@@ -76,15 +76,19 @@ interagent msg send --to claude --subject "Question: <task title>" \
 
 ---
 
-## Project Context
+## Project Context — Read These on Every Session Start
 
-**Always read first:** `.interagent/shared/context.md`
+**1. `AI_CONTEXT.md`** (project root) — versioned best-practices template:
+- Code standards, security rules, workflow conventions
+- Sub-agent setup guide
+- Full InterAgent workflow reference
+- The basis for this project's `CLAUDE.md`
+- Keep it current: `interagent update-template --agent claude`
 
-This file contains:
-- What the project is and its current state
-- Your specific task or current focus
-- Constraints, conventions, and key files to know
-- Any decisions already made
+**2. `.interagent/shared/context.md`** — current project state:
+- What the project is and what's been done
+- Your specific task or focus for this session
+- Constraints, key files, and decisions already made
 
 ---
 

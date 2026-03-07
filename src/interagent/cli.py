@@ -98,18 +98,34 @@ interagent summary
             with open(agents_path, "w", encoding="utf-8") as f:
                 f.write(agents_guide)
         except FileNotFoundError:
-            pass  # Non-fatal: AGENTS.md is helpful but not required
+            pass  # Non-fatal
+
+        # Write AI_CONTEXT.md — versioned best-practices template at project root.
+        # Both agents use this as context; it is the basis for generating CLAUDE.md.
+        # Run `interagent update-template` to keep it current with new AI capabilities.
+        ai_context_path = Path.cwd() / "AI_CONTEXT.md"
+        if not ai_context_path.exists():
+            try:
+                ai_context = get_template("ai_context")
+                with open(ai_context_path, "w", encoding="utf-8") as f:
+                    f.write(ai_context)
+            except FileNotFoundError:
+                pass  # Non-fatal
 
         print_success(f"Initialized session: {session.name}")
         print(f"   ID: {session.id}")
         print(f"   Mode: {session.mode}")
         print(f"   Principal: {session.principal}")
         print(f"\n[DIR] Created .interagent/ directory")
-        print("     .interagent/AGENTS.md   <- agents read this for the collaboration guide")
-        print("     .interagent/shared/context.md  <- fill this with project details")
+        print("     .interagent/AGENTS.md    <- collaboration guide (commands, roles, workflow)")
+        print("     .interagent/shared/context.md  <- fill this with current project state")
+        print("\n[FILE] Created AI_CONTEXT.md at project root")
+        print("     <- versioned best-practices template; basis for generating CLAUDE.md")
+        print("     <- run `interagent update-template --agent claude` to keep it current")
         print("\nNext steps:")
-        print("1. Edit .interagent/shared/context.md with project details")
-        print("2. Quick start: interagent quick --to kimi \"Your task\"")
+        print("1. Fill in the [Replace with...] sections in AI_CONTEXT.md")
+        print("2. Edit .interagent/shared/context.md with current project state")
+        print("3. Tell Claude: \"Read AI_CONTEXT.md and .interagent/AGENTS.md, then generate CLAUDE.md\"")
         return 0
         
     except ValueError as e:
@@ -640,18 +656,23 @@ def cmd_update_template(args: argparse.Namespace) -> int:
     # Resolve template path
     template_path = getattr(args, "template_path", None)
     if not template_path:
-        # Walk up to 4 parent directories looking for template.txt
-        search = Path(__file__).parent
-        for _ in range(6):
-            candidate = search / "template.txt"
-            if candidate.exists():
-                template_path = str(candidate)
-                break
-            search = search.parent
+        # 1. Look for AI_CONTEXT.md in cwd (deployed by `interagent init`)
+        candidate = Path.cwd() / "AI_CONTEXT.md"
+        if candidate.exists():
+            template_path = str(candidate)
+        else:
+            # 2. Walk up parent directories for a legacy template.txt
+            search = Path.cwd()
+            for _ in range(6):
+                candidate = search / "template.txt"
+                if candidate.exists():
+                    template_path = str(candidate)
+                    break
+                search = search.parent
         if not template_path:
             template_path = (
-                "~/Documents/projects/template.txt"
-                "  (path not auto-detected - please verify)"
+                "./AI_CONTEXT.md"
+                "  (not found — run `interagent init` first or use --template-path)"
             )
 
     focus = getattr(args, "focus", None) or (
