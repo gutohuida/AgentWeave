@@ -7,15 +7,14 @@ name = "interagent"
 version = "0.1.0"
 description = "A framework for Claude Code and Kimi Code collaboration"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
-    {name = "InterAgent Team"},
+    {name = "gutohuida"},
 ]
 keywords = ["claude", "kimi", "collaboration", "agents", "ai", "code"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -39,10 +38,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/interagent"
-Documentation = "https://github.com/yourusername/interagent#readme"
-Repository = "https://github.com/yourusername/interagent"
-Issues = "https://github.com/yourusername/interagent/issues"
+Homepage = "https://github.com/gutohuida/InterAgentFramework"
+Documentation = "https://github.com/gutohuida/InterAgentFramework#readme"
+Repository = "https://github.com/gutohuida/InterAgentFramework"
+Issues = "https://github.com/gutohuida/InterAgentFramework/issues"
+Changelog = "https://github.com/gutohuida/InterAgentFramework/blob/master/CHANGELOG.md"
 
 [project.scripts]
 interagent = "interagent.cli:main"
