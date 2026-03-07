@@ -2,553 +2,367 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/yourusername/interagent/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/interagent/actions)
-[![PyPI version](https://badge.fury.io/py/interagent.svg)](https://badge.fury.io/py/interagent)
+[![PyPI version](https://badge.fury.io/py/interagent-framework.svg)](https://badge.fury.io/py/interagent-framework)
 
 > **A collaboration framework for Claude Code and Kimi Code**
 
-InterAgent enables Claude Code and Kimi Code to collaborate effectively on software development projects through structured protocols, task delegation, and shared state management.
+InterAgent lets Claude Code and Kimi Code work together on the same project.
+After a one-time setup, you orchestrate everything through **natural language prompts** —
+no manual CLI commands required during your session.
 
 ---
 
-## 🎯 Why InterAgent?
+## How It Works
 
-Claude and Kimi are both powerful coding assistants, but they have different strengths:
+InterAgent creates a shared `.interagent/` directory that both agents use as a
+communication channel. The user acts as the messenger, passing relay prompts between agents.
 
-- **Claude** excels at architecture, system design, and documentation
-- **Kimi** shines at implementation, tool usage, and optimization
+```
+You (setup once)
+  └─ interagent init --project "My App" --principal claude
 
-**InterAgent** lets you leverage both by providing:
+You (natural language)
+  └─ "Claude, delegate the auth module to Kimi"
 
-- 🎭 **Role-based collaboration** (Principal, Delegate, Reviewer)
-- 📋 **Structured task delegation** with capability-based routing
-- 👀 **Code review workflows** between agents
-- 💬 **Discussion protocols** for complex decisions
-- 📁 **Shared state** via Git-trackable files
+Claude (runs CLI via Bash automatically)
+  └─ interagent quick --to kimi "Implement auth module"
+  └─ interagent relay --agent kimi
+  └─ [shows you the relay prompt to paste into Kimi]
+
+You
+  └─ paste relay prompt into Kimi Code
+
+Kimi (reads AGENTS.md + context.md, runs CLI via terminal)
+  └─ interagent task update <id> --status in_progress
+  └─ [does the work]
+  └─ interagent task update <id> --status completed
+  └─ interagent msg send --to claude --subject "Done" --message "..."
+
+You
+  └─ "Claude, Kimi is done"
+
+Claude (runs CLI via Bash automatically)
+  └─ interagent inbox --agent claude
+  └─ interagent summary
+  └─ [reviews Kimi's work and continues]
+```
+
+**The only manual step is pasting the relay prompt into Kimi.** Both agents handle
+all CLI commands themselves — you just have a conversation.
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### Installation
+### 1. Install
 
 ```bash
-pip install interagent
+pip install interagent-framework
 ```
 
-### Initialize a Session
+### 2. Initialize (once per project)
 
 ```bash
-interagent init --project "My API" --principal claude
+cd your-project/
+interagent init --project "My App" --principal claude
 ```
 
-This creates an `.interagent/` directory with:
-- Session configuration
-- Task management
-- Message queue
-- Shared context
+This creates:
+- `.interagent/AGENTS.md` — full collaboration guide that both agents read on startup
+- `.interagent/shared/context.md` — fill this with your project description
+- `.interagent/session.json` — session state
 
-### Quick Start - Single Command
+### 3. Fill in project context
 
+Edit `.interagent/shared/context.md` and paste in your project description, current state,
+and any constraints. Both agents read this at the start of every task.
+
+### 4. Start working — just prompt Claude
+
+From this point, use natural language. Claude handles the CLI:
+
+> "Claude, read `.interagent/AGENTS.md` to understand how we're collaborating,
+> then delegate the database schema design to Kimi."
+
+Claude will run `interagent quick` and `interagent relay` via Bash, then show you
+a prompt to paste into Kimi Code.
+
+---
+
+## Prompt-First Workflow
+
+### Delegating to Kimi
+
+Just tell Claude what to assign. No CLI needed.
+
+**You → Claude:**
+> "Delegate the user authentication module to Kimi. It should include login, logout,
+> JWT tokens, and password reset. See PLAN.md for the API design."
+
+**Claude does automatically:**
 ```bash
-interagent quick --to kimi "Design database schema"
+interagent quick --to kimi "Implement user authentication: login, logout, JWT tokens, password reset. See PLAN.md §3 for API design."
+interagent relay --agent kimi
 ```
 
-This single command:
-- Creates a task
-- Assigns it to Kimi
-- Generates a message
-- Prints what to tell Kimi
+**Claude shows you:**
+```
+====================================================================
+RELAY PROMPT FOR KIMI
+====================================================================
+Copy and paste this to the agent:
 
-### Check Status
+@kimi - You have work in the InterAgent collaboration system.
 
+Your role: delegate
+Collaboration guide: read .interagent/AGENTS.md for commands, workflow, and protocol.
+Project context: read .interagent/shared/context.md before starting.
+
+[TASK] You have 1 new task(s):
+   - Implement user authentication (task-a3f2c1)
+...
+====================================================================
+```
+
+**You:** paste that into Kimi Code.
+
+---
+
+### Kimi Receiving Work
+
+When Kimi receives the relay prompt, it:
+1. Reads `.interagent/AGENTS.md` for the full collaboration guide and command reference
+2. Reads `.interagent/shared/context.md` for project context
+3. Runs `interagent inbox --agent kimi` to see the task
+4. Does the work
+5. Reports back via `interagent msg send --to claude --subject "Done" --message "..."`
+
+All of this happens automatically — Kimi doesn't need to be told how the system works
+because AGENTS.md explains it.
+
+---
+
+### Getting Kimi's Work Back to Claude
+
+When Kimi is done:
+
+**You → Claude:**
+> "Kimi is done."
+
+**Claude does automatically:**
 ```bash
-interagent status        # Detailed status
-interagent summary       # Quick overview
+interagent inbox --agent claude
+interagent summary
+```
+
+Claude reviews Kimi's messages and completed tasks, then continues reviewing or
+assigns the next task.
+
+---
+
+### Asking for a Status Check
+
+**You → Claude:**
+> "What's the current state of the project?"
+
+**Claude does automatically:**
+```bash
+interagent status
+interagent summary
 ```
 
 ---
 
-## 💡 How It Works
+### Cross-Agent Sub-Agent Requests
 
-InterAgent uses a **file-based protocol** where both agents read and write to a shared `.interagent/` directory:
+Either agent can ask the other to run one of their specialized sub-agents.
 
+**Example — Claude asking Kimi to do web research:**
+
+Claude writes `.interagent/shared/agent-request-research.md`:
 ```
-Your Project/
-├── .interagent/
-│   ├── session.json          # Current session
-│   ├── tasks/
-│   │   ├── active/           # Active tasks
-│   │   └── completed/        # Completed tasks
-│   ├── messages/
-│   │   ├── pending/          # Unread messages
-│   │   └── archive/          # Message history
-│   └── shared/
-│       └── context.md        # Project context
-└── [your code...]
+Kimi: research latest best practices for JWT refresh token rotation (2026)
+Write summary to: .interagent/shared/jwt-research.md
 ```
 
-**The user acts as the orchestrator**, prompting each agent to check the shared state:
+Then Claude tells you: *"Tell Kimi to check `.interagent/shared/` for a new request."*
 
-1. **You:** "@Claude - You're Principal. Check `.interagent/` and delegate tasks to Kimi"
-2. **Claude:** Reads files, creates task for Kimi
-3. **You:** "@Kimi - Check `.interagent/` inbox"
-4. **Kimi:** Reads task, implements, updates status
-5. **You:** "@Claude - Kimi completed the task. Please review"
+You paste one message into Kimi. Kimi handles it. No further orchestration needed.
 
 ---
 
-## 📚 Commands
+## Setup for New Projects (Using the Kickoff Template)
 
-### Quick Commands (Reduced Friction)
+If you use the [project kickoff template](https://github.com/gutohuida/InterAgentFramework),
+the generated `CLAUDE.md` automatically includes the multi-agent workflow rules:
+
+- Claude checks for `.interagent/session.json` on every session start
+- If found, Claude reads `AGENTS.md` and `context.md` automatically
+- Claude runs all `interagent` commands via Bash without being asked
+
+This means on any future session, you can start with:
+> "Check the InterAgent session and tell me what's pending."
+
+And Claude will handle the rest.
+
+---
+
+## Commands Reference
+
+### Session
 
 ```bash
-interagent quick --to kimi "Implement user auth"       # Single-command delegation
-interagent relay --to kimi                              # Generate prompt to copy
-interagent summary                                      # Quick overview for decisions
+interagent init --project "Name" --principal claude   # Initialize
+interagent status                                      # Full status
+interagent summary                                     # Quick overview
 ```
 
-### Session Management
+### Delegation
 
 ```bash
-interagent init --project "Name" --principal claude    # Initialize session
-interagent status                                       # Show status
-interagent summary                                      # Quick summary for relay
+interagent quick --to kimi "Task description"         # Create + assign task
+interagent relay --agent kimi                         # Generate relay prompt
+interagent relay --agent claude                       # Generate relay for Claude
 ```
 
-### Task Management
+### Tasks
 
 ```bash
-interagent task create --title "Task" --assignee kimi   # Create task
-interagent task list                                    # List all tasks
-interagent task show task-xxx                           # Show task details
-interagent task update task-xxx --status completed      # Update status
+interagent task list                                  # List all tasks
+interagent task show <task_id>                        # View task details
+interagent task update <task_id> --status in_progress
+interagent task update <task_id> --status completed
+interagent task update <task_id> --status approved
+interagent task update <task_id> --status needs_revision --note "Fix X"
 ```
 
 ### Messaging
 
 ```bash
-interagent inbox --agent kimi                           # Check inbox
-interagent msg send --to kimi --message "Hello"         # Send message
-interagent msg read msg-xxx                             # Mark as read
-```
-
-### Quick Delegation
-
-```bash
-interagent delegate --to kimi --task "Implement auth"   # Quick delegation
+interagent inbox --agent claude                       # Check Claude's inbox
+interagent inbox --agent kimi                         # Check Kimi's inbox
+interagent msg send --to claude --subject "Done" --message "Implemented X"
 ```
 
 ### Template Maintenance
 
 Keep your project kickoff template current with new AI capabilities:
 
-| Command | Description |
-|---|---|
-| `interagent update-template --agent claude` | Generate research prompt for Claude |
-| `interagent update-template --agent kimi` | Generate research prompt for Kimi |
-| `interagent update-template --agent claude --focus "sub-agents"` | Focus on a specific area |
-| `interagent update-template --agent kimi --template-path ~/projects/template.txt` | Specify template path |
+```bash
+interagent update-template --agent claude --template-path ~/projects/template.txt
+interagent update-template --agent kimi   --template-path ~/projects/template.txt
+interagent update-template --agent claude --focus "sub-agents"
+```
 
 The generated prompt instructs the agent to search for new best practices,
-review the current template, apply improvements, and write a `TEMPLATE_UPDATE.md`
-summary of what changed.
+review the current template, apply improvements, and write a `TEMPLATE_UPDATE.md`.
 
 ---
 
-## 🎭 Roles
-
-### Principal Engineer
-- Makes architectural decisions
-- Delegates tasks to the Delegate
-- Reviews completed work
-
-### Delegate
-- Executes assigned tasks
-- Reports progress to Principal
-- Requests help when needed
-
-### Reviewer
-- Reviews code from another agent
-- Provides structured feedback
-- Approves or requests revisions
-
----
-
-## 🛡️ Safety Features
-
-### Schema Validation
-All JSON files are validated before saving:
-- ✅ Task status must be valid
-- ✅ Agent names must be "claude" or "kimi"
-- ✅ Required fields present
-- ✅ Type checking
-
-### File Locking
-Prevents race conditions when both agents work simultaneously:
-- 🔒 Tasks are locked during updates
-- 🔒 Messages are locked during sending
-- 🔒 Automatic lock timeout (5 minutes)
-- 🔒 Stale lock detection
-
-### Input Sanitization
-- String length limits
-- Type coercion
-- Invalid character filtering
-
----
-
-## 📖 Example Workflow
-
-### 1. Initialize Session
-
-```bash
-interagent init --project "E-commerce API" --principal claude
-```
-
-### 2. Claude (as Principal) Plans Architecture
-
-**You:** "@Claude - You're Principal Engineer. Check `.interagent/` and plan the API architecture."
-
-**Claude:** Reviews project, delegates with quick command:
-
-```bash
-# Single command creates task and message
-interagent quick --to kimi "Design database schema"
-
-# Check what to tell Kimi
-interagent relay --to kimi
-```
-
-Output:
-```
-RELAY PROMPT FOR KIMI
---------------------
-@kimi - You have work in the InterAgent collaboration system.
-Your role: delegate
-
-📋 You have 1 new task(s):
-   - Design database schema (task-xxx)
-
-Please:
-1. Check .interagent/tasks/active/ for details
-2. Run: interagent task update task-xxx --status in_progress
-3. Do the work
-4. Run: interagent task update task-xxx --status completed
-5. Send a message when done
-```
-
-**Copy-paste the relay prompt to Kimi.**
-
-### 3. Kimi (as Delegate) Implements
-
-**Kimi:** Receives the prompt, runs the commands:
-
-```bash
-interagent task update task-xxx --status in_progress
-# Implements schema
-
-interagent task update task-xxx --status completed
-interagent msg send --to claude --subject "Schema ready" --message "Done!"
-```
-
-### 4. You Check Summary
-
-```bash
-interagent summary
-```
-
-Output:
-```
-INTERAGENT SUMMARY
-==================
-
-[TASKS]
-  ✅ 1 task(s) approved
-  👀 1 task(s) ready for review
-
-[MESSAGES]
-  📬 Claude: 1 unread message(s)
-     - From kimi: Schema ready
-
-[ACTION ITEMS]
-  → Tell claude to review 1 completed task(s)
-
-[QUICK COMMANDS]
-  interagent relay --to claude
-```
-
-### 5. Claude Reviews
-
-**You:** Copy-paste the relay prompt to Claude:
-
-```bash
-interagent relay --to claude
-```
-
-**Claude:** Reviews and approves:
-
-```bash
-interagent inbox --agent claude
-interagent task show task-xxx
-# Reviews work
-
-interagent task update task-xxx --status approved
-interagent msg send --to kimi --message "Approved! Great work."
-```
-
----
-
-## 🧩 Capabilities
-
-InterAgent automatically routes tasks based on agent capabilities:
-
-| Capability | Best Agent |
-|------------|------------|
-| Architecture Design | Claude |
-| System Design | Claude |
-| Implementation | Kimi |
-| Code Refactoring | Kimi |
-| Performance Optimization | Kimi |
-| Testing | Kimi |
-| Code Review | Claude |
-| Documentation | Claude |
-| Security Analysis | Claude |
-| Tool Use | Kimi |
-
----
-
-## 🐍 Python API
-
-InterAgent can also be used as a Python library:
-
-```python
-from interagent import Session, Task, Message
-
-# Initialize session
-session = Session.create("My Project", principal="claude")
-session.save()
-
-# Create task
-task = Task.create(
-    title="Implement API",
-    assignee="kimi",
-    priority="high",
-)
-task.save()
-
-# Send message
-msg = Message.create(
-    sender="claude",
-    recipient="kimi",
-    content="Task assigned!",
-)
-msg.save()
-```
-
-See `examples/` for more complete examples.
-
----
-
-## 📁 Project Structure
+## What Gets Created on Init
 
 ```
 .interagent/
-├── session.json              # Session configuration
-├── README.md                 # Session documentation
-├── agents/
-│   ├── claude.json          # Claude's status & inbox
-│   └── kimi.json            # Kimi's status & inbox
+├── AGENTS.md             # Collaboration guide — both agents read this
+├── README.md             # Quick command reference
+├── session.json          # Session config (id, mode, principal)
+├── shared/
+│   └── context.md        # Project state — fill this with your project description
 ├── tasks/
-│   ├── active/              # Active tasks (*.json)
-│   └── completed/           # Completed tasks (*.json)
+│   ├── active/           # JSON files for each active task
+│   └── completed/        # Archived completed tasks
 ├── messages/
-│   ├── pending/             # Unread messages (*.json)
-│   └── archive/             # Read messages (*.json)
-└── shared/
-    ├── context.md           # Project context
-    ├── architecture.md      # Architecture decisions
-    └── decisions.md         # Decision log
+│   ├── pending/          # Unread messages
+│   └── archive/          # Message history
+└── agents/               # Agent status files
 ```
 
----
-
-## 🎓 Best Practices
-
-### DO ✅
-- **Check inbox first** before starting work
-- **Update task status** as you progress (in_progress → completed)
-- **Include context** when delegating tasks
-- **Use descriptive subjects** for messages
-- **Document decisions** in `shared/decisions.md`
-- **Commit `.interagent/` to Git** for history
-
-### DON'T ❌
-- Work without checking inbox first
-- Leave tasks in "in_progress" when blocked
-- Send vague messages without context
-- Forget to mark messages as read
-- Work on tasks you haven't accepted
+`.interagent/AGENTS.md` is the key file. Both Claude and Kimi read it on every
+session start to understand their roles, available commands, and the collaboration protocol.
 
 ---
 
-## 🤝 Integration with Claude and Kimi
+## Safety Features
 
-### For Claude Code
+**File locking** — prevents race conditions when both agents work simultaneously.
+Tasks and messages use file-based mutexes with a 5-minute automatic timeout.
 
-Claude can use the CLI directly:
+**Schema validation** — all JSON state files are validated before saving.
+Agent names, task statuses, and required fields are enforced.
+
+**Input sanitization** — string length limits and type coercion before any write.
+
+---
+
+## Watchdog (Optional)
+
+Run in a separate terminal to get notifications when tasks or messages change:
 
 ```bash
-interagent inbox --agent claude
-interagent task list
-interagent task update task-xxx --status in_progress
+interagent-watch
 ```
 
-### For Kimi Code
-
-Kimi can use the CLI or create a skill for slash commands:
-
-```yaml
-# .kimi/skills/interagent/skill.yaml
-name: interagent
-description: InterAgent collaboration
-commands:
-  - name: inbox
-    description: Check inbox
-  - name: task_create
-    description: Create task
-```
-
-Then use:
-```
-/interagent inbox
-/interagent task_create --title "Task" --assignee claude
-```
+Useful if you want to know when Kimi has finished without actively checking.
 
 ---
 
-## 📊 Comparison
+## Roles
 
-| Feature | InterAgent | Manual Coordination |
-|---------|------------|---------------------|
-| Task tracking | ✅ Structured | ❌ Ad-hoc |
-| Message history | ✅ Persistent | ❌ Lost |
-| Role clarity | ✅ Defined | ❌ Ambiguous |
-| Code reviews | ✅ Structured | ❌ Informal |
-| Git integration | ✅ Tracked | ❌ Manual notes |
-| Audit trail | ✅ Complete | ❌ Fragmented |
+| Role | Agent | Responsibilities |
+|---|---|---|
+| Principal | Claude | Architecture, planning, review, final decisions |
+| Delegate | Kimi | Implementation, execution, reporting back |
+
+In hierarchical mode (default), Claude assigns work and reviews results.
+In peer mode, both agents can assign tasks to each other.
 
 ---
 
-## 📦 Installation Options
-
-### From PyPI (Recommended)
+## Installation Options
 
 ```bash
-pip install interagent
-```
+# From PyPI
+pip install interagent-framework
 
-### From Source
-
-```bash
-git clone https://github.com/yourusername/interagent.git
-cd interagent
+# From source
+git clone https://github.com/gutohuida/InterAgentFramework.git
+cd InterAgentFramework
 pip install -e .
 ```
 
-### Development Install
+---
 
-```bash
-git clone https://github.com/yourusername/interagent.git
-cd interagent
-pip install -e ".[dev]"
-```
+## FAQ
+
+**Q: Do I need to run CLI commands during my session?**
+No. After `interagent init`, just talk to Claude. It runs all `interagent` commands
+via Bash automatically. The only manual step is pasting the relay prompt into Kimi.
+
+**Q: How does Kimi know how to use the system?**
+`interagent init` writes `.interagent/AGENTS.md` — a complete guide covering commands,
+workflow, and protocol. The relay prompt tells Kimi to read it before starting work.
+
+**Q: Should I commit `.interagent/` to Git?**
+Partially. The `.gitignore` included with the project excludes runtime state
+(tasks, messages, session.json) but keeps AGENTS.md and README.md.
+This gives you documentation without committing transient data.
+
+**Q: Can I use this with just Claude (no Kimi)?**
+Yes — just skip the relay step. The session, task, and summary commands are
+useful even for single-agent projects to track progress.
+
+**Q: What if Kimi doesn't have terminal access?**
+The relay prompt includes the task details inline, so Kimi can read and respond
+without running any commands. The collaboration is less structured but still works.
 
 ---
 
-## 🔔 Watchdog (Optional)
+## Links
 
-Monitor for new messages and tasks automatically:
-
-```bash
-# Start watching for changes
-python -m interagent.watchdog
-
-# Or with custom poll interval
-python -m interagent.watchdog --interval 10
-```
-
-This prints notifications when:
-- 📬 New messages arrive
-- 📋 New tasks are assigned
-- ✅ Tasks are completed
-
-Useful for running in a separate terminal while you work.
+- **GitHub:** https://github.com/gutohuida/InterAgentFramework
+- **PyPI:** https://pypi.org/project/interagent-framework/
+- **Issues:** https://github.com/gutohuida/InterAgentFramework/issues
 
 ---
 
-## 🔮 Roadmap
-
-- [x] Quick mode (single-command delegation)
-- [x] Relay prompt generation
-- [x] Summary command
-- [x] Schema validation
-- [x] File locking
-- [x] Watchdog script
-- [ ] Web dashboard for visualizing collaboration
-- [ ] Desktop notifications for new messages
-- [ ] Integration with GitHub/GitLab PRs
-- [ ] Slack/Discord notifications
-- [ ] More agent profiles (GPT-4, Copilot, etc.)
-
----
-
-## 🤔 FAQ
-
-**Q: Do Claude and Kimi talk directly?**  
-A: No, they communicate through shared files in `.interagent/`. The user prompts each agent to check the files.
-
-**Q: Can I use this with other AI assistants?**  
-A: Yes! Just add their profiles to the agent configuration.
-
-**Q: Is the `.interagent/` directory required?**  
-A: Yes, it's where all collaboration state is stored.
-
-**Q: Should I commit `.interagent/` to Git?**  
-A: Yes, it provides a complete audit trail of your collaboration.
-
-**Q: Can agents work in parallel?**  
-A: Yes! Each can work on their assigned tasks independently.
-
-**Q: What if agents disagree?**  
-A: The Principal Engineer makes the final decision.
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) file.
-
----
-
-## 🙏 Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## 💬 Support
-
-- **Issues:** [GitHub Issues](https://github.com/yourusername/interagent/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/interagent/discussions)
-- **Documentation:** [Full Documentation](https://github.com/yourusername/interagent#readme)
-
----
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/interagent&type=Date)](https://star-history.com/#yourusername/interagent&Date)
-
----
-
-**Happy collaborating! 🎉**
+MIT License
