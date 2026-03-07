@@ -65,3 +65,7 @@ dmypy.json
 *.local
 .env
 .env.local
+
+# Inter-agent working files (not for version control)
+kimichanges.md
+kimiwork.md

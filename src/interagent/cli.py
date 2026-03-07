@@ -3,6 +3,8 @@
 
 import argparse
 import sys
+from datetime import date
+from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
@@ -12,6 +14,7 @@ from .task import Task, TaskStatus
 from .messaging import Message, MessageBus
 from .locking import acquire_lock, release_lock, LockError
 from .validator import validate_task, validate_message
+from .templates import get_template
 from .utils import (
     ensure_dirs,
     print_success,
@@ -613,6 +616,57 @@ def cmd_delegate(args: argparse.Namespace) -> int:
     return cmd_quick(quick_args)
 
 
+def cmd_update_template(args: argparse.Namespace) -> int:
+    """Generate a prompt instructing an agent to update the kickoff template."""
+    # Resolve template path
+    template_path = getattr(args, "template_path", None)
+    if not template_path:
+        # Walk up to 4 parent directories looking for template.txt
+        search = Path(__file__).parent
+        for _ in range(6):
+            candidate = search / "template.txt"
+            if candidate.exists():
+                template_path = str(candidate)
+                break
+            search = search.parent
+        if not template_path:
+            template_path = (
+                "~/Documents/projects/template.txt"
+                "  (path not auto-detected - please verify)"
+            )
+
+    focus = getattr(args, "focus", None) or (
+        "all areas: new sub-agent capabilities, collaboration patterns, "
+        "updated Claude Code / Kimi Code features"
+    )
+    agent = args.agent
+    today = date.today().isoformat()
+    year = str(date.today().year)
+
+    try:
+        template = get_template("update_prompt")
+    except FileNotFoundError:
+        print_error("Template 'update_prompt' not found in src/interagent/templates/")
+        return 1
+
+    prompt = (
+        template
+        .replace("{agent}", agent.capitalize())
+        .replace("{template_path}", str(template_path))
+        .replace("{focus}", focus)
+        .replace("{date}", today)
+        .replace("{year}", year)
+    )
+
+    separator = "=" * 70
+    print(separator)
+    print(f"[PROMPT] Copy and paste the following into {agent.capitalize()} Code:")
+    print(separator)
+    print(prompt)
+    print(separator)
+    return 0
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
@@ -840,6 +894,29 @@ For more help: https://github.com/yourusername/interagent
         help="Task priority",
     )
     
+    # update-template
+    update_tmpl_parser = subparsers.add_parser(
+        "update-template",
+        help="Generate a prompt to update the kickoff template with new AI best practices",
+    )
+    update_tmpl_parser.add_argument(
+        "--agent", "-a",
+        required=True,
+        choices=VALID_AGENTS,
+        help="Which agent receives and executes the update prompt (claude or kimi)",
+    )
+    update_tmpl_parser.add_argument(
+        "--template-path", "-p",
+        default=None,
+        dest="template_path",
+        help="Path to the template file (default: searches parent dirs for template.txt)",
+    )
+    update_tmpl_parser.add_argument(
+        "--focus", "-f",
+        default=None,
+        help="Optional focus area e.g. 'sub-agents', 'security', 'kimi-capabilities'",
+    )
+
     return parser
 
 
@@ -888,6 +965,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_inbox(parsed_args)
         elif parsed_args.command == "delegate":
             return cmd_delegate(parsed_args)
+        elif parsed_args.command == "update-template":
+            return cmd_update_template(parsed_args)
         else:
             parser.print_help()
             return 0

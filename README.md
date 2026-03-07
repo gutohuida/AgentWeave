@@ -139,6 +139,21 @@ interagent msg read msg-xxx                             # Mark as read
 interagent delegate --to kimi --task "Implement auth"   # Quick delegation
 ```
 
+### Template Maintenance
+
+Keep your project kickoff template current with new AI capabilities:
+
+| Command | Description |
+|---|---|
+| `interagent update-template --agent claude` | Generate research prompt for Claude |
+| `interagent update-template --agent kimi` | Generate research prompt for Kimi |
+| `interagent update-template --agent claude --focus "sub-agents"` | Focus on a specific area |
+| `interagent update-template --agent kimi --template-path ~/projects/template.txt` | Specify template path |
+
+The generated prompt instructs the agent to search for new best practices,
+review the current template, apply improvements, and write a `TEMPLATE_UPDATE.md`
+summary of what changed.
+
 ---
 
 ## 🎭 Roles
