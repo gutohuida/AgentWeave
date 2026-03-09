@@ -21,6 +21,11 @@ MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
 SESSION_FILE = INTERAGENT_DIR / "session.json"
 AGENTS_FILE = INTERAGENT_DIR / "agents.json"
 
+# Transport
+TRANSPORT_CONFIG_FILE = INTERAGENT_DIR / "transport.json"
+GIT_COLLAB_BRANCH = "interagent/collab"
+GIT_SEEN_DIR = INTERAGENT_DIR / ".git_seen"  # local seen-set for git transport (gitignored)
+
 # Valid agents
 VALID_AGENTS = ["claude", "kimi"]
 

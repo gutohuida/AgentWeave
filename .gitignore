@@ -69,3 +69,7 @@ dmypy.json
 # Inter-agent working files (not for version control)
 kimichanges.md
 kimiwork.md
+
+# Transport config and state (machine-local, contain secrets)
+.interagent/transport.json
+.interagent/.git_seen/

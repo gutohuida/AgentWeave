@@ -142,18 +142,16 @@ class MessageBus:
 
     @staticmethod
     def send(message: Message) -> bool:
-        """Send a message (save to pending)."""
-        return message.save(pending=True)
+        """Send a message via the active transport."""
+        from .transport import get_transport
+        return get_transport().send_message(message.to_dict())
 
     @staticmethod
     def get_inbox(agent: str) -> List[Message]:
-        """Get all pending messages for an agent."""
-        messages = []
-        for filepath in MESSAGES_PENDING_DIR.glob("*.json"):
-            data = load_json(filepath)
-            if data and data.get("to") == agent:
-                messages.append(Message(data))
-        return sorted(messages, key=lambda m: m.timestamp)
+        """Get all pending messages for an agent via the active transport."""
+        from .transport import get_transport
+        data_list = get_transport().get_pending_messages(agent)
+        return [Message(d) for d in data_list]
 
     @staticmethod
     def get_outbox(agent: str) -> List[Message]:
@@ -176,8 +174,12 @@ class MessageBus:
 
     @staticmethod
     def mark_read(message_id: str) -> bool:
-        """Mark a message as read."""
-        message = Message.load(message_id, pending=True)
-        if message:
-            return message.mark_read()
-        return False
+        """Mark a message as read via the active transport."""
+        from .transport import get_transport
+        t = get_transport()
+        if t.get_transport_type() == "local":
+            message = Message.load(message_id, pending=True)
+            if message:
+                return message.mark_read()
+            return False
+        return t.archive_message(message_id)

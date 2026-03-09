@@ -5,7 +5,7 @@ This package provides tools for managing inter-agent collaboration through
 structured protocols, task delegation, and shared state.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "InterAgent Team"
 
 from .cli import main

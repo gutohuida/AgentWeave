@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
-from .constants import VALID_AGENTS, VALID_MODES, INTERAGENT_DIR
+from .constants import VALID_AGENTS, VALID_MODES, INTERAGENT_DIR, TRANSPORT_CONFIG_FILE
 from .session import Session
 from .task import Task, TaskStatus
 from .messaging import Message, MessageBus
@@ -68,7 +68,7 @@ interagent quick --to kimi "Implement auth"
 interagent inbox --agent kimi
 
 # Get relay prompt
-interagent relay --to kimi
+interagent relay --agent kimi
 
 # Summary
 interagent summary
@@ -249,9 +249,9 @@ def cmd_summary(args: argparse.Namespace) -> int:
         task_id = ready_for_review[0].id
         print(f"  interagent task show {task_id}")
     if kimi_msgs:
-        print(f"  interagent relay --to kimi")
+        print(f"  interagent relay --agent kimi")
     if claude_msgs:
-        print(f"  interagent relay --to claude")
+        print(f"  interagent relay --agent claude")
     print()
     
     return 0
@@ -395,7 +395,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
         print(f"   Assigned to: {recipient}")
         print()
         print("Next step:")
-        print(f"  interagent relay --to {recipient}")
+        print(f"  interagent relay --agent {recipient}")
         print()
         print("This will generate the prompt to copy to the agent.")
         
@@ -707,6 +707,167 @@ def cmd_update_template(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def cmd_transport_setup(args: argparse.Namespace) -> int:
+    """Set up cross-machine transport."""
+    import subprocess as _sp
+    from .utils import save_json
+
+    transport_type = args.type
+
+    if transport_type == "git":
+        # Verify we're inside a git repository
+        result = _sp.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print_error("Not a git repository. Run `git init` first.")
+            return 1
+
+        remote = args.remote or "origin"
+        branch = args.branch or "interagent/collab"
+
+        # Check if the collab branch already exists on the remote
+        result = _sp.run(
+            ["git", "ls-remote", "--heads", remote, branch],
+            capture_output=True, text=True,
+        )
+        branch_exists = bool(result.stdout.strip())
+
+        if not branch_exists:
+            print_info(f"Creating orphan branch '{branch}' on {remote}...")
+            # Build an empty tree and push an initial commit via git plumbing
+            proc = _sp.run(["git", "mktree"], input=b"", capture_output=True)
+            empty_tree = proc.stdout.decode().strip()
+            proc = _sp.run(
+                ["git", "commit-tree", empty_tree, "-m", "init: interagent collab branch"],
+                capture_output=True, text=True,
+            )
+            commit_sha = proc.stdout.strip()
+            proc = _sp.run(
+                ["git", "push", remote, f"{commit_sha}:refs/heads/{branch}"],
+                capture_output=True, text=True,
+            )
+            if proc.returncode != 0:
+                print_error(f"Failed to push branch to {remote}: {proc.stderr.strip()}")
+                return 1
+            print_success(f"Created orphan branch '{branch}' on {remote}")
+        else:
+            print_info(f"Using existing branch '{branch}' on {remote}")
+
+        # Write .interagent/transport.json
+        INTERAGENT_DIR.mkdir(parents=True, exist_ok=True)
+        config = {
+            "type": "git",
+            "remote": remote,
+            "branch": branch,
+            "poll_interval": 10,
+        }
+        save_json(TRANSPORT_CONFIG_FILE, config)
+
+        print_success("Git transport configured!")
+        print(f"   Remote:   {remote}")
+        print(f"   Branch:   {branch}")
+        print(f"   Config:   {TRANSPORT_CONFIG_FILE}")
+        print()
+        print("Next steps:")
+        print(f"  1. Your collaborator clones/has the repo with remote '{remote}'")
+        print(f"  2. They run: interagent transport setup --remote {remote} --type git")
+        print(f"  3. Messages now sync via git branch '{branch}'")
+        print()
+        print("Start watching for incoming messages:")
+        print("  interagent-watch")
+        return 0
+
+    elif transport_type == "http":
+        print_error("HTTP/MCP transport (InterAgent Hub) is not yet implemented.")
+        print_info("See ROADMAP.md for the planned MCP-based Hub architecture.")
+        return 1
+
+    print_error(f"Unknown transport type: {transport_type}")
+    return 1
+
+
+def cmd_transport_status(args: argparse.Namespace) -> int:
+    """Show current transport configuration and status."""
+    import subprocess as _sp
+    from .utils import load_json as _load_json
+
+    config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not config:
+        print("[TRANSPORT] Type: local (default)")
+        print("   No .interagent/transport.json — using local filesystem")
+        print("   To enable cross-machine sync:")
+        print("     interagent transport setup --type git")
+        return 0
+
+    transport_type = config.get("type", "local")
+    print(f"[TRANSPORT] Type: {transport_type}")
+
+    if transport_type == "git":
+        remote = config.get("remote", "origin")
+        branch = config.get("branch", "interagent/collab")
+        poll_interval = config.get("poll_interval", 10)
+        print(f"   Remote:        {remote}")
+        print(f"   Branch:        {branch}")
+        print(f"   Poll interval: {poll_interval}s")
+
+        # Connectivity check
+        result = _sp.run(
+            ["git", "ls-remote", "--heads", remote, branch],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            _sp.run(["git", "fetch", remote, branch, "--quiet"], capture_output=True)
+            result2 = _sp.run(
+                ["git", "ls-tree", f"{remote}/{branch}", "--name-only"],
+                capture_output=True, text=True,
+            )
+            files = [f for f in result2.stdout.splitlines() if f.strip()]
+            msg_files = [f for f in files if "-task-for-" not in f]
+            task_files = [f for f in files if "-task-for-" in f]
+            print(f"   Status:        connected")
+            print(f"   Files on branch: {len(files)} ({len(msg_files)} messages, {len(task_files)} tasks)")
+        else:
+            print(f"   Status:        cannot reach {remote}/{branch}")
+
+    elif transport_type == "http":
+        print(f"   URL:     {config.get('url', '(not set)')}")
+        print(f"   Project: {config.get('project_id', '(not set)')}")
+        print(f"   Status:  not yet implemented — see ROADMAP.md")
+
+    return 0
+
+
+def cmd_transport_pull(args: argparse.Namespace) -> int:
+    """Force an immediate fetch from the remote transport."""
+    from .transport import get_transport
+    from .constants import VALID_AGENTS
+
+    t = get_transport()
+    if t.get_transport_type() == "local":
+        print_info("Local transport — no pull needed")
+        return 0
+
+    print_info(f"Pulling from {t.get_transport_type()} transport...")
+    for agent in VALID_AGENTS:
+        messages = t.get_pending_messages(agent)
+        if messages:
+            print(f"   {agent}: {len(messages)} pending message(s)")
+
+    print_success("Pull complete")
+    return 0
+
+
+def cmd_transport_disable(args: argparse.Namespace) -> int:
+    """Disable transport and revert to local filesystem."""
+    if not TRANSPORT_CONFIG_FILE.exists():
+        print_info("Already using local transport (no transport.json)")
+        return 0
+
+    TRANSPORT_CONFIG_FILE.unlink()
+    print_success("Transport disabled — reverted to local filesystem")
+    return 0
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
@@ -957,6 +1118,44 @@ For more help: https://github.com/yourusername/interagent
         help="Optional focus area e.g. 'sub-agents', 'security', 'kimi-capabilities'",
     )
 
+
+    # Transport commands
+    transport_parser = subparsers.add_parser(
+        "transport",
+        help="Configure cross-machine transport (git/http)",
+    )
+    transport_subparsers = transport_parser.add_subparsers(dest="transport_command")
+
+    # transport setup
+    transport_setup = transport_subparsers.add_parser(
+        "setup", help="Set up transport backend"
+    )
+    transport_setup.add_argument(
+        "--type", "-t",
+        choices=["git", "http"],
+        required=True,
+        help="Transport type",
+    )
+    transport_setup.add_argument(
+        "--remote", "-r",
+        default="origin",
+        help="Git remote name (default: origin)",
+    )
+    transport_setup.add_argument(
+        "--branch", "-b",
+        default="interagent/collab",
+        help="Git orphan branch name (default: interagent/collab)",
+    )
+
+    # transport status
+    transport_subparsers.add_parser("status", help="Show transport status")
+
+    # transport pull
+    transport_subparsers.add_parser("pull", help="Force immediate fetch from remote")
+
+    # transport disable
+    transport_subparsers.add_parser("disable", help="Disable transport, revert to local")
+
     return parser
 
 
@@ -1007,6 +1206,18 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_delegate(parsed_args)
         elif parsed_args.command == "update-template":
             return cmd_update_template(parsed_args)
+        elif parsed_args.command == "transport":
+            if parsed_args.transport_command == "setup":
+                return cmd_transport_setup(parsed_args)
+            elif parsed_args.transport_command == "status":
+                return cmd_transport_status(parsed_args)
+            elif parsed_args.transport_command == "pull":
+                return cmd_transport_pull(parsed_args)
+            elif parsed_args.transport_command == "disable":
+                return cmd_transport_disable(parsed_args)
+            else:
+                parser.parse_args(["transport", "--help"])
+                return 0
         else:
             parser.print_help()
             return 0
