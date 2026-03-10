@@ -4,15 +4,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://badge.fury.io/py/interagent-framework.svg)](https://badge.fury.io/py/interagent-framework)
 
-> **A collaboration framework for Claude Code and Kimi Code**
+> **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, and more**
 
-InterAgent lets Claude Code and Kimi Code work together on the same project — on the same machine or across machines. After a one-time setup, you orchestrate everything through **natural language prompts** — no manual CLI commands required during your session.
+InterAgent lets multiple AI agents work together on the same project — on the same machine or across machines. After a one-time setup, you orchestrate everything through **natural language prompts** — no manual CLI commands required during your session.
 
 ---
 
 ## How It Works
 
-InterAgent creates a shared `.interagent/` directory that both agents use as a communication channel. The user acts as the messenger, passing relay prompts between agents.
+InterAgent creates a shared `.interagent/` directory that all agents use as a communication channel. The user acts as the messenger, passing relay prompts between agents.
 
 ```
 You (setup once)
@@ -60,26 +60,32 @@ pip install interagent-framework
 
 ```bash
 cd your-project/
-interagent init --project "My App" --principal claude
+# N-agent support: initialize with any combination of agents
+interagent init --project "My App" --agents claude,kimi,gemini,codex
 ```
 
 This creates:
-- `.interagent/AGENTS.md` — full collaboration guide that both agents read on startup
+- `.interagent/AGENTS.md` — full collaboration guide that all agents read on startup
+- `.interagent/ROLES.md` — auto-generated role assignments (tech_lead, backend_dev, etc.)
 - `.interagent/shared/context.md` — fill this with your project description
 - `.interagent/session.json` — session state
+
+**Supported agents:** claude, kimi, gemini, codex, aider, cline, cursor, windsurf, copilot, opendevin, gpt, qwen (or any name matching `^[a-zA-Z0-9_-]{1,32}$`)
 
 ### 3. Fill in project context
 
 Edit `.interagent/shared/context.md` and paste in your project description, current state, and any constraints. Both agents read this at the start of every task.
 
-### 4. Start working — just prompt Claude
+### 4. Start working — just prompt the principal
 
-From this point, use natural language. Claude handles the CLI:
+From this point, use natural language. The principal agent handles the CLI:
 
 > "Claude, read `.interagent/AGENTS.md` to understand how we're collaborating,
 > then delegate the database schema design to Kimi."
 
 Claude will run `interagent quick` and `interagent relay` via Bash, then show you a prompt to paste into Kimi Code.
+
+With N-agent support, you can have multiple delegates working in parallel — e.g., Kimi on backend, Gemini on frontend, Codex on tests.
 
 ---
 
@@ -88,10 +94,13 @@ Claude will run `interagent quick` and `interagent relay` via Bash, then show yo
 By default, InterAgent works on a single machine via the local `.interagent/` directory. If your collaborator is on a different machine, enable **Git transport** with one command:
 
 ```bash
-interagent transport setup --type git
+# Cross-machine with cluster naming (v0.3.0+)
+interagent transport setup --type git --cluster alice
 ```
 
 This creates an orphan branch (`interagent/collab`) on your git remote. Messages and tasks are synced through it using git plumbing — your working tree and current branch are never touched.
+
+Cluster naming stamps messages as `alice.claude → bob.gemini` for multi-person git transport.
 
 ### How to set up cross-machine
 
@@ -147,7 +156,7 @@ interagent task show <task_id>                        # View task details
 interagent task update <task_id> --status in_progress
 interagent task update <task_id> --status completed
 interagent task update <task_id> --status approved
-interagent task update <task_id> --status needs_revision --note "Fix X"
+interagent task update <task_id> --status revision_needed --note "Fix X"
 ```
 
 ### Messaging
@@ -180,7 +189,8 @@ interagent update-template --agent claude --focus "sub-agents"
 
 ```
 .interagent/
-├── AGENTS.md             # Collaboration guide — both agents read this
+├── AGENTS.md             # Collaboration guide — all agents read this
+├── ROLES.md              # Auto-generated role assignments (editable)
 ├── README.md             # Quick command reference
 ├── session.json          # Session config (id, mode, principal)
 ├── shared/
@@ -194,7 +204,7 @@ interagent update-template --agent claude --focus "sub-agents"
 └── agents/               # Agent status files
 ```
 
-`.interagent/AGENTS.md` is the key file. Both Claude and Kimi read it on every session start to understand their roles, available commands, and the collaboration protocol.
+`.interagent/AGENTS.md` is the key file. All agents read it on every session start to understand their roles, available commands, and the collaboration protocol.
 
 ---
 
@@ -266,13 +276,17 @@ interagent summary
 
 ## Roles
 
-| Role | Agent | Responsibilities |
+| Role | Example Agents | Responsibilities |
 |---|---|---|
-| Principal | Claude | Architecture, planning, review, final decisions |
-| Delegate | Kimi | Implementation, execution, reporting back |
+| Principal | claude | Architecture, planning, review, final decisions |
+| Delegate 1 | kimi | Backend implementation |
+| Delegate 2 | gemini | Frontend development |
+| Delegate 3 | codex | Testing, DevOps |
 
-In hierarchical mode (default), Claude assigns work and reviews results.
-In peer mode, both agents can assign tasks to each other.
+In hierarchical mode (default), the principal assigns work and reviews results.
+In peer mode, agents can assign tasks to each other.
+
+Roles are defined in `.interagent/ROLES.md` — edit this file to customize agent responsibilities.
 
 ---
 
@@ -282,6 +296,7 @@ In peer mode, both agents can assign tasks to each other.
 |---|---|---|
 | Local transport | Done | Single-machine via `.interagent/` filesystem |
 | Git transport | Done (v0.2.0) | Cross-machine via orphan branch, zero infra |
+| N-agent support | Done (v0.3.0) | Multi-agent teams with ROLES.md and cluster naming |
 | InterAgent Hub | Planned | MCP server for multi-team collaboration, web dashboard |
 
 The Hub (Phase 3) will be an **MCP server** — Claude Code and Kimi Code connect to it as a native MCP tool provider, enabling real-time delivery without polling and a web dashboard for project oversight. See [ROADMAP.md](ROADMAP.md) for the full plan.
@@ -305,22 +320,24 @@ pip install -e .
 ## FAQ
 
 **Q: Do I need to run CLI commands during my session?**
-No. After `interagent init`, just talk to Claude. It runs all `interagent` commands via Bash automatically. The only manual step is pasting the relay prompt into Kimi.
+No. After `interagent init`, just talk to your principal agent. It runs all `interagent` commands via Bash automatically. The only manual step is pasting relay prompts to delegate agents.
 
-**Q: How does Kimi know how to use the system?**
-`interagent init` writes `.interagent/AGENTS.md` — a complete guide covering commands, workflow, and protocol. The relay prompt tells Kimi to read it before starting work.
+**Q: How do delegate agents know how to use the system?**
+`interagent init` writes `.interagent/AGENTS.md` — a complete guide covering commands, workflow, and protocol. The relay prompt tells each agent to read it before starting work.
 
 **Q: Should I commit `.interagent/` to Git?**
 Partially. The `.gitignore` excludes runtime state (tasks, messages, session.json, transport.json) but keeps AGENTS.md and README.md. This gives you documentation without committing transient data.
 
-**Q: Can I use this with just Claude (no Kimi)?**
+**Q: Can I use this with a single agent?**
 Yes — just skip the relay step. The session, task, and summary commands are useful even for single-agent projects to track progress.
 
 **Q: Do both developers need the same git remote for cross-machine sync?**
 Yes. Git transport requires a shared remote (e.g. `origin`). One developer runs `interagent transport setup --type git` to create the orphan branch, then the other runs the same command to connect to it.
 
-**Q: What if Kimi doesn't have terminal access?**
-The relay prompt includes the task details inline, so Kimi can read and respond without running any commands. The collaboration is less structured but still works.
+Use `--cluster` to identify different teams: `alice` and `bob` can both collaborate on the same project with messages stamped as `alice.claude → bob.gemini`.
+
+**Q: What if a delegate agent doesn't have terminal access?**
+The relay prompt includes the task details inline, so agents can read and respond without running any commands. The collaboration is less structured but still works.
 
 ---
 

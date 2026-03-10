@@ -1245,6 +1245,13 @@ For more help: https://github.com/gutohuida/InterAgentFramework
 
 def main(args: Optional[List[str]] = None) -> int:
     """Main entry point."""
+    # Ensure stdout/stderr handle Unicode (e.g. emoji in messages) on Windows
+    import sys as _sys
+    if hasattr(_sys.stdout, "reconfigure"):
+        _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(_sys.stderr, "reconfigure"):
+        _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = create_parser()
     parsed_args = parser.parse_args(args)
     
