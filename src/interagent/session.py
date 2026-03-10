@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from .constants import SESSION_FILE, VALID_AGENTS, VALID_MODES
+from .constants import SESSION_FILE, VALID_MODES, AGENT_NAME_RE, DEFAULT_AGENTS
 from .utils import load_json, save_json, generate_id, now_iso
 
 
@@ -38,8 +38,13 @@ class Session:
         """Get agent configurations."""
         return self._data.get("agents", {})
 
+    @property
+    def agent_names(self) -> List[str]:
+        """Get list of agent names in this session."""
+        return list(self._data.get("agents", {}).keys())
+
     def get_agent_role(self, agent: str) -> str:
-        """Get role for an agent."""
+        """Get session role for an agent (principal/delegate/reviewer/collaborator)."""
         return self.agents.get(agent, {}).get("role", "delegate")
 
     def to_dict(self) -> Dict[str, Any]:
@@ -64,19 +69,41 @@ class Session:
         name: str,
         principal: str = "claude",
         mode: str = "hierarchical",
+        agents: Optional[List[str]] = None,
     ) -> "Session":
-        """Create a new session."""
-        if principal not in VALID_AGENTS:
-            raise ValueError(f"Invalid principal: {principal}")
+        """Create a new session.
+
+        Args:
+            name:      Project/session name.
+            principal: The lead agent (must be in agents list).
+            mode:      Collaboration mode.
+            agents:    List of agent names. Defaults to DEFAULT_AGENTS.
+                       Any name matching AGENT_NAME_RE is accepted.
+        """
+        if not AGENT_NAME_RE.match(principal):
+            raise ValueError(f"Invalid principal name: {principal!r}")
         if mode not in VALID_MODES:
             raise ValueError(f"Invalid mode: {mode}")
 
-        agents = {}
-        for agent in VALID_AGENTS:
-            agents[agent] = {
-                "role": "principal" if agent == principal else "delegate",
-                "since": now_iso(),
-            }
+        agent_list = agents if agents else DEFAULT_AGENTS
+        # Ensure principal is included
+        if principal not in agent_list:
+            agent_list = [principal] + agent_list
+
+        # Validate each agent name
+        for ag in agent_list:
+            if not AGENT_NAME_RE.match(ag):
+                raise ValueError(f"Invalid agent name: {ag!r}")
+
+        agent_map = {}
+        for ag in agent_list:
+            if ag == principal:
+                role = "principal"
+            elif len(agent_list) == 2:
+                role = "delegate"
+            else:
+                role = "collaborator"
+            agent_map[ag] = {"role": role, "since": now_iso()}
 
         data = {
             "id": generate_id("session"),
@@ -85,7 +112,7 @@ class Session:
             "updated": now_iso(),
             "mode": mode,
             "principal": principal,
-            "agents": agents,
+            "agents": agent_map,
             "active_tasks": [],
             "completed_tasks": [],
             "discussions": [],
@@ -109,7 +136,7 @@ class Session:
         """Move task from active to completed."""
         active = self._data.get("active_tasks", [])
         completed = self._data.get("completed_tasks", [])
-        
+
         if task_id in active:
             active.remove(task_id)
             completed.append(task_id)

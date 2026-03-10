@@ -7,8 +7,17 @@ are never touched.
 
 File naming on the branch
 --------------------------
-Messages: {iso_ts}-{from}-{to}-{uuid6}.json
-  e.g.    20260309T142301Z-claude-kimi-a3f2c1.json
+Without cluster:
+  Messages: {iso_ts}-{from}-{to}-{uuid6}.json
+    e.g.    20260309T142301Z-claude-kimi-a3f2c1.json
+
+With cluster (multi-person on same branch):
+  Messages: {iso_ts}-{cluster}.{from}-{to_full}-{uuid6}.json
+    e.g.    20260309T142301Z-alice.claude-bob.kimi-a3f2c1.json
+
+  The cluster name identifies a developer's workspace (set via
+  `interagent transport setup --type git --cluster alice`).
+  Recipients use cluster.agent addressing to reach specific clusters.
 
 Tasks:    {iso_ts}-task-for-{assignee}-{uuid6}.json
   e.g.    20260309T142301Z-task-for-kimi-b7d3e2.json
@@ -63,10 +72,12 @@ class GitTransport(BaseTransport):
         remote: str = "origin",
         branch: str = "interagent/collab",
         poll_interval: int = 10,
+        cluster: str = "",
     ):
         self.remote = remote
         self.branch = branch
         self.poll_interval = poll_interval
+        self.cluster = cluster  # Developer workspace name; "" = no cluster prefix
         self._remote_ref = f"{remote}/{branch}"
 
     # ------------------------------------------------------------------
@@ -185,8 +196,7 @@ class GitTransport(BaseTransport):
     # Filename helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _make_msg_filename(message_data: Dict[str, Any]) -> str:
+    def _make_msg_filename(self, message_data: Dict[str, Any]) -> str:
         uid = str(uuid.uuid4())[:6]
         from_agent = message_data.get("from", "unknown")
         to_agent = message_data.get("to", "unknown")
@@ -200,20 +210,41 @@ class GitTransport(BaseTransport):
 
     @staticmethod
     def _recipient_from_msg_filename(fname: str) -> str:
-        """Extract the 'to' agent from a message filename.
+        """Extract the 'to' field from a message filename.
 
         Filename format: {ts}-{from}-{to}-{uid6}.json
-        Split by '-' gives: [ts, from, to, uid6]
+        The 'to' field may include a cluster prefix: cluster.agent
         """
         stem = fname[:-5] if fname.endswith(".json") else fname  # strip .json
         parts = stem.split("-")
         return parts[2] if len(parts) >= 4 else ""
+
+    def _matches_agent(self, recipient_field: str, agent: str) -> bool:
+        """Return True if recipient_field targets this agent.
+
+        Handles both plain names ("claude") and cluster-prefixed names
+        ("alice.claude"). When self.cluster is set, only accept messages
+        explicitly addressed to this cluster or without a cluster prefix.
+        """
+        if recipient_field == agent:
+            return True  # plain match, no cluster prefix
+        if recipient_field == f"{self.cluster}.{agent}" and self.cluster:
+            return True  # exact cluster.agent match
+        # Accept plain agent name even when we have a cluster (backward compat)
+        return False
 
     # ------------------------------------------------------------------
     # BaseTransport implementation
     # ------------------------------------------------------------------
 
     def send_message(self, message_data: Dict[str, Any]) -> bool:
+        # Stamp with cluster prefix so recipients know which workspace sent this
+        if self.cluster and "from" in message_data:
+            raw_from = message_data["from"]
+            # Only add prefix if not already prefixed
+            if "." not in raw_from:
+                message_data = dict(message_data)
+                message_data["from"] = f"{self.cluster}.{raw_from}"
         filename = self._make_msg_filename(message_data)
         content_bytes = json.dumps(message_data, indent=2).encode("utf-8")
         from_agent = message_data.get("from", "?")
@@ -225,6 +256,9 @@ class GitTransport(BaseTransport):
 
         Fetches from remote, filters by recipient, excludes already-seen IDs.
         Does NOT mutate the seen set — call archive_message() to mark as read.
+
+        When self.cluster is set, matches cluster.agent AND plain agent names
+        so messages from before cluster setup are still delivered.
         """
         self._fetch()
         all_files = self.list_remote_filenames()
@@ -232,7 +266,7 @@ class GitTransport(BaseTransport):
         # Fast filter: recipient encoded in filename (no file reads needed)
         candidate_files = [
             f for f in all_files
-            if self._recipient_from_msg_filename(f) == agent
+            if self._matches_agent(self._recipient_from_msg_filename(f), agent)
         ]
 
         seen = self._get_seen_set(agent)

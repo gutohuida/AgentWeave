@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "interagent-framework"
-version = "0.2.0"
-description = "A framework for Claude Code and Kimi Code collaboration"
+version = "0.3.0"
+description = "Multi-agent AI collaboration framework (Claude, Kimi, Gemini, Codex, and more)"
 readme = "README.md"
 license = "MIT"
 authors = [
     {name = "gutohuida"},
 ]
-keywords = ["claude", "kimi", "collaboration", "agents", "ai", "code"]
+keywords = ["claude", "kimi", "gemini", "codex", "collaboration", "agents", "ai", "code", "multi-agent"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

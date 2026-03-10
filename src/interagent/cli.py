@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
-from .constants import VALID_AGENTS, VALID_MODES, INTERAGENT_DIR, TRANSPORT_CONFIG_FILE
+from .constants import (
+    VALID_AGENTS, VALID_MODES, INTERAGENT_DIR, TRANSPORT_CONFIG_FILE,
+    DEFAULT_AGENTS, DEFAULT_AGENT_ROLES, DEV_ROLE_LABELS,
+)
 from .session import Session
 from .task import Task, TaskStatus
 from .messaging import Message, MessageBus
@@ -29,25 +32,38 @@ def cmd_init(args: argparse.Namespace) -> int:
     if INTERAGENT_DIR.exists() and not args.force:
         print_warning(".interagent/ already exists. Use --force to overwrite.")
         return 1
-    
+
     ensure_dirs()
-    
+
     try:
+        # Parse agent list: --agents claude,kimi,gemini  OR fall back to default
+        agents_arg = getattr(args, "agents", None)
+        agent_list = None
+        if agents_arg:
+            agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()]
+
+        principal = args.principal or "claude"
+
         session = Session.create(
             name=args.project or "Unnamed Project",
-            principal=args.principal or "claude",
+            principal=principal,
             mode=args.mode or "hierarchical",
+            agents=agent_list,
         )
         session.save()
-        
+
         # Create README
+        agents_listed = "\n".join(
+            f"# interagent relay --agent {ag}" for ag in session.agent_names
+        )
         readme_path = INTERAGENT_DIR / "README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(f"""# InterAgent Session: {session.name}
 
-**ID:** {session.id}  
-**Mode:** {session.mode}  
+**ID:** {session.id}
+**Mode:** {session.mode}
 **Principal:** {session.principal}
+**Agents:** {', '.join(session.agent_names)}
 
 ## Quick Commands
 
@@ -55,20 +71,20 @@ def cmd_init(args: argparse.Namespace) -> int:
 # Check status
 interagent status
 
-# Create task
-interagent task create --title "Task name" --assignee kimi
+# Create task for any agent
+interagent task create --title "Task name" --assignee <agent>
 
 # List tasks
 interagent task list
 
 # Quick delegation
-interagent quick --to kimi "Implement auth"
+interagent quick --to <agent> "Implement auth"
 
 # Check inbox
-interagent inbox --agent kimi
+interagent inbox --agent <agent>
 
-# Get relay prompt
-interagent relay --agent kimi
+# Get relay prompt (for each agent)
+{agents_listed}
 
 # Summary
 interagent summary
@@ -76,17 +92,20 @@ interagent summary
 
 ## Files
 
-- `session.json` - Session configuration
-- `agents/` - Agent status
-- `tasks/active/` - Active tasks
-- `tasks/completed/` - Completed tasks
-- `messages/pending/` - Unread messages
-- `messages/archive/` - Message history
-- `shared/` - Shared context and decisions
+- `session.json` — Session configuration
+- `AGENTS.md` — Collaboration guide (read by all agents on session start)
+- `ROLES.md` — Agent role assignments (edit freely)
+- `agents/` — Agent status
+- `tasks/active/` — Active tasks
+- `tasks/completed/` — Completed tasks
+- `messages/pending/` — Unread messages
+- `messages/archive/` — Message history
+- `shared/` — Shared context and decisions
 """)
-        
-        # Write AGENTS.md — the collaboration guide both agents read on session start
-        delegate = next((a for a in VALID_AGENTS if a != session.principal), "kimi")
+
+        # Write AGENTS.md — collaboration guide read by all agents on session start
+        non_principal = [a for a in session.agent_names if a != session.principal]
+        delegate = non_principal[0] if non_principal else "kimi"
         try:
             agents_guide = (
                 get_template("agents_guide")
@@ -100,9 +119,31 @@ interagent summary
         except FileNotFoundError:
             pass  # Non-fatal
 
+        # Write ROLES.md — agent role assignments (auto-filled, user-editable)
+        try:
+            role_rows = []
+            for ag in session.agent_names:
+                dev_role_key = DEFAULT_AGENT_ROLES.get(ag, "fullstack_dev")
+                dev_role_label = DEV_ROLE_LABELS.get(dev_role_key, "Full Stack Developer")
+                session_role = session.get_agent_role(ag)
+                responsibility = _role_responsibility(dev_role_key)
+                role_rows.append(f"| **{ag}** | {dev_role_label} (`{session_role}`) | {responsibility} |")
+
+            roles_content = (
+                get_template("roles_template")
+                .replace("{project_name}", session.name)
+                .replace("{session_id}", session.id)
+                .replace("{mode}", session.mode)
+                .replace("{principal}", session.principal)
+                .replace("{role_rows}", "\n".join(role_rows))
+            )
+            roles_path = INTERAGENT_DIR / "ROLES.md"
+            with open(roles_path, "w", encoding="utf-8") as f:
+                f.write(roles_content)
+        except FileNotFoundError:
+            pass  # Non-fatal
+
         # Write AI_CONTEXT.md — versioned best-practices template at project root.
-        # Both agents use this as context; it is the basis for generating CLAUDE.md.
-        # Run `interagent update-template` to keep it current with new AI capabilities.
         ai_context_path = Path.cwd() / "AI_CONTEXT.md"
         if not ai_context_path.exists():
             try:
@@ -113,24 +154,46 @@ interagent summary
                 pass  # Non-fatal
 
         print_success(f"Initialized session: {session.name}")
-        print(f"   ID: {session.id}")
-        print(f"   Mode: {session.mode}")
-        print(f"   Principal: {session.principal}")
-        print(f"\n[DIR] Created .interagent/ directory")
-        print("     .interagent/AGENTS.md    <- collaboration guide (commands, roles, workflow)")
-        print("     .interagent/shared/context.md  <- fill this with current project state")
+        print(f"   ID:      {session.id}")
+        print(f"   Mode:    {session.mode}")
+        print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
+        print(f"\n[DIR] Created .interagent/")
+        print("     AGENTS.md    <- collaboration guide (commands, roles, workflow)")
+        print("     ROLES.md     <- agent role assignments (edit freely)")
+        print("     shared/context.md  <- fill this with current project state")
         print("\n[FILE] Created AI_CONTEXT.md at project root")
         print("     <- versioned best-practices template; basis for generating CLAUDE.md")
         print("     <- run `interagent update-template --agent claude` to keep it current")
         print("\nNext steps:")
         print("1. Fill in the [Replace with...] sections in AI_CONTEXT.md")
-        print("2. Edit .interagent/shared/context.md with current project state")
-        print("3. Tell Claude: \"Read AI_CONTEXT.md and .interagent/AGENTS.md, then generate CLAUDE.md\"")
+        print("2. Edit .interagent/ROLES.md to assign the right dev roles")
+        print("3. Edit .interagent/shared/context.md with current project state")
+        print(f"4. Tell {session.principal.capitalize()}: \"Read AI_CONTEXT.md, AGENTS.md, and ROLES.md, then generate CLAUDE.md\"")
         return 0
-        
+
     except ValueError as e:
         print_error(str(e))
         return 1
+
+
+def _role_responsibility(role_key: str) -> str:
+    """Return a short responsibility description for a dev role."""
+    responsibilities = {
+        "tech_lead":         "Architecture decisions, code review, integration",
+        "architect":         "System design, data models, API contracts",
+        "backend_dev":       "APIs, database, business logic, server-side",
+        "frontend_dev":      "UI components, styling, client-side state",
+        "fullstack_dev":     "Backend and frontend features",
+        "qa_engineer":       "Tests, quality assurance, edge cases",
+        "devops_engineer":   "CI/CD, infrastructure, deployment",
+        "security_engineer": "Security review, auth/authz, vulnerability audit",
+        "data_engineer":     "Data pipelines, ETL, analytics",
+        "ml_engineer":       "ML models, training pipelines, inference",
+        "technical_writer":  "Documentation, READMEs, API docs",
+        "code_reviewer":     "Pull request reviews, style enforcement",
+        "project_manager":   "Task tracking, progress coordination",
+    }
+    return responsibilities.get(role_key, "General development tasks")
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -158,8 +221,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"   Active: {len(active_tasks)}")
     print(f"   Completed: {len(completed_tasks)}")
     
-    # Count messages
-    pending = MessageBus.get_inbox("claude") + MessageBus.get_inbox("kimi")
+    # Count messages (across all session agents)
+    all_agents = session.agent_names or ["claude", "kimi"]
+    pending = []
+    for ag in all_agents:
+        pending.extend(MessageBus.get_inbox(ag))
     print(f"\n[MSG] Pending Messages: {len(pending)}")
     
     return 0
@@ -182,76 +248,78 @@ def cmd_summary(args: argparse.Namespace) -> int:
     print(f"Principal: {session.principal}")
     print()
     
-    # Tasks by status
+    # Tasks by status — dynamic across all session agents
     all_tasks = Task.list_all()
-    
-    pending_claude = [t for t in all_tasks if t.assignee == "claude" and t.status in ["pending", "assigned"]]
-    pending_kimi = [t for t in all_tasks if t.assignee == "kimi" and t.status in ["pending", "assigned"]]
-    in_progress_claude = [t for t in all_tasks if t.assignee == "claude" and t.status == "in_progress"]
-    in_progress_kimi = [t for t in all_tasks if t.assignee == "kimi" and t.status == "in_progress"]
+    all_agents = session.agent_names or ["claude", "kimi"]
+
+    pending_by_agent = {
+        ag: [t for t in all_tasks if t.assignee == ag and t.status in ["pending", "assigned"]]
+        for ag in all_agents
+    }
+    in_progress_by_agent = {
+        ag: [t for t in all_tasks if t.assignee == ag and t.status == "in_progress"]
+        for ag in all_agents
+    }
     ready_for_review = [t for t in all_tasks if t.status in ["completed", "under_review"]]
     approved = [t for t in all_tasks if t.status == "approved"]
-    
+
     print("[TASKS]")
-    if pending_claude:
-        print(f"  [WAIT] Claude: {len(pending_claude)} task(s) waiting to start")
-    if pending_kimi:
-        print(f"  [WAIT] Kimi: {len(pending_kimi)} task(s) waiting to start")
-    if in_progress_claude:
-        print(f"  [WORK] Claude: {len(in_progress_claude)} task(s) in progress")
-    if in_progress_kimi:
-        print(f"  [WORK] Kimi: {len(in_progress_kimi)} task(s) in progress")
+    for ag in all_agents:
+        if pending_by_agent[ag]:
+            print(f"  [WAIT] {ag.capitalize()}: {len(pending_by_agent[ag])} task(s) waiting to start")
+        if in_progress_by_agent[ag]:
+            print(f"  [WORK] {ag.capitalize()}: {len(in_progress_by_agent[ag])} task(s) in progress")
     if ready_for_review:
         print(f"  [REVIEW] {len(ready_for_review)} task(s) ready for review")
     if approved:
         print(f"  [OK] {len(approved)} task(s) approved")
-    
-    if not any([pending_claude, pending_kimi, in_progress_claude, in_progress_kimi, ready_for_review, approved]):
+
+    any_tasks = any(
+        pending_by_agent[ag] or in_progress_by_agent[ag] for ag in all_agents
+    ) or ready_for_review or approved
+    if not any_tasks:
         print("  No active tasks")
     print()
-    
-    # Messages
-    claude_msgs = MessageBus.get_inbox("claude")
-    kimi_msgs = MessageBus.get_inbox("kimi")
-    
+
+    # Messages — dynamic across all agents
+    msgs_by_agent = {ag: MessageBus.get_inbox(ag) for ag in all_agents}
+
     print("[MESSAGES]")
-    if claude_msgs:
-        print(f"  [MSG] Claude: {len(claude_msgs)} unread message(s)")
-        for msg in claude_msgs:
-            print(f"     - From {msg.sender}: {msg.subject or '(no subject)'}")
-    if kimi_msgs:
-        print(f"  [MSG] Kimi: {len(kimi_msgs)} unread message(s)")
-        for msg in kimi_msgs:
-            print(f"     - From {msg.sender}: {msg.subject or '(no subject)'}")
-    if not claude_msgs and not kimi_msgs:
+    any_msgs = False
+    for ag in all_agents:
+        if msgs_by_agent[ag]:
+            any_msgs = True
+            print(f"  [MSG] {ag.capitalize()}: {len(msgs_by_agent[ag])} unread message(s)")
+            for msg in msgs_by_agent[ag]:
+                print(f"     - From {msg.sender}: {msg.subject or '(no subject)'}")
+    if not any_msgs:
         print("  No unread messages")
     print()
-    
+
     # Action items
     print("[ACTION ITEMS]")
     if ready_for_review:
         print(f"  -> Tell {session.principal} to review {len(ready_for_review)} completed task(s)")
-    if pending_kimi and session.principal == "claude":
-        print(f"  -> Tell Kimi to check inbox ({len(pending_kimi)} new task(s))")
-    if pending_claude and session.principal == "kimi":
-        print(f"  -> Tell Claude to check inbox ({len(pending_claude)} new task(s))")
-    if claude_msgs:
-        print("  -> Tell Claude to check messages")
-    if kimi_msgs:
-        print("  -> Tell Kimi to check messages")
-    if not any([ready_for_review, pending_kimi, pending_claude, claude_msgs, kimi_msgs]):
+    non_principal = [ag for ag in all_agents if ag != session.principal]
+    for ag in non_principal:
+        if pending_by_agent.get(ag):
+            print(f"  -> Tell {ag.capitalize()} to check inbox ({len(pending_by_agent[ag])} new task(s))")
+        if msgs_by_agent.get(ag):
+            print(f"  -> Tell {ag.capitalize()} to check messages")
+    if msgs_by_agent.get(session.principal):
+        print(f"  -> Tell {session.principal.capitalize()} to check messages")
+    if not ready_for_review and not any_msgs and not any(pending_by_agent.values()):
         print("  All caught up! No action needed.")
     print()
-    
+
     # Quick commands
     print("[QUICK COMMANDS]")
     if ready_for_review:
         task_id = ready_for_review[0].id
         print(f"  interagent task show {task_id}")
-    if kimi_msgs:
-        print(f"  interagent relay --agent kimi")
-    if claude_msgs:
-        print(f"  interagent relay --agent claude")
+    for ag in all_agents:
+        if msgs_by_agent[ag]:
+            print(f"  interagent relay --agent {ag}")
     print()
     
     return 0
@@ -629,7 +697,6 @@ def cmd_msg_read(args: argparse.Namespace) -> int:
 def cmd_delegate(args: argparse.Namespace) -> int:
     """Quick delegation command."""
     # Create task
-    task_id = f"task-xxx"
     task = Task.create(
         title=args.task,
         description=args.description or "",
@@ -755,22 +822,31 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
 
         # Write .interagent/transport.json
         INTERAGENT_DIR.mkdir(parents=True, exist_ok=True)
+        cluster = getattr(args, "cluster", None) or ""
         config = {
             "type": "git",
             "remote": remote,
             "branch": branch,
             "poll_interval": 10,
         }
+        if cluster:
+            config["cluster"] = cluster
         save_json(TRANSPORT_CONFIG_FILE, config)
 
         print_success("Git transport configured!")
         print(f"   Remote:   {remote}")
         print(f"   Branch:   {branch}")
+        if cluster:
+            print(f"   Cluster:  {cluster}  (your workspace identity on the shared branch)")
         print(f"   Config:   {TRANSPORT_CONFIG_FILE}")
         print()
         print("Next steps:")
         print(f"  1. Your collaborator clones/has the repo with remote '{remote}'")
-        print(f"  2. They run: interagent transport setup --remote {remote} --type git")
+        if cluster:
+            print(f"  2. They run: interagent transport setup --type git --cluster <their-name>")
+            print(f"  3. Address messages to them as: <their-cluster>.<their-agent>")
+        else:
+            print(f"  2. They run: interagent transport setup --remote {remote} --type git")
         print(f"  3. Messages now sync via git branch '{branch}'")
         print()
         print("Start watching for incoming messages:")
@@ -806,9 +882,12 @@ def cmd_transport_status(args: argparse.Namespace) -> int:
         remote = config.get("remote", "origin")
         branch = config.get("branch", "interagent/collab")
         poll_interval = config.get("poll_interval", 10)
+        cluster = config.get("cluster", "")
         print(f"   Remote:        {remote}")
         print(f"   Branch:        {branch}")
         print(f"   Poll interval: {poll_interval}s")
+        if cluster:
+            print(f"   Cluster:       {cluster}")
 
         # Connectivity check
         result = _sp.run(
@@ -848,7 +927,9 @@ def cmd_transport_pull(args: argparse.Namespace) -> int:
         return 0
 
     print_info(f"Pulling from {t.get_transport_type()} transport...")
-    for agent in VALID_AGENTS:
+    session = Session.load()
+    pull_agents = session.agent_names if session else VALID_AGENTS
+    for agent in pull_agents:
         messages = t.get_pending_messages(agent)
         if messages:
             print(f"   {agent}: {len(messages)} pending message(s)")
@@ -872,18 +953,19 @@ def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
         prog="interagent",
-        description="InterAgent - Framework for Claude and Kimi collaboration",
+        description="InterAgent - Multi-agent AI collaboration framework",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  interagent init --project "My API" --principal claude
+  interagent init --project "My API" --principal claude --agents claude,kimi,gemini
   interagent quick --to kimi "Implement authentication"
-  interagent relay --to kimi
+  interagent relay --agent kimi
   interagent summary
   interagent task list
-  interagent inbox --agent kimi
+  interagent inbox --agent gemini
+  interagent transport setup --type git --cluster alice
 
-For more help: https://github.com/yourusername/interagent
+For more help: https://github.com/gutohuida/InterAgentFramework
         """,
     )
     
@@ -900,9 +982,12 @@ For more help: https://github.com/yourusername/interagent
     init_parser.add_argument("--project", "-p", help="Project name")
     init_parser.add_argument(
         "--principal",
-        choices=VALID_AGENTS,
         default="claude",
-        help="Principal agent (default: claude)",
+        help="Principal (lead) agent, e.g. claude (default: claude)",
+    )
+    init_parser.add_argument(
+        "--agents",
+        help=f"Comma-separated agent list, e.g. claude,kimi,gemini (default: {','.join(DEFAULT_AGENTS)})",
     )
     init_parser.add_argument(
         "--mode",
@@ -922,27 +1007,24 @@ For more help: https://github.com/yourusername/interagent
     # Summary (NEW)
     subparsers.add_parser("summary", help="Quick summary for relay decisions")
     
-    # Relay (NEW)
+    # Relay
     relay_parser = subparsers.add_parser("relay", help="Generate relay prompt for agent")
     relay_parser.add_argument(
         "--agent", "-a",
         required=True,
-        choices=VALID_AGENTS,
-        help="Agent to generate prompt for",
+        help="Agent to generate prompt for (e.g. kimi, gemini, codex)",
     )
-    
-    # Quick (NEW)
+
+    # Quick
     quick_parser = subparsers.add_parser("quick", help="Quick task delegation (single command)")
     quick_parser.add_argument(
         "--to", "-t",
         required=True,
-        choices=VALID_AGENTS,
-        help="Delegate to",
+        help="Delegate to (any agent name)",
     )
     quick_parser.add_argument(
         "--from-agent", "-f",
-        choices=VALID_AGENTS,
-        help="Delegate from",
+        help="Delegate from (any agent name)",
     )
     quick_parser.add_argument(
         "--priority",
@@ -965,8 +1047,7 @@ For more help: https://github.com/yourusername/interagent
     task_create.add_argument("--description", "-d", help="Task description")
     task_create.add_argument(
         "--assignee", "-a",
-        choices=VALID_AGENTS,
-        help="Assign to agent",
+        help="Assign to agent (any agent name, e.g. kimi, gemini)",
     )
     task_create.add_argument(
         "--assigner",
@@ -993,8 +1074,7 @@ For more help: https://github.com/yourusername/interagent
     task_list = task_subparsers.add_parser("list", help="List tasks")
     task_list.add_argument(
         "--assignee",
-        choices=VALID_AGENTS,
-        help="Filter by assignee",
+        help="Filter by assignee (any agent name)",
     )
     task_list.add_argument(
         "--status",
@@ -1032,13 +1112,11 @@ For more help: https://github.com/yourusername/interagent
     msg_send.add_argument(
         "--to", "-t",
         required=True,
-        choices=VALID_AGENTS,
-        help="Recipient",
+        help="Recipient (any agent name)",
     )
     msg_send.add_argument(
         "--from-agent", "-f",
-        choices=VALID_AGENTS,
-        help="Sender",
+        help="Sender (any agent name)",
     )
     msg_send.add_argument("--subject", "-s", help="Message subject")
     msg_send.add_argument(
@@ -1062,22 +1140,19 @@ For more help: https://github.com/yourusername/interagent
     inbox_parser = subparsers.add_parser("inbox", help="Check inbox")
     inbox_parser.add_argument(
         "--agent", "-a",
-        choices=VALID_AGENTS,
-        help="Check for specific agent",
+        help="Check for specific agent (any agent name)",
     )
-    
+
     # Delegate shortcut
     delegate_parser = subparsers.add_parser("delegate", help="Quick task delegation")
     delegate_parser.add_argument(
         "--to", "-t",
         required=True,
-        choices=VALID_AGENTS,
-        help="Delegate to",
+        help="Delegate to (any agent name)",
     )
     delegate_parser.add_argument(
         "--from-agent", "-f",
-        choices=VALID_AGENTS,
-        help="Delegate from",
+        help="Delegate from (any agent name)",
     )
     delegate_parser.add_argument(
         "--task",
@@ -1103,8 +1178,7 @@ For more help: https://github.com/yourusername/interagent
     update_tmpl_parser.add_argument(
         "--agent", "-a",
         required=True,
-        choices=VALID_AGENTS,
-        help="Which agent receives and executes the update prompt (claude or kimi)",
+        help="Which agent receives and executes the update prompt (e.g. claude, kimi, gemini)",
     )
     update_tmpl_parser.add_argument(
         "--template-path", "-p",
@@ -1145,6 +1219,16 @@ For more help: https://github.com/yourusername/interagent
         "--branch", "-b",
         default="interagent/collab",
         help="Git orphan branch name (default: interagent/collab)",
+    )
+    transport_setup.add_argument(
+        "--cluster", "-c",
+        default=None,
+        help=(
+            "Your workspace name on the shared branch (e.g. alice). "
+            "Use when multiple people/machines share the same git remote. "
+            "Messages will be stamped '{cluster}.{agent}' so each workspace "
+            "can be addressed individually."
+        ),
     )
 
     # transport status

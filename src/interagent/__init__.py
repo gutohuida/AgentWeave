@@ -1,11 +1,11 @@
 """
-InterAgent - A framework for Claude Code and Kimi Code collaboration.
+InterAgent - Multi-agent AI collaboration framework.
 
-This package provides tools for managing inter-agent collaboration through
-structured protocols, task delegation, and shared state.
+File-based protocol for N AI agents (Claude, Kimi, Gemini, Codex, etc.)
+to collaborate through a shared .interagent/ directory.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "InterAgent Team"
 
 from .cli import main

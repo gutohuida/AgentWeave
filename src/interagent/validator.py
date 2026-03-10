@@ -1,7 +1,7 @@
 """JSON schema validation for InterAgent."""
 
 from typing import Any, Dict, List, Tuple
-from .constants import TASK_STATUSES, MESSAGE_TYPES, PRIORITIES, VALID_AGENTS
+from .constants import TASK_STATUSES, MESSAGE_TYPES, PRIORITIES, AGENT_NAME_RE
 
 
 class ValidationError(Exception):
@@ -9,100 +9,113 @@ class ValidationError(Exception):
     pass
 
 
+def _valid_agent(name: Any) -> bool:
+    """Return True if name is a valid agent identifier.
+
+    Accepts plain agent names (e.g. "claude") and cluster-prefixed names
+    (e.g. "alice.claude") used by the git transport.
+    """
+    if not isinstance(name, str):
+        return False
+    # Strip optional cluster prefix
+    agent_part = name.split(".")[-1] if "." in name else name
+    return bool(AGENT_NAME_RE.match(agent_part))
+
+
 def validate_task(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
     """Validate task data.
-    
+
     Returns:
         (is_valid, list_of_errors)
     """
     errors = []
-    
+
     # Required fields
     required = ["id", "title", "status", "created"]
     for field in required:
         if field not in data:
             errors.append(f"Missing required field: {field}")
-    
+
     # Validate status
     if "status" in data and data["status"] not in TASK_STATUSES:
         errors.append(f"Invalid status: {data['status']}")
-    
+
     # Validate priority
     if "priority" in data and data["priority"] not in PRIORITIES:
         errors.append(f"Invalid priority: {data['priority']}")
-    
-    # Validate assignee/assigner
+
+    # Validate assignee/assigner — any valid agent name, not just known ones
     if "assignee" in data and data["assignee"]:
-        if data["assignee"] not in VALID_AGENTS:
-            errors.append(f"Invalid assignee: {data['assignee']}")
-    
+        if not _valid_agent(data["assignee"]):
+            errors.append(f"Invalid assignee name: {data['assignee']!r}")
+
     if "assigner" in data and data["assigner"]:
-        if data["assigner"] not in VALID_AGENTS:
-            errors.append(f"Invalid assigner: {data['assigner']}")
-    
+        if not _valid_agent(data["assigner"]):
+            errors.append(f"Invalid assigner name: {data['assigner']!r}")
+
     # Validate types
     if "title" in data and not isinstance(data["title"], str):
         errors.append("Title must be a string")
-    
+
     if "description" in data and not isinstance(data["description"], str):
         errors.append("Description must be a string")
-    
+
     if "requirements" in data and not isinstance(data["requirements"], list):
         errors.append("Requirements must be a list")
-    
+
     return len(errors) == 0, errors
 
 
 def validate_message(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
     """Validate message data.
-    
+
     Returns:
         (is_valid, list_of_errors)
     """
     errors = []
-    
+
     # Required fields
     required = ["id", "from", "to", "content", "timestamp"]
     for field in required:
         if field not in data:
             errors.append(f"Missing required field: {field}")
-    
-    # Validate sender/recipient
-    if "from" in data and data["from"] not in VALID_AGENTS:
-        errors.append(f"Invalid sender: {data['from']}")
-    
-    if "to" in data and data["to"] not in VALID_AGENTS:
-        errors.append(f"Invalid recipient: {data['to']}")
-    
+
+    # Validate sender/recipient — accept plain names and cluster.agent form
+    if "from" in data and not _valid_agent(data["from"]):
+        errors.append(f"Invalid sender: {data['from']!r}")
+
+    if "to" in data and not _valid_agent(data["to"]):
+        errors.append(f"Invalid recipient: {data['to']!r}")
+
     # Validate type
     if "type" in data and data["type"] not in MESSAGE_TYPES:
         errors.append(f"Invalid message type: {data['type']}")
-    
+
     # Validate types
     if "content" in data and not isinstance(data["content"], str):
         errors.append("Content must be a string")
-    
+
     if "subject" in data and not isinstance(data["subject"], str):
         errors.append("Subject must be a string")
-    
+
     return len(errors) == 0, errors
 
 
 def validate_session(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
     """Validate session data."""
     errors = []
-    
+
     required = ["id", "name", "created", "mode", "principal"]
     for field in required:
         if field not in data:
             errors.append(f"Missing required field: {field}")
-    
+
     if "mode" in data and data["mode"] not in ["hierarchical", "peer", "review"]:
         errors.append(f"Invalid mode: {data['mode']}")
-    
-    if "principal" in data and data["principal"] not in VALID_AGENTS:
-        errors.append(f"Invalid principal: {data['principal']}")
-    
+
+    if "principal" in data and not _valid_agent(data["principal"]):
+        errors.append(f"Invalid principal: {data['principal']!r}")
+
     return len(errors) == 0, errors
 
 
@@ -116,7 +129,7 @@ def sanitize_string(value: Any, max_length: int = 1000) -> str:
 def sanitize_task_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Sanitize task data before saving."""
     sanitized = {}
-    
+
     # Copy allowed fields with sanitization
     if "id" in data:
         sanitized["id"] = sanitize_string(data["id"], 50)
@@ -128,11 +141,13 @@ def sanitize_task_data(data: Dict[str, Any]) -> Dict[str, Any]:
         sanitized["status"] = data["status"]
     if "priority" in data and data["priority"] in PRIORITIES:
         sanitized["priority"] = data["priority"]
-    if "assignee" in data and data["assignee"] in VALID_AGENTS:
+
+    # Accept any valid agent name
+    if "assignee" in data and _valid_agent(data.get("assignee", "")):
         sanitized["assignee"] = data["assignee"]
-    if "assigner" in data and data["assigner"] in VALID_AGENTS:
+    if "assigner" in data and _valid_agent(data.get("assigner", "")):
         sanitized["assigner"] = data["assigner"]
-    
+
     # Lists
     if "requirements" in data and isinstance(data["requirements"], list):
         sanitized["requirements"] = [
@@ -146,11 +161,11 @@ def sanitize_task_data(data: Dict[str, Any]) -> Dict[str, Any]:
         sanitized["deliverables"] = [
             sanitize_string(d, 500) for d in data["deliverables"]
         ]
-    
+
     # Timestamps
     if "created" in data:
         sanitized["created"] = data["created"]
     if "updated" in data:
         sanitized["updated"] = data["updated"]
-    
+
     return sanitized

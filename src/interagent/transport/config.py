@@ -12,8 +12,13 @@ def get_transport() -> BaseTransport:
     preserving 100% of existing single-machine behavior.
 
     transport.json shape:
-        {"type": "git", "remote": "origin", "branch": "interagent/collab", "poll_interval": 10}
+        {"type": "git", "remote": "origin", "branch": "interagent/collab",
+         "poll_interval": 10, "cluster": "alice"}
         {"type": "http", "url": "https://...", "api_key": "iaf_live_xxx", "project_id": "proj-abc"}
+
+    The "cluster" key is optional. When set, outgoing messages are stamped with
+    "{cluster}.{agent}" as the sender, and inbox filtering matches both
+    "{cluster}.{agent}" and plain "{agent}" for backward compatibility.
     """
     config = load_json(TRANSPORT_CONFIG_FILE)
     if not config:
@@ -28,6 +33,7 @@ def get_transport() -> BaseTransport:
             remote=config.get("remote", "origin"),
             branch=config.get("branch", "interagent/collab"),
             poll_interval=int(config.get("poll_interval", 10)),
+            cluster=config.get("cluster", ""),
         )
     elif transport_type == "http":
         from .http import HttpTransport
