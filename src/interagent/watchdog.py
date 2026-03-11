@@ -17,6 +17,7 @@ class Watchdog:
         callback: Optional[Callable] = None,
         poll_interval: float = 5.0,
         transport=None,
+        retry_after: Optional[float] = None,
     ):
         """Initialize watchdog.
 
@@ -43,6 +44,8 @@ class Watchdog:
         self.known_tasks: Set[str] = set()
         self.known_remote_files: Set[str] = set()  # for git/http transport
         self.running = False
+        self.retry_after = retry_after  # seconds; None = no retry
+        self.pinged_at: Dict[str, float] = {}  # msg_id -> unix time of last ping
 
     def _default_callback(self, event_type: str, data: dict):
         """Default callback that prints to stdout."""
@@ -89,6 +92,7 @@ class Watchdog:
 
     def start(self):
         """Start watching."""
+        from .eventlog import log_event, write_heartbeat
         transport_type = self.transport.get_transport_type()
         print(f"[WATCH] InterAgent Watchdog started (transport: {transport_type})")
         if transport_type == "local":
@@ -100,6 +104,9 @@ class Watchdog:
             print(f"   Watching: {remote}/{branch} (fetching every {self.poll_interval}s)")
         print(f"   Poll interval: {self.poll_interval}s")
         print("   Press Ctrl+C to stop\n")
+
+        log_event("watchdog_started", transport=transport_type)
+        write_heartbeat()
 
         # Initial scan
         if transport_type == "local":
@@ -114,8 +121,10 @@ class Watchdog:
         try:
             while self.running:
                 self._check_once()
+                write_heartbeat()
                 time.sleep(self.poll_interval)
         except KeyboardInterrupt:
+            log_event("watchdog_stopped")
             print("\n\n[STOP] Watchdog stopped")
 
     def _check_once(self):
@@ -127,14 +136,44 @@ class Watchdog:
 
     def _check_once_local(self):
         """Scan local .interagent/ filesystem for new files."""
+        import time as _t
+        from .eventlog import log_event
         current_messages = self._scan_messages()
         new_messages = current_messages - self.known_messages
 
         for msg_id in new_messages:
             msg_data = self._get_message_info(msg_id)
+            log_event(
+                "msg_detected",
+                msg_id=msg_id,
+                **{"to": msg_data.get("to", "?"), "from": msg_data.get("from", "?")},
+                subject=msg_data.get("subject", ""),
+            )
             self.callback("new_message", msg_data)
 
         self.known_messages = current_messages
+
+        # Re-ping stale messages (pinged but still unread after retry_after seconds)
+        if self.retry_after is not None:
+            now = _t.time()
+            for msg_id in list(current_messages):
+                last_ping = self.pinged_at.get(msg_id)
+                if last_ping and (now - last_ping) >= self.retry_after:
+                    msg_data = self._get_message_info(msg_id)
+                    elapsed_min = int((now - last_ping) / 60)
+                    log_event(
+                        "msg_stale",
+                        msg_id=msg_id,
+                        **{"to": msg_data.get("to", "?"), "from": msg_data.get("from", "?")},
+                        subject=msg_data.get("subject", ""),
+                        minutes_unread=elapsed_min,
+                    )
+                    print(
+                        f"[STALE] {msg_id} unread for {elapsed_min}m — re-pinging "
+                        f"{msg_data.get('to', '?')}"
+                    )
+                    del self.pinged_at[msg_id]  # reset so retry_after resets
+                    self.callback("new_message", msg_data)
 
         current_tasks = self._scan_tasks()
         new_tasks = current_tasks - self.known_tasks
@@ -180,7 +219,14 @@ def _agent_ping_cmd(agent: str, prompt: str) -> list:
     return ["claude", "-p", prompt]
 
 
-def _make_ping_callback(agents: List[str]) -> Callable:
+def _check_cli_available(agent: str) -> bool:
+    """Check if an agent's CLI is available in PATH."""
+    import shutil
+    cli_name = "kimi" if agent == "kimi" else "claude"
+    return shutil.which(cli_name) is not None
+
+
+def _make_ping_callback(agents: List[str], pinged_at: Optional[Dict[str, float]] = None) -> Callable:
     """Return a callback that pings each agent's CLI when a message addressed to them arrives.
 
     Handles any number of agents. Non-blocking (Popen fire-and-forget).
@@ -188,6 +234,15 @@ def _make_ping_callback(agents: List[str]) -> Callable:
     """
     agent_set = set(agents)
     seen: Set[str] = set()
+
+    # Validate CLIs at startup and warn about missing ones
+    for agent in agents:
+        if not _check_cli_available(agent):
+            print(
+                f"[WARN] {agent} CLI not found in PATH. "
+                f"Auto-ping for {agent} will not work.",
+                file=sys.stderr,
+            )
 
     def callback(event_type: str, data: Dict[str, Any]) -> None:
         if event_type != "new_message":
@@ -200,13 +255,43 @@ def _make_ping_callback(agents: List[str]) -> Callable:
             return
         seen.add(msg_id)
 
+        # Skip if CLI is not available
+        if not _check_cli_available(recipient):
+            print(
+                f"[SKIP] Cannot notify {recipient}: CLI not found in PATH",
+                file=sys.stderr,
+            )
+            from .eventlog import log_event
+            log_event("ping_skipped", agent=recipient, msg_id=msg_id, reason="CLI not found in PATH")
+            return
+
         prompt = (
-            f"You have a new InterAgent message. "
+            f"You have a new InterAgent message from {data.get('from', 'another agent')}. "
             f"Call get_inbox('{recipient}') to retrieve it and respond."
         )
         cmd = _agent_ping_cmd(recipient, prompt)
         print(f"[PING] Notifying {recipient}: {data.get('subject', '(no subject)')}")
-        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"[PING] Command: {' '.join(cmd)}")
+
+        from .eventlog import log_event
+        import time as _t
+        if pinged_at is not None:
+            pinged_at[msg_id] = _t.time()
+        log_event("watchdog_ping", agent=recipient, msg_id=msg_id,
+                  subject=data.get("subject", ""))
+
+        # Run subprocess and capture error output for debugging
+        try:
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+            )
+        except FileNotFoundError as e:
+            print(f"[ERROR] Failed to ping {recipient}: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"[ERROR] Unexpected error pinging {recipient}: {e}", file=sys.stderr)
 
     return callback
 
@@ -235,10 +320,21 @@ def main():
         default=None,
         help="Agent to monitor and ping when --auto-ping is set (e.g. claude, kimi)",
     )
+    parser.add_argument(
+        "--retry-after",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Re-ping if a message is still unread after this many seconds (e.g. 600 for 10min)",
+    )
 
     args = parser.parse_args()
 
-    callback = None
+    watchdog = Watchdog(
+        poll_interval=args.interval or 5.0,
+        retry_after=args.retry_after,
+    )
+
     if args.auto_ping:
         if args.agent:
             agents_to_ping = [args.agent]
@@ -255,10 +351,11 @@ def main():
                 sys.exit(1)
             agents_to_ping = session.agent_names
 
-        callback = _make_ping_callback(agents_to_ping)
+        watchdog.callback = _make_ping_callback(agents_to_ping, pinged_at=watchdog.pinged_at)
         print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
+        if args.retry_after:
+            print(f"[PING] Retry after: {int(args.retry_after)}s")
 
-    watchdog = Watchdog(callback=callback, poll_interval=args.interval or 5.0)
     watchdog.start()
 
 

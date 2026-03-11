@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from . import __version__
 from .constants import (
-    VALID_AGENTS, VALID_MODES, INTERAGENT_DIR, TRANSPORT_CONFIG_FILE,
+    VALID_AGENTS, VALID_MODES, INTERAGENT_DIR, SHARED_DIR, TRANSPORT_CONFIG_FILE,
     DEFAULT_AGENTS, DEFAULT_AGENT_ROLES, DEV_ROLE_LABELS,
 )
 from .session import Session
@@ -153,22 +153,75 @@ interagent summary
             except FileNotFoundError:
                 pass  # Non-fatal
 
+        # Write shared/context.md — current project state (dynamic, changes daily)
+        context_md_path = SHARED_DIR / "context.md"
+        if not context_md_path.exists():
+            context_md_content = f"""# Current Project State
+
+> **Purpose:** What's being worked on right now — today's focus, recent decisions, blockers.
+>
+> **Update frequency:** Daily, or whenever state changes.
+>
+> **For project fundamentals:** See `AI_CONTEXT.md` in the project root (tech stack, architecture, commands).
+
+---
+
+## Current Sprint / Phase
+
+[What phase are we in? E.g., "MVP development", "Refactoring auth module", "Preparing for v1.0 release"]
+
+## Active Work
+
+### In Progress
+- [Agent name] is working on: [brief description]
+- Blockers: [any blockers or "None"]
+
+### Next Up
+- [Task or feature name] — assigned to [agent] or unassigned
+- [Task or feature name] — waiting for [dependency]
+
+## Recent Decisions (last 3-5)
+
+1. **[Date]** [Decision made] — [rationale]
+2. **[Date]** [Decision made] — [rationale]
+3. **[Date]** [Decision made] — [rationale]
+
+## Blockers & Needs Attention
+
+- [ ] [Blocker or issue needing attention]
+
+## Notes for Agents
+
+- [Any context that doesn't fit elsewhere]
+
+---
+
+*Last updated: [date]*
+*Session: {session.name} ({session.id})*
+"""
+            context_md_path.write_text(context_md_content, encoding="utf-8")
+
         print_success(f"Initialized session: {session.name}")
         print(f"   ID:      {session.id}")
         print(f"   Mode:    {session.mode}")
         print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
         print(f"\n[DIR] Created .interagent/")
-        print("     AGENTS.md    <- collaboration guide (commands, roles, workflow)")
-        print("     ROLES.md     <- agent role assignments (edit freely)")
-        print("     shared/context.md  <- fill this with current project state")
+        print("     AGENTS.md            <- collaboration protocol (MCP vs manual, workflow)")
+        print("     ROLES.md             <- agent role assignments (edit freely)")
+        print("     shared/context.md    <- current focus, recent decisions (update daily)")
         print("\n[FILE] Created AI_CONTEXT.md at project root")
-        print("     <- versioned best-practices template; basis for generating CLAUDE.md")
+        print("     <- project DNA: stack, architecture, code standards (rarely changes)")
         print("     <- run `interagent update-template --agent claude` to keep it current")
+        print("\nFile purposes:")
+        print("  • AI_CONTEXT.md       — What is this project? (static, per-project)")
+        print("  • AGENTS.md           — How do we collaborate? (per-session)")
+        print("  • ROLES.md            — Who does what? (per-session)")
+        print("  • shared/context.md   — What are we doing today? (changes daily)")
         print("\nNext steps:")
         print("1. Fill in the [Replace with...] sections in AI_CONTEXT.md")
         print("2. Edit .interagent/ROLES.md to assign the right dev roles")
-        print("3. Edit .interagent/shared/context.md with current project state")
-        print(f"4. Tell {session.principal.capitalize()}: \"Read AI_CONTEXT.md, AGENTS.md, and ROLES.md, then generate CLAUDE.md\"")
+        print("3. Update .interagent/shared/context.md with today's focus")
+        print(f'4. Tell {session.principal.capitalize()}: "Read AI_CONTEXT.md, AGENTS.md, ROLES.md, and shared/context.md"')
         print()
         print("Zero-relay MCP mode (optional):")
         print("  interagent mcp setup   # configure MCP server in both agents (once)")
@@ -216,6 +269,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
     print(f"   Principal: {session.principal}")
 
     # Watchdog state
+    from .eventlog import get_heartbeat_age
     watchdog_status = "stopped"
     watchdog_pid = None
     if WATCHDOG_PID_FILE.exists():
@@ -225,8 +279,18 @@ def cmd_status(_args: argparse.Namespace) -> int:
             watchdog_status = f"running (PID {watchdog_pid})"
         except (OSError, ProcessLookupError, ValueError):
             watchdog_status = "stopped (stale PID file)"
-    log_hint = f" — logs: {WATCHDOG_LOG_FILE}" if WATCHDOG_LOG_FILE.exists() else ""
-    print(f"\n[WATCH] Watchdog: {watchdog_status}{log_hint}")
+    heartbeat_age = get_heartbeat_age()
+    if heartbeat_age is not None:
+        if heartbeat_age < 30:
+            hb_str = f"last beat {int(heartbeat_age)}s ago"
+        elif heartbeat_age < 3600:
+            hb_str = f"last beat {int(heartbeat_age / 60)}m ago"
+        else:
+            hb_str = f"last beat {int(heartbeat_age / 3600)}h ago"
+        if heartbeat_age > 60 and "running" not in watchdog_status:
+            hb_str = f"DEAD — {hb_str}"
+        watchdog_status = f"{watchdog_status}  [{hb_str}]"
+    print(f"\n[WATCH] Watchdog: {watchdog_status}")
 
     # Per-agent info
     all_agents = session.agent_names or ["claude", "kimi"]
@@ -603,7 +667,8 @@ def cmd_task_update(args: argparse.Namespace) -> int:
         
         if args.status:
             old_status = task.status
-            task.update(status=args.status)
+            agent_name = getattr(args, "agent", None) or task.assignee
+            task.update(agent=agent_name, status=args.status)
             print(f"Status: {old_status} -> {args.status}")
             
             # Move to completed if appropriate
@@ -787,7 +852,7 @@ def cmd_update_template(args: argparse.Namespace) -> int:
 
 
 
-def cmd_start(_args: argparse.Namespace) -> int:
+def cmd_start(args: argparse.Namespace) -> int:
     """Launch the InterAgent watchdog as a background daemon.
 
     Reads all agents from the active session and auto-pings each one when
@@ -814,7 +879,8 @@ def cmd_start(_args: argparse.Namespace) -> int:
 
     from .constants import WATCHDOG_LOG_FILE
 
-    cmd = ["interagent-watch", "--auto-ping"]
+    retry_after = getattr(args, "retry_after", None) or 600  # default 10 min
+    cmd = ["interagent-watch", "--auto-ping", "--retry-after", str(retry_after)]
 
     import os as _os
     spawn_kwargs: dict = (
@@ -865,49 +931,52 @@ def cmd_stop(_args: argparse.Namespace) -> int:
 
 
 def cmd_log(args: argparse.Namespace) -> int:
-    """Tail the watchdog log file."""
-    import os
-    from .constants import WATCHDOG_LOG_FILE, WATCHDOG_PID_FILE
+    """Show structured activity log (messages, tasks, watchdog events)."""
+    from .eventlog import get_events, format_event
+    from .constants import EVENTS_LOG_FILE
 
-    if not WATCHDOG_LOG_FILE.exists():
-        print_info("No watchdog log yet. Start the watchdog first: interagent start")
+    n = args.lines if hasattr(args, "lines") and args.lines else 50
+    agent_filter = getattr(args, "agent", None)
+    event_filter = getattr(args, "type", None)
+
+    events = get_events(n=n, event_type=event_filter, agent=agent_filter)
+
+    if not events:
+        if not EVENTS_LOG_FILE.exists():
+            print_info("No events yet. Events are recorded automatically when you send messages, update tasks, or start the watchdog.")
+        else:
+            print_info("No events match the current filter.")
         return 0
 
-    lines = args.lines if hasattr(args, "lines") and args.lines else 50
+    for entry in events:
+        print(format_event(entry))
 
-    # Print the last N lines
-    try:
-        text = WATCHDOG_LOG_FILE.read_text(encoding="utf-8", errors="replace")
-        all_lines = text.splitlines()
-        for line in all_lines[-lines:]:
-            print(line)
-    except OSError as e:
-        print_error(f"Cannot read log: {e}")
-        return 1
-
-    # If --follow, stream new lines
+    # If --follow, stream new events
     if hasattr(args, "follow") and args.follow:
-        pid_running = False
-        if WATCHDOG_PID_FILE.exists():
-            try:
-                pid = int(WATCHDOG_PID_FILE.read_text().strip())
-                os.kill(pid, 0)
-                pid_running = True
-            except (OSError, ProcessLookupError, ValueError):
-                pass
-
-        if not pid_running:
-            print_warning("Watchdog is not running (log may be stale).")
-
-        print_info("--- following log (Ctrl-C to stop) ---")
+        import time as _time
+        print_info("--- following events (Ctrl-C to stop) ---")
         try:
-            with open(WATCHDOG_LOG_FILE, "r", encoding="utf-8", errors="replace") as fh:
+            with open(EVENTS_LOG_FILE, "r", encoding="utf-8") as fh:
                 fh.seek(0, 2)  # seek to end
-                import time as _time
                 while True:
                     line = fh.readline()
                     if line:
-                        print(line, end="")
+                        line = line.strip()
+                        if line:
+                            try:
+                                import json as _json
+                                entry = _json.loads(line)
+                                if agent_filter:
+                                    if agent_filter not in (
+                                        entry.get("from"), entry.get("to"),
+                                        entry.get("agent"), entry.get("assignee")
+                                    ):
+                                        continue
+                                if event_filter and entry.get("event") != event_filter:
+                                    continue
+                                print(format_event(entry))
+                            except Exception:
+                                pass
                     else:
                         _time.sleep(0.5)
         except KeyboardInterrupt:
@@ -1396,18 +1465,33 @@ For more help: https://github.com/gutohuida/InterAgentFramework
 
 
     # Start / stop watchdog daemon
-    subparsers.add_parser("start", help="Start the watchdog daemon in the background")
+    start_parser = subparsers.add_parser("start", help="Start the watchdog daemon in the background")
+    start_parser.add_argument(
+        "--retry-after",
+        type=int,
+        default=600,
+        metavar="SECONDS",
+        help="Re-ping an agent if their message is unread after this many seconds (default: 600 = 10min)",
+    )
     subparsers.add_parser("stop",  help="Stop the background watchdog daemon")
 
     # Log viewer
-    log_parser = subparsers.add_parser("log", help="View watchdog activity log")
+    log_parser = subparsers.add_parser("log", help="View structured activity log (messages, tasks, watchdog)")
     log_parser.add_argument(
         "-n", "--lines", type=int, default=50,
-        help="Number of recent lines to show (default: 50)",
+        help="Number of recent events to show (default: 50)",
     )
     log_parser.add_argument(
         "-f", "--follow", action="store_true",
-        help="Follow log output in real time (like tail -f)",
+        help="Follow log in real time (like tail -f)",
+    )
+    log_parser.add_argument(
+        "--agent",
+        help="Filter events by agent name",
+    )
+    log_parser.add_argument(
+        "--type",
+        help="Filter by event type (msg_sent, msg_read, task_created, task_status, watchdog_started, ...)",
     )
 
     # MCP commands

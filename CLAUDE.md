@@ -128,7 +128,7 @@ Valid statuses (from `constants.py`): `pending`, `assigned`, `in_progress`, `com
 
 ## Critical Rules
 
-- `VALID_AGENTS = ["claude", "kimi"]` — adding a new agent requires updating `constants.py` AND `validator.py`
+- Agent names are validated by `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` in `constants.py`. Any name matching this regex is accepted. `KNOWN_AGENTS` is a documentation/suggestion list only, not a validation gate.
 - `VALID_MODES = ["hierarchical", "peer", "review"]`
 - ALL saves must pass through `validator.py` sanitize functions first
 - ALL task file operations that modify state must use `locking.py` context manager (`with lock("name"):`)

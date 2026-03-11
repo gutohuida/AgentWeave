@@ -20,8 +20,13 @@ MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
 
 # File paths
 SESSION_FILE = INTERAGENT_DIR / "session.json"
-WATCHDOG_PID_FILE = INTERAGENT_DIR / "watchdog.pid"  # gitignored, machine-local
-WATCHDOG_LOG_FILE = INTERAGENT_DIR / "watchdog.log"  # gitignored, machine-local
+WATCHDOG_PID_FILE = INTERAGENT_DIR / "watchdog.pid"        # gitignored, machine-local
+WATCHDOG_LOG_FILE = INTERAGENT_DIR / "watchdog.log"        # gitignored, machine-local
+WATCHDOG_HEARTBEAT_FILE = INTERAGENT_DIR / "watchdog.heartbeat"  # gitignored
+
+# Event log
+LOGS_DIR = INTERAGENT_DIR / "logs"
+EVENTS_LOG_FILE = LOGS_DIR / "events.jsonl"                # gitignored, machine-local
 
 # Transport
 TRANSPORT_CONFIG_FILE = INTERAGENT_DIR / "transport.json"

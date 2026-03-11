@@ -54,18 +54,25 @@ interagent init --project "My App" --agents claude,kimi
 ```
 
 Creates:
-- `.interagent/AGENTS.md` — collaboration guide all agents read on startup
-- `.interagent/ROLES.md` — role assignments (tech_lead, backend_dev, etc.)
-- `.interagent/shared/context.md` — fill this with your project description
+- `AI_CONTEXT.md` (project root) — project DNA: stack, architecture, code standards (static, rarely changes)
+- `.interagent/AGENTS.md` — collaboration protocol: MCP vs manual mode, workflow (per-session)
+- `.interagent/ROLES.md` — agent role assignments: who does what (per-session)
+- `.interagent/shared/context.md` — current focus: what's being worked on today (changes daily)
 
 **Supported agents:** claude, kimi, gemini, codex, aider, cline, cursor, windsurf, copilot, and any name matching `^[a-zA-Z0-9_-]{1,32}$`
 
 ### 3. Fill in project context
 
-```bash
-# Edit this file — agents read it at the start of every task
-.interagent/shared/context.md
-```
+**AI_CONTEXT.md** — Fill this once with your project's fundamentals:
+- Project overview, tech stack, essential commands
+- Architecture, directory structure
+- Code standards and workflow conventions
+
+**shared/context.md** — Update this daily with current state:
+- What phase you're in, what's being worked on
+- Recent decisions, blockers, next steps
+
+Agents read all four files on session start.
 
 ### 4a. Start working — manual relay mode
 
@@ -220,14 +227,20 @@ pending → assigned → in_progress → completed → under_review → approved
 
 ## What Gets Created on Init
 
+### Project Root
+```
+AI_CONTEXT.md             # Project DNA — stack, architecture, standards (static)
+```
+
+### .interagent/ Directory
 ```
 .interagent/
-├── AGENTS.md             # Collaboration guide — all agents read this
-├── ROLES.md              # Auto-generated role assignments (editable)
+├── AGENTS.md             # Collaboration protocol — MCP vs manual, workflow
+├── ROLES.md              # Agent role assignments — who owns what domain
 ├── README.md             # Quick command reference
 ├── session.json          # Session config (gitignored)
 ├── shared/
-│   └── context.md        # Project state — fill this with your project description
+│   └── context.md        # Current state — today's focus, recent decisions (dynamic)
 ├── tasks/
 │   ├── active/           # JSON files for each active task (gitignored)
 │   └── completed/        # Archived completed tasks (gitignored)
@@ -235,6 +248,15 @@ pending → assigned → in_progress → completed → under_review → approved
     ├── pending/          # Unread messages (gitignored)
     └── archive/          # Message history (gitignored)
 ```
+
+### File Purposes
+
+| File | Question It Answers | Change Frequency |
+|------|---------------------|------------------|
+| `AI_CONTEXT.md` | What is this project? (stack, architecture, commands) | Monthly |
+| `AGENTS.md` | How do we collaborate? (MCP vs manual, workflow) | Per session |
+| `ROLES.md` | Who does what? (role assignments) | Per session |
+| `shared/context.md` | What are we doing today? (focus, decisions, blockers) | Daily |
 
 ---
 

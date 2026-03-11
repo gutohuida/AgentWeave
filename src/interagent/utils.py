@@ -14,6 +14,7 @@ from .constants import (
     MESSAGES_PENDING_DIR,
     MESSAGES_ARCHIVE_DIR,
     SHARED_DIR,
+    LOGS_DIR,
 )
 
 
@@ -27,6 +28,7 @@ def ensure_dirs() -> None:
         MESSAGES_PENDING_DIR,
         MESSAGES_ARCHIVE_DIR,
         SHARED_DIR,
+        LOGS_DIR,
     ]:
         d.mkdir(parents=True, exist_ok=True)
 

@@ -31,7 +31,7 @@ def validate_task(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
     errors = []
 
     # Required fields
-    required = ["id", "title", "status", "created"]
+    required = ["id", "title", "status", "created_at"]
     for field in required:
         if field not in data:
             errors.append(f"Missing required field: {field}")
@@ -163,8 +163,8 @@ def sanitize_task_data(data: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
     # Timestamps
-    if "created" in data:
-        sanitized["created"] = data["created"]
+    if "created_at" in data:
+        sanitized["created_at"] = data["created_at"]
     if "updated" in data:
         sanitized["updated"] = data["updated"]
 

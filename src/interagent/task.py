@@ -120,13 +120,35 @@ class Task:
 
     def save(self) -> bool:
         """Save task to file."""
+        from .eventlog import log_event
         filepath = TASKS_ACTIVE_DIR / f"{self.id}.json"
-        return save_json(filepath, self._data)
+        is_new = not filepath.exists()
+        result = save_json(filepath, self._data)
+        if result and is_new:
+            log_event(
+                "task_created",
+                task_id=self.id,
+                title=self.title,
+                assignee=self.assignee,
+                priority=self.priority,
+            )
+        return result
 
-    def update(self, **kwargs) -> None:
+    def update(self, agent: Optional[str] = None, **kwargs) -> None:
         """Update task fields."""
+        from .eventlog import log_event
+        prev_status = self._data.get("status")
         self._data.update(kwargs)
         self._data["updated"] = now_iso()
+        new_status = self._data.get("status")
+        if "status" in kwargs and new_status != prev_status:
+            log_event(
+                "task_status",
+                task_id=self.id,
+                prev=prev_status,
+                status=new_status,
+                agent=agent,
+            )
 
     def move_to_completed(self) -> bool:
         """Move task from active to completed."""
@@ -162,7 +184,7 @@ class Task:
             "priority": priority,
             "assignee": assignee,
             "assigner": assigner,
-            "created": now_iso(),
+            "created_at": now_iso(),
             "updated": now_iso(),
             "requirements": requirements or [],
             "acceptance_criteria": acceptance_criteria or [],

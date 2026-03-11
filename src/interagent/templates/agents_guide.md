@@ -1,5 +1,13 @@
 # InterAgent Collaboration Guide
 
+> **Purpose:** How to collaborate with other AI agents in this project.
+>
+> **Prerequisites:** Read `AI_CONTEXT.md` in the project root first for project details (stack, architecture, commands).
+>
+> **Update frequency:** Per session, or when collaboration patterns change.
+
+---
+
 ## What This Is
 
 InterAgent is a multi-agent collaboration protocol. Any number of AI agents can work
@@ -89,14 +97,11 @@ interagent msg send --to {principal} --subject "Done: <title>" --message "..."
 
 ## On Every Session Start — Read These Files
 
-**1. `AI_CONTEXT.md`** (project root) — versioned best-practices template:
-code standards, workflow conventions, sub-agent setup guide.
-
-**2. `.interagent/ROLES.md`** — role assignments (which agent owns which domain).
-Check before creating tasks.
-
-**3. `.interagent/shared/context.md`** — current project state:
-what the project is, what's been done, constraints, key decisions.
+| Order | File | Purpose |
+|-------|------|---------|
+| 1 | `AI_CONTEXT.md` (project root) | Project overview, tech stack, commands, code standards |
+| 2 | `.interagent/ROLES.md` | Role assignments (which agent owns which domain) |
+| 3 | `.interagent/shared/context.md` | Current project state: what's being worked on, recent decisions |
 
 ---
 
@@ -146,7 +151,7 @@ Either agent can ask another to invoke one of their specialized sub-agents:
   README.md             Quick command reference
   watchdog.log          Ping activity log (gitignored, machine-local)
   shared/
-    context.md          Project state — read this every session
+    context.md          Current project state — read this every session
     agent-request-*.md  Cross-agent sub-agent requests
   tasks/
     active/             JSON files for each task
@@ -155,4 +160,39 @@ Either agent can ask another to invoke one of their specialized sub-agents:
     pending/            Unread messages
     archive/            Message history
   transport.json        Transport config (machine-local, gitignored)
+```
+
+---
+
+## Quick Command Reference
+
+```bash
+# Status and overview
+interagent status              # Full status with per-agent breakdown
+interagent summary             # Quick summary for relay decisions
+
+# Task management
+interagent task create --title "Task name" --assignee <agent>
+interagent task list           # List all active tasks
+interagent task show <id>      # Show task details
+interagent task update <id> --status in_progress
+interagent task update <id> --status completed
+
+# Delegation
+interagent quick --to <agent> "Task description"
+interagent relay --agent <agent>   # Generate relay prompt
+
+# Messaging
+interagent inbox --agent <agent>
+interagent msg send --to <agent> --message "..."
+
+# Watchdog (auto-ping daemon)
+interagent start               # Start background watchdog
+interagent stop                # Stop watchdog
+interagent log -f              # Watch log in real-time
+
+# Transport (cross-machine sync)
+interagent transport setup --type git
+interagent transport status
+interagent transport pull
 ```

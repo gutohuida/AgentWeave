@@ -1,9 +1,11 @@
-<!-- InterAgent AI Context v0.1.2 — run `interagent update-template` to update -->
+<!-- InterAgent AI Context v0.2.0 — run `interagent update-template` to update -->
 # AI Workflow Context
 
-> This file is deployed by `interagent init` and versioned with the package.
-> Run `interagent update-template --agent claude` to generate a prompt that
-> keeps this file current with new AI capabilities and best practices.
+> **Purpose:** This file defines the project's DNA — what it is, how it's built, and how to work with it.
+>
+> **Update frequency:** Monthly, or when the tech stack changes.
+>
+> **For current work:** See `.interagent/shared/context.md` for today's focus and recent decisions.
 
 ---
 
@@ -53,6 +55,22 @@
 
 ---
 
+## Multi-Agent Collaboration
+
+If `.interagent/session.json` exists, you are in multi-agent mode.
+
+**On every session start:**
+1. **Read this file** (`AI_CONTEXT.md`) — understand the project
+2. **Read `.interagent/AGENTS.md`** — learn the collaboration protocol
+3. **Read `.interagent/ROLES.md`** — see who's responsible for what
+4. **Read `.interagent/shared/context.md`** — see current focus and recent decisions
+5. Run `interagent status` to see pending work
+
+**Rule: run all `interagent` CLI commands via Bash automatically.**
+Never ask the user to run CLI commands. They only paste relay prompts.
+
+---
+
 ## Sub-Agent Setup
 
 Create these in `.claude/agents/` based on project type. Each agent outputs findings
@@ -74,43 +92,6 @@ with severity: CRITICAL / HIGH / MEDIUM / INFO.
 
 ### Create If the Project Will Be Deployed
 - `devops-reviewer` — CI/CD config, Dockerfile, env var handling, secrets management
-
----
-
-## Multi-Agent Workflow (InterAgent)
-
-If `.interagent/session.json` exists, you are in multi-agent mode.
-
-**On every session start:**
-1. Read `.interagent/AGENTS.md` — collaboration guide and full command reference
-2. Read `.interagent/shared/context.md` — current project state and your task
-3. Run `interagent status` to see pending work (via Bash — do not ask user to run it)
-
-**Rule: run all `interagent` CLI commands via Bash automatically.**
-Never ask the user to run CLI commands. They only paste relay prompts.
-
-### Delegating to Kimi
-
-```bash
-interagent quick --to kimi "[task description]"
-interagent relay --agent kimi
-```
-
-Show the relay prompt output to the user to paste into Kimi Code.
-
-### When User Says "Kimi Is Done"
-
-```bash
-interagent inbox --agent claude
-interagent summary
-```
-
-Review Kimi's work and continue without user input.
-
-### Cross-Agent Sub-Agent Requests
-
-Write `.interagent/shared/agent-request-[topic].md`, then tell user:
-"Tell Kimi to check `.interagent/shared/` for a new request from Claude"
 
 ---
 

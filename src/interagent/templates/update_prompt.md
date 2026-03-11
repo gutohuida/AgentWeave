@@ -6,59 +6,63 @@
 
 ## Your Task
 
-You are responsible for keeping the project kickoff template current with the
-latest AI coding best practices and tool capabilities.
+Research the latest capabilities and best practices for AI coding agents,
+then update the project kickoff template to reflect current tools and workflows.
 
 ## Steps
 
 ### 1. Research (search the web)
 
-Search for the following topics - focus on {year}:
+Search for these topics — use today's date ({date}) to focus on the most
+recent information:
 
-- "Claude Code sub-agents best practices {year}"
-- "Kimi Code agents capabilities {year}"
-- "AI coding workflow multi-agent patterns {year}"
-- "Claude Code hooks slash commands new features {year}"
-- Recent Anthropic developer blog posts about Claude Code
-- Recent Moonshot AI / Kimi developer docs about Kimi Code agents
+- "{agent} new features capabilities {year}"
+- "{agent} sub-agents tools configuration best practices"
+- "AI coding agent multi-agent collaboration {year}"
+- "AI coding workflow best practices {year}"
+- "multi-agent software development patterns {year}"
+- Recent official docs or developer blog posts from the provider of {agent}
+- New AI coding tools or agents released recently
+
+Also reflect on your own built-in knowledge: what capabilities or commands do
+you have that may not yet appear in the template?
 
 ### 2. Review the Current Template
 
 Read the file at: `{template_path}`
 
 Pay attention to:
-- Any commands that reference specific versions or flags
-- Steps that describe Claude Code or Kimi Code behavior
-- The cross-agent sub-agent prompting section
-- The InterAgent CLI commands mentioned
+- Commands or flags that reference specific versions or may be outdated
+- Steps describing AI agent behavior that may have changed
+- The multi-agent collaboration sections
+- The InterAgent CLI commands referenced
+- Any tool-specific language that should be generalized or updated
 
 ### 3. Identify Improvements
 
-Look for:
-- New sub-agent or tool capabilities in Claude Code or Kimi Code
-- Outdated commands, flags, or workflows
-- Better multi-agent collaboration patterns
-- Improved prompt structures
-- New `interagent` CLI commands that should be documented
-- New cross-agent prompting techniques discovered since the last update
+Look for opportunities to:
+- Document new capabilities of {agent} (and other common AI coding agents)
+- Remove or update outdated commands, flags, or workflows
+- Improve multi-agent collaboration patterns
+- Reflect new `interagent` CLI commands if applicable
+- Update cross-agent prompting techniques based on current best practices
 
 ### 4. Update the Template
 
 Edit the file at `{template_path}` with your improvements.
 Rules:
-- Make targeted, minimal changes - do not restructure working sections
-- Update version years (e.g. "2025/2026") if appropriate
-- Add new capabilities where relevant
-- Remove references to features that no longer exist
+- Make targeted, minimal changes — do not restructure working sections
+- Keep language agent-agnostic where possible (others besides {agent} use this template)
+- Add new capabilities where relevant; remove features that no longer exist
+- Do not hardcode years — prefer "latest" or relative language
 
 ### 5. Write Change Summary
 
-Create (or overwrite) `TEMPLATE_UPDATE.md` in the same directory as the
-template with:
-- Date of update
-- List of changes made and the reason for each
-- Sources and links you referenced
-- Any open questions or areas that need the user's decision
+Create (or overwrite) `TEMPLATE_UPDATE.md` in the same directory as the template with:
+- Date of update ({date})
+- What changed and why
+- Sources and links referenced
+- Open questions or areas needing the user's decision
 
 ## Focus Area for This Run
 
@@ -67,4 +71,4 @@ template with:
 ## Expected Output
 
 1. Updated `{template_path}`
-2. New `TEMPLATE_UPDATE.md` in the same directory as the template
+2. `TEMPLATE_UPDATE.md` in the same directory as the template

@@ -95,16 +95,18 @@ class Message:
 
     def mark_read(self) -> bool:
         """Mark message as read and move to archive."""
+        from .eventlog import log_event
         pending_path = MESSAGES_PENDING_DIR / f"{self.id}.json"
         archive_path = MESSAGES_ARCHIVE_DIR / f"{self.id}.json"
-        
+
         self._data["read"] = True
         self._data["read_at"] = now_iso()
-        
+
         save_json(archive_path, self._data)
-        
+
         if pending_path.exists():
             pending_path.unlink()
+            log_event("msg_read", msg_id=self.id, agent=self.recipient, **{"from": self.sender})
             return True
         return False
 
@@ -144,7 +146,16 @@ class MessageBus:
     def send(message: Message) -> bool:
         """Send a message via the active transport."""
         from .transport import get_transport
-        return get_transport().send_message(message.to_dict())
+        from .eventlog import log_event
+        result = get_transport().send_message(message.to_dict())
+        if result:
+            log_event(
+                "msg_sent",
+                msg_id=message.id,
+                subject=message.subject,
+                **{"from": message.sender, "to": message.recipient},
+            )
+        return result
 
     @staticmethod
     def get_inbox(agent: str) -> List[Message]:

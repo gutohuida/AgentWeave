@@ -149,7 +149,7 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: str) -> Dict[str, Any]:
+def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
     """Update a task's status.
 
     Valid statuses: pending, assigned, in_progress, completed,
@@ -158,6 +158,7 @@ def update_task(task_id: str, status: str) -> Dict[str, Any]:
     Args:
         task_id: Task ID to update
         status: New status value
+        agent: Your agent name (e.g. "kimi"). Used for activity logging.
 
     Returns:
         Updated task dict, or {'error': '...'} on failure.
@@ -170,7 +171,7 @@ def update_task(task_id: str, status: str) -> Dict[str, Any]:
         if task is None:
             return {"error": f"Task '{task_id}' not found"}
 
-        task.update(status=status)
+        task.update(agent=agent or None, status=status)
 
         if status in ("approved", "rejected"):
             task.move_to_completed()
