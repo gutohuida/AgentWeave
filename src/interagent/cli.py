@@ -943,7 +943,12 @@ def cmd_mcp_setup(_args: argparse.Namespace) -> int:
                 mcp_args, capture_output=True, text=True,
                 encoding="utf-8", errors="replace", shell=_shell,
             )
-            results[agent_cli] = "ok" if result.returncode == 0 else f"failed: {result.stderr.strip()}"
+            if result.returncode == 0:
+                results[agent_cli] = "ok"
+            elif "already exists" in result.stderr.lower() or "already exists" in result.stdout.lower():
+                results[agent_cli] = "already configured"
+            else:
+                results[agent_cli] = f"failed: {result.stderr.strip()}"
         except FileNotFoundError:
             results[agent_cli] = "not found"
 
@@ -951,11 +956,11 @@ def cmd_mcp_setup(_args: argparse.Namespace) -> int:
     print("InterAgent MCP server setup")
     print("-" * 40)
     for agent_cli, status in results.items():
-        icon = "[OK]" if status == "ok" else "[!!]"
+        icon = "[OK]" if status in ("ok", "already configured") else "[!!]"
         print(f"  {icon} {agent_cli}: {status}")
     print()
 
-    if any(s != "ok" for s in results.values()):
+    if any(s not in ("ok", "already configured") for s in results.values()):
         print("Manual configuration (add to your agent's MCP settings):")
         print()
         print("  Claude Code (.mcp.json or via `claude mcp add`):")
