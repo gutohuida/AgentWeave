@@ -202,36 +202,61 @@ def _role_responsibility(role_key: str) -> str:
 
 def cmd_status(_args: argparse.Namespace) -> int:
     """Show session status."""
+    import os as _os
+    from .constants import WATCHDOG_PID_FILE, WATCHDOG_LOG_FILE
+
     session = Session.load()
     if not session:
         print_error("No session found. Run: interagent init")
         return 1
-    
+
     print(f"[STAT] Session: {session.name}")
-    print(f"   ID: {session.id}")
-    print(f"   Mode: {session.mode}")
+    print(f"   ID:        {session.id}")
+    print(f"   Mode:      {session.mode}")
     print(f"   Principal: {session.principal}")
-    
-    print(f"\n[AGENTS] Agents:")
-    for agent, info in session.agents.items():
-        print(f"   {agent}: {info.get('role', 'unknown')}")
-    
-    # Count tasks
-    active_tasks = Task.list_all(active_only=True)
-    completed_tasks = Task.list_all()
-    completed_tasks = [t for t in completed_tasks if t.status in ["completed", "approved"]]
-    
-    print(f"\n[TASK] Tasks:")
-    print(f"   Active: {len(active_tasks)}")
-    print(f"   Completed: {len(completed_tasks)}")
-    
-    # Count messages (across all session agents)
+
+    # Watchdog state
+    watchdog_status = "stopped"
+    watchdog_pid = None
+    if WATCHDOG_PID_FILE.exists():
+        try:
+            watchdog_pid = int(WATCHDOG_PID_FILE.read_text().strip())
+            _os.kill(watchdog_pid, 0)
+            watchdog_status = f"running (PID {watchdog_pid})"
+        except (OSError, ProcessLookupError, ValueError):
+            watchdog_status = "stopped (stale PID file)"
+    log_hint = f" — logs: {WATCHDOG_LOG_FILE}" if WATCHDOG_LOG_FILE.exists() else ""
+    print(f"\n[WATCH] Watchdog: {watchdog_status}{log_hint}")
+
+    # Per-agent info
     all_agents = session.agent_names or ["claude", "kimi"]
-    pending = []
-    for ag in all_agents:
-        pending.extend(MessageBus.get_inbox(ag))
-    print(f"\n[MSG] Pending Messages: {len(pending)}")
-    
+    active_tasks = Task.list_all(active_only=True)
+
+    print(f"\n[AGENTS]")
+    for agent in all_agents:
+        role = session.agents.get(agent, {}).get("role", "unknown")
+        inbox = MessageBus.get_inbox(agent)
+        agent_tasks = [t for t in active_tasks if t.assignee == agent]
+        in_prog = [t for t in agent_tasks if t.status == "in_progress"]
+        waiting = [t for t in agent_tasks if t.status in ("pending", "assigned")]
+        review  = [t for t in agent_tasks if t.status in ("completed", "under_review")]
+        principal_marker = " [principal]" if agent == session.principal else ""
+        print(f"   {agent}{principal_marker} ({role})")
+        if inbox:
+            print(f"      inbox:    {len(inbox)} unread message(s)")
+        if in_prog:
+            print(f"      working:  {len(in_prog)} task(s) in progress")
+        if waiting:
+            print(f"      waiting:  {len(waiting)} task(s) not yet started")
+        if review:
+            print(f"      review:   {len(review)} task(s) ready for review")
+        if not inbox and not agent_tasks:
+            print(f"      idle")
+
+    # Overall task summary
+    completed_tasks = [t for t in Task.list_all() if t.status in ("completed", "approved")]
+    print(f"\n[TASKS] Active: {len(active_tasks)}  |  Completed: {len(completed_tasks)}")
+
     return 0
 
 
@@ -787,6 +812,8 @@ def cmd_start(_args: argparse.Namespace) -> int:
         except (OSError, ProcessLookupError, ValueError):
             WATCHDOG_PID_FILE.unlink()
 
+    from .constants import WATCHDOG_LOG_FILE
+
     cmd = ["interagent-watch", "--auto-ping"]
 
     import os as _os
@@ -795,10 +822,12 @@ def cmd_start(_args: argparse.Namespace) -> int:
         if _os.name == "nt"
         else {"start_new_session": True}
     )
-    proc = _sp.Popen(cmd, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, stdin=_sp.DEVNULL, **spawn_kwargs)
+    log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")
+    proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)
 
     WATCHDOG_PID_FILE.write_text(str(proc.pid))
     print_success(f"Watchdog started in background (PID {proc.pid})")
+    print_info(f"Logs: {WATCHDOG_LOG_FILE}")
     print_info("Run 'interagent stop' to stop it.")
     return 0
 
@@ -835,23 +864,88 @@ def cmd_stop(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_log(args: argparse.Namespace) -> int:
+    """Tail the watchdog log file."""
+    import os
+    from .constants import WATCHDOG_LOG_FILE, WATCHDOG_PID_FILE
+
+    if not WATCHDOG_LOG_FILE.exists():
+        print_info("No watchdog log yet. Start the watchdog first: interagent start")
+        return 0
+
+    lines = args.lines if hasattr(args, "lines") and args.lines else 50
+
+    # Print the last N lines
+    try:
+        text = WATCHDOG_LOG_FILE.read_text(encoding="utf-8", errors="replace")
+        all_lines = text.splitlines()
+        for line in all_lines[-lines:]:
+            print(line)
+    except OSError as e:
+        print_error(f"Cannot read log: {e}")
+        return 1
+
+    # If --follow, stream new lines
+    if hasattr(args, "follow") and args.follow:
+        pid_running = False
+        if WATCHDOG_PID_FILE.exists():
+            try:
+                pid = int(WATCHDOG_PID_FILE.read_text().strip())
+                os.kill(pid, 0)
+                pid_running = True
+            except (OSError, ProcessLookupError, ValueError):
+                pass
+
+        if not pid_running:
+            print_warning("Watchdog is not running (log may be stale).")
+
+        print_info("--- following log (Ctrl-C to stop) ---")
+        try:
+            with open(WATCHDOG_LOG_FILE, "r", encoding="utf-8", errors="replace") as fh:
+                fh.seek(0, 2)  # seek to end
+                import time as _time
+                while True:
+                    line = fh.readline()
+                    if line:
+                        print(line, end="")
+                    else:
+                        _time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
+
+    return 0
+
+
 def cmd_mcp_setup(_args: argparse.Namespace) -> int:
     """Configure the InterAgent MCP server for Claude Code and Kimi Code."""
+    import os as _os
     import subprocess as _sp
 
     server_cmd = "interagent-mcp"
+    # On Windows, agent CLIs are .cmd files — shell=True is required for subprocess to find them
+    _shell = _os.name == "nt"
 
     results = {}
     for agent_cli, mcp_args in [
         ("claude", ["claude", "mcp", "add", "interagent", "--", server_cmd]),
         ("kimi",   ["kimi",   "mcp", "add", "--transport", "stdio", "interagent", "--", server_cmd]),
     ]:
-        check = _sp.run([agent_cli, "--version"], capture_output=True)
-        if check.returncode != 0:
+        try:
+            check = _sp.run([agent_cli, "--version"], capture_output=True, shell=_shell)
+            if check.returncode != 0:
+                results[agent_cli] = "not found"
+                continue
+        except FileNotFoundError:
             results[agent_cli] = "not found"
             continue
-        result = _sp.run(mcp_args, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        results[agent_cli] = "ok" if result.returncode == 0 else f"failed: {result.stderr.strip()}"
+        try:
+            result = _sp.run(
+                mcp_args, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", shell=_shell,
+            )
+            results[agent_cli] = "ok" if result.returncode == 0 else f"failed: {result.stderr.strip()}"
+        except FileNotFoundError:
+            results[agent_cli] = "not found"
 
     print()
     print("InterAgent MCP server setup")
@@ -1300,6 +1394,17 @@ For more help: https://github.com/gutohuida/InterAgentFramework
     subparsers.add_parser("start", help="Start the watchdog daemon in the background")
     subparsers.add_parser("stop",  help="Stop the background watchdog daemon")
 
+    # Log viewer
+    log_parser = subparsers.add_parser("log", help="View watchdog activity log")
+    log_parser.add_argument(
+        "-n", "--lines", type=int, default=50,
+        help="Number of recent lines to show (default: 50)",
+    )
+    log_parser.add_argument(
+        "-f", "--follow", action="store_true",
+        help="Follow log output in real time (like tail -f)",
+    )
+
     # MCP commands
     mcp_parser = subparsers.add_parser("mcp", help="MCP server management")
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command")
@@ -1382,6 +1487,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_start(parsed_args)
         elif parsed_args.command == "stop":
             return cmd_stop(parsed_args)
+        elif parsed_args.command == "log":
+            return cmd_log(parsed_args)
         elif parsed_args.command == "status":
             return cmd_status(parsed_args)
         elif parsed_args.command == "summary":

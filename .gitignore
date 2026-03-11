@@ -74,5 +74,6 @@ kimiwork.md
 .interagent/transport.json
 .interagent/.git_seen/
 
-# Watchdog daemon PID (machine-local)
+# Watchdog daemon PID and log (machine-local)
 .interagent/watchdog.pid
+.interagent/watchdog.log
