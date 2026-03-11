@@ -105,12 +105,12 @@ interagent summary
 
         # Write AGENTS.md — collaboration guide read by all agents on session start
         non_principal = [a for a in session.agent_names if a != session.principal]
-        delegate = non_principal[0] if non_principal else "kimi"
+        agents_list = ", ".join(non_principal) if non_principal else "kimi"
         try:
             agents_guide = (
                 get_template("agents_guide")
                 .replace("{principal}", session.principal)
-                .replace("{delegate}", delegate)
+                .replace("{agents_list}", agents_list)
                 .replace("{mode}", session.mode)
             )
             agents_path = INTERAGENT_DIR / "AGENTS.md"
@@ -653,24 +653,26 @@ def cmd_msg_send(args: argparse.Namespace) -> int:
 def cmd_inbox(args: argparse.Namespace) -> int:
     """Check inbox."""
     agent = args.agent
-    if not agent:
-        # Try to determine current agent from session
-        session = Session.load()
-        if session:
-            print_info("Checking inbox for all agents...")
-    
     if agent:
         messages = MessageBus.get_inbox(agent)
     else:
-        messages = (
-            MessageBus.get_inbox("claude") +
-            MessageBus.get_inbox("kimi")
-        )
-    
+        session = Session.load()
+        if session:
+            print_info("Checking inbox for all agents...")
+            messages = []
+            for ag in session.agent_names:
+                messages += MessageBus.get_inbox(ag)
+        else:
+            # No session: fall back to default agents
+            messages = (
+                MessageBus.get_inbox("claude") +
+                MessageBus.get_inbox("kimi")
+            )
+
     if not messages:
         print_info(f"No messages for {agent or 'anyone'}")
         return 0
-    
+
     print(f"[IN] Messages ({len(messages)}):")
     print("-" * 80)
     for msg in messages:
@@ -680,7 +682,7 @@ def cmd_inbox(args: argparse.Namespace) -> int:
         print(f"Time: {msg.timestamp}")
         print(f"\n{msg.content}")
         print("-" * 80)
-    
+
     return 0
 
 
@@ -696,25 +698,15 @@ def cmd_msg_read(args: argparse.Namespace) -> int:
 
 def cmd_delegate(args: argparse.Namespace) -> int:
     """Quick delegation command."""
-    # Create task
-    task = Task.create(
-        title=args.task,
-        description=args.description or "",
-        assignee=args.to,
-        assigner=args.from_agent or "claude",
-        priority=args.priority or "medium",
-    )
-    
-    # Use quick command internally
     class QuickArgs:
         pass
-    
+
     quick_args = QuickArgs()
     quick_args.from_agent = args.from_agent
     quick_args.to = args.to
     quick_args.task = args.task
     quick_args.priority = args.priority
-    
+
     return cmd_quick(quick_args)
 
 
@@ -723,19 +715,10 @@ def cmd_update_template(args: argparse.Namespace) -> int:
     # Resolve template path
     template_path = getattr(args, "template_path", None)
     if not template_path:
-        # 1. Look for AI_CONTEXT.md in cwd (deployed by `interagent init`)
+        # Look for AI_CONTEXT.md in cwd (deployed by `interagent init`)
         candidate = Path.cwd() / "AI_CONTEXT.md"
         if candidate.exists():
             template_path = str(candidate)
-        else:
-            # 2. Walk up parent directories for a legacy template.txt
-            search = Path.cwd()
-            for _ in range(6):
-                candidate = search / "template.txt"
-                if candidate.exists():
-                    template_path = str(candidate)
-                    break
-                search = search.parent
         if not template_path:
             template_path = (
                 "./AI_CONTEXT.md"
@@ -743,8 +726,8 @@ def cmd_update_template(args: argparse.Namespace) -> int:
             )
 
     focus = getattr(args, "focus", None) or (
-        "all areas: new sub-agent capabilities, collaboration patterns, "
-        "updated Claude Code / Kimi Code features"
+        "all areas: new agent capabilities, multi-agent collaboration patterns, "
+        "updated AI coding tools and best practices"
     )
     agent = args.agent
     today = date.today().isoformat()
@@ -767,12 +750,55 @@ def cmd_update_template(args: argparse.Namespace) -> int:
 
     separator = "=" * 70
     print(separator)
-    print(f"[PROMPT] Copy and paste the following into {agent.capitalize()} Code:")
+    print(f"[PROMPT] Copy and paste the following into {agent.capitalize()}:")
     print(separator)
     print(prompt)
     print(separator)
     return 0
 
+
+
+def cmd_mcp_setup(_args: argparse.Namespace) -> int:
+    """Configure the InterAgent MCP server for Claude Code and Kimi Code."""
+    import subprocess as _sp
+
+    server_cmd = "interagent-mcp"
+
+    results = {}
+    for agent_cli, mcp_args in [
+        ("claude", ["claude", "mcp", "add", "interagent", "--", server_cmd]),
+        ("kimi",   ["kimi",   "mcp", "add", "--transport", "stdio", "interagent", "--", server_cmd]),
+    ]:
+        check = _sp.run([agent_cli, "--version"], capture_output=True)
+        if check.returncode != 0:
+            results[agent_cli] = "not found"
+            continue
+        result = _sp.run(mcp_args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        results[agent_cli] = "ok" if result.returncode == 0 else f"failed: {result.stderr.strip()}"
+
+    print()
+    print("InterAgent MCP server setup")
+    print("-" * 40)
+    for agent_cli, status in results.items():
+        icon = "[OK]" if status == "ok" else "[!!]"
+        print(f"  {icon} {agent_cli}: {status}")
+    print()
+
+    if any(s != "ok" for s in results.values()):
+        print("Manual configuration (add to your agent's MCP settings):")
+        print()
+        print("  Claude Code (.mcp.json or via `claude mcp add`):")
+        print('    claude mcp add interagent -- interagent-mcp')
+        print()
+        print("  Kimi Code:")
+        print('    kimi mcp add --transport stdio interagent -- interagent-mcp')
+        print()
+
+    print("Start the auto-ping watchdog alongside the MCP server:")
+    print("  interagent-watch --auto-ping --agent claude   # in one terminal")
+    print("  interagent-watch --auto-ping --agent kimi     # in another terminal")
+    print()
+    return 0
 
 
 def cmd_transport_setup(args: argparse.Namespace) -> int:
@@ -1193,6 +1219,14 @@ For more help: https://github.com/gutohuida/InterAgentFramework
     )
 
 
+    # MCP commands
+    mcp_parser = subparsers.add_parser("mcp", help="MCP server management")
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command")
+    mcp_subparsers.add_parser(
+        "setup",
+        help="Configure interagent-mcp in Claude Code and Kimi Code",
+    )
+
     # Transport commands
     transport_parser = subparsers.add_parser(
         "transport",
@@ -1297,6 +1331,12 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_delegate(parsed_args)
         elif parsed_args.command == "update-template":
             return cmd_update_template(parsed_args)
+        elif parsed_args.command == "mcp":
+            if parsed_args.mcp_command == "setup":
+                return cmd_mcp_setup(parsed_args)
+            else:
+                parser.parse_args(["mcp", "--help"])
+                return 0
         elif parsed_args.command == "transport":
             if parsed_args.transport_command == "setup":
                 return cmd_transport_setup(parsed_args)

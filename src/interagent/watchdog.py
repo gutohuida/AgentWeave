@@ -1,9 +1,10 @@
 """Watchdog script for monitoring new messages and tasks."""
 
+import subprocess
 import time
 import sys
 from pathlib import Path
-from typing import Set, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Set
 
 from .constants import MESSAGES_PENDING_DIR, TASKS_ACTIVE_DIR
 from .utils import load_json
@@ -173,6 +174,39 @@ class Watchdog:
         self.running = False
 
 
+def _make_ping_callback(target_agent: str) -> Callable:
+    """Return a callback that pings the target agent's CLI when a message arrives.
+
+    Uses `claude -p` for claude and `kimi --print -p` for kimi.
+    Non-blocking (Popen fire-and-forget). A seen-set prevents double-pings.
+    """
+    seen: Set[str] = set()
+
+    def callback(event_type: str, data: Dict[str, Any]) -> None:
+        if event_type != "new_message":
+            return
+        if data.get("to") != target_agent:
+            return
+        msg_id = data.get("id", "")
+        if msg_id in seen:
+            return
+        seen.add(msg_id)
+
+        prompt = (
+            f"You have a new InterAgent message. "
+            f"Call get_inbox('{target_agent}') to retrieve it and respond."
+        )
+        if target_agent == "kimi":
+            cmd = ["kimi", "--print", "-p", prompt]
+        else:
+            cmd = ["claude", "-p", prompt]
+
+        print(f"[PING] Notifying {target_agent}: {data.get('subject', '(no subject)')}")
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    return callback
+
+
 def main():
     """CLI entry point for watchdog."""
     import argparse
@@ -186,10 +220,29 @@ def main():
         default=None,
         help="Poll interval in seconds (default: 5 for local, 10 for git transport)",
     )
+    parser.add_argument(
+        "--auto-ping",
+        action="store_true",
+        help="Automatically ping the target agent's CLI when a message arrives",
+    )
+    parser.add_argument(
+        "--agent",
+        type=str,
+        default=None,
+        help="Agent to monitor and ping when --auto-ping is set (e.g. claude, kimi)",
+    )
 
     args = parser.parse_args()
 
-    watchdog = Watchdog(poll_interval=args.interval or 5.0)
+    callback = None
+    if args.auto_ping:
+        if not args.agent:
+            print("Error: --auto-ping requires --agent <name>", file=sys.stderr)
+            sys.exit(1)
+        callback = _make_ping_callback(args.agent)
+        print(f"[PING] Auto-ping enabled for agent: {args.agent}")
+
+    watchdog = Watchdog(callback=callback, poll_interval=args.interval or 5.0)
     watchdog.start()
 
 

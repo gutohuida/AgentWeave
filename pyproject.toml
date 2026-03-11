@@ -29,6 +29,7 @@ requires-python = ">=3.8"
 dependencies = []
 
 [project.optional-dependencies]
+mcp = ["fastmcp>=2.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -36,6 +37,7 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
+all = ["fastmcp>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/gutohuida/InterAgentFramework"
@@ -48,12 +50,13 @@ Changelog = "https://github.com/gutohuida/InterAgentFramework/blob/master/CHANGE
 interagent = "interagent.cli:main"
 iaf = "interagent.cli:main"
 interagent-watch = "interagent.watchdog:main"
+interagent-mcp = "interagent.mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-interagent = ["templates/*", "assets/*"]
+interagent = ["templates/*"]
 
 [tool.black]
 line-length = 100
