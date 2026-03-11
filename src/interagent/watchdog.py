@@ -174,18 +174,27 @@ class Watchdog:
         self.running = False
 
 
-def _make_ping_callback(target_agent: str) -> Callable:
-    """Return a callback that pings the target agent's CLI when a message arrives.
+def _agent_ping_cmd(agent: str, prompt: str) -> list:
+    """Return the CLI command to ping an agent with a prompt."""
+    if agent == "kimi":
+        return ["kimi", "--print", "-p", prompt]
+    return ["claude", "-p", prompt]
 
-    Uses `claude -p` for claude and `kimi --print -p` for kimi.
-    Non-blocking (Popen fire-and-forget). A seen-set prevents double-pings.
+
+def _make_ping_callback(agents: List[str]) -> Callable:
+    """Return a callback that pings each agent's CLI when a message addressed to them arrives.
+
+    Handles any number of agents. Non-blocking (Popen fire-and-forget).
+    A seen-set prevents double-pings for the same message ID.
     """
+    agent_set = set(agents)
     seen: Set[str] = set()
 
     def callback(event_type: str, data: Dict[str, Any]) -> None:
         if event_type != "new_message":
             return
-        if data.get("to") != target_agent:
+        recipient = data.get("to", "")
+        if recipient not in agent_set:
             return
         msg_id = data.get("id", "")
         if msg_id in seen:
@@ -194,14 +203,10 @@ def _make_ping_callback(target_agent: str) -> Callable:
 
         prompt = (
             f"You have a new InterAgent message. "
-            f"Call get_inbox('{target_agent}') to retrieve it and respond."
+            f"Call get_inbox('{recipient}') to retrieve it and respond."
         )
-        if target_agent == "kimi":
-            cmd = ["kimi", "--print", "-p", prompt]
-        else:
-            cmd = ["claude", "-p", prompt]
-
-        print(f"[PING] Notifying {target_agent}: {data.get('subject', '(no subject)')}")
+        cmd = _agent_ping_cmd(recipient, prompt)
+        print(f"[PING] Notifying {recipient}: {data.get('subject', '(no subject)')}")
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     return callback
@@ -236,11 +241,23 @@ def main():
 
     callback = None
     if args.auto_ping:
-        if not args.agent:
-            print("Error: --auto-ping requires --agent <name>", file=sys.stderr)
-            sys.exit(1)
-        callback = _make_ping_callback(args.agent)
-        print(f"[PING] Auto-ping enabled for agent: {args.agent}")
+        if args.agent:
+            agents_to_ping = [args.agent]
+        else:
+            # No --agent given: read all agents from the active session
+            from .session import Session
+            session = Session.load()
+            if not session:
+                print(
+                    "Error: --auto-ping without --agent requires an active session. "
+                    "Run: interagent init",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            agents_to_ping = session.agent_names
+
+        callback = _make_ping_callback(agents_to_ping)
+        print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
 
     watchdog = Watchdog(callback=callback, poll_interval=args.interval or 5.0)
     watchdog.start()

@@ -13,9 +13,9 @@ from .constants import (
     DEFAULT_AGENTS, DEFAULT_AGENT_ROLES, DEV_ROLE_LABELS,
 )
 from .session import Session
-from .task import Task, TaskStatus
+from .task import Task
 from .messaging import Message, MessageBus
-from .locking import acquire_lock, release_lock, LockError
+from .locking import acquire_lock, release_lock
 from .validator import validate_task, validate_message
 from .templates import get_template
 from .utils import (
@@ -169,6 +169,10 @@ interagent summary
         print("2. Edit .interagent/ROLES.md to assign the right dev roles")
         print("3. Edit .interagent/shared/context.md with current project state")
         print(f"4. Tell {session.principal.capitalize()}: \"Read AI_CONTEXT.md, AGENTS.md, and ROLES.md, then generate CLAUDE.md\"")
+        print()
+        print("Zero-relay MCP mode (optional):")
+        print("  interagent mcp setup   # configure MCP server in both agents (once)")
+        print("  interagent start       # launch background watchdog — agents notify each other automatically")
         return 0
 
     except ValueError as e:
@@ -196,7 +200,7 @@ def _role_responsibility(role_key: str) -> str:
     return responsibilities.get(role_key, "General development tasks")
 
 
-def cmd_status(args: argparse.Namespace) -> int:
+def cmd_status(_args: argparse.Namespace) -> int:
     """Show session status."""
     session = Session.load()
     if not session:
@@ -231,7 +235,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_summary(args: argparse.Namespace) -> int:
+def cmd_summary(_args: argparse.Namespace) -> int:
     """Show quick summary for relay decisions."""
     session = Session.load()
     if not session:
@@ -758,6 +762,79 @@ def cmd_update_template(args: argparse.Namespace) -> int:
 
 
 
+def cmd_start(_args: argparse.Namespace) -> int:
+    """Launch the InterAgent watchdog as a background daemon.
+
+    Reads all agents from the active session and auto-pings each one when
+    a new message arrives. PID is written to .interagent/watchdog.pid.
+    """
+    import os
+    import subprocess as _sp
+    from .constants import WATCHDOG_PID_FILE
+
+    if not INTERAGENT_DIR.exists():
+        print_error("No session found. Run: interagent init")
+        return 1
+
+    # Check if already running
+    if WATCHDOG_PID_FILE.exists():
+        try:
+            pid = int(WATCHDOG_PID_FILE.read_text().strip())
+            os.kill(pid, 0)  # signal 0 = existence check only
+            print_warning(f"Watchdog already running (PID {pid}).")
+            print_info("Run 'interagent stop' first to restart it.")
+            return 1
+        except (OSError, ProcessLookupError, ValueError):
+            WATCHDOG_PID_FILE.unlink()
+
+    cmd = ["interagent-watch", "--auto-ping"]
+
+    import os as _os
+    spawn_kwargs: dict = (
+        {"creationflags": 0x00000008 | 0x08000000}  # DETACHED_PROCESS | CREATE_NO_WINDOW
+        if _os.name == "nt"
+        else {"start_new_session": True}
+    )
+    proc = _sp.Popen(cmd, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, stdin=_sp.DEVNULL, **spawn_kwargs)
+
+    WATCHDOG_PID_FILE.write_text(str(proc.pid))
+    print_success(f"Watchdog started in background (PID {proc.pid})")
+    print_info("Run 'interagent stop' to stop it.")
+    return 0
+
+
+def cmd_stop(_args: argparse.Namespace) -> int:
+    """Stop the background InterAgent watchdog."""
+    import os
+    from .constants import WATCHDOG_PID_FILE
+
+    if not WATCHDOG_PID_FILE.exists():
+        print_info("No watchdog PID file found — nothing to stop.")
+        return 0
+
+    try:
+        pid = int(WATCHDOG_PID_FILE.read_text().strip())
+    except ValueError:
+        WATCHDOG_PID_FILE.unlink()
+        print_error("Corrupt PID file removed.")
+        return 1
+
+    try:
+        if os.name == "nt":
+            import subprocess as _sp2
+            _sp2.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+        else:
+            import signal
+            os.kill(pid, signal.SIGTERM)
+        WATCHDOG_PID_FILE.unlink()
+        print_success(f"Watchdog stopped (PID {pid})")
+    except (OSError, ProcessLookupError):
+        WATCHDOG_PID_FILE.unlink()
+        print_warning(f"Process {pid} was already gone — PID file removed.")
+
+    return 0
+
+
 def cmd_mcp_setup(_args: argparse.Namespace) -> int:
     """Configure the InterAgent MCP server for Claude Code and Kimi Code."""
     import subprocess as _sp
@@ -888,7 +965,7 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
     return 1
 
 
-def cmd_transport_status(args: argparse.Namespace) -> int:
+def cmd_transport_status(_args: argparse.Namespace) -> int:
     """Show current transport configuration and status."""
     import subprocess as _sp
     from .utils import load_json as _load_json
@@ -942,7 +1019,7 @@ def cmd_transport_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_transport_pull(args: argparse.Namespace) -> int:
+def cmd_transport_pull(_args: argparse.Namespace) -> int:
     """Force an immediate fetch from the remote transport."""
     from .transport import get_transport
     from .constants import VALID_AGENTS
@@ -964,7 +1041,7 @@ def cmd_transport_pull(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_transport_disable(args: argparse.Namespace) -> int:
+def cmd_transport_disable(_args: argparse.Namespace) -> int:
     """Disable transport and revert to local filesystem."""
     if not TRANSPORT_CONFIG_FILE.exists():
         print_info("Already using local transport (no transport.json)")
@@ -1219,6 +1296,10 @@ For more help: https://github.com/gutohuida/InterAgentFramework
     )
 
 
+    # Start / stop watchdog daemon
+    subparsers.add_parser("start", help="Start the watchdog daemon in the background")
+    subparsers.add_parser("stop",  help="Stop the background watchdog daemon")
+
     # MCP commands
     mcp_parser = subparsers.add_parser("mcp", help="MCP server management")
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command")
@@ -1297,6 +1378,10 @@ def main(args: Optional[List[str]] = None) -> int:
     try:
         if parsed_args.command == "init":
             return cmd_init(parsed_args)
+        elif parsed_args.command == "start":
+            return cmd_start(parsed_args)
+        elif parsed_args.command == "stop":
+            return cmd_stop(parsed_args)
         elif parsed_args.command == "status":
             return cmd_status(parsed_args)
         elif parsed_args.command == "summary":

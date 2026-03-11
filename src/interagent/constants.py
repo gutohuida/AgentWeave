@@ -20,7 +20,7 @@ MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
 
 # File paths
 SESSION_FILE = INTERAGENT_DIR / "session.json"
-AGENTS_FILE = INTERAGENT_DIR / "agents.json"
+WATCHDOG_PID_FILE = INTERAGENT_DIR / "watchdog.pid"  # gitignored, machine-local
 
 # Transport
 TRANSPORT_CONFIG_FILE = INTERAGENT_DIR / "transport.json"
