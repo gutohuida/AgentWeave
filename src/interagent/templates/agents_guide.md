@@ -2,103 +2,101 @@
 
 ## What This Is
 
-InterAgent is a file-based multi-agent collaboration protocol. Any number of AI agents
-can work together on the same project through a shared `.interagent/` directory.
-The user acts as the messenger — passing relay prompts from one agent to the others.
+InterAgent is a multi-agent collaboration protocol. Any number of AI agents can work
+together on the same project through a shared `.interagent/` directory and optional MCP tools.
 
 **Session mode:** {mode}
 **Principal agent:** {principal} — architecture, planning, review, final decisions
-**Other agents:** {delegate} (and any others listed in `.interagent/ROLES.md`)
-
-Supported agents include Claude Code, Kimi Code, Gemini CLI, Codex CLI, Aider, Cline,
-Cursor Agent, Windsurf, Copilot Agent, OpenHands — any agent that can read files and
-run terminal commands can participate.
+**Other agents:** {agents_list} — see `.interagent/ROLES.md` for role assignments
 
 ---
 
-## How the Workflow Works
+## Communication Mode — Check This First
 
+**If you have `send_message` and `get_inbox` as available tools (MCP mode):**
+Use them directly. No relay prompts, no manual steps. The watchdog daemon will
+automatically notify the other agent's CLI when you send a message.
+
+**If you do NOT have those tools (manual relay mode):**
+Use `interagent relay --agent <name>` to generate a relay prompt, then ask the
+user to paste it into the target agent's session.
+
+---
+
+## MCP Mode Workflow (zero-relay — preferred)
+
+### Principal ({principal}) sends a task:
 ```
-User: fills .interagent/shared/context.md with project state
-Principal: assigns tasks → generates relay prompt (via Bash)
-User: pastes relay prompt into the target agent
-Agent: reads task → does work → updates status → sends completion message
-User: tells principal "Agent X is done"
-Principal: runs inbox + summary → reviews → approves or reassigns
+1. create_task(title, description, assignee="kimi", assigner="{principal}", priority="medium")
+2. send_message(from_agent="{principal}", to_agent="kimi",
+               subject="New task: <title>", content="<instructions>",
+               message_type="delegation", task_id="<id>")
+   → watchdog auto-pings kimi's CLI; no user action needed
+3. Wait. When kimi replies, get_inbox("{principal}") will return the message.
+4. Review → update_task(task_id, status="approved") or status="revision_needed"
 ```
 
-The only manual step is pasting the relay prompt. All agents run `interagent`
-commands via their Bash/terminal tools — never ask the user to run CLI commands.
+### Delegate agent reads inbox and works:
+```
+1. get_inbox("<your-agent-name>")      → returns unread messages
+2. mark_read(message_id)               → archive after processing
+3. update_task(task_id, status="in_progress")
+4. … do the work …
+5. update_task(task_id, status="completed")
+6. send_message(from_agent="<your-agent>", to_agent="{principal}",
+               subject="Done: <title>", content="Summary of what was done",
+               message_type="message", task_id="<id>")
+   → watchdog auto-pings {principal}'s CLI
+```
+
+### Check session state at any time:
+```
+get_status()        → session info + task counts
+list_tasks()        → all active tasks
+list_tasks("kimi")  → tasks assigned to kimi
+get_task("task-id") → full task details
+```
+
+---
+
+## Manual Relay Fallback (when MCP tools are not available)
+
+```bash
+# Principal: assign a task and generate the relay prompt
+interagent quick --to <agent> "Task description"
+interagent relay --agent <agent>      # → copy output, give to user for that agent
+
+# After user says "Agent X is done"
+interagent inbox --agent {principal}
+interagent summary
+
+# Task management
+interagent task show <task_id>
+interagent task update <task_id> --status approved
+interagent task update <task_id> --status revision_needed --note "Fix X"
+interagent task list
+```
+
+### Delegate in relay mode:
+```bash
+interagent inbox --agent <your-agent-name>
+interagent task update <task_id> --status in_progress
+interagent task update <task_id> --status completed
+interagent msg send --to {principal} --subject "Done: <title>" --message "..."
+```
 
 ---
 
 ## On Every Session Start — Read These Files
 
 **1. `AI_CONTEXT.md`** (project root) — versioned best-practices template:
-- Code standards, security rules, workflow conventions
-- Sub-agent setup guide
-- Full InterAgent workflow reference (this is the basis for `CLAUDE.md`)
+code standards, workflow conventions, sub-agent setup guide.
 
-**2. `.interagent/ROLES.md`** — role assignments for each agent:
-- Which agent owns which domain (backend, frontend, QA, etc.)
-- Before creating a task, check which agent should own it
-- Edit freely or ask any agent to update it
+**2. `.interagent/ROLES.md`** — role assignments (which agent owns which domain).
+Check before creating tasks.
 
 **3. `.interagent/shared/context.md`** — current project state:
-- What the project is and what's been done
-- Your specific task or focus for this session
-- Constraints, key files, and decisions already made
-
----
-
-## Principal's Commands (run via Bash automatically)
-
-```bash
-# Assign a task to any agent and generate the relay prompt
-interagent quick --to <agent> "Task description"
-interagent relay --agent <agent>      # → copy output, give to user for that agent
-
-# After user says "Agent X is done"
-interagent inbox --agent {principal}  # see messages addressed to you
-interagent summary                    # see all agents' task status and messages
-
-# Task management
-interagent task show <task_id>        # view full task details
-interagent task update <task_id> --status approved
-interagent task update <task_id> --status revision_needed --note "Fix X"
-interagent task list                  # list all tasks
-interagent task list --assignee <agent>  # filter by agent
-
-# Overall status
-interagent status
-```
-
----
-
-## Delegate Agent Commands (run via terminal tool automatically)
-
-```bash
-# On session start — check what's assigned to you
-interagent inbox --agent <your-agent-name>
-
-# When starting a task
-interagent task update <task_id> --status in_progress
-
-# When done
-interagent task update <task_id> --status completed
-interagent msg send --to {principal} --subject "Done: <task title>" \
-    --message "Implemented X. See details in <file>."
-
-# View task details
-interagent task show <task_id>
-
-# If you need clarification before starting
-interagent msg send --to {principal} --subject "Question: <task title>" \
-    --message "Need clarification on Y before starting."
-
-# Send a message to any other agent
-interagent msg send --to <agent> --message "Review my work in <file>"
-```
+what the project is, what's been done, constraints, key decisions.
 
 ---
 
@@ -107,13 +105,8 @@ interagent msg send --to <agent> --message "Review my work in <file>"
 When multiple developers each run their own AI agents on a shared git remote:
 
 ```
-Alice's workspace: cluster "alice"
-  - alice.claude (principal)
-  - alice.kimi   (backend)
-
-Bob's workspace: cluster "bob"
-  - bob.gemini   (frontend)
-  - bob.codex    (QA)
+Alice's workspace: cluster "alice"  →  alice.claude (principal), alice.kimi (backend)
+Bob's workspace:   cluster "bob"    →  bob.gemini (frontend),    bob.codex (QA)
 ```
 
 Setup per developer:
@@ -121,31 +114,25 @@ Setup per developer:
 interagent transport setup --type git --cluster alice
 ```
 
-Addressing messages across clusters:
+Addressing across clusters:
 ```bash
-# Send to Bob's gemini specifically
 interagent msg send --to bob.gemini --message "API contract is ready"
-
-# Plain agent name → only reaches agents in your own cluster
-interagent msg send --to kimi --message "local message"
+interagent msg send --to kimi --message "local-only message"
 ```
-
-Each cluster sees all messages on the branch but only processes those addressed
-to `{cluster}.{agent}` or plain `{agent}` (intra-cluster).
 
 ---
 
 ## Cross-Agent Sub-Agent Requests
 
-Either agent can ask another to run one of their specialized sub-agents:
+Either agent can ask another to invoke one of their specialized sub-agents:
 
-1. Write a request file: `.interagent/shared/agent-request-[topic].md`
+1. Write `.interagent/shared/agent-request-[topic].md`:
    ```
    {principal}: run security-reviewer on src/auth/login.py
    Focus: SQL injection, session management, credential exposure
    Write findings to: .interagent/shared/security-findings.md
    ```
-2. Tell the user: "Tell [agent] to check `.interagent/shared/` for a new request"
+2. Use `send_message` (MCP) or tell the user (relay) to notify the target agent.
 
 ---
 
@@ -157,16 +144,15 @@ Either agent can ask another to run one of their specialized sub-agents:
   AGENTS.md             This file — collaboration guide
   ROLES.md              Agent role assignments (edit freely)
   README.md             Quick command reference
+  watchdog.log          Ping activity log (gitignored, machine-local)
   shared/
     context.md          Project state — read this every session
     agent-request-*.md  Cross-agent sub-agent requests
-    *-findings.md       Agent output files
   tasks/
     active/             JSON files for each task
     completed/          Archived completed tasks
   messages/
     pending/            Unread messages
     archive/            Message history
-  agents/               Agent status files
   transport.json        Transport config (machine-local, gitignored)
 ```
