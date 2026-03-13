@@ -13,15 +13,18 @@ type Page = 'messages' | 'tasks' | 'questions' | 'activity'
 
 export default function App() {
   const { isConfigured } = useConfigStore()
-  const [showSetup, setShowSetup] = useState(!isConfigured)
+  const [forceOpen, setForceOpen] = useState(false)
   const [page, setPage] = useState<Page>('messages')
+
+  // Show modal when truly not configured, or when explicitly opened
+  const showSetup = !isConfigured || forceOpen
 
   // Start SSE connection once configured
   useSSE()
 
   // Listen for 401 auth errors
   useEffect(() => {
-    const handler = () => setShowSetup(true)
+    const handler = () => setForceOpen(true)
     window.addEventListener('auth-error', handler)
     return () => window.removeEventListener('auth-error', handler)
   }, [])
@@ -33,7 +36,7 @@ export default function App() {
         <Sidebar
           activePage={page}
           onNavigate={setPage}
-          onOpenSetup={() => setShowSetup(true)}
+          onOpenSetup={() => setForceOpen(true)}
         />
         <main className="flex-1 overflow-auto">
           {page === 'messages' && <MessagesFeed />}
@@ -42,7 +45,7 @@ export default function App() {
           {page === 'activity' && <ActivityLog />}
         </main>
       </div>
-      <SetupModal open={showSetup} onClose={() => setShowSetup(false)} />
+      <SetupModal open={showSetup} onClose={() => setForceOpen(false)} />
     </div>
   )
 }
