@@ -11,7 +11,7 @@ interface StoredConfig {
 function loadConfig(): StoredConfig {
   // 1. Server-injected config — Hub serves the dashboard and injects its own key.
   //    This is the normal production path: no setup needed.
-  const injected = (window as Record<string, unknown>).__AW_CONFIG__ as Partial<StoredConfig> | undefined
+  const injected = (window as unknown as Record<string, unknown>).__AW_CONFIG__ as Partial<StoredConfig> | undefined
   if (injected?.apiKey) {
     return {
       apiKey: injected.apiKey,
