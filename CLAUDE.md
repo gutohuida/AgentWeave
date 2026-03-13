@@ -49,8 +49,12 @@ curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.e
 cp .env.example .env   # edit AW_BOOTSTRAP_API_KEY
 docker compose up -d
 
-# Hub — contributor build from source (inside hub/ directory)
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+# Hub — build and run from source (inside hub/ directory)
+docker compose up --build -d
+
+# UI development (hot-reload, proxies /api → Hub at localhost:8000)
+cd hub/ui && npm install && npm run dev       # dashboard at http://localhost:5173
+cd hub/ui && npm run build                    # produces dist/ (copied into Docker image)
 
 # Connect CLI to Hub
 agentweave transport setup --type http --url http://localhost:8000 \

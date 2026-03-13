@@ -1,5 +1,13 @@
-FROM python:3.11-slim
+# Stage 1: Build React UI
+FROM node:20-slim AS ui-builder
+WORKDIR /app/ui
+COPY ui/package*.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build
 
+# Stage 2: Python server
+FROM python:3.11-slim
 WORKDIR /app
 
 # Install package
@@ -8,6 +16,9 @@ COPY hub/ ./hub/
 COPY alembic.ini ./
 
 RUN pip install --no-cache-dir -e .
+
+# Copy built UI into hub static directory
+COPY --from=ui-builder /app/ui/dist /app/hub/static/ui
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data

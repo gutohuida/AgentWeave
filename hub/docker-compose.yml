@@ -1,15 +1,7 @@
-# AgentWeave Hub — for end users
-# No source code needed. Just this file + a .env file.
-#
-# Quick start:
-#   curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-#   curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-#   cp .env.example .env   # then edit AW_BOOTSTRAP_API_KEY
-#   docker compose up -d
-
 services:
   hub:
-    image: ghcr.io/gutohuida/agentweave-hub:latest
+    build: .
+    image: agentweave-hub:latest
     ports:
       - "${AW_PORT:-8000}:8000"
     volumes:

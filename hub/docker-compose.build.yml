@@ -1,10 +1,2 @@
-# AgentWeave Hub — for contributors / local development
-# Builds the image from source instead of pulling from GHCR.
-#
-# Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
-
-services:
-  hub:
-    build: .
-    image: agentweave-hub:dev
+# Deprecated — build is now included in docker-compose.yml directly.
+# Use: docker compose up --build -d
