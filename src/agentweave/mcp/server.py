@@ -24,7 +24,7 @@ except ImportError as e:
         "Install it with: pip install 'agentweave-ai[mcp]'"
     ) from e
 
-from ..constants import MESSAGE_TYPES, PRIORITIES, TASK_STATUSES
+from ..constants import MESSAGE_TYPES, PRIORITIES, TASK_STATUSES, TransportType
 from ..locking import lock, LockError
 from ..messaging import Message, MessageBus
 from ..task import Task
@@ -142,6 +142,14 @@ def get_task(task_id: str) -> Dict[str, Any]:
     Returns:
         Task dict with all fields, or {'error': '...'} if not found.
     """
+    transport = get_transport()
+    if transport.get_transport_type() == TransportType.HTTP:
+        result = transport.get_task_by_id(task_id)
+        if result is None:
+            return {"error": f"Task '{task_id}' not found"}
+        return result
+
+    # local / git: file-based
     task = Task.load(task_id)
     if task is None:
         return {"error": f"Task '{task_id}' not found"}
@@ -156,7 +164,7 @@ def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
     under_review, revision_needed, approved, rejected.
 
     Args:
-        task_id: Task ID to update
+        task_id: Task ID to update — use the 'id' field from list_tasks().
         status: New status value
         agent: Your agent name (e.g. "kimi"). Used for activity logging.
 
@@ -166,6 +174,15 @@ def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
     if status not in TASK_STATUSES:
         return {"error": f"Invalid status '{status}'. Valid: {', '.join(TASK_STATUSES)}"}
 
+    transport = get_transport()
+    if transport.get_transport_type() == TransportType.HTTP:
+        ok = transport.update_task_status(task_id, status)
+        if not ok:
+            return {"error": f"Failed to update task '{task_id}' on Hub"}
+        result = transport.get_task_by_id(task_id)
+        return result if result else {"id": task_id, "status": status}
+
+    # local / git: file-based with lock
     try:
         with lock(f"task-{task_id}"):
             task = Task.load(task_id)

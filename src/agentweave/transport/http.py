@@ -144,6 +144,13 @@ class HttpTransport(BaseTransport):
     # Extended Hub methods (not in BaseTransport ABC)
     # ------------------------------------------------------------------
 
+    def get_task_by_id(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """GET /api/v1/tasks/{id} — fetch a single task from Hub."""
+        try:
+            return self._request("GET", f"/tasks/{task_id}")
+        except RuntimeError:
+            return None
+
     def update_task_status(self, task_id: str, status: str) -> bool:
         """PATCH /api/v1/tasks/{id} — update task status on Hub."""
         try:
