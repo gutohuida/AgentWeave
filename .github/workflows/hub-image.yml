@@ -2,11 +2,13 @@ name: Publish Hub Docker image
 
 on:
   push:
+    branches:
+      - master
     tags:
-      - "hub-v*"          # trigger on tags like hub-v0.1.0
+      - "hub-v*"
     paths:
       - "hub/**"
-  workflow_dispatch:       # allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
