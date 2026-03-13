@@ -987,8 +987,8 @@ def cmd_log(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_mcp_setup(_args: argparse.Namespace) -> int:
-    """Configure the AgentWeave MCP server for Claude Code and Kimi Code."""
+def cmd_mcp_setup(args: argparse.Namespace) -> int:
+    """Configure the AgentWeave MCP server for all session agents."""
     import os as _os
     import subprocess as _sp
 
@@ -996,18 +996,31 @@ def cmd_mcp_setup(_args: argparse.Namespace) -> int:
     # On Windows, agent CLIs are .cmd files — shell=True is required for subprocess to find them
     _shell = _os.name == "nt"
 
+    # Build per-agent MCP registration commands.
+    # Known CLI interfaces: claude uses `claude mcp add`, kimi uses `kimi mcp add --transport stdio`.
+    # Any other agent: try the generic `<agent> mcp add` form.
+    def _mcp_args(agent: str) -> list:
+        if agent == "claude":
+            return ["claude", "mcp", "add", "agentweave", "--", server_cmd]
+        if agent == "kimi":
+            return ["kimi", "mcp", "add", "--transport", "stdio", "agentweave", "--", server_cmd]
+        # Generic fallback — works for agents that follow the claude CLI convention
+        return [agent, "mcp", "add", "agentweave", "--", server_cmd]
+
+    # Determine which agents to configure: session agents → DEFAULT_AGENTS fallback
+    session = Session.load()
+    agent_list = session.agent_names if session else DEFAULT_AGENTS
+
     results = {}
-    for agent_cli, mcp_args in [
-        ("claude", ["claude", "mcp", "add", "agentweave", "--", server_cmd]),
-        ("kimi",   ["kimi",   "mcp", "add", "--transport", "stdio", "agentweave", "--", server_cmd]),
-    ]:
+    for agent in agent_list:
+        mcp_args = _mcp_args(agent)
         try:
-            check = _sp.run([agent_cli, "--version"], capture_output=True, shell=_shell)
+            check = _sp.run([agent, "--version"], capture_output=True, shell=_shell)
             if check.returncode != 0:
-                results[agent_cli] = "not found"
+                results[agent] = "not found"
                 continue
         except FileNotFoundError:
-            results[agent_cli] = "not found"
+            results[agent] = "not found"
             continue
         try:
             result = _sp.run(
@@ -1015,36 +1028,46 @@ def cmd_mcp_setup(_args: argparse.Namespace) -> int:
                 encoding="utf-8", errors="replace", shell=_shell,
             )
             if result.returncode == 0:
-                results[agent_cli] = "ok"
+                results[agent] = "ok"
             elif "already exists" in result.stderr.lower() or "already exists" in result.stdout.lower():
-                results[agent_cli] = "already configured"
+                results[agent] = "already configured"
             else:
-                results[agent_cli] = f"failed: {result.stderr.strip()}"
+                results[agent] = f"failed: {result.stderr.strip()}"
         except FileNotFoundError:
-            results[agent_cli] = "not found"
+            results[agent] = "not found"
 
     print()
     print("AgentWeave MCP server setup")
     print("-" * 40)
-    for agent_cli, status in results.items():
+    for agent, status in results.items():
         icon = "[OK]" if status in ("ok", "already configured") else "[!!]"
-        print(f"  {icon} {agent_cli}: {status}")
+        print(f"  {icon} {agent}: {status}")
     print()
 
-    if any(s not in ("ok", "already configured") for s in results.values()):
-        print("Manual configuration (add to your agent's MCP settings):")
+    # Print manual commands only for agents that couldn't be configured automatically
+    failed = [a for a, s in results.items() if s not in ("ok", "already configured")]
+    if failed:
+        print("Manual configuration for agents not found automatically:")
         print()
-        print("  Claude Code (.mcp.json or via `claude mcp add`):")
-        print('    claude mcp add agentweave -- agentweave-mcp')
-        print()
-        print("  Kimi Code:")
-        print('    kimi mcp add --transport stdio agentweave -- agentweave-mcp')
+        for agent in failed:
+            if agent == "kimi":
+                print(f'    kimi mcp add --transport stdio agentweave -- {server_cmd}')
+            else:
+                print(f'    {agent} mcp add agentweave -- {server_cmd}')
         print()
 
-    print("Start the auto-ping watchdog alongside the MCP server:")
-    print("  agentweave-watch --auto-ping --agent claude   # in one terminal")
-    print("  agentweave-watch --auto-ping --agent kimi     # in another terminal")
+    print("Next step — start the background watchdog (one command, all agents):")
+    print("  agentweave start")
     print()
+    print("To stop it later:")
+    print("  agentweave stop")
+    print()
+
+    # If --start flag passed, launch watchdog immediately
+    if getattr(args, "start", False):
+        print("Launching watchdog now...")
+        return cmd_start(args)
+
     return 0
 
 
@@ -1620,9 +1643,14 @@ For more help: https://github.com/gutohuida/AgentWeave
     # MCP commands
     mcp_parser = subparsers.add_parser("mcp", help="MCP server management")
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command")
-    mcp_subparsers.add_parser(
+    mcp_setup_parser = mcp_subparsers.add_parser(
         "setup",
-        help="Configure agentweave-mcp in Claude Code and Kimi Code",
+        help="Configure agentweave-mcp in all session agents",
+    )
+    mcp_setup_parser.add_argument(
+        "--start",
+        action="store_true",
+        help="Also launch the background watchdog immediately after setup",
     )
 
     # Transport commands

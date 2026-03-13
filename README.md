@@ -78,15 +78,17 @@ Claude runs `agentweave quick` and `agentweave relay`, then shows you a prompt t
 ### 4b. Start working — zero-relay MCP
 
 ```bash
-# One-time: configure MCP in both agents
+# One-time: configure MCP in all session agents
 agentweave mcp setup
 
-# Two terminals — keep running
-agentweave-watch --auto-ping --agent claude   # notifies Claude when Kimi sends
-agentweave-watch --auto-ping --agent kimi     # notifies Kimi when Claude sends
+# Start background watchdog — monitors all agents, one process, one command
+agentweave start
+
+# Stop it later
+agentweave stop
 ```
 
-Now just prompt Claude — agents communicate autonomously.
+Restart your Claude/Kimi sessions so they pick up the MCP server. Then just prompt Claude — agents communicate autonomously.
 
 ---
 
@@ -130,11 +132,27 @@ docker compose up --build -d
 ### Connect the CLI to Hub
 
 ```bash
+# 6. Go to your project directory
+cd /path/to/your-project
+
+# 7. Initialize the project
+agentweave init --project "My App" --agents claude,kimi
+
+# 8. Connect CLI to Hub
 agentweave transport setup --type http \
   --url http://localhost:8000 \
-  --api-key aw_live_... \
+  --api-key aw_live_<your-key> \
   --project-id proj-default
+
+# 9. Register MCP server with all session agents (one command)
+agentweave mcp setup
+
+# 10. Start background watchdog for all agents (one command, one terminal)
+agentweave start
+# Stop it later with: agentweave stop
 ```
+
+That's it. Restart your Claude/Kimi sessions so they pick up the new MCP server.
 
 ### Hub UI development (hot-reload)
 
