@@ -1,0 +1,5 @@
+# Override root .gitignore — allow src/lib/ (not a Python lib dir)
+!src/lib/
+
+node_modules/
+dist/
