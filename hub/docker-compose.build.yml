@@ -1,9 +1,9 @@
-# For contributors — builds from local source instead of GitHub.
+# For contributors — builds from local source.
 #
 # Usage (from hub/ directory):
-#   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
+#   make docker-up
+#   or: docker build . -t agentweave-hub:latest && docker compose up -d
 
 services:
   hub:
-    build:
-      context: .
+    build: .

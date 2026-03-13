@@ -31,10 +31,10 @@ ui-build:
 	cd ui && npm run build
 
 docker-build:
-	docker compose -f docker-compose.yml -f docker-compose.build.yml build
+	docker build . -t agentweave-hub:latest
 
 docker-up:
-	docker compose -f docker-compose.yml -f docker-compose.build.yml up --build -d
+	docker build . -t agentweave-hub:latest && docker compose up -d
 
 docker-down:
 	docker compose down
