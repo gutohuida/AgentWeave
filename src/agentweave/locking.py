@@ -12,6 +12,7 @@ DEFAULT_RETRY_DELAY = 0.1  # seconds
 
 class LockError(Exception):
     """Raised when lock cannot be acquired."""
+
     pass
 
 

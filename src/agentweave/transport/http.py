@@ -71,7 +71,9 @@ class HttpTransport(BaseTransport):
                 raw = resp.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Hub API {exc.code}: {exc.read().decode(errors='replace')}") from exc
+            raise RuntimeError(
+                f"Hub API {exc.code}: {exc.read().decode(errors='replace')}"
+            ) from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Hub connection error: {exc.reason}") from exc
 
@@ -97,6 +99,7 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             from ..eventlog import ERROR, log_event
+
             log_event("transport_error", severity=ERROR, method="send_message", error=str(exc))
             return False
 
@@ -109,7 +112,10 @@ class HttpTransport(BaseTransport):
             return []
         except RuntimeError as exc:
             from ..eventlog import WARN, log_event
-            log_event("transport_error", severity=WARN, method="get_pending_messages", error=str(exc))
+
+            log_event(
+                "transport_error", severity=WARN, method="get_pending_messages", error=str(exc)
+            )
             return []
 
     def archive_message(self, message_id: str) -> bool:
@@ -119,6 +125,7 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             from ..eventlog import ERROR, log_event
+
             log_event("transport_error", severity=ERROR, method="archive_message", error=str(exc))
             return False
 
@@ -129,6 +136,7 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             from ..eventlog import ERROR, log_event
+
             log_event("transport_error", severity=ERROR, method="send_task", error=str(exc))
             return False
 
@@ -144,6 +152,7 @@ class HttpTransport(BaseTransport):
             return []
         except RuntimeError as exc:
             from ..eventlog import WARN, log_event
+
             log_event("transport_error", severity=WARN, method="get_active_tasks", error=str(exc))
             return []
 
@@ -160,6 +169,7 @@ class HttpTransport(BaseTransport):
             return self._request("GET", f"/tasks/{task_id}")
         except RuntimeError as exc:
             from ..eventlog import WARN, log_event
+
             log_event("transport_error", severity=WARN, method="get_task_by_id", error=str(exc))
             return None
 
@@ -170,12 +180,13 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             from ..eventlog import ERROR, log_event
-            log_event("transport_error", severity=ERROR, method="update_task_status", error=str(exc))
+
+            log_event(
+                "transport_error", severity=ERROR, method="update_task_status", error=str(exc)
+            )
             return False
 
-    def ask_question(
-        self, from_agent: str, question: str, blocking: bool = False
-    ) -> Optional[str]:
+    def ask_question(self, from_agent: str, question: str, blocking: bool = False) -> Optional[str]:
         """POST /api/v1/questions — post a question for the human user.
 
         Returns the question ID, or None on failure.
@@ -189,6 +200,7 @@ class HttpTransport(BaseTransport):
             return result.get("id")
         except RuntimeError as exc:
             from ..eventlog import ERROR, log_event
+
             log_event("transport_error", severity=ERROR, method="ask_question", error=str(exc))
             return None
 
@@ -201,10 +213,13 @@ class HttpTransport(BaseTransport):
             return self._request("GET", f"/questions/{question_id}")
         except RuntimeError as exc:
             from ..eventlog import WARN, log_event
+
             log_event("transport_error", severity=WARN, method="get_answer", error=str(exc))
             return None
 
-    def push_heartbeat(self, agent: str, status: str = "active", message: Optional[str] = None) -> bool:
+    def push_heartbeat(
+        self, agent: str, status: str = "active", message: Optional[str] = None
+    ) -> bool:
         """POST /api/v1/agents/{name}/heartbeat — publish agent status to the Hub."""
         try:
             body: Dict[str, Any] = {"status": status}
@@ -214,12 +229,11 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             from ..eventlog import WARN, log_event
+
             log_event("transport_error", severity=WARN, method="push_heartbeat", error=str(exc))
             return False
 
-    def post_agent_output(
-        self, agent: str, content: str, session_id: Optional[str] = None
-    ) -> bool:
+    def post_agent_output(self, agent: str, content: str, session_id: Optional[str] = None) -> bool:
         """POST /api/v1/agents/{name}/output — stream one line of agent output to the Hub."""
         try:
             body: Dict[str, Any] = {"content": content}
@@ -229,6 +243,7 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             from ..eventlog import WARN, log_event
+
             log_event("transport_error", severity=WARN, method="post_agent_output", error=str(exc))
             return False
 

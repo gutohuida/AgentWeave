@@ -7,6 +7,7 @@ from .constants import AGENT_NAME_RE, MESSAGE_TYPES, PRIORITIES, TASK_STATUSES
 
 class ValidationError(Exception):
     """Raised when validation fails."""
+
     pass
 
 
@@ -149,17 +150,13 @@ def sanitize_task_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Lists
     if "requirements" in data and isinstance(data["requirements"], list):
-        sanitized["requirements"] = [
-            sanitize_string(r, 500) for r in data["requirements"]
-        ]
+        sanitized["requirements"] = [sanitize_string(r, 500) for r in data["requirements"]]
     if "acceptance_criteria" in data and isinstance(data["acceptance_criteria"], list):
         sanitized["acceptance_criteria"] = [
             sanitize_string(c, 500) for c in data["acceptance_criteria"]
         ]
     if "deliverables" in data and isinstance(data["deliverables"], list):
-        sanitized["deliverables"] = [
-            sanitize_string(d, 500) for d in data["deliverables"]
-        ]
+        sanitized["deliverables"] = [sanitize_string(d, 500) for d in data["deliverables"]]
 
     # Timestamps
     if "created_at" in data:

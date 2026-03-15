@@ -21,17 +21,19 @@ MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
 
 # File paths
 SESSION_FILE = AGENTWEAVE_DIR / "session.json"
-WATCHDOG_PID_FILE = AGENTWEAVE_DIR / "watchdog.pid"        # gitignored, machine-local
-WATCHDOG_LOG_FILE = AGENTWEAVE_DIR / "watchdog.log"        # gitignored, machine-local
+WATCHDOG_PID_FILE = AGENTWEAVE_DIR / "watchdog.pid"  # gitignored, machine-local
+WATCHDOG_LOG_FILE = AGENTWEAVE_DIR / "watchdog.log"  # gitignored, machine-local
 WATCHDOG_HEARTBEAT_FILE = AGENTWEAVE_DIR / "watchdog.heartbeat"  # gitignored
 
 # Event log
 LOGS_DIR = AGENTWEAVE_DIR / "logs"
-EVENTS_LOG_FILE = LOGS_DIR / "events.jsonl"                # gitignored, machine-local
+EVENTS_LOG_FILE = LOGS_DIR / "events.jsonl"  # gitignored, machine-local
+
 
 # Transport types
 class TransportType(str, Enum):
     """Pluggable transport backends."""
+
     LOCAL = "local"
     GIT = "git"
     HTTP = "http"
@@ -48,18 +50,18 @@ AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 # Known agents — used for documentation, suggestions, and default role assignments.
 # NOT a validation gate: any name matching AGENT_NAME_RE is accepted.
 KNOWN_AGENTS = [
-    "claude",    # Claude Code (Anthropic) — claude.ai/code
-    "kimi",      # Kimi Code (Moonshot AI)
-    "gemini",    # Gemini CLI (Google) — open-source, 1M context
-    "codex",     # Codex CLI (OpenAI)
-    "aider",     # Aider — git-native AI pair programmer
-    "cline",     # Cline — MCP-based VS Code agent
-    "cursor",    # Cursor Agent (Anysphere)
+    "claude",  # Claude Code (Anthropic) — claude.ai/code
+    "kimi",  # Kimi Code (Moonshot AI)
+    "gemini",  # Gemini CLI (Google) — open-source, 1M context
+    "codex",  # Codex CLI (OpenAI)
+    "aider",  # Aider — git-native AI pair programmer
+    "cline",  # Cline — MCP-based VS Code agent
+    "cursor",  # Cursor Agent (Anysphere)
     "windsurf",  # Windsurf / Cascade (Codeium)
-    "copilot",   # GitHub Copilot Agent (Microsoft)
-    "opendevin", # OpenHands / OpenDevin — open-source autonomous agent
-    "gpt",       # Generic ChatGPT / OpenAI assistant
-    "qwen",      # Qwen / Tongyi Qianwen (Alibaba)
+    "copilot",  # GitHub Copilot Agent (Microsoft)
+    "opendevin",  # OpenHands / OpenDevin — open-source autonomous agent
+    "gpt",  # Generic ChatGPT / OpenAI assistant
+    "qwen",  # Qwen / Tongyi Qianwen (Alibaba)
 ]
 
 # Default agents when none specified at init (backward-compatible)
@@ -87,35 +89,35 @@ VALID_DEV_ROLES = [
 
 # Human-readable role labels
 DEV_ROLE_LABELS = {
-    "tech_lead":         "Tech Lead",
-    "architect":         "Architect",
-    "backend_dev":       "Backend Developer",
-    "frontend_dev":      "Frontend Developer",
-    "fullstack_dev":     "Full Stack Developer",
-    "qa_engineer":       "QA / Test Engineer",
-    "devops_engineer":   "DevOps Engineer",
+    "tech_lead": "Tech Lead",
+    "architect": "Architect",
+    "backend_dev": "Backend Developer",
+    "frontend_dev": "Frontend Developer",
+    "fullstack_dev": "Full Stack Developer",
+    "qa_engineer": "QA / Test Engineer",
+    "devops_engineer": "DevOps Engineer",
     "security_engineer": "Security Engineer",
-    "data_engineer":     "Data Engineer",
-    "ml_engineer":       "ML / AI Engineer",
-    "technical_writer":  "Technical Writer",
-    "code_reviewer":     "Code Reviewer",
-    "project_manager":   "Project Manager",
+    "data_engineer": "Data Engineer",
+    "ml_engineer": "ML / AI Engineer",
+    "technical_writer": "Technical Writer",
+    "code_reviewer": "Code Reviewer",
+    "project_manager": "Project Manager",
 }
 
 # Default dev role per known agent (suggested starting point for ROLES.md)
 DEFAULT_AGENT_ROLES = {
-    "claude":    "tech_lead",
-    "kimi":      "backend_dev",
-    "gemini":    "fullstack_dev",
-    "codex":     "backend_dev",
-    "aider":     "code_reviewer",
-    "cline":     "fullstack_dev",
-    "cursor":    "frontend_dev",
-    "windsurf":  "frontend_dev",
-    "copilot":   "code_reviewer",
+    "claude": "tech_lead",
+    "kimi": "backend_dev",
+    "gemini": "fullstack_dev",
+    "codex": "backend_dev",
+    "aider": "code_reviewer",
+    "cline": "fullstack_dev",
+    "cursor": "frontend_dev",
+    "windsurf": "frontend_dev",
+    "copilot": "code_reviewer",
     "opendevin": "devops_engineer",
-    "gpt":       "technical_writer",
-    "qwen":      "backend_dev",
+    "gpt": "technical_writer",
+    "qwen": "backend_dev",
 }
 
 # Valid session roles

@@ -40,6 +40,7 @@ def log_event(event: str, severity: str = INFO, **kwargs: Any) -> None:
     if severity in _PUSH_MIN_SEVERITY:
         try:
             from .transport import get_transport
+
             t = get_transport()
             if t.get_transport_type() == "http":
                 agent = str(kwargs.get("agent", "system"))
@@ -92,10 +93,9 @@ def get_events(
         events = [e for e in events if e.get("event") == event_type]
     if agent:
         events = [
-            e for e in events
-            if agent in (
-                e.get("from"), e.get("to"), e.get("agent"), e.get("assignee")
-            )
+            e
+            for e in events
+            if agent in (e.get("from"), e.get("to"), e.get("agent"), e.get("assignee"))
         ]
 
     return events[-n:]
@@ -139,10 +139,7 @@ def format_event(entry: Dict[str, Any]) -> str:
     if ev == "watchdog_stopped":
         return f"[{ts}] WATCH STOPPED"
     if ev == "watchdog_ping":
-        return (
-            f"[{ts}] WATCH PING -> {entry.get('agent','?')}"
-            f"  msg={entry.get('msg_id','?')}"
-        )
+        return f"[{ts}] WATCH PING -> {entry.get('agent','?')}" f"  msg={entry.get('msg_id','?')}"
     if ev == "ping_skipped":
         return (
             f"[{ts}] WATCH PING SKIPPED -> {entry.get('agent','?')}"

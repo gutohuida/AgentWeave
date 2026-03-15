@@ -120,9 +120,7 @@ class GitTransport(BaseTransport):
         """
         for attempt in range(3):
             # Write blob to git object store
-            rc, blob_sha, _ = _run_git(
-                ["hash-object", "-w", "--stdin"], stdin_bytes=content_bytes
-            )
+            rc, blob_sha, _ = _run_git(["hash-object", "-w", "--stdin"], stdin_bytes=content_bytes)
             if rc != 0:
                 return False
             blob_sha = blob_sha.strip()
@@ -134,9 +132,9 @@ class GitTransport(BaseTransport):
             # Build the new tree (existing entries + new blob)
             if branch_exists:
                 rc, tree_entries, _ = _run_git(["ls-tree", self._remote_ref])
-                mktree_input = (
-                    tree_entries + f"100644 blob {blob_sha}\t{filename}\n"
-                ).encode("utf-8")
+                mktree_input = (tree_entries + f"100644 blob {blob_sha}\t{filename}\n").encode(
+                    "utf-8"
+                )
             else:
                 mktree_input = f"100644 blob {blob_sha}\t{filename}\n".encode()
 
@@ -149,9 +147,12 @@ class GitTransport(BaseTransport):
             if branch_exists:
                 rc, commit_sha, _ = _run_git(
                     [
-                        "commit-tree", new_tree,
-                        "-p", self._remote_ref,
-                        "-m", commit_msg,
+                        "commit-tree",
+                        new_tree,
+                        "-p",
+                        self._remote_ref,
+                        "-m",
+                        commit_msg,
                     ]
                 )
             else:
@@ -163,14 +164,12 @@ class GitTransport(BaseTransport):
             commit_sha = commit_sha.strip()
 
             # Push
-            rc, _, err = _run_git(
-                ["push", self.remote, f"{commit_sha}:refs/heads/{self.branch}"]
-            )
+            rc, _, err = _run_git(["push", self.remote, f"{commit_sha}:refs/heads/{self.branch}"])
             if rc == 0:
                 return True
             if "non-fast-forward" in err or "rejected" in err:
                 # Another machine pushed first — wait and retry
-                time.sleep(0.5 * (2 ** attempt))
+                time.sleep(0.5 * (2**attempt))
                 continue
             return False
 
@@ -263,8 +262,7 @@ class GitTransport(BaseTransport):
 
         # Fast filter: recipient encoded in filename (no file reads needed)
         candidate_files = [
-            f for f in all_files
-            if self._matches_agent(self._recipient_from_msg_filename(f), agent)
+            f for f in all_files if self._matches_agent(self._recipient_from_msg_filename(f), agent)
         ]
 
         seen = self._get_seen_set(agent)
@@ -334,7 +332,8 @@ class GitTransport(BaseTransport):
             return parts[3] if len(parts) >= 5 else ""
 
         task_files = [
-            f for f in all_files
+            f
+            for f in all_files
             if _is_task_def(f) and (agent is None or _task_assignee(f) == agent)
         ]
 

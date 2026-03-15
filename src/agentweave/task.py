@@ -10,6 +10,7 @@ from .utils import generate_id, load_json, now_iso, save_json
 
 class TaskStatus(Enum):
     """Task status enumeration."""
+
     PENDING = "pending"
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
@@ -101,7 +102,7 @@ class Task:
     def load(cls, task_id: str) -> Optional["Task"]:
         """Load task by ID."""
         # Validate task_id format to prevent path traversal
-        if not re.match(r'^[a-zA-Z0-9_-]+$', task_id):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", task_id):
             return None
 
         # Try active first
@@ -120,6 +121,7 @@ class Task:
     def save(self) -> bool:
         """Save task to file."""
         from .eventlog import ERROR, log_event
+
         filepath = TASKS_ACTIVE_DIR / f"{self.id}.json"
         is_new = not filepath.exists()
         result = save_json(filepath, self._data)
@@ -143,6 +145,7 @@ class Task:
     def update(self, agent: Optional[str] = None, **kwargs) -> None:
         """Update task fields."""
         from .eventlog import log_event
+
         prev_status = self._data.get("status")
         self._data.update(kwargs)
         self._data["updated"] = now_iso()

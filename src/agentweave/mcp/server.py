@@ -327,12 +327,14 @@ def ask_user(
         api_key = config["api_key"]
         project_id = config.get("project_id", "")
 
-        body = _json.dumps({
-            "from_agent": from_agent,
-            "question": question,
-            "blocking": blocking,
-            "project_id": project_id,
-        }).encode()
+        body = _json.dumps(
+            {
+                "from_agent": from_agent,
+                "question": question,
+                "blocking": blocking,
+                "project_id": project_id,
+            }
+        ).encode()
         request = _req.Request(f"{url}/api/v1/questions", data=body, method="POST")
         request.add_header("Authorization", f"Bearer {api_key}")
         request.add_header("Content-Type", "application/json")
@@ -350,7 +352,7 @@ def ask_user(
             recipient="user",
             subject="Question from agent",
             content=f"**Question** (blocking={blocking}):\n\n{question}\n\n"
-                    "Reply by sending a message back to this agent.",
+            "Reply by sending a message back to this agent.",
             message_type="message",
         )
         ok = MessageBus.send(msg)

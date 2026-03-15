@@ -59,9 +59,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         session.save()
 
         # Create README
-        agents_listed = "\n".join(
-            f"# agentweave relay --agent {ag}" for ag in session.agent_names
-        )
+        agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
         readme_path = AGENTWEAVE_DIR / "README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(f"""# AgentWeave Session: {session.name}
@@ -133,7 +131,9 @@ agentweave summary
                 dev_role_label = DEV_ROLE_LABELS.get(dev_role_key, "Full Stack Developer")
                 session_role = session.get_agent_role(ag)
                 responsibility = _role_responsibility(dev_role_key)
-                role_rows.append(f"| **{ag}** | {dev_role_label} (`{session_role}`) | {responsibility} |")
+                role_rows.append(
+                    f"| **{ag}** | {dev_role_label} (`{session_role}`) | {responsibility} |"
+                )
 
             roles_content = (
                 get_template("roles_template")
@@ -227,11 +227,15 @@ agentweave summary
         print("1. Fill in the [Replace with...] sections in AI_CONTEXT.md")
         print("2. Edit .agentweave/ROLES.md to assign the right dev roles")
         print("3. Update .agentweave/shared/context.md with today's focus")
-        print(f'4. Tell {session.principal.capitalize()}: "Read AI_CONTEXT.md, AGENTS.md, ROLES.md, and shared/context.md"')
+        print(
+            f'4. Tell {session.principal.capitalize()}: "Read AI_CONTEXT.md, AGENTS.md, ROLES.md, and shared/context.md"'
+        )
         print()
         print("Zero-relay MCP mode (optional):")
         print("  agentweave mcp setup   # configure MCP server in both agents (once)")
-        print("  agentweave start       # launch background watchdog — agents notify each other automatically")
+        print(
+            "  agentweave start       # launch background watchdog — agents notify each other automatically"
+        )
         return 0
 
     except ValueError as e:
@@ -242,19 +246,19 @@ agentweave summary
 def _role_responsibility(role_key: str) -> str:
     """Return a short responsibility description for a dev role."""
     responsibilities = {
-        "tech_lead":         "Architecture decisions, code review, integration",
-        "architect":         "System design, data models, API contracts",
-        "backend_dev":       "APIs, database, business logic, server-side",
-        "frontend_dev":      "UI components, styling, client-side state",
-        "fullstack_dev":     "Backend and frontend features",
-        "qa_engineer":       "Tests, quality assurance, edge cases",
-        "devops_engineer":   "CI/CD, infrastructure, deployment",
+        "tech_lead": "Architecture decisions, code review, integration",
+        "architect": "System design, data models, API contracts",
+        "backend_dev": "APIs, database, business logic, server-side",
+        "frontend_dev": "UI components, styling, client-side state",
+        "fullstack_dev": "Backend and frontend features",
+        "qa_engineer": "Tests, quality assurance, edge cases",
+        "devops_engineer": "CI/CD, infrastructure, deployment",
         "security_engineer": "Security review, auth/authz, vulnerability audit",
-        "data_engineer":     "Data pipelines, ETL, analytics",
-        "ml_engineer":       "ML models, training pipelines, inference",
-        "technical_writer":  "Documentation, READMEs, API docs",
-        "code_reviewer":     "Pull request reviews, style enforcement",
-        "project_manager":   "Task tracking, progress coordination",
+        "data_engineer": "Data pipelines, ETL, analytics",
+        "ml_engineer": "ML models, training pipelines, inference",
+        "technical_writer": "Documentation, READMEs, API docs",
+        "code_reviewer": "Pull request reviews, style enforcement",
+        "project_manager": "Task tracking, progress coordination",
     }
     return responsibilities.get(role_key, "General development tasks")
 
@@ -277,6 +281,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
 
     # Watchdog state
     from .eventlog import get_heartbeat_age
+
     watchdog_status = "stopped"
     watchdog_pid = None
     if WATCHDOG_PID_FILE.exists():
@@ -301,6 +306,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
 
     # Per-agent info
     from .constants import DEFAULT_AGENTS
+
     all_agents = session.agent_names or DEFAULT_AGENTS
     active_tasks = Task.list_all(active_only=True)
 
@@ -311,7 +317,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
         agent_tasks = [t for t in active_tasks if t.assignee == agent]
         in_prog = [t for t in agent_tasks if t.status == "in_progress"]
         waiting = [t for t in agent_tasks if t.status in ("pending", "assigned")]
-        review  = [t for t in agent_tasks if t.status in ("completed", "under_review")]
+        review = [t for t in agent_tasks if t.status in ("completed", "under_review")]
         principal_marker = " [principal]" if agent == session.principal else ""
         print(f"   {agent}{principal_marker} ({role})")
         if inbox:
@@ -351,6 +357,7 @@ def cmd_summary(_args: argparse.Namespace) -> int:
 
     # Tasks by status — dynamic across all session agents
     from .constants import DEFAULT_AGENTS
+
     all_tasks = Task.list_all()
     all_agents = session.agent_names or DEFAULT_AGENTS
 
@@ -368,17 +375,23 @@ def cmd_summary(_args: argparse.Namespace) -> int:
     print("[TASKS]")
     for ag in all_agents:
         if pending_by_agent[ag]:
-            print(f"  [WAIT] {ag.capitalize()}: {len(pending_by_agent[ag])} task(s) waiting to start")
+            print(
+                f"  [WAIT] {ag.capitalize()}: {len(pending_by_agent[ag])} task(s) waiting to start"
+            )
         if in_progress_by_agent[ag]:
-            print(f"  [WORK] {ag.capitalize()}: {len(in_progress_by_agent[ag])} task(s) in progress")
+            print(
+                f"  [WORK] {ag.capitalize()}: {len(in_progress_by_agent[ag])} task(s) in progress"
+            )
     if ready_for_review:
         print(f"  [REVIEW] {len(ready_for_review)} task(s) ready for review")
     if approved:
         print(f"  [OK] {len(approved)} task(s) approved")
 
-    any_tasks = any(
-        pending_by_agent[ag] or in_progress_by_agent[ag] for ag in all_agents
-    ) or ready_for_review or approved
+    any_tasks = (
+        any(pending_by_agent[ag] or in_progress_by_agent[ag] for ag in all_agents)
+        or ready_for_review
+        or approved
+    )
     if not any_tasks:
         print("  No active tasks")
     print()
@@ -405,7 +418,9 @@ def cmd_summary(_args: argparse.Namespace) -> int:
     non_principal = [ag for ag in all_agents if ag != session.principal]
     for ag in non_principal:
         if pending_by_agent.get(ag):
-            print(f"  -> Tell {ag.capitalize()} to check inbox ({len(pending_by_agent[ag])} new task(s))")
+            print(
+                f"  -> Tell {ag.capitalize()} to check inbox ({len(pending_by_agent[ag])} new task(s))"
+            )
         if msgs_by_agent.get(ag):
             print(f"  -> Tell {ag.capitalize()} to check messages")
     if msgs_by_agent.get(session.principal):
@@ -548,9 +563,9 @@ def cmd_quick(args: argparse.Namespace) -> int:
             recipient=recipient,
             subject=f"Task: {task.title}",
             content=f"You have been assigned a task: {task_desc}\n\n"
-                    f"Task ID: {task.id}\n"
-                    f"Priority: {task.priority}\n\n"
-                    f"To start: agentweave task update {task.id} --status in_progress",
+            f"Task ID: {task.id}\n"
+            f"Priority: {task.priority}\n\n"
+            f"To start: agentweave task update {task.id} --status in_progress",
             message_type="delegation",
             task_id=task.id,
         )
@@ -695,10 +710,13 @@ def cmd_task_update(args: argparse.Namespace) -> int:
         if args.note:
             notes = task.to_dict().get("notes", [])
             from .utils import now_iso
-            notes.append({
-                "timestamp": now_iso(),
-                "note": args.note,
-            })
+
+            notes.append(
+                {
+                    "timestamp": now_iso(),
+                    "note": args.note,
+                }
+            )
             task.update(notes=notes)
             print("Added note")
 
@@ -768,6 +786,7 @@ def cmd_inbox(args: argparse.Namespace) -> int:
         else:
             # No session: fall back to default agents
             from .constants import DEFAULT_AGENTS
+
             messages = []
             for _ag in DEFAULT_AGENTS:
                 messages += MessageBus.get_inbox(_ag)
@@ -801,6 +820,7 @@ def cmd_msg_read(args: argparse.Namespace) -> int:
 
 def cmd_delegate(args: argparse.Namespace) -> int:
     """Quick delegation command."""
+
     class QuickArgs:
         pass
 
@@ -843,8 +863,7 @@ def cmd_update_template(args: argparse.Namespace) -> int:
         return 1
 
     prompt = (
-        template
-        .replace("{agent}", agent.capitalize())
+        template.replace("{agent}", agent.capitalize())
         .replace("{template_path}", str(template_path))
         .replace("{focus}", focus)
         .replace("{date}", today)
@@ -858,7 +877,6 @@ def cmd_update_template(args: argparse.Namespace) -> int:
     print(prompt)
     print(separator)
     return 0
-
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -893,6 +911,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     cmd = ["agentweave-watch", "--auto-ping", "--retry-after", str(retry_after)]
 
     import os as _os
+
     spawn_kwargs: dict = (
         {"creationflags": 0x00000008 | 0x08000000}  # DETACHED_PROCESS | CREATE_NO_WINDOW
         if _os.name == "nt"
@@ -929,9 +948,11 @@ def cmd_stop(_args: argparse.Namespace) -> int:
     try:
         if os.name == "nt":
             import subprocess as _sp2
+
             _sp2.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
         else:
             import signal
+
             os.kill(pid, signal.SIGTERM)
         WATCHDOG_PID_FILE.unlink()
         print_success(f"Watchdog stopped (PID {pid})")
@@ -955,7 +976,9 @@ def cmd_log(args: argparse.Namespace) -> int:
 
     if not events:
         if not EVENTS_LOG_FILE.exists():
-            print_info("No events yet. Events are recorded automatically when you send messages, update tasks, or start the watchdog.")
+            print_info(
+                "No events yet. Events are recorded automatically when you send messages, update tasks, or start the watchdog."
+            )
         else:
             print_info("No events match the current filter.")
         return 0
@@ -966,6 +989,7 @@ def cmd_log(args: argparse.Namespace) -> int:
     # If --follow, stream new events
     if hasattr(args, "follow") and args.follow:
         import time as _time
+
         print_info("--- following events (Ctrl-C to stop) ---")
         try:
             with open(EVENTS_LOG_FILE, encoding="utf-8") as fh:
@@ -977,10 +1001,13 @@ def cmd_log(args: argparse.Namespace) -> int:
                         if line:
                             try:
                                 import json as _json
+
                                 entry = _json.loads(line)
                                 if agent_filter and agent_filter not in (
-                                    entry.get("from"), entry.get("to"),
-                                    entry.get("agent"), entry.get("assignee")
+                                    entry.get("from"),
+                                    entry.get("to"),
+                                    entry.get("agent"),
+                                    entry.get("assignee"),
                                 ):
                                     continue
                                 if event_filter and entry.get("event") != event_filter:
@@ -1033,12 +1060,19 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
             continue
         try:
             result = _sp.run(
-                mcp_args, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", shell=_shell,
+                mcp_args,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                shell=_shell,
             )
             if result.returncode == 0:
                 results[agent] = "ok"
-            elif "already exists" in result.stderr.lower() or "already exists" in result.stdout.lower():
+            elif (
+                "already exists" in result.stderr.lower()
+                or "already exists" in result.stdout.lower()
+            ):
                 results[agent] = "already configured"
             else:
                 results[agent] = f"failed: {result.stderr.strip()}"
@@ -1060,9 +1094,9 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
         print()
         for agent in failed:
             if agent == "kimi":
-                print(f'    kimi mcp add --transport stdio agentweave -- {server_cmd}')
+                print(f"    kimi mcp add --transport stdio agentweave -- {server_cmd}")
             else:
-                print(f'    {agent} mcp add agentweave -- {server_cmd}')
+                print(f"    {agent} mcp add agentweave -- {server_cmd}")
         print()
 
     print("Next step — start the background watchdog (one command, all agents):")
@@ -1101,7 +1135,8 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         # Check if the collab branch already exists on the remote
         result = _sp.run(
             ["git", "ls-remote", "--heads", remote, branch],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         branch_exists = bool(result.stdout.strip())
 
@@ -1112,12 +1147,14 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
             empty_tree = proc.stdout.decode().strip()
             proc = _sp.run(
                 ["git", "commit-tree", empty_tree, "-m", "init: agentweave collab branch"],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             commit_sha = proc.stdout.strip()
             proc = _sp.run(
                 ["git", "push", remote, f"{commit_sha}:refs/heads/{branch}"],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             if proc.returncode != 0:
                 print_error(f"Failed to push branch to {remote}: {proc.stderr.strip()}")
@@ -1198,12 +1235,15 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
 
         # Write transport.json
         AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
-        save_json(TRANSPORT_CONFIG_FILE, {
-            "type": "http",
-            "url": url,
-            "api_key": api_key,
-            "project_id": project_id,
-        })
+        save_json(
+            TRANSPORT_CONFIG_FILE,
+            {
+                "type": "http",
+                "url": url,
+                "api_key": api_key,
+                "project_id": project_id,
+            },
+        )
 
         print_success("HTTP transport configured!")
         print(f"   URL:        {url}")
@@ -1253,25 +1293,30 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
         # Connectivity check
         result = _sp.run(
             ["git", "ls-remote", "--heads", remote, branch],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0 and result.stdout.strip():
             _sp.run(["git", "fetch", remote, branch, "--quiet"], capture_output=True)
             result2 = _sp.run(
                 ["git", "ls-tree", f"{remote}/{branch}", "--name-only"],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             files = [f for f in result2.stdout.splitlines() if f.strip()]
             msg_files = [f for f in files if "-task-for-" not in f]
             task_files = [f for f in files if "-task-for-" in f]
             print("   Status:        connected")
-            print(f"   Files on branch: {len(files)} ({len(msg_files)} messages, {len(task_files)} tasks)")
+            print(
+                f"   Files on branch: {len(files)} ({len(msg_files)} messages, {len(task_files)} tasks)"
+            )
         else:
             print(f"   Status:        cannot reach {remote}/{branch}")
 
     elif transport_type == "http":
         import urllib.error as _uerr
         import urllib.request as _ureq
+
         url = config.get("url", "")
         api_key = config.get("api_key", "")
         project_id = config.get("project_id", "")
@@ -1285,6 +1330,7 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
                 )
                 with _ureq.urlopen(req, timeout=5) as resp:
                     import json as _json
+
                     data = _json.loads(resp.read())
                 tasks_active = sum(data.get("task_counts", {}).values())
                 msgs_pending = data.get("message_counts", {}).get("pending", 0)
@@ -1466,7 +1512,8 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Relay
     relay_parser = subparsers.add_parser("relay", help="Generate relay prompt for agent")
     relay_parser.add_argument(
-        "--agent", "-a",
+        "--agent",
+        "-a",
         required=True,
         help="Agent to generate prompt for (e.g. kimi, gemini, codex)",
     )
@@ -1474,12 +1521,14 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Quick
     quick_parser = subparsers.add_parser("quick", help="Quick task delegation (single command)")
     quick_parser.add_argument(
-        "--to", "-t",
+        "--to",
+        "-t",
         required=True,
         help="Delegate to (any agent name)",
     )
     quick_parser.add_argument(
-        "--from-agent", "-f",
+        "--from-agent",
+        "-f",
         help="Delegate from (any agent name)",
     )
     quick_parser.add_argument(
@@ -1502,7 +1551,8 @@ For more help: https://github.com/gutohuida/AgentWeave
     task_create.add_argument("--title", "-t", required=True, help="Task title")
     task_create.add_argument("--description", "-d", help="Task description")
     task_create.add_argument(
-        "--assignee", "-a",
+        "--assignee",
+        "-a",
         help="Assign to agent (any agent name, e.g. kimi, gemini)",
     )
     task_create.add_argument(
@@ -1552,8 +1602,14 @@ For more help: https://github.com/gutohuida/AgentWeave
     task_update.add_argument(
         "--status",
         choices=[
-            "pending", "assigned", "in_progress", "completed",
-            "under_review", "revision_needed", "approved", "rejected",
+            "pending",
+            "assigned",
+            "in_progress",
+            "completed",
+            "under_review",
+            "revision_needed",
+            "approved",
+            "rejected",
         ],
         help="New status",
     )
@@ -1566,17 +1622,20 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Send message
     msg_send = msg_subparsers.add_parser("send", help="Send a message")
     msg_send.add_argument(
-        "--to", "-t",
+        "--to",
+        "-t",
         required=True,
         help="Recipient (any agent name)",
     )
     msg_send.add_argument(
-        "--from-agent", "-f",
+        "--from-agent",
+        "-f",
         help="Sender (any agent name)",
     )
     msg_send.add_argument("--subject", "-s", help="Message subject")
     msg_send.add_argument(
-        "--message", "-m",
+        "--message",
+        "-m",
         required=True,
         help="Message content",
     )
@@ -1595,19 +1654,22 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Inbox
     inbox_parser = subparsers.add_parser("inbox", help="Check inbox")
     inbox_parser.add_argument(
-        "--agent", "-a",
+        "--agent",
+        "-a",
         help="Check for specific agent (any agent name)",
     )
 
     # Delegate shortcut
     delegate_parser = subparsers.add_parser("delegate", help="Quick task delegation")
     delegate_parser.add_argument(
-        "--to", "-t",
+        "--to",
+        "-t",
         required=True,
         help="Delegate to (any agent name)",
     )
     delegate_parser.add_argument(
-        "--from-agent", "-f",
+        "--from-agent",
+        "-f",
         help="Delegate from (any agent name)",
     )
     delegate_parser.add_argument(
@@ -1616,7 +1678,8 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Task description",
     )
     delegate_parser.add_argument(
-        "--description", "-d",
+        "--description",
+        "-d",
         help="Detailed description",
     )
     delegate_parser.add_argument(
@@ -1632,25 +1695,29 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Generate a prompt to update the kickoff template with new AI best practices",
     )
     update_tmpl_parser.add_argument(
-        "--agent", "-a",
+        "--agent",
+        "-a",
         required=True,
         help="Which agent receives and executes the update prompt (e.g. claude, kimi, gemini)",
     )
     update_tmpl_parser.add_argument(
-        "--template-path", "-p",
+        "--template-path",
+        "-p",
         default=None,
         dest="template_path",
         help="Path to the template file (default: searches parent dirs for template.txt)",
     )
     update_tmpl_parser.add_argument(
-        "--focus", "-f",
+        "--focus",
+        "-f",
         default=None,
         help="Optional focus area e.g. 'sub-agents', 'security', 'kimi-capabilities'",
     )
 
-
     # Start / stop watchdog daemon
-    start_parser = subparsers.add_parser("start", help="Start the watchdog daemon in the background")
+    start_parser = subparsers.add_parser(
+        "start", help="Start the watchdog daemon in the background"
+    )
     start_parser.add_argument(
         "--retry-after",
         type=int,
@@ -1658,16 +1725,23 @@ For more help: https://github.com/gutohuida/AgentWeave
         metavar="SECONDS",
         help="Re-ping an agent if their message is unread after this many seconds (default: 600 = 10min)",
     )
-    subparsers.add_parser("stop",  help="Stop the background watchdog daemon")
+    subparsers.add_parser("stop", help="Stop the background watchdog daemon")
 
     # Log viewer
-    log_parser = subparsers.add_parser("log", help="View structured activity log (messages, tasks, watchdog)")
+    log_parser = subparsers.add_parser(
+        "log", help="View structured activity log (messages, tasks, watchdog)"
+    )
     log_parser.add_argument(
-        "-n", "--lines", type=int, default=50,
+        "-n",
+        "--lines",
+        type=int,
+        default=50,
         help="Number of recent events to show (default: 50)",
     )
     log_parser.add_argument(
-        "-f", "--follow", action="store_true",
+        "-f",
+        "--follow",
+        action="store_true",
         help="Follow log in real time (like tail -f)",
     )
     log_parser.add_argument(
@@ -1700,27 +1774,29 @@ For more help: https://github.com/gutohuida/AgentWeave
     transport_subparsers = transport_parser.add_subparsers(dest="transport_command")
 
     # transport setup
-    transport_setup = transport_subparsers.add_parser(
-        "setup", help="Set up transport backend"
-    )
+    transport_setup = transport_subparsers.add_parser("setup", help="Set up transport backend")
     transport_setup.add_argument(
-        "--type", "-t",
+        "--type",
+        "-t",
         choices=["git", "http"],
         required=True,
         help="Transport type",
     )
     transport_setup.add_argument(
-        "--remote", "-r",
+        "--remote",
+        "-r",
         default="origin",
         help="Git remote name (default: origin)",
     )
     transport_setup.add_argument(
-        "--branch", "-b",
+        "--branch",
+        "-b",
         default="agentweave/collab",
         help="Git orphan branch name (default: agentweave/collab)",
     )
     transport_setup.add_argument(
-        "--cluster", "-c",
+        "--cluster",
+        "-c",
         default=None,
         help=(
             "Your workspace name on the shared branch (e.g. alice). "
@@ -1764,7 +1840,8 @@ For more help: https://github.com/gutohuida/AgentWeave
     )
     hb_parser.add_argument("--agent", "-a", required=True, help="Agent name")
     hb_parser.add_argument(
-        "--status", "-s",
+        "--status",
+        "-s",
         choices=["active", "idle", "waiting"],
         default="active",
         help="Agent status (default: active)",
@@ -1794,6 +1871,7 @@ def main(args: Optional[List[str]] = None) -> int:
     """Main entry point."""
     # Ensure stdout/stderr handle Unicode (e.g. emoji in messages) on Windows
     import sys as _sys
+
     if hasattr(_sys.stdout, "reconfigure"):
         _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(_sys.stderr, "reconfigure"):

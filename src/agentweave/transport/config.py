@@ -55,12 +55,14 @@ def get_transport() -> BaseTransport:
     config = _find_transport_config()
     if not config:
         from .local import LocalTransport
+
         return LocalTransport()
 
     transport_type = config.get("type", "local")
 
     if transport_type == "git":
         from .git import GitTransport
+
         return GitTransport(
             remote=config.get("remote", "origin"),
             branch=config.get("branch", "agentweave/collab"),
@@ -69,6 +71,7 @@ def get_transport() -> BaseTransport:
         )
     elif transport_type == "http":
         from .http import HttpTransport
+
         return HttpTransport(
             url=config.get("url", ""),
             api_key=config.get("api_key", ""),
@@ -76,4 +79,5 @@ def get_transport() -> BaseTransport:
         )
     else:
         from .local import LocalTransport
+
         return LocalTransport()
