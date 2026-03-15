@@ -80,3 +80,17 @@ kimiwork.md
 # Watchdog daemon PID and log (machine-local)
 .agentweave/watchdog.pid
 .agentweave/watchdog.log
+
+# UI design concepts — kept locally for reference, not tracked
+hub/ui-concepts/
+
+# Screenshots and local media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+
+# Hub's own agentweave runtime state
+hub/.agentweave/

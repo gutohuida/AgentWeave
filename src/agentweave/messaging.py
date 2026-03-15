@@ -146,11 +146,19 @@ class MessageBus:
     def send(message: Message) -> bool:
         """Send a message via the active transport."""
         from .transport import get_transport
-        from .eventlog import log_event
+        from .eventlog import log_event, ERROR
         result = get_transport().send_message(message.to_dict())
         if result:
             log_event(
                 "msg_sent",
+                msg_id=message.id,
+                subject=message.subject,
+                **{"from": message.sender, "to": message.recipient},
+            )
+        else:
+            log_event(
+                "msg_send_failed",
+                severity=ERROR,
                 msg_id=message.id,
                 subject=message.subject,
                 **{"from": message.sender, "to": message.recipient},

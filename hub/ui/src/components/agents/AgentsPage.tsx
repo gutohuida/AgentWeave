@@ -16,7 +16,7 @@ export function AgentsPage() {
   const selectedAgent = agents.find((a) => a.name === selected) ?? null
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading agents…</div>
+    return <div className="p-6 text-sm text-white/40">Loading agents…</div>
   }
 
   if (agents.length === 0) {
@@ -32,7 +32,7 @@ export function AgentsPage() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left panel — agent list */}
-      <div className="w-1/3 border-r overflow-auto p-3 space-y-1">
+      <div className="w-1/3 overflow-auto p-3 space-y-1.5" style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}>
         {agents.map((agent) => (
           <AgentCard
             key={agent.name}
@@ -48,24 +48,22 @@ export function AgentsPage() {
         {selectedAgent ? (
           <>
             {/* Tab bar */}
-            <div className="flex border-b shrink-0">
+            <div className="flex shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
               {(['output', 'timeline'] as ActiveTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    'px-4 py-2 text-sm font-medium capitalize transition-colors',
+                    'px-4 py-2.5 text-sm font-medium capitalize transition-colors',
                     activeTab === tab
                       ? 'border-b-2 border-primary text-primary'
-                      : 'text-muted-foreground hover:text-foreground'
+                      : 'text-white/40 hover:text-white/70'
                   )}
                 >
                   {tab}
                 </button>
               ))}
             </div>
-
-            {/* Tab content */}
             <div className="flex-1 overflow-hidden">
               {activeTab === 'output' ? (
                 <AgentOutputPanel agent={selectedAgent} />
@@ -75,7 +73,7 @@ export function AgentsPage() {
             </div>
           </>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-sm text-white/25">
             Select an agent to view their output.
           </div>
         )}

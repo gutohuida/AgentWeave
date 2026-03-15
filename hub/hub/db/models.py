@@ -135,6 +135,9 @@ class EventLog(Base):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     data: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    severity: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="info", index=True
+    )
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

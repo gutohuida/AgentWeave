@@ -120,7 +120,7 @@ class Task:
 
     def save(self) -> bool:
         """Save task to file."""
-        from .eventlog import log_event
+        from .eventlog import log_event, ERROR
         filepath = TASKS_ACTIVE_DIR / f"{self.id}.json"
         is_new = not filepath.exists()
         result = save_json(filepath, self._data)
@@ -131,6 +131,13 @@ class Task:
                 title=self.title,
                 assignee=self.assignee,
                 priority=self.priority,
+            )
+        elif not result:
+            log_event(
+                "task_save_failed",
+                severity=ERROR,
+                task_id=self.id,
+                title=self.title,
             )
         return result
 

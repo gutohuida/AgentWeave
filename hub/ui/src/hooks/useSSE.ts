@@ -6,6 +6,7 @@ export interface SSEEvent {
   type: string
   data: unknown
   timestamp: string
+  severity?: string
 }
 
 type SSEListener = (event: SSEEvent) => void
@@ -19,6 +20,7 @@ const SSE_EVENT_TYPES = [
   'question_answered',
   'agent_heartbeat',
   'agent_output',
+  'log_event',
 ]
 
 const MAX_BUFFERED = 200
@@ -36,8 +38,9 @@ export function getBufferedEvents(): SSEEvent[] {
 
 function handleNamedEvent(type: string, e: MessageEvent) {
   try {
-    const data = JSON.parse(e.data) as unknown
-    const sseEvent: SSEEvent = { type, data, timestamp: new Date().toISOString() }
+    const data = JSON.parse(e.data) as Record<string, unknown>
+    const severity = typeof data?.severity === 'string' ? data.severity : undefined
+    const sseEvent: SSEEvent = { type, data, timestamp: new Date().toISOString(), severity }
     eventBuffer.push(sseEvent)
     if (eventBuffer.length > MAX_BUFFERED) eventBuffer.shift()
     listeners.forEach((fn) => fn(sseEvent))
@@ -87,6 +90,10 @@ export function useSSE(onEvent?: SSEListener) {
   const { hubUrl, apiKey, isConfigured } = useConfigStore()
   const queryClient = useQueryClient()
   const listenerRef = useRef<SSEListener | null>(null)
+  // Keep onEvent in a ref so the effect below doesn't need it as a dep.
+  // This prevents constant listener teardown/re-add on every render.
+  const onEventRef = useRef(onEvent)
+  onEventRef.current = onEvent
 
   useEffect(() => {
     if (!isConfigured) return
@@ -115,7 +122,7 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break
       }
-      onEvent?.(event)
+      onEventRef.current?.(event)
     }
 
     if (listenerRef.current) {
@@ -130,5 +137,5 @@ export function useSSE(onEvent?: SSEListener) {
         listenerRef.current = null
       }
     }
-  }, [queryClient, onEvent])
+  }, [queryClient]) // onEvent intentionally omitted — use onEventRef instead
 }

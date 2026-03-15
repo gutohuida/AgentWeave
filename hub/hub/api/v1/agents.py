@@ -19,7 +19,7 @@ from ...schemas.agents import (
     AgentTimelineEvent,
 )
 from ...sse import sse_manager
-from ...utils import short_id
+from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -214,11 +214,9 @@ async def post_heartbeat(
     )
     session.add(hb)
     await session.commit()
-    await sse_manager.broadcast(
-        project_id,
-        "agent_heartbeat",
-        {"agent": name, "status": body.status, "message": body.message},
-    )
+    payload = {"agent": name, "status": body.status, "message": body.message}
+    await sse_manager.broadcast(project_id, "agent_heartbeat", payload)
+    await persist_event(session, project_id, "agent_heartbeat", payload, agent=name)
     return {"id": hb.id, "agent": name, "status": body.status}
 
 

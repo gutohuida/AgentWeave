@@ -139,7 +139,7 @@ class Watchdog:
                     # Log transient errors (e.g. Hub restart / network blip) but keep running
                     print(f"[WARN] Poll error (will retry in {self.poll_interval}s): {exc}",
                           file=sys.stderr)
-                    log_event("watchdog_poll_error", error=str(exc))
+                    log_event("watchdog_poll_error", severity="warn", error=str(exc))
                 write_heartbeat()
                 time.sleep(self.poll_interval)
         except KeyboardInterrupt:
@@ -448,8 +448,8 @@ def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -
             cmd += ["--session", session_id]
         cmd += ["-p", prompt]
         return cmd
-    # Claude and other CLIs — stream-json gives per-event JSONL including thinking blocks
-    cmd = [agent, "--output-format", "stream-json"]
+    # Claude and other CLIs — json gives a single result JSON line with session_id and response text
+    cmd = [agent, "--output-format", "json"]
     if session_id:
         cmd += ["--resume", session_id]
     cmd += ["-p", prompt]
@@ -546,13 +546,17 @@ def _parse_claude_stream_line(line: str) -> list:
         return []
 
     if msg_type == "result":
-        cost = data.get("total_cost_usd")
         subtype = data.get("subtype", "")
         if subtype == "error":
             return [f"[ERROR] {data.get('error', 'unknown error')}"]
+        parts = []
+        result_text = data.get("result", "").strip()
+        if result_text:
+            parts.append(result_text)
+        cost = data.get("total_cost_usd")
         if cost is not None:
-            return [f"[done] cost: ${cost:.4f}"]
-        return []
+            parts.append(f"[done] cost: ${cost:.4f}")
+        return parts if parts else []
 
     # system/init and everything else — ignore
     return []
@@ -585,8 +589,9 @@ def _run_agent_subprocess(
     if is_http:
         try:
             transport.push_heartbeat(agent, status="running", message=f"Responding to: {subject}")
-        except Exception:
-            pass
+        except Exception as exc:
+            from .eventlog import log_event, WARN
+            log_event("watchdog_heartbeat_failed", severity=WARN, agent=agent, error=str(exc))
 
     session_id: Optional[str] = None
     # Mutable container so the stderr thread can read the latest session_id
@@ -594,23 +599,38 @@ def _run_agent_subprocess(
     kimi_parser = _KimiParser() if agent == "kimi" else None
 
     def _drain_stderr(proc: subprocess.Popen) -> None:
-        """Read stderr in a background thread and post each line as agent output."""
-        for raw in proc.stderr:  # type: ignore[union-attr]
-            err_line = raw.rstrip("\n")
-            if not err_line.strip():
-                continue
-            msg = f"[stderr] {err_line}"
-            if is_http:
-                try:
-                    transport.post_agent_output(agent, msg, session_id=session_id_ref[0])
-                except Exception:
-                    pass
-            else:
-                print(f"[{agent}:err] {err_line}", file=sys.stderr)
+        """Read stderr in a background thread and post each line as agent output
+        and as a log event so it appears in the Hub Logs tab."""
+        _ERROR_KEYWORDS = ("Error", "Traceback", "Exception", "FAILED", "fatal")
+        try:
+            for raw in proc.stderr:  # type: ignore[union-attr]
+                err_line = raw.rstrip("\n")
+                if not err_line.strip():
+                    continue
+                msg = f"[stderr] {err_line}"
+                if is_http:
+                    try:
+                        transport.post_agent_output(agent, msg, session_id=session_id_ref[0])
+                    except Exception as exc:
+                        from .eventlog import log_event, WARN
+                        log_event("watchdog_output_post_failed", severity=WARN,
+                                  agent=agent, error=str(exc))
+                    # Only push error-level lines to the Logs tab
+                    if any(kw in err_line for kw in _ERROR_KEYWORDS):
+                        transport.push_log("agent_stderr", agent, {"line": err_line}, "error")
+                else:
+                    print(f"[{agent}:err] {err_line}", file=sys.stderr)
+        except Exception as exc:
+            from .eventlog import log_event, WARN
+            log_event("watchdog_stderr_drain_failed", severity=WARN,
+                      agent=agent, error=str(exc))
 
-    try:
+    def _run_cmd(run_cmd: list, run_session_id: Optional[str]) -> int:
+        """Run agent command, stream output. Returns process returncode."""
+        nonlocal session_id, session_id_ref
+
         proc = subprocess.Popen(
-            cmd,
+            run_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
@@ -638,17 +658,53 @@ def _run_agent_subprocess(
                 for readable in readable_lines:
                     try:
                         transport.post_agent_output(agent, readable, session_id=session_id)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        from .eventlog import log_event, WARN
+                        log_event("watchdog_output_post_failed", severity=WARN,
+                                  agent=agent, error=str(exc))
             else:
                 for readable in readable_lines:
                     print(f"[{agent}] {readable}")
 
         proc.wait()
         stderr_thread.join(timeout=5)
+        return proc.returncode or 0
+
+    try:
+        returncode = _run_cmd(cmd, session_id)
+
+        # If the process failed and we used a session ID, the session may be
+        # expired. Clear it and retry once without --resume.
+        saved_session = _load_agent_session(agent) if agent != "kimi" else None
+        if returncode != 0 and saved_session:
+            from .eventlog import log_event, WARN
+            log_event("watchdog_session_retry", severity=WARN, agent=agent,
+                      exit_code=returncode, reason="stale session cleared")
+            print(f"[WARN] {agent} exited with code {returncode} — session may be stale, "
+                  f"clearing and retrying without --resume", file=sys.stderr)
+            # Clear the stale session file
+            session_file = AGENTS_DIR / f"{agent}-session.json"
+            try:
+                session_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            session_id = None
+            session_id_ref[0] = None
+            retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None)  # cmd[-1] is the prompt
+            returncode = _run_cmd(retry_cmd, None)
+
+        if returncode != 0:
+            from .eventlog import log_event, WARN
+            log_event("watchdog_agent_exit", severity=WARN, agent=agent,
+                      exit_code=returncode)
+            print(f"[WARN] {agent} exited with code {returncode}", file=sys.stderr)
     except FileNotFoundError as exc:
+        from .eventlog import log_event, ERROR
+        log_event("watchdog_spawn_failed", severity=ERROR, agent=agent, error=str(exc))
         print(f"[ERROR] Failed to launch {agent}: {exc}", file=sys.stderr)
     except Exception as exc:
+        from .eventlog import log_event, ERROR
+        log_event("watchdog_subprocess_error", severity=ERROR, agent=agent, error=str(exc))
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
     # Extract kimi session ID after process exits
@@ -669,8 +725,9 @@ def _run_agent_subprocess(
     if is_http:
         try:
             transport.push_heartbeat(agent, status="idle")
-        except Exception:
-            pass
+        except Exception as exc:
+            from .eventlog import log_event, WARN
+            log_event("watchdog_heartbeat_failed", severity=WARN, agent=agent, error=str(exc))
 
 
 def _check_cli_available(agent: str) -> bool:

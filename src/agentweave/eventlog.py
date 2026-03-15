@@ -10,20 +10,41 @@ from typing import Any, Dict, List, Optional
 
 from .constants import LOGS_DIR, EVENTS_LOG_FILE, WATCHDOG_HEARTBEAT_FILE
 
+# Severity constants
+DEBUG = "debug"
+INFO = "info"
+WARN = "warn"
+ERROR = "error"
 
-def log_event(event: str, **kwargs: Any) -> None:
-    """Append a structured event to events.jsonl."""
+# Minimum severity that gets pushed to Hub (info and above — debug is too noisy)
+_PUSH_MIN_SEVERITY = {INFO, WARN, ERROR}
+
+
+def log_event(event: str, severity: str = INFO, **kwargs: Any) -> None:
+    """Append a structured event to events.jsonl and optionally push to Hub."""
     try:
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
         entry: Dict[str, Any] = {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "event": event,
+            "severity": severity,
         }
         entry.update(kwargs)
         with open(EVENTS_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:
         pass
+
+    # Push to Hub for warn/error severity only
+    if severity in _PUSH_MIN_SEVERITY:
+        try:
+            from .transport import get_transport
+            t = get_transport()
+            if t.get_transport_type() == "http":
+                agent = str(kwargs.get("agent", "system"))
+                t.push_log(event, agent, dict(kwargs), severity)
+        except Exception:
+            pass
 
 
 def write_heartbeat() -> None:

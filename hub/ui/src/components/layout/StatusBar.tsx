@@ -10,26 +10,29 @@ export function StatusBar() {
   const agentCount = data?.agents_active?.length ?? 0
 
   return (
-    <div className="flex items-center gap-4 border-b bg-muted/30 px-4 py-2 text-xs">
-      <span className="font-semibold text-muted-foreground uppercase tracking-wider">AgentWeave Hub</span>
-      <div className="flex items-center gap-1">
+    <div className="glass-bar flex items-center gap-4 py-1.5 px-4 text-xs font-mono shrink-0">
+      <span className="font-semibold text-white/30 uppercase tracking-widest text-[10px]">AgentWeave Hub</span>
+      <div className="flex items-center gap-1 text-white/40">
         <MessageSquare className="h-3.5 w-3.5" />
-        <span>{pendingMsgs} pending msgs</span>
+        <span><span className="text-white/80">{pendingMsgs}</span> pending msgs</span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 text-white/40">
         <CheckSquare className="h-3.5 w-3.5" />
-        <span>{activeTasks} tasks</span>
+        <span><span className="text-white/80">{activeTasks}</span> tasks</span>
       </div>
-      <div className={`flex items-center gap-1 ${unanswered > 0 ? 'text-red-600 font-bold' : ''}`}>
+      <div className={`flex items-center gap-1 ${unanswered > 0 ? 'text-red-400 font-bold' : 'text-white/40'}`}>
         <HelpCircle className="h-3.5 w-3.5" />
-        <span>{unanswered} question{unanswered !== 1 ? 's' : ''}{unanswered > 0 ? '!' : ''}</span>
+        <span>
+          <span className={unanswered > 0 ? 'text-red-300' : 'text-white/80'}>{unanswered}</span>
+          {' '}question{unanswered !== 1 ? 's' : ''}{unanswered > 0 ? '!' : ''}
+        </span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 text-white/40">
         <Users className="h-3.5 w-3.5" />
-        <span>{agentCount} agent{agentCount !== 1 ? 's' : ''}</span>
+        <span><span className="text-white/80">{agentCount}</span> agent{agentCount !== 1 ? 's' : ''}</span>
       </div>
       {data?.project_name && (
-        <span className="ml-auto text-muted-foreground">{data.project_name}</span>
+        <span className="ml-auto text-white/25">{data.project_name}</span>
       )}
     </div>
   )

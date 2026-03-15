@@ -23,11 +23,9 @@ export function MessagesFeed() {
   const isLoading = mode === 'inbox' ? inboxLoading : historyLoading
   const messages = mode === 'inbox' ? inboxMessages : historyMessages
 
-  // Agent filter pills from history (all participants)
   const { data: allMessages } = useMessageHistory({})
   const agents = [...new Set(allMessages?.flatMap((m) => [m.from, m.to]) ?? [])]
 
-  // Build grouped view for history mode
   const groupedMessages: Record<string, Message[]> = {}
   if (grouped && messages) {
     for (const msg of messages) {
@@ -37,20 +35,22 @@ export function MessagesFeed() {
   }
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-muted-foreground">Loading messages…</div>
+    return <div className="p-6 text-sm text-white/40">Loading messages…</div>
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      {/* Mode toggle */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex rounded-lg border overflow-hidden text-sm">
+    <div className="flex flex-col gap-4 p-5">
+      {/* Mode toggle + filters */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex rounded-xl overflow-hidden text-sm" style={{ border: '1px solid rgba(255,255,255,0.10)' }}>
           {(['inbox', 'history'] as Mode[]).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={`px-3 py-1.5 capitalize transition-colors ${
-                mode === m ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent text-muted-foreground'
+              className={`px-3 py-1.5 capitalize transition-colors text-xs font-medium ${
+                mode === m
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/[0.05]'
               }`}
             >
               {m}
@@ -63,7 +63,9 @@ export function MessagesFeed() {
             <button
               onClick={() => setAgentFilter(undefined)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                agentFilter === undefined ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+                agentFilter === undefined
+                  ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
+                  : 'bg-white/[0.05] text-white/40 hover:text-white/70'
               }`}
             >
               All
@@ -73,7 +75,9 @@ export function MessagesFeed() {
                 key={agent}
                 onClick={() => setAgentFilter(agent)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  agentFilter === agent ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+                  agentFilter === agent
+                    ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
+                    : 'bg-white/[0.05] text-white/40 hover:text-white/70'
                 }`}
               >
                 {agent}
@@ -86,14 +90,16 @@ export function MessagesFeed() {
           <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={() => setSort(sort === 'asc' ? 'desc' : 'asc')}
-              className="rounded-full px-3 py-1 text-xs font-medium bg-muted hover:bg-accent transition-colors"
+              className="rounded-full px-3 py-1 text-xs font-medium bg-white/[0.05] text-white/40 hover:text-white/70 transition-colors"
             >
               {sort === 'asc' ? 'Oldest first' : 'Newest first'}
             </button>
             <button
               onClick={() => setGrouped(!grouped)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                grouped ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+                grouped
+                  ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
+                  : 'bg-white/[0.05] text-white/40 hover:text-white/70'
               }`}
             >
               Group by conversation
@@ -116,7 +122,7 @@ export function MessagesFeed() {
           ))}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {messages.map((msg) => (
             <MessageCard key={msg.id} message={msg} />
           ))}

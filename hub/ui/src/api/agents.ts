@@ -53,20 +53,31 @@ export function useAgentOutput(name: string | null) {
   const { isConfigured } = useConfigStore()
   const [lines, setLines] = useState<AgentOutputLine[]>([])
   const nameRef = useRef(name)
+  const seededRef = useRef(false)
   nameRef.current = name
 
-  // Seed from REST on mount / name change
+  // Reset when agent changes
+  useEffect(() => {
+    setLines([])
+    seededRef.current = false
+  }, [name])
+
+  // Seed from REST on mount / name change (once — staleTime:Infinity prevents
+  // automatic refetches from clobbering live SSE-appended lines)
   const { data: initial } = useQuery<AgentOutputLine[]>({
     queryKey: ['agents', name, 'output'],
     queryFn: () => getJson<AgentOutputLine[]>(`/api/v1/agents/${name}/output?limit=200`),
     enabled: isConfigured && !!name,
+    staleTime: Infinity,
   })
 
   useEffect(() => {
-    if (initial) setLines(initial)
+    if (!initial || seededRef.current) return
+    seededRef.current = true
+    setLines(initial)
   }, [initial])
 
-  // Append new lines from SSE
+  // Append new lines from SSE — stable ref avoids listener churn
   const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
   handleSSE.current = (event: SSEEvent) => {
     if (event.type !== 'agent_output') return

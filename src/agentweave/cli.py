@@ -890,6 +890,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         if _os.name == "nt"
         else {"start_new_session": True}
     )
+    WATCHDOG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")
     proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)
 

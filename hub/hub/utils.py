@@ -17,6 +17,7 @@ async def persist_event(
     event_type: str,
     data: Optional[Dict[str, Any]] = None,
     agent: Optional[str] = None,
+    severity: str = "info",
 ) -> None:
     """Write one row to event_logs. Import is deferred to avoid circular imports."""
     from .db.models import EventLog
@@ -27,6 +28,7 @@ async def persist_event(
         event_type=event_type,
         agent=agent,
         data=data or {},
+        severity=severity,
     )
     session.add(entry)
     await session.commit()

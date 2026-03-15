@@ -7,12 +7,12 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<string, string> = {
-  default: 'bg-gray-100 text-gray-800',
-  success: 'bg-green-100 text-green-800',
-  warning: 'bg-yellow-100 text-yellow-800',
-  danger: 'bg-red-100 text-red-800',
-  info: 'bg-blue-100 text-blue-800',
-  secondary: 'bg-purple-100 text-purple-800',
+  default: 'bg-zinc-700/50 text-zinc-300 ring-1 ring-zinc-600/30',
+  success: 'bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20',
+  warning: 'bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20',
+  danger: 'bg-red-500/15 text-red-400 ring-1 ring-red-500/20',
+  info: 'bg-primary/15 text-primary ring-1 ring-primary/20',
+  secondary: 'bg-zinc-800/60 text-zinc-400 ring-1 ring-zinc-700/30',
 }
 
 export function Badge({ children, variant = 'default', className }: BadgeProps) {
