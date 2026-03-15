@@ -133,7 +133,13 @@ class Watchdog:
 
         try:
             while self.running:
-                self._check_once()
+                try:
+                    self._check_once()
+                except Exception as exc:
+                    # Log transient errors (e.g. Hub restart / network blip) but keep running
+                    print(f"[WARN] Poll error (will retry in {self.poll_interval}s): {exc}",
+                          file=sys.stderr)
+                    log_event("watchdog_poll_error", error=str(exc))
                 write_heartbeat()
                 time.sleep(self.poll_interval)
         except KeyboardInterrupt:
