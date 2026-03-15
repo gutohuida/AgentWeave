@@ -1,15 +1,46 @@
-"""GET /api/v1/events — SSE stream."""
+"""GET /api/v1/events — SSE stream and history."""
 
 import asyncio
-from typing import AsyncGenerator, Tuple
+from typing import AsyncGenerator, List, Tuple
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from ...auth import get_project
+from ...db.engine import get_session
+from ...db.models import EventLog
 from ...sse import sse_manager
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+@router.get("/history")
+async def event_history(
+    limit: int = Query(100, ge=1, le=500),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return recent persisted events from the EventLog table (oldest-first)."""
+    project_id, _ = project
+    q = (
+        select(EventLog)
+        .where(EventLog.project_id == project_id)
+        .order_by(EventLog.timestamp.desc())
+        .limit(limit)
+    )
+    result = await session.execute(q)
+    rows = result.scalars().all()
+    return [
+        {
+            "type": r.event_type,
+            "data": r.data or {},
+            "timestamp": r.timestamp.isoformat(),
+            "agent": r.agent,
+        }
+        for r in reversed(rows)  # oldest first
+    ]
 
 
 @router.get("")

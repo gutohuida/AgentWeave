@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Question
+from ...db.models import Message, Question
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -88,14 +88,43 @@ async def answer_question(
     question = await session.get(Question, question_id)
     if question is None or question.project_id != project_id:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    from_agent = question.from_agent
+    q_text = question.question
+
     question.answer = body.answer
     question.answered = True
     question.answered_at = datetime.now(timezone.utc)
+
+    # Create a message to the agent so the watchdog re-pings them with the answer
+    msg_id = f"msg-{short_id()}"
+    reply_msg = Message(
+        id=msg_id,
+        project_id=project_id,
+        sender="human",
+        recipient=from_agent,
+        subject=f"Answer: {q_text[:80]}",
+        content=f"Question: {q_text}\n\nAnswer: {body.answer}",
+        type="reply",
+    )
+    session.add(reply_msg)
     await session.commit()
     await session.refresh(question)
+
     await sse_manager.broadcast(
         project_id, "question_answered",
         {"id": question_id, "answer": body.answer}
+    )
+    await sse_manager.broadcast(
+        project_id, "message_created",
+        {
+            "id": msg_id,
+            "from": "human",
+            "to": from_agent,
+            "subject": f"Answer: {q_text[:80]}",
+            "type": "reply",
+            "timestamp": reply_msg.timestamp.isoformat(),
+        },
     )
     await persist_event(
         session, project_id, "question_answered",

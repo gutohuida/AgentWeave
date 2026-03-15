@@ -1,11 +1,14 @@
 """Watchdog script for monitoring new messages and tasks."""
 
+import json
 import subprocess
+import threading
 import time
 import sys
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from .constants import MESSAGES_PENDING_DIR, TASKS_ACTIVE_DIR
+from .constants import AGENTS_DIR, MESSAGES_PENDING_DIR, TASKS_ACTIVE_DIR
 from .utils import load_json
 
 
@@ -253,14 +256,217 @@ class Watchdog:
         self.running = False
 
 
-def _agent_ping_cmd(agent: str, prompt: str) -> list:
+def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -> list:
     """Return the CLI command to ping an agent with a prompt.
 
-    Kimi uses --print; all others invoke the agent's own CLI by name with -p.
+    Kimi uses --print; Claude and others use --output-format json so we can
+    parse JSONL lines and extract the session_id for resumption.
     """
     if agent == "kimi":
-        return ["kimi", "--print", "-p", prompt]
-    return [agent, "-p", prompt]
+        cmd = ["kimi", "--print"]
+        if session_id:
+            cmd += ["--session", session_id]
+        cmd += ["-p", prompt]
+        return cmd
+    # Claude and other CLIs — stream-json gives per-event JSONL including thinking blocks
+    cmd = [agent, "--output-format", "stream-json"]
+    if session_id:
+        cmd += ["--resume", session_id]
+    cmd += ["-p", prompt]
+    return cmd
+
+
+def _load_agent_session(agent: str) -> Optional[str]:
+    """Load saved session ID for an agent from .agentweave/agents/<agent>-session.json."""
+    session_file = AGENTS_DIR / f"{agent}-session.json"
+    if not session_file.exists():
+        return None
+    try:
+        data = json.loads(session_file.read_text())
+        return data.get("session_id")
+    except Exception:
+        return None
+
+
+def _save_agent_session(agent: str, session_id: str) -> None:
+    """Persist session ID for an agent to .agentweave/agents/<agent>-session.json."""
+    AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+    session_file = AGENTS_DIR / f"{agent}-session.json"
+    session_file.write_text(json.dumps({"session_id": session_id}))
+
+
+def _extract_claude_session_id(line: str) -> Optional[str]:
+    """Parse a JSONL line from claude --output-format stream-json, return session_id if present."""
+    try:
+        data = json.loads(line)
+        return data.get("session_id") or None
+    except Exception:
+        return None
+
+
+def _parse_claude_stream_line(line: str) -> list:
+    """Parse one JSONL line from `claude --output-format stream-json`.
+
+    Returns a list of human-readable strings to post as agent output.
+    Empty list means the line carries no user-visible content.
+    """
+    try:
+        data = json.loads(line)
+    except Exception:
+        # Non-JSON line — pass through as-is if non-empty
+        stripped = line.strip()
+        return [stripped] if stripped else []
+
+    msg_type = data.get("type", "")
+
+    if msg_type == "assistant":
+        message = data.get("message", {})
+        content = message.get("content", [])
+        if isinstance(content, str):
+            return [content] if content.strip() else []
+        results = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type", "")
+            if block_type == "thinking":
+                thinking = block.get("thinking", "").strip()
+                if thinking:
+                    # Prefix each line so it's visually distinct in the log
+                    prefixed = "\n".join(f"💭 {l}" for l in thinking.splitlines())
+                    results.append(prefixed)
+            elif block_type == "text":
+                text = block.get("text", "").strip()
+                if text:
+                    results.append(text)
+        return results
+
+    if msg_type == "tool_use":
+        name = data.get("name", "unknown")
+        inp = data.get("input", {})
+        try:
+            inp_str = json.dumps(inp, ensure_ascii=False)
+            if len(inp_str) > 300:
+                inp_str = inp_str[:300] + "…"
+        except Exception:
+            inp_str = str(inp)
+        return [f"🔧 {name}({inp_str})"]
+
+    if msg_type == "tool_result":
+        content = data.get("content", [])
+        if isinstance(content, list):
+            texts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    t = block.get("text", "").strip()
+                    if t:
+                        snippet = t[:500] + ("…" if len(t) > 500 else "")
+                        texts.append(f"  → {snippet}")
+            return texts
+        return []
+
+    if msg_type == "result":
+        cost = data.get("total_cost_usd")
+        subtype = data.get("subtype", "")
+        if subtype == "error":
+            return [f"[ERROR] {data.get('error', 'unknown error')}"]
+        if cost is not None:
+            return [f"[done] cost: ${cost:.4f}"]
+        return []
+
+    # system/init and everything else — ignore
+    return []
+
+
+def _extract_kimi_session_id(sessions_before: set, sessions_after: set) -> Optional[str]:
+    """Return the new Kimi session name by diffing before/after ~/.kimi/sessions/ listings."""
+    new_sessions = sessions_after - sessions_before
+    if new_sessions:
+        return next(iter(new_sessions))
+    return None
+
+
+def _run_agent_subprocess(
+    agent: str,
+    cmd: list,
+    subject: str,
+    transport: Any,
+    is_http: bool,
+) -> None:
+    """Background thread: run agent, stream output to Hub, save session ID."""
+    # Snapshot kimi sessions before launch
+    sessions_before: set = set()
+    if agent == "kimi":
+        kimi_dir = Path.home() / ".kimi" / "sessions"
+        if kimi_dir.exists():
+            sessions_before = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+
+    # Send "running" heartbeat
+    if is_http:
+        try:
+            transport.push_heartbeat(agent, status="running", message=f"Responding to: {subject}")
+        except Exception:
+            pass
+
+    session_id: Optional[str] = None
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+        for raw_line in proc.stdout:  # type: ignore[union-attr]
+            line = raw_line.rstrip("\n")
+            # Try to extract session_id from JSONL (always attempt for Claude)
+            if agent != "kimi" and session_id is None:
+                extracted = _extract_claude_session_id(line)
+                if extracted:
+                    session_id = extracted
+            # Parse Claude stream-json into human-readable chunks; kimi is plain text
+            if agent != "kimi":
+                readable_lines = _parse_claude_stream_line(line)
+            else:
+                readable_lines = [line] if line.strip() else []
+            # Stream to Hub or local stdout
+            if is_http:
+                for readable in readable_lines:
+                    try:
+                        transport.post_agent_output(agent, readable, session_id=session_id)
+                    except Exception:
+                        pass
+            else:
+                for readable in readable_lines:
+                    print(f"[{agent}] {readable}")
+        proc.wait()
+    except FileNotFoundError as exc:
+        print(f"[ERROR] Failed to launch {agent}: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
+
+    # Extract kimi session ID after process exits
+    if agent == "kimi":
+        kimi_dir = Path.home() / ".kimi" / "sessions"
+        if kimi_dir.exists():
+            sessions_after = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+            session_id = _extract_kimi_session_id(sessions_before, sessions_after)
+
+    # Persist session ID for next run
+    if session_id:
+        try:
+            _save_agent_session(agent, session_id)
+        except Exception:
+            pass
+
+    # Send "idle" heartbeat
+    if is_http:
+        try:
+            transport.push_heartbeat(agent, status="idle")
+        except Exception:
+            pass
 
 
 def _check_cli_available(agent: str) -> bool:
@@ -270,14 +476,20 @@ def _check_cli_available(agent: str) -> bool:
     return shutil.which(cli_name) is not None
 
 
-def _make_ping_callback(agents: List[str], pinged_at: Optional[Dict[str, float]] = None) -> Callable:
+def _make_ping_callback(
+    agents: List[str],
+    pinged_at: Optional[Dict[str, float]] = None,
+    transport: Any = None,
+) -> Callable:
     """Return a callback that pings each agent's CLI when a message addressed to them arrives.
 
-    Handles any number of agents. Non-blocking (Popen fire-and-forget).
+    Handles any number of agents. Non-blocking (spawns a daemon thread per ping).
+    Uses session persistence to resume the same agent session across pings.
     A seen-set prevents double-pings for the same message ID.
     """
     agent_set = set(agents)
     seen: Set[str] = set()
+    is_http = transport is not None and transport.get_transport_type() == "http"
 
     # Validate CLIs at startup and warn about missing ones
     for agent in agents:
@@ -313,9 +525,13 @@ def _make_ping_callback(agents: List[str], pinged_at: Optional[Dict[str, float]]
             f"You have a new AgentWeave message from {data.get('from', 'another agent')}. "
             f"Call get_inbox('{recipient}') to retrieve it and respond."
         )
-        cmd = _agent_ping_cmd(recipient, prompt)
-        print(f"[PING] Notifying {recipient}: {data.get('subject', '(no subject)')}")
+        session_id = _load_agent_session(recipient)
+        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
+        subject = data.get("subject", "(no subject)")
+        print(f"[PING] Notifying {recipient}: {subject}")
         print(f"[PING] Command: {' '.join(cmd)}")
+        if session_id:
+            print(f"[PING] Resuming session: {session_id}")
 
         from .eventlog import log_event
         import time as _t
@@ -324,18 +540,12 @@ def _make_ping_callback(agents: List[str], pinged_at: Optional[Dict[str, float]]
         log_event("watchdog_ping", agent=recipient, msg_id=msg_id,
                   subject=data.get("subject", ""))
 
-        # Run subprocess and capture error output for debugging
-        try:
-            subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.DEVNULL,
-            )
-        except FileNotFoundError as e:
-            print(f"[ERROR] Failed to ping {recipient}: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"[ERROR] Unexpected error pinging {recipient}: {e}", file=sys.stderr)
+        t = threading.Thread(
+            target=_run_agent_subprocess,
+            args=(recipient, cmd, subject, transport, is_http),
+            daemon=True,
+        )
+        t.start()
 
     return callback
 
@@ -396,7 +606,11 @@ def main():
                 sys.exit(1)
             agents_to_ping = session.agent_names
 
-        watchdog.callback = _make_ping_callback(agents_to_ping, pinged_at=watchdog.pinged_at)
+        watchdog.callback = _make_ping_callback(
+            agents_to_ping,
+            pinged_at=watchdog.pinged_at,
+            transport=watchdog.transport,
+        )
         print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
         if args.retry_after:
             print(f"[PING] Retry after: {int(args.retry_after)}s")

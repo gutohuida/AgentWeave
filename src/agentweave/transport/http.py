@@ -196,3 +196,16 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError:
             return False
+
+    def post_agent_output(
+        self, agent: str, content: str, session_id: Optional[str] = None
+    ) -> bool:
+        """POST /api/v1/agents/{name}/output — stream one line of agent output to the Hub."""
+        try:
+            body: Dict[str, Any] = {"content": content}
+            if session_id:
+                body["session_id"] = session_id
+            self._request("POST", f"/agents/{agent}/output", body)
+            return True
+        except RuntimeError:
+            return False

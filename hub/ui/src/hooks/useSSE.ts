@@ -18,16 +18,28 @@ const SSE_EVENT_TYPES = [
   'question_asked',
   'question_answered',
   'agent_heartbeat',
+  'agent_output',
 ]
+
+const MAX_BUFFERED = 200
 
 const listeners = new Set<SSEListener>()
 let eventSource: EventSource | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let connectedUrl = ''
+let connectedKey = ''
+const eventBuffer: SSEEvent[] = []
+
+export function getBufferedEvents(): SSEEvent[] {
+  return eventBuffer.slice()
+}
 
 function handleNamedEvent(type: string, e: MessageEvent) {
   try {
     const data = JSON.parse(e.data) as unknown
     const sseEvent: SSEEvent = { type, data, timestamp: new Date().toISOString() }
+    eventBuffer.push(sseEvent)
+    if (eventBuffer.length > MAX_BUFFERED) eventBuffer.shift()
     listeners.forEach((fn) => fn(sseEvent))
   } catch {
     // ignore malformed events
@@ -35,6 +47,17 @@ function handleNamedEvent(type: string, e: MessageEvent) {
 }
 
 function connect(hubUrl: string, apiKey: string) {
+  // No-op if already connected with the same config
+  if (
+    connectedUrl === hubUrl &&
+    connectedKey === apiKey &&
+    eventSource !== null &&
+    eventSource.readyState !== EventSource.CLOSED
+  ) {
+    return
+  }
+  connectedUrl = hubUrl
+  connectedKey = apiKey
   if (eventSource) {
     eventSource.close()
     eventSource = null

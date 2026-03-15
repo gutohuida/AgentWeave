@@ -1,18 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity, Pause, Play } from 'lucide-react'
-import { SSEEvent, useSSE } from '@/hooks/useSSE'
+import { SSEEvent, getBufferedEvents, useSSE } from '@/hooks/useSSE'
 import { EventRow } from './EventRow'
 import { EmptyState } from '@/components/common/EmptyState'
+import { getJson } from '@/api/client'
+import { useConfigStore } from '@/store/configStore'
 
 type StoredEvent = SSEEvent & { localId: number }
 
 const MAX_EVENTS = 200
 
 export function ActivityLog() {
-  const [events, setEvents] = useState<StoredEvent[]>([])
-  const [paused, setPaused] = useState(false)
   const counterRef = useRef(0)
+  const { isConfigured } = useConfigStore()
+  const [events, setEvents] = useState<StoredEvent[]>(() =>
+    getBufferedEvents().map((e) => ({ ...e, localId: counterRef.current++ }))
+  )
+  const [paused, setPaused] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Load historical events from the EventLog table on mount
+  useEffect(() => {
+    if (!isConfigured) return
+    getJson<SSEEvent[]>('/api/v1/events/history?limit=200')
+      .then((history) => {
+        setEvents((prev) => {
+          const existingIds = new Set(prev.map((e) => e.timestamp + e.type))
+          const fresh = history
+            .filter((e) => !existingIds.has(e.timestamp + e.type))
+            .map((e) => ({ ...e, localId: counterRef.current++ }))
+          return [...fresh, ...prev].slice(-MAX_EVENTS)
+        })
+      })
+      .catch(() => {/* ignore — hub may not be reachable yet */})
+  }, [isConfigured])
 
   useSSE((event) => {
     if (paused) return

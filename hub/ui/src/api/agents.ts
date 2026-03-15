@@ -1,6 +1,8 @@
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { useSSE, SSEEvent } from '@/hooks/useSSE'
 
 export interface AgentSummary {
   name: string
@@ -17,6 +19,14 @@ export interface AgentTimelineEvent {
   timestamp: string
   summary: string
   data: Record<string, unknown>
+}
+
+export interface AgentOutputLine {
+  id: string
+  agent: string
+  session_id?: string
+  content: string
+  timestamp: string
 }
 
 export function useAgents() {
@@ -37,4 +47,38 @@ export function useAgentTimeline(name: string | null) {
     enabled: isConfigured && !!name,
     refetchInterval: 5000,
   })
+}
+
+export function useAgentOutput(name: string | null) {
+  const { isConfigured } = useConfigStore()
+  const [lines, setLines] = useState<AgentOutputLine[]>([])
+  const nameRef = useRef(name)
+  nameRef.current = name
+
+  // Seed from REST on mount / name change
+  const { data: initial } = useQuery<AgentOutputLine[]>({
+    queryKey: ['agents', name, 'output'],
+    queryFn: () => getJson<AgentOutputLine[]>(`/api/v1/agents/${name}/output?limit=200`),
+    enabled: isConfigured && !!name,
+  })
+
+  useEffect(() => {
+    if (initial) setLines(initial)
+  }, [initial])
+
+  // Append new lines from SSE
+  const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
+  handleSSE.current = (event: SSEEvent) => {
+    if (event.type !== 'agent_output') return
+    const d = event.data as { agent: string; content: string; session_id?: string; timestamp: string }
+    if (d.agent !== nameRef.current) return
+    setLines((prev) => [
+      ...prev,
+      { id: `live-${Date.now()}`, agent: d.agent, session_id: d.session_id, content: d.content, timestamp: d.timestamp },
+    ])
+  }
+
+  useSSE((event) => handleSSE.current(event))
+
+  return { lines }
 }

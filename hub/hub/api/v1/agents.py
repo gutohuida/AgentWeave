@@ -4,14 +4,20 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, EventLog, Message, Task
-from ...schemas.agents import AgentHeartbeatCreate, AgentSummary, AgentTimelineEvent
+from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, Task
+from ...schemas.agents import (
+    AgentHeartbeatCreate,
+    AgentOutputCreate,
+    AgentOutputResponse,
+    AgentSummary,
+    AgentTimelineEvent,
+)
 from ...sse import sse_manager
 from ...utils import short_id
 
@@ -39,11 +45,21 @@ async def list_agents(
         Task.assignee.isnot(None),
         Task.updated >= cutoff,
     )
+    heartbeat_agents_q = select(AgentHeartbeat.agent).distinct().where(
+        AgentHeartbeat.project_id == project_id,
+        AgentHeartbeat.timestamp >= cutoff,
+    )
+    output_agents_q = select(AgentOutput.agent).distinct().where(
+        AgentOutput.project_id == project_id,
+        AgentOutput.timestamp >= cutoff,
+    )
 
-    senders_res, recipients_res, assignees_res = await asyncio.gather(
+    senders_res, recipients_res, assignees_res, hb_agents_res, out_agents_res = await asyncio.gather(
         session.execute(senders_q),
         session.execute(recipients_q),
         session.execute(assignees_q),
+        session.execute(heartbeat_agents_q),
+        session.execute(output_agents_q),
     )
 
     agents = set()
@@ -54,6 +70,10 @@ async def list_agents(
     for (name,) in assignees_res:
         if name:
             agents.add(name)
+    for (name,) in hb_agents_res:
+        agents.add(name)
+    for (name,) in out_agents_res:
+        agents.add(name)
 
     summaries = []
     for agent_name in sorted(agents):
@@ -200,3 +220,57 @@ async def post_heartbeat(
         {"agent": name, "status": body.status, "message": body.message},
     )
     return {"id": hb.id, "agent": name, "status": body.status}
+
+
+@router.post("/{name}/output", status_code=status.HTTP_201_CREATED)
+async def post_agent_output(
+    name: str,
+    body: AgentOutputCreate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    row = AgentOutput(
+        id=f"out-{short_id()}",
+        project_id=project_id,
+        agent=name,
+        session_id=body.session_id,
+        content=body.content,
+    )
+    session.add(row)
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id,
+        "agent_output",
+        {
+            "agent": name,
+            "session_id": body.session_id,
+            "content": body.content,
+            "timestamp": row.timestamp.isoformat(),
+        },
+    )
+    return {"id": row.id}
+
+
+@router.get("/{name}/output", response_model=List[AgentOutputResponse])
+async def get_agent_output(
+    name: str,
+    limit: int = Query(200, ge=1, le=1000),
+    since: Optional[str] = Query(None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    q = select(AgentOutput).where(
+        AgentOutput.project_id == project_id,
+        AgentOutput.agent == name,
+    )
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            q = q.where(AgentOutput.timestamp > since_dt)
+        except ValueError:
+            pass
+    q = q.order_by(AgentOutput.timestamp.asc()).limit(limit)
+    result = await session.execute(q)
+    return result.scalars().all()

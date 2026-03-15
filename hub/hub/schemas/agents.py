@@ -30,3 +30,18 @@ class AgentTimelineEvent(BaseModel):
 class AgentHeartbeatCreate(BaseModel):
     status: str = "active"
     message: Optional[str] = None
+
+
+class AgentOutputCreate(BaseModel):
+    content: str
+    session_id: Optional[str] = None
+
+
+class AgentOutputResponse(BaseModel):
+    id: str
+    agent: str
+    session_id: Optional[str]
+    content: str
+    timestamp: datetime
+
+    model_config = {"from_attributes": True}

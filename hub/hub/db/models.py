@@ -159,3 +159,21 @@ class AgentHeartbeat(Base):
     __table_args__ = (
         Index("ix_agent_heartbeats_project_agent", "project_id", "agent"),
     )
+
+
+class AgentOutput(Base):
+    __tablename__ = "agent_outputs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False, index=True
+    )
+
+    __table_args__ = (
+        Index("ix_agent_outputs_project_agent", "project_id", "agent"),
+        Index("ix_agent_outputs_project_ts", "project_id", "timestamp"),
+    )
