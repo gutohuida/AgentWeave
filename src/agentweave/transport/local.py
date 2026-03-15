@@ -25,7 +25,7 @@ class LocalTransport(BaseTransport):
         return save_json(filepath, message_data)
 
     def get_pending_messages(self, agent: str) -> List[Dict[str, Any]]:
-        result = []
+        result: List[Dict[str, Any]] = []
         if not MESSAGES_PENDING_DIR.exists():
             return result
         for filepath in MESSAGES_PENDING_DIR.glob("*.json"):
@@ -57,7 +57,7 @@ class LocalTransport(BaseTransport):
         return save_json(filepath, task_data)
 
     def get_active_tasks(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:
-        result = []
+        result: List[Dict[str, Any]] = []
         if not TASKS_ACTIVE_DIR.exists():
             return result
         for filepath in TASKS_ACTIVE_DIR.glob("*.json"):

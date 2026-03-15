@@ -120,7 +120,7 @@ class Session:
 
         return cls(data)
 
-    def update(self, **kwargs) -> None:
+    def update(self, **kwargs: Any) -> None:
         """Update session fields."""
         self._data.update(kwargs)
         self._data["updated"] = now_iso()

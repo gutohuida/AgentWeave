@@ -17,7 +17,7 @@ Configure in Kimi Code:
 from typing import Any, Dict, List, Optional
 
 try:
-    from fastmcp import FastMCP
+    from fastmcp import FastMCP  # type: ignore[import-not-found]
 except ImportError as e:
     raise ImportError(
         "fastmcp is required for the MCP server. "
@@ -144,7 +144,7 @@ def get_task(task_id: str) -> Dict[str, Any]:
     """
     transport = get_transport()
     if transport.get_transport_type() == TransportType.HTTP:
-        result = transport.get_task_by_id(task_id)
+        result = transport.get_task_by_id(task_id)  # type: ignore[attr-defined]
         if result is None:
             return {"error": f"Task '{task_id}' not found"}
         return result
@@ -176,10 +176,10 @@ def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
 
     transport = get_transport()
     if transport.get_transport_type() == TransportType.HTTP:
-        ok = transport.update_task_status(task_id, status)
+        ok = transport.update_task_status(task_id, status)  # type: ignore[attr-defined]
         if not ok:
             return {"error": f"Failed to update task '{task_id}' on Hub"}
-        result = transport.get_task_by_id(task_id)
+        result = transport.get_task_by_id(task_id)  # type: ignore[attr-defined]
         return result if result else {"id": task_id, "status": status}
 
     # local / git: file-based with lock

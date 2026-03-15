@@ -44,7 +44,7 @@ def log_event(event: str, severity: str = INFO, **kwargs: Any) -> None:
             t = get_transport()
             if t.get_transport_type() == "http":
                 agent = str(kwargs.get("agent", "system"))
-                t.push_log(event, agent, dict(kwargs), severity)
+                t.push_log(event, agent, dict(kwargs), severity)  # type: ignore[attr-defined]
         except Exception:
             pass
 

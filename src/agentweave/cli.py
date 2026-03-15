@@ -821,15 +821,12 @@ def cmd_msg_read(args: argparse.Namespace) -> int:
 def cmd_delegate(args: argparse.Namespace) -> int:
     """Quick delegation command."""
 
-    class QuickArgs:
-        pass
-
-    quick_args = QuickArgs()
-    quick_args.from_agent = args.from_agent
-    quick_args.to = args.to
-    quick_args.task = args.task
-    quick_args.priority = args.priority
-
+    quick_args = argparse.Namespace(
+        from_agent=args.from_agent,
+        to=args.to,
+        task=args.task,
+        priority=args.priority,
+    )
     return cmd_quick(quick_args)
 
 
@@ -1143,14 +1140,14 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         if not branch_exists:
             print_info(f"Creating orphan branch '{branch}' on {remote}...")
             # Build an empty tree and push an initial commit via git plumbing
-            proc = _sp.run(["git", "mktree"], input=b"", capture_output=True)
-            empty_tree = proc.stdout.decode().strip()
-            proc = _sp.run(
+            proc_b = _sp.run(["git", "mktree"], input=b"", capture_output=True)
+            empty_tree = proc_b.stdout.decode().strip()
+            proc_t = _sp.run(
                 ["git", "commit-tree", empty_tree, "-m", "init: agentweave collab branch"],
                 capture_output=True,
                 text=True,
             )
-            commit_sha = proc.stdout.strip()
+            commit_sha = proc_t.stdout.strip()
             proc = _sp.run(
                 ["git", "push", remote, f"{commit_sha}:refs/heads/{branch}"],
                 capture_output=True,

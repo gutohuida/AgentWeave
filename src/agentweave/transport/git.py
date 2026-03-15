@@ -52,7 +52,7 @@ def _iso_compact() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _run_git(args: list, stdin_bytes: bytes = None) -> tuple:
+def _run_git(args: list, stdin_bytes: Optional[bytes] = None) -> tuple:
     """Run a git command. Returns (returncode, stdout_str, stderr_str)."""
     proc = subprocess.run(
         ["git"] + args,

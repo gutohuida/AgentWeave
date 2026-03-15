@@ -2,6 +2,7 @@
 
 import time
 from contextlib import contextmanager
+from typing import Iterator
 
 from .constants import AGENTWEAVE_DIR
 
@@ -79,7 +80,7 @@ def release_lock(lock_name: str) -> bool:
 
 
 @contextmanager
-def lock(lock_name: str, timeout: float = DEFAULT_TIMEOUT):
+def lock(lock_name: str, timeout: float = DEFAULT_TIMEOUT) -> Iterator[None]:
     """Context manager for acquiring and releasing locks.
 
     Usage:

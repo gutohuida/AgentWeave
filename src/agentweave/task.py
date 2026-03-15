@@ -142,7 +142,7 @@ class Task:
             )
         return result
 
-    def update(self, agent: Optional[str] = None, **kwargs) -> None:
+    def update(self, agent: Optional[str] = None, **kwargs: Any) -> None:
         """Update task fields."""
         from .eventlog import log_event
 

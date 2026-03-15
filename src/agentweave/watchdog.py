@@ -21,10 +21,10 @@ class Watchdog:
         self,
         callback: Optional[Callable] = None,
         poll_interval: float = 5.0,
-        transport=None,
+        transport: Any = None,
         retry_after: Optional[float] = None,
         agent: Optional[str] = None,
-    ):
+    ) -> None:
         """Initialize watchdog.
 
         Args:
@@ -52,7 +52,7 @@ class Watchdog:
         self.retry_after = retry_after  # seconds; None = no retry
         self.pinged_at: Dict[str, float] = {}  # msg_id -> unix time of last ping
 
-    def _default_callback(self, event_type: str, data: dict):
+    def _default_callback(self, event_type: str, data: dict) -> None:
         """Default callback that prints to stdout."""
         if event_type == "new_message":
             print(f"\n[MSG] New message for {data['to']} from {data['from']}")
@@ -95,7 +95,7 @@ class Watchdog:
         task_file = TASKS_ACTIVE_DIR / f"{task_id}.json"
         return load_json(task_file) or {}
 
-    def start(self):
+    def start(self) -> None:
         """Start watching."""
         from .eventlog import log_event, write_heartbeat
 
@@ -126,8 +126,8 @@ class Watchdog:
         elif transport_type == "http":
             self._init_http_state()
         else:
-            self.transport._fetch()
-            self.known_remote_files = set(self.transport.list_remote_filenames())
+            self.transport._fetch()  # type: ignore[union-attr]
+            self.known_remote_files = set(self.transport.list_remote_filenames())  # type: ignore[union-attr]
 
         self.running = True
 
@@ -148,7 +148,7 @@ class Watchdog:
             log_event("watchdog_stopped")
             print("\n\n[STOP] Watchdog stopped")
 
-    def _check_once(self):
+    def _check_once(self) -> None:
         """Check for changes once."""
         transport_type = self.transport.get_transport_type()
         if transport_type == "local":
@@ -158,7 +158,7 @@ class Watchdog:
         else:
             self._check_once_remote()
 
-    def _check_once_local(self):
+    def _check_once_local(self) -> None:
         """Scan local .agentweave/ filesystem for new files."""
         import time as _t
 
@@ -210,7 +210,7 @@ class Watchdog:
 
         self.known_tasks = current_tasks
 
-    def _init_http_state(self):
+    def _init_http_state(self) -> None:
         """Seed known message/task IDs from Hub so we don't re-fire on startup."""
         messages = self.transport.get_pending_messages(self.agent or "")
         for msg in messages:
@@ -223,7 +223,7 @@ class Watchdog:
             if task_id:
                 self.known_tasks.add(task_id)
 
-    def _check_once_http(self):
+    def _check_once_http(self) -> None:
         """Poll Hub REST API for new messages and tasks."""
         messages = self.transport.get_pending_messages(self.agent or "")
         for msg in messages:
@@ -239,7 +239,7 @@ class Watchdog:
                 self.known_tasks.add(task_id)
                 self.callback("new_task", task)
 
-    def _check_once_remote(self):
+    def _check_once_remote(self) -> None:
         """Scan remote transport for new files without consuming messages.
 
         The watchdog only notifies — it does NOT add message IDs to the seen
@@ -247,12 +247,12 @@ class Watchdog:
         This means the same message appears in both watchdog notifications AND
         the inbox command until explicitly archived.
         """
-        self.transport._fetch()
-        current_files = set(self.transport.list_remote_filenames())
+        self.transport._fetch()  # type: ignore[union-attr]
+        current_files = set(self.transport.list_remote_filenames())  # type: ignore[union-attr]
         new_files = current_files - self.known_remote_files
 
         for fname in new_files:
-            data = self.transport.read_remote_file(fname)
+            data = self.transport.read_remote_file(fname)  # type: ignore[union-attr]
             if data is None:
                 continue
             if "-task-for-" in fname:
@@ -262,7 +262,7 @@ class Watchdog:
 
         self.known_remote_files = current_files
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop watching."""
         self.running = False
 
@@ -841,7 +841,7 @@ def _make_ping_callback(
     return callback
 
 
-def main():
+def main() -> None:
     """CLI entry point for watchdog."""
     import argparse
 

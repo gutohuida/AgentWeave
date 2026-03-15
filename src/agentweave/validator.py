@@ -128,7 +128,7 @@ def sanitize_string(value: Any, max_length: int = 1000) -> str:
 
 def sanitize_task_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Sanitize task data before saving."""
-    sanitized = {}
+    sanitized: Dict[str, Any] = {}
 
     # Copy allowed fields with sanitization
     if "id" in data:
