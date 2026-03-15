@@ -4,9 +4,9 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_no_auth_returns_403(app):
+async def test_no_auth_returns_401(app):
     resp = await app.get("/api/v1/status")
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
