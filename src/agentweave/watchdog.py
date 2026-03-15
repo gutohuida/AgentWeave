@@ -1,6 +1,7 @@
 """Watchdog script for monitoring new messages and tasks."""
 
 import json
+import re
 import subprocess
 import threading
 import time
@@ -256,6 +257,179 @@ class Watchdog:
         self.running = False
 
 
+class _KimiParser:
+    """
+    State-machine parser for kimi --print streaming output.
+
+    Kimi emits Python-repr-style events, one per multi-line block ending with ')'.
+    This accumulates lines, detects event boundaries, and emits human-readable strings.
+
+    Example input (kimi raw lines):
+        ThinkPart(
+            type='think',
+            think='I need to check my inbox.',
+            encrypted=None
+        )
+    Example output:
+        ['  💭 I need to check my inbox.']
+    """
+
+    _EVENT_RE = re.compile(r'^([A-Z][A-Za-z]+)\(')
+    # Events we parse and render
+    _RENDER = frozenset({'TurnBegin', 'StepBegin', 'ThinkPart', 'TextPart', 'ToolCall', 'ToolResult'})
+
+    def __init__(self) -> None:
+        self._buf: List[str] = []
+        self._cur: str = ""        # current event name
+        self._skip: bool = False   # True when we don't want this event's output
+        self._pending: Dict[str, str] = {}   # tool_call_id -> tool_name
+        self._partial_id: str = ""           # call_id waiting for ToolCallPart
+        self._partial_name: str = ""         # tool_name waiting for ToolCallPart
+        self._partial_args: str = ""         # accumulated partial JSON args
+
+    def feed(self, line: str) -> List[str]:
+        """Feed one raw output line; returns list of display strings (may be empty)."""
+        stripped = line.strip()
+        if not stripped:
+            return []
+
+        if not self._buf:
+            m = self._EVENT_RE.match(stripped)
+            if not m:
+                return []
+            name = m.group(1)
+            self._cur = name
+            self._skip = name not in self._RENDER
+            self._buf = [stripped]
+            # Single-line event: parens balance on this one line
+            if stripped.count("(") == stripped.count(")"):
+                return self._flush()
+            return []
+        else:
+            self._buf.append(stripped)
+            # Closing paren on its own line ends the current outer event
+            if stripped == ")":
+                return self._flush()
+            return []
+
+    def _flush(self) -> List[str]:
+        block = "\n".join(self._buf)
+        name = self._cur
+        self._buf = []
+        self._cur = ""
+
+        if self._skip:
+            self._skip = False
+            # ToolCallPart carries the rest of a split arguments string
+            if name == "ToolCallPart":
+                m = re.search(r"arguments_part='(.*?)'(?:\s*\))?$", block, re.DOTALL)
+                if m and self._partial_id:
+                    self._partial_args += m.group(1)
+                    try:
+                        args = json.loads(self._partial_args)
+                        result = [self._fmt_tool(self._partial_name, args)]
+                        self._partial_id = self._partial_name = self._partial_args = ""
+                        return result
+                    except Exception:
+                        pass  # still incomplete; wait for more ToolCallPart
+            return []
+
+        self._skip = False
+        return self._render(name, block)
+
+    def _render(self, name: str, block: str) -> List[str]:
+        if name == "TurnBegin":
+            m = re.search(r'user_input=["\'](.+?)["\']', block, re.DOTALL)
+            text = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
+            if len(text) > 120:
+                text = text[:120] + "…"
+            sep = "─" * 56
+            return [sep, f"📨  {text}", sep]
+
+        if name == "StepBegin":
+            m = re.search(r"n=(\d+)", block)
+            n = m.group(1) if m else "?"
+            return [f"  ── Step {n} " + "─" * 46]
+
+        if name == "ThinkPart":
+            m = re.search(r"think='(.*?)',\s*encrypted", block, re.DOTALL)
+            if not m:
+                m = re.search(r'think="(.*?)",\s*encrypted', block, re.DOTALL)
+            if m:
+                thinking = re.sub(r"\s+", " ", m.group(1).replace("\\n", " ")).strip()
+                if len(thinking) > 200:
+                    thinking = thinking[:200] + "…"
+                return [f"  💭 {thinking}"]
+            return []
+
+        if name == "TextPart":
+            m = re.search(r"text='(.*?)'(?:[,)\s]|$)", block, re.DOTALL)
+            if not m:
+                m = re.search(r'text="(.*?)"(?:[,)\s]|$)', block, re.DOTALL)
+            if m:
+                text = m.group(1).replace("\\n", "\n").strip()
+                if text:
+                    return [f"  💬 {text}"]
+            return []
+
+        if name == "ToolCall":
+            id_m = re.search(r"id='([^']+)'", block)
+            name_m = re.search(r"name='([^']+)'", block)
+            args_m = re.search(r"arguments='(.*?)'(?:\s*\)|\s*,)", block, re.DOTALL)
+            call_id = id_m.group(1) if id_m else ""
+            tool_name = name_m.group(1) if name_m else "unknown"
+            raw_args = args_m.group(1) if args_m else ""
+            self._pending[call_id] = tool_name
+            try:
+                args = json.loads(raw_args)
+                return [self._fmt_tool(tool_name, args)]
+            except Exception:
+                # Incomplete JSON — wait for ToolCallPart to complete it
+                self._partial_id = call_id
+                self._partial_name = tool_name
+                self._partial_args = raw_args
+                return []
+
+        if name == "ToolResult":
+            id_m = re.search(r"tool_call_id='([^']+)'", block)
+            call_id = id_m.group(1) if id_m else ""
+            tool_name = self._pending.pop(call_id, "")
+
+            is_error = "is_error=True" in block
+            if is_error:
+                err_m = re.search(r"text='([^']+)'", block)
+                err = err_m.group(1)[:100] if err_m else "unknown error"
+                return [f"     ✗ {err}"]
+
+            # Meaningful message (e.g. "File successfully overwritten")
+            msg_m = re.search(r"message='([^']+)'", block)
+            if msg_m and msg_m.group(1).strip():
+                return [f"     ✓ {msg_m.group(1).strip()[:100]}"]
+
+            # get_inbox — count messages in result
+            if tool_name == "get_inbox":
+                count = len(re.findall(r'"id":', block))
+                if count:
+                    return [f"     ✓ {count} message(s)"]
+
+            return ["     ✓ ok"]
+
+        return []
+
+    @staticmethod
+    def _fmt_tool(tool_name: str, args: dict) -> str:
+        # Drop large/noisy fields
+        skip_keys = {"content", "body", "text", "new_text", "old_text"}
+        display = {k: v for k, v in args.items() if k not in skip_keys}
+        parts = []
+        for k, v in list(display.items())[:4]:
+            v_str = str(v)
+            if len(v_str) > 60:
+                v_str = v_str[:60] + "…"
+            parts.append(f'{k}="{v_str}"')
+        return f"  🔧 {tool_name}({', '.join(parts)})"
+
+
 def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -> list:
     """Return the CLI command to ping an agent with a prompt.
 
@@ -409,6 +583,24 @@ def _run_agent_subprocess(
             pass
 
     session_id: Optional[str] = None
+    # Mutable container so the stderr thread can read the latest session_id
+    session_id_ref: List[Optional[str]] = [None]
+    kimi_parser = _KimiParser() if agent == "kimi" else None
+
+    def _drain_stderr(proc: subprocess.Popen) -> None:
+        """Read stderr in a background thread and post each line as agent output."""
+        for raw in proc.stderr:  # type: ignore[union-attr]
+            err_line = raw.rstrip("\n")
+            if not err_line.strip():
+                continue
+            msg = f"[stderr] {err_line}"
+            if is_http:
+                try:
+                    transport.post_agent_output(agent, msg, session_id=session_id_ref[0])
+                except Exception:
+                    pass
+            else:
+                print(f"[{agent}:err] {err_line}", file=sys.stderr)
 
     try:
         proc = subprocess.Popen(
@@ -419,6 +611,9 @@ def _run_agent_subprocess(
             text=True,
             bufsize=1,
         )
+        stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
+        stderr_thread.start()
+
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
             # Try to extract session_id from JSONL (always attempt for Claude)
@@ -426,11 +621,12 @@ def _run_agent_subprocess(
                 extracted = _extract_claude_session_id(line)
                 if extracted:
                     session_id = extracted
-            # Parse Claude stream-json into human-readable chunks; kimi is plain text
-            if agent != "kimi":
-                readable_lines = _parse_claude_stream_line(line)
+                    session_id_ref[0] = session_id
+            # Parse output into human-readable lines
+            if kimi_parser is not None:
+                readable_lines = kimi_parser.feed(line)
             else:
-                readable_lines = [line] if line.strip() else []
+                readable_lines = _parse_claude_stream_line(line)
             # Stream to Hub or local stdout
             if is_http:
                 for readable in readable_lines:
@@ -441,7 +637,9 @@ def _run_agent_subprocess(
             else:
                 for readable in readable_lines:
                     print(f"[{agent}] {readable}")
+
         proc.wait()
+        stderr_thread.join(timeout=5)
     except FileNotFoundError as exc:
         print(f"[ERROR] Failed to launch {agent}: {exc}", file=sys.stderr)
     except Exception as exc:
