@@ -37,6 +37,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] - 2026-03-15
+
+### Added
+- Hub UI glassmorphism redesign: animated background orbs, frosted glass panels, full dark theme
+- Color theme picker in Hub settings (Ocean Deep, Cosmic Purple, Solar Flare, Forest Night, Neon Rose)
+- Agent output streaming to Hub UI with thinking block rendering
+- Kimi output parser and stderr capture for agent diagnostics
+- Watchdog resilience: crash recovery on transient Hub connection errors
+
+### Fixed
+- HTTP transport: two bug fixes in MCP server
+- CI: all ruff, black, and mypy errors resolved; lint checks scoped to Python 3.11 to avoid black version skew
+- pyproject.toml: corrected PEP 621 `license` field format
+
+---
+
 ## [Unreleased]
 
 ### Planned
