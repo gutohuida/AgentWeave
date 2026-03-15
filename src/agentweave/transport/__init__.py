@@ -19,9 +19,9 @@ Transport selection (auto, based on .agentweave/transport.json):
 
 from .base import BaseTransport
 from .config import get_transport
-from .local import LocalTransport
 from .git import GitTransport
 from .http import HttpTransport
+from .local import LocalTransport
 
 __all__ = [
     "BaseTransport",

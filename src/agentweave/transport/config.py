@@ -3,9 +3,9 @@
 from pathlib import Path
 from typing import Optional
 
-from .base import BaseTransport
 from ..constants import TRANSPORT_CONFIG_FILE
 from ..utils import load_json
+from .base import BaseTransport
 
 
 def _find_transport_config() -> Optional[dict]:

@@ -2,8 +2,8 @@
 
 from typing import Any, Dict, List, Optional
 
-from .constants import MESSAGES_PENDING_DIR, MESSAGES_ARCHIVE_DIR, MESSAGE_TYPES, TransportType
-from .utils import load_json, save_json, generate_id, now_iso
+from .constants import MESSAGE_TYPES, MESSAGES_ARCHIVE_DIR, MESSAGES_PENDING_DIR, TransportType
+from .utils import generate_id, load_json, now_iso, save_json
 
 
 class Message:
@@ -79,7 +79,7 @@ class Message:
             filepath = MESSAGES_PENDING_DIR / f"{message_id}.json"
         else:
             filepath = MESSAGES_ARCHIVE_DIR / f"{message_id}.json"
-        
+
         data = load_json(filepath)
         if data:
             return cls(data)
@@ -145,8 +145,8 @@ class MessageBus:
     @staticmethod
     def send(message: Message) -> bool:
         """Send a message via the active transport."""
+        from .eventlog import ERROR, log_event
         from .transport import get_transport
-        from .eventlog import log_event, ERROR
         result = get_transport().send_message(message.to_dict())
         if result:
             log_event(
@@ -176,19 +176,19 @@ class MessageBus:
     def get_outbox(agent: str) -> List[Message]:
         """Get all sent messages from an agent."""
         messages = []
-        
+
         # Check pending
         for filepath in MESSAGES_PENDING_DIR.glob("*.json"):
             data = load_json(filepath)
             if data and data.get("from") == agent:
                 messages.append(Message(data))
-        
+
         # Check archive
         for filepath in MESSAGES_ARCHIVE_DIR.glob("*.json"):
             data = load_json(filepath)
             if data and data.get("from") == agent:
                 messages.append(Message(data))
-        
+
         return sorted(messages, key=lambda m: m.timestamp)
 
     @staticmethod

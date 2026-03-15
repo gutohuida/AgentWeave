@@ -3,10 +3,9 @@
 import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pathlib import Path
 
-from .constants import TASKS_ACTIVE_DIR, TASKS_COMPLETED_DIR, TASK_STATUSES, PRIORITIES
-from .utils import load_json, save_json, generate_id, now_iso
+from .constants import PRIORITIES, TASKS_ACTIVE_DIR, TASKS_COMPLETED_DIR
+from .utils import generate_id, load_json, now_iso, save_json
 
 
 class TaskStatus(Enum):
@@ -108,19 +107,19 @@ class Task:
         # Try active first
         filepath = TASKS_ACTIVE_DIR / f"{task_id}.json"
         data = load_json(filepath)
-        
+
         if not data:
             # Try completed
             filepath = TASKS_COMPLETED_DIR / f"{task_id}.json"
             data = load_json(filepath)
-        
+
         if data:
             return cls(data)
         return None
 
     def save(self) -> bool:
         """Save task to file."""
-        from .eventlog import log_event, ERROR
+        from .eventlog import ERROR, log_event
         filepath = TASKS_ACTIVE_DIR / f"{self.id}.json"
         is_new = not filepath.exists()
         result = save_json(filepath, self._data)
@@ -161,7 +160,7 @@ class Task:
         """Move task from active to completed."""
         active_path = TASKS_ACTIVE_DIR / f"{self.id}.json"
         completed_path = TASKS_COMPLETED_DIR / f"{self.id}.json"
-        
+
         if active_path.exists():
             save_json(completed_path, self._data)
             active_path.unlink()
@@ -210,24 +209,24 @@ class Task:
     ) -> List["Task"]:
         """List all tasks matching criteria."""
         tasks = []
-        
+
         # Load active tasks
         for filepath in TASKS_ACTIVE_DIR.glob("*.json"):
             data = load_json(filepath)
             if data:
                 tasks.append(cls(data))
-        
+
         # Load completed if not active_only
         if not active_only:
             for filepath in TASKS_COMPLETED_DIR.glob("*.json"):
                 data = load_json(filepath)
                 if data:
                     tasks.append(cls(data))
-        
+
         # Filter
         if status:
             tasks = [t for t in tasks if t.status == status]
         if assignee:
             tasks = [t for t in tasks if t.assignee == assignee]
-        
+
         return tasks

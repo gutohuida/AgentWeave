@@ -7,14 +7,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .constants import (
-    AGENTWEAVE_DIR,
     AGENTS_DIR,
+    AGENTWEAVE_DIR,
+    LOGS_DIR,
+    MESSAGES_ARCHIVE_DIR,
+    MESSAGES_PENDING_DIR,
+    SHARED_DIR,
     TASKS_ACTIVE_DIR,
     TASKS_COMPLETED_DIR,
-    MESSAGES_PENDING_DIR,
-    MESSAGES_ARCHIVE_DIR,
-    SHARED_DIR,
-    LOGS_DIR,
 )
 
 
@@ -48,9 +48,9 @@ def load_json(filepath: Path) -> Optional[Dict[str, Any]]:
     if not filepath.exists():
         return None
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -61,7 +61,7 @@ def save_json(filepath: Path, data: Dict[str, Any]) -> bool:
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         return True
-    except IOError:
+    except OSError:
         return False
 
 

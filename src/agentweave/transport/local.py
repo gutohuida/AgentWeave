@@ -2,13 +2,13 @@
 
 from typing import Any, Dict, List, Optional
 
-from .base import BaseTransport
 from ..constants import (
-    MESSAGES_PENDING_DIR,
     MESSAGES_ARCHIVE_DIR,
+    MESSAGES_PENDING_DIR,
     TASKS_ACTIVE_DIR,
 )
-from ..utils import load_json, save_json, now_iso
+from ..utils import load_json, now_iso, save_json
+from .base import BaseTransport
 
 
 class LocalTransport(BaseTransport):
@@ -62,9 +62,8 @@ class LocalTransport(BaseTransport):
             return result
         for filepath in TASKS_ACTIVE_DIR.glob("*.json"):
             data = load_json(filepath)
-            if data:
-                if agent is None or data.get("assignee") == agent:
-                    result.append(data)
+            if data and (agent is None or data.get("assignee") == agent):
+                result.append(data)
         return sorted(result, key=lambda d: d.get("created_at", ""))
 
     def get_transport_type(self) -> str:

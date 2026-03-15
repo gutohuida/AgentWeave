@@ -1,11 +1,12 @@
 """Watchdog script for monitoring new messages and tasks."""
 
+import contextlib
 import json
 import re
 import subprocess
+import sys
 import threading
 import time
-import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -67,7 +68,7 @@ class Watchdog:
             print()
         elif event_type == "task_completed":
             print(f"\n[OK] Task completed: {data.get('title', 'Untitled')}")
-            print(f"   Ready for review!")
+            print("   Ready for review!")
             print()
 
     def _scan_messages(self) -> Set[str]:
@@ -159,6 +160,7 @@ class Watchdog:
     def _check_once_local(self):
         """Scan local .agentweave/ filesystem for new files."""
         import time as _t
+
         from .eventlog import log_event
         current_messages = self._scan_messages()
         new_messages = current_messages - self.known_messages
@@ -439,8 +441,8 @@ class _KimiParser:
 def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -> list:
     """Return the CLI command to ping an agent with a prompt.
 
-    Kimi uses --print; Claude and others use --output-format json so we can
-    parse JSONL lines and extract the session_id for resumption.
+    Kimi uses --print; Claude and others use --output-format stream-json so we can
+    parse JSONL lines in real-time and extract the session_id for resumption.
     """
     if agent == "kimi":
         cmd = ["kimi", "--print"]
@@ -448,8 +450,9 @@ def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -
             cmd += ["--session", session_id]
         cmd += ["-p", prompt]
         return cmd
-    # Claude and other CLIs — json gives a single result JSON line with session_id and response text
-    cmd = [agent, "--output-format", "json"]
+    # Claude and other CLIs — stream-json gives real-time JSONL lines with thinking,
+    # assistant messages, tool calls, and session_id for resumption
+    cmd = [agent, "--output-format", "stream-json"]
     if session_id:
         cmd += ["--resume", session_id]
     cmd += ["-p", prompt]
@@ -513,7 +516,7 @@ def _parse_claude_stream_line(line: str) -> list:
                 thinking = block.get("thinking", "").strip()
                 if thinking:
                     # Prefix each line so it's visually distinct in the log
-                    prefixed = "\n".join(f"💭 {l}" for l in thinking.splitlines())
+                    prefixed = "\n".join(f"💭 {line}" for line in thinking.splitlines())
                     results.append(prefixed)
             elif block_type == "text":
                 text = block.get("text", "").strip()
@@ -590,7 +593,7 @@ def _run_agent_subprocess(
         try:
             transport.push_heartbeat(agent, status="running", message=f"Responding to: {subject}")
         except Exception as exc:
-            from .eventlog import log_event, WARN
+            from .eventlog import WARN, log_event
             log_event("watchdog_heartbeat_failed", severity=WARN, agent=agent, error=str(exc))
 
     session_id: Optional[str] = None
@@ -601,7 +604,7 @@ def _run_agent_subprocess(
     def _drain_stderr(proc: subprocess.Popen) -> None:
         """Read stderr in a background thread and post each line as agent output
         and as a log event so it appears in the Hub Logs tab."""
-        _ERROR_KEYWORDS = ("Error", "Traceback", "Exception", "FAILED", "fatal")
+        _error_keywords = ("Error", "Traceback", "Exception", "FAILED", "fatal")
         try:
             for raw in proc.stderr:  # type: ignore[union-attr]
                 err_line = raw.rstrip("\n")
@@ -612,16 +615,16 @@ def _run_agent_subprocess(
                     try:
                         transport.post_agent_output(agent, msg, session_id=session_id_ref[0])
                     except Exception as exc:
-                        from .eventlog import log_event, WARN
+                        from .eventlog import WARN, log_event
                         log_event("watchdog_output_post_failed", severity=WARN,
                                   agent=agent, error=str(exc))
                     # Only push error-level lines to the Logs tab
-                    if any(kw in err_line for kw in _ERROR_KEYWORDS):
+                    if any(kw in err_line for kw in _error_keywords):
                         transport.push_log("agent_stderr", agent, {"line": err_line}, "error")
                 else:
                     print(f"[{agent}:err] {err_line}", file=sys.stderr)
         except Exception as exc:
-            from .eventlog import log_event, WARN
+            from .eventlog import WARN, log_event
             log_event("watchdog_stderr_drain_failed", severity=WARN,
                       agent=agent, error=str(exc))
 
@@ -659,7 +662,7 @@ def _run_agent_subprocess(
                     try:
                         transport.post_agent_output(agent, readable, session_id=session_id)
                     except Exception as exc:
-                        from .eventlog import log_event, WARN
+                        from .eventlog import WARN, log_event
                         log_event("watchdog_output_post_failed", severity=WARN,
                                   agent=agent, error=str(exc))
             else:
@@ -677,33 +680,31 @@ def _run_agent_subprocess(
         # expired. Clear it and retry once without --resume.
         saved_session = _load_agent_session(agent) if agent != "kimi" else None
         if returncode != 0 and saved_session:
-            from .eventlog import log_event, WARN
+            from .eventlog import WARN, log_event
             log_event("watchdog_session_retry", severity=WARN, agent=agent,
                       exit_code=returncode, reason="stale session cleared")
             print(f"[WARN] {agent} exited with code {returncode} — session may be stale, "
                   f"clearing and retrying without --resume", file=sys.stderr)
             # Clear the stale session file
             session_file = AGENTS_DIR / f"{agent}-session.json"
-            try:
+            with contextlib.suppress(Exception):
                 session_file.unlink(missing_ok=True)
-            except Exception:
-                pass
             session_id = None
             session_id_ref[0] = None
             retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None)  # cmd[-1] is the prompt
             returncode = _run_cmd(retry_cmd, None)
 
         if returncode != 0:
-            from .eventlog import log_event, WARN
+            from .eventlog import WARN, log_event
             log_event("watchdog_agent_exit", severity=WARN, agent=agent,
                       exit_code=returncode)
             print(f"[WARN] {agent} exited with code {returncode}", file=sys.stderr)
     except FileNotFoundError as exc:
-        from .eventlog import log_event, ERROR
+        from .eventlog import ERROR, log_event
         log_event("watchdog_spawn_failed", severity=ERROR, agent=agent, error=str(exc))
         print(f"[ERROR] Failed to launch {agent}: {exc}", file=sys.stderr)
     except Exception as exc:
-        from .eventlog import log_event, ERROR
+        from .eventlog import ERROR, log_event
         log_event("watchdog_subprocess_error", severity=ERROR, agent=agent, error=str(exc))
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
@@ -716,17 +717,15 @@ def _run_agent_subprocess(
 
     # Persist session ID for next run
     if session_id:
-        try:
+        with contextlib.suppress(Exception):
             _save_agent_session(agent, session_id)
-        except Exception:
-            pass
 
     # Send "idle" heartbeat
     if is_http:
         try:
             transport.push_heartbeat(agent, status="idle")
         except Exception as exc:
-            from .eventlog import log_event, WARN
+            from .eventlog import WARN, log_event
             log_event("watchdog_heartbeat_failed", severity=WARN, agent=agent, error=str(exc))
 
 
@@ -794,8 +793,9 @@ def _make_ping_callback(
         if session_id:
             print(f"[PING] Resuming session: {session_id}")
 
-        from .eventlog import log_event
         import time as _t
+
+        from .eventlog import log_event
         if pinged_at is not None:
             pinged_at[msg_id] = _t.time()
         log_event("watchdog_ping", agent=recipient, msg_id=msg_id,

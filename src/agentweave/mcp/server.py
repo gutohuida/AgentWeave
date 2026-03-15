@@ -25,7 +25,7 @@ except ImportError as e:
     ) from e
 
 from ..constants import MESSAGE_TYPES, PRIORITIES, TASK_STATUSES, TransportType
-from ..locking import lock, LockError
+from ..locking import LockError, lock
 from ..messaging import Message, MessageBus
 from ..task import Task
 from ..transport import get_transport
@@ -313,8 +313,9 @@ def ask_user(
     transport = get_transport()
     if transport.get_transport_type() == "http":
         import json as _json
-        import urllib.request as _req
         import urllib.error as _uerr
+        import urllib.request as _req
+
         from ..constants import TRANSPORT_CONFIG_FILE
         from ..utils import load_json as _load_json
 
@@ -390,8 +391,9 @@ def get_answer(question_id: str) -> Dict[str, Any]:
         }
 
     import json as _json
-    import urllib.request as _req
     import urllib.error as _uerr
+    import urllib.request as _req
+
     from ..constants import TRANSPORT_CONFIG_FILE
     from ..utils import load_json as _load_json
 
@@ -423,7 +425,7 @@ def get_answer(question_id: str) -> Dict[str, Any]:
 
 def main() -> None:
     """Run the AgentWeave MCP server (stdio transport)."""
-    mcp.run()
+    mcp.run(transport="stdio", show_banner=False)
 
 
 if __name__ == "__main__":

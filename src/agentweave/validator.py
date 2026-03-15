@@ -1,7 +1,8 @@
 """JSON schema validation for AgentWeave."""
 
 from typing import Any, Dict, List, Tuple
-from .constants import TASK_STATUSES, MESSAGE_TYPES, PRIORITIES, AGENT_NAME_RE
+
+from .constants import AGENT_NAME_RE, MESSAGE_TYPES, PRIORITIES, TASK_STATUSES
 
 
 class ValidationError(Exception):
@@ -45,13 +46,11 @@ def validate_task(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
         errors.append(f"Invalid priority: {data['priority']}")
 
     # Validate assignee/assigner — any valid agent name, not just known ones
-    if "assignee" in data and data["assignee"]:
-        if not _valid_agent(data["assignee"]):
-            errors.append(f"Invalid assignee name: {data['assignee']!r}")
+    if "assignee" in data and data["assignee"] and not _valid_agent(data["assignee"]):
+        errors.append(f"Invalid assignee name: {data['assignee']!r}")
 
-    if "assigner" in data and data["assigner"]:
-        if not _valid_agent(data["assigner"]):
-            errors.append(f"Invalid assigner name: {data['assigner']!r}")
+    if "assigner" in data and data["assigner"] and not _valid_agent(data["assigner"]):
+        errors.append(f"Invalid assigner name: {data['assigner']!r}")
 
     # Validate types
     if "title" in data and not isinstance(data["title"], str):

@@ -9,22 +9,28 @@ from typing import List, Optional
 
 from . import __version__
 from .constants import (
-    VALID_AGENTS, VALID_MODES, AGENTWEAVE_DIR, SHARED_DIR, TRANSPORT_CONFIG_FILE,
-    DEFAULT_AGENTS, DEFAULT_AGENT_ROLES, DEV_ROLE_LABELS,
+    AGENTWEAVE_DIR,
+    DEFAULT_AGENT_ROLES,
+    DEFAULT_AGENTS,
+    DEV_ROLE_LABELS,
+    SHARED_DIR,
+    TRANSPORT_CONFIG_FILE,
+    VALID_AGENTS,
+    VALID_MODES,
 )
+from .locking import acquire_lock, release_lock
+from .messaging import Message, MessageBus
 from .session import Session
 from .task import Task
-from .messaging import Message, MessageBus
-from .locking import acquire_lock, release_lock
-from .validator import validate_task, validate_message
 from .templates import get_template
 from .utils import (
     ensure_dirs,
-    print_success,
-    print_warning,
     print_error,
     print_info,
+    print_success,
+    print_warning,
 )
+from .validator import validate_message, validate_task
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -205,7 +211,7 @@ agentweave summary
         print(f"   ID:      {session.id}")
         print(f"   Mode:    {session.mode}")
         print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
-        print(f"\n[DIR] Created .agentweave/")
+        print("\n[DIR] Created .agentweave/")
         print("     AGENTS.md            <- collaboration protocol (MCP vs manual, workflow)")
         print("     ROLES.md             <- agent role assignments (edit freely)")
         print("     shared/context.md    <- current focus, recent decisions (update daily)")
@@ -256,7 +262,8 @@ def _role_responsibility(role_key: str) -> str:
 def cmd_status(_args: argparse.Namespace) -> int:
     """Show session status."""
     import os as _os
-    from .constants import WATCHDOG_PID_FILE, WATCHDOG_LOG_FILE
+
+    from .constants import WATCHDOG_PID_FILE
 
     session = Session.load()
     if not session:
@@ -297,7 +304,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
     all_agents = session.agent_names or DEFAULT_AGENTS
     active_tasks = Task.list_all(active_only=True)
 
-    print(f"\n[AGENTS]")
+    print("\n[AGENTS]")
     for agent in all_agents:
         role = session.agents.get(agent, {}).get("role", "unknown")
         inbox = MessageBus.get_inbox(agent)
@@ -316,7 +323,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
         if review:
             print(f"      review:   {len(review)} task(s) ready for review")
         if not inbox and not agent_tasks:
-            print(f"      idle")
+            print("      idle")
 
     # Overall task summary
     completed_tasks = [t for t in Task.list_all() if t.status in ("completed", "approved")]
@@ -331,17 +338,17 @@ def cmd_summary(_args: argparse.Namespace) -> int:
     if not session:
         print_error("No session found. Run: agentweave init")
         return 1
-    
+
     print("=" * 60)
     print("INTERAGENT SUMMARY")
     print("=" * 60)
     print()
-    
+
     # Session info
     print(f"Session: {session.name} ({session.mode} mode)")
     print(f"Principal: {session.principal}")
     print()
-    
+
     # Tasks by status — dynamic across all session agents
     from .constants import DEFAULT_AGENTS
     all_tasks = Task.list_all()
@@ -416,25 +423,25 @@ def cmd_summary(_args: argparse.Namespace) -> int:
         if msgs_by_agent[ag]:
             print(f"  agentweave relay --agent {ag}")
     print()
-    
+
     return 0
 
 
 def cmd_relay(args: argparse.Namespace) -> int:
     """Generate relay prompt for an agent."""
     agent = args.agent
-    
+
     # Get pending tasks for this agent
     pending_tasks = Task.list_all(assignee=agent, status="assigned")
     pending_tasks.extend(Task.list_all(assignee=agent, status="pending"))
-    
+
     # Get messages for this agent
     messages = MessageBus.get_inbox(agent)
-    
+
     # Get session
     session = Session.load()
     role = session.get_agent_role(agent) if session else "delegate"
-    
+
     print("=" * 60)
     print(f"RELAY PROMPT FOR {agent.upper()}")
     print("=" * 60)
@@ -443,15 +450,15 @@ def cmd_relay(args: argparse.Namespace) -> int:
     print()
     print("-" * 60)
     print()
-    
+
     # Generate the prompt
     print(f"@{agent} - You have work in the AgentWeave collaboration system.")
     print()
     print(f"Your role: {role}")
-    print(f"Collaboration guide: read .agentweave/AGENTS.md for commands, workflow, and protocol.")
-    print(f"Project context: read .agentweave/shared/context.md before starting.")
+    print("Collaboration guide: read .agentweave/AGENTS.md for commands, workflow, and protocol.")
+    print("Project context: read .agentweave/shared/context.md before starting.")
     print()
-    
+
     if pending_tasks:
         print(f"[TASK] You have {len(pending_tasks)} new task(s):")
         for task in pending_tasks:
@@ -464,7 +471,7 @@ def cmd_relay(args: argparse.Namespace) -> int:
         print("4. Run: agentweave task update <task_id> --status completed")
         print("5. Send a message when done: agentweave msg send --to <other> --message 'Done!'")
         print()
-    
+
     if messages:
         print(f"[MSG] You have {len(messages)} unread message(s):")
         for msg in messages[:3]:  # Show first 3
@@ -473,34 +480,34 @@ def cmd_relay(args: argparse.Namespace) -> int:
         print("Check your inbox:")
         print(f"  agentweave inbox --agent {agent}")
         print()
-    
+
     if not pending_tasks and not messages:
         print("No pending tasks or messages.")
         print()
         print("Useful commands:")
-        print(f"  agentweave status           # Check overall status")
-        print(f"  agentweave summary          # Quick summary")
+        print("  agentweave status           # Check overall status")
+        print("  agentweave summary          # Quick summary")
         print()
-    
+
     print("-" * 60)
     print()
-    
+
     return 0
 
 
 def cmd_quick(args: argparse.Namespace) -> int:
     """Quick mode - single command for task delegation."""
     ensure_dirs()
-    
+
     session = Session.load()
     if not session:
         print_error("No session found. Run: agentweave init")
         return 1
-    
+
     sender = args.from_agent or session.principal
     recipient = args.to
     task_desc = args.task
-    
+
     try:
         # Create task with lock
         task = Task.create(
@@ -510,7 +517,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
             assigner=sender,
             priority=args.priority or "medium",
         )
-        
+
         # Validate before saving
         is_valid, errors = validate_task(task.to_dict())
         if not is_valid:
@@ -518,23 +525,23 @@ def cmd_quick(args: argparse.Namespace) -> int:
             for err in errors:
                 print(f"  - {err}")
             return 1
-        
+
         # Try to acquire lock
         try:
             if not acquire_lock(f"task_{task.id}", timeout=5):
                 print_error("Could not create task - another process is working")
                 return 1
-            
+
             task.update(status="assigned")
             task.save()
-            
+
             # Update session
             session.add_task(task.id)
             session.save()
-            
+
         finally:
             release_lock(f"task_{task.id}")
-        
+
         # Create message
         msg = Message.create(
             sender=sender,
@@ -547,12 +554,12 @@ def cmd_quick(args: argparse.Namespace) -> int:
             message_type="delegation",
             task_id=task.id,
         )
-        
+
         # Validate message
         is_valid, errors = validate_message(msg.to_dict())
         if is_valid:
             MessageBus.send(msg)
-        
+
         print_success("Quick delegation complete!")
         print(f"   Task: {task.id}")
         print(f"   Assigned to: {recipient}")
@@ -561,9 +568,9 @@ def cmd_quick(args: argparse.Namespace) -> int:
         print(f"  agentweave relay --agent {recipient}")
         print()
         print("This will generate the prompt to copy to the agent.")
-        
+
         return 0
-        
+
     except Exception as e:
         print_error(f"Failed: {e}")
         return 1
@@ -572,7 +579,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
 def cmd_task_create(args: argparse.Namespace) -> int:
     """Create a new task."""
     ensure_dirs()
-    
+
     try:
         task = Task.create(
             title=args.title,
@@ -583,7 +590,7 @@ def cmd_task_create(args: argparse.Namespace) -> int:
             requirements=args.requirements,
             acceptance_criteria=args.criteria,
         )
-        
+
         # Validate
         is_valid, errors = validate_task(task.to_dict())
         if not is_valid:
@@ -591,15 +598,15 @@ def cmd_task_create(args: argparse.Namespace) -> int:
             for err in errors:
                 print(f"  - {err}")
             return 1
-        
+
         # Lock and save
         if not acquire_lock(f"task_{task.id}", timeout=5):
             print_error("Could not create task - another process is working")
             return 1
-        
+
         try:
             task.save()
-            
+
             # Update session
             session = Session.load()
             if session:
@@ -607,14 +614,14 @@ def cmd_task_create(args: argparse.Namespace) -> int:
                 session.save()
         finally:
             release_lock(f"task_{task.id}")
-        
+
         print_success(f"Created task: {task.id}")
         print(f"   Title: {task.title}")
         print(f"   Assignee: {task.assignee or 'Unassigned'}")
         print(f"   Priority: {task.priority}")
         print(f"\n   File: {AGENTWEAVE_DIR}/tasks/active/{task.id}.json")
         return 0
-        
+
     except Exception as e:
         print_error(f"Failed to create task: {e}")
         return 1
@@ -627,11 +634,11 @@ def cmd_task_list(args: argparse.Namespace) -> int:
         assignee=args.assignee,
         active_only=args.active_only,
     )
-    
+
     if not tasks:
         print_info("No tasks found.")
         return 0
-    
+
     print(f"[TASK] Tasks ({len(tasks)}):")
     print("-" * 80)
     for task in tasks:
@@ -639,7 +646,7 @@ def cmd_task_list(args: argparse.Namespace) -> int:
         print(f"           Assignee: {task.assignee or 'Unassigned'}")
         print(f"           Priority: {task.priority}")
         print()
-    
+
     return 0
 
 
@@ -649,7 +656,7 @@ def cmd_task_show(args: argparse.Namespace) -> int:
     if not task:
         print_error(f"Task not found: {args.task_id}")
         return 1
-    
+
     print(task.to_markdown())
     return 0
 
@@ -660,31 +667,31 @@ def cmd_task_update(args: argparse.Namespace) -> int:
     if not acquire_lock(f"task_{args.task_id}", timeout=10):
         print_error("Task is currently being edited by another process")
         return 1
-    
+
     try:
         task = Task.load(args.task_id)
         if not task:
             print_error(f"Task not found: {args.task_id}")
             return 1
-        
+
         if args.status:
             old_status = task.status
             agent_name = getattr(args, "agent", None) or task.assignee
             task.update(agent=agent_name, status=args.status)
             print(f"Status: {old_status} -> {args.status}")
-            
+
             # Move to completed if appropriate
             if args.status in ["completed", "approved"]:
                 task.move_to_completed()
-                
+
                 # Update session
                 session = Session.load()
                 if session:
                     session.complete_task(task.id)
                     session.save()
-                
+
                 print("Moved to completed/")
-        
+
         if args.note:
             notes = task.to_dict().get("notes", [])
             from .utils import now_iso
@@ -694,7 +701,7 @@ def cmd_task_update(args: argparse.Namespace) -> int:
             })
             task.update(notes=notes)
             print("Added note")
-        
+
         # Validate before saving
         is_valid, errors = validate_task(task.to_dict())
         if not is_valid:
@@ -702,11 +709,11 @@ def cmd_task_update(args: argparse.Namespace) -> int:
             for err in errors:
                 print(f"  - {err}")
             return 1
-        
+
         task.save()
         print_success(f"Updated task: {args.task_id}")
         return 0
-        
+
     finally:
         release_lock(f"task_{args.task_id}")
 
@@ -714,7 +721,7 @@ def cmd_task_update(args: argparse.Namespace) -> int:
 def cmd_msg_send(args: argparse.Namespace) -> int:
     """Send a message."""
     ensure_dirs()
-    
+
     try:
         message = Message.create(
             sender=args.from_agent or "unknown",
@@ -724,7 +731,7 @@ def cmd_msg_send(args: argparse.Namespace) -> int:
             message_type=args.type or "message",
             task_id=args.task_id,
         )
-        
+
         # Validate
         is_valid, errors = validate_message(message.to_dict())
         if not is_valid:
@@ -732,15 +739,15 @@ def cmd_msg_send(args: argparse.Namespace) -> int:
             for err in errors:
                 print(f"  - {err}")
             return 1
-        
+
         MessageBus.send(message)
-        
+
         print_success(f"Message sent: {message.id}")
         print(f"   To: {args.to}")
         print(f"   Subject: {args.subject or '(no subject)'}")
         print(f"\n   @{args.to} - Check your inbox: agentweave inbox --agent {args.to}")
         return 0
-        
+
     except Exception as e:
         print_error(f"Failed to send message: {e}")
         return 1
@@ -862,6 +869,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     """
     import os
     import subprocess as _sp
+
     from .constants import WATCHDOG_PID_FILE
 
     if not AGENTWEAVE_DIR.exists():
@@ -891,7 +899,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         else {"start_new_session": True}
     )
     WATCHDOG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")
+    log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115
     proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)
 
     WATCHDOG_PID_FILE.write_text(str(proc.pid))
@@ -904,6 +912,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 def cmd_stop(_args: argparse.Namespace) -> int:
     """Stop the background AgentWeave watchdog."""
     import os
+
     from .constants import WATCHDOG_PID_FILE
 
     if not WATCHDOG_PID_FILE.exists():
@@ -935,8 +944,8 @@ def cmd_stop(_args: argparse.Namespace) -> int:
 
 def cmd_log(args: argparse.Namespace) -> int:
     """Show structured activity log (messages, tasks, watchdog events)."""
-    from .eventlog import get_events, format_event
     from .constants import EVENTS_LOG_FILE
+    from .eventlog import format_event, get_events
 
     n = args.lines if hasattr(args, "lines") and args.lines else 50
     agent_filter = getattr(args, "agent", None)
@@ -959,7 +968,7 @@ def cmd_log(args: argparse.Namespace) -> int:
         import time as _time
         print_info("--- following events (Ctrl-C to stop) ---")
         try:
-            with open(EVENTS_LOG_FILE, "r", encoding="utf-8") as fh:
+            with open(EVENTS_LOG_FILE, encoding="utf-8") as fh:
                 fh.seek(0, 2)  # seek to end
                 while True:
                     line = fh.readline()
@@ -969,12 +978,11 @@ def cmd_log(args: argparse.Namespace) -> int:
                             try:
                                 import json as _json
                                 entry = _json.loads(line)
-                                if agent_filter:
-                                    if agent_filter not in (
-                                        entry.get("from"), entry.get("to"),
-                                        entry.get("agent"), entry.get("assignee")
-                                    ):
-                                        continue
+                                if agent_filter and agent_filter not in (
+                                    entry.get("from"), entry.get("to"),
+                                    entry.get("agent"), entry.get("assignee")
+                                ):
+                                    continue
                                 if event_filter and entry.get("event") != event_filter:
                                     continue
                                 print(format_event(entry))
@@ -1075,6 +1083,7 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
 def cmd_transport_setup(args: argparse.Namespace) -> int:
     """Set up cross-machine transport."""
     import subprocess as _sp
+
     from .utils import save_json
 
     transport_type = args.type
@@ -1140,8 +1149,8 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         print("Next steps:")
         print(f"  1. Your collaborator clones/has the repo with remote '{remote}'")
         if cluster:
-            print(f"  2. They run: agentweave transport setup --type git --cluster <their-name>")
-            print(f"  3. Address messages to them as: <their-cluster>.<their-agent>")
+            print("  2. They run: agentweave transport setup --type git --cluster <their-name>")
+            print("  3. Address messages to them as: <their-cluster>.<their-agent>")
         else:
             print(f"  2. They run: agentweave transport setup --remote {remote} --type git")
         print(f"  3. Messages now sync via git branch '{branch}'")
@@ -1167,8 +1176,8 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
             return 1
 
         # Connectivity check
-        import urllib.request as _urllib_req
         import urllib.error as _urllib_err
+        import urllib.request as _urllib_req
 
         status_url = f"{url.rstrip('/')}/api/v1/status"
         req = _urllib_req.Request(status_url)
@@ -1179,7 +1188,7 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
                 resp.read()
         except _urllib_err.HTTPError as exc:
             if exc.code == 401:
-                print_error(f"Hub rejected the API key (401 Unauthorized). Check --api-key.")
+                print_error("Hub rejected the API key (401 Unauthorized). Check --api-key.")
             else:
                 print_error(f"Hub returned HTTP {exc.code}. Check --url.")
             return 1
@@ -1216,6 +1225,7 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
 def cmd_transport_status(_args: argparse.Namespace) -> int:
     """Show current transport configuration and status."""
     import subprocess as _sp
+
     from .utils import load_json as _load_json
 
     config = _load_json(TRANSPORT_CONFIG_FILE)
@@ -1254,14 +1264,14 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
             files = [f for f in result2.stdout.splitlines() if f.strip()]
             msg_files = [f for f in files if "-task-for-" not in f]
             task_files = [f for f in files if "-task-for-" in f]
-            print(f"   Status:        connected")
+            print("   Status:        connected")
             print(f"   Files on branch: {len(files)} ({len(msg_files)} messages, {len(task_files)} tasks)")
         else:
             print(f"   Status:        cannot reach {remote}/{branch}")
 
     elif transport_type == "http":
-        import urllib.request as _ureq
         import urllib.error as _uerr
+        import urllib.request as _ureq
         url = config.get("url", "")
         api_key = config.get("api_key", "")
         project_id = config.get("project_id", "")
@@ -1278,13 +1288,13 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
                     data = _json.loads(resp.read())
                 tasks_active = sum(data.get("task_counts", {}).values())
                 msgs_pending = data.get("message_counts", {}).get("pending", 0)
-                print(f"   Status:  connected")
+                print("   Status:  connected")
                 print(f"   Tasks:   {tasks_active} active")
                 print(f"   Messages: {msgs_pending} pending")
             except (_uerr.URLError, _uerr.HTTPError, Exception) as exc:
                 print(f"   Status:  unreachable ({exc})")
         else:
-            print(f"   Status:  not configured")
+            print("   Status:  not configured")
 
     return 0
 
@@ -1292,7 +1302,6 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
 def cmd_transport_pull(_args: argparse.Namespace) -> int:
     """Force an immediate fetch from the remote transport."""
     from .transport import get_transport
-    from .constants import VALID_AGENTS
 
     t = get_transport()
     if t.get_transport_type() == "local":
@@ -1367,8 +1376,8 @@ def cmd_reply(args: argparse.Namespace) -> int:
     answer = args.answer
 
     import json as _json
-    import urllib.request as _req
     import urllib.error as _uerr
+    import urllib.request as _req
 
     body = _json.dumps({"answer": answer}).encode()
     request = _req.Request(
@@ -1415,15 +1424,15 @@ Examples:
 For more help: https://github.com/gutohuida/AgentWeave
         """,
     )
-    
+
     parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
     )
-    
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
+
     # Init
     init_parser = subparsers.add_parser("init", help="Initialize session")
     init_parser.add_argument("--project", "-p", help="Project name")
@@ -1447,13 +1456,13 @@ For more help: https://github.com/gutohuida/AgentWeave
         action="store_true",
         help="Force overwrite existing session",
     )
-    
+
     # Status
     subparsers.add_parser("status", help="Show session status")
-    
+
     # Summary (NEW)
     subparsers.add_parser("summary", help="Quick summary for relay decisions")
-    
+
     # Relay
     relay_parser = subparsers.add_parser("relay", help="Generate relay prompt for agent")
     relay_parser.add_argument(
@@ -1483,11 +1492,11 @@ For more help: https://github.com/gutohuida/AgentWeave
         "task",
         help="Task description",
     )
-    
+
     # Task commands
     task_parser = subparsers.add_parser("task", help="Task management")
     task_subparsers = task_parser.add_subparsers(dest="task_command")
-    
+
     # Task create
     task_create = task_subparsers.add_parser("create", help="Create task")
     task_create.add_argument("--title", "-t", required=True, help="Task title")
@@ -1516,7 +1525,7 @@ For more help: https://github.com/gutohuida/AgentWeave
         nargs="+",
         help="Acceptance criteria",
     )
-    
+
     # Task list
     task_list = task_subparsers.add_parser("list", help="List tasks")
     task_list.add_argument(
@@ -1532,11 +1541,11 @@ For more help: https://github.com/gutohuida/AgentWeave
         action="store_true",
         help="Show only active tasks",
     )
-    
+
     # Task show
     task_show = task_subparsers.add_parser("show", help="Show task details")
     task_show.add_argument("task_id", help="Task ID")
-    
+
     # Task update
     task_update = task_subparsers.add_parser("update", help="Update task")
     task_update.add_argument("task_id", help="Task ID")
@@ -1549,11 +1558,11 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="New status",
     )
     task_update.add_argument("--note", help="Add a note")
-    
+
     # Message commands
     msg_parser = subparsers.add_parser("msg", help="Message management")
     msg_subparsers = msg_parser.add_subparsers(dest="msg_command")
-    
+
     # Send message
     msg_send = msg_subparsers.add_parser("send", help="Send a message")
     msg_send.add_argument(
@@ -1578,11 +1587,11 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Message type",
     )
     msg_send.add_argument("--task-id", help="Related task ID")
-    
+
     # Read message
     msg_read = msg_subparsers.add_parser("read", help="Mark message as read")
     msg_read.add_argument("msg_id", help="Message ID")
-    
+
     # Inbox
     inbox_parser = subparsers.add_parser("inbox", help="Check inbox")
     inbox_parser.add_argument(
@@ -1616,7 +1625,7 @@ For more help: https://github.com/gutohuida/AgentWeave
         default="medium",
         help="Task priority",
     )
-    
+
     # update-template
     update_tmpl_parser = subparsers.add_parser(
         "update-template",
@@ -1792,11 +1801,11 @@ def main(args: Optional[List[str]] = None) -> int:
 
     parser = create_parser()
     parsed_args = parser.parse_args(args)
-    
+
     if not parsed_args.command:
         parser.print_help()
         return 0
-    
+
     # Route commands
     try:
         if parsed_args.command == "init":

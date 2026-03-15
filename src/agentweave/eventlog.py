@@ -4,11 +4,12 @@ All public functions swallow exceptions so event logging never crashes callers.
 Events are appended as JSON lines to .agentweave/logs/events.jsonl.
 """
 
+import contextlib
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .constants import LOGS_DIR, EVENTS_LOG_FILE, WATCHDOG_HEARTBEAT_FILE
+from .constants import EVENTS_LOG_FILE, LOGS_DIR, WATCHDOG_HEARTBEAT_FILE
 
 # Severity constants
 DEBUG = "debug"
@@ -49,12 +50,10 @@ def log_event(event: str, severity: str = INFO, **kwargs: Any) -> None:
 
 def write_heartbeat() -> None:
     """Write current timestamp to the watchdog heartbeat file."""
-    try:
+    with contextlib.suppress(Exception):
         WATCHDOG_HEARTBEAT_FILE.write_text(
             datetime.now().isoformat(timespec="seconds"), encoding="utf-8"
         )
-    except Exception:
-        pass
 
 
 def get_heartbeat_age() -> Optional[float]:
@@ -79,16 +78,14 @@ def get_events(
         return []
     events: List[Dict[str, Any]] = []
     try:
-        with open(EVENTS_LOG_FILE, "r", encoding="utf-8") as f:
+        with open(EVENTS_LOG_FILE, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     events.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
-    except IOError:
+    except OSError:
         return []
 
     if event_type:

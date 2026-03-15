@@ -10,10 +10,10 @@ TEMPLATES_DIR = Path(__file__).parent
 
 def get_template(name: str) -> str:
     """Get a template by name.
-    
+
     Args:
         name: Template name (e.g., 'task_delegation', 'review_request')
-        
+
     Returns:
         Template content as string
     """
@@ -25,7 +25,7 @@ def get_template(name: str) -> str:
 
 def list_templates() -> list:
     """List available templates.
-    
+
     Returns:
         List of template names
     """

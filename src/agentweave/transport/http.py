@@ -71,9 +71,9 @@ class HttpTransport(BaseTransport):
                 raw = resp.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"Hub API {exc.code}: {exc.read().decode(errors='replace')}")
+            raise RuntimeError(f"Hub API {exc.code}: {exc.read().decode(errors='replace')}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Hub connection error: {exc.reason}")
+            raise RuntimeError(f"Hub connection error: {exc.reason}") from exc
 
     # ------------------------------------------------------------------
     # BaseTransport implementation
@@ -96,7 +96,7 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/messages", body)
             return True
         except RuntimeError as exc:
-            from ..eventlog import log_event, ERROR
+            from ..eventlog import ERROR, log_event
             log_event("transport_error", severity=ERROR, method="send_message", error=str(exc))
             return False
 
@@ -108,7 +108,7 @@ class HttpTransport(BaseTransport):
                 return result
             return []
         except RuntimeError as exc:
-            from ..eventlog import log_event, WARN
+            from ..eventlog import WARN, log_event
             log_event("transport_error", severity=WARN, method="get_pending_messages", error=str(exc))
             return []
 
@@ -118,7 +118,7 @@ class HttpTransport(BaseTransport):
             self._request("PATCH", f"/messages/{message_id}/read")
             return True
         except RuntimeError as exc:
-            from ..eventlog import log_event, ERROR
+            from ..eventlog import ERROR, log_event
             log_event("transport_error", severity=ERROR, method="archive_message", error=str(exc))
             return False
 
@@ -128,7 +128,7 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/tasks", task_data)
             return True
         except RuntimeError as exc:
-            from ..eventlog import log_event, ERROR
+            from ..eventlog import ERROR, log_event
             log_event("transport_error", severity=ERROR, method="send_task", error=str(exc))
             return False
 
@@ -143,7 +143,7 @@ class HttpTransport(BaseTransport):
                 return result
             return []
         except RuntimeError as exc:
-            from ..eventlog import log_event, WARN
+            from ..eventlog import WARN, log_event
             log_event("transport_error", severity=WARN, method="get_active_tasks", error=str(exc))
             return []
 
@@ -159,7 +159,7 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/tasks/{task_id}")
         except RuntimeError as exc:
-            from ..eventlog import log_event, WARN
+            from ..eventlog import WARN, log_event
             log_event("transport_error", severity=WARN, method="get_task_by_id", error=str(exc))
             return None
 
@@ -169,7 +169,7 @@ class HttpTransport(BaseTransport):
             self._request("PATCH", f"/tasks/{task_id}", {"status": status})
             return True
         except RuntimeError as exc:
-            from ..eventlog import log_event, ERROR
+            from ..eventlog import ERROR, log_event
             log_event("transport_error", severity=ERROR, method="update_task_status", error=str(exc))
             return False
 
@@ -188,7 +188,7 @@ class HttpTransport(BaseTransport):
             )
             return result.get("id")
         except RuntimeError as exc:
-            from ..eventlog import log_event, ERROR
+            from ..eventlog import ERROR, log_event
             log_event("transport_error", severity=ERROR, method="ask_question", error=str(exc))
             return None
 
@@ -200,7 +200,7 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/questions/{question_id}")
         except RuntimeError as exc:
-            from ..eventlog import log_event, WARN
+            from ..eventlog import WARN, log_event
             log_event("transport_error", severity=WARN, method="get_answer", error=str(exc))
             return None
 
@@ -213,7 +213,7 @@ class HttpTransport(BaseTransport):
             self._request("POST", f"/agents/{agent}/heartbeat", body)
             return True
         except RuntimeError as exc:
-            from ..eventlog import log_event, WARN
+            from ..eventlog import WARN, log_event
             log_event("transport_error", severity=WARN, method="push_heartbeat", error=str(exc))
             return False
 
@@ -228,7 +228,7 @@ class HttpTransport(BaseTransport):
             self._request("POST", f"/agents/{agent}/output", body)
             return True
         except RuntimeError as exc:
-            from ..eventlog import log_event, WARN
+            from ..eventlog import WARN, log_event
             log_event("transport_error", severity=WARN, method="post_agent_output", error=str(exc))
             return False
 

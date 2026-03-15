@@ -43,8 +43,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from .base import BaseTransport
 from ..constants import GIT_SEEN_DIR
+from .base import BaseTransport
 
 
 def _iso_compact() -> str:
@@ -57,8 +57,7 @@ def _run_git(args: list, stdin_bytes: bytes = None) -> tuple:
     proc = subprocess.run(
         ["git"] + args,
         input=stdin_bytes,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     )
     stdout = proc.stdout.decode("utf-8", errors="replace") if proc.stdout else ""
     stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
@@ -139,7 +138,7 @@ class GitTransport(BaseTransport):
                     tree_entries + f"100644 blob {blob_sha}\t{filename}\n"
                 ).encode("utf-8")
             else:
-                mktree_input = f"100644 blob {blob_sha}\t{filename}\n".encode("utf-8")
+                mktree_input = f"100644 blob {blob_sha}\t{filename}\n".encode()
 
             rc, new_tree, _ = _run_git(["mktree"], stdin_bytes=mktree_input)
             if rc != 0:
@@ -229,10 +228,8 @@ class GitTransport(BaseTransport):
         """
         if recipient_field == agent:
             return True  # plain match, no cluster prefix
-        if recipient_field == f"{self.cluster}.{agent}" and self.cluster:
-            return True  # exact cluster.agent match
         # Accept plain agent name even when we have a cluster (backward compat)
-        return False
+        return bool(self.cluster) and recipient_field == f"{self.cluster}.{agent}"
 
     # ------------------------------------------------------------------
     # BaseTransport implementation
