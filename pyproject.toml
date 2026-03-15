@@ -7,7 +7,7 @@ name = "agentweave-ai"
 version = "0.5.0"
 description = "Multi-agent AI collaboration framework (Claude, Kimi, Gemini, Codex, and more)"
 readme = "README.md"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "gutohuida"},
 ]
