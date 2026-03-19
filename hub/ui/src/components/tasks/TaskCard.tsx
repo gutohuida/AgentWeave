@@ -8,10 +8,10 @@ interface TaskCardProps {
 
 export function TaskCard({ task }: TaskCardProps) {
   return (
-    <div className="glass-card rounded-xl p-3 space-y-2 cursor-default">
-      <p className="text-sm font-medium leading-tight text-white/90">{task.title}</p>
+    <div className="m3-card-elevated p-4 space-y-2.5 cursor-default">
+      <p className="m3-title-small" style={{ color: 'var(--foreground)' }}>{task.title}</p>
       {task.description && (
-        <p className="text-xs text-white/40 line-clamp-2">{task.description}</p>
+        <p className="m3-body-small line-clamp-2" style={{ color: 'var(--on-sv)' }}>{task.description}</p>
       )}
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant={statusVariant(task.status)}>{task.status}</Badge>
@@ -20,7 +20,7 @@ export function TaskCard({ task }: TaskCardProps) {
           <Badge variant="secondary">{task.assignee}</Badge>
         )}
       </div>
-      <p className="text-xs text-white/25">
+      <p className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
         {formatDistanceToNow(new Date(task.updated), { addSuffix: true })}
       </p>
     </div>

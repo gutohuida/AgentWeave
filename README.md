@@ -24,8 +24,8 @@ AgentWeave lets multiple AI agents work together on the same project through a s
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.5.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.1.0
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.6.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.2.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server
@@ -302,9 +302,12 @@ make hub-down       # stop
 | Git transport | ✅ Done (v0.2.0) | Cross-machine via orphan branch, zero infra |
 | N-agent support | ✅ Done (v0.3.0) | Multi-agent teams with ROLES.md and cluster naming |
 | Local MCP server | ✅ Done (v0.4.0) | Native tool integration, zero-relay with watchdog pinger |
-| HTTP transport | 🔄 In progress (v0.5.0) | CLI ↔ Hub via REST |
-| AgentWeave Hub | 🔄 Alpha (v0.1.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
-| Hub UI | 🔄 Alpha | React dashboard — tasks, messages, human questions |
+| HTTP transport | ✅ Done (v0.5.0) | CLI ↔ Hub via REST |
+| AgentWeave Hub | ✅ Done (v0.2.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
+| Hub UI | ✅ Done (v0.2.0) | React dashboard — tasks, messages, human questions, agent trigger |
+| Agent Trigger | ✅ Done (v0.6.0) | Trigger agents from Hub UI; watchdog executes on host (no CLIs in Docker) |
+| Per-agent context templates | ✅ Done (v0.6.0) | `claude_context.md`, `kimi_context.md`, `collab_protocol.md` |
+| Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
 ---
 

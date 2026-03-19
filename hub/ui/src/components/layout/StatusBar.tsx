@@ -1,39 +1,99 @@
-import { MessageSquare, CheckSquare, HelpCircle, Users } from 'lucide-react'
+import { Icon } from '@/components/common/Icon'
 import { useStatus } from '@/api/status'
+import { useConfigStore } from '@/store/configStore'
 
-export function StatusBar() {
+interface StatusBarProps {
+  onOpenSetup: () => void
+}
+
+export function StatusBar({ onOpenSetup }: StatusBarProps) {
   const { data } = useStatus()
+  const { mode, setMode } = useConfigStore()
 
   const pendingMsgs = data?.message_counts?.pending ?? 0
   const activeTasks = data ? Object.values(data.task_counts).reduce((a, b) => a + b, 0) : 0
-  const unanswered = data?.question_counts?.unanswered ?? 0
-  const agentCount = data?.agents_active?.length ?? 0
+  const unanswered  = data?.question_counts?.unanswered ?? 0
+  const agentCount  = data?.agents_active?.length ?? 0
+
+  function toggleMode() {
+    const next = mode === 'light' ? 'dark' : 'light'
+    setMode(next)
+    document.documentElement.dataset.mode = next
+  }
 
   return (
-    <div className="glass-bar flex items-center gap-4 py-1.5 px-4 text-xs font-mono shrink-0">
-      <span className="font-semibold text-white/30 uppercase tracking-widest text-[10px]">AgentWeave Hub</span>
-      <div className="flex items-center gap-1 text-white/40">
-        <MessageSquare className="h-3.5 w-3.5" />
-        <span><span className="text-white/80">{pendingMsgs}</span> pending msgs</span>
+    <div className="m3-top-bar flex items-center gap-3 px-4 shrink-0">
+      {/* Logo / title */}
+      <button
+        onClick={onOpenSetup}
+        className="m3-title-large shrink-0 transition-opacity hover:opacity-80"
+        style={{ color: 'var(--primary)' }}
+      >
+        AgentWeave
+      </button>
+
+      <div className="h-5 w-px shrink-0" style={{ background: 'var(--outline-variant)' }} />
+
+      {/* Status chips */}
+      <div className="flex items-center gap-2 flex-1 flex-wrap">
+        {/* Messages */}
+        <div
+          className="m3-chip m3-label-medium flex items-center gap-1.5"
+          style={{ background: 'var(--surface-highest)', color: 'var(--on-sv)' }}
+        >
+          <Icon name="chat" size={14} />
+          <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{pendingMsgs}</span>
+          <span>msgs</span>
+        </div>
+
+        {/* Tasks */}
+        <div
+          className="m3-chip m3-label-medium flex items-center gap-1.5"
+          style={{ background: 'var(--surface-highest)', color: 'var(--on-sv)' }}
+        >
+          <Icon name="task_alt" size={14} />
+          <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{activeTasks}</span>
+          <span>tasks</span>
+        </div>
+
+        {/* Questions */}
+        <div
+          className="m3-chip m3-label-medium flex items-center gap-1.5"
+          style={{
+            background: unanswered > 0 ? 'var(--error-cont)' : 'var(--surface-highest)',
+            color:      unanswered > 0 ? 'var(--on-error-cont)' : 'var(--on-sv)',
+          }}
+        >
+          <Icon name="help" size={14} />
+          <span style={{ fontWeight: 500 }}>{unanswered}</span>
+          <span>question{unanswered !== 1 ? 's' : ''}{unanswered > 0 ? '!' : ''}</span>
+        </div>
+
+        {/* Agents */}
+        <div
+          className="m3-chip m3-label-medium flex items-center gap-1.5"
+          style={{ background: 'var(--surface-highest)', color: 'var(--on-sv)' }}
+        >
+          <Icon name="smart_toy" size={14} />
+          <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{agentCount}</span>
+          <span>agent{agentCount !== 1 ? 's' : ''}</span>
+        </div>
+
+        {data?.project_name && (
+          <span className="m3-label-medium" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+            {data.project_name}
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-1 text-white/40">
-        <CheckSquare className="h-3.5 w-3.5" />
-        <span><span className="text-white/80">{activeTasks}</span> tasks</span>
-      </div>
-      <div className={`flex items-center gap-1 ${unanswered > 0 ? 'text-red-400 font-bold' : 'text-white/40'}`}>
-        <HelpCircle className="h-3.5 w-3.5" />
-        <span>
-          <span className={unanswered > 0 ? 'text-red-300' : 'text-white/80'}>{unanswered}</span>
-          {' '}question{unanswered !== 1 ? 's' : ''}{unanswered > 0 ? '!' : ''}
-        </span>
-      </div>
-      <div className="flex items-center gap-1 text-white/40">
-        <Users className="h-3.5 w-3.5" />
-        <span><span className="text-white/80">{agentCount}</span> agent{agentCount !== 1 ? 's' : ''}</span>
-      </div>
-      {data?.project_name && (
-        <span className="ml-auto text-white/25">{data.project_name}</span>
-      )}
+
+      {/* Mode toggle icon button */}
+      <button
+        onClick={toggleMode}
+        className="m3-icon-btn"
+        title={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+      >
+        <Icon name={mode === 'light' ? 'dark_mode' : 'light_mode'} size={20} />
+      </button>
     </div>
   )
 }

@@ -14,38 +14,30 @@ import { useSSE } from '@/hooks/useSSE'
 type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents'
 
 export default function App() {
-  const { isConfigured, theme } = useConfigStore()
+  const { isConfigured, theme, mode } = useConfigStore()
   const [setupOpen, setSetupOpen] = useState(false)
   const [page, setPage] = useState<Page>('messages')
 
-  // Sync theme to <html data-theme="..."> whenever it changes
+  // Sync theme + mode to <html data-theme="..." data-mode="...">
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-  }, [theme])
+    document.documentElement.dataset.mode  = mode
+  }, [theme, mode])
 
-  // Start SSE connection once configured
   useSSE()
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      {/* Animated orb background */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
-        <div className="orb orb-4" />
-      </div>
-
-      {/* Content layer */}
-      <div className="relative z-10 flex flex-col h-full">
-        <StatusBar />
-        <div className="flex flex-1 overflow-hidden gap-2 p-2 pt-1.5">
+      {/* Content layer — flat Material surface, no orbs */}
+      <div className="flex flex-col h-full">
+        <StatusBar onOpenSetup={() => setSetupOpen(true)} />
+        <div className="flex flex-1 overflow-hidden">
           <Sidebar
             activePage={page}
             onNavigate={setPage}
             onOpenSetup={() => setSetupOpen(true)}
           />
-          <main className="flex-1 overflow-hidden rounded-xl glass">
+          <main className="flex-1 overflow-hidden m3-surface border-l-0" style={{ borderRadius: 0 }}>
             {page === 'messages'  && <div className="h-full overflow-auto"><MessagesFeed /></div>}
             {page === 'tasks'     && <div className="h-full overflow-auto"><TasksBoard /></div>}
             {page === 'questions' && <div className="h-full overflow-auto"><QuestionsPanel /></div>}

@@ -23,13 +23,14 @@ export function AnswerForm({ questionId, onAnswered }: AnswerFormProps) {
         onChange={(e) => setAnswer(e.target.value)}
         placeholder="Type your answer…"
         rows={3}
-        className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+        className="m3-input w-full resize-none m3-body-medium"
         disabled={isPending}
       />
       <button
         type="submit"
         disabled={isPending || !answer.trim()}
-        className="rounded-md bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="m3-btn-tonal disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ height: 36, padding: '0 20px', fontSize: 13 }}
       >
         {isPending ? 'Submitting…' : 'Submit Answer'}
       </button>

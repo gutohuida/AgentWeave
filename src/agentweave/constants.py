@@ -120,6 +120,14 @@ DEFAULT_AGENT_ROLES = {
     "qwen": "backend_dev",
 }
 
+# Mapping from agent name to the root-level context file that agent auto-reads.
+# claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.
+AGENT_CONTEXT_FILES: dict = {
+    "claude": "CLAUDE.md",
+    "gemini": "GEMINI.md",
+}
+AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
+
 # Valid session roles
 VALID_ROLES = ["principal", "delegate", "reviewer", "collaborator"]
 

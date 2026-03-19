@@ -1,8 +1,6 @@
-# AgentWeave Collaboration Guide
+# AgentWeave Collaboration Protocol
 
 > **Purpose:** How to collaborate with other AI agents in this project.
->
-> **Prerequisites:** Read `AI_CONTEXT.md` in the project root first for project details (stack, architecture, commands).
 >
 > **Update frequency:** Per session, or when collaboration patterns change.
 
@@ -95,16 +93,6 @@ agentweave msg send --to {principal} --subject "Done: <title>" --message "..."
 
 ---
 
-## On Every Session Start — Read These Files
-
-| Order | File | Purpose |
-|-------|------|---------|
-| 1 | `AI_CONTEXT.md` (project root) | Project overview, tech stack, commands, code standards |
-| 2 | `.agentweave/ROLES.md` | Role assignments (which agent owns which domain) |
-| 3 | `.agentweave/shared/context.md` | Current project state: what's being worked on, recent decisions |
-
----
-
 ## Multi-Person Collaboration (Git Transport with Clusters)
 
 When multiple developers each run their own AI agents on a shared git remote:
@@ -146,9 +134,10 @@ Either agent can ask another to invoke one of their specialized sub-agents:
 ```
 .agentweave/
   session.json          Session config (id, mode, principal, agents)
-  AGENTS.md             This file — collaboration guide
+  protocol.md           This file — collaboration protocol
   ROLES.md              Agent role assignments (edit freely)
   README.md             Quick command reference
+  ai_context.md         Project DNA source — edit this, then run update-template
   watchdog.log          Ping activity log (gitignored, machine-local)
   shared/
     context.md          Current project state — read this every session

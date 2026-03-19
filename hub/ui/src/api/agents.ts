@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE, SSEEvent } from '@/hooks/useSSE'
@@ -49,47 +49,124 @@ export function useAgentTimeline(name: string | null) {
   })
 }
 
+// Global cache for agent output lines that persists across component mounts
+const linesCache = new Map<string, AgentOutputLine[]>()
+
 export function useAgentOutput(name: string | null) {
-  const { isConfigured } = useConfigStore()
-  const [lines, setLines] = useState<AgentOutputLine[]>([])
+  const { isConfigured, apiKey } = useConfigStore()
+  const queryClient = useQueryClient()
   const nameRef = useRef(name)
-  const seededRef = useRef(false)
+  const isInitialMount = useRef(true)
   nameRef.current = name
 
-  // Reset when agent changes
-  useEffect(() => {
-    setLines([])
-    seededRef.current = false
-  }, [name])
+  const cacheKey = name || 'null'
 
-  // Seed from REST on mount / name change (once — staleTime:Infinity prevents
-  // automatic refetches from clobbering live SSE-appended lines)
-  const { data: initial } = useQuery<AgentOutputLine[]>({
-    queryKey: ['agents', name, 'output'],
+  // Seed from REST on mount / agent change - using React Query for caching
+  const { data: initialData, isLoading: isLoadingInitial } = useQuery<AgentOutputLine[]>({
+    queryKey: ['agents', name, 'output', 'seed'],
     queryFn: () => getJson<AgentOutputLine[]>(`/api/v1/agents/${name}/output?limit=200`),
     enabled: isConfigured && !!name,
-    staleTime: Infinity,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   })
 
+  // Sync initial data to cache on first mount or agent change
   useEffect(() => {
-    if (!initial || seededRef.current) return
-    seededRef.current = true
-    setLines(initial)
-  }, [initial])
+    if (!name || !initialData) return
 
-  // Append new lines from SSE — stable ref avoids listener churn
+    // On initial mount or agent change, merge server data with cache
+    // Server data takes precedence for deduplication
+    if (isInitialMount.current) {
+      const existingIds = new Set((linesCache.get(cacheKey) || []).map(l => l.id))
+      const newFromServer = initialData.filter(l => !existingIds.has(l.id))
+      
+      if (newFromServer.length > 0 || !linesCache.has(cacheKey)) {
+        const merged = [...(linesCache.get(cacheKey) || []), ...newFromServer]
+        // Sort by timestamp to ensure correct order
+        merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+        linesCache.set(cacheKey, merged)
+        // Trigger re-render by invalidating the custom query key
+        queryClient.invalidateQueries({ queryKey: ['agents', name, 'lines'] })
+      }
+      isInitialMount.current = false
+    }
+  }, [name, cacheKey, initialData, queryClient])
+
+  // Reset isInitialMount when agent changes
+  useEffect(() => {
+    isInitialMount.current = true
+  }, [name])
+
+  // Get current lines from cache (using a dummy query to trigger re-renders)
+  const { data: lines = [] } = useQuery<AgentOutputLine[]>({
+    queryKey: ['agents', name, 'lines'],
+    queryFn: () => linesCache.get(cacheKey) || [],
+    enabled: !!name,
+    staleTime: Infinity,
+    initialData: () => linesCache.get(cacheKey) || [],
+  })
+
+  const isLoading = isLoadingInitial && lines.length === 0
+
+  // Poll for new lines every 2 seconds (fallback when SSE misses events)
+  useEffect(() => {
+    if (!isConfigured || !name) return
+
+    const poll = async () => {
+      try {
+        const currentLines = linesCache.get(cacheKey) || []
+        const lastTimestamp = currentLines[currentLines.length - 1]?.timestamp
+        const since = lastTimestamp
+          ? `&since=${encodeURIComponent(lastTimestamp)}`
+          : ''
+        const url = `/api/v1/agents/${name}/output?limit=50${since}`
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        })
+        if (response.ok) {
+          const newLines: AgentOutputLine[] = await response.json()
+          if (newLines.length > 0) {
+            const existingIds = new Set((linesCache.get(cacheKey) || []).map(l => l.id))
+            const uniqueNew = newLines.filter(l => !existingIds.has(l.id))
+            if (uniqueNew.length > 0) {
+              const merged = [...(linesCache.get(cacheKey) || []), ...uniqueNew]
+              linesCache.set(cacheKey, merged)
+              queryClient.invalidateQueries({ queryKey: ['agents', name, 'lines'] })
+            }
+          }
+        }
+      } catch {
+        // Silently fail polling - SSE is the primary source
+      }
+    }
+
+    // Poll immediately on mount
+    poll()
+    const interval = setInterval(poll, 2000)
+    return () => clearInterval(interval)
+  }, [isConfigured, name, cacheKey, apiKey, queryClient])
+
+  // Append new lines from SSE
   const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
   handleSSE.current = (event: SSEEvent) => {
     if (event.type !== 'agent_output') return
     const d = event.data as { agent: string; content: string; session_id?: string; timestamp: string }
     if (d.agent !== nameRef.current) return
-    setLines((prev) => [
-      ...prev,
-      { id: `live-${Date.now()}`, agent: d.agent, session_id: d.session_id, content: d.content, timestamp: d.timestamp },
-    ])
+    
+    const agentKey = d.agent
+    const newLine: AgentOutputLine = {
+      id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      agent: d.agent,
+      session_id: d.session_id,
+      content: d.content,
+      timestamp: d.timestamp
+    }
+    
+    const current = linesCache.get(agentKey) || []
+    linesCache.set(agentKey, [...current, newLine])
+    queryClient.invalidateQueries({ queryKey: ['agents', d.agent, 'lines'] })
   }
 
   useSSE((event) => handleSSE.current(event))
 
-  return { lines }
+  return { lines, isLoading }
 }

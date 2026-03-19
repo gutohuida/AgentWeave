@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-_MESSAGE_TYPES = ["message", "delegation", "review", "discussion"]
+_MESSAGE_TYPES = ["message", "delegation", "review", "discussion", "direct_trigger"]
 
 
 class MessageCreate(BaseModel):
@@ -25,8 +25,10 @@ class MessageCreate(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_type(cls, v: str) -> str:
-        if v not in _MESSAGE_TYPES:
-            raise ValueError(f"type must be one of {_MESSAGE_TYPES}")
+        # Reference the module-level variable dynamically
+        import hub.schemas.messages as _mod
+        if v not in _mod._MESSAGE_TYPES:
+            raise ValueError(f"type must be one of {_mod._MESSAGE_TYPES}")
         return v
 
 

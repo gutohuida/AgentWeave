@@ -1,5 +1,4 @@
-import { MessageSquare, CheckSquare, HelpCircle, Activity, Settings, Terminal, Bot } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Icon } from '@/components/common/Icon'
 import { useQuestions } from '@/api/questions'
 import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
@@ -12,81 +11,104 @@ interface SidebarProps {
   onOpenSetup: () => void
 }
 
+const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
+  { id: 'messages',  label: 'Messages',  icon: 'chat' },
+  { id: 'tasks',     label: 'Tasks',     icon: 'task_alt' },
+  { id: 'questions', label: 'Questions', icon: 'help' },
+  { id: 'activity',  label: 'Activity',  icon: 'monitoring' },
+  { id: 'logs',      label: 'Logs',      icon: 'terminal' },
+  { id: 'agents',    label: 'Agents',    icon: 'smart_toy' },
+]
+
 export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
   const { data: questions } = useQuestions(false)
-  const { data: messages } = useMessages()
-  const { data: agents } = useAgents()
+  const { data: messages }  = useMessages()
+  const { data: agents }    = useAgents()
 
-  const unanswered = questions?.length ?? 0
-  const unread = messages?.filter((m) => !m.read).length ?? 0
+  const unanswered   = questions?.length ?? 0
+  const unread       = messages?.filter((m) => !m.read).length ?? 0
   const activeAgents = agents?.filter((a) => a.status === 'active').length ?? 0
 
-  const navItems: { id: Page; label: string; icon: React.ElementType; badge?: number; danger?: boolean }[] = [
-    { id: 'messages',  label: 'Messages',  icon: MessageSquare, badge: unread },
-    { id: 'tasks',     label: 'Tasks',     icon: CheckSquare },
-    { id: 'questions', label: 'Questions', icon: HelpCircle,    badge: unanswered, danger: unanswered > 0 },
-    { id: 'activity',  label: 'Activity',  icon: Activity },
-    { id: 'logs',      label: 'Logs',      icon: Terminal },
-    { id: 'agents',    label: 'Agents',    icon: Bot,           badge: activeAgents },
-  ]
+  function getBadge(id: Page): { count: number; danger: boolean } | null {
+    if (id === 'messages'  && unread > 0)      return { count: unread, danger: false }
+    if (id === 'questions' && unanswered > 0)  return { count: unanswered, danger: true }
+    if (id === 'agents'    && activeAgents > 0) return { count: activeAgents, danger: false }
+    return null
+  }
 
   return (
-    <div className="glass flex h-full w-48 flex-col rounded-xl shrink-0">
+    <div className="m3-nav-rail flex h-full w-20 flex-col items-center shrink-0 py-3 gap-1">
       {/* Logo */}
-      <div className="px-4 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black text-white"
-               style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.6))' }}>
-            AW
-          </div>
-          <div>
-            <div className="font-semibold text-sm text-white">AgentWeave</div>
-            <div className="text-[10px] text-white/30">Hub</div>
-          </div>
-        </div>
+      <div
+        className="w-12 h-12 rounded-[18px] flex items-center justify-center text-[10px] font-black mb-3 shrink-0"
+        style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+      >
+        AW
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-0.5 p-2.5">
-        {navItems.map(({ id, label, icon: Icon, badge, danger }) => (
-          <button
-            key={id}
-            onClick={() => onNavigate(id)}
-            className={cn(
-              'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
-              activePage === id
-                ? 'border-l-2 border-primary bg-white/[0.07] text-white font-medium'
-                : 'text-white/50 hover:text-white/80 hover:bg-white/[0.05]'
-            )}
-          >
-            <span className="flex items-center gap-2">
-              <Icon className="h-4 w-4" />
-              {label}
-            </span>
-            {badge !== undefined && badge > 0 && (
-              <span className={cn(
-                'rounded-full px-1.5 py-0.5 text-xs font-bold',
-                danger
-                  ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/20'
-                  : 'bg-primary/15 text-primary ring-1 ring-primary/20'
-              )}>
-                {badge}
+      {/* Nav items */}
+      <nav className="flex flex-col items-center gap-0.5 flex-1 w-full px-2">
+        {NAV_ITEMS.map(({ id, label, icon }) => {
+          const active = activePage === id
+          const badge  = getBadge(id)
+          return (
+            <button
+              key={id}
+              onClick={() => onNavigate(id)}
+              title={label}
+              className="relative flex flex-col items-center gap-1 w-full py-1.5 px-1 text-center transition-colors"
+              style={{ color: active ? 'var(--on-p-cont)' : 'var(--on-sv)' }}
+            >
+              {/* Pill indicator */}
+              <div className="relative flex items-center justify-center w-14 h-8">
+                {active && (
+                  <div
+                    className="absolute inset-0 rounded-full"
+                    style={{ background: 'var(--p-cont)' }}
+                  />
+                )}
+                <Icon
+                  name={icon}
+                  size={22}
+                  fill={active ? 1 : 0}
+                  className="relative z-10"
+                  style={{ color: active ? 'var(--on-p-cont)' : 'var(--on-sv)' } as React.CSSProperties}
+                />
+                {badge && (
+                  <span
+                    className="absolute top-0 right-0 min-w-[16px] h-4 rounded-full px-1 text-[9px] font-bold flex items-center justify-center leading-none z-20"
+                    style={{
+                      background: badge.danger ? 'var(--destructive)' : 'var(--primary)',
+                      color:      badge.danger ? 'var(--destructive-fg)' : 'var(--primary-foreground)',
+                    }}
+                  >
+                    {badge.count}
+                  </span>
+                )}
+              </div>
+              <span
+                className="m3-label-small"
+                style={{ color: active ? 'var(--on-p-cont)' : 'var(--on-sv)', opacity: active ? 1 : 0.72 }}
+              >
+                {label}
               </span>
-            )}
-          </button>
-        ))}
+            </button>
+          )
+        })}
       </nav>
 
       {/* Setup */}
-      <div className="p-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <button
-          onClick={onOpenSetup}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/40 hover:bg-white/[0.05] hover:text-white/70 transition-colors"
-        >
-          <Settings className="h-4 w-4" />
-          Setup
-        </button>
-      </div>
+      <button
+        onClick={onOpenSetup}
+        title="Setup"
+        className="flex flex-col items-center gap-1 w-full py-1.5 px-1"
+        style={{ color: 'var(--on-sv)' }}
+      >
+        <div className="flex items-center justify-center w-14 h-8">
+          <Icon name="settings" size={22} />
+        </div>
+        <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.72 }}>Setup</span>
+      </button>
     </div>
   )
 }

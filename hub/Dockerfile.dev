@@ -1,0 +1,24 @@
+# Development Dockerfile - uses local code directly without pip install
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies first
+RUN pip install --no-cache-dir fastapi uvicorn sqlalchemy pydantic alembic aiohttp aiosqlite
+
+# Copy hub code
+COPY hub/ ./hub/
+COPY alembic.ini ./
+COPY pyproject.toml ./
+
+# Do a proper non-editable install
+RUN pip install --no-cache-dir --no-build-isolation .
+
+# Create data directory for SQLite
+RUN mkdir -p /app/data
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${AW_PORT:-8000}/health')"
+
+# Run migrations then start server
+CMD ["sh", "-c", "alembic upgrade head && uvicorn hub.main:app --host 0.0.0.0 --port ${AW_PORT:-8000}"]

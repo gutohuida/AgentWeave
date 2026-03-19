@@ -1,10 +1,13 @@
 """Agent monitor endpoints."""
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,117 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
 
+# In-memory store for manually added agents (per project)
+# In production, this should be in the database
+_manually_added_agents: dict[str, set[str]] = {}
+
+
+def _get_session_agents(project_id: str) -> Optional[set[str]]:
+    """Try to read configured agents from .agentweave/session.json.
+    
+    Returns None if session file doesn't exist.
+    """
+    # Try common locations for session.json
+    possible_paths = [
+        Path(".agentweave") / "session.json",
+        Path("..") / ".agentweave" / "session.json",
+        Path.home() / ".agentweave" / "session.json",
+    ]
+    
+    for path in possible_paths:
+        if path.exists():
+            try:
+                data = json.loads(path.read_text())
+                agents = data.get("agents", {})
+                if agents:
+                    return set(agents.keys())
+            except (json.JSONDecodeError, IOError):
+                continue
+    
+    return None
+
+
+class AddAgentRequest(BaseModel):
+    agent_name: str
+
+
+@router.post("/configure", status_code=status.HTTP_201_CREATED)
+async def add_configured_agent(
+    body: AddAgentRequest,
+    project: Tuple[str, str] = Depends(get_project),
+):
+    """Manually add an agent to the configured list for this project."""
+    project_id, _ = project
+    agent_name = body.agent_name.strip().lower()
+    
+    if not agent_name or len(agent_name) > 32:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid agent name"
+        )
+    
+    if project_id not in _manually_added_agents:
+        _manually_added_agents[project_id] = set()
+    
+    _manually_added_agents[project_id].add(agent_name)
+    
+    await sse_manager.broadcast(
+        project_id,
+        "agent_configured",
+        {"agent": agent_name, "action": "added"}
+    )
+    
+    return {"success": True, "agent": agent_name}
+
+
+@router.delete("/configure/{agent_name}", status_code=status.HTTP_200_OK)
+async def remove_configured_agent(
+    agent_name: str,
+    project: Tuple[str, str] = Depends(get_project),
+):
+    """Remove a manually added agent from the configured list."""
+    project_id, _ = project
+    agent_name = agent_name.strip().lower()
+    
+    if project_id in _manually_added_agents:
+        _manually_added_agents[project_id].discard(agent_name)
+    
+    await sse_manager.broadcast(
+        project_id,
+        "agent_configured",
+        {"agent": agent_name, "action": "removed"}
+    )
+    
+    return {"success": True, "agent": agent_name}
+
+
+@router.get("/configured")
+async def get_configured_agents(
+    project: Tuple[str, str] = Depends(get_project),
+):
+    """Get the list of configured agents for this project.
+    
+    Returns agents from session.json if it exists, otherwise manually added agents.
+    """
+    project_id, _ = project
+    
+    # Try to get from session file first
+    session_agents = _get_session_agents(project_id)
+    if session_agents is not None:
+        return {
+            "source": "session.json",
+            "agents": sorted(session_agents),
+            "can_modify": False
+        }
+    
+    # Fall back to manually added agents
+    manual_agents = _manually_added_agents.get(project_id, set())
+    return {
+        "source": "manual",
+        "agents": sorted(manual_agents),
+        "can_modify": True
+    }
+
 
 @router.get("", response_model=List[AgentSummary])
 async def list_agents(
@@ -34,6 +148,7 @@ async def list_agents(
     project_id, _ = project
     cutoff = datetime.now(timezone.utc) - _24H
 
+    # Active agents (last 24h) - for status/heartbeat info
     senders_q = select(Message.sender).distinct().where(
         Message.project_id == project_id, Message.timestamp >= cutoff
     )
@@ -54,26 +169,59 @@ async def list_agents(
         AgentOutput.timestamp >= cutoff,
     )
 
-    senders_res, recipients_res, assignees_res, hb_agents_res, out_agents_res = await asyncio.gather(
+    # ALL agents ever seen (no time cutoff) - to show configured agents
+    all_senders_q = select(Message.sender).distinct().where(
+        Message.project_id == project_id
+    )
+    all_recipients_q = select(Message.recipient).distinct().where(
+        Message.project_id == project_id
+    )
+    all_assignees_q = select(Task.assignee).distinct().where(
+        Task.project_id == project_id,
+        Task.assignee.isnot(None),
+    )
+
+    senders_res, recipients_res, assignees_res, hb_agents_res, out_agents_res, \
+        all_senders_res, all_recipients_res, all_assignees_res = await asyncio.gather(
         session.execute(senders_q),
         session.execute(recipients_q),
         session.execute(assignees_q),
         session.execute(heartbeat_agents_q),
         session.execute(output_agents_q),
+        # All-time queries
+        session.execute(all_senders_q),
+        session.execute(all_recipients_q),
+        session.execute(all_assignees_q),
     )
 
-    agents = set()
+    # Active agents (for status detection)
+    active_agents = set()
     for (name,) in senders_res:
-        agents.add(name)
+        active_agents.add(name)
     for (name,) in recipients_res:
-        agents.add(name)
+        active_agents.add(name)
     for (name,) in assignees_res:
         if name:
-            agents.add(name)
+            active_agents.add(name)
     for (name,) in hb_agents_res:
-        agents.add(name)
+        active_agents.add(name)
     for (name,) in out_agents_res:
-        agents.add(name)
+        active_agents.add(name)
+
+    # Get configured agents from session.json or manual configuration
+    configured_agents = _get_session_agents(project_id)
+    if configured_agents is not None:
+        # Use agents from session.json
+        agents = configured_agents
+    else:
+        # Use manually added agents, or fall back to active agents only
+        agents = _manually_added_agents.get(project_id, set())
+        if not agents:
+            # No configuration yet - only show agents that have been active
+            agents = active_agents.copy()
+    
+    # Always ensure active agents are included even if not in config
+    agents.update(active_agents)
 
     summaries = []
     for agent_name in sorted(agents):

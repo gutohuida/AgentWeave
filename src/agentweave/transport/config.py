@@ -23,12 +23,19 @@ def _find_transport_config() -> Optional[dict]:
         return config
 
     # Walk up the directory tree — handles MCP server CWD != project dir
-    current = Path.cwd()
-    for directory in current.parents:
-        candidate = directory / ".agentweave" / "transport.json"
-        config = load_json(candidate)
-        if config:
-            return config
+    try:
+        current = Path.cwd()
+    except (OSError, FileNotFoundError):
+        # CWD may have been deleted (e.g., temp dir cleaned up)
+        # Fall back to looking in common locations
+        current = None
+    
+    if current:
+        for directory in current.parents:
+            candidate = directory / ".agentweave" / "transport.json"
+            config = load_json(candidate)
+            if config:
+                return config
 
     return None
 

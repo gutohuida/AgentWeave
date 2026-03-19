@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .constants import AGENTS_DIR, MESSAGES_PENDING_DIR, TASKS_ACTIVE_DIR
+from .eventlog import WARN, log_event
 from .utils import load_json
 
 
@@ -455,8 +456,9 @@ def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -
         cmd += ["-p", prompt]
         return cmd
     # Claude and other CLIs — stream-json gives real-time JSONL lines with thinking,
-    # assistant messages, tool calls, and session_id for resumption
-    cmd = [agent, "--output-format", "stream-json"]
+    # assistant messages, tool calls, and session_id for resumption.
+    # --verbose is required when using --output-format with --print (-p).
+    cmd = [agent, "--output-format", "stream-json", "--verbose"]
     if session_id:
         cmd += ["--resume", session_id]
     cmd += ["-p", prompt]
@@ -508,7 +510,8 @@ def _parse_claude_stream_line(line: str) -> list:
 
     if msg_type == "assistant":
         message = data.get("message", {})
-        content = message.get("content", [])
+        # Some CLI versions nest content under "message", others put it at the top level
+        content = message.get("content", data.get("content", []))
         if isinstance(content, str):
             return [content] if content.strip() else []
         results = []
@@ -541,6 +544,9 @@ def _parse_claude_stream_line(line: str) -> list:
 
     if msg_type == "tool_result":
         content = data.get("content", [])
+        if isinstance(content, str):
+            stripped = content.strip()
+            return [f"  → {stripped[:500]}"] if stripped else []
         if isinstance(content, list):
             texts = []
             for block in content:
@@ -592,7 +598,7 @@ def _run_agent_subprocess(
         if kimi_dir.exists():
             sessions_before = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
 
-    # Send "running" heartbeat
+    # Send "running" heartbeat + diagnostic start marker
     if is_http:
         try:
             transport.push_heartbeat(agent, status="running", message=f"Responding to: {subject}")
@@ -600,6 +606,10 @@ def _run_agent_subprocess(
             from .eventlog import WARN, log_event
 
             log_event("watchdog_heartbeat_failed", severity=WARN, agent=agent, error=str(exc))
+        try:
+            transport.post_agent_output(agent, f"[watchdog] 🚀 Starting {agent}…", session_id=None)
+        except Exception as exc:
+            print(f"[ERROR] Could not post start marker to Hub: {exc}", file=sys.stderr)
 
     session_id: Optional[str] = None
     # Mutable container so the stderr thread can read the latest session_id
@@ -620,8 +630,6 @@ def _run_agent_subprocess(
                     try:
                         transport.post_agent_output(agent, msg, session_id=session_id_ref[0])
                     except Exception as exc:
-                        from .eventlog import WARN, log_event
-
                         log_event(
                             "watchdog_output_post_failed",
                             severity=WARN,
@@ -634,9 +642,35 @@ def _run_agent_subprocess(
                 else:
                     print(f"[{agent}:err] {err_line}", file=sys.stderr)
         except Exception as exc:
-            from .eventlog import WARN, log_event
-
             log_event("watchdog_stderr_drain_failed", severity=WARN, agent=agent, error=str(exc))
+
+    def _detect_kimi_session() -> None:
+        """Background thread: poll for new Kimi session shortly after start."""
+        nonlocal session_id, session_id_ref
+        if agent != "kimi":
+            return
+        kimi_dir = Path.home() / ".kimi" / "sessions"
+        if not kimi_dir.exists():
+            log_event("watchdog_kimi_no_sessions_dir", severity=WARN)
+            return
+        # Poll for up to 5 seconds to find new session
+        for i in range(50):
+            if session_id is not None:
+                log_event("watchdog_kimi_session_already_set", session_id=session_id)
+                return
+            time.sleep(0.1)
+            try:
+                sessions_now = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+                new_sessions = sessions_now - sessions_before
+                if new_sessions:
+                    found_session = next(iter(new_sessions))
+                    session_id = found_session
+                    session_id_ref[0] = found_session
+                    log_event("watchdog_kimi_session_found", session_id=found_session, attempts=i)
+                    return
+            except Exception as e:
+                log_event("watchdog_kimi_session_error", severity=WARN, error=str(e))
+        log_event("watchdog_kimi_session_not_found", severity=WARN, after_attempts=50)
 
     def _run_cmd(run_cmd: list, run_session_id: Optional[str]) -> int:
         """Run agent command, stream output. Returns process returncode."""
@@ -653,6 +687,11 @@ def _run_agent_subprocess(
         stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
         stderr_thread.start()
 
+        # Start Kimi session detection in background (for real-time session_id)
+        if agent == "kimi":
+            threading.Thread(target=_detect_kimi_session, daemon=True).start()
+
+        output_line_count = 0
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
             # Try to extract session_id from JSONL (always attempt for Claude)
@@ -669,23 +708,43 @@ def _run_agent_subprocess(
             # Stream to Hub or local stdout
             if is_http:
                 for readable in readable_lines:
+                    output_line_count += 1
                     try:
-                        transport.post_agent_output(agent, readable, session_id=session_id)
+                        # Use session_id_ref[0] to get latest session (updated by detection thread for Kimi)
+                        ok = transport.post_agent_output(agent, readable, session_id=session_id_ref[0])
+                        if not ok:
+                            print(
+                                f"[WARN] post_agent_output returned False for {agent}",
+                                file=sys.stderr,
+                            )
                     except Exception as exc:
-                        from .eventlog import WARN, log_event
-
                         log_event(
                             "watchdog_output_post_failed",
                             severity=WARN,
                             agent=agent,
                             error=str(exc),
                         )
+                        print(
+                            f"[ERROR] post_agent_output failed for {agent}: {exc}",
+                            file=sys.stderr,
+                        )
             else:
                 for readable in readable_lines:
+                    output_line_count += 1
                     print(f"[{agent}] {readable}")
 
         proc.wait()
         stderr_thread.join(timeout=5)
+
+        # Post a completion summary so we can confirm the pipeline is alive
+        summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
+        print(summary, file=sys.stderr)
+        if is_http:
+            with contextlib.suppress(Exception):
+                transport.post_agent_output(
+                    agent, summary, session_id=session_id_ref[0]
+                )
+
         return proc.returncode or 0
 
     try:
@@ -734,17 +793,25 @@ def _run_agent_subprocess(
         log_event("watchdog_subprocess_error", severity=ERROR, agent=agent, error=str(exc))
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
-    # Extract kimi session ID after process exits
-    if agent == "kimi":
+    # Extract kimi session ID after process exits (fallback if _detect_kimi_session missed it)
+    if agent == "kimi" and session_id is None:
         kimi_dir = Path.home() / ".kimi" / "sessions"
         if kimi_dir.exists():
             sessions_after = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
             session_id = _extract_kimi_session_id(sessions_before, sessions_after)
+            if session_id:
+                session_id_ref[0] = session_id
 
     # Persist session ID for next run
     if session_id:
         with contextlib.suppress(Exception):
             _save_agent_session(agent, session_id)
+        # For Kimi, post a synthetic output line so the Hub/UI learns the session ID.
+        # All real output lines were posted without session_id (detected post-exit),
+        # so without this the UI would never see the session ID chip.
+        if agent == "kimi" and is_http:
+            with contextlib.suppress(Exception):
+                transport.post_agent_output(agent, f"[session: {session_id}]", session_id=session_id)
 
     # Send "idle" heartbeat
     if is_http:
@@ -792,6 +859,10 @@ def _make_ping_callback(
             return
         recipient = data.get("to", "")
         if recipient not in agent_set:
+            return
+        # Direct trigger messages (from Hub UI) are handled by _make_direct_trigger_callback
+        # which also uses get_inbox flow.  Skip here to avoid launching a second process.
+        if data.get("from", "") == "user":
             return
         msg_id = data.get("id", "")
         if msg_id in seen:
@@ -841,6 +912,88 @@ def _make_ping_callback(
     return callback
 
 
+def _make_direct_trigger_callback(
+    transport: Any = None,
+) -> Callable:
+    """Return a callback that polls for and executes direct trigger messages from Hub UI.
+    
+    These are messages created by the Hub UI's "Send Message" feature that need
+    to be executed on the host machine (where the CLIs are installed).
+    """
+    is_http = transport is not None and transport.get_transport_type() == "http"
+    seen: Set[str] = set()
+    
+    if not is_http:
+        # Direct triggers only work with HTTP transport (Hub)
+        return lambda event_type, data: None
+    
+    def callback(event_type: str, data: Dict[str, Any]) -> None:
+        if event_type != "new_message":
+            return
+        
+        # Check for direct trigger messages (from user via Hub UI)
+        sender = data.get("from", "")
+        subject = data.get("subject", "")
+        if sender != "user" or "Direct message from Hub" not in subject:
+            return
+        
+        recipient = data.get("to", "")
+        msg_id = data.get("id", "")
+        
+        if msg_id in seen:
+            return
+        seen.add(msg_id)
+        
+        # Skip if CLI is not available
+        if not _check_cli_available(recipient):
+            log_event(
+                "direct_trigger_skipped",
+                agent=recipient,
+                msg_id=msg_id,
+                reason="CLI not found in PATH",
+            )
+            return
+        
+        # Extract optional session ID from content tag, then discard raw content.
+        # We do NOT pass raw content directly as the prompt — agents need to go through
+        # their normal get_inbox flow so that output capture (MCP tool events, stream-json
+        # events) works correctly.  The message stays unread in the DB so the agent can
+        # retrieve it via get_inbox.  The seen-set above prevents re-triggering within
+        # this watchdog session.
+        content = data.get("content", "")
+        session_id = None
+        if "[Session:" in content:
+            import re as _re
+            match = _re.search(r'\[Session:\s*([^\]]+)\]', content)
+            if match:
+                session_id = match.group(1).strip()
+        if session_id is None:
+            session_id = _load_agent_session(recipient)
+
+        prompt = (
+            f"You have a new AgentWeave message from user. "
+            f"Call get_inbox('{recipient}') to retrieve it and respond."
+        )
+        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
+
+        log_event("direct_trigger_executing", agent=recipient, msg_id=msg_id, session_id=session_id)
+        print(f"[TRIGGER] Executing direct trigger for {recipient}")
+        print(f"[TRIGGER] Command: {' '.join(cmd)}")
+        if session_id:
+            print(f"[TRIGGER] Resuming session: {session_id}")
+
+        # Execute in background thread.
+        # Message is intentionally left unread so the agent can read it via get_inbox.
+        t = threading.Thread(
+            target=_run_agent_subprocess,
+            args=(recipient, cmd, "Direct trigger from Hub", transport, is_http),
+            daemon=True,
+        )
+        t.start()
+    
+    return callback
+
+
 def main() -> None:
     """CLI entry point for watchdog."""
     import argparse
@@ -882,6 +1035,8 @@ def main() -> None:
         agent=args.agent,
     )
 
+    callbacks = []
+    
     if args.auto_ping:
         if args.agent:
             agents_to_ping = [args.agent]
@@ -899,14 +1054,26 @@ def main() -> None:
                 sys.exit(1)
             agents_to_ping = session.agent_names
 
-        watchdog.callback = _make_ping_callback(
+        callbacks.append(_make_ping_callback(
             agents_to_ping,
             pinged_at=watchdog.pinged_at,
             transport=watchdog.transport,
-        )
+        ))
         print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
         if args.retry_after:
             print(f"[PING] Retry after: {int(args.retry_after)}s")
+    
+    # Always enable direct trigger callback for HTTP transport
+    # This allows Hub UI "Send Message" to work
+    callbacks.append(_make_direct_trigger_callback(transport=watchdog.transport))
+    print("[TRIGGER] Direct trigger handler enabled (for Hub UI messages)")
+
+    # Combine all callbacks into one
+    if callbacks:
+        def combined_callback(event_type: str, data: Dict[str, Any]) -> None:
+            for cb in callbacks:
+                cb(event_type, data)
+        watchdog.callback = combined_callback
 
     watchdog.start()
 

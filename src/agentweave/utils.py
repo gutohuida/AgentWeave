@@ -30,6 +30,9 @@ def ensure_dirs() -> None:
         SHARED_DIR,
         LOGS_DIR,
     ]:
+        # If path exists as a file, remove it first
+        if d.exists() and d.is_file():
+            d.unlink()
         d.mkdir(parents=True, exist_ok=True)
 
 

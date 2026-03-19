@@ -102,6 +102,9 @@ def _msg_dict(msg: Message) -> dict:
         "from": msg.sender,
         "to": msg.recipient,
         "subject": msg.subject,
+        "content": msg.content,
         "type": msg.type,
         "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+        "task_id": msg.task_id,
+        "read": msg.read,
     }

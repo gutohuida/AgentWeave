@@ -61,8 +61,9 @@ dmypy.json
 
 # But keep the directory structure and docs
 !.agentweave/README.md
-!.agentweave/PROTOCOL.md
-!.agentweave/AGENTS.md
+!.agentweave/protocol.md
+!.agentweave/ai_context.md
+!.agentweave/ROLES.md
 
 # Local development
 *.local
@@ -94,3 +95,12 @@ hub/ui-concepts/
 
 # Hub's own agentweave runtime state
 hub/.agentweave/
+
+# Test environment scripts and directory
+cleanup-test.sh
+run-test-env.sh
+test/
+/agentweave-test/
+*.test/
+
+prints/

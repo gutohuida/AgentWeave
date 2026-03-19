@@ -9,6 +9,8 @@ from typing import List, Optional
 
 from . import __version__
 from .constants import (
+    AGENT_CONTEXT_FILES,
+    AGENT_CONTEXT_FILES_DEFAULT,
     AGENTWEAVE_DIR,
     DEFAULT_AGENT_ROLES,
     DEFAULT_AGENTS,
@@ -36,8 +38,21 @@ from .validator import validate_message, validate_task
 def cmd_init(args: argparse.Namespace) -> int:
     """Initialize a new session."""
     if AGENTWEAVE_DIR.exists() and not args.force:
+        if AGENTWEAVE_DIR.is_file():
+            print_error(".agentweave exists as a file, not a directory.")
+            print_info("Remove it with: rm .agentweave")
+            return 1
         print_warning(".agentweave/ already exists. Use --force to overwrite.")
         return 1
+
+    # Handle case where .agentweave exists as a file with --force
+    if AGENTWEAVE_DIR.exists() and args.force and AGENTWEAVE_DIR.is_file():
+        try:
+            AGENTWEAVE_DIR.unlink()
+            print_info("Removed existing .agentweave file.")
+        except OSError as e:
+            print_error(f"Cannot remove .agentweave file: {e}")
+            return 1
 
     ensure_dirs()
 
@@ -97,8 +112,9 @@ agentweave summary
 ## Files
 
 - `session.json` — Session configuration
-- `AGENTS.md` — Collaboration guide (read by all agents on session start)
+- `protocol.md` — Collaboration protocol (MCP vs manual relay, workflow)
 - `ROLES.md` — Agent role assignments (edit freely)
+- `ai_context.md` — Project DNA source (edit this, then run update-template)
 - `agents/` — Agent status
 - `tasks/active/` — Active tasks
 - `tasks/completed/` — Completed tasks
@@ -107,19 +123,19 @@ agentweave summary
 - `shared/` — Shared context and decisions
 """)
 
-        # Write AGENTS.md — collaboration guide read by all agents on session start
+        # Write protocol.md — collaboration guide inside .agentweave/
         non_principal = [a for a in session.agent_names if a != session.principal]
         agents_list = ", ".join(non_principal) if non_principal else "kimi"
         try:
-            agents_guide = (
-                get_template("agents_guide")
+            collab_protocol = (
+                get_template("collab_protocol")
                 .replace("{principal}", session.principal)
                 .replace("{agents_list}", agents_list)
                 .replace("{mode}", session.mode)
             )
-            agents_path = AGENTWEAVE_DIR / "AGENTS.md"
-            with open(agents_path, "w", encoding="utf-8") as f:
-                f.write(agents_guide)
+            protocol_path = AGENTWEAVE_DIR / "protocol.md"
+            with open(protocol_path, "w", encoding="utf-8") as f:
+                f.write(collab_protocol)
         except FileNotFoundError:
             pass  # Non-fatal
 
@@ -149,13 +165,34 @@ agentweave summary
         except FileNotFoundError:
             pass  # Non-fatal
 
-        # Write AI_CONTEXT.md — versioned best-practices template at project root.
-        ai_context_path = Path.cwd() / "AI_CONTEXT.md"
+        # Write .agentweave/ai_context.md — hidden source template (agents don't read this directly).
+        ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
         if not ai_context_path.exists():
             try:
                 ai_context = get_template("ai_context")
                 with open(ai_context_path, "w", encoding="utf-8") as f:
                     f.write(ai_context)
+            except FileNotFoundError:
+                pass  # Non-fatal
+
+        # Write agent-specific context files at project root (auto-read by each agent).
+        # claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.
+        version_comment = f"AgentWeave v{__version__}"
+        written_root_files: set = set()
+        for ag in session.agent_names:
+            root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+            if root_filename in written_root_files:
+                continue  # multiple agents may share AGENTS.md — only write once
+            root_path = Path.cwd() / root_filename
+            if root_path.exists():
+                written_root_files.add(root_filename)
+                continue  # never overwrite an existing file
+            template_name = "claude_context" if ag == "claude" else "kimi_context"
+            try:
+                context_content = get_template(template_name).replace("{version}", version_comment)
+                with open(root_path, "w", encoding="utf-8") as f:
+                    f.write(context_content)
+                written_root_files.add(root_filename)
             except FileNotFoundError:
                 pass  # Non-fatal
 
@@ -168,7 +205,7 @@ agentweave summary
 >
 > **Update frequency:** Daily, or whenever state changes.
 >
-> **For project fundamentals:** See `AI_CONTEXT.md` in the project root (tech stack, architecture, commands).
+> **For project fundamentals:** See your agent context file (CLAUDE.md / AGENTS.md / GEMINI.md) at the project root.
 
 ---
 
@@ -207,29 +244,34 @@ agentweave summary
 """
             context_md_path.write_text(context_md_content, encoding="utf-8")
 
+        # Build list of root files that were created
+        root_files_created = sorted(written_root_files)
+
         print_success(f"Initialized session: {session.name}")
         print(f"   ID:      {session.id}")
         print(f"   Mode:    {session.mode}")
         print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
         print("\n[DIR] Created .agentweave/")
-        print("     AGENTS.md            <- collaboration protocol (MCP vs manual, workflow)")
+        print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
         print("     ROLES.md             <- agent role assignments (edit freely)")
+        print("     ai_context.md        <- project DNA source — fill this in, then update agent files")
         print("     shared/context.md    <- current focus, recent decisions (update daily)")
-        print("\n[FILE] Created AI_CONTEXT.md at project root")
-        print("     <- project DNA: stack, architecture, code standards (rarely changes)")
-        print("     <- run `agentweave update-template --agent claude` to keep it current")
+        if root_files_created:
+            print("\n[FILES] Created at project root (auto-read by agents each session):")
+            for fname in root_files_created:
+                print(f"     {fname}")
         print("\nFile purposes:")
-        print("  • AI_CONTEXT.md       — What is this project? (static, per-project)")
-        print("  • AGENTS.md           — How do we collaborate? (per-session)")
-        print("  • ROLES.md            — Who does what? (per-session)")
-        print("  • shared/context.md   — What are we doing today? (changes daily)")
+        print("  • .agentweave/ai_context.md  — Project DNA source (edit this)")
+        for fname in root_files_created:
+            print(f"  • {fname:<22} — Auto-loaded by agent; contains full project context")
+        print("  • .agentweave/ROLES.md       — Who does what? (per-session)")
+        print("  • .agentweave/shared/context.md — What are we doing today? (changes daily)")
         print("\nNext steps:")
-        print("1. Fill in the [Replace with...] sections in AI_CONTEXT.md")
-        print("2. Edit .agentweave/ROLES.md to assign the right dev roles")
-        print("3. Update .agentweave/shared/context.md with today's focus")
-        print(
-            f'4. Tell {session.principal.capitalize()}: "Read AI_CONTEXT.md, AGENTS.md, ROLES.md, and shared/context.md"'
-        )
+        print("1. Fill in the [Replace with...] sections in .agentweave/ai_context.md")
+        print("2. Run `agentweave update-template --agent <name>` to push changes to agent files")
+        print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
+        print("4. Update .agentweave/shared/context.md with today's focus")
+        print(f'5. Start {session.principal.capitalize()} — it will auto-read its context file')
         print()
         print("Zero-relay MCP mode (optional):")
         print("  agentweave mcp setup   # configure MCP server in both agents (once)")
@@ -470,7 +512,7 @@ def cmd_relay(args: argparse.Namespace) -> int:
     print(f"@{agent} - You have work in the AgentWeave collaboration system.")
     print()
     print(f"Your role: {role}")
-    print("Collaboration guide: read .agentweave/AGENTS.md for commands, workflow, and protocol.")
+    print("Collaboration guide: read .agentweave/protocol.md for commands, workflow, and protocol.")
     print("Project context: read .agentweave/shared/context.md before starting.")
     print()
 
@@ -519,7 +561,8 @@ def cmd_quick(args: argparse.Namespace) -> int:
         print_error("No session found. Run: agentweave init")
         return 1
 
-    sender = args.from_agent or session.principal
+    # Default sender is "user" (the human) unless explicitly specified
+    sender = args.from_agent or "user"
     recipient = args.to
     task_desc = args.task
 
@@ -550,6 +593,12 @@ def cmd_quick(args: argparse.Namespace) -> int:
             task.update(status="assigned")
             task.save()
 
+            # Send task via transport if using HTTP (so Hub sees it)
+            from .transport import get_transport
+            transport = get_transport()
+            if transport.get_transport_type() == "http":
+                transport.send_task(task.to_dict())
+
             # Update session
             session.add_task(task.id)
             session.save()
@@ -557,15 +606,12 @@ def cmd_quick(args: argparse.Namespace) -> int:
         finally:
             release_lock(f"task_{task.id}")
 
-        # Create message
+        # Create simple message without task reference (cleaner UX)
         msg = Message.create(
             sender=sender,
             recipient=recipient,
             subject=f"Task: {task.title}",
-            content=f"You have been assigned a task: {task_desc}\n\n"
-            f"Task ID: {task.id}\n"
-            f"Priority: {task.priority}\n\n"
-            f"To start: agentweave task update {task.id} --status in_progress",
+            content=task_desc,
             message_type="delegation",
             task_id=task.id,
         )
@@ -577,7 +623,8 @@ def cmd_quick(args: argparse.Namespace) -> int:
 
         print_success("Quick delegation complete!")
         print(f"   Task: {task.id}")
-        print(f"   Assigned to: {recipient}")
+        print(f"   From: {sender}")
+        print(f"   To: {recipient}")
         print()
         print("Next step:")
         print(f"  agentweave relay --agent {recipient}")
@@ -835,13 +882,13 @@ def cmd_update_template(args: argparse.Namespace) -> int:
     # Resolve template path
     template_path = getattr(args, "template_path", None)
     if not template_path:
-        # Look for AI_CONTEXT.md in cwd (deployed by `agentweave init`)
-        candidate = Path.cwd() / "AI_CONTEXT.md"
+        # Look for ai_context.md inside .agentweave/ (deployed by `agentweave init`)
+        candidate = Path.cwd() / ".agentweave" / "ai_context.md"
         if candidate.exists():
             template_path = str(candidate)
         if not template_path:
             template_path = (
-                "./AI_CONTEXT.md"
+                ".agentweave/ai_context.md"
                 "  (not found — run `agentweave init` first or use --template-path)"
             )
 
@@ -891,6 +938,12 @@ def cmd_start(args: argparse.Namespace) -> int:
         print_error("No session found. Run: agentweave init")
         return 1
 
+    # Check if .agentweave exists as a file (should be a directory)
+    if AGENTWEAVE_DIR.is_file():
+        print_error(".agentweave exists as a file, not a directory.")
+        print_info("Remove it with: rm .agentweave")
+        return 1
+
     # Check if already running
     if WATCHDOG_PID_FILE.exists():
         try:
@@ -914,6 +967,10 @@ def cmd_start(args: argparse.Namespace) -> int:
         if _os.name == "nt"
         else {"start_new_session": True}
     )
+
+    # Ensure log directory exists (handles edge case where .agentweave/ exists
+    # but was created manually without proper subdirectories)
+    AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
     WATCHDOG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115
     proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)

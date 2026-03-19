@@ -41,3 +41,6 @@ hub-up:
 
 hub-down:
 	cd hub && docker compose down
+
+hub-full-build:
+	cd hub && docker compose -f docker-compose.yml -f  docker-compose.build.yml up --build -d

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '@/components/common/Icon'
+import { useCopy } from '@/hooks/useCopy'
 import { AgentSummary, useAgentOutput } from '@/api/agents'
 
 interface AgentOutputPanelProps {
@@ -6,19 +8,18 @@ interface AgentOutputPanelProps {
 }
 
 export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
-  const { lines } = useAgentOutput(agent.name)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const { lines, isLoading } = useAgentOutput(agent.name)
+  const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoscroll, setAutoscroll] = useState(true)
+  const { copied, copy } = useCopy(2000)
 
-  // Auto-scroll to bottom when new lines arrive
   useEffect(() => {
     if (autoscroll && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [lines, autoscroll])
 
-  // Detect manual scroll up to pause autoscroll
   function handleScroll() {
     const el = containerRef.current
     if (!el) return
@@ -26,26 +27,49 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     setAutoscroll(atBottom)
   }
 
-  // Latest session ID from the most recent line that has one
   const sessionId = [...lines].reverse().find((l) => l.session_id)?.session_id
+  const isRunning = agent.status === 'running'
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 text-green-400 font-mono text-xs rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-800 bg-zinc-900 shrink-0">
-        <span className="text-zinc-200 font-semibold">{agent.name}</span>
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--background)' }}>
+      {/* Header bar */}
+      <div
+        className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b"
+        style={{ background: 'var(--surface-high)', borderColor: 'var(--outline-variant)' }}
+      >
+        <span className="m3-title-small" style={{ color: 'var(--foreground)' }}>{agent.name}</span>
+
+        {/* Session ID chip */}
         {sessionId && (
-          <span className="px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300 text-[10px]">
-            session: {sessionId.slice(0, 12)}…
-          </span>
+          <button
+            onClick={() => copy(sessionId)}
+            title="Click to copy full session ID"
+            className="m3-chip m3-label-small flex items-center gap-1 transition-colors cursor-pointer"
+            style={copied
+              ? { background: 'var(--p-cont)', color: 'var(--on-p-cont)' }
+              : { background: 'var(--s-cont)', color: 'var(--on-s-cont)' }
+            }
+          >
+            <Icon name={copied ? 'check' : 'content_copy'} size={12} />
+            {copied ? 'copied' : `session: ${sessionId.slice(0, 12)}…`}
+          </button>
         )}
-        <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${
-          agent.status === 'running'
-            ? 'bg-green-900 text-green-300'
-            : 'bg-zinc-700 text-zinc-400'
-        }`}>
+
+        {/* Status chip */}
+        <span
+          className="m3-chip m3-label-small flex items-center gap-1.5"
+          style={isRunning
+            ? { background: 'var(--p-cont)', color: 'var(--on-p-cont)' }
+            : { background: 'var(--surface-highest)', color: 'var(--on-sv)' }
+          }
+        >
+          {isRunning && (
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+          )}
           {agent.status}
         </span>
+
+        {/* Autoscroll toggle */}
         <button
           onClick={() => {
             setAutoscroll((v) => {
@@ -55,23 +79,31 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
               return !v
             })
           }}
-          className="ml-auto text-[10px] px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="ml-auto m3-chip m3-label-small transition-colors"
+          style={{ background: 'var(--s-cont)', color: 'var(--on-s-cont)', cursor: 'pointer' }}
         >
           {autoscroll ? 'Pause scroll' : 'Resume scroll'}
         </button>
       </div>
 
-      {/* Output body */}
+      {/* Output body — darkest surface for terminal feel */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-3 space-y-0.5"
+        className="flex-1 overflow-y-auto p-4 space-y-0.5"
+        style={{ background: 'var(--surface-lowest)' }}
       >
-        {lines.length === 0 ? (
-          <p className="text-zinc-600 italic">Waiting for output…</p>
+        {isLoading ? (
+          <p className="font-mono m3-body-small italic" style={{ color: 'var(--on-sv)' }}>Loading output…</p>
+        ) : lines.length === 0 ? (
+          <p className="font-mono m3-body-small italic" style={{ color: 'var(--on-sv)' }}>Waiting for output…</p>
         ) : (
           lines.map((line, i) => (
-            <div key={line.id ?? i} className="whitespace-pre-wrap break-all leading-5">
+            <div
+              key={line.id ?? i}
+              className="font-mono m3-body-small leading-5 whitespace-pre-wrap break-all"
+              style={{ color: 'var(--foreground)' }}
+            >
               {line.content}
             </div>
           ))

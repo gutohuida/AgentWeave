@@ -37,6 +37,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.0] - 2026-03-19
+
+### Added (CLI)
+- Agent-specific context templates: `claude_context.md`, `kimi_context.md`, `collab_protocol.md` — generated via `agentweave update-template --agent <name>`
+- `collab_protocol.md` template for cross-agent protocol documentation
+- Session start checklist and role adherence rules embedded in agent context templates
+
+### Removed (CLI)
+- `agents_guide.md` template — replaced by per-agent context templates
+
+### Added (Hub v0.2.0)
+- **Agent Trigger endpoint** (`POST /api/v1/agent/trigger`): triggers an agent from the Hub UI; creates a message the host-side watchdog picks up and executes on the host machine — CLIs do not need to run inside Docker
+- **Agent session listing** (`GET /api/v1/agent/sessions/{agent}`): returns available CLI sessions for an agent
+- **Agent Configurator UI**: component to add/remove configured agents (reads from `session.json` or manual list)
+- **Agent Message Sender UI**: compose and send messages to agents directly from the dashboard, with session resume support
+- **Agent configure endpoints**: `POST/DELETE/GET /api/v1/agents/configure` for managing the configured agent list per project
+- `Icon` common component and `useCopy` hook for the dashboard
+- `hub/Dockerfile.dev` for hot-reload development workflow
+- Static files support in Hub (`hub/hub/static/`)
+
+### Changed (Hub)
+- Major UI refresh across all dashboard components (AgentsPage, ActivityLog, EventRow, AgentCard, AgentOutputPanel, Sidebar, StatusBar, LogLine, LogsView, MessageCard, MessagesFeed, QuestionsPanel, TaskCard, TasksBoard, Badge, EmptyState, SetupModal)
+- Tailwind config and global CSS overhaul for consistent dark theme styling
+
+---
+
 ## [0.5.1] - 2026-03-15
 
 ### Added

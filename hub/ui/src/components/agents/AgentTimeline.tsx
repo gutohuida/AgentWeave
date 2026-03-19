@@ -1,11 +1,11 @@
 import { formatDistanceToNow } from 'date-fns'
-import { MessageSquare, CheckSquare, Zap } from 'lucide-react'
+import { Icon } from '@/components/common/Icon'
 import { AgentSummary, useAgentTimeline } from '@/api/agents'
 
-function iconForType(type: string) {
-  if (type === 'message') return MessageSquare
-  if (type.startsWith('task')) return CheckSquare
-  return Zap
+function iconForType(type: string): string {
+  if (type === 'message')        return 'chat'
+  if (type.startsWith('task'))   return 'task_alt'
+  return 'bolt'
 }
 
 interface AgentTimelineProps {
@@ -19,35 +19,48 @@ export function AgentTimeline({ agent }: AgentTimelineProps) {
     <div className="flex flex-col h-full overflow-auto p-4 gap-4">
       {/* Current activity banner */}
       {agent.latest_status_msg && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+        <div
+          className="m3-status-banner"
+          style={{
+            borderColor:     'color-mix(in srgb, var(--primary) 30%, transparent)',
+            backgroundColor: 'color-mix(in srgb, var(--primary) 5%, var(--surface-low))',
+          }}
+        >
+          <div className="flex items-center gap-2 m3-label-medium mb-1" style={{ color: 'var(--on-sv)' }}>
+            <span className="h-2 w-2 rounded-full bg-current animate-pulse" style={{ color: '#22c55e' }} />
             Current activity
           </div>
-          <p className="text-sm">{agent.latest_status_msg}</p>
+          <p className="m3-body-medium" style={{ color: 'var(--foreground)' }}>{agent.latest_status_msg}</p>
         </div>
       )}
 
-      {/* Timeline */}
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Timeline</h3>
+      {/* Timeline header */}
+      <h3 className="m3-title-medium" style={{ color: 'var(--foreground)' }}>Timeline</h3>
+
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="m3-body-medium" style={{ color: 'var(--on-sv)' }}>Loading…</p>
       ) : events.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No timeline events yet.</p>
+        <p className="m3-body-medium" style={{ color: 'var(--on-sv)' }}>No timeline events yet.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-1">
           {events.map((event) => {
-            const Icon = iconForType(event.event_type)
+            const iconName = iconForType(event.event_type)
             return (
-              <div key={event.id} className="flex items-start gap-3 text-sm">
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div key={event.id} className="m3-list-item-2" style={{ gap: 12, padding: '8px 0' }}>
+                {/* Icon in tonal container */}
+                <div
+                  className="m3-icon-container shrink-0"
+                  style={{ width: 36, height: 36, background: 'var(--p-cont)', color: 'var(--on-p-cont)' }}
+                >
+                  <Icon name={iconName} size={18} />
+                </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
+                  <p className="m3-label-medium uppercase tracking-wide" style={{ color: 'var(--on-sv)' }}>
                     {event.event_type}
                   </p>
-                  <p className="text-sm truncate">{event.summary}</p>
+                  <p className="m3-body-medium truncate" style={{ color: 'var(--foreground)' }}>{event.summary}</p>
                 </div>
-                <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                <span className="m3-label-small whitespace-nowrap shrink-0" style={{ color: 'var(--on-sv)' }}>
                   {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
                 </span>
               </div>

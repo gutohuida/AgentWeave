@@ -1,4 +1,3 @@
-import { CheckSquare } from 'lucide-react'
 import { useTasks } from '@/api/tasks'
 import { TaskCard } from './TaskCard'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -14,13 +13,13 @@ export function TasksBoard() {
   const { data: tasks, isLoading } = useTasks()
 
   if (isLoading) {
-    return <div className="p-6 text-sm text-white/40">Loading tasks…</div>
+    return <div className="p-6 m3-body-medium" style={{ color: 'var(--on-sv)' }}>Loading tasks…</div>
   }
 
   if (!tasks || tasks.length === 0) {
     return (
       <div className="p-6">
-        <EmptyState icon={CheckSquare} title="No tasks yet" description="Tasks created by agents will appear here." />
+        <EmptyState icon="task_alt" title="No tasks yet" description="Tasks created by agents will appear here." />
       </div>
     )
   }
@@ -32,13 +31,31 @@ export function TasksBoard() {
         return (
           <div
             key={key}
-            className={`flex flex-col gap-2.5 rounded-xl p-3 overflow-auto ${accent ? 'glass-accent' : 'glass'}`}
+            className="flex flex-col gap-2.5 rounded-2xl p-3 overflow-auto"
+            style={{
+              background:   accent
+                ? 'color-mix(in srgb, var(--p-cont) 25%, var(--surface-low))'
+                : 'var(--surface-low)',
+              border: `1px solid ${accent ? 'color-mix(in srgb, var(--primary) 20%, transparent)' : 'var(--outline-variant)'}`,
+            }}
           >
-            <div className="flex items-center justify-between mb-0.5">
-              <span className={`text-xs font-semibold uppercase tracking-widest ${accent ? 'text-primary/80' : 'text-white/40'}`}>
+            {/* Column header */}
+            <div className="flex items-center justify-between mb-0.5 px-0.5">
+              <span
+                className="m3-label-medium uppercase tracking-widest"
+                style={{ color: accent ? 'var(--primary)' : 'var(--on-sv)' }}
+              >
                 {label}
               </span>
-              <span className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${accent ? 'bg-primary/15 text-primary ring-1 ring-primary/20' : 'bg-white/8 text-white/40 ring-1 ring-white/10'}`}>
+              <span
+                className="m3-label-small rounded-full px-2 py-0.5"
+                style={{
+                  background: accent
+                    ? 'color-mix(in srgb, var(--primary) 15%, transparent)'
+                    : 'var(--surface-highest)',
+                  color: accent ? 'var(--primary)' : 'var(--on-sv)',
+                }}
+              >
                 {col.length}
               </span>
             </div>
