@@ -1,8 +1,8 @@
 # Stage 1: Build React UI
 FROM node:20-slim AS ui-builder
 WORKDIR /app/ui
-COPY ui/package.json ./
-RUN npm install
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
 COPY ui/ ./
 RUN npm run build
 
