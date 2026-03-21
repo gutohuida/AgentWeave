@@ -711,7 +711,9 @@ def _run_agent_subprocess(
                     output_line_count += 1
                     try:
                         # Use session_id_ref[0] to get latest session (updated by detection thread for Kimi)
-                        ok = transport.post_agent_output(agent, readable, session_id=session_id_ref[0])
+                        ok = transport.post_agent_output(
+                            agent, readable, session_id=session_id_ref[0]
+                        )
                         if not ok:
                             print(
                                 f"[WARN] post_agent_output returned False for {agent}",
@@ -741,9 +743,7 @@ def _run_agent_subprocess(
         print(summary, file=sys.stderr)
         if is_http:
             with contextlib.suppress(Exception):
-                transport.post_agent_output(
-                    agent, summary, session_id=session_id_ref[0]
-                )
+                transport.post_agent_output(agent, summary, session_id=session_id_ref[0])
 
         return proc.returncode or 0
 
@@ -811,7 +811,9 @@ def _run_agent_subprocess(
         # so without this the UI would never see the session ID chip.
         if agent == "kimi" and is_http:
             with contextlib.suppress(Exception):
-                transport.post_agent_output(agent, f"[session: {session_id}]", session_id=session_id)
+                transport.post_agent_output(
+                    agent, f"[session: {session_id}]", session_id=session_id
+                )
 
     # Send "idle" heartbeat
     if is_http:
@@ -964,7 +966,8 @@ def _make_direct_trigger_callback(
         session_id = None
         if "[Session:" in content:
             import re as _re
-            match = _re.search(r'\[Session:\s*([^\]]+)\]', content)
+
+            match = _re.search(r"\[Session:\s*([^\]]+)\]", content)
             if match:
                 session_id = match.group(1).strip()
         if session_id is None:
@@ -1054,11 +1057,13 @@ def main() -> None:
                 sys.exit(1)
             agents_to_ping = session.agent_names
 
-        callbacks.append(_make_ping_callback(
-            agents_to_ping,
-            pinged_at=watchdog.pinged_at,
-            transport=watchdog.transport,
-        ))
+        callbacks.append(
+            _make_ping_callback(
+                agents_to_ping,
+                pinged_at=watchdog.pinged_at,
+                transport=watchdog.transport,
+            )
+        )
         print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
         if args.retry_after:
             print(f"[PING] Retry after: {int(args.retry_after)}s")
@@ -1070,9 +1075,11 @@ def main() -> None:
 
     # Combine all callbacks into one
     if callbacks:
+
         def combined_callback(event_type: str, data: Dict[str, Any]) -> None:
             for cb in callbacks:
                 cb(event_type, data)
+
         watchdog.callback = combined_callback
 
     watchdog.start()

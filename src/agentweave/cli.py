@@ -254,7 +254,9 @@ agentweave summary
         print("\n[DIR] Created .agentweave/")
         print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
         print("     ROLES.md             <- agent role assignments (edit freely)")
-        print("     ai_context.md        <- project DNA source — fill this in, then update agent files")
+        print(
+            "     ai_context.md        <- project DNA source — fill this in, then update agent files"
+        )
         print("     shared/context.md    <- current focus, recent decisions (update daily)")
         if root_files_created:
             print("\n[FILES] Created at project root (auto-read by agents each session):")
@@ -271,7 +273,7 @@ agentweave summary
         print("2. Run `agentweave update-template --agent <name>` to push changes to agent files")
         print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
         print("4. Update .agentweave/shared/context.md with today's focus")
-        print(f'5. Start {session.principal.capitalize()} — it will auto-read its context file')
+        print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
         print()
         print("Zero-relay MCP mode (optional):")
         print("  agentweave mcp setup   # configure MCP server in both agents (once)")
@@ -595,6 +597,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
 
             # Send task via transport if using HTTP (so Hub sees it)
             from .transport import get_transport
+
             transport = get_transport()
             if transport.get_transport_type() == "http":
                 transport.send_task(task.to_dict())
