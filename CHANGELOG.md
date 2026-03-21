@@ -37,6 +37,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.6.1] - 2026-03-21
+
+### Added (Hub UI v0.2.1)
+- **Expandable TaskCard**: tasks now expand inline to show requirements, acceptance criteria, deliverables, and notes
+- **Expandable MessageCard**: long messages truncate with click-to-expand; message type and task ID chips in footer; subject shown as a labelled field
+- Task interface extended with `assigner`, `requirements`, `acceptance_criteria`, `deliverables`, `notes` fields
+- Assigner badge shown on task cards when assigner differs from assignee
+
+### Fixed (Hub)
+- `questions.py`: reply message sender changed from `"human"` to `"user"` for consistency with message schema
+
+---
+
 ## [0.6.0] - 2026-03-19
 
 ### Added (CLI)

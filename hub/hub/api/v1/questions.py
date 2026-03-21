@@ -101,7 +101,7 @@ async def answer_question(
     reply_msg = Message(
         id=msg_id,
         project_id=project_id,
-        sender="human",
+        sender="user",
         recipient=from_agent,
         subject=f"Answer: {q_text[:80]}",
         content=f"Question: {q_text}\n\nAnswer: {body.answer}",
@@ -119,7 +119,7 @@ async def answer_question(
         project_id, "message_created",
         {
             "id": msg_id,
-            "from": "human",
+            "from": "user",
             "to": from_agent,
             "subject": f"Answer: {q_text[:80]}",
             "type": "reply",

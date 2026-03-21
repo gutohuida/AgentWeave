@@ -6,161 +6,156 @@
 
 > **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, and more**
 
-AgentWeave lets multiple AI agents work together on the same project through a shared protocol. Agents communicate through a local `.agentweave/` directory, a local MCP server, or the **AgentWeave Hub** — a self-hosted server with a web dashboard.
+AgentWeave lets multiple AI agents work together on the same project through a shared protocol. The **AgentWeave Hub** is a self-hosted server with a web dashboard — the recommended way to run it.
 
 ---
 
-## Three Modes
+## Quick Start — AgentWeave Hub (Recommended)
 
-| Mode | Setup | Best for |
-|------|-------|----------|
-| **Manual relay** | Zero — just install | Quick start, occasional delegation |
-| **Zero-relay MCP** | `agentweave mcp setup` + 2 watchers | Autonomous loops, same machine |
-| **Hub** | Docker + `agentweave transport setup --type http` | Teams, multi-machine, web dashboard |
+The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time visibility into agent activity.
 
----
-
-## Repository Layout
-
-```
-AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.6.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.2.0
-│   ├── hub/            Hub Python package
-│   ├── ui/             React dashboard (built into Docker image, no separate server)
-│   └── Dockerfile      Multi-stage build: Node UI → Python server
-├── tests/              CLI unit tests (pytest)
-└── Makefile            Convenience targets for both packages
-```
-
-> **Note on Hub + UI:** The dashboard UI lives inside `hub/ui/` and is compiled into the Docker image. The Hub serves it at the same port — no separate server or CORS config needed in production. For development, `npm run dev` in `hub/ui/` proxies API calls to `localhost:8000`.
-
----
-
-## Quick Start — CLI Only (Manual Relay)
-
-### 1. Install
+### Step 1 — Start the Hub (Docker)
 
 ```bash
-pip install agentweave-ai
-
-# With MCP server (zero-relay mode)
-pip install "agentweave-ai[mcp]"
-
-# From source
-git clone https://github.com/gutohuida/AgentWeave.git
-cd AgentWeave
-pip install -e ".[mcp]"
-```
-
-### 2. Initialize (once per project)
-
-```bash
-cd your-project/
-agentweave init --project "My App" --agents claude,kimi
-```
-
-Creates `AI_CONTEXT.md` (project DNA) and `.agentweave/` with AGENTS.md, ROLES.md, and shared/context.md.
-
-**Supported agents:** claude, kimi, gemini, codex, aider, cline, cursor, windsurf, copilot, and any name matching `^[a-zA-Z0-9_-]{1,32}$`
-
-### 3. Fill in project context
-
-- **`AI_CONTEXT.md`** — fill once: stack, architecture, commands, standards
-- **`.agentweave/shared/context.md`** — update daily: current phase, blockers, decisions
-
-### 4. Start working — manual relay
-
-> "Claude, delegate the database schema design to Kimi."
-
-Claude runs `agentweave quick` and `agentweave relay`, then shows you a prompt to paste into Kimi Code.
-
-### 4b. Start working — zero-relay MCP
-
-```bash
-# One-time: configure MCP in all session agents
-agentweave mcp setup
-
-# Start background watchdog — monitors all agents, one process, one command
-agentweave start
-
-# Stop it later
-agentweave stop
-```
-
-Restart your Claude/Kimi sessions so they pick up the MCP server. Then just prompt Claude — agents communicate autonomously.
-
----
-
-## Quick Start — AgentWeave Hub
-
-The Hub is a self-hosted server providing REST + SSE + MCP interfaces, plus a web dashboard.
-
-### Option A — Docker (recommended, no source needed)
-
-```bash
-# 1. Download config files
+# Download the two config files
 curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
 curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
 
-# 2. Create your .env
+# Create your .env
 cp .env.example .env
+```
 
-# 3. Generate a secure API key and paste into .env
+Open `.env` and set your API key:
+
+```bash
+# Generate a secure key
 python -c "import secrets; print('aw_live_' + secrets.token_hex(16))"
-# Paste the output as AW_BOOTSTRAP_API_KEY in .env
+```
 
-# 4. Start Hub
+Paste the output as `AW_BOOTSTRAP_API_KEY` in `.env`, then start the Hub:
+
+```bash
 docker compose up -d
-
-# Hub is now running at http://localhost:8000
-# Dashboard at http://localhost:8000  (auto-configured, no login needed)
 ```
 
-### Option B — Build from source
+The Hub is now running at **http://localhost:8000** — open it in your browser to see the dashboard.
+
+---
+
+### Step 2 — Install the CLI
 
 ```bash
-git clone https://github.com/gutohuida/AgentWeave.git
-cd AgentWeave/hub
-
-cp .env.example .env
-# Edit .env: set AW_BOOTSTRAP_API_KEY
-
-docker compose up --build -d
+pip install "agentweave-ai[mcp]"
 ```
 
-### Connect the CLI to Hub
+---
+
+### Step 3 — Initialize your project
 
 ```bash
-# 6. Go to your project directory
 cd /path/to/your-project
-
-# 7. Initialize the project
 agentweave init --project "My App" --agents claude,kimi
+```
 
-# 8. Connect CLI to Hub
+This creates `AI_CONTEXT.md` (fill it in once: stack, architecture, standards) and `.agentweave/` with agent roles and shared context.
+
+---
+
+### Step 4 — Connect the CLI to the Hub
+
+```bash
 agentweave transport setup --type http \
   --url http://localhost:8000 \
   --api-key aw_live_<your-key> \
   --project-id proj-default
-
-# 9. Register MCP server with all session agents (one command)
-agentweave mcp setup
-
-# 10. Start background watchdog for all agents (one command, one terminal)
-agentweave start
-# Stop it later with: agentweave stop
 ```
 
-That's it. Restart your Claude/Kimi sessions so they pick up the new MCP server.
+---
 
-### Hub UI development (hot-reload)
+### Step 5 — Register the MCP server and start the watchdog
 
 ```bash
-cd hub/ui
-npm install
-npm run dev        # dashboard at http://localhost:5173, proxies /api → Hub
+# Register MCP with all session agents (one command)
+agentweave mcp setup
+
+# Start the background watchdog (one terminal, all agents)
+agentweave start
+# Stop later with: agentweave stop
 ```
+
+Restart your Claude / Kimi sessions so they pick up the new MCP server. That's it — agents communicate through the Hub and you monitor everything in the dashboard.
+
+---
+
+## What the Dashboard Shows
+
+Open **http://localhost:8000** to see:
+
+- **Tasks board** — all tasks with status, priority, assignee, requirements, acceptance criteria, and deliverables (click any card to expand)
+- **Messages feed** — inter-agent messages with expand-to-read for long content; message type and linked task shown inline
+- **Human questions** — questions agents have asked you; answer directly in the dashboard
+- **Agent activity** — live event stream and per-agent output log
+- **Agent configurator** — add/remove agents, trigger agents, send messages manually
+
+---
+
+## Configuration — .env reference
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AW_BOOTSTRAP_API_KEY` | *(required)* | API key auto-created on first start (`aw_live_…`) |
+| `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
+| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
+| `AW_PORT` | `8000` | Port the Hub listens on |
+| `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS (leave empty in production) |
+| `DATABASE_URL` | `sqlite+aiosqlite:///data/agentweave.db` | SQLite path inside the container |
+
+Data persists in a Docker volume (`hub-data`) — no manual backup needed for local use.
+
+---
+
+## Alternative Modes
+
+| Mode | Setup | Best for |
+|------|-------|----------|
+| **Hub** | Docker + `agentweave transport setup --type http` | Teams, multi-machine, web dashboard *(recommended)* |
+| **Zero-relay MCP** | `agentweave mcp setup` + watchdog | Autonomous loops, same machine, no server |
+| **Manual relay** | Zero — just install | Quick one-off delegation |
+
+### Zero-relay MCP (no Hub)
+
+```bash
+pip install "agentweave-ai[mcp]"
+cd your-project/
+agentweave init --project "My App" --agents claude,kimi
+agentweave mcp setup   # configure MCP in agent settings
+agentweave start       # start background watchdog
+```
+
+### Manual relay (simplest possible)
+
+```bash
+pip install agentweave-ai
+cd your-project/
+agentweave init --project "My App" --agents claude,kimi
+# Ask Claude to delegate; it runs agentweave quick + relay and gives you a prompt to paste into Kimi
+```
+
+---
+
+## Cross-Machine Collaboration
+
+### Via Git (no server required)
+
+```bash
+agentweave transport setup --type git --cluster yourname
+```
+
+Creates an orphan branch (`agentweave/collab`) on your git remote. Messages sync through git plumbing — working tree and HEAD are never touched. Both developers need access to the same remote.
+
+### Via Hub (recommended for teams)
+
+Deploy the Hub once, connect all agents via HTTP transport. The dashboard shows all messages, tasks, and human questions in real time.
 
 ---
 
@@ -169,7 +164,7 @@ npm run dev        # dashboard at http://localhost:5173, proxies /api → Hub
 ### Session
 
 ```bash
-agentweave init --project "Name" --principal claude
+agentweave init --project "Name" --agents claude,kimi
 agentweave status
 agentweave summary
 ```
@@ -196,9 +191,8 @@ agentweave task update <task_id> --status revision_needed --note "Fix X"
 ### Transport
 
 ```bash
-agentweave transport setup --type git                  # cross-machine via git orphan branch
-agentweave transport setup --type http --url ... \
-  --api-key ... --project-id ...                       # Hub transport
+agentweave transport setup --type http --url ... --api-key ... --project-id ...
+agentweave transport setup --type git --cluster yourname
 agentweave transport status
 agentweave transport pull
 agentweave transport disable
@@ -207,7 +201,7 @@ agentweave transport disable
 ### Human interaction (Hub only)
 
 ```bash
-agentweave reply --id <question_id> "Your answer"      # answer a question from an agent
+agentweave reply --id <question_id> "Your answer"
 ```
 
 ---
@@ -241,55 +235,63 @@ pending → assigned → in_progress → completed → under_review → approved
 
 ---
 
-## Cross-Machine Collaboration
-
-### Via Git (no server required)
+## Build from Source
 
 ```bash
-agentweave transport setup --type git --cluster yourname
+git clone https://github.com/gutohuida/AgentWeave.git
+cd AgentWeave/hub
+
+cp .env.example .env
+# Edit .env: set AW_BOOTSTRAP_API_KEY
+
+docker compose up --build -d
 ```
 
-Creates an orphan branch (`agentweave/collab`) on your git remote. Messages sync through git plumbing — working tree and HEAD are never touched.
+### Hub UI development (hot-reload)
 
-### Via Hub (recommended for teams)
-
-Deploy the Hub once, connect all agents via HTTP transport. The web dashboard shows all messages, tasks, and human questions in real time.
+```bash
+cd hub/ui
+npm install
+npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at localhost:8000
+```
 
 ---
 
-## Safety & Quality
+## Repository Layout
 
-- **File locking** — file-based mutexes prevent race conditions when agents write simultaneously
-- **Schema validation** — all data validated before saving; agent names, task statuses, and required fields enforced
-- **Input sanitization** — string length limits and type coercion before any write
-- **API validation** — Hub rejects invalid `status`/`priority`/`type` values with HTTP 422
-- **Pagination** — all Hub list endpoints support `offset`/`limit` (default 100)
-- **CORS** — configurable via `AW_CORS_ORIGINS` env var
+```
+AgentWeave/
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.6.1
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.2.1
+│   ├── hub/            Hub Python package
+│   ├── ui/             React dashboard (built into Docker image, no separate server)
+│   └── Dockerfile      Multi-stage build: Node UI → Python server
+├── tests/              CLI unit tests (pytest)
+└── Makefile            Convenience targets for both packages
+```
 
 ---
 
 ## Development
 
 ```bash
-# Install CLI for development
+# CLI
 pip install -e ".[dev]"
-
-# Or use the Makefile
-make install-all    # both CLI and Hub
-make test-all       # pytest for both
-make lint           # ruff + mypy
-make format         # black
-
-# Run CLI tests
+ruff check src/
+black src/
+mypy src/
 pytest tests/ -v
 
-# Run Hub tests
-pytest hub/tests/ -v
+# Hub
+cd hub
+pip install -e ".[dev]"
+make ui-build    # rebuild React UI
+pytest tests/ -v
 
-# Hub from source
-make hub-build      # build Docker image and start
-make hub-up         # start existing image
-make hub-down       # stop
+# Both
+make install-all
+make test-all
+make lint
 ```
 
 ---
@@ -304,8 +306,7 @@ make hub-down       # stop
 | Local MCP server | ✅ Done (v0.4.0) | Native tool integration, zero-relay with watchdog pinger |
 | HTTP transport | ✅ Done (v0.5.0) | CLI ↔ Hub via REST |
 | AgentWeave Hub | ✅ Done (v0.2.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
-| Hub UI | ✅ Done (v0.2.0) | React dashboard — tasks, messages, human questions, agent trigger |
-| Agent Trigger | ✅ Done (v0.6.0) | Trigger agents from Hub UI; watchdog executes on host (no CLIs in Docker) |
+| Hub UI | ✅ Done (v0.2.1) | React dashboard — expandable tasks/messages, agent trigger, configurator |
 | Per-agent context templates | ✅ Done (v0.6.0) | `claude_context.md`, `kimi_context.md`, `collab_protocol.md` |
 | Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
@@ -314,16 +315,16 @@ make hub-down       # stop
 ## FAQ
 
 **Q: Do I need the Hub?**
-No. Manual relay and local MCP modes work with zero infra. The Hub adds a web dashboard, multi-machine support, and human question-answering via the dashboard.
+No. Manual relay and local MCP modes work with zero infra. The Hub adds a web dashboard, multi-machine support, and human question-answering.
 
 **Q: Should I put the UI in a separate folder/repo?**
-No. The UI (`hub/ui/`) is built into the Docker image and served by the Hub at the same port. Keeping them together avoids a second server and CORS configuration. For local dev, `npm run dev` in `hub/ui/` proxies API calls to the running Hub.
+No. The UI (`hub/ui/`) is built into the Docker image and served by the Hub at the same port. No second server or CORS config needed in production.
 
 **Q: Do I need to run CLI commands during my session?**
 No. After `agentweave init`, just talk to Claude. It runs all `agentweave` commands via Bash automatically.
 
 **Q: Do the watchdog processes need to stay running?**
-Yes (in local MCP mode). Run `agentweave-watch --auto-ping --agent <name>` for each agent. If they stop, messages still queue — agents just won't be auto-triggered.
+Yes (in local MCP mode or Hub mode). Run `agentweave start` once. If they stop, messages still queue — agents just won't be auto-triggered.
 
 **Q: Should I commit `.agentweave/`?**
 Partially. Runtime state (tasks, messages, session.json, transport.json) is gitignored. AGENTS.md and README.md are committed.

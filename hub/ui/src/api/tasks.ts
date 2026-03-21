@@ -10,6 +10,11 @@ export interface Task {
   status: string
   priority: string
   assignee?: string
+  assigner?: string
+  requirements?: string[]
+  acceptance_criteria?: string[]
+  deliverables?: string[]
+  notes?: string
   created_at: string
   updated: string
 }
