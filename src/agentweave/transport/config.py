@@ -29,7 +29,7 @@ def _find_transport_config() -> Optional[dict]:
         # CWD may have been deleted (e.g., temp dir cleaned up)
         # Fall back to looking in common locations
         current = None
-    
+
     if current:
         for directory in current.parents:
             candidate = directory / ".agentweave" / "transport.json"

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .constants import AGENTS_DIR, MESSAGES_PENDING_DIR, TASKS_ACTIVE_DIR
-from .eventlog import WARN, log_event
+from .eventlog import log_event
 from .utils import load_json
 
 
@@ -916,34 +916,34 @@ def _make_direct_trigger_callback(
     transport: Any = None,
 ) -> Callable:
     """Return a callback that polls for and executes direct trigger messages from Hub UI.
-    
+
     These are messages created by the Hub UI's "Send Message" feature that need
     to be executed on the host machine (where the CLIs are installed).
     """
     is_http = transport is not None and transport.get_transport_type() == "http"
     seen: Set[str] = set()
-    
+
     if not is_http:
         # Direct triggers only work with HTTP transport (Hub)
         return lambda event_type, data: None
-    
+
     def callback(event_type: str, data: Dict[str, Any]) -> None:
         if event_type != "new_message":
             return
-        
+
         # Check for direct trigger messages (from user via Hub UI)
         sender = data.get("from", "")
         subject = data.get("subject", "")
         if sender != "user" or "Direct message from Hub" not in subject:
             return
-        
+
         recipient = data.get("to", "")
         msg_id = data.get("id", "")
-        
+
         if msg_id in seen:
             return
         seen.add(msg_id)
-        
+
         # Skip if CLI is not available
         if not _check_cli_available(recipient):
             log_event(
@@ -953,7 +953,7 @@ def _make_direct_trigger_callback(
                 reason="CLI not found in PATH",
             )
             return
-        
+
         # Extract optional session ID from content tag, then discard raw content.
         # We do NOT pass raw content directly as the prompt — agents need to go through
         # their normal get_inbox flow so that output capture (MCP tool events, stream-json
@@ -990,7 +990,7 @@ def _make_direct_trigger_callback(
             daemon=True,
         )
         t.start()
-    
+
     return callback
 
 
@@ -1036,7 +1036,7 @@ def main() -> None:
     )
 
     callbacks = []
-    
+
     if args.auto_ping:
         if args.agent:
             agents_to_ping = [args.agent]
@@ -1062,7 +1062,7 @@ def main() -> None:
         print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
         if args.retry_after:
             print(f"[PING] Retry after: {int(args.retry_after)}s")
-    
+
     # Always enable direct trigger callback for HTTP transport
     # This allows Hub UI "Send Message" to work
     callbacks.append(_make_direct_trigger_callback(transport=watchdog.transport))
