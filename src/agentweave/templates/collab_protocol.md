@@ -93,6 +93,54 @@ agentweave msg send --to {principal} --subject "Done: <title>" --message "..."
 
 ---
 
+## Handoff Message Format
+
+When sending a task or completing a handoff, structure the message body with these fields.
+Do NOT paste full conversation history or file contents — compress to the minimum the recipient needs.
+
+```
+COMPLETED: [what was finished — specific deliverables, not "did the task"]
+CONTEXT:   [decisions made, constraints discovered, relevant state — summarized]
+REMAINING: [the specific next action the recipient should take]
+CONSTRAINTS: [anything the recipient must NOT do]
+VERIFICATION: [exact command to run to confirm the work is correct]
+```
+
+**Example:**
+```
+COMPLETED: Implemented JWT auth endpoints (POST /login, POST /refresh, DELETE /logout)
+CONTEXT:   Used HS256, tokens expire in 1h, refresh tokens stored in Redis with 7d TTL
+REMAINING: Build the frontend login form and wire it to POST /login
+CONSTRAINTS: Do not change the token schema — backend validation depends on current shape
+VERIFICATION: Run `pytest tests/test_auth.py` — all 12 tests should pass
+```
+
+---
+
+## Phase-Based Delegation
+
+When delegating, specify which phase you want. This prevents wasted work if scope is misunderstood.
+
+| Phase | Recipient does | Recipient does NOT |
+|-------|---------------|--------------------|
+| **Explore** | Reads, investigates, writes findings report | Modifies any files |
+| **Plan** | Writes implementation plan to `.agentweave/shared/plan-[task-id].md` | Writes code |
+| **Implement** | Executes an approved plan, runs tests | Changes scope without asking |
+| **Explore + Implement** | Full end-to-end | (use only for small, well-scoped tasks) |
+
+---
+
+## Escalation Path
+
+If blocked or uncertain at any point:
+
+1. Check `.agentweave/shared/context.md` for recent decisions that may unblock you
+2. Send a message to {principal} with the specific question — do not silently stall
+3. If Hub transport: use `ask_user` MCP tool for questions that require human input
+4. **Do NOT silently skip a blocked task** — update its status to `revision_needed` with a note explaining what is needed
+
+---
+
 ## Multi-Person Collaboration (Git Transport with Clusters)
 
 When multiple developers each run their own AI agents on a shared git remote:

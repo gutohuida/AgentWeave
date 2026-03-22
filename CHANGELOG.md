@@ -37,6 +37,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.0] - 2026-03-22
+
+### Added (CLI)
+- **Auto-generated Claude Code skills on `agentweave init`**: running `init` now writes 8 ready-to-use `.claude/skills/` into the project, personalized with agent names, principal, and mode
+  - `/aw-delegate` — delegate a task and auto-generate relay prompt when on local transport
+  - `/aw-status` — full collaboration overview (tasks + inboxes + watchdog)
+  - `/aw-done` — mark task complete and notify principal (safety-guarded)
+  - `/aw-review` — request a code review from the reviewer agent
+  - `/aw-relay` — generate relay prompt for manual handoff
+  - `/aw-sync` — sync all agent context files from `ai_context.md`
+  - `/aw-revise` — accept a revision and notify principal
+  - `aw-collab-start` — auto-invoked session checklist (reads role, inbox, tasks)
+- **Template improvements** based on multi-agent best practices research (Anthropic, Google ADK, OpenAI Swarm):
+  - Security Guardrails section in `claude_context.md`, `kimi_context.md`, `ai_context.md` — hardcoded secrets, shell injection, SSL, path traversal
+  - Performance Guardrails section — N+1 queries, blocking I/O, unbounded loops
+  - Phase Discipline section — Explore → Plan → Implement → Verify workflow
+  - Escalation Path table — 6 clear situations with explicit actions
+  - `task_delegation.md` gains 5 new fields: Phase, Constraints, Output Format, Verification, Escalation Path
+  - `collab_protocol.md` gains structured Handoff Message Format and Phase-Based Delegation table
+  - `review_request.md` gains Review Scope selector and Verification checklist for reviewers
+  - `kimi_context.md` synced with `claude_context.md` — Sub-Agent Setup section added
+- **`aw-deploy` project skill** at `.claude/skills/aw-deploy/` — full release workflow for maintainers
+
+### Added (Hub v0.3.0)
+- **Agent Chat API** (`GET /api/v1/agent/{agent}/chat/{session_id}`): retrieves structured chat history for a given agent session, merging messages and agent output into a unified timeline
+- **AgentPromptPanel UI component**: displays per-agent chat history in the dashboard with auto-scroll and live updates
+- **AgentPromptMessage UI component**: renders individual chat messages with role-based styling (user vs agent)
+- **agentChat API client** (`hub/ui/src/api/agentChat.ts`): React hooks `useAgentChatHistory` and `useAgentRecentChat` for polling agent conversation history
+
+---
+
 ## [0.6.1] - 2026-03-21
 
 ### Added (Hub UI v0.2.1)

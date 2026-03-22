@@ -583,6 +583,28 @@ def _extract_kimi_session_id(sessions_before: set, sessions_after: set) -> Optio
     return None
 
 
+def _get_kimi_session_from_json(work_dir: Optional[str] = None) -> Optional[str]:
+    """Read Kimi session ID from ~/.kimi/kimi.json for the given working directory.
+
+    Kimi stores the last_session_id per work_dir in this JSON file.
+    This is more reliable than detecting new session directories.
+    """
+    kimi_json = Path.home() / ".kimi" / "kimi.json"
+    if not kimi_json.exists():
+        return None
+    try:
+        data = json.loads(kimi_json.read_text())
+        work_dirs = data.get("work_dirs", [])
+        # Use provided work_dir or current working directory
+        target_dir = work_dir or str(Path.cwd())
+        for entry in work_dirs:
+            if entry.get("path") == target_dir:
+                return entry.get("last_session_id")
+    except Exception:
+        pass
+    return None
+
+
 def _run_agent_subprocess(
     agent: str,
     cmd: list,
@@ -653,12 +675,18 @@ def _run_agent_subprocess(
         if not kimi_dir.exists():
             log_event("watchdog_kimi_no_sessions_dir", severity=WARN)
             return
+
+        # Also read kimi.json for the current working directory
+        work_dir = str(Path.cwd())
+
         # Poll for up to 5 seconds to find new session
         for i in range(50):
             if session_id is not None:
                 log_event("watchdog_kimi_session_already_set", session_id=session_id)
                 return
             time.sleep(0.1)
+
+            # Method 1: Check for new session directories
             try:
                 sessions_now = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
                 new_sessions = sessions_now - sessions_before
@@ -666,10 +694,22 @@ def _run_agent_subprocess(
                     found_session = next(iter(new_sessions))
                     session_id = found_session
                     session_id_ref[0] = found_session
-                    log_event("watchdog_kimi_session_found", session_id=found_session, attempts=i)
+                    log_event("watchdog_kimi_session_found", session_id=found_session, attempts=i, method="directory")
                     return
             except Exception as e:
                 log_event("watchdog_kimi_session_error", severity=WARN, error=str(e))
+
+            # Method 2: Read from kimi.json (more reliable)
+            try:
+                from_json = _get_kimi_session_from_json(work_dir)
+                if from_json and from_json not in sessions_before:
+                    session_id = from_json
+                    session_id_ref[0] = from_json
+                    log_event("watchdog_kimi_session_found", session_id=from_json, attempts=i, method="kimi_json")
+                    return
+            except Exception:
+                pass
+
         log_event("watchdog_kimi_session_not_found", severity=WARN, after_attempts=50)
 
     def _run_cmd(run_cmd: list, run_session_id: Optional[str]) -> int:
@@ -795,12 +835,24 @@ def _run_agent_subprocess(
 
     # Extract kimi session ID after process exits (fallback if _detect_kimi_session missed it)
     if agent == "kimi" and session_id is None:
-        kimi_dir = Path.home() / ".kimi" / "sessions"
-        if kimi_dir.exists():
-            sessions_after = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
-            session_id = _extract_kimi_session_id(sessions_before, sessions_after)
-            if session_id:
-                session_id_ref[0] = session_id
+        work_dir = str(Path.cwd())
+
+        # Method 1: Try reading from kimi.json (most reliable)
+        from_json = _get_kimi_session_from_json(work_dir)
+        if from_json:
+            session_id = from_json
+            session_id_ref[0] = from_json
+            log_event("watchdog_kimi_session_fallback", session_id=from_json, method="kimi_json")
+
+        # Method 2: Diff session directories
+        if session_id is None:
+            kimi_dir = Path.home() / ".kimi" / "sessions"
+            if kimi_dir.exists():
+                sessions_after = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+                session_id = _extract_kimi_session_id(sessions_before, sessions_after)
+                if session_id:
+                    session_id_ref[0] = session_id
+                    log_event("watchdog_kimi_session_fallback", session_id=session_id, method="directory_diff")
 
     # Persist session ID for next run
     if session_id:

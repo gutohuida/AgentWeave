@@ -24,7 +24,7 @@ from .locking import acquire_lock, release_lock
 from .messaging import Message, MessageBus
 from .session import Session
 from .task import Task
-from .templates import get_template
+from .templates import get_skill_template, get_template, list_skill_templates
 from .utils import (
     ensure_dirs,
     print_error,
@@ -270,7 +270,7 @@ agentweave summary
         print("  • .agentweave/shared/context.md — What are we doing today? (changes daily)")
         print("\nNext steps:")
         print("1. Fill in the [Replace with...] sections in .agentweave/ai_context.md")
-        print("2. Run `agentweave update-template --agent <name>` to push changes to agent files")
+        print("2. Run `agentweave sync-context` to regenerate agent files from ai_context.md")
         print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
         print("4. Update .agentweave/shared/context.md with today's focus")
         print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
@@ -280,6 +280,21 @@ agentweave summary
         print(
             "  agentweave start       # launch background watchdog — agents notify each other automatically"
         )
+
+        # Generate Claude Code skills in .claude/skills/
+        skills_count = _generate_claude_skills(session, Path.cwd(), force=args.force)
+        if skills_count > 0:
+            print(f"\n[SKILLS] Generated {skills_count} Claude Code skills in .claude/skills/")
+            print("  Available slash commands:")
+            print("    /aw-delegate   delegate a task to another agent")
+            print("    /aw-status     full collaboration status overview")
+            print("    /aw-done       mark a task complete and notify principal")
+            print("    /aw-review     request a code review")
+            print("    /aw-relay      generate relay prompt for an agent")
+            print("    /aw-sync       sync context files from ai_context.md")
+            print("    /aw-revise     accept and begin a revision")
+            print("  (aw-collab-start runs automatically at session start)")
+
         return 0
 
     except ValueError as e:
@@ -305,6 +320,48 @@ def _role_responsibility(role_key: str) -> str:
         "project_manager": "Task tracking, progress coordination",
     }
     return responsibilities.get(role_key, "General development tasks")
+
+
+def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = False) -> int:
+    """Generate .claude/skills/ from skill templates, personalized for this session.
+
+    Returns the number of skill files written.
+    """
+    skills_dir = base_dir / ".claude" / "skills"
+    non_principal = [a for a in session.agent_names if a != session.principal]
+    reviewer = non_principal[0] if non_principal else session.principal
+    agents_list = ", ".join(session.agent_names)
+
+    substitutions = {
+        "project_name": session.name,
+        "principal": session.principal,
+        "agents_list": agents_list,
+        "mode": session.mode,
+        "reviewer": reviewer,
+    }
+
+    skill_names = list_skill_templates()
+    if not skill_names:
+        return 0
+
+    count = 0
+    for name in sorted(skill_names):
+        skill_dir = skills_dir / name
+        skill_file = skill_dir / "SKILL.md"
+        if skill_file.exists() and not force:
+            continue
+        try:
+            template = get_skill_template(name)
+        except FileNotFoundError:
+            continue
+        content = template
+        for key, value in substitutions.items():
+            content = content.replace("{" + key + "}", value)
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(content, encoding="utf-8")
+        count += 1
+
+    return count
 
 
 def cmd_status(_args: argparse.Namespace) -> int:
@@ -923,6 +980,75 @@ def cmd_update_template(args: argparse.Namespace) -> int:
     print(separator)
     print(prompt)
     print(separator)
+    return 0
+
+
+def cmd_sync_context(args: argparse.Namespace) -> int:
+    """Regenerate agent context files from ai_context.md source."""
+    if not AGENTWEAVE_DIR.exists():
+        print_error("No session found. Run: agentweave init")
+        return 1
+
+    # Load session to get agent list
+    session = Session.load()
+    if not session:
+        print_error("Failed to load session. Run: agentweave init")
+        return 1
+
+    # Determine which agents to sync
+    agent_arg = getattr(args, "agent", None)
+    if agent_arg:
+        agents_to_sync = [a.strip() for a in agent_arg.split(",") if a.strip()]
+        # Validate agents
+        for ag in agents_to_sync:
+            if ag not in session.agent_names:
+                print_warning(f"Agent '{ag}' not in session, skipping")
+        agents_to_sync = [ag for ag in agents_to_sync if ag in session.agent_names]
+    else:
+        agents_to_sync = session.agent_names
+
+    if not agents_to_sync:
+        print_warning("No agents to sync")
+        return 0
+
+    force = getattr(args, "force", False)
+    version_comment = f"AgentWeave v{__version__}"
+    written_files: list = []
+    skipped_files: list = []
+
+    for ag in agents_to_sync:
+        root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+        root_path = Path.cwd() / root_filename
+
+        if root_path.exists() and not force:
+            skipped_files.append(root_filename)
+            continue
+
+        # Select template based on agent
+        template_name = "claude_context" if ag == "claude" else "kimi_context"
+        try:
+            context_content = get_template(template_name).replace("{version}", version_comment)
+            with open(root_path, "w", encoding="utf-8") as f:
+                f.write(context_content)
+            written_files.append(root_filename)
+        except FileNotFoundError:
+            print_error(f"Template '{template_name}' not found")
+            continue
+
+    # Report results
+    if written_files:
+        print_success(f"Regenerated {len(written_files)} agent context file(s):")
+        for fname in written_files:
+            print(f"  • {fname}")
+
+    if skipped_files:
+        print_warning(f"Skipped {len(skipped_files)} existing file(s) (use --force to overwrite):")
+        for fname in skipped_files:
+            print(f"  • {fname}")
+
+    if not written_files and not skipped_files:
+        print_info("No files changed")
+
     return 0
 
 
@@ -1771,6 +1897,24 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Optional focus area e.g. 'sub-agents', 'security', 'kimi-capabilities'",
     )
 
+    # sync-context
+    sync_context_parser = subparsers.add_parser(
+        "sync-context",
+        help="Regenerate agent context files from .agentweave/ai_context.md",
+    )
+    sync_context_parser.add_argument(
+        "--agent",
+        "-a",
+        default=None,
+        help="Comma-separated list of agents to sync (default: all session agents)",
+    )
+    sync_context_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite existing agent context files",
+    )
+
     # Start / stop watchdog daemon
     start_parser = subparsers.add_parser(
         "start", help="Start the watchdog daemon in the background"
@@ -1985,6 +2129,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_delegate(parsed_args)
         elif parsed_args.command == "update-template":
             return cmd_update_template(parsed_args)
+        elif parsed_args.command == "sync-context":
+            return cmd_sync_context(parsed_args)
         elif parsed_args.command == "mcp":
             if parsed_args.mcp_command == "setup":
                 return cmd_mcp_setup(parsed_args)

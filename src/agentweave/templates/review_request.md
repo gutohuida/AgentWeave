@@ -6,6 +6,14 @@
 **Date:** {{ date }}  
 **Requested Reviewer:** {{ reviewer }}
 
+## Review Scope
+
+- [ ] Full review (correctness, security, style, performance)
+- [ ] Security-focused
+- [ ] Performance-focused
+- [ ] Style / conventions only
+- [ ] Specific concern: [describe]
+
 ---
 
 ## Summary
@@ -26,6 +34,21 @@
 {% else %}
 - [ ] Tests pending
 {% endif %}
+
+## Verification Steps for Reviewer
+
+Before approving, run:
+```bash
+# {{ test_command }}
+# {{ lint_command }}
+```
+Expected: all tests pass, no lint errors.
+
+Security checklist:
+- [ ] No hardcoded secrets or credentials
+- [ ] External input is validated at system boundaries
+- [ ] No injection vectors (SQL, shell, path traversal)
+- [ ] No new dependencies with known CVEs
 
 ## Specific Areas for Review
 
