@@ -694,7 +694,12 @@ def _run_agent_subprocess(
                     found_session = next(iter(new_sessions))
                     session_id = found_session
                     session_id_ref[0] = found_session
-                    log_event("watchdog_kimi_session_found", session_id=found_session, attempts=i, method="directory")
+                    log_event(
+                        "watchdog_kimi_session_found",
+                        session_id=found_session,
+                        attempts=i,
+                        method="directory",
+                    )
                     return
             except Exception as e:
                 log_event("watchdog_kimi_session_error", severity=WARN, error=str(e))
@@ -705,7 +710,12 @@ def _run_agent_subprocess(
                 if from_json and from_json not in sessions_before:
                     session_id = from_json
                     session_id_ref[0] = from_json
-                    log_event("watchdog_kimi_session_found", session_id=from_json, attempts=i, method="kimi_json")
+                    log_event(
+                        "watchdog_kimi_session_found",
+                        session_id=from_json,
+                        attempts=i,
+                        method="kimi_json",
+                    )
                     return
             except Exception:
                 pass
@@ -852,7 +862,11 @@ def _run_agent_subprocess(
                 session_id = _extract_kimi_session_id(sessions_before, sessions_after)
                 if session_id:
                     session_id_ref[0] = session_id
-                    log_event("watchdog_kimi_session_fallback", session_id=session_id, method="directory_diff")
+                    log_event(
+                        "watchdog_kimi_session_fallback",
+                        session_id=session_id,
+                        method="directory_diff",
+                    )
 
     # Persist session ID for next run
     if session_id:
