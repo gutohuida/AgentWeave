@@ -53,6 +53,7 @@ KNOWN_AGENTS = [
     "claude",  # Claude Code (Anthropic) — claude.ai/code
     "kimi",  # Kimi Code (Moonshot AI)
     "gemini",  # Gemini CLI (Google) — open-source, 1M context
+    "opencode",  # OpenCode — multi-model (75+ providers), open-source
     "codex",  # Codex CLI (OpenAI)
     "aider",  # Aider — git-native AI pair programmer
     "cline",  # Cline — MCP-based VS Code agent
@@ -109,6 +110,7 @@ DEFAULT_AGENT_ROLES = {
     "claude": "tech_lead",
     "kimi": "backend_dev",
     "gemini": "fullstack_dev",
+    "opencode": "fullstack_dev",
     "codex": "backend_dev",
     "aider": "code_reviewer",
     "cline": "fullstack_dev",
@@ -121,10 +123,11 @@ DEFAULT_AGENT_ROLES = {
 }
 
 # Mapping from agent name to the root-level context file that agent auto-reads.
-# claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.
+# claude → CLAUDE.md, gemini → GEMINI.md, opencode → OPENCODE.md, everything else → AGENTS.md.
 AGENT_CONTEXT_FILES: dict = {
     "claude": "CLAUDE.md",
     "gemini": "GEMINI.md",
+    "opencode": "OPENCODE.md",
 }
 AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
 

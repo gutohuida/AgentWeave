@@ -3,7 +3,14 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-File-based collaboration protocol enabling Claude Code and Kimi Code to work together through a shared `.agentweave/` directory. Zero external dependencies — pure Python stdlib. Supports single-machine (local) and cross-machine (git orphan branch) collaboration. The AgentWeave Hub (self-hosted FastAPI server) is now available in `hub/` — see ROADMAP.md.
+File-based collaboration protocol enabling Claude Code, Kimi Code, Gemini CLI, and OpenCode to work together through a shared `.agentweave/` directory. Zero external dependencies — pure Python stdlib. Supports single-machine (local) and cross-machine (git orphan branch) collaboration. The AgentWeave Hub (self-hosted FastAPI server) is now available in `hub/` — see ROADMAP.md.
+
+**Supported Agents:**
+- **Claude Code** (Anthropic) — CLAUDE.md context
+- **Kimi Code** (Moonshot AI) — AGENTS.md context  
+- **Gemini CLI** (Google) — GEMINI.md context
+- **OpenCode** (Open source) — OPENCODE.md context
+- **Others** via generic AGENTS.md (Codex, Cline, Cursor, Copilot, Aider, etc.)
 
 ## Tech Stack
 - Python 3.8+, no external runtime dependencies
@@ -21,8 +28,9 @@ pip install -e ".[dev]"                       # include pytest, black, ruff, myp
 # Verify
 agentweave --help
 
-# Session lifecycle
-agentweave init --project "Name" --principal claude
+# Session lifecycle (NEW: interactive wizard)
+agentweave init                               # Interactive wizard (arrow keys, checkbox UI)
+agentweave init --project "Name" --principal claude  # Non-interactive mode
 agentweave status
 agentweave summary
 
@@ -43,7 +51,11 @@ agentweave transport status                   # show active transport
 agentweave transport pull                     # force immediate fetch
 agentweave transport disable                  # revert to local filesystem
 
-# Hub — end-user install (no source code needed, pulls pre-built image)
+# Hub — NEW: CLI setup command (auto-downloads, creates .env, starts container)
+agentweave hub setup                          # Interactive Hub setup
+agentweave hub setup --port 8000 --dir ./hub  # Custom port/location
+
+# Hub — manual install (no source code needed, pulls pre-built image)
 curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
 curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
 cp .env.example .env   # edit AW_BOOTSTRAP_API_KEY
@@ -103,8 +115,11 @@ src/agentweave/
   watchdog.py     Polls for new files; transport-aware (local glob or remote fetch)
   constants.py    All valid values and directory Path constants — source of truth
   utils.py        load_json, save_json, generate_id, now_iso, print_* helpers
+  interactive.py  Interactive wizard UI: arrow key navigation, checkboxes, styled output
+  hub_setup.py    Hub automation: Docker detection, .env generation, container management
   templates/      Markdown prompt templates; load via get_template("name") from
                   templates/__init__.py — templates are .md files in that directory
+                  claude_context.md, kimi_context.md, gemini_context.md — per-agent templates
   transport/      Pluggable transport layer (see below)
 
 .agentweave/      Runtime state — gitignored except README.md, protocol.md, ai_context.md, ROLES.md
@@ -169,6 +184,44 @@ Valid statuses (from `constants.py`): `pending`, `assigned`, `in_progress`, `com
 - Hub API key format is `aw_live_{random32}` — never commit keys
 - Hub is in `hub/` subdirectory; CLI is in `src/agentweave/` — two separate packages
 - HttpTransport uses stdlib `urllib.request` only — no new CLI dependencies
+
+## Interactive Wizard (v0.7+)
+
+The `agentweave init` command now defaults to an interactive wizard when run without `--project`:
+
+```
+🧵 AgentWeave Setup Wizard
+═══════════════════════════════════════════
+
+[1/6] 📁 Project Name
+Enter a name for your project [My Project]: 
+
+[2/6] 🤖 Select Agents (arrow keys + Space to toggle)
+  [✓] Claude Code (Anthropic)     - Code, review, architecture
+> [✓] Kimi Code (Moonshot AI)     - Fast, context-aware coding
+  [✓] Gemini CLI (Google)         - 1M context, reasoning
+  [✓] OpenCode (Open source)      - Multi-model (75+ providers)
+
+[3/6] 👑 Principal Agent (arrow keys + Enter)
+> Claude
+  Kimi
+
+[4/6] 🌐 Hub Setup
+Set up the AgentWeave Hub? [Y/n]: 
+
+[5/6] 🔌 Transport Configuration
+[6/6] 🚀 Start Watchdog
+```
+
+**Key files:**
+- `src/agentweave/interactive.py` — UI utilities (arrow keys, colors, checkbox navigation)
+- `src/agentweave/hub_setup.py` — Docker automation (detect, download, start Hub)
+
+**When modifying the wizard:**
+- `ask_agents()` — Uses `get_key()` for real-time arrow key input, Space to toggle checkboxes
+- `ask_choice()` — Single-select with arrow navigation, cyan highlight for selection
+- `print_banner()` / `print_step()` — Styled output with box-drawing characters
+- `Styled` class — ANSI color support with automatic terminal capability detection
 
 ## When Compacting
 

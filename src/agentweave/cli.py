@@ -202,7 +202,13 @@ agentweave summary
             if root_path.exists():
                 written_root_files.add(root_filename)
                 continue  # never overwrite an existing file
-            template_name = "claude_context" if ag == "claude" else "kimi_context"
+            # Select template based on agent
+            if ag == "claude":
+                template_name = "claude_context"
+            elif ag == "gemini":
+                template_name = "gemini_context"
+            else:
+                template_name = "kimi_context"
             try:
                 context_content = get_template(template_name).replace("{version}", version_comment)
                 with open(root_path, "w", encoding="utf-8") as f:
@@ -648,7 +654,15 @@ agentweave summary
         if root_path.exists():
             written_root_files.add(root_filename)
             continue
-        template_name = "claude_context" if ag == "claude" else "kimi_context"
+        # Select template based on agent
+        if ag == "claude":
+            template_name = "claude_context"
+        elif ag == "gemini":
+            template_name = "gemini_context"
+        elif ag == "opencode":
+            template_name = "opencode_context"
+        else:
+            template_name = "kimi_context"
         try:
             context_content = get_template(template_name).replace("{version}", version_comment)
             with open(root_path, "w", encoding="utf-8") as f:
@@ -1432,7 +1446,14 @@ def cmd_sync_context(args: argparse.Namespace) -> int:
             continue
 
         # Select template based on agent
-        template_name = "claude_context" if ag == "claude" else "kimi_context"
+        if ag == "claude":
+            template_name = "claude_context"
+        elif ag == "gemini":
+            template_name = "gemini_context"
+        elif ag == "opencode":
+            template_name = "opencode_context"
+        else:
+            template_name = "kimi_context"
         try:
             context_content = get_template(template_name).replace("{version}", version_comment)
             with open(root_path, "w", encoding="utf-8") as f:
@@ -1756,6 +1777,9 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
             return ["claude", "mcp", "add", "agentweave", "--", server_cmd]
         if agent == "kimi":
             return ["kimi", "mcp", "add", "--transport", "stdio", "agentweave", "--", server_cmd]
+        if agent == "gemini":
+            # Gemini CLI uses: gemini mcp add <name> <command>
+            return ["gemini", "mcp", "add", "agentweave", server_cmd]
         # Generic fallback — works for agents that follow the claude CLI convention
         return [agent, "mcp", "add", "agentweave", "--", server_cmd]
 
@@ -1764,6 +1788,7 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
     agent_list = session.agent_names if session else DEFAULT_AGENTS
 
     results = {}
+
     for agent in agent_list:
         mcp_args = _mcp_args(agent)
         try:
@@ -1811,6 +1836,8 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
         for agent in failed:
             if agent == "kimi":
                 print(f"    kimi mcp add --transport stdio agentweave -- {server_cmd}")
+            elif agent == "gemini":
+                print(f"    gemini mcp add agentweave {server_cmd}")
             else:
                 print(f"    {agent} mcp add agentweave -- {server_cmd}")
         print()

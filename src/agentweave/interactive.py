@@ -470,13 +470,23 @@ def ask_choice(
 
 def ask_agents() -> List[str]:
     """Ask user to select multiple agents with interactive checkboxes."""
+    # Agents with dedicated context file support
+    # ★ = Dedicated template (CLAUDE.md, GEMINI.md, OPENCODE.md, or AGENTS.md for Kimi)
+    fully_supported = {"claude", "kimi", "gemini", "opencode"}
+
     print()
     if Styled.enabled():
         print(f"  {Styled.bold(Styled.bright_cyan('Select AI agents to collaborate:'))}")
         print(f"  {Styled.dim('Space to toggle, ↑↓ to navigate, Enter to confirm')}")
+        print()
+        print(f"  {Styled.green('★')} {Styled.dim('= Dedicated context file (recommended)')}")
+        print(f"  {Styled.dim('○ = Generic AGENTS.md support')}")
     else:
         print("Select AI agents to collaborate:")
         print("Space to toggle, arrows to navigate, Enter to confirm")
+        print()
+        print("★ = Dedicated context file (recommended)")
+        print("○ = Generic AGENTS.md support")
     print()
 
     # Agent descriptions
@@ -484,6 +494,7 @@ def ask_agents() -> List[str]:
         "claude": "Claude Code (Anthropic)     - Code, review, architecture",
         "kimi": "Kimi Code (Moonshot AI)     - Fast, context-aware coding",
         "gemini": "Gemini CLI (Google)         - 1M context, reasoning",
+        "opencode": "OpenCode                    - Multi-model (75+ providers), open-source",
         "codex": "Codex CLI (OpenAI)          - GPT-4 powered coding",
         "aider": "Aider                       - Git-native pair programmer",
         "cline": "Cline                       - MCP-based VS Code agent",
@@ -505,11 +516,13 @@ def ask_agents() -> List[str]:
         for i, agent in enumerate(agents):
             is_current = i == current_idx
             is_selected = agent in selected
+            has_dedicated = agent in fully_supported
             desc = descriptions.get(agent, agent)
 
             if Styled.enabled():
                 # Checkbox style
                 checkbox = Styled.green(f"[{Emojis.CHECK}]") if is_selected else Styled.dim("[ ]")
+                support_icon = Styled.green("★") if has_dedicated else Styled.dim("○")
 
                 if is_current:
                     pointer = Styled.green(Emojis.POINTER)
@@ -520,11 +533,12 @@ def ask_agents() -> List[str]:
                     name = Styled.bold(agent.capitalize()) if is_selected else agent.capitalize()
                     desc_text = desc if is_selected else Styled.dim(desc)
 
-                print(f"    {pointer} {checkbox} {name:<12} {desc_text}")
+                print(f"    {pointer} {checkbox} {support_icon} {name:<12} {desc_text}")
             else:
                 checkbox = "[X]" if is_selected else "[ ]"
                 pointer = ">" if is_current else " "
-                print(f"    {pointer} {checkbox} {agent.capitalize():<12} {desc}")
+                support_icon = "★" if has_dedicated else "○"
+                print(f"    {pointer} {checkbox} {support_icon} {agent.capitalize():<12} {desc}")
 
         # Instructions at bottom
         print()
@@ -538,7 +552,7 @@ def ask_agents() -> List[str]:
 
         # Clear lines for redraw
         if Styled.enabled():
-            for _ in range(len(agents) + 2):
+            for _ in range(len(agents) + 5):
                 move_cursor_up()
                 clear_line()
 
@@ -557,7 +571,7 @@ def ask_agents() -> List[str]:
             # Confirm selection
             if not selected:
                 if Styled.enabled():
-                    move_cursor_down(len(agents) + 2)
+                    move_cursor_down(len(agents) + 5)
                     print(f"  {Styled.yellow(Emojis.WARNING)} Please select at least one agent")
                     print()
                     for _ in range(3):
@@ -567,7 +581,7 @@ def ask_agents() -> List[str]:
                 continue
 
             if Styled.enabled():
-                move_cursor_down(len(agents) + 2)
+                move_cursor_down(len(agents) + 5)
             print()
             return list(selected)
         elif key == "q" or key == "Q" or key == "\x03":

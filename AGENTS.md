@@ -29,11 +29,24 @@ The framework supports three modes:
 | Hub Backend | FastAPI + SQLAlchemy + SQLite/PostgreSQL |
 | Hub Frontend | React + TypeScript + Vite |
 
+## Supported AI Agents
+
+AgentWeave officially supports the following AI agents:
+
+| Agent | Context File | Install | Best For |
+|-------|-------------|---------|----------|
+| **Claude** | `CLAUDE.md` | `npm install -g @anthropic-ai/claude-code` | Code review, architecture, tech lead |
+| **Kimi** | `AGENTS.md` | `pip install kimi-cli` | Fast coding, context-aware development |
+| **Gemini** | `GEMINI.md` | `npm install -g @google/gemini-cli` | 1M token context, reasoning, agent skills |
+| **OpenCode** | `OPENCODE.md` | `curl -fsSL https://opencode.ai/install \| bash` | Multi-model (75+ providers), open-source |
+
+Other agents (Codex, Cline, Cursor, Copilot, Aider, etc.) are supported via generic `AGENTS.md` context files.
+
 ## Repository Layout
 
 ```
 AgentWeave/
-├── src/agentweave/              # CLI package (Python 3.8+, zero runtime deps) — v0.5.0
+├── src/agentweave/              # CLI package (Python 3.8+, zero runtime deps) — v0.7.0
 │   ├── __init__.py              # Package exports and version
 │   ├── cli.py                   # All CLI commands (argparse) — main entry point
 │   ├── session.py               # Session lifecycle management
@@ -45,6 +58,8 @@ AgentWeave/
 │   ├── eventlog.py              # Structured event logging
 │   ├── constants.py             # All constants and valid values
 │   ├── utils.py                 # Utility functions
+│   ├── interactive.py           # Interactive wizard UI (arrow keys, colors, prompts)
+│   ├── hub_setup.py             # Hub setup automation (Docker, .env, health checks)
 │   ├── templates/               # Markdown prompt templates
 │   │   ├── __init__.py          # Template loader (get_template())
 │   │   ├── agents_guide.md      # Collaboration guide template
@@ -79,6 +94,28 @@ AgentWeave/
 ├── Makefile                     # Convenience targets for CLI and Hub
 └── README.md                    # User documentation
 ```
+
+## Quick Start (Interactive Wizard)
+
+The fastest way to get started is the interactive setup wizard:
+
+```bash
+# Launch the interactive wizard (recommended)
+agentweave init
+
+# Or use flags for non-interactive setup
+agentweave init --project "My App" --agents claude,kimi
+```
+
+The wizard will guide you through:
+1. **Project name** — Choose a name for your project
+2. **Agent selection** — Use arrow keys + Space to select AI agents (checkbox style)
+3. **Principal agent** — Choose the lead agent with arrow keys
+4. **Collaboration mode** — hierarchical / peer / review
+5. **Hub setup** — Optional Docker-based web dashboard
+6. **MCP & Watchdog** — Auto-configure agent communication
+
+**Navigation:** ↑/↓ arrows to move, Space to toggle, Enter to confirm
 
 ## Build and Development Commands
 
@@ -139,15 +176,21 @@ agentweave --help
 aw --help                    # alias
 agentweave-watch --help      # watchdog
 agentweave-mcp               # MCP server (stdio)
+
+# New in v0.7: Interactive wizard + Hub management
+agentweave init              # Interactive setup wizard
+agentweave hub setup         # Set up AgentWeave Hub (Docker)
+agentweave hub status        # Check Hub status
 ```
 
 ### Hub (Docker)
 
 ```bash
-# Build and start Hub
-make hub-build
+# Quick setup via CLI wizard (downloads docker-compose.yml, creates .env, starts Hub)
+agentweave hub setup
 
-# Start existing image
+# Manual setup
+make hub-build
 make hub-up
 
 # Stop Hub
@@ -424,7 +467,7 @@ python -m twine upload dist/*
 ### Version Management
 
 Version is defined in:
-- `pyproject.toml` (`[project]` section): **0.5.0**
+- `pyproject.toml` (`[project]` section): **0.7.0**
 - `src/agentweave/__init__.py` (`__version__`)
 
 Keep these in sync when bumping versions.
