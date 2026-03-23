@@ -1,6 +1,6 @@
 ---
 name: aw-deploy
-description: Release a new version of AgentWeave — bumps versions, updates CHANGELOG, commits, tags, and creates GitHub releases to trigger PyPI and Docker Hub publishing. Never invoke this automatically.
+description: This skill should be used when the user asks to "deploy", "release", "publish a new version", "bump version", "create a release", or says "/aw-deploy". Checks codebase changes, determines what needs releasing (CLI and/or Hub), bumps versions, updates CHANGELOG, commits, tags, and creates GitHub releases to trigger PyPI and Docker publishing. Never invoke this automatically.
 disable-model-invocation: true
 ---
 
@@ -9,17 +9,64 @@ Deploy a new version of AgentWeave (CLI and/or Hub).
 ## Usage
 
 ```
-/aw-deploy <cli-version>                  — CLI only (e.g. 0.7.0)
-/aw-deploy <cli-version> hub:<hub-version> — both (e.g. 0.7.0 hub:0.3.0)
-/aw-deploy hub:<hub-version>              — Hub only (e.g. hub:0.3.0)
+/aw-deploy                                — auto-detect what changed and ask for versions
+/aw-deploy <cli-version>                  — CLI only (e.g. 0.9.0)
+/aw-deploy <cli-version> hub:<hub-version> — both (e.g. 0.9.0 hub:0.4.0)
+/aw-deploy hub:<hub-version>              — Hub only (e.g. hub:0.4.0)
 ```
 
 Parse $ARGUMENTS to extract:
-- `cli_version`: the new CLI version (semver, e.g. `0.7.0`) — present if not Hub-only
-- `hub_version`: the new Hub version (semver, e.g. `0.3.0`) — present if prefixed with `hub:`
+- `cli_version`: the new CLI version (semver, e.g. `0.9.0`) — present if not Hub-only
+- `hub_version`: the new Hub version (semver, e.g. `0.4.0`) — present if prefixed with `hub:`
 
-If $ARGUMENTS is empty or does not contain a version, ask:
-> "What version should I release? Usage: `/aw-deploy <cli-version>` or `/aw-deploy <cli-version> hub:<hub-version>`"
+---
+
+## Step 0 — Detect changes since last release
+
+Run this before asking for versions. It determines what needs to be released.
+
+```bash
+# Find last tags for CLI and Hub
+git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "no-cli-tag"
+git describe --tags --match "hub-v*" --abbrev=0 2>/dev/null || echo "no-hub-tag"
+```
+
+```bash
+# Changes in CLI (src/) since last CLI tag
+LAST_CLI=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
+if [ -n "$LAST_CLI" ]; then
+  git log --oneline "$LAST_CLI"..HEAD -- src/ pyproject.toml
+else
+  git log --oneline HEAD -- src/ pyproject.toml
+fi
+```
+
+```bash
+# Changes in Hub (hub/) since last Hub tag
+LAST_HUB=$(git describe --tags --match "hub-v*" --abbrev=0 2>/dev/null || echo "")
+if [ -n "$LAST_HUB" ]; then
+  git log --oneline "$LAST_HUB"..HEAD -- hub/
+else
+  git log --oneline HEAD -- hub/
+fi
+```
+
+Also check for any uncommitted changes:
+```bash
+git status --short
+git diff --stat HEAD
+```
+
+Based on results:
+- If commits touch `src/` or `pyproject.toml` → CLI needs a release
+- If commits touch `hub/` → Hub needs a release
+- If both → suggest releasing both together
+
+If $ARGUMENTS is empty, report what changed and suggest what to release:
+> "I found changes in [CLI/Hub/both] since the last release. Recommend releasing [what].
+> What version should I use? Current CLI: X.Y.Z → suggest X.Y+1.Z. Current Hub: A.B.C → suggest A.B+1.C"
+
+If $ARGUMENTS has versions, skip the suggestion and proceed.
 
 ---
 
@@ -52,7 +99,17 @@ ruff check src/
 ```
 
 ```bash
-# 1e. Run tests if tests/ directory exists
+# 1e. Run format check
+black --check src/
+```
+
+```bash
+# 1f. Run type check
+mypy src/
+```
+
+```bash
+# 1g. Run tests if tests/ directory exists
 [ -d tests ] && python -m pytest tests/ -q --tb=short || echo "no tests"
 ```
 
@@ -108,7 +165,7 @@ Use today's date in `YYYY-MM-DD` format.
 ## [<cli_version>] - <today>
 
 ### Added (CLI)
-- <summarize CLI changes since last release — read recent commits with: git log --oneline <last_cli_tag>..HEAD>
+- <summarize CLI changes since last release — read recent commits with: git log --oneline <last_cli_tag>..HEAD -- src/>
 
 ### Added (Hub v<hub_version>)
 - <summarize Hub changes since last release>
@@ -203,6 +260,8 @@ gh run list --limit 5
 Show the user the workflow run URLs and report:
 - CLI release: PyPI publish workflow triggered? → package will be at `https://pypi.org/project/agentweave-ai/`
 - Hub release: Docker image workflow triggered? → image will be at `ghcr.io/gutohuida/agentweave-hub:<hub_version>`
+
+Tell the user: "Run `/aw-check-ci` (or `/loop 2m /aw-check-ci`) to monitor until all workflows pass."
 
 ---
 
