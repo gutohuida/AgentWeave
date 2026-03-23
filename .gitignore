@@ -96,6 +96,9 @@ hub/ui-concepts/
 # Hub's own agentweave runtime state
 hub/.agentweave/
 
+# Hub SQLite data directory (runtime, not for version control)
+hub/data/
+
 # Test environment scripts and directory
 cleanup-test.sh
 run-test-env.sh
