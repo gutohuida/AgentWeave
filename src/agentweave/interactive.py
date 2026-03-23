@@ -4,7 +4,7 @@ import os
 import sys
 import termios
 import tty
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from .constants import KNOWN_AGENTS
 
@@ -327,7 +327,7 @@ def ask_text(
     prompt: str,
     default: Optional[str] = None,
     required: bool = False,
-    validator: Optional[callable] = None,
+    validator: Optional[Callable] = None,
 ) -> str:
     """Ask for text input with optional default and validation."""
     while True:

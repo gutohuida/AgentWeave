@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from contextlib import suppress
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .interactive import (
     Emojis,
@@ -329,7 +329,7 @@ def get_hub_status(target_dir: Path) -> dict:
     target_dir = Path(target_dir)
     compose_file = target_dir / "docker-compose.yml"
 
-    result = {
+    result: Dict[str, Any] = {
         "installed": compose_file.exists(),
         "running": False,
         "healthy": False,
