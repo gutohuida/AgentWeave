@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.0] - 2026-03-23
+
+### Added
+- **Gemini CLI support**: dedicated `gemini_context.md` template; correct MCP
+  command format (`gemini mcp add agentweave <cmd>`) in `agentweave mcp-setup`
+- **OpenCode support**: dedicated `opencode_context.md` template; `OPENCODE.md`
+  as context file; added to `KNOWN_AGENTS`, default roles, and agent list in
+  interactive wizard
+- **Interactive wizard**: star (★) indicator distinguishes agents with dedicated
+  context files (claude, kimi, gemini, opencode) from generic AGENTS.md agents
+- **Deploy skills**: `aw-deploy` skill gains auto change-detection step (detects
+  CLI vs Hub changes since last tag); `aw-check-ci` skill for monitoring GitHub
+  Actions CI/CD, auto-fixing lint/type/test failures, and pushing fixes
+- **Gitignore**: `hub/data/` and `.agentweave/logs/` added to `.gitignore`
+
+### Fixed
+- Mypy type errors in `interactive.py` and `hub_setup.py`
+- Ruff lint errors in `interactive.py`
+- Black formatting across `cli.py`, `interactive.py`, `hub_setup.py`
+
+---
+
 ## [0.1.0] - 2024-03-07
 
 ### Added
