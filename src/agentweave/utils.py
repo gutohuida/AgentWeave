@@ -1,6 +1,7 @@
 """Utility functions for AgentWeave."""
 
 import json
+import secrets
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -93,3 +94,12 @@ def print_error(message: str) -> None:
 def print_info(message: str) -> None:
     """Print info message."""
     print(f"[INFO] {message}")
+
+
+def generate_api_key() -> str:
+    """Generate a secure random API key for Hub authentication.
+
+    Returns:
+        A secure API key in the format 'aw_live_<hex>'
+    """
+    return f"aw_live_{secrets.token_hex(16)}"

@@ -37,6 +37,21 @@ from .validator import validate_message, validate_task
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Initialize a new session."""
+    # Check if we should use interactive mode
+    interactive = getattr(args, "interactive", False)
+    project_arg = getattr(args, "project", None)
+
+    # Auto-enable interactive mode if no project specified and not explicitly disabled
+    if not project_arg and not getattr(args, "non_interactive", False):
+        interactive = True
+
+    if interactive:
+        return _cmd_init_interactive(args)
+    return _cmd_init_non_interactive(args)
+
+
+def _cmd_init_non_interactive(args: argparse.Namespace) -> int:
+    """Non-interactive initialization (original behavior)."""
     if AGENTWEAVE_DIR.exists() and not args.force:
         if AGENTWEAVE_DIR.is_file():
             print_error(".agentweave exists as a file, not a directory.")
@@ -300,6 +315,398 @@ agentweave summary
     except ValueError as e:
         print_error(str(e))
         return 1
+
+
+def _cmd_init_interactive(args: argparse.Namespace) -> int:
+    """Interactive initialization with setup wizard."""
+    from pathlib import Path
+
+    from .hub_setup import setup_hub_interactive
+    from .interactive import (
+        Emojis,
+        Styled,
+        ask_agents,
+        ask_choice,
+        ask_confirm,
+        ask_text,
+        print_banner,
+        print_info_item,
+        print_step,
+        print_success_item,
+        print_summary,
+    )
+
+    # Check if already initialized
+    if AGENTWEAVE_DIR.exists() and not args.force:
+        if AGENTWEAVE_DIR.is_file():
+            print_error(".agentweave exists as a file, not a directory.")
+            print_info("Remove it with: rm .agentweave")
+            return 1
+
+        if Styled.enabled():
+            print(f"\n{Styled.yellow(Emojis.WARNING)} .agentweave/ already exists.")
+        else:
+            print("\n[WARN] .agentweave/ already exists.")
+
+        overwrite = ask_confirm("Overwrite existing session?", default=False)
+        if not overwrite:
+            print("Setup cancelled.")
+            return 0
+
+    # Handle case where .agentweave exists as a file with --force
+    if AGENTWEAVE_DIR.exists() and args.force and AGENTWEAVE_DIR.is_file():
+        try:
+            AGENTWEAVE_DIR.unlink()
+        except OSError as e:
+            print_error(f"Cannot remove .agentweave file: {e}")
+            return 1
+
+    # Welcome banner
+    print_banner()
+
+    total_steps = 6
+    current_step = 0
+
+    # Step 1: Project name
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.FOLDER, "Project Name")
+    default_name = Path.cwd().name.replace("-", " ").replace("_", " ").title()
+    project_name = ask_text(
+        "Enter a name for your project",
+        default=default_name,
+        required=True,
+    )
+    print()
+
+    # Step 2: Select agents
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.ROBOT, "Select Agents")
+    agent_list = ask_agents()
+    print()
+    print_success_item(f"Selected: {', '.join(agent_list)}")
+    print()
+
+    # Step 3: Principal agent
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.CROWN, "Principal Agent")
+    principal_choices = [(a, a.capitalize()) for a in agent_list]
+    default_principal = agent_list[0] if agent_list else "claude"
+    principal = ask_choice(
+        "Who will be the lead agent?",
+        choices=principal_choices,
+        default=default_principal,
+    )
+    print()
+
+    # Step 4: Mode selection
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.GEAR, "Collaboration Mode")
+    mode_choices = [
+        ("hierarchical", "Hierarchical - Principal assigns work, delegates execute"),
+        ("peer", "Peer - Agents can assign tasks to each other"),
+        ("review", "Review - Review-focused workflow"),
+    ]
+    mode = ask_choice(
+        "How should agents collaborate?",
+        choices=mode_choices,
+        default="hierarchical",
+    )
+    print()
+
+    # Step 5: Hub setup
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.GLOBE, "Hub Setup (Web Dashboard)")
+    setup_hub = ask_confirm(
+        "Set up the AgentWeave Hub for web dashboard and multi-machine sync?",
+        default=True,
+    )
+
+    hub_configured = False
+    hub_url = None
+    api_key = None
+
+    if setup_hub:
+        hub_ok, api_key, hub_url, hub_error = setup_hub_interactive(project_name)
+        hub_configured = hub_ok
+        if not hub_ok and hub_error:
+            print()
+            print_info_item("You can set up the Hub later with:")
+            print_info_item("  agentweave hub setup")
+    else:
+        print_info_item("Skipping Hub setup")
+        print_info_item("You can set it up later with: agentweave hub setup")
+    print()
+
+    # Now create the session
+    ensure_dirs()
+
+    try:
+        session = Session.create(
+            name=project_name,
+            principal=principal,
+            mode=mode,
+            agents=agent_list,
+        )
+        session.save()
+
+        # Create all the template files
+        _create_session_files(session, args.force)
+
+        print_success_item(f"Created session: {session.name}")
+        print()
+
+    except ValueError as e:
+        print_error(f"Failed to create session: {e}")
+        return 1
+
+    # Step 6: Transport setup (if Hub was configured)
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.PLUG, "Transport Configuration")
+
+    if hub_configured and hub_url and api_key:
+        print_info_item("Configuring HTTP transport...")
+        from .utils import save_json
+
+        save_json(
+            TRANSPORT_CONFIG_FILE,
+            {
+                "type": "http",
+                "url": hub_url,
+                "api_key": api_key,
+                "project_id": "proj-default",
+            },
+        )
+        print_success_item("HTTP transport configured")
+    else:
+        print_info_item("Using local filesystem transport")
+        print_info_item("Configure HTTP transport later with: agentweave transport setup")
+    print()
+
+    # MCP setup prompt
+    mcp_setup = ask_confirm("Configure MCP server for agents?", default=True)
+    mcp_configured = False
+
+    if mcp_setup:
+        print_info_item("Running MCP setup...")
+        # Create a namespace with the start flag
+        mcp_args = argparse.Namespace(start=False)
+        mcp_result = cmd_mcp_setup(mcp_args)
+        mcp_configured = mcp_result == 0
+    else:
+        print_info_item("Skipping MCP setup")
+        print_info_item("Run later with: agentweave mcp setup")
+    print()
+
+    # Watchdog start prompt
+    watchdog_started = False
+    if mcp_configured:
+        start_watchdog = ask_confirm("Start the background watchdog?", default=True)
+        if start_watchdog:
+            print_info_item("Starting watchdog...")
+            wd_args = argparse.Namespace(retry_after=600)
+            wd_result = cmd_start(wd_args)
+            watchdog_started = wd_result == 0
+        else:
+            print_info_item("Skipping watchdog start")
+            print_info_item("Start later with: agentweave start")
+    else:
+        print_info_item("Start the watchdog later with: agentweave start")
+
+    print()
+
+    # Print summary
+    print_summary(
+        project_name=project_name,
+        agents=agent_list,
+        principal=principal,
+        mode=mode,
+        hub_configured=hub_configured,
+        hub_url=hub_url,
+        mcp_configured=mcp_configured,
+        watchdog_started=watchdog_started,
+    )
+
+    return 0
+
+
+def _create_session_files(session: "Session", force: bool = False) -> None:
+    """Create all the template files for a session."""
+    from pathlib import Path
+
+    from .templates import get_template
+
+    # Create README
+    agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
+    readme_path = AGENTWEAVE_DIR / "README.md"
+    with open(readme_path, "w", encoding="utf-8") as f:
+        f.write(f"""# AgentWeave Session: {session.name}
+
+**ID:** {session.id}
+**Mode:** {session.mode}
+**Principal:** {session.principal}
+**Agents:** {', '.join(session.agent_names)}
+
+## Quick Commands
+
+```bash
+# Check status
+agentweave status
+
+# Create task for any agent
+agentweave task create --title "Task name" --assignee <agent>
+
+# List tasks
+agentweave task list
+
+# Quick delegation
+agentweave quick --to <agent> "Implement auth"
+
+# Check inbox
+agentweave inbox --agent <agent>
+
+# Get relay prompt (for each agent)
+{agents_listed}
+
+# Summary
+agentweave summary
+```
+
+## Files
+
+- `session.json` — Session configuration
+- `protocol.md` — Collaboration protocol (MCP vs manual relay, workflow)
+- `ROLES.md` — Agent role assignments (edit freely)
+- `ai_context.md` — Project DNA source (edit this, then run update-template)
+- `agents/` — Agent status
+- `tasks/active/` — Active tasks
+- `tasks/completed/` — Completed tasks
+- `messages/pending/` — Unread messages
+- `messages/archive/` — Message history
+- `shared/` — Shared context and decisions
+""")
+
+    # Write protocol.md
+    non_principal = [a for a in session.agent_names if a != session.principal]
+    agents_list = ", ".join(non_principal) if non_principal else "kimi"
+    try:
+        collab_protocol = (
+            get_template("collab_protocol")
+            .replace("{principal}", session.principal)
+            .replace("{agents_list}", agents_list)
+            .replace("{mode}", session.mode)
+        )
+        protocol_path = AGENTWEAVE_DIR / "protocol.md"
+        with open(protocol_path, "w", encoding="utf-8") as f:
+            f.write(collab_protocol)
+    except FileNotFoundError:
+        pass
+
+    # Write ROLES.md
+    try:
+        role_rows = []
+        for ag in session.agent_names:
+            dev_role_key = DEFAULT_AGENT_ROLES.get(ag, "fullstack_dev")
+            dev_role_label = DEV_ROLE_LABELS.get(dev_role_key, "Full Stack Developer")
+            session_role = session.get_agent_role(ag)
+            responsibility = _role_responsibility(dev_role_key)
+            role_rows.append(
+                f"| **{ag}** | {dev_role_label} (`{session_role}`) | {responsibility} |"
+            )
+
+        roles_content = (
+            get_template("roles_template")
+            .replace("{project_name}", session.name)
+            .replace("{session_id}", session.id)
+            .replace("{mode}", session.mode)
+            .replace("{principal}", session.principal)
+            .replace("{role_rows}", "\n".join(role_rows))
+        )
+        roles_path = AGENTWEAVE_DIR / "ROLES.md"
+        with open(roles_path, "w", encoding="utf-8") as f:
+            f.write(roles_content)
+    except FileNotFoundError:
+        pass
+
+    # Write ai_context.md
+    ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
+    if not ai_context_path.exists():
+        try:
+            ai_context = get_template("ai_context")
+            with open(ai_context_path, "w", encoding="utf-8") as f:
+                f.write(ai_context)
+        except FileNotFoundError:
+            pass
+
+    # Write agent-specific context files at project root
+    version_comment = f"AgentWeave v{__version__}"
+    written_root_files: set = set()
+    for ag in session.agent_names:
+        root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+        if root_filename in written_root_files:
+            continue
+        root_path = Path.cwd() / root_filename
+        if root_path.exists():
+            written_root_files.add(root_filename)
+            continue
+        template_name = "claude_context" if ag == "claude" else "kimi_context"
+        try:
+            context_content = get_template(template_name).replace("{version}", version_comment)
+            with open(root_path, "w", encoding="utf-8") as f:
+                f.write(context_content)
+            written_root_files.add(root_filename)
+        except FileNotFoundError:
+            pass
+
+    # Write shared/context.md
+    context_md_path = SHARED_DIR / "context.md"
+    if not context_md_path.exists():
+        context_md_content = f"""# Current Project State
+
+> **Purpose:** What's being worked on right now — today's focus, recent decisions, blockers.
+>
+> **Update frequency:** Daily, or whenever state changes.
+>
+> **For project fundamentals:** See your agent context file (CLAUDE.md / AGENTS.md / GEMINI.md) at the project root.
+
+---
+
+## Current Sprint / Phase
+
+[What phase are we in? E.g., "MVP development", "Refactoring auth module", "Preparing for v1.0 release"]
+
+## Active Work
+
+### In Progress
+- [Agent name] is working on: [brief description]
+- Blockers: [any blockers or "None"]
+
+### Next Up
+- [Task or feature name] — assigned to [agent] or unassigned
+- [Task or feature name] — waiting for [dependency]
+
+## Recent Decisions (last 3-5)
+
+1. **[Date]** [Decision made] — [rationale]
+2. **[Date]** [Decision made] — [rationale]
+3. **[Date]** [Decision made] — [rationale]
+
+## Blockers & Needs Attention
+
+- [ ] [Blocker or issue needing attention]
+
+## Notes for Agents
+
+- [Any context that doesn't fit elsewhere]
+
+---
+
+*Last updated: [date]*
+*Session: {session.name} ({session.id})*
+"""
+        context_md_path.write_text(context_md_content, encoding="utf-8")
+
+    # Generate Claude Code skills
+    _generate_claude_skills(session, Path.cwd(), force=force)
 
 
 def _role_responsibility(role_key: str) -> str:
@@ -1206,6 +1613,124 @@ def cmd_log(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hub_setup(args: argparse.Namespace) -> int:
+    """Set up the AgentWeave Hub (Docker-based web dashboard)."""
+    from pathlib import Path
+
+    from .hub_setup import (
+        check_docker_installed,
+        create_hub_env,
+        download_hub_files,
+        generate_api_key,
+        is_port_available,
+        start_hub,
+        wait_for_hub,
+    )
+    from .interactive import (
+        Emojis,
+        Styled,
+        print_banner,
+        print_error_item,
+        print_info_item,
+        print_success_item,
+    )
+
+    print_banner()
+
+    # Check Docker
+    print_info_item("Checking Docker...")
+    docker_ok, docker_error = check_docker_installed()
+    if not docker_ok:
+        print_error_item(f"Docker not found: {docker_error}")
+        print()
+        print("Please install Docker first:")
+        print("  https://docs.docker.com/get-docker/")
+        return 1
+
+    print_success_item("Docker detected")
+
+    # Get project name from session if available
+    session = Session.load()
+    project_name = session.name if session else "Default Project"
+
+    # Determine target directory
+    target_dir = Path(args.dir) if hasattr(args, "dir") else Path.cwd() / "hub"
+    target_dir = target_dir.resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download files if needed
+    compose_file = target_dir / "docker-compose.yml"
+    if not compose_file.exists():
+        print_info_item("Downloading Hub files...")
+        download_ok, download_error = download_hub_files(target_dir)
+        if not download_ok:
+            print_error_item(f"Failed to download: {download_error}")
+            print()
+            print("You can download manually:")
+            print("  curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml")
+            print("  curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example")
+            return 1
+        print_success_item("Downloaded Hub files")
+    else:
+        print_info_item("Using existing Hub files")
+
+    # Check port
+    port = getattr(args, "port", 8000)
+    if not is_port_available(port):
+        if Styled.enabled():
+            print(f"  {Styled.yellow(Emojis.WARNING)} Port {port} is in use.")
+        else:
+            print(f"  [WARN] Port {port} is in use.")
+        print_error_item(f"Port {port} is already in use")
+        print_info_item("Use --port to specify a different port")
+        return 1
+
+    # Generate API key
+    api_key = generate_api_key()
+
+    # Create .env file
+    env_path = create_hub_env(
+        target_dir=target_dir,
+        api_key=api_key,
+        port=port,
+        project_name=project_name,
+    )
+    print_success_item(f"Created {env_path}")
+
+    # Start the Hub
+    start_ok, start_error = start_hub(target_dir, port)
+    if not start_ok:
+        print_error_item(f"Failed to start Hub: {start_error}")
+        return 1
+
+    # Wait for Hub to be ready
+    hub_url = f"http://localhost:{port}"
+    print_info_item("Waiting for Hub to be ready...")
+    if wait_for_hub(hub_url, timeout=60):
+        print_success_item(f"Hub is ready at {hub_url}")
+    else:
+        print_error_item("Hub started but health check timed out")
+        print_info_item(f"Check logs: docker compose -f {target_dir}/docker-compose.yml logs")
+
+    print()
+    if Styled.enabled():
+        print(f"{Styled.bold('Dashboard:')} {Styled.cyan(hub_url)}")
+        print(f"{Styled.bold('API Key:')} {api_key[:15]}... (saved in {target_dir}/.env)")
+    else:
+        print(f"Dashboard: {hub_url}")
+        print(f"API Key: {api_key[:15]}... (saved in {target_dir}/.env)")
+    print()
+    print("Next steps:")
+    print("  1. Open the dashboard in your browser")
+    print("  2. Configure CLI transport:")
+    if Styled.enabled():
+        print(f"     {Styled.cyan(f'agentweave transport setup --type http --url {hub_url} --api-key {api_key} --project-id proj-default')}")
+    else:
+        print(f"     agentweave transport setup --type http --url {hub_url} --api-key {api_key} --project-id proj-default")
+
+    return 0
+
+
 def cmd_mcp_setup(args: argparse.Namespace) -> int:
     """Configure the AgentWeave MCP server for all session agents."""
     import os as _os
@@ -1685,6 +2210,18 @@ For more help: https://github.com/gutohuida/AgentWeave
         action="store_true",
         help="Force overwrite existing session",
     )
+    init_parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        help="Force interactive setup wizard",
+    )
+    init_parser.add_argument(
+        "--non-interactive",
+        dest="non_interactive",
+        action="store_true",
+        help="Force non-interactive mode (requires --project)",
+    )
 
     # Status
     subparsers.add_parser("status", help="Show session status")
@@ -1967,6 +2504,29 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Also launch the background watchdog immediately after setup",
     )
 
+    # Hub commands
+    hub_parser = subparsers.add_parser("hub", help="AgentWeave Hub management")
+    hub_subparsers = hub_parser.add_subparsers(dest="hub_command")
+
+    # Hub setup
+    hub_setup = hub_subparsers.add_parser(
+        "setup",
+        help="Set up the AgentWeave Hub (Docker-based web dashboard)",
+    )
+    hub_setup.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8000,
+        help="Port for the Hub to listen on (default: 8000)",
+    )
+    hub_setup.add_argument(
+        "--dir",
+        "-d",
+        default="hub",
+        help="Directory to install Hub files (default: hub/)",
+    )
+
     # Transport commands
     transport_parser = subparsers.add_parser(
         "transport",
@@ -2136,6 +2696,12 @@ def main(args: Optional[List[str]] = None) -> int:
                 return cmd_mcp_setup(parsed_args)
             else:
                 parser.parse_args(["mcp", "--help"])
+                return 0
+        elif parsed_args.command == "hub":
+            if parsed_args.hub_command == "setup":
+                return cmd_hub_setup(parsed_args)
+            else:
+                parser.parse_args(["hub", "--help"])
                 return 0
         elif parsed_args.command == "transport":
             if parsed_args.transport_command == "setup":
