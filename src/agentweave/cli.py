@@ -1667,8 +1667,12 @@ def cmd_hub_setup(args: argparse.Namespace) -> int:
             print_error_item(f"Failed to download: {download_error}")
             print()
             print("You can download manually:")
-            print("  curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml")
-            print("  curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example")
+            print(
+                "  curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml"
+            )
+            print(
+                "  curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example"
+            )
             return 1
         print_success_item("Downloaded Hub files")
     else:
@@ -1724,9 +1728,13 @@ def cmd_hub_setup(args: argparse.Namespace) -> int:
     print("  1. Open the dashboard in your browser")
     print("  2. Configure CLI transport:")
     if Styled.enabled():
-        print(f"     {Styled.cyan(f'agentweave transport setup --type http --url {hub_url} --api-key {api_key} --project-id proj-default')}")
+        print(
+            f"     {Styled.cyan(f'agentweave transport setup --type http --url {hub_url} --api-key {api_key} --project-id proj-default')}"
+        )
     else:
-        print(f"     agentweave transport setup --type http --url {hub_url} --api-key {api_key} --project-id proj-default")
+        print(
+            f"     agentweave transport setup --type http --url {hub_url} --api-key {api_key} --project-id proj-default"
+        )
 
     return 0
 

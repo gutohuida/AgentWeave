@@ -110,9 +110,10 @@ def supports_color() -> bool:
     if term in ("dumb", ""):
         return False
     if sys.platform == "win32":
-        return os.environ.get("WT_SESSION") is not None or os.environ.get(
-            "COLORTERM"
-        ) in ("truecolor", "24bit")
+        return os.environ.get("WT_SESSION") is not None or os.environ.get("COLORTERM") in (
+            "truecolor",
+            "24bit",
+        )
     return True
 
 
@@ -221,6 +222,7 @@ def get_key() -> str:
     """Read a single keypress from stdin (cross-platform)."""
     if sys.platform == "win32":
         import msvcrt
+
         key = msvcrt.getch().decode("utf-8", errors="ignore")
         if key == "\x00" or key == "\xe0":
             key = msvcrt.getch().decode("utf-8", errors="ignore")
@@ -249,11 +251,21 @@ def print_banner() -> None:
     """Print the AgentWeave welcome banner."""
     if Styled.enabled():
         print()
-        print(f"  {Styled.bright_cyan('╔══════════════════════════════════════════════════════════╗')}")
-        print(f"  {Styled.bright_cyan('║')}  {Emojis.THREAD}  {Styled.bold(Styled.bright_cyan('AgentWeave Setup Wizard'))}                           {Styled.bright_cyan('║')}")
-        print(f"  {Styled.bright_cyan('║')}                                                          {Styled.bright_cyan('║')}")
-        print(f"  {Styled.bright_cyan('║')}  {Styled.dim('Set up your multi-agent AI collaboration environment')}    {Styled.bright_cyan('║')}")
-        print(f"  {Styled.bright_cyan('╚══════════════════════════════════════════════════════════╝')}")
+        print(
+            f"  {Styled.bright_cyan('╔══════════════════════════════════════════════════════════╗')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('║')}  {Emojis.THREAD}  {Styled.bold(Styled.bright_cyan('AgentWeave Setup Wizard'))}                           {Styled.bright_cyan('║')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('║')}                                                          {Styled.bright_cyan('║')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('║')}  {Styled.dim('Set up your multi-agent AI collaboration environment')}    {Styled.bright_cyan('║')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('╚══════════════════════════════════════════════════════════╝')}"
+        )
         print()
     else:
         print()
@@ -347,7 +359,9 @@ def ask_text(
             is_valid, error_msg = validator(user_input)
             if not is_valid:
                 if Styled.enabled():
-                    print(f"  {Styled.red(Emojis.ERROR)} {Styled.red(error_msg or 'Invalid input.')}")
+                    print(
+                        f"  {Styled.red(Emojis.ERROR)} {Styled.red(error_msg or 'Invalid input.')}"
+                    )
                 else:
                     print(f"  [ERR] {error_msg or 'Invalid input.'}")
                 continue
@@ -425,7 +439,11 @@ def ask_choice(
                 print(f"    [{prefix}] {desc}")
 
         # Get key input
-        print(f"\n  {Styled.dim('Use ↑↓ arrows, Enter to select')}" if Styled.enabled() else "\n  (Use arrow keys, Enter to select)")
+        print(
+            f"\n  {Styled.dim('Use ↑↓ arrows, Enter to select')}"
+            if Styled.enabled()
+            else "\n  (Use arrow keys, Enter to select)"
+        )
 
         key = get_key()
 
@@ -587,15 +605,25 @@ def print_summary(
     if Styled.enabled():
         # Project info box
         print(f"  {Styled.bright_cyan('┌────────────────────────────────────────────────────┐')}")
-        print(f"  {Styled.bright_cyan('│')}  {Styled.bold('Project:')}  {project_name:<38} {Styled.bright_cyan('│')}")
-        print(f"  {Styled.bright_cyan('│')}  {Styled.bold('Agents:')}   {', '.join(agents):<38} {Styled.bright_cyan('│')}")
-        print(f"  {Styled.bright_cyan('│')}  {Styled.bold('Principal:')} {principal:<38} {Styled.bright_cyan('│')}")
-        print(f"  {Styled.bright_cyan('│')}  {Styled.bold('Mode:')}     {mode:<38} {Styled.bright_cyan('│')}")
+        print(
+            f"  {Styled.bright_cyan('│')}  {Styled.bold('Project:')}  {project_name:<38} {Styled.bright_cyan('│')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('│')}  {Styled.bold('Agents:')}   {', '.join(agents):<38} {Styled.bright_cyan('│')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('│')}  {Styled.bold('Principal:')} {principal:<38} {Styled.bright_cyan('│')}"
+        )
+        print(
+            f"  {Styled.bright_cyan('│')}  {Styled.bold('Mode:')}     {mode:<38} {Styled.bright_cyan('│')}"
+        )
         print(f"  {Styled.bright_cyan('└────────────────────────────────────────────────────┘')}")
 
         if hub_configured and hub_url:
             print()
-            print(f"  {Styled.green(Emojis.GLOBE)}  Dashboard: {Styled.bright_cyan(Styled.underline(hub_url))}")
+            print(
+                f"  {Styled.green(Emojis.GLOBE)}  Dashboard: {Styled.bright_cyan(Styled.underline(hub_url))}"
+            )
 
         print()
         print(f"  {Styled.bold('Status:')}")
@@ -625,7 +653,11 @@ def print_summary(
     print()
     print("  Next steps:")
     if Styled.enabled():
-        print(f"    {Styled.cyan('1.')}" + f" Open the dashboard: {Styled.underline(hub_url)}" if hub_url else "    1. Set up the Hub: agentweave hub setup")
+        print(
+            f"    {Styled.cyan('1.')}" + f" Open the dashboard: {Styled.underline(hub_url)}"
+            if hub_url
+            else "    1. Set up the Hub: agentweave hub setup"
+        )
         print(f"    {Styled.cyan('2.')} Start your agents (they auto-connect via MCP)")
         print(f"    {Styled.cyan('3.')} Create your first task:")
         cmd_example = 'agentweave quick --to kimi "Implement auth"'

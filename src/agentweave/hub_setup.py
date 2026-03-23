@@ -379,7 +379,9 @@ def get_hub_status(target_dir: Path) -> dict:
     return result
 
 
-def setup_hub_interactive(project_name: str) -> Tuple[bool, Optional[str], Optional[str], Optional[str]]:
+def setup_hub_interactive(
+    project_name: str,
+) -> Tuple[bool, Optional[str], Optional[str], Optional[str]]:
     """Interactive Hub setup.
 
     Args:
@@ -437,9 +439,7 @@ def setup_hub_interactive(project_name: str) -> Tuple[bool, Optional[str], Optio
     if not is_port_available(port):
         new_port = find_available_port(port + 1)
         if Styled.enabled():
-            print(
-                f"  {Styled.yellow(Emojis.WARNING)} Port {port} is in use."
-            )
+            print(f"  {Styled.yellow(Emojis.WARNING)} Port {port} is in use.")
         else:
             print(f"  [WARN] Port {port} is in use.")
 
@@ -450,7 +450,10 @@ def setup_hub_interactive(project_name: str) -> Tuple[bool, Optional[str], Optio
             custom_port = ask_text(
                 "Enter a port number",
                 default=str(new_port),
-                validator=lambda x: (x.isdigit() and 1024 <= int(x) <= 65535, "Port must be 1024-65535"),
+                validator=lambda x: (
+                    x.isdigit() and 1024 <= int(x) <= 65535,
+                    "Port must be 1024-65535",
+                ),
             )
             port = int(custom_port)
 
@@ -479,6 +482,8 @@ def setup_hub_interactive(project_name: str) -> Tuple[bool, Optional[str], Optio
         print_success_item(f"Hub is ready at {hub_url}")
     else:
         print_error_item("Hub started but health check timed out")
-        print_info_item(f"Check status with: docker compose -f {target_dir}/docker-compose.yml logs")
+        print_info_item(
+            f"Check status with: docker compose -f {target_dir}/docker-compose.yml logs"
+        )
 
     return True, api_key, hub_url, None
