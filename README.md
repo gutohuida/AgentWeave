@@ -16,6 +16,16 @@ The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time vis
 
 ### Step 1 — Start the Hub (Docker)
 
+**Option A — one command (after installing the CLI):**
+
+```bash
+agentweave hub setup
+```
+
+This downloads the config files, generates a secure API key, and starts the Hub for you.
+
+**Option B — manually:**
+
 ```bash
 # Download the two config files
 curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
@@ -54,10 +64,16 @@ pip install "agentweave-ai[mcp]"
 
 ```bash
 cd /path/to/your-project
+agentweave init
+```
+
+This launches an interactive setup wizard — enter your project name, choose a collaboration mode, and select your agents. Or skip the wizard with flags:
+
+```bash
 agentweave init --project "My App" --agents claude,kimi
 ```
 
-This creates `AI_CONTEXT.md` (fill it in once: stack, architecture, standards) and `.agentweave/` with agent roles and shared context.
+Either way, AgentWeave creates `AI_CONTEXT.md` (fill it in once: stack, architecture, standards) and `.agentweave/` with agent roles and shared context.
 
 ---
 
@@ -188,6 +204,12 @@ agentweave task update <task_id> --status approved
 agentweave task update <task_id> --status revision_needed --note "Fix X"
 ```
 
+### Hub
+
+```bash
+agentweave hub setup   # download config, generate API key, start Hub via Docker
+```
+
 ### Transport
 
 ```bash
@@ -261,8 +283,8 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.6.1
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.2.1
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.8.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.3.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server
@@ -308,6 +330,7 @@ make lint
 | AgentWeave Hub | ✅ Done (v0.2.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
 | Hub UI | ✅ Done (v0.2.1) | React dashboard — expandable tasks/messages, agent trigger, configurator |
 | Per-agent context templates | ✅ Done (v0.6.0) | `claude_context.md`, `kimi_context.md`, `collab_protocol.md` |
+| Interactive init wizard | ✅ Done (v0.8.0) | `agentweave init` launches guided setup; `hub setup` deploys Hub via Docker |
 | Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
 ---

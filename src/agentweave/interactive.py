@@ -409,7 +409,7 @@ def ask_choice(
     # Selection loop
     while True:
         # Redraw all options
-        for i, (value, desc) in enumerate(choices):
+        for i, (_value, desc) in enumerate(choices):
             is_selected = i == current_idx
 
             if Styled.enabled():
@@ -491,10 +491,7 @@ def ask_agents() -> List[str]:
 
             if Styled.enabled():
                 # Checkbox style
-                if is_selected:
-                    checkbox = Styled.green(f"[{Emojis.CHECK}]")
-                else:
-                    checkbox = Styled.dim("[ ]")
+                checkbox = Styled.green(f"[{Emojis.CHECK}]") if is_selected else Styled.dim("[ ]")
 
                 if is_current:
                     pointer = Styled.green(Emojis.POINTER)
@@ -555,10 +552,7 @@ def ask_agents() -> List[str]:
                 move_cursor_down(len(agents) + 2)
             print()
             return list(selected)
-        elif key == "q" or key == "Q":
-            print("\nSetup cancelled.")
-            sys.exit(1)
-        elif key == "\x03":
+        elif key == "q" or key == "Q" or key == "\x03":
             print("\nSetup cancelled.")
             sys.exit(1)
 
