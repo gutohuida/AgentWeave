@@ -82,6 +82,9 @@ kimiwork.md
 .agentweave/watchdog.pid
 .agentweave/watchdog.log
 
+# Event log (runtime)
+.agentweave/logs/
+
 # UI design concepts — kept locally for reference, not tracked
 hub/ui-concepts/
 
