@@ -5,10 +5,14 @@ services:
       - "${AW_PORT:-8000}:8000"
     volumes:
       - hub-data:/app/data
+      # Mount project directory to detect session.json
+      # Change this path to your actual project directory
+      - ${AGENTWEAVE_PROJECT_DIR:-..}:/project:ro
     env_file:
       - .env
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db
+      - AGENTWEAVE_PROJECT_PATH=/project
     restart: unless-stopped
     healthcheck:
       test:

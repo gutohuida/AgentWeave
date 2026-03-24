@@ -370,7 +370,7 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
     # Welcome banner
     print_banner()
 
-    total_steps = 6
+    total_steps = 7
     current_step = 0
 
     # Step 1: Project name
@@ -419,7 +419,34 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
     )
     print()
 
-    # Step 5: Hub setup
+    # Step 5: YOLO mode configuration
+    current_step += 1
+    print_step(current_step, total_steps, Emojis.ROCKET, "YOLO Mode (Auto-approve)")
+    print("YOLO mode allows agents to execute commands WITHOUT asking for permission.")
+    print()
+    
+    from .constants import AGENT_YOLO_FLAGS
+    yolo_agents = []
+    
+    for agent in agent_list:
+        if agent in AGENT_YOLO_FLAGS:
+            flag = AGENT_YOLO_FLAGS[agent]
+            enable = ask_confirm(
+                f"Enable YOLO mode for {agent.capitalize()}? ({flag})",
+                default=False,
+            )
+            if enable:
+                yolo_agents.append(agent)
+    
+    if yolo_agents:
+        print()
+        print_success_item(f"YOLO enabled for: {', '.join(yolo_agents)}")
+        print_warning("⚠️  These agents will auto-approve all tool calls!")
+    else:
+        print_info_item("YOLO mode not enabled for any agents")
+    print()
+
+    # Step 6: Hub setup
     current_step += 1
     print_step(current_step, total_steps, Emojis.GLOBE, "Hub Setup (Web Dashboard)")
     setup_hub = ask_confirm(
@@ -453,6 +480,11 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
             mode=mode,
             agents=agent_list,
         )
+        
+        # Add YOLO settings if any enabled
+        if yolo_agents:
+            session._data["settings"] = {"yolo": {a: True for a in yolo_agents}}
+        
         session.save()
 
         # Create all the template files
@@ -465,7 +497,7 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
         print_error(f"Failed to create session: {e}")
         return 1
 
-    # Step 6: Transport setup (if Hub was configured)
+    # Step 7: Transport setup (if Hub was configured)
     current_step += 1
     print_step(current_step, total_steps, Emojis.PLUG, "Transport Configuration")
 
@@ -1634,6 +1666,50 @@ def cmd_log(args: argparse.Namespace) -> int:
     return 0
 
 
+def _create_local_build_compose(
+    target_dir: Path, base_compose: Path, build_compose: Path
+) -> None:
+    """Create a docker-compose.yml for local builds that uses local Dockerfile."""
+    # For local builds, we create a simple compose file that builds from the repo
+    compose_content = """services:
+  hub:
+    build:
+      context: %(context)s
+      dockerfile: Dockerfile
+    ports:
+      - "${AW_PORT:-8000}:8000"
+    volumes:
+      - hub-data:/app/data
+      - ${AGENTWEAVE_PROJECT_DIR:-%(project_dir)s}:/project:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db
+      - AGENTWEAVE_PROJECT_PATH=/project
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  hub-data:
+"""
+    # The build context should be the hub/ directory (where Dockerfile lives)
+    context = str(build_compose.parent)
+    # Project dir is the parent of hub/ (repo root)
+    project_dir = str(build_compose.parent.parent)
+    
+    output = target_dir / "docker-compose.yml"
+    output.write_text(compose_content % {"context": context, "project_dir": project_dir})
+
+
 def cmd_hub_setup(args: argparse.Namespace) -> int:
     """Set up the AgentWeave Hub (Docker-based web dashboard)."""
     from pathlib import Path
@@ -1647,6 +1723,8 @@ def cmd_hub_setup(args: argparse.Namespace) -> int:
         start_hub,
         wait_for_hub,
     )
+    # Local build mode - use repo's docker-compose.build.yml
+    use_local_build = getattr(args, "build", False)
     from .interactive import (
         Emojis,
         Styled,
@@ -1679,9 +1757,32 @@ def cmd_hub_setup(args: argparse.Namespace) -> int:
     target_dir = target_dir.resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download files if needed
+    # Download files if needed (skip in local build mode if files exist)
     compose_file = target_dir / "docker-compose.yml"
-    if not compose_file.exists():
+    if use_local_build:
+        # Local build mode: check for repo's docker-compose.build.yml
+        repo_root = Path(__file__).parent.parent.parent  # src/agentweave/ -> repo root
+        build_compose = repo_root / "hub" / "docker-compose.build.yml"
+        base_compose = repo_root / "hub" / "docker-compose.yml"
+        env_example = repo_root / "hub" / ".env.example"
+        
+        if build_compose.exists():
+            print_info_item("Using local build configuration...")
+            import shutil
+            # Copy docker-compose.build.yml as docker-compose.yml
+            shutil.copy(build_compose, target_dir / "docker-compose.yml")
+            # Also need base compose for volumes/env_file config
+            if base_compose.exists():
+                # Merge or use base compose with build override
+                # For simplicity, create a merged compose file
+                _create_local_build_compose(target_dir, base_compose, build_compose)
+            if env_example.exists():
+                shutil.copy(env_example, target_dir / ".env.example")
+            print_success_item("Copied local build files")
+        else:
+            print_error_item("Local build files not found. Are you running from source?")
+            return 1
+    elif not compose_file.exists():
         print_info_item("Downloading Hub files...")
         download_ok, download_error = download_hub_files(target_dir)
         if not download_ok:
@@ -1710,8 +1811,22 @@ def cmd_hub_setup(args: argparse.Namespace) -> int:
         print_info_item("Use --port to specify a different port")
         return 1
 
-    # Generate API key
-    api_key = generate_api_key()
+    # Check for existing API key in .env file (preserve across restarts)
+    env_path = target_dir / ".env"
+    existing_api_key = None
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.startswith("AW_BOOTSTRAP_API_KEY="):
+                existing_api_key = line.split("=", 1)[1].strip()
+                break
+    
+    # Use existing key or generate new one
+    if existing_api_key:
+        api_key = existing_api_key
+        print_info_item(f"Reusing existing API key from {env_path.name}")
+    else:
+        api_key = generate_api_key()
+        print_info_item("Generated new API key")
 
     # Create .env file
     env_path = create_hub_env(
@@ -1857,6 +1972,89 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sync_session_to_hub(url: str, api_key: str) -> None:
+    """Sync local session agents to Hub during transport setup.
+    
+    Reads session.json and pushes each agent to the Hub via API.
+    Shows progress but doesn't fail on errors (best effort).
+    """
+    from .session import Session
+    from .utils import get_context_file_for_agent
+    
+    import json as _json
+    import urllib.error as _urllib_err
+    import urllib.request as _urllib_req
+    
+    session = Session.load()
+    if not session:
+        print_info("No local session found. Skipping agent sync.")
+        return
+    
+    agents = session.agents
+    if not agents:
+        print_info("No agents in session. Skipping agent sync.")
+        return
+    
+    print()
+    print("Syncing local agents to Hub...")
+    
+    synced = 0
+    failed = []
+    
+    for agent_name in session.agent_names:
+        role = session.get_agent_role(agent_name)
+        # Map session roles to Hub-valid roles (collaborator -> delegate)
+        if role == "collaborator":
+            role = "delegate"
+        context_file = get_context_file_for_agent(agent_name)
+        
+        # Get YOLO setting
+        settings = session._data.get("settings", {})
+        yolo_settings = settings.get("yolo", {})
+        yolo_enabled = yolo_settings.get(agent_name, False) if isinstance(yolo_settings, dict) else False
+        
+        # Build request to sync agent config
+        sync_url = f"{url.rstrip('/')}/api/v1/agents/{agent_name}/sync"
+        body = _json.dumps({
+            "role": role,
+            "yolo_enabled": yolo_enabled,
+        }).encode("utf-8")
+        
+        req = _urllib_req.Request(
+            sync_url,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        
+        try:
+            with _urllib_req.urlopen(req, timeout=10) as resp:
+                resp.read()
+            print(f"  ✓ {agent_name} ({role}){' 🚀 YOLO' if yolo_enabled else ''} → {context_file}")
+            synced += 1
+        except _urllib_err.HTTPError as exc:
+            error_body = exc.read().decode('utf-8', errors='ignore')[:100]
+            if exc.code == 401:
+                print(f"  ✗ {agent_name}: HTTP {exc.code} - API key invalid (check hub/.env)")
+            else:
+                print(f"  ✗ {agent_name}: HTTP {exc.code} - {error_body}")
+            failed.append(agent_name)
+        except Exception as exc:
+            print(f"  ✗ {agent_name}: {exc}")
+            failed.append(agent_name)
+    
+    print()
+    if synced > 0:
+        print(f"{synced} agent(s) synced to Hub workspace.")
+        print(f"You can now view and edit them at: {url}/agents")
+    if failed:
+        print_warning(f"{len(failed)} agent(s) failed to sync (see above).")
+
+
 def cmd_transport_setup(args: argparse.Namespace) -> int:
     """Set up cross-machine transport."""
     import subprocess as _sp
@@ -1992,6 +2190,11 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         print(f"   URL:        {url}")
         print(f"   Project ID: {project_id}")
         print(f"   Config:     {TRANSPORT_CONFIG_FILE}")
+        print()
+
+        # Sync local session agents to Hub
+        _sync_session_to_hub(url, api_key)
+
         print()
         print("Next steps:")
         print("  agentweave quick --to kimi 'Test task'")
@@ -2146,6 +2349,426 @@ def cmd_transport_disable(_args: argparse.Namespace) -> int:
 
     TRANSPORT_CONFIG_FILE.unlink()
     print_success("Transport disabled — reverted to local filesystem")
+    return 0
+
+
+def cmd_config_yolo(args: argparse.Namespace) -> int:
+    """Manage YOLO mode configuration."""
+    from .constants import AGENT_YOLO_FLAGS
+    from .session import Session
+
+    # Load session
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+
+    # Get current settings
+    settings = session._data.get("settings", {})
+    yolo_settings = settings.get("yolo", {})
+
+    if args.list:
+        print()
+        print("YOLO Mode Status (auto-approve all tool calls):")
+        print("-" * 50)
+        for agent in AGENT_YOLO_FLAGS:
+            enabled = yolo_settings.get(agent, False)
+            status = "✅ ENABLED" if enabled else "❌ disabled"
+            flag = AGENT_YOLO_FLAGS[agent]
+            print(f"  {agent:<12} {status:<12} (flag: {flag})")
+        print()
+        print("Environment variable override:")
+        print("  AGENTWEAVE_YOLO=1           Enable for all agents")
+        print("  AGENTWEAVE_YOLO=claude,kimi Enable for specific agents")
+        print()
+        return 0
+
+    if args.enable:
+        agent = args.enable.lower()
+        if agent not in AGENT_YOLO_FLAGS:
+            print_error(f"Unknown agent '{agent}'")
+            print_info(f"Supported agents: {', '.join(AGENT_YOLO_FLAGS.keys())}")
+            return 1
+
+        # Update settings
+        if not isinstance(yolo_settings, dict):
+            yolo_settings = {}
+        yolo_settings[agent] = True
+        settings["yolo"] = yolo_settings
+        session._data["settings"] = settings
+        session.save()
+
+        print_success(f"YOLO mode ENABLED for {agent}")
+        print_warning(f"  Flag: {AGENT_YOLO_FLAGS[agent]}")
+        print_warning("  All tool calls will be auto-approved!")
+        return 0
+
+    if args.disable:
+        agent = args.disable.lower()
+        if agent not in AGENT_YOLO_FLAGS:
+            print_error(f"Unknown agent '{agent}'")
+            print_info(f"Supported agents: {', '.join(AGENT_YOLO_FLAGS.keys())}")
+            return 1
+
+        # Update settings
+        if isinstance(yolo_settings, dict):
+            yolo_settings[agent] = False
+        settings["yolo"] = yolo_settings
+        session._data["settings"] = settings
+        session.save()
+
+        print_success(f"YOLO mode DISABLED for {agent}")
+        return 0
+
+    # No arguments provided - show help
+    print()
+    print("YOLO Mode - Auto-approve all tool calls")
+    print("=" * 50)
+    print()
+    print("⚠️  WARNING: YOLO mode gives AI agents full autonomy.")
+    print("   They can execute commands, write files, and make changes")
+    print("   WITHOUT asking for permission. Use with caution!")
+    print()
+    print("Commands:")
+    print("  agentweave config yolo --list              Show current status")
+    print("  agentweave config yolo --enable claude     Enable for Claude")
+    print("  agentweave config yolo --disable claude    Disable for Claude")
+    print()
+    print("Supported agents:")
+    for agent, flag in AGENT_YOLO_FLAGS.items():
+        print(f"  {agent:<12} {flag}")
+    print()
+    print("Environment variable override:")
+    print("  export AGENTWEAVE_YOLO=1                   Enable for all")
+    print("  export AGENTWEAVE_YOLO=claude,kimi         Enable for specific agents")
+    print()
+    return 0
+
+
+def _sync_agent_to_hub(agent_name: str, role: str, yolo_enabled: bool) -> bool:
+    """Sync agent config to Hub if HTTP transport is configured.
+    
+    Returns True if sync succeeded or no Hub configured.
+    Returns False if sync failed.
+    """
+    from .utils import load_json as _load_json
+    
+    config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not config or config.get("type") != "http":
+        return True  # No Hub configured, that's fine
+    
+    url = config["url"].rstrip("/")
+    api_key = config["api_key"]
+    
+    import json as _json
+    import urllib.error as _urllib_err
+    import urllib.request as _urllib_req
+    
+    # Map session roles to Hub-valid roles (collaborator -> delegate)
+    if role == "collaborator":
+        role = "delegate"
+    
+    sync_url = f"{url}/api/v1/agents/{agent_name}/sync"
+    body = _json.dumps({
+        "role": role,
+        "yolo_enabled": yolo_enabled,
+    }).encode("utf-8")
+    
+    req = _urllib_req.Request(
+        sync_url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    
+    try:
+        with _urllib_req.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return True
+    except _urllib_err.HTTPError as exc:
+        error_body = exc.read().decode('utf-8', errors='ignore')
+        print_warning(f"  Hub sync failed for {agent_name}: HTTP {exc.code} - {error_body}")
+        return False
+    except Exception as exc:
+        print_warning(f"  Hub sync failed for {agent_name}: {exc}")
+        return False
+
+
+def _remove_agent_from_hub(agent_name: str) -> bool:
+    """Remove agent from Hub if HTTP transport is configured."""
+    from .utils import load_json as _load_json
+    
+    config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not config or config.get("type") != "http":
+        return True
+    
+    url = config["url"].rstrip("/")
+    api_key = config["api_key"]
+    
+    import urllib.error as _urllib_err
+    import urllib.request as _urllib_req
+    
+    delete_url = f"{url}/api/v1/agents/{agent_name}/sync"
+    
+    req = _urllib_req.Request(
+        delete_url,
+        method="DELETE",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        },
+    )
+    
+    try:
+        with _urllib_req.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return True
+    except Exception:
+        return False
+
+
+def cmd_agent_add(args: argparse.Namespace) -> int:
+    """Add a new agent to the session."""
+    from .constants import AGENT_NAME_RE
+    from .session import Session
+    from .utils import get_context_file_for_agent
+    
+    # Validate agent name
+    if not AGENT_NAME_RE.match(args.name):
+        print_error(f"Invalid agent name: {args.name}")
+        print_info("Agent names must be 1-32 characters, alphanumeric, hyphen, or underscore")
+        return 1
+    
+    # Load session
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+    
+    agent_name = args.name.lower()
+    
+    # Check if agent already exists
+    if agent_name in session.agents:
+        print_error(f"Agent '{agent_name}' already exists in session")
+        return 1
+    
+    # Add agent to session
+    if "agents" not in session._data:
+        session._data["agents"] = {}
+    
+    session._data["agents"][agent_name] = {"role": args.role}
+    
+    # Save session
+    session.save()
+    
+    # Sync to Hub
+    hub_synced = _sync_agent_to_hub(agent_name, args.role, args.yolo)
+    
+    print_success(f"Added agent: {agent_name}")
+    print(f"  Role: {args.role}")
+    print(f"  Context file: {get_context_file_for_agent(agent_name)}")
+    if args.yolo:
+        print_warning("  YOLO mode: enabled (will be applied on next run)")
+    if not hub_synced:
+        print_warning("  Note: Could not sync to Hub (will sync on next connection)")
+    
+    return 0
+
+
+def cmd_agent_remove(args: argparse.Namespace) -> int:
+    """Remove an agent from the session."""
+    from .session import Session
+    
+    # Load session
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+    
+    agent_name = args.name.lower()
+    
+    # Check if agent exists
+    if agent_name not in session.agents:
+        print_error(f"Agent '{agent_name}' not found in session")
+        return 1
+    
+    # Cannot remove principal
+    principal = session.principal
+    if agent_name == principal:
+        print_error(f"Cannot remove principal agent '{agent_name}'")
+        print_info("Set a different principal first or reinitialize the session")
+        return 1
+    
+    # Remove agent from session
+    del session._data["agents"][agent_name]
+    session.save()
+    
+    # Remove from Hub
+    hub_synced = _remove_agent_from_hub(agent_name)
+    
+    print_success(f"Removed agent: {agent_name}")
+    if not hub_synced:
+        print_warning("  Note: Could not remove from Hub (will sync on next connection)")
+    
+    return 0
+
+
+def cmd_agent_set_role(args: argparse.Namespace) -> int:
+    """Change an agent's role."""
+    from .session import Session
+    
+    # Load session
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+    
+    agent_name = args.name.lower()
+    
+    # Check if agent exists
+    if agent_name not in session.agents:
+        print_error(f"Agent '{agent_name}' not found in session")
+        return 1
+    
+    # Update role
+    old_role = session._data["agents"][agent_name].get("role", "delegate")
+    session._data["agents"][agent_name]["role"] = args.role
+    
+    # If setting to principal, update the principal field
+    if args.role == "principal":
+        session._data["principal"] = agent_name
+    
+    session.save()
+    
+    # Get current YOLO setting
+    settings = session._data.get("settings", {})
+    yolo_settings = settings.get("yolo", {})
+    yolo_enabled = yolo_settings.get(agent_name, False) if isinstance(yolo_settings, dict) else False
+    
+    # Sync to Hub
+    hub_synced = _sync_agent_to_hub(agent_name, args.role, yolo_enabled)
+    
+    print_success(f"Updated role for {agent_name}: {old_role} → {args.role}")
+    if not hub_synced:
+        print_warning("  Note: Could not sync to Hub (will sync on next connection)")
+    
+    return 0
+
+
+def cmd_agent_set_yolo(args: argparse.Namespace) -> int:
+    """Enable/disable YOLO mode for an agent."""
+    from .constants import AGENT_YOLO_FLAGS
+    from .session import Session
+    
+    # Load session
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+    
+    agent_name = args.name.lower()
+    
+    # Check if agent exists
+    if agent_name not in session.agents:
+        print_error(f"Agent '{agent_name}' not found in session")
+        return 1
+    
+    # Check if agent supports YOLO
+    if agent_name not in AGENT_YOLO_FLAGS:
+        print_error(f"Agent '{agent_name}' does not support YOLO mode")
+        print_info(f"Supported agents: {', '.join(AGENT_YOLO_FLAGS.keys())}")
+        return 1
+    
+    # Update YOLO setting
+    enabled = args.enabled == "on"
+    
+    settings = session._data.get("settings", {})
+    if "yolo" not in settings or not isinstance(settings["yolo"], dict):
+        settings["yolo"] = {}
+    
+    settings["yolo"][agent_name] = enabled
+    session._data["settings"] = settings
+    session.save()
+    
+    # Get current role
+    role = session._data["agents"][agent_name].get("role", "delegate")
+    
+    # Sync to Hub
+    hub_synced = _sync_agent_to_hub(agent_name, role, enabled)
+    
+    if enabled:
+        print_success(f"YOLO mode ENABLED for {agent_name}")
+        print_warning(f"  Flag: {AGENT_YOLO_FLAGS[agent_name]}")
+        print_warning("  All tool calls will be auto-approved!")
+    else:
+        print_success(f"YOLO mode DISABLED for {agent_name}")
+    
+    if not hub_synced:
+        print_warning("  Note: Could not sync to Hub (will sync on next connection)")
+    
+    return 0
+
+
+def cmd_agent_list(_args: argparse.Namespace) -> int:
+    """List all agents in the session."""
+    from .constants import AGENT_YOLO_FLAGS
+    from .session import Session
+    from .utils import get_context_file_for_agent
+    
+    # Load session
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+    
+    # Get YOLO settings
+    settings = session._data.get("settings", {})
+    yolo_settings = settings.get("yolo", {})
+    
+    print()
+    print(f"Agents in session: {session.name}")
+    print("=" * 60)
+    print()
+    
+    for agent_name in session.agent_names:
+        agent_data = session.agents.get(agent_name, {})
+        role = agent_data.get("role", "delegate")
+        is_principal = agent_name == session.principal
+        
+        # YOLO status
+        yolo_enabled = False
+        if isinstance(yolo_settings, dict):
+            yolo_enabled = yolo_settings.get(agent_name, False)
+        
+        # Build status string
+        status_parts = []
+        if is_principal:
+            status_parts.append("⭐ Principal")
+        else:
+            status_parts.append(f"  {role.capitalize()}")
+        
+        if yolo_enabled:
+            status_parts.append("🚀 YOLO")
+        
+        context_file = get_context_file_for_agent(agent_name)
+        
+        print(f"  {agent_name:<15} {' | '.join(status_parts)}")
+        print(f"                  Context: {context_file}")
+        print()
+    
+    print(f"Total: {len(session.agent_names)} agent(s)")
+    print()
+    print("Commands:")
+    print("  agentweave agent add <name> --role <role>     Add new agent")
+    print("  agentweave agent set-role <name> <role>       Change role")
+    print("  agentweave agent set-yolo <name> on|off       Toggle YOLO mode")
+    print("  agentweave agent remove <name>                Remove agent")
+    print()
+    
     return 0
 
 
@@ -2539,6 +3162,62 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Also launch the background watchdog immediately after setup",
     )
 
+    # Agent commands
+    agent_parser = subparsers.add_parser("agent", help="Manage agents in the session")
+    agent_subparsers = agent_parser.add_subparsers(dest="agent_command")
+
+    # agent add
+    agent_add = agent_subparsers.add_parser(
+        "add",
+        help="Add a new agent to the session",
+    )
+    agent_add.add_argument("name", help="Agent name (e.g., gemini, codex)")
+    agent_add.add_argument(
+        "--role",
+        choices=["principal", "delegate", "reviewer"],
+        default="delegate",
+        help="Agent role (default: delegate)",
+    )
+    agent_add.add_argument(
+        "--yolo",
+        action="store_true",
+        help="Enable YOLO mode (auto-approve all tool calls)",
+    )
+
+    # agent remove
+    agent_remove = agent_subparsers.add_parser(
+        "remove",
+        help="Remove an agent from the session",
+    )
+    agent_remove.add_argument("name", help="Agent name to remove")
+
+    # agent set-role
+    agent_set_role = agent_subparsers.add_parser(
+        "set-role",
+        help="Change an agent's role",
+    )
+    agent_set_role.add_argument("name", help="Agent name")
+    agent_set_role.add_argument(
+        "role",
+        choices=["principal", "delegate", "reviewer"],
+        help="New role",
+    )
+
+    # agent set-yolo
+    agent_set_yolo = agent_subparsers.add_parser(
+        "set-yolo",
+        help="Enable/disable YOLO mode for an agent",
+    )
+    agent_set_yolo.add_argument("name", help="Agent name")
+    agent_set_yolo.add_argument(
+        "enabled",
+        choices=["on", "off"],
+        help="Enable or disable YOLO mode",
+    )
+
+    # agent list
+    agent_subparsers.add_parser("list", help="List all agents in the session")
+
     # Hub commands
     hub_parser = subparsers.add_parser("hub", help="AgentWeave Hub management")
     hub_subparsers = hub_parser.add_subparsers(dest="hub_command")
@@ -2560,6 +3239,12 @@ For more help: https://github.com/gutohuida/AgentWeave
         "-d",
         default="hub",
         help="Directory to install Hub files (default: hub/)",
+    )
+    hub_setup.add_argument(
+        "--build",
+        "-b",
+        action="store_true",
+        help="Build from local source instead of downloading image (for development/testing)",
     )
 
     # Transport commands
@@ -2660,6 +3345,37 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Your answer text",
     )
 
+    # Config command for YOLO mode
+    config_parser = subparsers.add_parser(
+        "config",
+        help="Manage AgentWeave configuration",
+    )
+    config_subparsers = config_parser.add_subparsers(dest="config_command")
+
+    # config yolo
+    yolo_parser = config_subparsers.add_parser(
+        "yolo",
+        help="Manage YOLO mode (auto-approve all tool calls)",
+    )
+    yolo_parser.add_argument(
+        "--enable",
+        "-e",
+        metavar="AGENT",
+        help="Enable YOLO mode for an agent (claude, kimi, gemini, codex, opencode)",
+    )
+    yolo_parser.add_argument(
+        "--disable",
+        "-d",
+        metavar="AGENT",
+        help="Disable YOLO mode for an agent",
+    )
+    yolo_parser.add_argument(
+        "--list",
+        "-l",
+        action="store_true",
+        help="Show current YOLO mode status for all agents",
+    )
+
     return parser
 
 
@@ -2754,6 +3470,26 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_reply(parsed_args)
         elif parsed_args.command == "hub-heartbeat":
             return cmd_hub_heartbeat(parsed_args)
+        elif parsed_args.command == "config":
+            if parsed_args.config_command == "yolo":
+                return cmd_config_yolo(parsed_args)
+            else:
+                parser.parse_args(["config", "--help"])
+                return 0
+        elif parsed_args.command == "agent":
+            if parsed_args.agent_command == "add":
+                return cmd_agent_add(parsed_args)
+            elif parsed_args.agent_command == "remove":
+                return cmd_agent_remove(parsed_args)
+            elif parsed_args.agent_command == "set-role":
+                return cmd_agent_set_role(parsed_args)
+            elif parsed_args.agent_command == "set-yolo":
+                return cmd_agent_set_yolo(parsed_args)
+            elif parsed_args.agent_command == "list":
+                return cmd_agent_list(parsed_args)
+            else:
+                parser.parse_args(["agent", "--help"])
+                return 0
         else:
             parser.print_help()
             return 0

@@ -443,22 +443,49 @@ class _KimiParser:
         return f"  🔧 {tool_name}({', '.join(parts)})"
 
 
-def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -> list:
+def _agent_ping_cmd(
+    agent: str,
+    prompt: str,
+    session_id: Optional[str] = None,
+    yolo: bool = False,
+) -> list:
     """Return the CLI command to ping an agent with a prompt.
 
     Kimi uses --print; Claude and others use --output-format stream-json so we can
     parse JSONL lines in real-time and extract the session_id for resumption.
+
+    Args:
+        agent: Agent name (claude, kimi, gemini, etc.)
+        prompt: The prompt to send
+        session_id: Optional session ID to resume
+        yolo: If True, add YOLO flag to auto-approve all tool calls
     """
+    from .constants import AGENT_YOLO_FLAGS
+
     if agent == "kimi":
         cmd = ["kimi", "--print"]
+        if yolo:
+            cmd.append("--yolo")
         if session_id:
             cmd += ["--session", session_id]
+        cmd += ["-p", prompt]
+        return cmd
+    if agent == "gemini":
+        # Gemini uses --output-format stream-json for NDJSON streaming
+        # Supports --resume to continue previous session
+        cmd = ["gemini", "--output-format", "stream-json"]
+        if yolo:
+            cmd.append("--yolo")
+        if session_id:
+            cmd += ["--resume", session_id]
         cmd += ["-p", prompt]
         return cmd
     # Claude and other CLIs — stream-json gives real-time JSONL lines with thinking,
     # assistant messages, tool calls, and session_id for resumption.
     # --verbose is required when using --output-format with --print (-p).
     cmd = [agent, "--output-format", "stream-json", "--verbose"]
+    if yolo and agent in AGENT_YOLO_FLAGS:
+        cmd.append(AGENT_YOLO_FLAGS[agent])
     if session_id:
         cmd += ["--resume", session_id]
     cmd += ["-p", prompt]
@@ -475,6 +502,59 @@ def _load_agent_session(agent: str) -> Optional[str]:
         return data.get("session_id")
     except Exception:
         return None
+
+
+def _is_yolo_enabled(agent: str, transport: Any = None) -> bool:
+    """Check if YOLO mode is enabled for an agent.
+
+    YOLO mode auto-approves all tool calls without prompting.
+    Checks in order of priority:
+    1. Environment variable (highest priority)
+    2. Session settings (local)
+    3. Hub settings (if using HTTP transport)
+
+    Environment variable: AGENTWEAVE_YOLO=1 or AGENTWEAVE_YOLO=agent1,agent2
+    Session setting: .agentweave/session.json -> settings.yolo[agent] = true
+    Hub setting: GET /api/v1/settings/yolo/{agent}
+    """
+    import os
+
+    agent_lower = agent.lower()
+
+    # Check environment variable first (highest priority)
+    yolo_env = os.environ.get("AGENTWEAVE_YOLO", "").strip()
+    if yolo_env:
+        if yolo_env in ("1", "true", "yes"):
+            return True
+        # Comma-separated list of agents
+        yolo_agents = {a.strip().lower() for a in yolo_env.split(",")}
+        if agent_lower in yolo_agents:
+            return True
+
+    # Check session settings (local)
+    try:
+        from .session import Session
+        session = Session.load()
+        if session and hasattr(session, "_data"):
+            settings = session._data.get("settings", {})
+            yolo_settings = settings.get("yolo", {})
+            if isinstance(yolo_settings, dict) and yolo_settings.get(agent_lower, False):
+                return True
+            elif isinstance(yolo_settings, bool) and yolo_settings:
+                return True
+    except Exception:
+        pass
+
+    # Check Hub settings (if using HTTP transport)
+    if transport is not None and transport.get_transport_type() == "http":
+        try:
+            yolo_status = transport.get_yolo_status(agent_lower)
+            if yolo_status and yolo_status.get("enabled"):
+                return True
+        except Exception:
+            pass
+
+    return False
 
 
 def _save_agent_session(agent: str, session_id: str) -> None:
@@ -605,6 +685,33 @@ def _get_kimi_session_from_json(work_dir: Optional[str] = None) -> Optional[str]
     return None
 
 
+def _get_gemini_tmp_sessions() -> set:
+    """Get set of Gemini session files from ~/.gemini/tmp/.
+
+    Gemini exports sessions to JSON files named: session-{timestamp}-{id}.json
+    Example: session-2025-09-18T02-45-3b44bc68.json
+    """
+    gemini_tmp = Path.home() / ".gemini" / "tmp"
+    if not gemini_tmp.exists():
+        return set()
+    try:
+        return {p.name for p in gemini_tmp.glob("session-*.json") if p.is_file()}
+    except Exception:
+        return set()
+
+
+def _extract_gemini_session_id(filename: str) -> Optional[str]:
+    """Extract session ID from Gemini session filename.
+
+    Filename format: session-2025-09-18T02-45-3b44bc68.json
+    Returns: 2025-09-18T02-45-3b44bc68 (the unique session ID)
+    """
+    if not filename.startswith("session-") or not filename.endswith(".json"):
+        return None
+    # Remove 'session-' prefix and '.json' suffix
+    return filename[8:-5]  # len("session-") == 8, len(".json") == 5
+
+
 def _run_agent_subprocess(
     agent: str,
     cmd: list,
@@ -613,12 +720,16 @@ def _run_agent_subprocess(
     is_http: bool,
 ) -> None:
     """Background thread: run agent, stream output to Hub, save session ID."""
-    # Snapshot kimi sessions before launch
-    sessions_before: set = set()
+    # Snapshot sessions before launch for agents that need directory-based detection
+    kimi_sessions_before: set = set()
+    gemini_sessions_before: set = set()
+
     if agent == "kimi":
         kimi_dir = Path.home() / ".kimi" / "sessions"
         if kimi_dir.exists():
-            sessions_before = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+            kimi_sessions_before = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+    elif agent == "gemini":
+        gemini_sessions_before = _get_gemini_tmp_sessions()
 
     # Send "running" heartbeat + diagnostic start marker
     if is_http:
@@ -689,7 +800,7 @@ def _run_agent_subprocess(
             # Method 1: Check for new session directories
             try:
                 sessions_now = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
-                new_sessions = sessions_now - sessions_before
+                new_sessions = sessions_now - kimi_sessions_before
                 if new_sessions:
                     found_session = next(iter(new_sessions))
                     session_id = found_session
@@ -707,7 +818,7 @@ def _run_agent_subprocess(
             # Method 2: Read from kimi.json (more reliable)
             try:
                 from_json = _get_kimi_session_from_json(work_dir)
-                if from_json and from_json not in sessions_before:
+                if from_json and from_json not in kimi_sessions_before:
                     session_id = from_json
                     session_id_ref[0] = from_json
                     log_event(
@@ -721,6 +832,42 @@ def _run_agent_subprocess(
                 pass
 
         log_event("watchdog_kimi_session_not_found", severity=WARN, after_attempts=50)
+
+    def _detect_gemini_session() -> None:
+        """Background thread: poll for new Gemini session shortly after start."""
+        nonlocal session_id, session_id_ref
+        if agent != "gemini":
+            return
+
+        # Poll for up to 5 seconds to find new session
+        for i in range(50):
+            if session_id is not None:
+                log_event("watchdog_gemini_session_already_set", session_id=session_id)
+                return
+            time.sleep(0.1)
+
+            # Check for new session files in ~/.gemini/tmp/
+            try:
+                sessions_now = _get_gemini_tmp_sessions()
+                new_sessions = sessions_now - gemini_sessions_before
+                if new_sessions:
+                    # Get the most recent session file (by filename which includes timestamp)
+                    newest_file = sorted(new_sessions)[-1]
+                    found_session = _extract_gemini_session_id(newest_file)
+                    if found_session:
+                        session_id = found_session
+                        session_id_ref[0] = found_session
+                        log_event(
+                            "watchdog_gemini_session_found",
+                            session_id=found_session,
+                            attempts=i,
+                            filename=newest_file,
+                        )
+                        return
+            except Exception as e:
+                log_event("watchdog_gemini_session_error", severity=WARN, error=str(e))
+
+        log_event("watchdog_gemini_session_not_found", severity=WARN, after_attempts=50)
 
     def _run_cmd(run_cmd: list, run_session_id: Optional[str]) -> int:
         """Run agent command, stream output. Returns process returncode."""
@@ -737,15 +884,18 @@ def _run_agent_subprocess(
         stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
         stderr_thread.start()
 
-        # Start Kimi session detection in background (for real-time session_id)
+        # Start Kimi/Gemini session detection in background (for real-time session_id)
         if agent == "kimi":
             threading.Thread(target=_detect_kimi_session, daemon=True).start()
+        elif agent == "gemini":
+            threading.Thread(target=_detect_gemini_session, daemon=True).start()
 
         output_line_count = 0
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
-            # Try to extract session_id from JSONL (always attempt for Claude)
-            if agent != "kimi" and session_id is None:
+            # Try to extract session_id from JSONL (for Claude and similar agents)
+            # Kimi and Gemini don't expose session_id in their stream output
+            if agent not in ("kimi", "gemini") and session_id is None:
                 extracted = _extract_claude_session_id(line)
                 if extracted:
                     session_id = extracted
@@ -824,7 +974,8 @@ def _run_agent_subprocess(
                 session_file.unlink(missing_ok=True)
             session_id = None
             session_id_ref[0] = None
-            retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None)  # cmd[-1] is the prompt
+            yolo = _is_yolo_enabled(agent, transport)
+            retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None, yolo=yolo)  # cmd[-1] is the prompt
             returncode = _run_cmd(retry_cmd, None)
 
         if returncode != 0:
@@ -859,7 +1010,7 @@ def _run_agent_subprocess(
             kimi_dir = Path.home() / ".kimi" / "sessions"
             if kimi_dir.exists():
                 sessions_after = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
-                session_id = _extract_kimi_session_id(sessions_before, sessions_after)
+                session_id = _extract_kimi_session_id(kimi_sessions_before, sessions_after)
                 if session_id:
                     session_id_ref[0] = session_id
                     log_event(
@@ -868,14 +1019,32 @@ def _run_agent_subprocess(
                         method="directory_diff",
                     )
 
+    # Extract Gemini session ID after process exits (fallback if _detect_gemini_session missed it)
+    if agent == "gemini" and session_id is None:
+        # Method: Diff tmp session files
+        sessions_after = _get_gemini_tmp_sessions()
+        new_sessions = sessions_after - gemini_sessions_before
+        if new_sessions:
+            # Get the most recent session file
+            newest_file = sorted(new_sessions)[-1]
+            found_session = _extract_gemini_session_id(newest_file)
+            if found_session:
+                session_id = found_session
+                session_id_ref[0] = found_session
+                log_event(
+                    "watchdog_gemini_session_fallback",
+                    session_id=found_session,
+                    filename=newest_file,
+                )
+
     # Persist session ID for next run
     if session_id:
         with contextlib.suppress(Exception):
             _save_agent_session(agent, session_id)
-        # For Kimi, post a synthetic output line so the Hub/UI learns the session ID.
+        # For Kimi and Gemini, post a synthetic output line so the Hub/UI learns the session ID.
         # All real output lines were posted without session_id (detected post-exit),
         # so without this the UI would never see the session ID chip.
-        if agent == "kimi" and is_http:
+        if agent in ("kimi", "gemini") and is_http:
             with contextlib.suppress(Exception):
                 transport.post_agent_output(
                     agent, f"[session: {session_id}]", session_id=session_id
@@ -955,7 +1124,8 @@ def _make_ping_callback(
             f"Call get_inbox('{recipient}') to retrieve it and respond."
         )
         session_id = _load_agent_session(recipient)
-        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
+        yolo = _is_yolo_enabled(recipient, transport)
+        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id, yolo=yolo)
         subject = data.get("subject", "(no subject)")
         print(f"[PING] Notifying {recipient}: {subject}")
         print(f"[PING] Command: {' '.join(cmd)}")
@@ -1043,7 +1213,8 @@ def _make_direct_trigger_callback(
             f"You have a new AgentWeave message from user. "
             f"Call get_inbox('{recipient}') to retrieve it and respond."
         )
-        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
+        yolo = _is_yolo_enabled(recipient, transport)
+        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id, yolo=yolo)
 
         log_event("direct_trigger_executing", agent=recipient, msg_id=msg_id, session_id=session_id)
         print(f"[TRIGGER] Executing direct trigger for {recipient}")

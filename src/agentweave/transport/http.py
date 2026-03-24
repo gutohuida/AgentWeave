@@ -268,3 +268,10 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/logs", body)
         except Exception:
             pass
+
+    def get_yolo_status(self, agent: str) -> Optional[Dict[str, Any]]:
+        """GET /api/v1/settings/yolo/{agent} — fetch YOLO mode status from Hub."""
+        try:
+            return self._request("GET", f"/settings/yolo/{agent}")
+        except RuntimeError:
+            return None

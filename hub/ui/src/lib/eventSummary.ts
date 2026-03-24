@@ -29,7 +29,13 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'watchdog_stderr_drain_failed': return `stderr drain for ${data.agent} failed: ${data.error}`
     case 'ping_skipped': return `${data.agent}: ${data.reason}`
     case 'transport_error': return `${data.method}: ${data.error}`
-    case 'log_event': return `${(data as Record<string, unknown>).event_type ?? ''}: ${(data as Record<string, unknown>).agent ?? ''}`
+    case 'log_event': {
+      const eventType = (data as Record<string, unknown>).event_type ?? ''
+      const agent = (data as Record<string, unknown>).agent ?? ''
+      if (eventType === 'yolo_enabled') return `🚀 ${agent} YOLO mode ENABLED`
+      if (eventType === 'yolo_disabled') return `🛑 ${agent} YOLO mode disabled`
+      return `${eventType}: ${agent}`
+    }
     default: {
       // Best-effort: pick any short string field from data
       const val = data.error ?? data.message ?? data.summary ?? data.title ?? ''

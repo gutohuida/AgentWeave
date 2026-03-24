@@ -170,8 +170,8 @@ export function AgentConfigurator() {
         <span
           className="px-2 py-1 rounded-full m3-label-small"
           style={{
-            background: selectedCount > 0 ? 'var(--primary-container)' : 'var(--surface-high)',
-            color: selectedCount > 0 ? 'var(--on-primary-container)' : 'var(--on-sv)'
+            background: selectedCount > 0 ? 'var(--p-cont)' : 'var(--surface-high)',
+            color: selectedCount > 0 ? 'var(--on-p-cont)' : 'var(--on-sv)'
           }}
         >
           {selectedCount} selected
@@ -186,12 +186,11 @@ export function AgentConfigurator() {
             <button
               key={agent.name}
               onClick={() => toggleAgent(agent.name)}
-              className={`p-3 rounded-lg text-left transition-all ${
-                isSelected
-                  ? 'bg-primary/15 border-2'
-                  : 'bg-surface-high hover:bg-surface-highest border-2 border-transparent'
-              }`}
-              style={isSelected ? { borderColor: 'var(--primary)' } : {}}
+              className="p-3 rounded-lg text-left transition-all border-2"
+              style={{
+                background: isSelected ? 'var(--p-cont)' : 'var(--surface-high)',
+                borderColor: isSelected ? 'var(--primary)' : 'transparent',
+              }}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -255,7 +254,7 @@ export function AgentConfigurator() {
               <span
                 key={agent}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full m3-label-medium"
-                style={{ background: 'var(--primary-container)', color: 'var(--on-primary-container)' }}
+                style={{ background: 'var(--p-cont)', color: 'var(--on-p-cont)' }}
               >
                 {agent}
                 <button

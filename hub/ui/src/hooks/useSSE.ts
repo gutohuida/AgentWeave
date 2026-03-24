@@ -20,6 +20,8 @@ const SSE_EVENT_TYPES = [
   'question_answered',
   'agent_heartbeat',
   'agent_output',
+  'agent_config_updated',
+  'agent_removed',
   'log_event',
 ]
 
@@ -119,6 +121,11 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['status'] })
           break
         case 'agent_heartbeat':
+          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          break
+        case 'agent_config_updated':
+        case 'agent_removed':
+          queryClient.invalidateQueries({ queryKey: ['agentConfigs'] })
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break
       }

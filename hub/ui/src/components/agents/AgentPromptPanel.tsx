@@ -216,7 +216,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
       {sessionMode === 'resume' && (
         <div
           className="px-4 py-2 border-b"
-          style={{ background: 'var(--surface)', borderColor: 'var(--outline-variant)' }}
+          style={{ background: 'var(--surface-low)', borderColor: 'var(--outline-variant)' }}
         >
           {isLoadingSessions ? (
             <span className="m3-body-small" style={{ color: 'var(--on-sv)' }}>Loading sessions...</span>
@@ -306,7 +306,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
             rows={1}
             className="flex-1 px-4 py-3 rounded-xl m3-body-medium resize-none border"
             style={{
-              background: 'var(--surface)',
+              background: 'var(--surface-low)',
               borderColor: 'var(--outline-variant)',
               color: 'var(--on-sv)',
               minHeight: '48px',
@@ -323,7 +323,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
             disabled={!message.trim() || isSending || (sessionMode === 'resume' && !selectedSessionId)}
             className="px-4 py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: message.trim() && !isSending ? 'var(--primary)' : 'var(--surface)',
+              background: message.trim() && !isSending ? 'var(--primary)' : 'var(--surface-low)',
               color: message.trim() && !isSending ? 'var(--primary-foreground)' : 'var(--on-sv)',
             }}
           >

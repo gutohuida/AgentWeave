@@ -206,9 +206,12 @@ export function AgentMessageSender({ agent, existingSessionId }: AgentMessageSen
       {/* Result */}
       {result && (
         <div
-          className={`p-3 rounded-lg m3-body-medium ${
-            result.success ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'
-          }`}
+          className="p-3 rounded-lg m3-body-medium"
+          style={
+            result.success
+              ? { background: 'var(--s-cont)', color: 'var(--on-s-cont)' }
+              : { background: 'var(--error-cont)', color: 'var(--on-error-cont)' }
+          }
         >
           {result.message}
         </div>

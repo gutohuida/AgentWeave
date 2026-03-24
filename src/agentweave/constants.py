@@ -154,3 +154,12 @@ MESSAGE_TYPES = ["message", "delegation", "review", "discussion"]
 
 # Priorities
 PRIORITIES = ["low", "medium", "high", "critical"]
+
+# YOLO mode flags per agent (auto-approve all tool calls)
+AGENT_YOLO_FLAGS = {
+    "claude": "--dangerously-skip-permissions",
+    "kimi": "--yolo",
+    "gemini": "--yolo",
+    "codex": "--yolo",
+    "opencode": "--yolo",
+}

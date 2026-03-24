@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, Task
+from ...db.models import AgentConfig, AgentHeartbeat, AgentOutput, EventLog, Message, Project, Task
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -22,23 +22,19 @@ from ...schemas.agents import (
     AgentTimelineEvent,
 )
 from ...sse import sse_manager
-from ...utils import persist_event, short_id
+from ...utils import persist_event, short_id, get_context_file_for_agent
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
 
-# In-memory store for manually added agents (per project)
-# In production, this should be in the database
-_manually_added_agents: dict[str, set[str]] = {}
 
+# =============================================================================
+# Session.json Helpers (Read-Only)
+# =============================================================================
 
-def _get_session_agents(project_id: str) -> Optional[set[str]]:
-    """Try to read configured agents from .agentweave/session.json.
-    
-    Returns None if session file doesn't exist.
-    """
-    # Try common locations for session.json
+def _find_session_json() -> Optional[Path]:
+    """Find session.json in common locations."""
     possible_paths = [
         Path(".agentweave") / "session.json",
         Path("..") / ".agentweave" / "session.json",
@@ -47,104 +43,72 @@ def _get_session_agents(project_id: str) -> Optional[set[str]]:
     
     for path in possible_paths:
         if path.exists():
-            try:
-                data = json.loads(path.read_text())
-                agents = data.get("agents", {})
-                if agents:
-                    return set(agents.keys())
-            except (json.JSONDecodeError, IOError):
-                continue
+            return path
     
     return None
 
 
-class AddAgentRequest(BaseModel):
-    agent_name: str
-
-
-@router.post("/configure", status_code=status.HTTP_201_CREATED)
-async def add_configured_agent(
-    body: AddAgentRequest,
-    project: Tuple[str, str] = Depends(get_project),
-):
-    """Manually add an agent to the configured list for this project."""
-    project_id, _ = project
-    agent_name = body.agent_name.strip().lower()
+def _get_session_agents_with_roles(project_id: str) -> Optional[Dict[str, Dict[str, Any]]]:
+    """Try to read configured agents with their roles from .agentweave/session.json.
     
-    if not agent_name or len(agent_name) > 32:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid agent name"
-        )
-    
-    if project_id not in _manually_added_agents:
-        _manually_added_agents[project_id] = set()
-    
-    _manually_added_agents[project_id].add(agent_name)
-    
-    await sse_manager.broadcast(
-        project_id,
-        "agent_configured",
-        {"agent": agent_name, "action": "added"}
-    )
-    
-    return {"success": True, "agent": agent_name}
-
-
-@router.delete("/configure/{agent_name}", status_code=status.HTTP_200_OK)
-async def remove_configured_agent(
-    agent_name: str,
-    project: Tuple[str, str] = Depends(get_project),
-):
-    """Remove a manually added agent from the configured list."""
-    project_id, _ = project
-    agent_name = agent_name.strip().lower()
-    
-    if project_id in _manually_added_agents:
-        _manually_added_agents[project_id].discard(agent_name)
-    
-    await sse_manager.broadcast(
-        project_id,
-        "agent_configured",
-        {"agent": agent_name, "action": "removed"}
-    )
-    
-    return {"success": True, "agent": agent_name}
-
-
-@router.get("/configured")
-async def get_configured_agents(
-    project: Tuple[str, str] = Depends(get_project),
-):
-    """Get the list of configured agents for this project.
-    
-    Returns agents from session.json if it exists, otherwise manually added agents.
+    Returns None if session file doesn't exist.
+    Returns dict of {agent_name: {role, principal, ...}} if it exists.
     """
-    project_id, _ = project
+    path = _find_session_json()
+    if not path:
+        return None
     
-    # Try to get from session file first
-    session_agents = _get_session_agents(project_id)
-    if session_agents is not None:
-        return {
-            "source": "session.json",
-            "agents": sorted(session_agents),
-            "can_modify": False
-        }
-    
-    # Fall back to manually added agents
-    manual_agents = _manually_added_agents.get(project_id, set())
-    return {
-        "source": "manual",
-        "agents": sorted(manual_agents),
-        "can_modify": True
-    }
+    try:
+        data = json.loads(path.read_text())
+        agents = data.get("agents", {})
+        principal = data.get("principal")
+        
+        # Enhance agent data with role info
+        result = {}
+        for agent_name, agent_data in agents.items():
+            if isinstance(agent_data, dict):
+                result[agent_name] = agent_data.copy()
+            else:
+                result[agent_name] = {}
+            
+            # Add role based on principal field
+            if agent_name == principal:
+                result[agent_name]["role"] = "principal"
+            else:
+                result[agent_name]["role"] = result[agent_name].get("role", "delegate")
+        
+        return result
+    except (json.JSONDecodeError, IOError):
+        return None
 
+
+def _get_session_agents(project_id: str) -> Optional[set[str]]:
+    """Try to read configured agents from .agentweave/session.json.
+    
+    Returns None if session file doesn't exist.
+    """
+    agents_data = _get_session_agents_with_roles(project_id)
+    if agents_data is None:
+        return None
+    return set(agents_data.keys())
+
+
+# =============================================================================
+# Agent List and Status (Read-Only from Hub DB + session.json)
+# =============================================================================
 
 @router.get("", response_model=List[AgentSummary])
 async def list_agents(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
+    """List all agents for this project.
+    
+    Combines agents from:
+    - Hub database (persisted configs)
+    - session.json (local CLI config)
+    - Recent activity (heartbeats, messages, tasks)
+    """
     project_id, _ = project
     cutoff = datetime.now(timezone.utc) - _24H
 
@@ -208,17 +172,21 @@ async def list_agents(
     for (name,) in out_agents_res:
         active_agents.add(name)
 
-    # Get configured agents from session.json or manual configuration
-    configured_agents = _get_session_agents(project_id)
-    if configured_agents is not None:
-        # Use agents from session.json
-        agents = configured_agents
-    else:
-        # Use manually added agents, or fall back to active agents only
-        agents = _manually_added_agents.get(project_id, set())
-        if not agents:
-            # No configuration yet - only show agents that have been active
-            agents = active_agents.copy()
+    # Get configured agents from session.json
+    session_agents_data = _get_session_agents_with_roles(project_id) or {}
+    session_agents = set(session_agents_data.keys())
+    
+    # Get agents from Hub database
+    result = await session.execute(
+        select(AgentConfig.agent_name).where(AgentConfig.project_id == project_id)
+    )
+    hub_agents = {row[0] for row in result.all()}
+    
+    # Combine all agent names
+    agents = session_agents | hub_agents
+    if not agents:
+        # No configuration yet - only show agents that have been active
+        agents = active_agents.copy()
     
     # Always ensure active agents are included even if not in config
     agents.update(active_agents)
@@ -420,3 +388,263 @@ async def get_agent_output(
     q = q.order_by(AgentOutput.timestamp.asc()).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()
+
+
+# =============================================================================
+# Agent Configuration Endpoints (Read-Only for Hub UI)
+# CLI is the source of truth - these endpoints only display synced data
+# =============================================================================
+
+class AgentConfigResponse(BaseModel):
+    """Agent configuration response."""
+    agent: str
+    role: str
+    yolo_enabled: bool
+    context_file: str
+    settings: Optional[dict]
+    source: str  # "hub" or "session.json"
+    updated_at: Optional[datetime]
+
+
+@router.get("/configs", response_model=List[AgentConfigResponse])
+async def list_agent_configs(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """List all agent configurations for this project.
+    
+    READ-ONLY: Hub displays merged config from:
+    - Hub database (synced from CLI)
+    - session.json (local CLI config, if accessible)
+    
+    To modify agents, use the CLI: agentweave agent add/set-role/set-yolo
+    """
+    project_id, _ = project
+    
+    # Get all agents from Hub database
+    q = select(AgentConfig).where(AgentConfig.project_id == project_id)
+    result = await session.execute(q)
+    hub_configs = {c.agent_name: c for c in result.scalars().all()}
+    
+    # Get agents from session.json
+    session_agents = _get_session_agents_with_roles(project_id) or {}
+    
+    # Combine all agent names
+    all_agents = set(hub_configs.keys()) | set(session_agents.keys())
+    
+    configs = []
+    for agent_name in sorted(all_agents):
+        hub_config = hub_configs.get(agent_name)
+        session_data = session_agents.get(agent_name, {})
+        
+        # Determine context file
+        context_file = hub_config.context_file if hub_config else get_context_file_for_agent(agent_name)
+        
+        # Determine role (Hub config takes precedence, then session.json)
+        role = hub_config.role if hub_config else session_data.get("role", "delegate")
+        
+        # Determine YOLO (Hub has it, session.json doesn't)
+        yolo_enabled = hub_config.yolo_enabled if hub_config else False
+        
+        configs.append(AgentConfigResponse(
+            agent=agent_name,
+            role=role,
+            yolo_enabled=yolo_enabled,
+            context_file=context_file,
+            settings=hub_config.settings if hub_config else None,
+            source="hub" if hub_config else "session.json",
+            updated_at=hub_config.updated_at if hub_config else None,
+        ))
+    
+    return configs
+
+
+@router.get("/{name}/config", response_model=AgentConfigResponse)
+async def get_agent_config(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get configuration for a specific agent.
+    
+    READ-ONLY: Use CLI to modify: agentweave agent set-role/set-yolo
+    """
+    project_id, _ = project
+    agent_name = name.lower()
+    
+    # Get from Hub database
+    q = select(AgentConfig).where(
+        AgentConfig.project_id == project_id,
+        AgentConfig.agent_name == agent_name,
+    )
+    result = await session.execute(q)
+    hub_config = result.scalars().first()
+    
+    # Check if in session.json
+    session_agents = _get_session_agents_with_roles(project_id) or {}
+    session_data = session_agents.get(agent_name, {})
+    in_session = agent_name in session_agents
+    
+    # Determine context file
+    context_file = hub_config.context_file if hub_config else get_context_file_for_agent(agent_name)
+    
+    # Determine role
+    role = hub_config.role if hub_config else session_data.get("role", "delegate")
+    
+    # Determine YOLO
+    yolo_enabled = hub_config.yolo_enabled if hub_config else False
+    
+    if hub_config:
+        return AgentConfigResponse(
+            agent=agent_name,
+            role=role,
+            yolo_enabled=yolo_enabled,
+            context_file=context_file,
+            settings=hub_config.settings,
+            source="hub",
+            updated_at=hub_config.updated_at,
+        )
+    else:
+        # Return default config
+        return AgentConfigResponse(
+            agent=agent_name,
+            role=role,
+            yolo_enabled=yolo_enabled,
+            context_file=context_file,
+            settings=None,
+            source="session.json" if in_session else "default",
+            updated_at=None,
+        )
+
+
+# =============================================================================
+# CLI-to-Hub Sync Endpoints (CLI Only)
+# These are called by the CLI to sync local changes to the Hub
+# =============================================================================
+
+class SyncAgentConfigRequest(BaseModel):
+    """Request from CLI to sync agent config to Hub."""
+    role: str
+    yolo_enabled: bool = False
+
+
+@router.post("/{name}/sync", response_model=AgentConfigResponse)
+async def sync_agent_config(
+    name: str,
+    body: SyncAgentConfigRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Sync agent config from CLI to Hub.
+    
+    This is called by the CLI (agentweave agent add/set-role/set-yolo)
+    to sync local session.json changes to the Hub.
+    """
+    from ...utils import short_id
+    
+    project_id, _ = project
+    agent_name = name.lower()
+    
+    # Validate role
+    valid_roles = {"principal", "delegate", "reviewer"}
+    if body.role not in valid_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {', '.join(valid_roles)}"
+        )
+    
+    # Get existing config or create new
+    q = select(AgentConfig).where(
+        AgentConfig.project_id == project_id,
+        AgentConfig.agent_name == agent_name,
+    )
+    result = await session.execute(q)
+    config = result.scalars().first()
+    
+    if config:
+        # Update existing
+        config.role = body.role
+        config.yolo_enabled = body.yolo_enabled
+    else:
+        # Create new
+        config = AgentConfig(
+            id=f"acfg-{short_id()}",
+            project_id=project_id,
+            agent_name=agent_name,
+            role=body.role,
+            yolo_enabled=body.yolo_enabled,
+            context_file=get_context_file_for_agent(agent_name),
+        )
+        session.add(config)
+    
+    await session.commit()
+    await session.refresh(config)
+    
+    # Broadcast update
+    await sse_manager.broadcast(
+        project_id,
+        "agent_config_updated",
+        {"agent": agent_name, "role": config.role, "yolo_enabled": config.yolo_enabled}
+    )
+    
+    # Log event for YOLO toggle
+    event_type = "yolo_enabled" if body.yolo_enabled else "yolo_disabled"
+    await persist_event(
+        session,
+        project_id,
+        event_type,
+        {"agent": agent_name, "yolo_enabled": config.yolo_enabled},
+        agent=agent_name,
+    )
+    await sse_manager.broadcast(
+        project_id,
+        "log_event",
+        {
+            "event_type": event_type,
+            "agent": agent_name,
+            "data": {"agent": agent_name, "yolo_enabled": config.yolo_enabled},
+            "severity": "info",
+        },
+    )
+    
+    return AgentConfigResponse(
+        agent=agent_name,
+        role=config.role,
+        yolo_enabled=config.yolo_enabled,
+        context_file=config.context_file,
+        settings=config.settings,
+        source="hub",
+        updated_at=config.updated_at,
+    )
+
+
+@router.delete("/{name}/sync", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_agent_config(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete agent config from Hub (called by CLI when agent is removed)."""
+    project_id, _ = project
+    agent_name = name.lower()
+    
+    # Delete from Hub database
+    q = select(AgentConfig).where(
+        AgentConfig.project_id == project_id,
+        AgentConfig.agent_name == agent_name,
+    )
+    result = await session.execute(q)
+    config = result.scalars().first()
+    
+    if config:
+        await session.delete(config)
+        await session.commit()
+        
+        # Broadcast removal
+        await sse_manager.broadcast(
+            project_id,
+            "agent_removed",
+            {"agent": agent_name}
+        )
+    
+    return None

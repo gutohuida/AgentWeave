@@ -22,6 +22,7 @@ class Project(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
+    settings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
@@ -179,4 +180,34 @@ class AgentOutput(Base):
     __table_args__ = (
         Index("ix_agent_outputs_project_agent", "project_id", "agent"),
         Index("ix_agent_outputs_project_ts", "project_id", "timestamp"),
+    )
+
+
+class AgentConfig(Base):
+    """Per-agent configuration stored in Hub database."""
+
+    __tablename__ = "agent_configs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False
+    )
+    agent_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # Role: principal, delegate, or reviewer
+    role: Mapped[str] = mapped_column(String(32), nullable=False, default="delegate")
+    # YOLO mode: auto-approve all tool calls
+    yolo_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Context file path (e.g., CLAUDE.md, AGENTS.md)
+    context_file: Mapped[str] = mapped_column(String(128), nullable=False, default="AGENTS.md")
+    # Additional settings as JSON
+    settings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_agent_configs_project_agent", "project_id", "agent_name", unique=True),
     )
