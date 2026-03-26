@@ -457,17 +457,28 @@ def setup_hub_interactive(
             )
             port = int(custom_port)
 
-    # Generate API key
-    api_key = generate_api_key()
+    # Re-use existing API key if .env already exists (Hub may be running with it)
+    env_file = target_dir / ".env"
+    existing_api_key: Optional[str] = None
+    if env_file.exists():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if line.startswith("AW_BOOTSTRAP_API_KEY="):
+                existing_api_key = line.split("=", 1)[1].strip()
+                break
 
-    # Create .env file
-    env_path = create_hub_env(
-        target_dir=target_dir,
-        api_key=api_key,
-        port=port,
-        project_name=project_name,
-    )
-    print_success_item(f"Created {env_path.name}")
+    api_key = existing_api_key or generate_api_key()
+
+    # Create .env file (skip if already present with same key to avoid restarting a live Hub)
+    if not existing_api_key:
+        env_path = create_hub_env(
+            target_dir=target_dir,
+            api_key=api_key,
+            port=port,
+            project_name=project_name,
+        )
+        print_success_item(f"Created {env_path.name}")
+    else:
+        print_info_item("Using existing Hub credentials")
 
     # Start the Hub
     start_ok, start_error = start_hub(target_dir, port)

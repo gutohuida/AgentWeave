@@ -752,7 +752,10 @@ agentweave summary
 *Last updated: [date]*
 *Session: {session.name} ({session.id})*
 """
-        context_md_path.write_text(context_md_content, encoding="utf-8")
+        from contextlib import suppress
+
+        with suppress(OSError):
+            context_md_path.write_text(context_md_content, encoding="utf-8")
 
     # Generate Claude Code skills
     _generate_claude_skills(session, Path.cwd(), force=force)
@@ -3505,7 +3508,10 @@ def main(args: Optional[List[str]] = None) -> int:
         print("\nInterrupted.")
         return 130
     except Exception as e:
+        import traceback
+
         print_error(f"Unexpected error: {e}")
+        print_error(traceback.format_exc().strip())
         return 1
 
 
