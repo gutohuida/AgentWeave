@@ -534,13 +534,17 @@ def _is_yolo_enabled(agent: str, transport: Any = None) -> bool:
     # Check session settings (local)
     try:
         from .session import Session
+
         session = Session.load()
         if session and hasattr(session, "_data"):
             settings = session._data.get("settings", {})
             yolo_settings = settings.get("yolo", {})
-            if isinstance(yolo_settings, dict) and yolo_settings.get(agent_lower, False):
-                return True
-            elif isinstance(yolo_settings, bool) and yolo_settings:
+            if (
+                isinstance(yolo_settings, dict)
+                and yolo_settings.get(agent_lower, False)
+                or isinstance(yolo_settings, bool)
+                and yolo_settings
+            ):
                 return True
     except Exception:
         pass
@@ -975,7 +979,9 @@ def _run_agent_subprocess(
             session_id = None
             session_id_ref[0] = None
             yolo = _is_yolo_enabled(agent, transport)
-            retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None, yolo=yolo)  # cmd[-1] is the prompt
+            retry_cmd = _agent_ping_cmd(
+                agent, cmd[-1], session_id=None, yolo=yolo
+            )  # cmd[-1] is the prompt
             returncode = _run_cmd(retry_cmd, None)
 
         if returncode != 0:

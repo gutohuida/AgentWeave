@@ -7,14 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Context file mapping for agents
-AGENT_CONTEXT_FILES = {
-    "claude": "CLAUDE.md",
-    "gemini": "GEMINI.md",
-    "opencode": "OPENCODE.md",
-    "kimi": "AGENTS.md",
-}
-
 from .constants import (
     AGENTS_DIR,
     AGENTWEAVE_DIR,
@@ -26,13 +18,21 @@ from .constants import (
     TASKS_COMPLETED_DIR,
 )
 
+# Context file mapping for agents
+AGENT_CONTEXT_FILES = {
+    "claude": "CLAUDE.md",
+    "gemini": "GEMINI.md",
+    "opencode": "OPENCODE.md",
+    "kimi": "AGENTS.md",
+}
+
 
 def get_context_file_for_agent(agent_name: str) -> str:
     """Get the appropriate context file for an agent.
-    
+
     Args:
         agent_name: The agent name (e.g., 'claude', 'kimi')
-        
+
     Returns:
         The context filename (e.g., 'CLAUDE.md', 'AGENTS.md')
     """
