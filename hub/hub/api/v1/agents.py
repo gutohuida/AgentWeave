@@ -637,7 +637,7 @@ async def delete_agent_config(
     config = result.scalars().first()
     
     if config:
-        await session.delete(config)
+        session.delete(config)
         await session.commit()
         
         # Broadcast removal

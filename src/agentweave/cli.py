@@ -1542,18 +1542,16 @@ def cmd_start(args: argparse.Namespace) -> int:
             print_info("Run 'agentweave stop' first to restart it.")
             return 1
         except (OSError, ProcessLookupError, ValueError):
-            WATCHDOG_PID_FILE.unlink()
+            WATCHDOG_PID_FILE.unlink(missing_ok=True)
 
     from .constants import WATCHDOG_LOG_FILE
 
     retry_after = getattr(args, "retry_after", None) or 600  # default 10 min
     cmd = ["agentweave-watch", "--auto-ping", "--retry-after", str(retry_after)]
 
-    import os as _os
-
     spawn_kwargs: dict = (
         {"creationflags": 0x00000008 | 0x08000000}  # DETACHED_PROCESS | CREATE_NO_WINDOW
-        if _os.name == "nt"
+        if os.name == "nt"
         else {"start_new_session": True}
     )
 
@@ -1563,6 +1561,7 @@ def cmd_start(args: argparse.Namespace) -> int:
     WATCHDOG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115
     proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)
+    log_fh.close()  # child inherited the fd; parent doesn't need it open
 
     WATCHDOG_PID_FILE.write_text(str(proc.pid))
     print_success(f"Watchdog started in background (PID {proc.pid})")
@@ -1584,7 +1583,7 @@ def cmd_stop(_args: argparse.Namespace) -> int:
     try:
         pid = int(WATCHDOG_PID_FILE.read_text().strip())
     except ValueError:
-        WATCHDOG_PID_FILE.unlink()
+        WATCHDOG_PID_FILE.unlink(missing_ok=True)
         print_error("Corrupt PID file removed.")
         return 1
 
@@ -1597,10 +1596,10 @@ def cmd_stop(_args: argparse.Namespace) -> int:
             import signal
 
             os.kill(pid, signal.SIGTERM)
-        WATCHDOG_PID_FILE.unlink()
+        WATCHDOG_PID_FILE.unlink(missing_ok=True)
         print_success(f"Watchdog stopped (PID {pid})")
     except (OSError, ProcessLookupError):
-        WATCHDOG_PID_FILE.unlink()
+        WATCHDOG_PID_FILE.unlink(missing_ok=True)
         print_warning(f"Process {pid} was already gone — PID file removed.")
 
     return 0

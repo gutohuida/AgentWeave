@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hub.auth import get_project
+from ...auth import get_project
 from hub.db.engine import get_session
 from hub.db.models import Project
 

@@ -4,7 +4,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install dependencies first
-RUN pip install --no-cache-dir fastapi uvicorn sqlalchemy pydantic alembic aiohttp aiosqlite
+RUN pip install --no-cache-dir fastapi uvicorn sqlalchemy pydantic alembic aiosqlite
 
 # Copy hub code
 COPY hub/ ./hub/

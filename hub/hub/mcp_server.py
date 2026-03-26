@@ -68,7 +68,7 @@ def _hub_request(
     req.add_header("Content-Type", "application/json")
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return _json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"Hub API error {exc.code}: {exc.read().decode()}")
