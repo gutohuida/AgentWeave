@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.1] - 2026-03-26
+
+### Fixed (CLI)
+- **File handle leak**: `log_fh` is now closed immediately after `Popen()` in `cmd_start` — prevents fd accumulation on repeated start/stop cycles
+- **Unlink safety**: all `PID_FILE.unlink()` calls in `cmd_start` / `cmd_stop` now use `missing_ok=True` to avoid `FileNotFoundError` on race conditions
+- **Redundant import**: removed `import os as _os` inside `cmd_start` (was already imported as `os`)
+- **Version fallback**: `__init__.py` fallback updated to `0.9.1` (was stuck at `0.8.0`)
+- Ruff lint cleanup (87 auto-fixed + 5 manual): removed blank-line whitespace, fixed import order, removed unused import, fixed E402 in `utils.py`
+- Black formatting applied to `cli.py` and `watchdog.py`
+
+### Fixed (Hub v0.4.0)
+- **`await session.delete()` crash**: `AsyncSession.delete()` is synchronous; removed erroneous `await` in agent config deletion endpoint — endpoint would raise `TypeError` at runtime
+- **MCP server hang**: added `timeout=30` to `urllib.request.urlopen()` in `_hub_request()` — previously could hang indefinitely if Hub was unreachable
+- **Import inconsistency**: `settings.py` now uses relative import `from ...auth import get_project` (was absolute `from hub.auth`)
+- **Dockerfile.dev**: removed unused `aiohttp` dependency (not in `pyproject.toml`, not imported anywhere)
+
+### Added (Hub v0.4.0)
+- **Agent config UI**: Hub dashboard now shows agent configurations synced from CLI (`/agents/configs` endpoint with `AgentConfigResponse` schema)
+- **Watchdog enhancements**: improved trigger handling and HTTP transport reliability
+- **M3 styling fixes**: dashboard UI refinements
+
+---
+
 ## [0.9.0] - 2026-03-23
 
 ### Added
