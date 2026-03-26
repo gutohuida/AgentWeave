@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.4] - 2026-03-26
+
+### Fixed
+- **`Path.cwd()` crash on WSL2+Windows after Docker init**: `os.getcwd()` raised `[Errno 2] No such file or directory` inside `_create_session_files()` when called after Docker's `subprocess.run()` activity — on WSL2+Windows mount points the kernel CWD reference becomes temporarily stale after Docker operations. Fix: capture `Path.cwd()` once at the start of `_cmd_init_interactive` before any subprocesses run, and pass it as `base_dir=` to `_create_session_files()` and `_generate_claude_skills()`.
+
+---
+
 ## [0.9.3] - 2026-03-26
 
 ### Fixed

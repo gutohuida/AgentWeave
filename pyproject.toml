@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentweave-ai"
-version = "0.9.3"
+version = "0.9.4"
 description = "Multi-agent AI collaboration framework (Claude, Kimi, Gemini, Codex, and more)"
 readme = "README.md"
 license = {text = "MIT"}
