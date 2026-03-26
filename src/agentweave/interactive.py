@@ -430,8 +430,18 @@ def ask_choice(
             current_idx = i
             break
 
+    # Save cursor position once, before the list is first drawn
+    if Styled.enabled():
+        sys.stdout.write("\033[s")
+        sys.stdout.flush()
+
     # Selection loop
     while True:
+        # Restore cursor to saved position and erase everything below
+        if Styled.enabled():
+            sys.stdout.write("\033[u\033[J")
+            sys.stdout.flush()
+
         # Redraw all options
         for i, (_value, desc) in enumerate(choices):
             is_selected = i == current_idx
@@ -456,9 +466,6 @@ def ask_choice(
         )
 
         key = get_key()
-
-        # Move up and erase all drawn lines before redrawing
-        _redraw(len(choices) + 2)  # choices + blank line + instructions line
 
         if key == "up":
             current_idx = (current_idx - 1) % len(choices)
@@ -516,7 +523,17 @@ def ask_agents() -> List[str]:
     current_idx = 0
     agents = list(KNOWN_AGENTS)
 
+    # Save cursor position once, before the list is first drawn
+    if Styled.enabled():
+        sys.stdout.write("\033[s")
+        sys.stdout.flush()
+
     while True:
+        # Restore cursor to saved position and erase everything below
+        if Styled.enabled():
+            sys.stdout.write("\033[u\033[J")
+            sys.stdout.flush()
+
         # Draw all options
         for i, agent in enumerate(agents):
             is_current = i == current_idx
@@ -554,9 +571,6 @@ def ask_agents() -> List[str]:
 
         # Get key
         key = get_key()
-
-        # Move up and erase all drawn lines before redrawing
-        _redraw(len(agents) + 2)  # agents + blank line + instructions line
 
         if key == "up":
             current_idx = (current_idx - 1) % len(agents)

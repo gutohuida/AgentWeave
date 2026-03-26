@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.6] - 2026-03-26
+
+### Fixed
+- **Interactive list redraw on wrapped terminals**: `\033[{n}A` (move-up-N-rows) fails when list lines wrap to multiple physical terminal rows — the cursor doesn't go up far enough and the list appends below itself. Fixed by replacing the move-up approach with cursor save/restore: emit `\033[s` once before the list is first drawn, then `\033[u\033[J` at the top of each loop iteration (restore saved position + erase to end of screen). Works correctly regardless of terminal width or line wrapping.
+
+---
+
 ## [0.9.5] - 2026-03-26
 
 ### Fixed
