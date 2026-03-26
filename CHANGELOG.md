@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.3] - 2026-03-26
+
+### Fixed
+- **Hub re-init API key mismatch**: on `agentweave init` when Hub was already running, a new API key was generated and written to `.env` but the running container still used the old key — causing `_sync_session_to_hub` to get 401 and all agents to fail syncing. Fix: read existing `AW_BOOTSTRAP_API_KEY` from `.env` and reuse it; only generate a new key when `.env` doesn't exist.
+- **Uncaught `[Errno 2]` during init**: `shared/context.md` write in `_create_session_files()` was not wrapped in error handling — any OS-level write failure propagated as an unhandled exception showing `[ERR] Unexpected error: [Errno 2] No such file or directory`. Wrapped with `contextlib.suppress(OSError)`.
+- **Improved error reporting**: `main()` catch-all now prints the full traceback alongside the error message to aid diagnosis.
+
+---
+
 ## [0.9.2] - 2026-03-26
 
 ### Fixed
