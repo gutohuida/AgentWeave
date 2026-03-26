@@ -516,6 +516,8 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
             },
         )
         print_success_item("HTTP transport configured")
+        print_info_item("Syncing agents to Hub...")
+        _sync_session_to_hub(hub_url, api_key)
     else:
         print_info_item("Using local filesystem transport")
         print_info_item("Configure HTTP transport later with: agentweave transport setup")
