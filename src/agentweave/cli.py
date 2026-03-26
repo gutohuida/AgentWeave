@@ -327,6 +327,11 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
     """Interactive initialization with setup wizard."""
     from pathlib import Path
 
+    # Capture cwd BEFORE any subprocesses (Docker) run — on WSL2+Windows paths
+    # os.getcwd() can fail after Docker subprocess activity if the mount point
+    # becomes temporarily stale. Capture it once here while it's guaranteed valid.
+    project_dir = Path.cwd()
+
     from .hub_setup import setup_hub_interactive
     from .interactive import (
         Emojis,
@@ -376,7 +381,7 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
     # Step 1: Project name
     current_step += 1
     print_step(current_step, total_steps, Emojis.FOLDER, "Project Name")
-    default_name = Path.cwd().name.replace("-", " ").replace("_", " ").title()
+    default_name = project_dir.name.replace("-", " ").replace("_", " ").title()
     project_name = ask_text(
         "Enter a name for your project",
         default=default_name,
@@ -489,7 +494,7 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
         session.save()
 
         # Create all the template files
-        _create_session_files(session, args.force)
+        _create_session_files(session, args.force, base_dir=project_dir)
 
         print_success_item(f"Created session: {session.name}")
         print()
@@ -570,11 +575,16 @@ def _cmd_init_interactive(args: argparse.Namespace) -> int:
     return 0
 
 
-def _create_session_files(session: "Session", force: bool = False) -> None:
+def _create_session_files(
+    session: "Session", force: bool = False, base_dir: "Optional[Path]" = None
+) -> None:
     """Create all the template files for a session."""
     from pathlib import Path
 
     from .templates import get_template
+
+    if base_dir is None:
+        base_dir = Path.cwd()
 
     # Create README
     agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
@@ -685,7 +695,7 @@ agentweave summary
         root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
         if root_filename in written_root_files:
             continue
-        root_path = Path.cwd() / root_filename
+        root_path = base_dir / root_filename
         if root_path.exists():
             written_root_files.add(root_filename)
             continue
@@ -758,7 +768,7 @@ agentweave summary
             context_md_path.write_text(context_md_content, encoding="utf-8")
 
     # Generate Claude Code skills
-    _generate_claude_skills(session, Path.cwd(), force=force)
+    _generate_claude_skills(session, base_dir, force=force)
 
 
 def _role_responsibility(role_key: str) -> str:
