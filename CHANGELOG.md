@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.2] - 2026-03-26
+
+### Fixed
+- **Hub agent sync on init**: agents created during `agentweave init` are now immediately synced to the Hub when HTTP transport is configured — previously they were never pushed to the Hub database, causing three visible issues: gemini (and any agent created at init) not appearing in the Hub UI, YOLO mode always showing as disabled, and stale principal roles from earlier syncs persisting in the Hub
+
+---
+
 ## [0.9.1] - 2026-03-26
 
 ### Fixed (CLI)
