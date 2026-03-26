@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.5] - 2026-03-26
+
+### Fixed
+- **Interactive agent selection redraws in place**: `move_cursor_up()`, `move_cursor_down()`, and `clear_line()` used `print(..., end="")` which buffers ANSI escape sequences — they only fired after the next newline-triggered flush, causing the list to append below itself instead of redrawing. Fixed by switching to `sys.stdout.write()` + `sys.stdout.flush()`. Added `_redraw(n)` helper that moves cursor up N lines and erases everything below in a single atomic write (`\033[{n}A\033[J`). `ask_choice()` and `ask_agents()` now use `_redraw()` instead of per-line clear loops; also fixed off-by-3 line count in `ask_agents()` (was clearing 5 extra lines, bleeding into the header).
+
+---
+
 ## [0.9.4] - 2026-03-26
 
 ### Fixed

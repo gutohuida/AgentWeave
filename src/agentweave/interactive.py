@@ -203,19 +203,29 @@ def clear_screen() -> None:
 def move_cursor_up(n: int = 1) -> None:
     """Move cursor up n lines."""
     if Styled.enabled():
-        print(f"\033[{n}A", end="")
+        sys.stdout.write(f"\033[{n}A")
+        sys.stdout.flush()
 
 
 def move_cursor_down(n: int = 1) -> None:
     """Move cursor down n lines."""
     if Styled.enabled():
-        print(f"\033[{n}B", end="")
+        sys.stdout.write(f"\033[{n}B")
+        sys.stdout.flush()
 
 
 def clear_line() -> None:
     """Clear the current line."""
     if Styled.enabled():
-        print(Colors.CLEAR_LINE, end="")
+        sys.stdout.write(Colors.CLEAR_LINE)
+        sys.stdout.flush()
+
+
+def _redraw(lines: int) -> None:
+    """Move cursor up `lines` rows and erase everything below — single flushed write."""
+    if Styled.enabled():
+        sys.stdout.write(f"\033[{lines}A\033[J")
+        sys.stdout.flush()
 
 
 def get_key() -> str:
@@ -447,11 +457,8 @@ def ask_choice(
 
         key = get_key()
 
-        # Clear previous lines for redraw
-        if Styled.enabled():
-            for _ in range(len(choices) + 2):
-                move_cursor_up()
-                clear_line()
+        # Move up and erase all drawn lines before redrawing
+        _redraw(len(choices) + 2)  # choices + blank line + instructions line
 
         if key == "up":
             current_idx = (current_idx - 1) % len(choices)
@@ -459,8 +466,6 @@ def ask_choice(
             current_idx = (current_idx + 1) % len(choices)
         elif key == "\r" or key == "\n":
             # Selection made
-            if Styled.enabled():
-                move_cursor_down(len(choices) + 2)
             print()
             return choices[current_idx][0]
         elif key == "\x03":
@@ -550,11 +555,8 @@ def ask_agents() -> List[str]:
         # Get key
         key = get_key()
 
-        # Clear lines for redraw
-        if Styled.enabled():
-            for _ in range(len(agents) + 5):
-                move_cursor_up()
-                clear_line()
+        # Move up and erase all drawn lines before redrawing
+        _redraw(len(agents) + 2)  # agents + blank line + instructions line
 
         if key == "up":
             current_idx = (current_idx - 1) % len(agents)
@@ -571,17 +573,11 @@ def ask_agents() -> List[str]:
             # Confirm selection
             if not selected:
                 if Styled.enabled():
-                    move_cursor_down(len(agents) + 5)
                     print(f"  {Styled.yellow(Emojis.WARNING)} Please select at least one agent")
-                    print()
-                    for _ in range(3):
-                        move_cursor_up()
                 else:
                     print("  [WARN] Please select at least one agent")
                 continue
 
-            if Styled.enabled():
-                move_cursor_down(len(agents) + 5)
             print()
             return list(selected)
         elif key == "q" or key == "Q" or key == "\x03":
