@@ -418,10 +418,6 @@ def ask_choice(
 ) -> str:
     """Ask user to select from a list using arrow key navigation."""
     print()
-    if Styled.enabled():
-        print(f"  {Styled.dim(prompt)}")
-    else:
-        print(prompt)
 
     # Find default index
     current_idx = 0
@@ -430,23 +426,42 @@ def ask_choice(
             current_idx = i
             break
 
-    # Save cursor position once, before the list is first drawn
-    if Styled.enabled():
-        sys.stdout.write("\033[s")
-        sys.stdout.flush()
+    if not Styled.enabled():
+        # Non-ANSI: print prompt once, append on redraw
+        print(prompt)
+        while True:
+            for i, (_value, desc) in enumerate(choices):
+                prefix = ">" if i == current_idx else " "
+                print(f"    [{prefix}] {desc}")
+            print("\n  (Use arrow keys, Enter to select)")
+            key = get_key()
+            if key == "up":
+                current_idx = (current_idx - 1) % len(choices)
+            elif key == "down":
+                current_idx = (current_idx + 1) % len(choices)
+            elif key in ("\r", "\n"):
+                print()
+                return choices[current_idx][0]
+            elif key == "\x03":
+                print("\nSetup cancelled.")
+                sys.exit(1)
 
-    # Selection loop
-    while True:
-        # Restore cursor to saved position and erase everything below
-        if Styled.enabled():
-            sys.stdout.write("\033[u\033[J")
+    # ANSI-capable: use alternate screen buffer for flicker-free redraw
+    sys.stdout.write("\033[?1049h")
+    sys.stdout.flush()
+    cancelled = False
+    result = choices[current_idx][0]
+    try:
+        while True:
+            # Clear alternate screen and draw from top
+            sys.stdout.write("\033[H\033[2J")
             sys.stdout.flush()
 
-        # Redraw all options
-        for i, (_value, desc) in enumerate(choices):
-            is_selected = i == current_idx
+            print(f"  {Styled.dim(prompt)}")
+            print()
 
-            if Styled.enabled():
+            for i, (_value, desc) in enumerate(choices):
+                is_selected = i == current_idx
                 if is_selected:
                     prefix = Styled.green(Emojis.POINTER)
                     text = Styled.on_cyan(f" {desc} ")
@@ -454,30 +469,31 @@ def ask_choice(
                     prefix = " "
                     text = f" {desc}"
                 print(f"    {prefix} {text}")
-            else:
-                prefix = ">" if is_selected else " "
-                print(f"    [{prefix}] {desc}")
 
-        # Get key input
-        print(
-            f"\n  {Styled.dim('Use ↑↓ arrows, Enter to select')}"
-            if Styled.enabled()
-            else "\n  (Use arrow keys, Enter to select)"
-        )
+            print(f"\n  {Styled.dim('Use ↑↓ arrows, Enter to select')}")
 
-        key = get_key()
+            key = get_key()
 
-        if key == "up":
-            current_idx = (current_idx - 1) % len(choices)
-        elif key == "down":
-            current_idx = (current_idx + 1) % len(choices)
-        elif key == "\r" or key == "\n":
-            # Selection made
-            print()
-            return choices[current_idx][0]
-        elif key == "\x03":
-            print("\nSetup cancelled.")
-            sys.exit(1)
+            if key == "up":
+                current_idx = (current_idx - 1) % len(choices)
+            elif key == "down":
+                current_idx = (current_idx + 1) % len(choices)
+            elif key in ("\r", "\n"):
+                result = choices[current_idx][0]
+                break
+            elif key == "\x03":
+                cancelled = True
+                break
+    finally:
+        sys.stdout.write("\033[?1049l")
+        sys.stdout.flush()
+
+    if cancelled:
+        print("\nSetup cancelled.")
+        sys.exit(1)
+
+    print()
+    return result
 
 
 def ask_agents() -> List[str]:
@@ -485,21 +501,6 @@ def ask_agents() -> List[str]:
     # Agents with dedicated context file support
     # ★ = Dedicated template (CLAUDE.md, GEMINI.md, OPENCODE.md, or AGENTS.md for Kimi)
     fully_supported = {"claude", "kimi", "gemini", "opencode"}
-
-    print()
-    if Styled.enabled():
-        print(f"  {Styled.bold(Styled.bright_cyan('Select AI agents to collaborate:'))}")
-        print(f"  {Styled.dim('Space to toggle, ↑↓ to navigate, Enter to confirm')}")
-        print()
-        print(f"  {Styled.green('★')} {Styled.dim('= Dedicated context file (recommended)')}")
-        print(f"  {Styled.dim('○ = Generic AGENTS.md support')}")
-    else:
-        print("Select AI agents to collaborate:")
-        print("Space to toggle, arrows to navigate, Enter to confirm")
-        print()
-        print("★ = Dedicated context file (recommended)")
-        print("○ = Generic AGENTS.md support")
-    print()
 
     # Agent descriptions
     descriptions = {
@@ -522,27 +523,74 @@ def ask_agents() -> List[str]:
     selected = {"claude", "kimi"}
     current_idx = 0
     agents = list(KNOWN_AGENTS)
+    warning: Optional[str] = None
 
-    # Save cursor position once, before the list is first drawn
-    if Styled.enabled():
-        sys.stdout.write("\033[s")
-        sys.stdout.flush()
+    print()
 
-    while True:
-        # Restore cursor to saved position and erase everything below
-        if Styled.enabled():
-            sys.stdout.write("\033[u\033[J")
+    if not Styled.enabled():
+        # Non-ANSI: print header once, append on redraw
+        print("Select AI agents to collaborate:")
+        print("Space to toggle, arrows to navigate, Enter to confirm")
+        print()
+        print("★ = Dedicated context file (recommended)")
+        print("○ = Generic AGENTS.md support")
+        print()
+        while True:
+            for i, agent in enumerate(agents):
+                is_current = i == current_idx
+                is_selected = agent in selected
+                has_dedicated = agent in fully_supported
+                desc = descriptions.get(agent, agent)
+                checkbox = "[X]" if is_selected else "[ ]"
+                pointer = ">" if is_current else " "
+                support_icon = "★" if has_dedicated else "○"
+                print(f"    {pointer} {checkbox} {support_icon} {agent.capitalize():<12} {desc}")
+            print()
+            print("  Space: toggle | ↑↓: navigate | Enter: confirm | Q: quit")
+            key = get_key()
+            if key == "up":
+                current_idx = (current_idx - 1) % len(agents)
+            elif key == "down":
+                current_idx = (current_idx + 1) % len(agents)
+            elif key == " ":
+                agent_name = agents[current_idx]
+                if agent_name in selected:
+                    selected.remove(agent_name)
+                else:
+                    selected.add(agent_name)
+            elif key == "\r" or key == "\n":
+                if not selected:
+                    print("  [WARN] Please select at least one agent")
+                    continue
+                print()
+                return list(selected)
+            elif key in ("q", "Q", "\x03"):
+                print("\nSetup cancelled.")
+                sys.exit(1)
+
+    # ANSI-capable: use alternate screen buffer for flicker-free redraw
+    sys.stdout.write("\033[?1049h")
+    sys.stdout.flush()
+    cancelled = False
+    try:
+        while True:
+            # Clear alternate screen and draw everything from the top
+            sys.stdout.write("\033[H\033[2J")
             sys.stdout.flush()
 
-        # Draw all options
-        for i, agent in enumerate(agents):
-            is_current = i == current_idx
-            is_selected = agent in selected
-            has_dedicated = agent in fully_supported
-            desc = descriptions.get(agent, agent)
+            print(f"  {Styled.bold(Styled.bright_cyan('Select AI agents to collaborate:'))}")
+            print(f"  {Styled.dim('Space to toggle, ↑↓ to navigate, Enter to confirm')}")
+            print()
+            print(f"  {Styled.green('★')} {Styled.dim('= Dedicated context file (recommended)')}")
+            print(f"  {Styled.dim('○ = Generic AGENTS.md support')}")
+            print()
 
-            if Styled.enabled():
-                # Checkbox style
+            for i, agent in enumerate(agents):
+                is_current = i == current_idx
+                is_selected = agent in selected
+                has_dedicated = agent in fully_supported
+                desc = descriptions.get(agent, agent)
+
                 checkbox = Styled.green(f"[{Emojis.CHECK}]") if is_selected else Styled.dim("[ ]")
                 support_icon = Styled.green("★") if has_dedicated else Styled.dim("○")
 
@@ -556,47 +604,44 @@ def ask_agents() -> List[str]:
                     desc_text = desc if is_selected else Styled.dim(desc)
 
                 print(f"    {pointer} {checkbox} {support_icon} {name:<12} {desc_text}")
-            else:
-                checkbox = "[X]" if is_selected else "[ ]"
-                pointer = ">" if is_current else " "
-                support_icon = "★" if has_dedicated else "○"
-                print(f"    {pointer} {checkbox} {support_icon} {agent.capitalize():<12} {desc}")
-
-        # Instructions at bottom
-        print()
-        if Styled.enabled():
-            print(f"  {Styled.dim('Space: toggle  ↑↓: navigate  Enter: confirm  Q: quit')}")
-        else:
-            print("  Space: toggle | ↑↓: navigate | Enter: confirm | Q: quit")
-
-        # Get key
-        key = get_key()
-
-        if key == "up":
-            current_idx = (current_idx - 1) % len(agents)
-        elif key == "down":
-            current_idx = (current_idx + 1) % len(agents)
-        elif key == " ":
-            # Toggle selection
-            agent = agents[current_idx]
-            if agent in selected:
-                selected.remove(agent)
-            else:
-                selected.add(agent)
-        elif key == "\r" or key == "\n":
-            # Confirm selection
-            if not selected:
-                if Styled.enabled():
-                    print(f"  {Styled.yellow(Emojis.WARNING)} Please select at least one agent")
-                else:
-                    print("  [WARN] Please select at least one agent")
-                continue
 
             print()
-            return list(selected)
-        elif key == "q" or key == "Q" or key == "\x03":
-            print("\nSetup cancelled.")
-            sys.exit(1)
+            print(f"  {Styled.dim('Space: toggle  ↑↓: navigate  Enter: confirm  Q: quit')}")
+
+            if warning:
+                print(f"\n  {Styled.yellow(Emojis.WARNING)} {Styled.yellow(warning)}")
+                warning = None
+
+            key = get_key()
+
+            if key == "up":
+                current_idx = (current_idx - 1) % len(agents)
+            elif key == "down":
+                current_idx = (current_idx + 1) % len(agents)
+            elif key == " ":
+                agent_name = agents[current_idx]
+                if agent_name in selected:
+                    selected.remove(agent_name)
+                else:
+                    selected.add(agent_name)
+            elif key == "\r" or key == "\n":
+                if not selected:
+                    warning = "Please select at least one agent"
+                    continue
+                break
+            elif key in ("q", "Q", "\x03"):
+                cancelled = True
+                break
+    finally:
+        sys.stdout.write("\033[?1049l")
+        sys.stdout.flush()
+
+    if cancelled:
+        print("\nSetup cancelled.")
+        sys.exit(1)
+
+    print()
+    return list(selected)
 
 
 def print_section(title: str) -> None:

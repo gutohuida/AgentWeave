@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.7] - 2026-03-26
+
+### Fixed
+- **Interactive list redraw on all terminals**: Replaced cursor save/restore (`\033[s`/`\033[u`) with the alternate screen buffer (`\033[?1049h`/`\033[?1049l`). The alternate screen gives a blank canvas; each frame clears with `\033[H\033[2J` and redraws from the top — no cursor math, no physical-row counting, works reliably in WSL, Windows Terminal, and any xterm-compatible terminal regardless of line wrapping or terminal width.
+
+---
+
 ## [0.9.6] - 2026-03-26
 
 ### Fixed
