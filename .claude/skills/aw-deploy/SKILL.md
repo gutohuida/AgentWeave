@@ -1,6 +1,6 @@
 ---
 name: aw-deploy
-description: Release a new version of AgentWeave — bumps versions, updates CHANGELOG, commits, tags, and creates GitHub releases to trigger PyPI and Docker Hub publishing. Never invoke this automatically.
+description: Release a new version of AgentWeave — auto-detects next version, bumps pyproject.toml files, updates CHANGELOG and README, commits, pushes and creates GitHub releases via Windows PowerShell (which holds git/gh credentials), then monitors the build. Never invoke this automatically.
 disable-model-invocation: true
 ---
 
@@ -9,208 +9,237 @@ Deploy a new version of AgentWeave (CLI and/or Hub).
 ## Usage
 
 ```
-/aw-deploy <cli-version>                  — CLI only (e.g. 0.7.0)
-/aw-deploy <cli-version> hub:<hub-version> — both (e.g. 0.7.0 hub:0.3.0)
-/aw-deploy hub:<hub-version>              — Hub only (e.g. hub:0.3.0)
+/aw-deploy                          — auto-detect next version for both
+/aw-deploy <cli-version>            — CLI only, explicit version
+/aw-deploy <cli-version> hub:<hub>  — both, explicit versions
+/aw-deploy hub:<hub-version>        — Hub only, explicit version
 ```
-
-Parse $ARGUMENTS to extract:
-- `cli_version`: the new CLI version (semver, e.g. `0.7.0`) — present if not Hub-only
-- `hub_version`: the new Hub version (semver, e.g. `0.3.0`) — present if prefixed with `hub:`
-
-If $ARGUMENTS is empty or does not contain a version, ask:
-> "What version should I release? Usage: `/aw-deploy <cli-version>` or `/aw-deploy <cli-version> hub:<hub-version>`"
 
 ---
 
-## Step 1 — Pre-flight checks
-
-Run all of these before making any changes. Stop and report if any fail.
+## Step 1 — Read current versions
 
 ```bash
-# 1a. Git working tree must be clean
+python3 -c "
+import re, subprocess
+
+# Read pyproject versions
+cli_ver = re.search(r'^version = \"(.+?)\"', open('pyproject.toml').read(), re.M).group(1)
+hub_ver = re.search(r'^version = \"(.+?)\"', open('hub/pyproject.toml').read(), re.M).group(1)
+
+# Read latest published version on PyPI
+import urllib.request, json
+try:
+    with urllib.request.urlopen('https://pypi.org/pypi/agentweave-ai/json', timeout=5) as r:
+        pypi_latest = sorted(json.load(r)['releases'].keys())[-1]
+except Exception:
+    pypi_latest = 'unknown'
+
+print(f'CLI  local={cli_ver}  pypi={pypi_latest}')
+print(f'Hub  local={hub_ver}')
+
+# Suggest next minor version
+parts = [int(x) for x in cli_ver.split('.')]
+parts[1] += 1; parts[2] = 0
+print(f'Suggested CLI next: {\".\".join(str(x) for x in parts)}')
+
+hub_parts = [int(x) for x in hub_ver.split('.')]
+hub_parts[1] += 1; hub_parts[2] = 0
+print(f'Suggested Hub next: {\".\".join(str(x) for x in hub_parts)}')
+"
+```
+
+---
+
+## Step 2 — Resolve target versions
+
+Parse $ARGUMENTS:
+- If `$ARGUMENTS` contains a bare semver (e.g. `0.11.0`) → that is `cli_version`
+- If it contains `hub:<semver>` (e.g. `hub:0.5.0`) → that is `hub_version`
+- If $ARGUMENTS is **empty**, use the suggested next versions from Step 1 for **both**
+  CLI and Hub, and ask: "I'll release CLI v<suggested> and Hub v<suggested>. Confirm?"
+- If only one side is specified, only bump that side.
+
+---
+
+## Step 3 — Pre-flight checks
+
+Stop and report if any fail.
+
+```bash
+# 3a. Working tree must be clean
 git status --short
 ```
-If any uncommitted changes exist, stop: "Working tree is not clean — commit or stash changes before releasing."
+If dirty, stop: "Working tree is not clean — commit or stash first."
 
 ```bash
-# 1b. Must be on master branch
+# 3b. Must be on master
 git branch --show-current
 ```
-If not on `master`, stop: "Not on master branch."
 
 ```bash
-# 1c. Must be up to date with remote
-git fetch origin
-git log HEAD..origin/master --oneline
+# 3c. Must be up to date with remote (use Windows git for authoritative remote state)
+powershell.exe -Command "cd '$(wslpath -w .)'; git fetch origin; git log HEAD..origin/master --oneline"
 ```
-If remote has commits we don't have, stop: "Local master is behind origin/master — pull first."
+If behind, stop: "Local master is behind origin/master — pull first."
 
 ```bash
-# 1d. Run lint
+# 3d. Lint
 ruff check src/
 ```
 
 ```bash
-# 1e. Run tests if tests/ directory exists
+# 3e. Tests (if tests/ exists)
 [ -d tests ] && python -m pytest tests/ -q --tb=short || echo "no tests"
 ```
 
-Show the user a summary of all checks and ask: "All checks passed. Proceed with release?"
+Show summary and ask: "All checks passed. Proceed?"
 
 ---
 
-## Step 2 — Confirm current and new versions
+## Step 4 — Bump versions
 
-Read the current versions:
+**If releasing CLI:** edit `pyproject.toml` — replace `version = "<old>"` with `version = "<cli_version>"`.
+
+**If releasing Hub:** edit `hub/pyproject.toml` — replace `version = "<old>"` with `version = "<hub_version>"`.
+
+Verify:
 ```bash
-grep '^version' pyproject.toml | head -1
-grep '^version' hub/pyproject.toml | head -1
+grep '^version' pyproject.toml hub/pyproject.toml
 ```
-
-Display a clear before/after table:
-
-| Package | Current | New |
-|---------|---------|-----|
-| agentweave-ai (CLI) | `<current>` | `<cli_version or unchanged>` |
-| agentweave-hub (Hub) | `<current>` | `<hub_version or unchanged>` |
-
-Ask: "Does this look correct?"
 
 ---
 
-## Step 3 — Bump versions
+## Step 5 — Update README.md
 
-Only bump what was requested.
+The README has version strings in the Repository Layout section. Update them:
 
-**If releasing CLI:**
-Edit `pyproject.toml` — change `version = "<old>"` to `version = "<cli_version>"` under `[project]`.
-
-**If releasing Hub:**
-Edit `hub/pyproject.toml` — change `version = "<old>"` to `version = "<hub_version>"` under `[project]`.
-
-Verify the edits:
 ```bash
-grep '^version' pyproject.toml
-grep '^version' hub/pyproject.toml
+python3 -c "
+import re
+
+readme = open('README.md').read()
+
+# Replace version in Repository Layout table — CLI line
+if '${cli_version}' != 'unchanged':
+    readme = re.sub(
+        r'(src/agentweave/\s+CLI package[^\n]*—\s*v)[0-9]+\.[0-9]+\.[0-9]+',
+        r'\g<1>${cli_version}',
+        readme
+    )
+
+# Replace version in Repository Layout table — Hub line
+if '${hub_version}' != 'unchanged':
+    readme = re.sub(
+        r'(hub/\s+AgentWeave Hub[^\n]*—\s*v)[0-9]+\.[0-9]+\.[0-9]+',
+        r'\g<1>${hub_version}',
+        readme
+    )
+
+open('README.md', 'w').write(readme)
+print('README.md updated')
+"
 ```
+
+Where `${cli_version}` and `${hub_version}` are the actual new version values.
 
 ---
 
-## Step 4 — Update CHANGELOG.md
+## Step 6 — Update CHANGELOG.md
 
-Open `CHANGELOG.md`. After the `---` separator below the file header (line 8), insert a new section.
+Insert a new section after the `---` on line 8. Use today's date (`YYYY-MM-DD`).
 
-Use today's date in `YYYY-MM-DD` format.
-
-**Format for both CLI + Hub release:**
-```markdown
-## [<cli_version>] - <today>
-
-### Added (CLI)
-- <summarize CLI changes since last release — read recent commits with: git log --oneline <last_cli_tag>..HEAD>
-
-### Added (Hub v<hub_version>)
-- <summarize Hub changes since last release>
-
----
-```
-
-**Format for CLI-only:**
-```markdown
-## [<cli_version>] - <today>
-
-### Added
-- <summarize changes>
-
----
-```
-
-**Format for Hub-only:**
-```markdown
-## [<hub_version>] - <today> (Hub)
-
-### Added (Hub)
-- <summarize Hub changes>
-
----
-```
-
-To get the commit history since the last tag:
+Get commit history since the last tag:
 ```bash
 git log --oneline $(git describe --tags --abbrev=0)..HEAD
 ```
 
-Ask the user to review the CHANGELOG entry and confirm or provide corrections before proceeding.
+**Format for both:**
+```markdown
+## [<cli_version>] - <today>
+
+### Added (CLI)
+- <summarize CLI changes from git log>
+
+### Added (Hub v<hub_version>)
+- <summarize Hub changes from git log>
+
+---
+```
+
+**Format for CLI-only or Hub-only:** omit the section that isn't changing.
+
+Ask the user to review the CHANGELOG entry and confirm before proceeding.
 
 ---
 
-## Step 5 — Commit
+## Step 7 — Commit (via Linux git)
 
-Stage only the version and changelog files:
+Stage only the changed files:
 ```bash
-git add pyproject.toml hub/pyproject.toml CHANGELOG.md
+git add pyproject.toml hub/pyproject.toml CHANGELOG.md README.md
 git status
 ```
-
-Build the commit message based on what's being released:
-- Both: `Bump to v<cli_version> / Hub v<hub_version>`
-- CLI only: `Bump to v<cli_version>`
-- Hub only: `Bump Hub to v<hub_version>`
 
 ```bash
 git commit -m "<message>"
 ```
 
----
-
-## Step 6 — Push
-
-```bash
-git push origin master
-```
+Commit message format:
+- Both:     `Bump to v<cli_version> / Hub v<hub_version>`
+- CLI only: `Bump to v<cli_version>`
+- Hub only: `Bump Hub to v<hub_version>`
 
 ---
 
-## Step 7 — Create GitHub releases (triggers CI publishing)
+## Step 8 — Push (via Windows PowerShell — has git credentials)
 
-**If releasing CLI** — creates a GitHub release tagged `v<cli_version>`:
-- This triggers `.github/workflows/publish.yml` → builds wheel + sdist → uploads to PyPI
 ```bash
-gh release create v<cli_version> \
-  --title "AgentWeave v<cli_version>" \
-  --notes "See [CHANGELOG](https://github.com/gutohuida/AgentWeave/blob/master/CHANGELOG.md) for details." \
-  --latest
+WIN_PATH=$(wslpath -w .)
+powershell.exe -Command "cd '$WIN_PATH'; git push origin master"
 ```
 
-**If releasing Hub** — creates a GitHub release tagged `hub-v<hub_version>`:
-- This triggers `.github/workflows/hub-image.yml` → builds Docker image → pushes to `ghcr.io/gutohuida/agentweave-hub`
+If it fails, report the PowerShell error verbatim and stop.
+
+---
+
+## Step 9 — Create GitHub releases (via Windows PowerShell — has gh credentials)
+
+**If releasing CLI:**
 ```bash
-gh release create hub-v<hub_version> \
-  --title "AgentWeave Hub v<hub_version>" \
-  --notes "See [CHANGELOG](https://github.com/gutohuida/AgentWeave/blob/master/CHANGELOG.md) for details."
+WIN_PATH=$(wslpath -w .)
+powershell.exe -Command "cd '$WIN_PATH'; gh release create v<cli_version> --title 'AgentWeave v<cli_version>' --notes 'See CHANGELOG for details.' --latest"
+```
+
+**If releasing Hub:**
+```bash
+WIN_PATH=$(wslpath -w .)
+powershell.exe -Command "cd '$WIN_PATH'; gh release create hub-v<hub_version> --title 'AgentWeave Hub v<hub_version>' --notes 'See CHANGELOG for details.'"
 ```
 
 ---
 
-## Step 8 — Verify publishing
+## Step 10 — Monitor build via check-build skill
 
-After creating releases, verify the CI workflows started:
-```bash
-gh run list --limit 5
+Invoke the `check-build` skill to immediately show the initial CI status:
+
+```
+skill: "check-build", args: "v<cli_version> hub-v<hub_version>"
 ```
 
-Show the user the workflow run URLs and report:
-- CLI release: PyPI publish workflow triggered? → package will be at `https://pypi.org/project/agentweave-ai/`
-- Hub release: Docker image workflow triggered? → image will be at `ghcr.io/gutohuida/agentweave-hub:<hub_version>`
+(Omit args for the side that wasn't released.)
+
+Then tell the user:
+> "Releases created. Run `/loop 30s /check-build v<cli_version> hub-v<hub_version>` to monitor the builds until they complete."
 
 ---
 
 ## Summary
 
-Report what was done:
-- Versions bumped: which files changed
-- CHANGELOG: section added for which versions
-- Commit: SHA and message
-- Tags created: `v<cli_version>` and/or `hub-v<hub_version>`
-- Workflows triggered: links to CI runs
+Report:
+- Versions bumped (which files)
+- CHANGELOG: section added
+- README: version strings updated
+- Commit SHA and message
+- GitHub release tags created
+- CI monitoring command to run
