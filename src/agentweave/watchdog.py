@@ -1125,6 +1125,19 @@ def main() -> None:
     callbacks.append(_make_direct_trigger_callback(transport=watchdog.transport))
     print("[TRIGGER] Direct trigger handler enabled (for Hub UI messages)")
 
+    # On HTTP transport: push session config to the Hub so it knows the full
+    # agent configuration (names, roles, yolo flags) without filesystem access.
+    if watchdog.transport is not None and watchdog.transport.get_transport_type() == "http":
+        from .session import Session as _Session
+
+        _sess = _Session.load()
+        if _sess:
+            try:
+                watchdog.transport.push_session(_sess.to_dict())
+                print(f"[HUB] Session synced: {', '.join(_sess.agent_names)}")
+            except Exception as _exc:
+                print(f"[WARN] Could not sync session with hub: {_exc}", file=sys.stderr)
+
     # Combine all callbacks into one
     if callbacks:
 

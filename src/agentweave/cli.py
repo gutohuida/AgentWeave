@@ -1634,6 +1634,46 @@ def cmd_reply(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_yolo(args: argparse.Namespace) -> int:
+    """Enable or disable yolo mode for an agent."""
+    from .session import Session
+
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run 'agentweave init' first.")
+        return 1
+
+    agent = args.agent
+
+    # Show status for all agents if no --enable/--disable given
+    if not args.enable and not args.disable:
+        print_info("Yolo mode status:")
+        for name in session.agent_names:
+            flag = "ON" if session.get_agent_yolo(name) else "off"
+            print(f"  {name}: {flag}")
+        return 0
+
+    if args.enable and args.disable:
+        print_error("Specify either --enable or --disable, not both.")
+        return 1
+
+    try:
+        enabled = args.enable
+        session.set_agent_yolo(agent, enabled)
+    except ValueError as exc:
+        print_error(str(exc))
+        return 1
+
+    session.save()
+
+    if enabled:
+        flag_hint = "--dangerously-skip-permissions" if agent == "claude" else "--yolo"
+        print_success(f"Yolo mode ENABLED for {agent} ({flag_hint} will be used)")
+    else:
+        print_success(f"Yolo mode DISABLED for {agent}")
+    return 0
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
@@ -2049,6 +2089,12 @@ For more help: https://github.com/gutohuida/AgentWeave
     )
     hb_parser.add_argument("--message", "-m", help="Optional status message")
 
+    # Yolo mode toggle
+    yolo_parser = subparsers.add_parser("yolo", help="Enable/disable yolo mode for an agent")
+    yolo_parser.add_argument("--agent", required=True, help="Agent name (e.g. claude, kimi)")
+    yolo_parser.add_argument("--enable", action="store_true", help="Enable yolo mode")
+    yolo_parser.add_argument("--disable", action="store_true", help="Disable yolo mode")
+
     # Reply to agent questions (Hub / http transport only)
     reply_parser = subparsers.add_parser(
         "reply",
@@ -2153,6 +2199,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_reply(parsed_args)
         elif parsed_args.command == "hub-heartbeat":
             return cmd_hub_heartbeat(parsed_args)
+        elif parsed_args.command == "yolo":
+            return cmd_yolo(parsed_args)
         else:
             parser.print_help()
             return 0

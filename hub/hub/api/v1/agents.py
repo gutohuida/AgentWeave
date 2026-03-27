@@ -6,14 +6,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, Task
+from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, ProjectSession, Task
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -28,115 +27,58 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
 
-# In-memory store for manually added agents (per project)
-# In production, this should be in the database
-_manually_added_agents: dict[str, set[str]] = {}
 
+async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
+    """Return session config for *project_id*.
 
-def _get_session_agents(project_id: str) -> Optional[set[str]]:
-    """Try to read configured agents from .agentweave/session.json.
-    
-    Returns None if session file doesn't exist.
+    Priority:
+    1. DB (ProjectSession table) — populated by CLI/watchdog via push_session().
+       Works in Docker where the container has no host filesystem access.
+    2. Local filesystem fallback — for developers running the Hub directly
+       (not in Docker) alongside the CLI in the same working directory.
     """
-    # Try common locations for session.json
-    possible_paths = [
+    result = await db.execute(
+        select(ProjectSession).where(ProjectSession.project_id == project_id)
+    )
+    row = result.scalars().first()
+    if row:
+        return row.data
+
+    # Filesystem fallback (local dev without Docker)
+    for path in [
         Path(".agentweave") / "session.json",
         Path("..") / ".agentweave" / "session.json",
-        Path.home() / ".agentweave" / "session.json",
-    ]
-    
-    for path in possible_paths:
+    ]:
         if path.exists():
             try:
-                data = json.loads(path.read_text())
-                agents = data.get("agents", {})
-                if agents:
-                    return set(agents.keys())
+                return json.loads(path.read_text())
             except (json.JSONDecodeError, IOError):
                 continue
-    
     return None
-
-
-class AddAgentRequest(BaseModel):
-    agent_name: str
-
-
-@router.post("/configure", status_code=status.HTTP_201_CREATED)
-async def add_configured_agent(
-    body: AddAgentRequest,
-    project: Tuple[str, str] = Depends(get_project),
-):
-    """Manually add an agent to the configured list for this project."""
-    project_id, _ = project
-    agent_name = body.agent_name.strip().lower()
-    
-    if not agent_name or len(agent_name) > 32:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid agent name"
-        )
-    
-    if project_id not in _manually_added_agents:
-        _manually_added_agents[project_id] = set()
-    
-    _manually_added_agents[project_id].add(agent_name)
-    
-    await sse_manager.broadcast(
-        project_id,
-        "agent_configured",
-        {"agent": agent_name, "action": "added"}
-    )
-    
-    return {"success": True, "agent": agent_name}
-
-
-@router.delete("/configure/{agent_name}", status_code=status.HTTP_200_OK)
-async def remove_configured_agent(
-    agent_name: str,
-    project: Tuple[str, str] = Depends(get_project),
-):
-    """Remove a manually added agent from the configured list."""
-    project_id, _ = project
-    agent_name = agent_name.strip().lower()
-    
-    if project_id in _manually_added_agents:
-        _manually_added_agents[project_id].discard(agent_name)
-    
-    await sse_manager.broadcast(
-        project_id,
-        "agent_configured",
-        {"agent": agent_name, "action": "removed"}
-    )
-    
-    return {"success": True, "agent": agent_name}
 
 
 @router.get("/configured")
 async def get_configured_agents(
     project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
 ):
-    """Get the list of configured agents for this project.
-    
-    Returns agents from session.json if it exists, otherwise manually added agents.
+    """Get the list of configured agents (read-only).
+
+    Agents are managed exclusively via the CLI (agentweave init --agents ...).
     """
     project_id, _ = project
-    
-    # Try to get from session file first
-    session_agents = _get_session_agents(project_id)
-    if session_agents is not None:
+    session_data = await _get_session_data(project_id, session)
+    if session_data:
+        agents = list(session_data.get("agents", {}).keys())
         return {
-            "source": "session.json",
-            "agents": sorted(session_agents),
-            "can_modify": False
+            "source": "db",
+            "agents": sorted(agents),
+            "can_modify": False,
         }
-    
-    # Fall back to manually added agents
-    manual_agents = _manually_added_agents.get(project_id, set())
     return {
-        "source": "manual",
-        "agents": sorted(manual_agents),
-        "can_modify": True
+        "source": "none",
+        "agents": [],
+        "can_modify": False,
     }
 
 
@@ -148,83 +90,49 @@ async def list_agents(
     project_id, _ = project
     cutoff = datetime.now(timezone.utc) - _24H
 
-    # Active agents (last 24h) - for status/heartbeat info
-    senders_q = select(Message.sender).distinct().where(
-        Message.project_id == project_id, Message.timestamp >= cutoff
-    )
-    recipients_q = select(Message.recipient).distinct().where(
-        Message.project_id == project_id, Message.timestamp >= cutoff
-    )
-    assignees_q = select(Task.assignee).distinct().where(
-        Task.project_id == project_id,
-        Task.assignee.isnot(None),
-        Task.updated >= cutoff,
-    )
-    heartbeat_agents_q = select(AgentHeartbeat.agent).distinct().where(
-        AgentHeartbeat.project_id == project_id,
-        AgentHeartbeat.timestamp >= cutoff,
-    )
-    output_agents_q = select(AgentOutput.agent).distinct().where(
-        AgentOutput.project_id == project_id,
-        AgentOutput.timestamp >= cutoff,
-    )
+    # Load session config (DB-first, filesystem fallback) for agent metadata
+    session_data = await _get_session_data(project_id, session)
+    session_agents_meta: dict = session_data.get("agents", {}) if session_data else {}
 
-    # ALL agents ever seen (no time cutoff) - to show configured agents
-    all_senders_q = select(Message.sender).distinct().where(
-        Message.project_id == project_id
-    )
-    all_recipients_q = select(Message.recipient).distinct().where(
-        Message.project_id == project_id
-    )
-    all_assignees_q = select(Task.assignee).distinct().where(
-        Task.project_id == project_id,
-        Task.assignee.isnot(None),
-    )
-
-    senders_res, recipients_res, assignees_res, hb_agents_res, out_agents_res, \
-        all_senders_res, all_recipients_res, all_assignees_res = await asyncio.gather(
-        session.execute(senders_q),
-        session.execute(recipients_q),
-        session.execute(assignees_q),
-        session.execute(heartbeat_agents_q),
-        session.execute(output_agents_q),
-        # All-time queries
-        session.execute(all_senders_q),
-        session.execute(all_recipients_q),
-        session.execute(all_assignees_q),
-    )
-
-    # Active agents (for status detection)
-    active_agents = set()
-    for (name,) in senders_res:
-        active_agents.add(name)
-    for (name,) in recipients_res:
-        active_agents.add(name)
-    for (name,) in assignees_res:
-        if name:
-            active_agents.add(name)
-    for (name,) in hb_agents_res:
-        active_agents.add(name)
-    for (name,) in out_agents_res:
-        active_agents.add(name)
-
-    # Get configured agents from session.json or manual configuration
-    configured_agents = _get_session_agents(project_id)
-    if configured_agents is not None:
-        # Use agents from session.json
-        agents = configured_agents
-    else:
-        # Use manually added agents, or fall back to active agents only
-        agents = _manually_added_agents.get(project_id, set())
-        if not agents:
-            # No configuration yet - only show agents that have been active
-            agents = active_agents.copy()
-    
-    # Always ensure active agents are included even if not in config
-    agents.update(active_agents)
+    # If no session.json, fall back to agents seen in DB activity (last 24h).
+    # This covers the Docker case where the hub can't read the host's session.json —
+    # the watchdog pushes heartbeats on startup to register agents.
+    if not session_agents_meta:
+        senders_q = select(Message.sender).distinct().where(
+            Message.project_id == project_id, Message.timestamp >= cutoff
+        )
+        recipients_q = select(Message.recipient).distinct().where(
+            Message.project_id == project_id, Message.timestamp >= cutoff
+        )
+        hb_q = select(AgentHeartbeat.agent).distinct().where(
+            AgentHeartbeat.project_id == project_id,
+            AgentHeartbeat.timestamp >= cutoff,
+        )
+        out_q = select(AgentOutput.agent).distinct().where(
+            AgentOutput.project_id == project_id,
+            AgentOutput.timestamp >= cutoff,
+        )
+        s_res, r_res, hb_res, out_res = await asyncio.gather(
+            session.execute(senders_q),
+            session.execute(recipients_q),
+            session.execute(hb_q),
+            session.execute(out_q),
+        )
+        fallback_names: set[str] = set()
+        for (name,) in s_res:
+            fallback_names.add(name)
+        for (name,) in r_res:
+            fallback_names.add(name)
+        for (name,) in hb_res:
+            fallback_names.add(name)
+        for (name,) in out_res:
+            fallback_names.add(name)
+        session_agents_meta = {name: {} for name in fallback_names}
 
     summaries = []
-    for agent_name in sorted(agents):
+    for agent_name in sorted(session_agents_meta):
+        agent_meta = session_agents_meta.get(agent_name, {})
+
         # Latest heartbeat
         hb_q = (
             select(AgentHeartbeat)
@@ -264,6 +172,8 @@ async def list_agents(
                 last_seen=hb.timestamp if hb else None,
                 message_count=msg_count,
                 active_task_count=task_count,
+                role=agent_meta.get("role"),
+                yolo=bool(agent_meta.get("yolo", False)),
             )
         )
 

@@ -15,6 +15,12 @@ const STATUS_CONFIG: Record<string, StatusConfig> = {
   waiting: { dotColor: '#f59e0b', label: 'Waiting', pulse: false, labelColor: 'var(--on-t-cont)' },
 }
 
+const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
+  principal:    { bg: 'color-mix(in srgb, #3b82f6 15%, transparent)', color: '#3b82f6' },
+  delegate:     { bg: 'color-mix(in srgb, #22c55e 15%, transparent)', color: '#22c55e' },
+  collaborator: { bg: 'color-mix(in srgb, var(--on-sv) 12%, transparent)', color: 'var(--on-sv)' },
+}
+
 interface AgentCardProps {
   agent: AgentSummary
   selected: boolean
@@ -25,6 +31,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
   const cfg = STATUS_CONFIG[agent.status] ?? {
     dotColor: 'var(--border)', label: agent.status, pulse: false, labelColor: 'var(--on-sv)',
   }
+  const roleCfg = agent.role ? (ROLE_CONFIG[agent.role] ?? ROLE_CONFIG.collaborator) : null
 
   return (
     <button
@@ -58,10 +65,31 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
         >
           {agent.name}
         </span>
+        {/* Yolo indicator */}
+        {agent.yolo && (
+          <span
+            title="Yolo mode — running without permission prompts"
+            className="material-symbols-rounded select-none"
+            style={{ fontSize: 16, color: '#f59e0b' }}
+          >
+            bolt
+          </span>
+        )}
         <span className="m3-label-small capitalize" style={{ color: cfg.labelColor }}>
           {cfg.label}
         </span>
       </div>
+      {/* Role badge */}
+      {roleCfg && (
+        <div className="mt-1.5">
+          <span
+            className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
+            style={{ background: roleCfg.bg, color: roleCfg.color, fontSize: '0.65rem' }}
+          >
+            {agent.role}
+          </span>
+        </div>
+      )}
       <div className="mt-1.5 flex gap-3 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
         <span>{agent.message_count} msgs</span>
         <span>{agent.active_task_count} tasks</span>

@@ -13,6 +13,8 @@ class AgentSummary(BaseModel):
     last_seen: Optional[datetime]
     message_count: int
     active_task_count: int
+    role: Optional[str] = None  # "principal" | "delegate" | "collaborator"
+    yolo: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.10.0] - 2026-03-27
+
+### Added (CLI)
+- **Yolo mode** (`agentweave yolo --agent <name> --enable/--disable`): per-agent flag to suppress confirmation prompts, enabling fully autonomous agent loops
+- **Session sync to Hub**: `session.json` is automatically pushed to the Hub on every save and on watchdog startup — agents appear in the dashboard without manual configuration
+- **`push_session()` in HTTP transport**: new method that POSTs session data to `/api/v1/session/sync` endpoint
+
+### Added (Hub v0.4.0)
+- **`ProjectSession` table**: stores synced session data (one row per project, upserted on each sync) — agents and their roles are now derived from the session rather than a manual agent list
+- **Session sync endpoint** (`POST /api/v1/session/sync`): upserts session data from CLI; called automatically by the watchdog
+- **Agent role and yolo fields** in `AgentSummary` schema: `role` (`principal` | `delegate` | `collaborator`) and `yolo` (bool) now surfaced in agent cards
+- **Session-based agent discovery**: agents page reads from `ProjectSession` DB table (falls back to filesystem `session.json`) — eliminates need for manual agent configuration
+
+### Removed (Hub)
+- **Agent Configurator UI** (`AgentConfigurator.tsx`) and associated manual `/configure` endpoints — replaced by automatic session sync
+
+---
+
 ## [0.1.0] - 2024-03-07
 
 ### Added

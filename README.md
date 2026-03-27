@@ -95,7 +95,7 @@ Open **http://localhost:8000** to see:
 - **Messages feed** — inter-agent messages with expand-to-read for long content; message type and linked task shown inline
 - **Human questions** — questions agents have asked you; answer directly in the dashboard
 - **Agent activity** — live event stream and per-agent output log
-- **Agent configurator** — add/remove agents, trigger agents, send messages manually
+- **Agent cards** — connected agents auto-discovered from your session; shows role, yolo mode, and per-agent chat history
 
 ---
 
@@ -198,6 +198,13 @@ agentweave transport pull
 agentweave transport disable
 ```
 
+### Yolo mode
+
+```bash
+agentweave yolo --agent claude --enable    # allow agent to act without confirmations
+agentweave yolo --agent claude --disable   # re-enable confirmation prompts
+```
+
 ### Human interaction (Hub only)
 
 ```bash
@@ -261,11 +268,12 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.6.1
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.2.1
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.10.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.4.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server
+├── docs/               Additional documentation
 ├── tests/              CLI unit tests (pytest)
 └── Makefile            Convenience targets for both packages
 ```
@@ -308,6 +316,8 @@ make lint
 | AgentWeave Hub | ✅ Done (v0.2.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
 | Hub UI | ✅ Done (v0.2.1) | React dashboard — expandable tasks/messages, agent trigger, configurator |
 | Per-agent context templates | ✅ Done (v0.6.0) | `claude_context.md`, `kimi_context.md`, `collab_protocol.md` |
+| Session sync to Hub | ✅ Done (v0.10.0) | Watchdog pushes session.json to Hub on startup; agents auto-appear in dashboard |
+| Yolo mode | ✅ Done (v0.10.0) | Per-agent flag to suppress confirmation prompts for autonomous loops |
 | Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
 ---

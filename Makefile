@@ -1,4 +1,4 @@
-.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format hub-build hub-up hub-down
+.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format hub-build hub-up hub-down hub-full-build
 
 # ── CLI (src/agentweave) ─────────────────────────────────────────────────────
 
@@ -43,4 +43,4 @@ hub-down:
 	cd hub && docker compose down
 
 hub-full-build:
-	cd hub && docker compose -f docker-compose.yml -f  docker-compose.build.yml up --build -d
+	cd hub && docker compose -f docker-compose.yml -f docker-compose.build.yml build

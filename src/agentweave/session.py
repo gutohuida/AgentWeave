@@ -47,6 +47,17 @@ class Session:
         """Get session role for an agent (principal/delegate/reviewer/collaborator)."""
         return self.agents.get(agent, {}).get("role", "delegate")
 
+    def get_agent_yolo(self, agent: str) -> bool:
+        """Return True if yolo mode is enabled for the agent."""
+        return bool(self.agents.get(agent, {}).get("yolo", False))
+
+    def set_agent_yolo(self, agent: str, enabled: bool) -> None:
+        """Enable or disable yolo mode for an agent."""
+        if agent not in self._data.get("agents", {}):
+            raise ValueError(f"Agent {agent!r} not in session")
+        self._data["agents"][agent]["yolo"] = enabled
+        self._data["updated"] = now_iso()
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return self._data
@@ -60,8 +71,11 @@ class Session:
         return None
 
     def save(self) -> bool:
-        """Save session to file."""
-        return save_json(SESSION_FILE, self._data)
+        """Save session to file and sync to Hub if HTTP transport is active."""
+        result = save_json(SESSION_FILE, self._data)
+        if result:
+            _push_session_to_hub(self._data)
+        return result
 
     @classmethod
     def create(
@@ -154,3 +168,18 @@ class Session:
             "active_tasks_count": len(self._data.get("active_tasks", [])),
             "completed_tasks_count": len(self._data.get("completed_tasks", [])),
         }
+
+
+def _push_session_to_hub(session_data: Dict[str, Any]) -> None:
+    """Push session config to the Hub if HTTP transport is configured.
+
+    Silently swallows all exceptions — a failed push must never break CLI commands.
+    """
+    try:
+        from .transport import get_transport
+
+        transport = get_transport()
+        if transport.get_transport_type() == "http":
+            transport.push_session(session_data)
+    except Exception:
+        pass

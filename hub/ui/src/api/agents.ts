@@ -11,6 +11,8 @@ export interface AgentSummary {
   last_seen?: string
   message_count: number
   active_task_count: number
+  role?: string  // "principal" | "delegate" | "collaborator"
+  yolo?: boolean
 }
 
 export interface AgentTimelineEvent {
@@ -31,6 +33,15 @@ export interface AgentOutputLine {
 
 export function useAgents() {
   const { isConfigured } = useConfigStore()
+  const queryClient = useQueryClient()
+
+  // Invalidate immediately when the CLI pushes a session_synced SSE event
+  useSSE((event) => {
+    if (event.type === 'session_synced') {
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    }
+  })
+
   return useQuery<AgentSummary[]>({
     queryKey: ['agents'],
     queryFn: () => getJson<AgentSummary[]>('/api/v1/agents'),

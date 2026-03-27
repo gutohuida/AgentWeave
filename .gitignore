@@ -96,10 +96,16 @@ hub/ui-concepts/
 # Hub's own agentweave runtime state
 hub/.agentweave/
 
+# Hub runtime database (Docker volume data)
+hub/data/
+
+# Claude Code lock files
+.claude/scheduled_tasks.lock
+
 # Test environment scripts and directory
 cleanup-test.sh
 run-test-env.sh
-test/
+testrun/
 /agentweave-test/
 *.test/
 

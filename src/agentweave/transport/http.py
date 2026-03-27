@@ -247,6 +247,21 @@ class HttpTransport(BaseTransport):
             log_event("transport_error", severity=WARN, method="post_agent_output", error=str(exc))
             return False
 
+    def push_session(self, session_data: Dict[str, Any]) -> bool:
+        """POST /api/v1/session/sync — push session.json config to the Hub.
+
+        Called on every Session.save() and at watchdog startup so the Hub
+        always has the latest agent configuration (names, roles, yolo flags).
+        """
+        try:
+            self._request("POST", "/session/sync", {"data": session_data})
+            return True
+        except RuntimeError as exc:
+            from ..eventlog import WARN, log_event
+
+            log_event("transport_error", severity=WARN, method="push_session", error=str(exc))
+            return False
+
     def push_log(
         self,
         event_type: str,
