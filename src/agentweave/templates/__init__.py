@@ -61,4 +61,11 @@ def list_skill_templates() -> list:
     return [f.stem for f in SKILLS_DIR.glob("*.md")]
 
 
-__all__ = ["get_template", "list_templates", "get_skill_template", "list_skill_templates", "TEMPLATES_DIR", "SKILLS_DIR"]
+__all__ = [
+    "get_template",
+    "list_templates",
+    "get_skill_template",
+    "list_skill_templates",
+    "TEMPLATES_DIR",
+    "SKILLS_DIR",
+]
