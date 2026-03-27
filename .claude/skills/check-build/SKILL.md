@@ -25,24 +25,46 @@ If empty, show the latest run for each tracked workflow.
 
 ## Step 2 — Fetch workflow runs
 
-```bash
-curl -s "https://api.github.com/repos/gutohuida/AgentWeave/actions/runs?per_page=30" \
-  -H "Accept: application/vnd.github+json" | python3 - <<'PYEOF'
-import sys, json
-from datetime import datetime
+Download to a temp file then parse (avoids stdin/heredoc conflicts):
 
-data = json.load(sys.stdin)
+```bash
+curl -s -o /tmp/aw_gh_runs.json \
+  "https://api.github.com/repos/gutohuida/AgentWeave/actions/runs?per_page=30" \
+  -H "Accept: application/vnd.github+json"
+
+python3 <<'PYEOF'
+import json
+from datetime import datetime, timezone
+
+# Tags to filter on (set from $ARGUMENTS — replace this list when calling)
+args = set()  # e.g. {"v0.10.0", "hub-v0.4.0"} — populated below
+
+import sys
+raw_args = "$ARGUMENTS".strip()
+if raw_args:
+    args = set(raw_args.split())
+
+data = json.load(open("/tmp/aw_gh_runs.json"))
 runs = data.get("workflow_runs", [])
 
-# Track the most recent run per workflow file name
 seen = {}
 for r in runs:
-    wf = r.get("path", "").split("/")[-1]  # e.g. "publish.yml"
-    if wf not in seen:
-        seen[wf] = r
+    wf = r.get("path", "").split("/")[-1]
+    title = r.get("display_title", "") or ""
+    branch = r.get("head_branch", "") or ""
+    if not args or any(a in title or a in branch for a in args):
+        if wf not in seen:
+            seen[wf] = r
+
+# Fallback: show latest per workflow if no tag matches
+if not seen:
+    for r in runs:
+        wf = r.get("path", "").split("/")[-1]
+        if wf not in seen:
+            seen[wf] = r
 
 tracked = ["publish.yml", "hub-image.yml", "ci.yml"]
-now = datetime.utcnow().strftime("%H:%M:%S UTC")
+now = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
 print(f"GitHub Actions — AgentWeave build status (checked at {now})\n")
 
 all_done = True
@@ -53,9 +75,9 @@ for wf in tracked:
     if not r:
         print(f"  {wf:<22} ⬜ no runs found")
         continue
-    status     = r["status"]       # queued / in_progress / completed
-    conclusion = r["conclusion"]   # success / failure / cancelled / skipped / None
-    ref        = r.get("head_branch") or r.get("head_commit", {}).get("id", "")[:7]
+    status     = r["status"]
+    conclusion = r["conclusion"]
+    ref        = r.get("head_branch") or (r.get("head_commit") or {}).get("id", "")[:7]
     url        = r["html_url"]
     if status != "completed":
         symbol = "🔄 running "
@@ -71,10 +93,7 @@ for wf in tracked:
 
 print()
 if all_done:
-    if any_failed:
-        print("BUILD_COMPLETE_FAILURE")
-    else:
-        print("BUILD_COMPLETE_SUCCESS")
+    print("BUILD_COMPLETE_SUCCESS" if not any_failed else "BUILD_COMPLETE_FAILURE")
 else:
     print("BUILD_RUNNING")
 PYEOF
@@ -94,12 +113,3 @@ PYEOF
 - **`BUILD_RUNNING`** — at least one workflow still in progress.
   Print: "Still running — will check again on next interval."
 
----
-
-## Tag filtering (when $ARGUMENTS is set)
-
-If $ARGUMENTS contains specific tags (e.g. `v0.10.0 hub-v0.4.0`), add this filter
-to the Python script: before populating `seen`, skip runs where
-`r.get("head_branch") not in args and not any(t["name"] in args for t in r.get("tags", []))`.
-Use the `head_sha` and compare against the tag's commit if needed. A simpler approach:
-filter by checking if `r["display_title"]` or `r["head_branch"]` contains any of the tags.

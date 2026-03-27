@@ -6,6 +6,7 @@ on:
 
 jobs:
   publish:
+    if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/hub-v')
     runs-on: ubuntu-latest
     
     steps:
