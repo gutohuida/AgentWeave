@@ -35,3 +35,7 @@ class BaseTransport(ABC):
     @abstractmethod
     def get_transport_type(self) -> str:
         """Return transport identifier: 'local', 'git', or 'http'."""
+
+    def push_session(self, session_data: Dict[str, Any]) -> bool:
+        """Push session data to the backend (no-op on non-HTTP transports)."""
+        return False
