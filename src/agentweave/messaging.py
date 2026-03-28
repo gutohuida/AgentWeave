@@ -1,9 +1,12 @@
 """Messaging system for AgentWeave."""
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from .constants import MESSAGE_TYPES, MESSAGES_ARCHIVE_DIR, MESSAGES_PENDING_DIR, TransportType
 from .utils import generate_id, load_json, now_iso, save_json
+
+logger = logging.getLogger(__name__)
 
 
 class Message:
@@ -95,8 +98,6 @@ class Message:
 
     def mark_read(self) -> bool:
         """Mark message as read and move to archive."""
-        from .eventlog import log_event
-
         pending_path = MESSAGES_PENDING_DIR / f"{self.id}.json"
         archive_path = MESSAGES_ARCHIVE_DIR / f"{self.id}.json"
 
@@ -107,7 +108,13 @@ class Message:
 
         if pending_path.exists():
             pending_path.unlink()
-            log_event("msg_read", msg_id=self.id, agent=self.recipient, **{"from": self.sender})
+            logger.info(
+                "msg_read",
+                extra={
+                    "event": "msg_read",
+                    "data": {"msg_id": self.id, "agent": self.recipient, "from": self.sender},
+                },
+            )
             return True
         return False
 
@@ -146,24 +153,34 @@ class MessageBus:
     @staticmethod
     def send(message: Message) -> bool:
         """Send a message via the active transport."""
-        from .eventlog import ERROR, log_event
         from .transport import get_transport
 
         result = get_transport().send_message(message.to_dict())
         if result:
-            log_event(
+            logger.info(
                 "msg_sent",
-                msg_id=message.id,
-                subject=message.subject,
-                **{"from": message.sender, "to": message.recipient},
+                extra={
+                    "event": "msg_sent",
+                    "data": {
+                        "msg_id": message.id,
+                        "subject": message.subject,
+                        "from": message.sender,
+                        "to": message.recipient,
+                    },
+                },
             )
         else:
-            log_event(
+            logger.error(
                 "msg_send_failed",
-                severity=ERROR,
-                msg_id=message.id,
-                subject=message.subject,
-                **{"from": message.sender, "to": message.recipient},
+                extra={
+                    "event": "msg_send_failed",
+                    "data": {
+                        "msg_id": message.id,
+                        "subject": message.subject,
+                        "from": message.sender,
+                        "to": message.recipient,
+                    },
+                },
             )
         return result
 

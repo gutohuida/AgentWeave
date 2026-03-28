@@ -1,11 +1,14 @@
 """Task management for AgentWeave."""
 
+import logging
 import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from .constants import PRIORITIES, TASKS_ACTIVE_DIR, TASKS_COMPLETED_DIR
 from .utils import generate_id, load_json, now_iso, save_json
+
+logger = logging.getLogger(__name__)
 
 
 class TaskStatus(Enum):
@@ -120,43 +123,50 @@ class Task:
 
     def save(self) -> bool:
         """Save task to file."""
-        from .eventlog import ERROR, log_event
-
         filepath = TASKS_ACTIVE_DIR / f"{self.id}.json"
         is_new = not filepath.exists()
         result = save_json(filepath, self._data)
         if result and is_new:
-            log_event(
+            logger.info(
                 "task_created",
-                task_id=self.id,
-                title=self.title,
-                assignee=self.assignee,
-                priority=self.priority,
+                extra={
+                    "event": "task_created",
+                    "data": {
+                        "task_id": self.id,
+                        "title": self.title,
+                        "assignee": self.assignee,
+                        "priority": self.priority,
+                    },
+                },
             )
         elif not result:
-            log_event(
+            logger.error(
                 "task_save_failed",
-                severity=ERROR,
-                task_id=self.id,
-                title=self.title,
+                extra={
+                    "event": "task_save_failed",
+                    "data": {"task_id": self.id, "title": self.title},
+                },
             )
         return result
 
     def update(self, agent: Optional[str] = None, **kwargs: Any) -> None:
         """Update task fields."""
-        from .eventlog import log_event
-
         prev_status = self._data.get("status")
         self._data.update(kwargs)
         self._data["updated"] = now_iso()
         new_status = self._data.get("status")
         if "status" in kwargs and new_status != prev_status:
-            log_event(
+            logger.info(
                 "task_status",
-                task_id=self.id,
-                prev=prev_status,
-                status=new_status,
-                agent=agent,
+                extra={
+                    "event": "task_status",
+                    "data": {
+                        "task_id": self.id,
+                        "prev": prev_status,
+                        "status": new_status,
+                        "agent": agent,
+                    },
+                },
             )
 
     def move_to_completed(self) -> bool:

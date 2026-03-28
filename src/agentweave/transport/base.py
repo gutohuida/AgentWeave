@@ -39,3 +39,13 @@ class BaseTransport(ABC):
     def push_session(self, session_data: Dict[str, Any]) -> bool:
         """Push session data to the backend (no-op on non-HTTP transports)."""
         return False
+
+    def push_log(
+        self,
+        event_type: str,
+        agent: str,
+        data: Optional[Dict[str, Any]],
+        severity: str,
+    ) -> None:
+        """Push a log event to the backend (no-op on non-HTTP transports)."""
+        return
