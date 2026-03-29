@@ -17,7 +17,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .constants import EVENTS_LOG_FILE, LOGS_DIR, WATCHDOG_HEARTBEAT_FILE
+from .constants import EVENTS_LOG_FILE, WATCHDOG_HEARTBEAT_FILE
 
 
 def write_heartbeat() -> None:
