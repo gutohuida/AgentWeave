@@ -2124,6 +2124,10 @@ def main(args: Optional[List[str]] = None) -> int:
     if hasattr(_sys.stderr, "reconfigure"):
         _sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+    from .logging_handlers import _configure_logging
+
+    _configure_logging()
+
     parser = create_parser()
     parsed_args = parser.parse_args(args)
 

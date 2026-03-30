@@ -12,12 +12,15 @@ Expected transport.json:
 """
 
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
 from .base import BaseTransport
+
+logger = logging.getLogger(__name__)
 
 
 class HttpTransport(BaseTransport):
@@ -98,9 +101,10 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/messages", body)
             return True
         except RuntimeError as exc:
-            from ..eventlog import ERROR, log_event
-
-            log_event("transport_error", severity=ERROR, method="send_message", error=str(exc))
+            logger.error(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "send_message", "error": str(exc)}},
+            )
             return False
 
     def get_pending_messages(self, agent: str) -> List[Dict[str, Any]]:
@@ -111,10 +115,9 @@ class HttpTransport(BaseTransport):
                 return result
             return []
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event(
-                "transport_error", severity=WARN, method="get_pending_messages", error=str(exc)
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "get_pending_messages", "error": str(exc)}},
             )
             return []
 
@@ -124,9 +127,10 @@ class HttpTransport(BaseTransport):
             self._request("PATCH", f"/messages/{message_id}/read")
             return True
         except RuntimeError as exc:
-            from ..eventlog import ERROR, log_event
-
-            log_event("transport_error", severity=ERROR, method="archive_message", error=str(exc))
+            logger.error(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "archive_message", "error": str(exc)}},
+            )
             return False
 
     def send_task(self, task_data: Dict[str, Any]) -> bool:
@@ -135,9 +139,10 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/tasks", task_data)
             return True
         except RuntimeError as exc:
-            from ..eventlog import ERROR, log_event
-
-            log_event("transport_error", severity=ERROR, method="send_task", error=str(exc))
+            logger.error(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "send_task", "error": str(exc)}},
+            )
             return False
 
     def get_active_tasks(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -151,9 +156,10 @@ class HttpTransport(BaseTransport):
                 return result
             return []
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event("transport_error", severity=WARN, method="get_active_tasks", error=str(exc))
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "get_active_tasks", "error": str(exc)}},
+            )
             return []
 
     def get_transport_type(self) -> str:
@@ -168,9 +174,10 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/tasks/{task_id}")
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event("transport_error", severity=WARN, method="get_task_by_id", error=str(exc))
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "get_task_by_id", "error": str(exc)}},
+            )
             return None
 
     def update_task_status(self, task_id: str, status: str) -> bool:
@@ -179,10 +186,9 @@ class HttpTransport(BaseTransport):
             self._request("PATCH", f"/tasks/{task_id}", {"status": status})
             return True
         except RuntimeError as exc:
-            from ..eventlog import ERROR, log_event
-
-            log_event(
-                "transport_error", severity=ERROR, method="update_task_status", error=str(exc)
+            logger.error(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "update_task_status", "error": str(exc)}},
             )
             return False
 
@@ -199,9 +205,10 @@ class HttpTransport(BaseTransport):
             )
             return result.get("id")
         except RuntimeError as exc:
-            from ..eventlog import ERROR, log_event
-
-            log_event("transport_error", severity=ERROR, method="ask_question", error=str(exc))
+            logger.error(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "ask_question", "error": str(exc)}},
+            )
             return None
 
     def get_answer(self, question_id: str) -> Optional[Dict[str, Any]]:
@@ -212,9 +219,10 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/questions/{question_id}")
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event("transport_error", severity=WARN, method="get_answer", error=str(exc))
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "get_answer", "error": str(exc)}},
+            )
             return None
 
     def push_heartbeat(
@@ -228,9 +236,10 @@ class HttpTransport(BaseTransport):
             self._request("POST", f"/agents/{agent}/heartbeat", body)
             return True
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event("transport_error", severity=WARN, method="push_heartbeat", error=str(exc))
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "push_heartbeat", "error": str(exc)}},
+            )
             return False
 
     def post_agent_output(self, agent: str, content: str, session_id: Optional[str] = None) -> bool:
@@ -242,9 +251,10 @@ class HttpTransport(BaseTransport):
             self._request("POST", f"/agents/{agent}/output", body)
             return True
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event("transport_error", severity=WARN, method="post_agent_output", error=str(exc))
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "post_agent_output", "error": str(exc)}},
+            )
             return False
 
     def push_session(self, session_data: Dict[str, Any]) -> bool:
@@ -257,9 +267,10 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/session/sync", {"data": session_data})
             return True
         except RuntimeError as exc:
-            from ..eventlog import WARN, log_event
-
-            log_event("transport_error", severity=WARN, method="push_session", error=str(exc))
+            logger.warning(
+                "transport_error",
+                extra={"event": "transport_error", "data": {"method": "push_session", "error": str(exc)}},
+            )
             return False
 
     def push_log(

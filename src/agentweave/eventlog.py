@@ -1,7 +1,15 @@
-"""Structured event logging for AgentWeave.
+"""Structured event log utilities for AgentWeave.
 
-All public functions swallow exceptions so event logging never crashes callers.
-Events are appended as JSON lines to .agentweave/logs/events.jsonl.
+The write path (previously log_event()) has been replaced by Python's standard
+logging module with two custom handlers:
+
+    JSONRotatingFileHandler  — writes to .agentweave/logs/events.jsonl
+    HubHandler               — forwards to Hub when HTTP transport is active
+
+See src/agentweave/logging_handlers.py for the handlers and _configure_logging().
+
+This module retains the read-path utilities (get_events, format_event) and the
+watchdog heartbeat helpers — none of those are affected by the logging migration.
 """
 
 import contextlib
@@ -9,44 +17,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .constants import EVENTS_LOG_FILE, LOGS_DIR, WATCHDOG_HEARTBEAT_FILE
-
-# Severity constants
-DEBUG = "debug"
-INFO = "info"
-WARN = "warn"
-ERROR = "error"
-
-# Minimum severity that gets pushed to Hub (info and above — debug is too noisy)
-_PUSH_MIN_SEVERITY = {INFO, WARN, ERROR}
-
-
-def log_event(event: str, severity: str = INFO, **kwargs: Any) -> None:
-    """Append a structured event to events.jsonl and optionally push to Hub."""
-    try:
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        entry: Dict[str, Any] = {
-            "ts": datetime.now().isoformat(timespec="seconds"),
-            "event": event,
-            "severity": severity,
-        }
-        entry.update(kwargs)
-        with open(EVENTS_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass
-
-    # Push to Hub for warn/error severity only
-    if severity in _PUSH_MIN_SEVERITY:
-        try:
-            from .transport import get_transport
-
-            t = get_transport()
-            if t.get_transport_type() == "http":
-                agent = str(kwargs.get("agent", "system"))
-                t.push_log(event, agent, dict(kwargs), severity)  # type: ignore[attr-defined]
-        except Exception:
-            pass
+from .constants import EVENTS_LOG_FILE, WATCHDOG_HEARTBEAT_FILE
 
 
 def write_heartbeat() -> None:
