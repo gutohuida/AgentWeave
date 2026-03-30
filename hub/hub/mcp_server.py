@@ -264,6 +264,50 @@ def get_status() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Agent configuration tool
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def get_agent_config(agent: str) -> Dict[str, Any]:
+    """Get runner configuration for an agent.
+
+    Returns runner type and, for claude_proxy agents, the base URL and the
+    name of the env var that holds the API key. Actual API key values are
+    never stored or returned.
+
+    Args:
+        agent: Agent name (e.g. "minimax")
+
+    Returns:
+        Dict with 'runner', and for claude_proxy agents also 'base_url' and
+        'api_key_var'. Returns {'error': '...'} if agent not found.
+    """
+    try:
+        agents = _hub_request("GET", "/agents")
+        match = next((a for a in agents if a.get("name") == agent), None)
+        if not match:
+            return {"error": f"Agent '{agent}' not found"}
+
+        result: Dict[str, Any] = {
+            "name": agent,
+            "runner": match.get("runner", "native"),
+        }
+
+        # For proxy agents, include connection details from the full session blob
+        if result["runner"] == "claude_proxy":
+            session = _hub_request("GET", "/session/sync")
+            agent_cfg = (session.get("data") or {}).get("agents", {}).get(agent, {})
+            env_vars = agent_cfg.get("env_vars", {})
+            result["base_url"] = env_vars.get("ANTHROPIC_BASE_URL", "")
+            result["api_key_var"] = env_vars.get("ANTHROPIC_API_KEY_VAR", "")
+
+        return result
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Human interaction tools (NEW)
 # ---------------------------------------------------------------------------
 

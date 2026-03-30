@@ -86,6 +86,7 @@ export function AgentsPage() {
                 <AgentMessageSender
                   agent={selectedAgent.name}
                   existingSessionId={lines.find(l => l.session_id)?.session_id}
+                  runner={selectedAgent.runner}
                 />
               )}
             </div>

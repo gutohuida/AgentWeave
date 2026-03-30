@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://badge.fury.io/py/agentweave-ai)
 
-> **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, and more**
+> **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, Minimax, GLM, and more**
 
 AgentWeave lets multiple AI agents work together on the same project through a shared protocol. The **AgentWeave Hub** is a self-hosted server with a web dashboard — the recommended way to run it.
 
@@ -143,6 +143,69 @@ agentweave init --project "My App" --agents claude,kimi
 
 ---
 
+## Claude-Proxy Agents (Minimax, GLM, and any OpenAI-compatible provider)
+
+Some models — like **MiniMax** and **Zhipu GLM** — don't have a native CLI. AgentWeave runs them through the Claude Code CLI by overriding two environment variables:
+
+```
+ANTHROPIC_BASE_URL  →  the provider's OpenAI-compatible endpoint
+ANTHROPIC_API_KEY   →  the provider's API key (resolved from your shell at runtime)
+```
+
+This is called a **`claude_proxy` runner**. AgentWeave tracks a separate Claude resume session ID per proxy agent so each one maintains its own conversation history.
+
+### Setup
+
+```bash
+# 1. Initialize with a proxy agent
+agentweave init --project "My App" --agents claude,minimax
+
+# 2. Configure the runner (uses built-in defaults for minimax and glm)
+agentweave agent configure minimax
+
+# Or supply custom values for any OpenAI-compatible provider:
+agentweave agent configure mymodel \
+  --runner claude_proxy \
+  --base-url https://api.example.com/v1 \
+  --api-key-var MY_MODEL_API_KEY
+```
+
+### Running a proxy agent
+
+```bash
+# Option A — switch env vars in your current shell, then run Claude manually
+export MINIMAX_API_KEY=<your-key>
+eval $(agentweave switch minimax)          # exports ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY
+claude --resume <session-id> -p "..."
+
+# Option B — let AgentWeave handle it (sets env + launches Claude with relay prompt)
+export MINIMAX_API_KEY=<your-key>
+agentweave run --agent minimax
+
+# Option C — from relay (shows switching instructions, or auto-runs with --run)
+agentweave relay --agent minimax           # shows copy-paste prompt + switching instructions
+agentweave relay --agent minimax --run     # combined: sets env + launches Claude
+```
+
+### Session continuity
+
+AgentWeave tracks the Claude session ID per proxy agent so `--resume` is used automatically on subsequent runs. To register a session ID manually (e.g. from `claude --list`):
+
+```bash
+agentweave agent set-session minimax <session-id>
+```
+
+**Security note:** API keys are never stored in `session.json`. Only the env var *name* is stored (e.g. `MINIMAX_API_KEY`). The actual value is resolved from your shell at runtime.
+
+### Built-in provider registry
+
+| Agent | Base URL | Env var |
+|-------|----------|---------|
+| `minimax` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` |
+| `glm` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` |
+
+---
+
 ## Cross-Machine Collaboration
 
 ### Via Git (no server required)
@@ -174,7 +237,23 @@ agentweave summary
 ```bash
 agentweave quick --to kimi "Task description"
 agentweave relay --agent kimi
+agentweave relay --agent minimax --run     # auto-run for claude_proxy agents
 agentweave inbox --agent claude
+```
+
+### Agent runner (claude_proxy setup)
+
+```bash
+agentweave agent configure minimax                      # use built-in defaults
+agentweave agent configure glm                          # use built-in defaults
+agentweave agent configure mymodel \                    # custom OpenAI-compatible provider
+  --runner claude_proxy \
+  --base-url https://api.example.com/v1 \
+  --api-key-var MY_MODEL_API_KEY
+agentweave agent set-session minimax <session-id>       # register Claude resume ID manually
+
+agentweave switch minimax        # output eval-able export commands
+agentweave run --agent minimax   # set env vars + launch Claude with relay prompt
 ```
 
 ### Tasks
@@ -268,8 +347,8 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.11.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.5.0
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.12.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.6.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server
@@ -318,6 +397,7 @@ make lint
 | Per-agent context templates | ✅ Done (v0.6.0) | `claude_context.md`, `kimi_context.md`, `collab_protocol.md` |
 | Session sync to Hub | ✅ Done (v0.10.0) | Watchdog pushes session.json to Hub on startup; agents auto-appear in dashboard |
 | Yolo mode | ✅ Done (v0.10.0) | Per-agent flag to suppress confirmation prompts for autonomous loops |
+| Claude-proxy agents | ✅ Done (v0.12.0) | Run Minimax, GLM, and any OpenAI-compatible provider via Claude CLI proxy |
 | Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
 ---
@@ -341,6 +421,12 @@ Partially. Runtime state (tasks, messages, session.json, transport.json) is giti
 
 **Q: Do both developers need the same git remote for git transport?**
 Yes. Git transport requires a shared remote (e.g. `origin`).
+
+**Q: How do I use Minimax or GLM — they don't have a CLI?**
+Use `agentweave agent configure minimax` (or `glm`) to set them up as `claude_proxy` agents. AgentWeave runs them through the Claude CLI with overridden env vars (`ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY`). Export your provider key, then run `agentweave run --agent minimax`. See the [Claude-Proxy Agents](#claude-proxy-agents-minimax-glm-and-any-openai-compatible-provider) section above.
+
+**Q: Can I use any OpenAI-compatible provider as an agent?**
+Yes. Use `agentweave agent configure <name> --runner claude_proxy --base-url <url> --api-key-var <VAR>`. The Claude CLI will proxy requests to that endpoint using your existing API key env var.
 
 ---
 

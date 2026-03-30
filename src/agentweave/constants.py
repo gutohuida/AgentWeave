@@ -62,6 +62,8 @@ KNOWN_AGENTS = [
     "opendevin",  # OpenHands / OpenDevin — open-source autonomous agent
     "gpt",  # Generic ChatGPT / OpenAI assistant
     "qwen",  # Qwen / Tongyi Qianwen (Alibaba)
+    "minimax",  # MiniMax — no native CLI, runs via Claude proxy
+    "glm",  # GLM (Zhipu AI) — no native CLI, runs via Claude proxy
 ]
 
 # Default agents when none specified at init (backward-compatible)
@@ -118,6 +120,8 @@ DEFAULT_AGENT_ROLES = {
     "opendevin": "devops_engineer",
     "gpt": "technical_writer",
     "qwen": "backend_dev",
+    "minimax": "backend_dev",
+    "glm": "backend_dev",
 }
 
 # Mapping from agent name to the root-level context file that agent auto-reads.
@@ -127,6 +131,32 @@ AGENT_CONTEXT_FILES: dict = {
     "gemini": "GEMINI.md",
 }
 AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
+
+# Agent runner types — how the agent CLI is invoked
+RUNNER_TYPES = ["native", "claude_proxy", "manual"]
+
+# Agents that run through Claude CLI with custom env vars (no native CLI of their own)
+CLAUDE_PROXY_PROVIDERS: dict = {
+    "minimax": {
+        "base_url": "https://api.minimax.chat/v1",
+        "api_key_var": "MINIMAX_API_KEY",
+        "model": "MiniMax-M2.7",
+    },
+    "glm": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "api_key_var": "ZHIPU_API_KEY",
+        "model": "glm-4",
+    },
+}
+
+# Default runner per known agent; agents not listed here default to "native"
+AGENT_RUNNER_DEFAULTS: dict = {
+    "minimax": "claude_proxy",
+    "glm": "claude_proxy",
+    "cursor": "manual",
+    "windsurf": "manual",
+    "copilot": "manual",
+}
 
 # Valid session roles
 VALID_ROLES = ["principal", "delegate", "reviewer", "collaborator"]

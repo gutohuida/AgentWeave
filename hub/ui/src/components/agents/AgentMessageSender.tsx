@@ -4,6 +4,7 @@ import { useConfigStore } from '@/store/configStore'
 interface AgentMessageSenderProps {
   agent: string
   existingSessionId?: string
+  runner?: string
 }
 
 interface Session {
@@ -12,7 +13,7 @@ interface Session {
   path: string
 }
 
-export function AgentMessageSender({ agent, existingSessionId }: AgentMessageSenderProps) {
+export function AgentMessageSender({ agent, existingSessionId, runner }: AgentMessageSenderProps) {
   const { apiKey } = useConfigStore()
   const [message, setMessage] = useState('')
   const [sessionMode, setSessionMode] = useState<'new' | 'resume'>('new')
@@ -100,6 +101,43 @@ export function AgentMessageSender({ agent, existingSessionId }: AgentMessageSen
       <h3 className="m3-title-medium" style={{ color: 'var(--on-sv)' }}>
         Send Message to {agent}
       </h3>
+
+      {/* Manual agent info */}
+      {runner === 'manual' && (
+        <div
+          className="p-3 rounded-lg m3-body-small"
+          style={{
+            background: 'color-mix(in srgb, #6b7280 15%, transparent)',
+            color: '#9ca3af',
+            border: '1px solid color-mix(in srgb, #6b7280 30%, transparent)'
+          }}
+        >
+          <span className="material-symbols-rounded inline-block mr-1" style={{ fontSize: 16, verticalAlign: 'middle' }}>
+            info
+          </span>
+          This is a manual agent (human-operated). The message will be queued but no automation
+          will run it — open the agent manually and check its AgentWeave inbox.
+        </div>
+      )}
+
+      {/* Proxy agent warning */}
+      {runner === 'claude_proxy' && (
+        <div
+          className="p-3 rounded-lg m3-body-small"
+          style={{
+            background: 'color-mix(in srgb, #f59e0b 15%, transparent)',
+            color: '#f59e0b',
+            border: '1px solid color-mix(in srgb, #f59e0b 30%, transparent)'
+          }}
+        >
+          <span className="material-symbols-rounded inline-block mr-1" style={{ fontSize: 16, verticalAlign: 'middle' }}>
+            warning
+          </span>
+          This is a proxy agent (runs via Claude CLI with custom env vars).
+          Triggering it requires your watchdog to be running with the appropriate API key exported
+          (e.g., <code>export MINIMAX_API_KEY=...</code> before <code>agentweave start</code>).
+        </div>
+      )}
 
       {/* Session Mode Selection */}
       <div className="space-y-2">

@@ -21,6 +21,19 @@ const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
   collaborator: { bg: 'color-mix(in srgb, var(--on-sv) 12%, transparent)', color: 'var(--on-sv)' },
 }
 
+const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
+  claude_proxy: {
+    bg: 'color-mix(in srgb, #f59e0b 15%, transparent)',
+    color: '#f59e0b',
+    label: 'proxy'
+  },
+  manual: {
+    bg: 'color-mix(in srgb, #6b7280 15%, transparent)',
+    color: '#6b7280',
+    label: 'manual'
+  },
+}
+
 interface AgentCardProps {
   agent: AgentSummary
   selected: boolean
@@ -81,12 +94,38 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
       </div>
       {/* Role badge */}
       {roleCfg && (
-        <div className="mt-1.5">
+        <div className="mt-1.5 flex gap-1.5">
           <span
             className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
             style={{ background: roleCfg.bg, color: roleCfg.color, fontSize: '0.65rem' }}
           >
             {agent.role}
+          </span>
+          {agent.runner && agent.runner !== 'native' && (
+            <span
+              className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
+              style={{
+                background: RUNNER_CONFIG[agent.runner]?.bg || RUNNER_CONFIG.manual.bg,
+                color: RUNNER_CONFIG[agent.runner]?.color || RUNNER_CONFIG.manual.color,
+                fontSize: '0.65rem'
+              }}
+            >
+              {RUNNER_CONFIG[agent.runner]?.label || agent.runner}
+            </span>
+          )}
+        </div>
+      )}
+      {!roleCfg && agent.runner && agent.runner !== 'native' && (
+        <div className="mt-1.5">
+          <span
+            className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
+            style={{
+              background: RUNNER_CONFIG[agent.runner]?.bg || RUNNER_CONFIG.manual.bg,
+              color: RUNNER_CONFIG[agent.runner]?.color || RUNNER_CONFIG.manual.color,
+              fontSize: '0.65rem'
+            }}
+          >
+            {RUNNER_CONFIG[agent.runner]?.label || agent.runner}
           </span>
         </div>
       )}

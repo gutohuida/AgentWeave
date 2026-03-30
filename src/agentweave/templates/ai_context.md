@@ -121,6 +121,23 @@ Before parallelizing, split work into phases to avoid wasted implementation:
 
 This prevents the common failure: two agents implement incompatible approaches at the same time.
 
+### MCP vs CLI — CRITICAL Rule
+
+**If `send_message` is in your available tools → Hub/MCP mode is active.**
+
+In Hub/MCP mode these CLI delegation commands are **FORBIDDEN**:
+- ❌ `agentweave relay --agent <name>`
+- ❌ `agentweave quick --to <name> "..."`
+- ❌ `agentweave relay --agent <name> --run`
+
+They require manual human action. `send_message` + watchdog is fully automatic for all runner types:
+- `native` (claude, kimi, gemini) → watchdog calls their CLI directly
+- `claude_proxy` (minimax, glm) → watchdog injects env vars, calls `claude` on their behalf
+- `manual` (cursor, copilot) → watchdog queues message; human runs agent manually
+
+**Correct delegation (Hub mode):** `create_task(...)` → `send_message(...)` → done.
+**CLI relay is ONLY valid** when you have no MCP tools (local/git transport without Hub).
+
 ### User Communication (Hub Mode Only)
 
 | Use | Tool | When |

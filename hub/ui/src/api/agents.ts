@@ -13,6 +13,7 @@ export interface AgentSummary {
   active_task_count: number
   role?: string  // "principal" | "delegate" | "collaborator"
   yolo?: boolean
+  runner?: string  // "native" | "claude_proxy" | "manual"
 }
 
 export interface AgentTimelineEvent {

@@ -120,8 +120,33 @@ When performance matters: measure first (`time`, `cProfile`, profiler of your st
 
 **Always check for AgentWeave MCP tools at session start** (`send_message`, `get_inbox`, `update_task`, `ask_user`). Then:
 
+### ⚠ CRITICAL: MCP vs CLI — Pick One, Never Mix
+
+**If `send_message` is in your available tools → you are in Hub/MCP mode.**
+
+In Hub/MCP mode, the following CLI commands are **FORBIDDEN** for agent delegation:
+- ❌ `agentweave relay --agent <name>`
+- ❌ `agentweave quick --to <name> "..."`
+- ❌ `agentweave relay --agent <name> --run`
+
+These generate relay prompts that require **manual human action**. In Hub mode, the watchdog auto-pings agents the moment `send_message` is called — no human intervention needed.
+
+**The watchdog handles ALL agent runner types automatically:**
+- `native` (claude, kimi, gemini) — calls their CLI directly
+- `claude_proxy` (minimax, glm) — injects env vars and calls `claude` CLI on their behalf
+- `manual` (cursor, copilot) — queues the message; human runs agent manually
+
+**Correct delegation in Hub/MCP mode:**
+```
+1. create_task(title="...", assignee="minimax", assigner="claude", ...)
+2. send_message(from_agent="claude", to_agent="minimax",
+               subject="New task: ...", content="...",
+               message_type="delegation", task_id="<id>")
+   → watchdog fires automatically, no relay, no user action needed
+```
+
 ### If MCP tools are available (Hub mode)
-- Use `send_message` to route work to other agents — never use CLI relay commands.
+- Use `send_message` to route work to other agents — NEVER use CLI relay commands.
 - Use `get_inbox` to read incoming tasks and messages.
 - Use `update_task` for every status transition.
 - Use `ask_user` when a decision requires human input — do not interrupt with direct chat.
@@ -163,7 +188,7 @@ Always respect the phase specified in the delegated task:
 
 If no phase is specified, default to: **Explore → share findings → await Plan approval → Implement**.
 
-### If no MCP tools (local/git mode)
+### If no MCP tools (local/git mode — relay is the ONLY valid context for these commands)
 - Use `agentweave relay --agent <name>` to send work to another agent.
 - Use `agentweave inbox --agent <your-name>` to read incoming tasks.
 - Use `agentweave task update <id> --status <status>` for every transition.

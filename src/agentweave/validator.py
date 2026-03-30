@@ -1,8 +1,11 @@
 """JSON schema validation for AgentWeave."""
 
+import re
 from typing import Any, Dict, List, Tuple
 
-from .constants import AGENT_NAME_RE, MESSAGE_TYPES, PRIORITIES, TASK_STATUSES
+from .constants import AGENT_NAME_RE, MESSAGE_TYPES, PRIORITIES, RUNNER_TYPES, TASK_STATUSES
+
+_ENV_VAR_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 
 class ValidationError(Exception):
@@ -115,6 +118,35 @@ def validate_session(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
 
     if "principal" in data and not _valid_agent(data["principal"]):
         errors.append(f"Invalid principal: {data['principal']!r}")
+
+    return len(errors) == 0, errors
+
+
+def validate_runner_config(runner: str, env_vars: dict) -> Tuple[bool, List[str]]:
+    """Validate runner type and env_vars for an agent.
+
+    Returns:
+        (is_valid, list_of_errors)
+    """
+    errors = []
+    if runner not in RUNNER_TYPES:
+        errors.append(f"Invalid runner type: {runner!r}. Must be one of {RUNNER_TYPES}")
+        return False, errors
+
+    if runner == "claude_proxy":
+        base_url = env_vars.get("ANTHROPIC_BASE_URL", "")
+        api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR", "")
+        if not base_url:
+            errors.append("claude_proxy runner requires env_vars.ANTHROPIC_BASE_URL")
+        elif not base_url.startswith(("http://", "https://")):
+            errors.append(f"ANTHROPIC_BASE_URL must start with http:// or https://: {base_url!r}")
+        if not api_key_var:
+            errors.append("claude_proxy runner requires env_vars.ANTHROPIC_API_KEY_VAR")
+        elif not _ENV_VAR_RE.match(api_key_var):
+            errors.append(
+                f"ANTHROPIC_API_KEY_VAR must be a valid env var name (uppercase, no spaces): "
+                f"{api_key_var!r}"
+            )
 
     return len(errors) == 0, errors
 

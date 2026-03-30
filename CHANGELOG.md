@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.12.0] - 2026-03-30
+
+### Added (CLI)
+- **Claude-proxy agent support** (`agentweave agent configure <name> --runner claude_proxy`): run Minimax, GLM, and any OpenAI-compatible model through the Claude Code CLI by injecting `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` at subprocess level. API keys are never stored — only the env var name is recorded in `session.json`.
+- **`agentweave switch <agent>`**: outputs eval-able `export KEY=VALUE` lines to activate a proxy agent in the current shell (`eval $(agentweave switch minimax)`).
+- **`agentweave run --agent <name>`**: resolves env vars, builds relay prompt, and launches the Claude subprocess with env overrides — full one-command delegation to a proxy agent.
+- **`agentweave relay --run` flag**: combines relay-prompt generation and immediate subprocess execution.
+- **`agentweave agent set-session <name> <id>`**: manually register a Claude `--resume` session ID for per-agent conversation continuity.
+- **`agentweave agent set-model <name> <model>`**: update the model name for a claude_proxy agent without reconfiguring all env vars.
+- **Built-in provider registry** (`CLAUDE_PROXY_PROVIDERS`): minimax and glm ship with default base URLs, api-key-var names, and model names — `agentweave agent configure minimax` works with zero flags.
+- **`src/agentweave/runner.py`** (new): shared helpers (`get_agent_env`, `build_claude_proxy_cmd`, `get_claude_session_id`, `save_claude_session_id`) used by both CLI and watchdog to avoid duplicating env-resolution logic.
+- **Watchdog env-var injection**: claude_proxy agents are auto-pinged with `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` injected into the subprocess environment — watchdog works for proxy agents without any manual steps.
+- **`agentweave reply` guard**: passing a `msg-...` message ID now prints a clear error directing to `send_message` MCP tool instead of silently returning HTTP 405.
+- **MCP protocol enforcement in context templates**: all agent context files (`claude_context.md`, `kimi_context.md`, `collab_protocol.md`, `ai_context.md`) now explicitly forbid `agentweave relay`/`agentweave quick` when MCP tools are available and document all three runner types as watchdog-handled.
+- **`testrun/setup.sh`**: new test environment setup script; automatically injects `fastmcp` into the agentweave-ai pipx venv so `agentweave-mcp` starts correctly.
+- `docs/kimi-task-hub-mcp-minimax-glm.md`: implementation brief for Hub-side proxy agent changes (used for cross-agent delegation).
+
+### Added (Hub v0.6.0)
+- **`runner` field in `AgentSummary`** (`hub/hub/schemas/agents.py`, `hub/hub/api/v1/agents.py`): `GET /api/v1/agents` now returns each agent's runner type (`native` / `claude_proxy` / `manual`) read from the synced `session.json`.
+- **`get_agent_config` MCP tool** (11th tool in `hub/hub/mcp_server.py`): agents can query a peer's runner type, base URL, and API key env var name via MCP — enabling orchestrators to understand proxy agents.
+- **Runner badge in `AgentCard`** (`hub/ui/src/components/agents/AgentCard.tsx`): dashboard shows amber "proxy" badge for `claude_proxy` agents and grey "manual" badge for manual agents — native agents show no badge.
+- **Proxy and manual warnings in trigger panel** (`hub/ui/src/components/agents/AgentMessageSender.tsx`): amber warning for claude_proxy agents (env vars must be set on host watchdog); grey info banner for manual agents (no automation, requires human action).
+- **`runner` field in TypeScript `AgentSummary`** (`hub/ui/src/api/agents.ts`): UI type matches API response.
+
+---
+
 ## [0.11.0] - 2026-03-30
 
 ### Changed (CLI)

@@ -3,6 +3,7 @@
 import contextlib
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -467,16 +468,34 @@ def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -
     Kimi uses --print; Claude and others use --output-format stream-json so we can
     parse JSONL lines in real-time and extract the session_id for resumption.
     """
+    from .constants import AGENT_RUNNER_DEFAULTS
+    from .session import Session
+
     if agent == "kimi":
         cmd = ["kimi", "--print"]
         if session_id:
             cmd += ["--session", session_id]
         cmd += ["-p", prompt]
         return cmd
+
+    # Determine CLI and model: claude_proxy agents use 'claude' CLI with custom model
+    cli = agent
+    model = None
+    session = Session.load()
+    if session:
+        runner_config = session.get_runner_config(agent)
+        if runner_config.get("runner") == "claude_proxy":
+            cli = "claude"
+            model = runner_config.get("model")
+    elif AGENT_RUNNER_DEFAULTS.get(agent) == "claude_proxy":
+        cli = "claude"
+
     # Claude and other CLIs — stream-json gives real-time JSONL lines with thinking,
     # assistant messages, tool calls, and session_id for resumption.
     # --verbose is required when using --output-format with --print (-p).
-    cmd = [agent, "--output-format", "stream-json", "--verbose"]
+    cmd = [cli, "--output-format", "stream-json", "--verbose"]
+    if model:
+        cmd += ["--model", model]
     if session_id:
         cmd += ["--resume", session_id]
     cmd += ["-p", prompt]
@@ -629,6 +648,7 @@ def _run_agent_subprocess(
     subject: str,
     transport: Any,
     is_http: bool,
+    env_vars: Optional[Dict[str, str]] = None,
 ) -> None:
     """Background thread: run agent, stream output to Hub, save session ID."""
     # Snapshot kimi sessions before launch
@@ -776,6 +796,17 @@ def _run_agent_subprocess(
         """Run agent command, stream output. Returns process returncode."""
         nonlocal session_id, session_id_ref
 
+        # Prepare environment: merge env_vars with current environment
+        proc_env = None
+        if env_vars:
+            proc_env = os.environ.copy()
+            proc_env.update(env_vars)
+            # If ANTHROPIC_API_KEY_VAR is set, resolve it and set ANTHROPIC_API_KEY
+            # (Claude CLI needs ANTHROPIC_API_KEY, not ANTHROPIC_API_KEY_VAR)
+            api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR")
+            if api_key_var and api_key_var in os.environ:
+                proc_env["ANTHROPIC_API_KEY"] = os.environ[api_key_var]
+
         proc = subprocess.Popen(
             run_cmd,
             stdout=subprocess.PIPE,
@@ -783,6 +814,7 @@ def _run_agent_subprocess(
             stdin=subprocess.DEVNULL,
             text=True,
             bufsize=1,
+            env=proc_env,
         )
         stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
         stderr_thread.start()
@@ -969,6 +1001,19 @@ def _check_cli_available(agent: str) -> bool:
     """Check if an agent's CLI is available in PATH."""
     import shutil
 
+    from .constants import AGENT_RUNNER_DEFAULTS
+    from .session import Session
+
+    # For claude_proxy agents, check for 'claude' CLI
+    session = Session.load()
+    if session:
+        runner_config = session.get_runner_config(agent)
+        if runner_config.get("runner") == "claude_proxy":
+            return shutil.which("claude") is not None
+    # Fallback to registry defaults
+    if AGENT_RUNNER_DEFAULTS.get(agent) == "claude_proxy":
+        return shutil.which("claude") is not None
+
     cli_name = "kimi" if agent == "kimi" else agent
     return shutil.which(cli_name) is not None
 
@@ -1042,6 +1087,16 @@ def _make_ping_callback(
         if session_id:
             print(f"[PING] Resuming session: {session_id}")
 
+        # Load env_vars from session config for claude_proxy agents
+        env_vars = None
+        from .session import Session
+
+        session = Session.load()
+        if session:
+            runner_config = session.get_runner_config(recipient)
+            if runner_config.get("runner") == "claude_proxy":
+                env_vars = runner_config.get("env_vars")
+
         import time as _t
 
         if pinged_at is not None:
@@ -1056,7 +1111,7 @@ def _make_ping_callback(
 
         t = threading.Thread(
             target=_run_agent_subprocess,
-            args=(recipient, cmd, subject, transport, is_http),
+            args=(recipient, cmd, subject, transport, is_http, env_vars),
             daemon=True,
         )
         t.start()
@@ -1134,6 +1189,16 @@ def _make_direct_trigger_callback(
         )
         cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
 
+        # Load env_vars from session config for claude_proxy agents
+        env_vars = None
+        from .session import Session
+
+        session = Session.load()
+        if session:
+            runner_config = session.get_runner_config(recipient)
+            if runner_config.get("runner") == "claude_proxy":
+                env_vars = runner_config.get("env_vars")
+
         logger.info(
             "direct_trigger_executing",
             extra={
@@ -1150,7 +1215,7 @@ def _make_direct_trigger_callback(
         # Message is intentionally left unread so the agent can read it via get_inbox.
         t = threading.Thread(
             target=_run_agent_subprocess,
-            args=(recipient, cmd, "Direct trigger from Hub", transport, is_http),
+            args=(recipient, cmd, "Direct trigger from Hub", transport, is_http, env_vars),
             daemon=True,
         )
         t.start()

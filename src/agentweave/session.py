@@ -2,7 +2,14 @@
 
 from typing import Any, Dict, List, Optional
 
-from .constants import AGENT_NAME_RE, DEFAULT_AGENTS, SESSION_FILE, VALID_MODES
+from .constants import (
+    AGENT_NAME_RE,
+    AGENT_RUNNER_DEFAULTS,
+    DEFAULT_AGENTS,
+    RUNNER_TYPES,
+    SESSION_FILE,
+    VALID_MODES,
+)
 from .utils import generate_id, load_json, now_iso, save_json
 
 
@@ -56,6 +63,47 @@ class Session:
         if agent not in self._data.get("agents", {}):
             raise ValueError(f"Agent {agent!r} not in session")
         self._data["agents"][agent]["yolo"] = enabled
+        self._data["updated"] = now_iso()
+
+    def get_runner_config(self, agent: str) -> dict:
+        """Return runner config for an agent.
+
+        Falls back to AGENT_RUNNER_DEFAULTS if not explicitly configured.
+        Returns dict with 'runner', 'env_vars', and 'model' keys.
+        """
+        from .constants import CLAUDE_PROXY_PROVIDERS
+
+        agent_cfg = self.agents.get(agent, {})
+        runner = agent_cfg.get("runner") or AGENT_RUNNER_DEFAULTS.get(agent, "native")
+        env_vars = agent_cfg.get("env_vars", {})
+        model = agent_cfg.get("model")
+
+        # If no model specified, use provider default
+        if not model and runner == "claude_proxy" and agent in CLAUDE_PROXY_PROVIDERS:
+            model = CLAUDE_PROXY_PROVIDERS[agent].get("model")
+
+        return {"runner": runner, "env_vars": env_vars, "model": model}
+
+    def set_runner_config(
+        self, agent: str, runner: str, env_vars: dict, model: Optional[str] = None
+    ) -> None:
+        """Store runner config for an agent.
+
+        Args:
+            agent:    Agent name (must already be in session).
+            runner:   One of RUNNER_TYPES.
+            env_vars: Dict with ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY_VAR for
+                      claude_proxy runners; empty dict for native/manual.
+            model:    Optional model name for claude_proxy agents (e.g., "MiniMax-M2.5").
+        """
+        if runner not in RUNNER_TYPES:
+            raise ValueError(f"Invalid runner type: {runner!r}. Must be one of {RUNNER_TYPES}")
+        if agent not in self._data.get("agents", {}):
+            raise ValueError(f"Agent {agent!r} not in session")
+        self._data["agents"][agent]["runner"] = runner
+        self._data["agents"][agent]["env_vars"] = env_vars
+        if model:
+            self._data["agents"][agent]["model"] = model
         self._data["updated"] = now_iso()
 
     def to_dict(self) -> Dict[str, Any]:

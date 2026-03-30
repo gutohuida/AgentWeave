@@ -20,10 +20,16 @@ together on the same project through a shared `.agentweave/` directory and optio
 ## Communication Mode — Check This First
 
 **If you have `send_message` and `get_inbox` as available tools (MCP mode):**
-Use them directly. No relay prompts, no manual steps. The watchdog daemon will
-automatically notify the other agent's CLI when you send a message.
+Use them directly. No relay prompts, no manual steps. The watchdog daemon
+automatically pings the target agent's CLI the moment `send_message` is called —
+for ALL runner types: native (claude, kimi), claude_proxy (minimax, glm), and manual.
 
-**If you do NOT have those tools (manual relay mode):**
+> ⚠ **`agentweave relay`, `agentweave quick`, and `agentweave relay --run` are
+> FORBIDDEN in MCP mode.** They require manual human action and defeat the
+> purpose of Hub automation. If you find yourself reaching for these commands
+> while MCP tools are available, stop and use `send_message` instead.
+
+**If you do NOT have those tools (local/git mode only):**
 Use `agentweave relay --agent <name>` to generate a relay prompt, then ask the
 user to paste it into the target agent's session.
 

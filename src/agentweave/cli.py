@@ -546,6 +546,11 @@ def cmd_summary(_args: argparse.Namespace) -> int:
 def cmd_relay(args: argparse.Namespace) -> int:
     """Generate relay prompt for an agent."""
     agent = args.agent
+    run_flag = getattr(args, "run", False)
+
+    # If --run is requested, delegate to cmd_run directly
+    if run_flag:
+        return cmd_run(args)
 
     # Get pending tasks for this agent
     pending_tasks = Task.list_all(assignee=agent, status="assigned")
@@ -607,6 +612,35 @@ def cmd_relay(args: argparse.Namespace) -> int:
 
     print("-" * 60)
     print()
+
+    # For claude_proxy agents, show switching instructions
+    if session:
+        runner_config = session.get_runner_config(agent)
+        if runner_config.get("runner") == "claude_proxy":
+            from .runner import get_claude_session_id
+
+            session_id = get_claude_session_id(agent)
+            env_vars = runner_config.get("env_vars", {})
+            api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR", "?")
+            print("─" * 60)
+            print(f"  {agent.upper()} is a claude_proxy agent — no native CLI")
+            print("─" * 60)
+            print(f"  Requires: export {api_key_var}=<your-api-key>")
+            print()
+            print("  Option 1 — Switch env vars then run manually:")
+            print(f"    eval $(agentweave switch {agent})")
+            if session_id:
+                print(f"    claude --resume {session_id} -p '<paste prompt above>'")
+            else:
+                print("    claude -p '<paste prompt above>'")
+            print()
+            print("  Option 2 — Auto-run (sets env + launches Claude with relay prompt):")
+            print(f"    agentweave run --agent {agent}")
+            print()
+            print("  Option 3 — Combined (from relay):")
+            print(f"    agentweave relay --agent {agent} --run")
+            print("─" * 60)
+            print()
 
     return 0
 
@@ -1604,6 +1638,16 @@ def cmd_reply(args: argparse.Namespace) -> int:
     question_id = args.id
     answer = args.answer
 
+    # Guard: message IDs (msg-...) are not question IDs (q-...)
+    if question_id.startswith("msg-"):
+        print_error(
+            f"'{question_id}' is a message ID, not a question ID.\n"
+            "  agentweave reply answers questions created by ask_user() — IDs start with 'q-'.\n"
+            "  To reply to a message use the send_message MCP tool, or:\n"
+            "    agentweave msg send --to <agent> --message '...'"
+        )
+        return 1
+
     import json as _json
     import urllib.error as _uerr
     import urllib.request as _req
@@ -1674,6 +1718,272 @@ def cmd_yolo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agent_configure(args: argparse.Namespace) -> int:
+    """Configure runner type for an agent (e.g. minimax/glm as claude_proxy)."""
+    from .constants import CLAUDE_PROXY_PROVIDERS
+    from .runner import get_claude_session_id
+    from .validator import validate_runner_config
+
+    agent = args.agent_name
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+    if agent not in session.agent_names:
+        print_error(
+            f"Agent {agent!r} is not in the current session. "
+            f"Known agents: {', '.join(session.agent_names)}"
+        )
+        return 1
+
+    runner = args.runner
+    base_url = args.base_url
+    api_key_var = args.api_key_var
+    model = args.model
+
+    # Apply registry defaults for known claude_proxy providers when flags are omitted
+    if runner == "claude_proxy" and agent in CLAUDE_PROXY_PROVIDERS:
+        defaults = CLAUDE_PROXY_PROVIDERS[agent]
+        if not base_url:
+            base_url = defaults["base_url"]
+        if not api_key_var:
+            api_key_var = defaults["api_key_var"]
+        if not model:
+            model = defaults.get("model")
+
+    # If runner not specified, use the known default or ask user to specify
+    if runner is None:
+        from .constants import AGENT_RUNNER_DEFAULTS
+
+        runner = AGENT_RUNNER_DEFAULTS.get(agent, "native")
+
+    env_vars: dict = {}
+    if runner == "claude_proxy":
+        if not base_url or not api_key_var:
+            print_error(
+                "claude_proxy runner requires --base-url and --api-key-var. "
+                f"Known providers: {list(CLAUDE_PROXY_PROVIDERS.keys())}"
+            )
+            return 1
+        env_vars = {
+            "ANTHROPIC_BASE_URL": base_url,
+            "ANTHROPIC_API_KEY_VAR": api_key_var,
+        }
+
+    is_valid, errors = validate_runner_config(runner, env_vars)
+    if not is_valid:
+        print_error("Runner config validation failed:")
+        for err in errors:
+            print(f"  - {err}")
+        return 1
+
+    session.set_runner_config(agent, runner, env_vars, model=model)
+    if not session.save():
+        print_error("Failed to save session")
+        return 1
+
+    print_success(f"Runner configured: {agent} → {runner}")
+    if runner == "claude_proxy":
+        print(f"  ANTHROPIC_BASE_URL = {base_url}")
+        print(f"  ANTHROPIC_API_KEY  = ${api_key_var}  (resolved from your shell at runtime)")
+        print(f"  MODEL              = {model}")
+        existing_session = get_claude_session_id(agent)
+        if existing_session:
+            print(f"  Saved session ID   = {existing_session}")
+        print()
+        print("  To activate this agent in your shell:")
+        print(f"    eval $(agentweave switch {agent})")
+        print("  Or to run it directly:")
+        print(f"    agentweave run --agent {agent}")
+    return 0
+
+
+def cmd_agent_set_session(args: argparse.Namespace) -> int:
+    """Manually register a Claude session ID for an agent."""
+    from .runner import save_claude_session_id
+
+    agent = args.agent_name
+    session_id = args.session_id
+
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+    if agent not in session.agent_names:
+        print_error(f"Agent {agent!r} is not in the current session")
+        return 1
+
+    save_claude_session_id(agent, session_id)
+    print_success(f"Session ID saved for {agent}: {session_id}")
+    print(f"  Next run: agentweave run --agent {agent}  (will use --resume {session_id})")
+    return 0
+
+
+def cmd_agent_set_model(args: argparse.Namespace) -> int:
+    """Set the model for a claude_proxy agent.
+
+    Usage: agentweave agent set-model <agent_name> <model_name>
+    """
+    agent = args.agent_name
+    model = args.model
+
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+    if agent not in session.agent_names:
+        print_error(f"Agent {agent!r} is not in the current session")
+        return 1
+
+    runner_config = session.get_runner_config(agent)
+    if runner_config.get("runner") != "claude_proxy":
+        print_error(
+            f"{agent} is not configured as claude_proxy. "
+            f"Run 'agentweave agent configure {agent} --runner claude_proxy' first."
+        )
+        return 1
+
+    # Get existing config
+    env_vars = runner_config.get("env_vars", {})
+
+    # Update model
+    session.set_runner_config(agent, "claude_proxy", env_vars, model=model)
+    if not session.save():
+        print_error("Failed to save session")
+        return 1
+
+    print_success(f"Model set for {agent}: {model}")
+    return 0
+
+
+def cmd_switch(args: argparse.Namespace) -> int:
+    """Output eval-able shell export commands to switch env vars for a claude_proxy agent.
+
+    Usage: eval $(agentweave switch minimax)
+    """
+    from .runner import get_agent_env, get_missing_api_key_var
+
+    agent = args.agent
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+    if agent not in session.agent_names:
+        print_error(f"Agent {agent!r} is not in the current session")
+        return 1
+
+    runner_config = session.get_runner_config(agent)
+    if runner_config.get("runner") != "claude_proxy":
+        print_info(
+            f"{agent} uses runner '{runner_config.get('runner', 'native')}' — "
+            f"no env var switch needed"
+        )
+        return 0
+
+    missing = get_missing_api_key_var(session, agent)
+    if missing:
+        print_error(
+            f"${missing} is not set in the current shell. "
+            f"Export it first:\n  export {missing}=<your-api-key>"
+        )
+        return 1
+
+    env_vars = get_agent_env(session, agent)
+    for key, value in env_vars.items():
+        # Print eval-able export statements
+        print(f"export {key}={value}")
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Set env vars for a claude_proxy agent and launch Claude with a relay prompt."""
+    import os
+    import subprocess as _subprocess
+
+    from .runner import (
+        build_claude_proxy_cmd,
+        get_agent_env,
+        get_claude_session_id,
+        get_missing_api_key_var,
+    )
+
+    agent = args.agent
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+    if agent not in session.agent_names:
+        print_error(f"Agent {agent!r} is not in the current session")
+        return 1
+
+    runner_config = session.get_runner_config(agent)
+    runner = runner_config.get("runner", "native")
+    model = runner_config.get("model")
+
+    if runner == "manual":
+        print_warning(f"{agent} is configured as a manual agent — use relay and copy-paste instead")
+        print(f"  agentweave relay --agent {agent}")
+        return 0
+
+    if runner != "claude_proxy":
+        print_warning(
+            f"{agent} uses runner '{runner}' which has its own CLI. "
+            f"Run it directly or use relay."
+        )
+        return 0
+
+    missing = get_missing_api_key_var(session, agent)
+    if missing:
+        print_error(
+            f"${missing} is not set in the current shell. "
+            f"Export it first:\n  export {missing}=<your-api-key>"
+        )
+        return 1
+
+    env_overrides = get_agent_env(session, agent)
+    session_id = get_claude_session_id(agent)
+
+    # Build relay prompt inline (same content as cmd_relay)
+    pending_tasks = Task.list_all(assignee=agent, status="assigned")
+    pending_tasks.extend(Task.list_all(assignee=agent, status="pending"))
+    messages = MessageBus.get_inbox(agent)
+    role = session.get_agent_role(agent)
+
+    lines = [f"@{agent} - You have work in the AgentWeave collaboration system."]
+    lines.append(f"Your role: {role}")
+    lines.append(
+        "Collaboration guide: read .agentweave/protocol.md for commands, workflow, and protocol."
+    )
+    lines.append("Project context: read .agentweave/shared/context.md before starting.")
+    if pending_tasks:
+        lines.append(f"[TASK] You have {len(pending_tasks)} new task(s):")
+        for task in pending_tasks:
+            lines.append(f"   - {task.title} ({task.id})")
+        lines.append("Run: agentweave task list  to see full details")
+    if messages:
+        lines.append(f"[MSG] You have {len(messages)} unread message(s).")
+        lines.append(f"Run: agentweave inbox --agent {agent}")
+    if not pending_tasks and not messages:
+        lines.append("No pending tasks or messages. Check agentweave status for context.")
+    prompt = "\n".join(lines)
+
+    cmd = build_claude_proxy_cmd(agent, prompt, session_id=session_id, model=model)
+
+    proc_env = {**os.environ, **env_overrides}
+
+    print_info(
+        f"Running {agent} via claude proxy "
+        f"(ANTHROPIC_BASE_URL={env_overrides.get('ANTHROPIC_BASE_URL', '?')})"
+    )
+    if session_id:
+        print_info(f"Resuming session: {session_id}")
+    print(f"Command: {' '.join(cmd)}")
+    print()
+
+    result = _subprocess.run(cmd, env=proc_env)
+    return result.returncode
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     parser = argparse.ArgumentParser(
@@ -1740,6 +2050,68 @@ For more help: https://github.com/gutohuida/AgentWeave
         required=True,
         help="Agent to generate prompt for (e.g. kimi, gemini, codex)",
     )
+    relay_parser.add_argument(
+        "--run",
+        action="store_true",
+        help="For claude_proxy agents: set env vars and launch Claude automatically",
+    )
+
+    # Agent configure / set-session
+    agent_parser = subparsers.add_parser("agent", help="Agent runner configuration")
+    agent_subparsers = agent_parser.add_subparsers(dest="agent_command")
+
+    agent_configure = agent_subparsers.add_parser(
+        "configure", help="Set runner type and env vars for an agent"
+    )
+    agent_configure.add_argument("agent_name", help="Agent name (must be in current session)")
+    agent_configure.add_argument(
+        "--runner",
+        choices=["native", "claude_proxy", "manual"],
+        help="Runner type (default: auto-detected from known providers)",
+    )
+    agent_configure.add_argument(
+        "--base-url",
+        dest="base_url",
+        help="ANTHROPIC_BASE_URL for claude_proxy agents (e.g. https://api.minimax.chat/v1)",
+    )
+    agent_configure.add_argument(
+        "--api-key-var",
+        dest="api_key_var",
+        help="Name of the shell env var holding the API key (e.g. MINIMAX_API_KEY)",
+    )
+    agent_configure.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model name for claude_proxy agents (e.g., MiniMax-M2.5, glm-4)",
+    )
+
+    agent_set_session = agent_subparsers.add_parser(
+        "set-session", help="Manually register a Claude session ID for an agent"
+    )
+    agent_set_session.add_argument("agent_name", help="Agent name")
+    agent_set_session.add_argument("session_id", help="Claude session ID (from claude --list)")
+
+    agent_set_model = agent_subparsers.add_parser(
+        "set-model", help="Set the model for a claude_proxy agent"
+    )
+    agent_set_model.add_argument("agent_name", help="Agent name (e.g., minimax)")
+    agent_set_model.add_argument("model", help="Model name (e.g., MiniMax-M2.5)")
+    agent_set_model.set_defaults(func=cmd_agent_set_model)
+
+    # Switch env vars for a claude_proxy agent
+    switch_parser = subparsers.add_parser(
+        "switch",
+        help="Output eval-able export commands for a claude_proxy agent",
+    )
+    switch_parser.add_argument("agent", help="Agent to switch to (e.g. minimax, glm)")
+
+    # Run a claude_proxy agent directly
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Set env vars and launch Claude for a claude_proxy agent",
+    )
+    run_parser.add_argument("--agent", "-a", required=True, help="Agent to run (e.g. minimax)")
 
     # Quick
     quick_parser = subparsers.add_parser("quick", help="Quick task delegation (single command)")
@@ -2205,6 +2577,18 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_hub_heartbeat(parsed_args)
         elif parsed_args.command == "yolo":
             return cmd_yolo(parsed_args)
+        elif parsed_args.command == "agent":
+            if parsed_args.agent_command == "configure":
+                return cmd_agent_configure(parsed_args)
+            elif parsed_args.agent_command == "set-session":
+                return cmd_agent_set_session(parsed_args)
+            else:
+                parser.parse_args(["agent", "--help"])
+                return 0
+        elif parsed_args.command == "switch":
+            return cmd_switch(parsed_args)
+        elif parsed_args.command == "run":
+            return cmd_run(parsed_args)
         else:
             parser.print_help()
             return 0

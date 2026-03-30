@@ -15,6 +15,7 @@ class AgentSummary(BaseModel):
     active_task_count: int
     role: Optional[str] = None  # "principal" | "delegate" | "collaborator"
     yolo: bool = False
+    runner: str = "native"  # "native" | "claude_proxy" | "manual"
 
     model_config = {"from_attributes": True}
 

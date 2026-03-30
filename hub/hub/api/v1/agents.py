@@ -174,6 +174,7 @@ async def list_agents(
                 active_task_count=task_count,
                 role=agent_meta.get("role"),
                 yolo=bool(agent_meta.get("yolo", False)),
+                runner=agent_meta.get("runner", "native"),
             )
         )
 
