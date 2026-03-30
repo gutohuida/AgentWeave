@@ -98,12 +98,12 @@ def _configure_logging() -> None:
     root.setLevel(logging.DEBUG)  # handlers control what actually emits
 
     # Ensure the log directory exists before opening the file handler
+    import contextlib
+
     from .constants import LOGS_DIR
 
-    try:
+    with contextlib.suppress(OSError):
         LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
 
     jsonl_path = LOGS_DIR / "events.jsonl"
 

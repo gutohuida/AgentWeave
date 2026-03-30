@@ -268,8 +268,8 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.10.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.4.0
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.11.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.5.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server

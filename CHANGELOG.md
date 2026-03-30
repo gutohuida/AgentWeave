@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.11.0] - 2026-03-30
+
+### Changed (CLI)
+- **Logging migrated to Python `logging` stdlib**: replaced custom `log_event()` with two handlers — `JSONRotatingFileHandler` (writes same JSONL schema to `events.jsonl`, now with 10 MB rotation / 5 backups) and `HubHandler` (forwards INFO/WARNING/ERROR to Hub when HTTP transport active). Resolves file growth, missing stack traces, and absence of logger hierarchy.
+- **`push_log()` added to `BaseTransport` as a no-op default**: removes latent `AttributeError` risk on LocalTransport and GitTransport.
+- **`_configure_logging()` called at CLI and watchdog startup**: respects `AW_LOG_LEVEL` (default `WARNING`) and `AW_LOG_FILE` env vars for developer tracing.
+- `eventlog.py` retains read-path utilities (`get_events`, `format_event`, `write_heartbeat`, `get_heartbeat_age`) — `agentweave log` output is unchanged.
+
+### Added (CLI)
+- `docs/logging-guide.md`: comprehensive developer reference covering logging architecture, migration rationale, and per-module log points for CLI and Hub.
+
+### Added (Hub v0.5.0)
+- Hub Docker build and `publish.yml` tag filter fix from v0.10.0 release cycle now included in Hub image.
+
+---
+
 ## [0.10.0] - 2026-03-27
 
 ### Added (CLI)
