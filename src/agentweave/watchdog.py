@@ -645,7 +645,10 @@ def _run_agent_subprocess(
         except Exception as exc:
             logger.warning(
                 "watchdog_heartbeat_failed",
-                extra={"event": "watchdog_heartbeat_failed", "data": {"agent": agent, "error": str(exc)}},
+                extra={
+                    "event": "watchdog_heartbeat_failed",
+                    "data": {"agent": agent, "error": str(exc)},
+                },
             )
         try:
             transport.post_agent_output(agent, f"[watchdog] 🚀 Starting {agent}…", session_id=None)
@@ -673,7 +676,10 @@ def _run_agent_subprocess(
                     except Exception as exc:
                         logger.warning(
                             "watchdog_output_post_failed",
-                            extra={"event": "watchdog_output_post_failed", "data": {"agent": agent, "error": str(exc)}},
+                            extra={
+                                "event": "watchdog_output_post_failed",
+                                "data": {"agent": agent, "error": str(exc)},
+                            },
                         )
                     # Only push error-level lines to the Logs tab
                     if any(kw in err_line for kw in _error_keywords):
@@ -683,7 +689,10 @@ def _run_agent_subprocess(
         except Exception as exc:
             logger.warning(
                 "watchdog_stderr_drain_failed",
-                extra={"event": "watchdog_stderr_drain_failed", "data": {"agent": agent, "error": str(exc)}},
+                extra={
+                    "event": "watchdog_stderr_drain_failed",
+                    "data": {"agent": agent, "error": str(exc)},
+                },
             )
 
     def _detect_kimi_session() -> None:
@@ -707,7 +716,10 @@ def _run_agent_subprocess(
             if session_id is not None:
                 logger.info(
                     "watchdog_kimi_session_already_set",
-                    extra={"event": "watchdog_kimi_session_already_set", "data": {"session_id": session_id}},
+                    extra={
+                        "event": "watchdog_kimi_session_already_set",
+                        "data": {"session_id": session_id},
+                    },
                 )
                 return
             time.sleep(0.1)
@@ -722,7 +734,14 @@ def _run_agent_subprocess(
                     session_id_ref[0] = found_session
                     logger.info(
                         "watchdog_kimi_session_found",
-                        extra={"event": "watchdog_kimi_session_found", "data": {"session_id": found_session, "attempts": i, "method": "directory"}},
+                        extra={
+                            "event": "watchdog_kimi_session_found",
+                            "data": {
+                                "session_id": found_session,
+                                "attempts": i,
+                                "method": "directory",
+                            },
+                        },
                     )
                     return
             except Exception as e:
@@ -739,7 +758,10 @@ def _run_agent_subprocess(
                     session_id_ref[0] = from_json
                     logger.info(
                         "watchdog_kimi_session_found",
-                        extra={"event": "watchdog_kimi_session_found", "data": {"session_id": from_json, "attempts": i, "method": "kimi_json"}},
+                        extra={
+                            "event": "watchdog_kimi_session_found",
+                            "data": {"session_id": from_json, "attempts": i, "method": "kimi_json"},
+                        },
                     )
                     return
             except Exception:
@@ -800,7 +822,10 @@ def _run_agent_subprocess(
                     except Exception as exc:
                         logger.warning(
                             "watchdog_output_post_failed",
-                            extra={"event": "watchdog_output_post_failed", "data": {"agent": agent, "error": str(exc)}},
+                            extra={
+                                "event": "watchdog_output_post_failed",
+                                "data": {"agent": agent, "error": str(exc)},
+                            },
                         )
                         print(
                             f"[ERROR] post_agent_output failed for {agent}: {exc}",
@@ -832,7 +857,14 @@ def _run_agent_subprocess(
         if returncode != 0 and saved_session:
             logger.warning(
                 "watchdog_session_retry",
-                extra={"event": "watchdog_session_retry", "data": {"agent": agent, "exit_code": returncode, "reason": "stale session cleared"}},
+                extra={
+                    "event": "watchdog_session_retry",
+                    "data": {
+                        "agent": agent,
+                        "exit_code": returncode,
+                        "reason": "stale session cleared",
+                    },
+                },
             )
             print(
                 f"[WARN] {agent} exited with code {returncode} — session may be stale, "
@@ -851,7 +883,10 @@ def _run_agent_subprocess(
         if returncode != 0:
             logger.warning(
                 "watchdog_agent_exit",
-                extra={"event": "watchdog_agent_exit", "data": {"agent": agent, "exit_code": returncode}},
+                extra={
+                    "event": "watchdog_agent_exit",
+                    "data": {"agent": agent, "exit_code": returncode},
+                },
             )
             print(f"[WARN] {agent} exited with code {returncode}", file=sys.stderr)
     except FileNotFoundError as exc:
@@ -863,7 +898,10 @@ def _run_agent_subprocess(
     except Exception as exc:
         logger.error(
             "watchdog_subprocess_error",
-            extra={"event": "watchdog_subprocess_error", "data": {"agent": agent, "error": str(exc)}},
+            extra={
+                "event": "watchdog_subprocess_error",
+                "data": {"agent": agent, "error": str(exc)},
+            },
         )
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
@@ -878,7 +916,10 @@ def _run_agent_subprocess(
             session_id_ref[0] = from_json
             logger.info(
                 "watchdog_kimi_session_fallback",
-                extra={"event": "watchdog_kimi_session_fallback", "data": {"session_id": from_json, "method": "kimi_json"}},
+                extra={
+                    "event": "watchdog_kimi_session_fallback",
+                    "data": {"session_id": from_json, "method": "kimi_json"},
+                },
             )
 
         # Method 2: Diff session directories
@@ -891,7 +932,10 @@ def _run_agent_subprocess(
                     session_id_ref[0] = session_id
                     logger.info(
                         "watchdog_kimi_session_fallback",
-                        extra={"event": "watchdog_kimi_session_fallback", "data": {"session_id": session_id, "method": "directory_diff"}},
+                        extra={
+                            "event": "watchdog_kimi_session_fallback",
+                            "data": {"session_id": session_id, "method": "directory_diff"},
+                        },
                     )
 
     # Persist session ID for next run
@@ -914,7 +958,10 @@ def _run_agent_subprocess(
         except Exception as exc:
             logger.warning(
                 "watchdog_heartbeat_failed",
-                extra={"event": "watchdog_heartbeat_failed", "data": {"agent": agent, "error": str(exc)}},
+                extra={
+                    "event": "watchdog_heartbeat_failed",
+                    "data": {"agent": agent, "error": str(exc)},
+                },
             )
 
 
@@ -972,7 +1019,14 @@ def _make_ping_callback(
             )
             logger.warning(
                 "ping_skipped",
-                extra={"event": "ping_skipped", "data": {"agent": recipient, "msg_id": msg_id, "reason": "CLI not found in PATH"}},
+                extra={
+                    "event": "ping_skipped",
+                    "data": {
+                        "agent": recipient,
+                        "msg_id": msg_id,
+                        "reason": "CLI not found in PATH",
+                    },
+                },
             )
             return
 
@@ -994,7 +1048,10 @@ def _make_ping_callback(
             pinged_at[msg_id] = _t.time()
         logger.info(
             "watchdog_ping",
-            extra={"event": "watchdog_ping", "data": {"agent": recipient, "msg_id": msg_id, "subject": data.get("subject", "")}},
+            extra={
+                "event": "watchdog_ping",
+                "data": {"agent": recipient, "msg_id": msg_id, "subject": data.get("subject", "")},
+            },
         )
 
         t = threading.Thread(
@@ -1043,7 +1100,14 @@ def _make_direct_trigger_callback(
         if not _check_cli_available(recipient):
             logger.warning(
                 "direct_trigger_skipped",
-                extra={"event": "direct_trigger_skipped", "data": {"agent": recipient, "msg_id": msg_id, "reason": "CLI not found in PATH"}},
+                extra={
+                    "event": "direct_trigger_skipped",
+                    "data": {
+                        "agent": recipient,
+                        "msg_id": msg_id,
+                        "reason": "CLI not found in PATH",
+                    },
+                },
             )
             return
 
@@ -1072,7 +1136,10 @@ def _make_direct_trigger_callback(
 
         logger.info(
             "direct_trigger_executing",
-            extra={"event": "direct_trigger_executing", "data": {"agent": recipient, "msg_id": msg_id, "session_id": session_id}},
+            extra={
+                "event": "direct_trigger_executing",
+                "data": {"agent": recipient, "msg_id": msg_id, "session_id": session_id},
+            },
         )
         print(f"[TRIGGER] Executing direct trigger for {recipient}")
         print(f"[TRIGGER] Command: {' '.join(cmd)}")

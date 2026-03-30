@@ -103,7 +103,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.error(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "send_message", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "send_message", "error": str(exc)},
+                },
             )
             return False
 
@@ -117,7 +120,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "get_pending_messages", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "get_pending_messages", "error": str(exc)},
+                },
             )
             return []
 
@@ -129,7 +135,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.error(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "archive_message", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "archive_message", "error": str(exc)},
+                },
             )
             return False
 
@@ -141,7 +150,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.error(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "send_task", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "send_task", "error": str(exc)},
+                },
             )
             return False
 
@@ -158,7 +170,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "get_active_tasks", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "get_active_tasks", "error": str(exc)},
+                },
             )
             return []
 
@@ -176,7 +191,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "get_task_by_id", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "get_task_by_id", "error": str(exc)},
+                },
             )
             return None
 
@@ -188,7 +206,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.error(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "update_task_status", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "update_task_status", "error": str(exc)},
+                },
             )
             return False
 
@@ -207,7 +228,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.error(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "ask_question", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "ask_question", "error": str(exc)},
+                },
             )
             return None
 
@@ -221,7 +245,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "get_answer", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "get_answer", "error": str(exc)},
+                },
             )
             return None
 
@@ -238,7 +265,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "push_heartbeat", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "push_heartbeat", "error": str(exc)},
+                },
             )
             return False
 
@@ -253,7 +283,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "post_agent_output", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "post_agent_output", "error": str(exc)},
+                },
             )
             return False
 
@@ -269,7 +302,10 @@ class HttpTransport(BaseTransport):
         except RuntimeError as exc:
             logger.warning(
                 "transport_error",
-                extra={"event": "transport_error", "data": {"method": "push_session", "error": str(exc)}},
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "push_session", "error": str(exc)},
+                },
             )
             return False
 
