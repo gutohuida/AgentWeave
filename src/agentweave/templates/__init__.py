@@ -4,6 +4,7 @@ This module contains markdown templates for common collaboration scenarios.
 """
 
 from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 TEMPLATES_DIR = Path(__file__).parent
 
@@ -23,7 +24,7 @@ def get_template(name: str) -> str:
     raise FileNotFoundError(f"Template not found: {name}")
 
 
-def list_templates() -> list:
+def list_templates() -> List[str]:
     """List available templates.
 
     Returns:
@@ -51,7 +52,7 @@ def get_skill_template(name: str) -> str:
     raise FileNotFoundError(f"Skill template not found: {name}")
 
 
-def list_skill_templates() -> list:
+def list_skill_templates() -> List[str]:
     """List available skill templates.
 
     Returns:
@@ -62,7 +63,7 @@ def list_skill_templates() -> list:
     return [f.stem for f in SKILLS_DIR.glob("*.md")]
 
 
-def load_roles_template() -> dict:
+def load_roles_template() -> Dict[str, Any]:
     """Load the roles config template (roles.json) from the package.
 
     Returns:
