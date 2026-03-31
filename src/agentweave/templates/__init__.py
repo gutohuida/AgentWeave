@@ -4,7 +4,7 @@ This module contains markdown templates for common collaboration scenarios.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 TEMPLATES_DIR = Path(__file__).parent
 
