@@ -59,48 +59,13 @@ It provides:
 
 ## Documentation
 
-<div class="grid cards" markdown>
-
--   :material-rocket-launch:{ .lg .middle } __Getting Started__
-
-    ---
-
-    Install the CLI, start the Hub, and connect your first agents.
-
-    [:octicons-arrow-right-24: Installation](getting-started/installation.md)
-    [:octicons-arrow-right-24: Quick Start](getting-started/quickstart.md)
-
--   :material-book-open-variant:{ .lg .middle } __Guides__
-
-    ---
-
-    Step-by-step guides for common tasks and workflows.
-
-    [:octicons-arrow-right-24: Adding New Agents](guides/adding-new-agents.md)
-    [:octicons-arrow-right-24: Dashboard](guides/dashboard.md)
-    [:octicons-arrow-right-24: FAQ](guides/faq.md)
-
--   :material-code-braces:{ .lg .middle } __Reference__
-
-    ---
-
-    CLI commands, MCP tools, API endpoints, and configuration options.
-
-    [:octicons-arrow-right-24: CLI Commands](reference/cli-commands.md)
-    [:octicons-arrow-right-24: MCP Tools](reference/mcp-tools.md)
-    [:octicons-arrow-right-24: Task Lifecycle](reference/task-lifecycle.md)
-
--   :material-sitemap:{ .lg .middle } __Architecture__
-
-    ---
-
-    Understand how AgentWeave works under the hood.
-
-    [:octicons-arrow-right-24: Overview](architecture/overview.md)
-    [:octicons-arrow-right-24: Transport Layer](architecture/transport-layer.md)
-    [:octicons-arrow-right-24: Messaging](architecture/messaging.md)
-
-</div>
+| Section | Description | Links |
+|---------|-------------|-------|
+| **Getting Started** | Install the CLI, start the Hub, and connect your first agents | [Installation](getting-started/installation.md) · [Quick Start](getting-started/quickstart.md) |
+| **Guides** | Step-by-step guides for common tasks and workflows | [Adding New Agents](guides/adding-new-agents.md) · [Context Files](guides/context-files.md) · [Session Modes](guides/session-modes.md) · [Dashboard](guides/dashboard.md) · [FAQ](guides/faq.md) |
+| **Reference** | CLI commands, MCP tools, API endpoints, and configuration options | [CLI Commands](reference/cli-commands.md) · [MCP Tools](reference/mcp-tools.md) · [Task Lifecycle](reference/task-lifecycle.md) · [Hub API](reference/hub-api.md) |
+| **Architecture** | Understand how AgentWeave works under the hood | [Overview](architecture/overview.md) · [Transport Layer](architecture/transport-layer.md) · [Messaging](architecture/messaging.md) · [Locking](architecture/locking.md) |
+| **Contributing** | Development setup and release process | [Development](contributing/development.md) · [Release Process](contributing/release-process.md) |
 
 ## Dashboard Features
 
