@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.15.0] - 2026-03-31
+
+### Added (CLI)
+- **Multi-role support for agents** — agents can now have multiple roles assigned simultaneously
+- **New `agentweave roles` CLI commands**:
+  - `agentweave roles list` — show all agents and their assigned roles
+  - `agentweave roles add <agent> <role>` — add a role to an agent
+  - `agentweave roles remove <agent> <role>` — remove a role from an agent
+  - `agentweave roles set <agent> <role1,role2,...>` — set multiple roles for an agent (replaces existing)
+  - `agentweave roles available` — list all available role types with descriptions
+- **Role guide markdown files** — automatically copied to `.agentweave/roles/{role}.md` when adding roles
+- **Backward compatibility** — legacy `agent_assignments` (single role) auto-converted to `agent_roles` (array)
+
+### Added (Hub v0.9.0)
+- **Hub sync for role changes** — roles automatically sync to Hub when HTTP transport is active
+- **Multi-role display in dashboard** — agent cards show all assigned roles as badges
+- **Hub API updated** — `dev_roles` and `dev_role_labels` arrays in AgentSummary schema
+
+---
+
 ## [0.14.0] - 2026-03-31
 
 ### Added (CLI)
