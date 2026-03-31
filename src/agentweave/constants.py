@@ -133,3 +133,20 @@ MESSAGE_TYPES = ["message", "delegation", "review", "discussion"]
 
 # Priorities
 PRIORITIES = ["low", "medium", "high", "critical"]
+
+# Valid role IDs (from templates/roles/roles.json)
+VALID_ROLE_IDS = [
+    "tech_lead",
+    "architect",
+    "backend_dev",
+    "frontend_dev",
+    "fullstack_dev",
+    "qa_engineer",
+    "devops_engineer",
+    "security_engineer",
+    "data_engineer",
+    "ml_engineer",
+    "technical_writer",
+    "code_reviewer",
+    "project_manager",
+]

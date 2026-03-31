@@ -92,16 +92,34 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
           {cfg.label}
         </span>
       </div>
-      {/* Role badge */}
-      {roleCfg && (
+      {/* Role badges */}
+      {(roleCfg || agent.dev_roles?.length || agent.dev_role || agent.runner) && (
         <div className="mt-1.5 flex gap-1.5 flex-wrap">
-          <span
-            className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
-            style={{ background: roleCfg.bg, color: roleCfg.color, fontSize: '0.65rem' }}
-          >
-            {agent.role}
-          </span>
-          {agent.dev_role && (
+          {roleCfg && (
+            <span
+              className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
+              style={{ background: roleCfg.bg, color: roleCfg.color, fontSize: '0.65rem' }}
+            >
+              {agent.role}
+            </span>
+          )}
+          {/* Multiple dev roles (new format) */}
+          {agent.dev_roles?.map((role, idx) => (
+            <span
+              key={role}
+              className="m3-label-small px-1.5 py-0.5 rounded-full"
+              title={`Dev role: ${role}`}
+              style={{
+                background: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
+                color: '#8b5cf6',
+                fontSize: '0.65rem',
+              }}
+            >
+              {agent.dev_role_labels?.[idx] ?? role}
+            </span>
+          ))}
+          {/* Single dev role (legacy format - fallback) */}
+          {!agent.dev_roles?.length && agent.dev_role && (
             <span
               className="m3-label-small px-1.5 py-0.5 rounded-full"
               title={`Dev role: ${agent.dev_role}`}
@@ -126,20 +144,6 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
               {RUNNER_CONFIG[agent.runner]?.label || agent.runner}
             </span>
           )}
-        </div>
-      )}
-      {!roleCfg && agent.runner && agent.runner !== 'native' && (
-        <div className="mt-1.5">
-          <span
-            className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
-            style={{
-              background: RUNNER_CONFIG[agent.runner]?.bg || RUNNER_CONFIG.manual.bg,
-              color: RUNNER_CONFIG[agent.runner]?.color || RUNNER_CONFIG.manual.color,
-              fontSize: '0.65rem'
-            }}
-          >
-            {RUNNER_CONFIG[agent.runner]?.label || agent.runner}
-          </span>
         </div>
       )}
       <div className="mt-1.5 flex gap-3 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>

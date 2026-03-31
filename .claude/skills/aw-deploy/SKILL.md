@@ -1,6 +1,6 @@
 ---
 name: aw-deploy
-description: Release a new version of AgentWeave — auto-detects next version, bumps pyproject.toml files, updates CHANGELOG and README, commits, pushes and creates GitHub releases via Windows PowerShell (which holds git/gh credentials), then monitors the build. Never invoke this automatically.
+description: Release a new version of AgentWeave — auto-detects next version, bumps pyproject.toml files, checks if documentation needs updates, updates CHANGELOG and README, commits, pushes and creates GitHub releases via Windows PowerShell (which holds git/gh credentials), then monitors the build. Never invoke this automatically.
 disable-model-invocation: true
 ---
 
@@ -110,7 +110,28 @@ grep '^version' pyproject.toml hub/pyproject.toml
 
 ---
 
-## Step 5 — Update README.md
+## Step 5 — Update documentation
+
+Review recent changes and determine if documentation needs updates:
+
+```bash
+# See what changed since last tag
+git log --oneline $(git describe --tags --abbrev=0)..HEAD
+```
+
+**Check and update if needed:**
+- `AGENTS.md` — New CLI commands, configuration options, or architecture changes?
+- `README.md` — New features, changed usage patterns, or updated examples?
+- `CLAUDE.md` / `KIMI.md` — Agent-specific context changes?
+- `docs/` — New features that need user documentation?
+
+Ask: "Any documentation updates needed for these changes?"
+
+If yes, update the relevant files before proceeding.
+
+---
+
+## Step 6 — Update README.md
 
 The README has version strings in the Repository Layout section. Update them:
 
@@ -145,7 +166,7 @@ Where `${cli_version}` and `${hub_version}` are the actual new version values.
 
 ---
 
-## Step 6 — Update CHANGELOG.md
+## Step 7 — Update CHANGELOG.md
 
 Insert a new section after the `---` on line 8. Use today's date (`YYYY-MM-DD`).
 
@@ -173,7 +194,7 @@ Ask the user to review the CHANGELOG entry and confirm before proceeding.
 
 ---
 
-## Step 7 — Commit (via Linux git)
+## Step 8 — Commit (via Linux git)
 
 Stage only the changed files:
 ```bash
@@ -192,7 +213,7 @@ Commit message format:
 
 ---
 
-## Step 8 — Push (via Windows PowerShell — has git credentials)
+## Step 9 — Push (via Windows PowerShell — has git credentials)
 
 ```bash
 WIN_PATH=$(wslpath -w .)
@@ -203,7 +224,7 @@ If it fails, report the PowerShell error verbatim and stop.
 
 ---
 
-## Step 9 — Create GitHub releases (via Windows PowerShell — has gh credentials)
+## Step 10 — Create GitHub releases (via Windows PowerShell — has gh credentials)
 
 **If releasing CLI:**
 ```bash
@@ -219,7 +240,7 @@ powershell.exe -Command "cd '$WIN_PATH'; gh release create hub-v<hub_version> --
 
 ---
 
-## Step 10 — Monitor build via check-build skill
+## Step 11 — Monitor build via check-build skill
 
 Invoke the `check-build` skill to immediately show the initial CI status:
 

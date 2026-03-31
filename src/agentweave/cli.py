@@ -19,9 +19,23 @@ from .constants import (
     TRANSPORT_CONFIG_FILE,
     VALID_AGENTS,
     VALID_MODES,
+    VALID_ROLE_IDS,
 )
 from .locking import acquire_lock, release_lock
 from .messaging import Message, MessageBus
+from .roles import (
+    add_role_to_agent,
+    copy_role_md_file,
+    format_agent_roles,
+    get_agent_roles,
+    get_available_roles,
+    load_roles_config,
+    remove_role_from_agent,
+    save_roles_config,
+    set_agent_roles,
+    sync_roles_to_hub,
+    validate_role,
+)
 from .session import Session
 from .task import Task
 from .templates import (
@@ -432,16 +446,24 @@ def cmd_status(_args: argparse.Namespace) -> int:
     all_agents = session.agent_names or DEFAULT_AGENTS
     active_tasks = Task.list_all(active_only=True)
 
+    # Load roles config for display
+    roles_config = load_roles_config()
+
     print("\n[AGENTS]")
     for agent in all_agents:
-        role = session.agents.get(agent, {}).get("role", "unknown")
+        # Get session role (principal/delegate)
+        session_role = session.agents.get(agent, {}).get("role", "delegate")
+        # Get dev roles (tech_lead, backend_dev, etc.)
+        dev_roles = get_agent_roles(agent, roles_config)
+        roles_display = ", ".join(dev_roles) if dev_roles else session_role
+        
         inbox = MessageBus.get_inbox(agent)
         agent_tasks = [t for t in active_tasks if t.assignee == agent]
         in_prog = [t for t in agent_tasks if t.status == "in_progress"]
         waiting = [t for t in agent_tasks if t.status in ("pending", "assigned")]
         review = [t for t in agent_tasks if t.status in ("completed", "under_review")]
         principal_marker = " [principal]" if agent == session.principal else ""
-        print(f"   {agent}{principal_marker} ({role})")
+        print(f"   {agent}{principal_marker} ({roles_display})")
         if inbox:
             print(f"      inbox:    {len(inbox)} unread message(s)")
         if in_prog:
@@ -1848,6 +1870,207 @@ def cmd_agent_set_model(args: argparse.Namespace) -> int:
     agent = args.agent_name
     model = args.model
 
+
+def cmd_roles_list(_args: argparse.Namespace) -> int:
+    """List all agents and their assigned roles."""
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+
+    config = load_roles_config()
+    
+    print("[ROLES] Agent role assignments")
+    print("-" * 60)
+    
+    for agent in session.agent_names:
+        principal_marker = " [principal]" if agent == session.principal else ""
+        roles_str = format_agent_roles(agent, config)
+        print(f"   {agent}{principal_marker}: {roles_str}")
+    
+    print()
+    print("Commands:")
+    print("  agentweave roles add <agent> <role>")
+    print("  agentweave roles remove <agent> <role>")
+    print("  agentweave roles set <agent> <role1,role2,...>")
+    print("  agentweave roles available")
+    
+    return 0
+
+
+def cmd_roles_add(args: argparse.Namespace) -> int:
+    """Add a role to an agent."""
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+
+    agent = args.agent
+    role = args.role
+
+    if agent not in session.agent_names:
+        print_error(f"Agent '{agent}' is not in the current session")
+        print_info(f"Session agents: {', '.join(session.agent_names)}")
+        return 1
+
+    # Load current config
+    config = load_roles_config()
+    
+    # Add the role
+    success, message, config = add_role_to_agent(agent, role, config)
+    if not success:
+        print_error(message)
+        return 1
+
+    # Save config
+    if not save_roles_config(config):
+        print_error("Failed to save roles configuration")
+        return 1
+
+    # Sync to Hub if HTTP transport
+    sync_roles_to_hub(config)
+
+    # Copy role markdown file to .agentweave/roles/
+    if copy_role_md_file(role):
+        print_info(f"Role guide copied: .agentweave/roles/{role}.md")
+    else:
+        print_warning(f"Role guide not found for: {role}")
+
+    print_success(message)
+    
+    # Show updated roles
+    current_roles = get_agent_roles(agent, config)
+    if current_roles:
+        print(f"   Current roles: {', '.join(current_roles)}")
+    
+    return 0
+
+
+def cmd_roles_remove(args: argparse.Namespace) -> int:
+    """Remove a role from an agent."""
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+
+    agent = args.agent
+    role = args.role
+
+    if agent not in session.agent_names:
+        print_error(f"Agent '{agent}' is not in the current session")
+        print_info(f"Session agents: {', '.join(session.agent_names)}")
+        return 1
+
+    # Load current config
+    config = load_roles_config()
+    if not config:
+        print_error("No roles configuration found")
+        return 1
+
+    # Remove the role
+    success, message, config = remove_role_from_agent(agent, role, config)
+    if not success:
+        print_error(message)
+        return 1
+
+    # Save config
+    if not save_roles_config(config):
+        print_error("Failed to save roles configuration")
+        return 1
+
+    # Sync to Hub if HTTP transport
+    sync_roles_to_hub(config)
+
+    print_success(message)
+    
+    # Show updated roles
+    current_roles = get_agent_roles(agent, config)
+    if current_roles:
+        print(f"   Current roles: {', '.join(current_roles)}")
+    else:
+        print("   Current roles: none")
+    
+    return 0
+
+
+def cmd_roles_set(args: argparse.Namespace) -> int:
+    """Set/replace all roles for an agent."""
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+
+    agent = args.agent
+    roles_str = args.roles
+
+    if agent not in session.agent_names:
+        print_error(f"Agent '{agent}' is not in the current session")
+        print_info(f"Session agents: {', '.join(session.agent_names)}")
+        return 1
+
+    # Parse roles
+    roles_list = [r.strip() for r in roles_str.split(",") if r.strip()]
+    
+    if not roles_list:
+        print_error("No valid roles provided")
+        return 1
+
+    # Load current config
+    config = load_roles_config()
+    
+    # Set the roles
+    success, message, config = set_agent_roles(agent, roles_list, config)
+    if not success:
+        print_error(message)
+        return 1
+
+    # Save config
+    if not save_roles_config(config):
+        print_error("Failed to save roles configuration")
+        return 1
+
+    # Sync to Hub if HTTP transport
+    sync_roles_to_hub(config)
+
+    # Copy role markdown files for all new roles
+    roles_copied = []
+    roles_missing = []
+    for role_id in roles_list:
+        if copy_role_md_file(role_id):
+            roles_copied.append(f"{role_id}.md")
+        else:
+            roles_missing.append(role_id)
+    
+    if roles_copied:
+        print_info(f"Role guides copied: {', '.join(roles_copied)}")
+    if roles_missing:
+        print_warning(f"Role guides not found: {', '.join(roles_missing)}")
+
+    print_success(message)
+    
+    return 0
+
+
+def cmd_roles_available(_args: argparse.Namespace) -> int:
+    """List all available role types."""
+    roles = get_available_roles()
+    
+    print("[AVAILABLE ROLES]")
+    print("-" * 60)
+    
+    for role_id, label, description in roles:
+        print(f"   {role_id}")
+        print(f"      Label: {label}")
+        if description:
+            print(f"      Responsibilities: {description}")
+        print()
+    
+    print("Usage:")
+    print("  agentweave roles add <agent> <role_id>")
+    print("  agentweave roles remove <agent> <role_id>")
+    
+    return 0
+
     session = Session.load()
     if not session:
         print_error("No session found. Run: agentweave init")
@@ -2488,6 +2711,37 @@ For more help: https://github.com/gutohuida/AgentWeave
     yolo_parser.add_argument("--enable", action="store_true", help="Enable yolo mode")
     yolo_parser.add_argument("--disable", action="store_true", help="Disable yolo mode")
 
+    # Roles management
+    roles_parser = subparsers.add_parser("roles", help="Manage agent roles")
+    roles_subparsers = roles_parser.add_subparsers(dest="roles_command")
+
+    # roles list
+    roles_subparsers.add_parser("list", help="List all agents and their roles")
+
+    # roles add
+    roles_add = roles_subparsers.add_parser("add", help="Add a role to an agent")
+    roles_add.add_argument("agent", help="Agent name (e.g., claude, kimi)")
+    roles_add.add_argument(
+        "role",
+        help=f"Role ID (e.g., {', '.join(VALID_ROLE_IDS[:3])}, ...)"
+    )
+
+    # roles remove
+    roles_remove = roles_subparsers.add_parser("remove", help="Remove a role from an agent")
+    roles_remove.add_argument("agent", help="Agent name")
+    roles_remove.add_argument("role", help="Role ID to remove")
+
+    # roles set
+    roles_set = roles_subparsers.add_parser("set", help="Set/replace all roles for an agent")
+    roles_set.add_argument("agent", help="Agent name")
+    roles_set.add_argument(
+        "roles",
+        help="Comma-separated role IDs (e.g., 'backend_dev,code_reviewer')"
+    )
+
+    # roles available
+    roles_subparsers.add_parser("available", help="List all available role types")
+
     # Reply to agent questions (Hub / http transport only)
     reply_parser = subparsers.add_parser(
         "reply",
@@ -2598,6 +2852,20 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_hub_heartbeat(parsed_args)
         elif parsed_args.command == "yolo":
             return cmd_yolo(parsed_args)
+        elif parsed_args.command == "roles":
+            if parsed_args.roles_command == "list":
+                return cmd_roles_list(parsed_args)
+            elif parsed_args.roles_command == "add":
+                return cmd_roles_add(parsed_args)
+            elif parsed_args.roles_command == "remove":
+                return cmd_roles_remove(parsed_args)
+            elif parsed_args.roles_command == "set":
+                return cmd_roles_set(parsed_args)
+            elif parsed_args.roles_command == "available":
+                return cmd_roles_available(parsed_args)
+            else:
+                parser.parse_args(["roles", "--help"])
+                return 0
         elif parsed_args.command == "agent":
             if parsed_args.agent_command == "configure":
                 return cmd_agent_configure(parsed_args)

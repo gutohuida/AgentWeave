@@ -14,8 +14,10 @@ export interface AgentSummary {
   role?: string  // "principal" | "delegate" | "collaborator"
   yolo?: boolean
   runner?: string  // "native" | "claude_proxy" | "manual"
-  dev_role?: string        // e.g. "tech_lead", "backend_dev"
-  dev_role_label?: string  // e.g. "Tech Lead", "Backend Developer"
+  dev_role?: string        // Primary dev role (backward compatibility)
+  dev_role_label?: string  // Primary dev role label
+  dev_roles?: string[]        // All role IDs (new multi-role support)
+  dev_role_labels?: string[]  // Labels for all roles
 }
 
 export interface AgentTimelineEvent {

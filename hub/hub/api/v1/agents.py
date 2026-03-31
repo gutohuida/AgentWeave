@@ -173,8 +173,37 @@ async def list_agents(
         task_res = await session.execute(task_q)
         task_count = len(task_res.scalars().all())
 
-        dev_role_key = agent_assignments.get(agent_name)
+        # Get dev roles - support both new 'agent_roles' (list) and legacy 'agent_assignments' (single)
+        dev_role_keys: list[str] = []
+        agent_roles_data = roles_data.get("agent_roles", {})
+        if agent_name in agent_roles_data:
+            # New format: agent_roles is a dict of lists
+            roles_entry = agent_roles_data[agent_name]
+            if isinstance(roles_entry, list):
+                dev_role_keys = roles_entry
+            else:
+                dev_role_keys = [roles_entry]
+        elif agent_name in agent_assignments:
+            # Legacy format: agent_assignments is a dict of single role strings
+            legacy_role = agent_assignments[agent_name]
+            if isinstance(legacy_role, list):
+                dev_role_keys = legacy_role
+            else:
+                dev_role_keys = [legacy_role] if legacy_role else []
+        
+        # Get primary role (first one) for single-role display
+        dev_role_key = dev_role_keys[0] if dev_role_keys else None
         dev_role_meta = roles_defs.get(dev_role_key, {}) if dev_role_key else {}
+        
+        # Build list of role labels for all roles
+        dev_role_labels = []
+        for role_key in dev_role_keys:
+            role_def = roles_defs.get(role_key, {})
+            if role_def:
+                dev_role_labels.append(role_def.get("label", role_key))
+            else:
+                dev_role_labels.append(role_key)
+        
         summaries.append(
             AgentSummary(
                 name=agent_name,
@@ -188,6 +217,8 @@ async def list_agents(
                 runner=agent_meta.get("runner", "native"),
                 dev_role=dev_role_key,
                 dev_role_label=dev_role_meta.get("label"),
+                dev_roles=dev_role_keys,
+                dev_role_labels=dev_role_labels,
             )
         )
 
