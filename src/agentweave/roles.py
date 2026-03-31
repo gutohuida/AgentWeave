@@ -11,7 +11,6 @@ from .constants import ROLES_CONFIG_FILE
 from .templates import load_roles_template
 from .utils import load_json, save_json
 
-
 # Valid role IDs from the templates
 VALID_ROLE_IDS = [
     "tech_lead",
@@ -32,7 +31,7 @@ VALID_ROLE_IDS = [
 
 def load_roles_config() -> Optional[Dict[str, Any]]:
     """Load the roles.json config file.
-    
+
     Returns:
         Parsed config dict, or None if file doesn't exist.
         The dict will have 'agent_roles' (list-based) normalized from
@@ -41,7 +40,7 @@ def load_roles_config() -> Optional[Dict[str, Any]]:
     data = load_json(ROLES_CONFIG_FILE)
     if not data:
         return None
-    
+
     # Normalize legacy format to new format
     # Old: "agent_assignments": { "agent": "role" }
     # New: "agent_roles": { "agent": ["role1", "role2"] }
@@ -50,20 +49,20 @@ def load_roles_config() -> Optional[Dict[str, Any]]:
             agent: [role] if isinstance(role, str) else role
             for agent, role in data.get("agent_assignments", {}).items()
         }
-    
+
     # Ensure agent_roles exists
     if "agent_roles" not in data:
         data["agent_roles"] = {}
-    
+
     return data
 
 
 def save_roles_config(config: Dict[str, Any]) -> bool:
     """Save the roles.json config file.
-    
+
     Args:
         config: The roles configuration dict
-        
+
     Returns:
         True if saved successfully, False otherwise.
     """
@@ -72,7 +71,7 @@ def save_roles_config(config: Dict[str, Any]) -> bool:
 
 def get_available_roles() -> List[Tuple[str, str, str]]:
     """Get list of available role definitions.
-    
+
     Returns:
         List of tuples (role_id, label, responsibilities_short)
     """
@@ -109,41 +108,41 @@ def get_available_roles() -> List[Tuple[str, str, str]]:
 
 def validate_role(role_id: str) -> Tuple[bool, str]:
     """Validate a role ID.
-    
+
     Args:
         role_id: The role ID to validate
-        
+
     Returns:
         Tuple of (is_valid, error_message)
     """
     if not role_id:
         return False, "Role ID cannot be empty"
-    
+
     valid_roles = [r[0] for r in get_available_roles()]
     if role_id not in valid_roles:
         return False, f"Invalid role '{role_id}'. Run 'agentweave roles available' for valid roles."
-    
+
     return True, ""
 
 
 def get_agent_roles(agent: str, config: Optional[Dict[str, Any]] = None) -> List[str]:
     """Get all roles assigned to an agent.
-    
+
     Args:
         agent: Agent name
         config: Optional pre-loaded config (will load if not provided)
-        
+
     Returns:
         List of role IDs for the agent
     """
     if config is None:
         config = load_roles_config()
-    
+
     if not config:
         return []
-    
+
     roles = config.get("agent_roles", {}).get(agent, [])
-    
+
     # Handle both list and string (legacy)
     if isinstance(roles, str):
         return [roles]
@@ -152,12 +151,12 @@ def get_agent_roles(agent: str, config: Optional[Dict[str, Any]] = None) -> List
 
 def add_role_to_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Add a role to an agent.
-    
+
     Args:
         agent: Agent name
         role: Role ID to add
         config: Optional pre-loaded config (will create new if not provided)
-        
+
     Returns:
         Tuple of (success, message, updated_config)
     """
@@ -165,11 +164,11 @@ def add_role_to_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = 
     is_valid, error = validate_role(role)
     if not is_valid:
         return False, error, config
-    
+
     # Load or create config
     if config is None:
         config = load_roles_config()
-    
+
     if config is None:
         # Create new config
         config = {
@@ -187,67 +186,67 @@ def add_role_to_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = 
             }
         except Exception:
             pass
-    
+
     # Ensure agent_roles exists
     if "agent_roles" not in config:
         config["agent_roles"] = {}
-    
+
     # Get current roles
     current_roles = get_agent_roles(agent, config)
-    
+
     # Check if already has this role
     if role in current_roles:
         return False, f"Agent '{agent}' already has role '{role}'", config
-    
+
     # Add the role
     current_roles.append(role)
     config["agent_roles"][agent] = current_roles
-    
+
     return True, f"Added '{role}' to '{agent}'", config
 
 
 def remove_role_from_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Remove a role from an agent.
-    
+
     Args:
         agent: Agent name
         role: Role ID to remove
         config: Optional pre-loaded config (will load if not provided)
-        
+
     Returns:
         Tuple of (success, message, updated_config)
     """
     # Load config
     if config is None:
         config = load_roles_config()
-    
+
     if not config:
         return False, "No roles configuration found", None
-    
+
     # Get current roles
     current_roles = get_agent_roles(agent, config)
-    
+
     if not current_roles:
         return False, f"Agent '{agent}' has no roles assigned", config
-    
+
     if role not in current_roles:
         return False, f"Agent '{agent}' does not have role '{role}'", config
-    
+
     # Remove the role
     current_roles.remove(role)
     config["agent_roles"][agent] = current_roles
-    
+
     return True, f"Removed '{role}' from '{agent}'", config
 
 
 def set_agent_roles(agent: str, roles: List[str], config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Set/replace all roles for an agent.
-    
+
     Args:
         agent: Agent name
         roles: List of role IDs
         config: Optional pre-loaded config (will create new if not provided)
-        
+
     Returns:
         Tuple of (success, message, updated_config)
     """
@@ -256,11 +255,11 @@ def set_agent_roles(agent: str, roles: List[str], config: Optional[Dict[str, Any
         is_valid, error = validate_role(role)
         if not is_valid:
             return False, error, config
-    
+
     # Load or create config
     if config is None:
         config = load_roles_config()
-    
+
     if config is None:
         # Create new config
         config = {
@@ -278,11 +277,11 @@ def set_agent_roles(agent: str, roles: List[str], config: Optional[Dict[str, Any
             }
         except Exception:
             pass
-    
+
     # Ensure agent_roles exists
     if "agent_roles" not in config:
         config["agent_roles"] = {}
-    
+
     # Remove duplicates while preserving order
     seen = set()
     unique_roles = []
@@ -290,48 +289,48 @@ def set_agent_roles(agent: str, roles: List[str], config: Optional[Dict[str, Any
         if role not in seen:
             seen.add(role)
             unique_roles.append(role)
-    
+
     # Set the roles
     config["agent_roles"][agent] = unique_roles
-    
+
     return True, f"Set roles for '{agent}': {', '.join(unique_roles)}", config
 
 
 def sync_roles_to_hub(config: Dict[str, Any]) -> bool:
     """Push roles config to the Hub if HTTP transport is active.
-    
+
     Args:
         config: The roles configuration to push
-        
+
     Returns:
         True if sync succeeded or no HTTP transport, False if sync failed.
     """
     try:
         from .transport import get_transport
-        
+
         transport = get_transport()
         if transport.get_transport_type() == "http":
             return transport.push_roles_config(config)
     except Exception:
         pass
-    
+
     return True  # Non-fatal for non-HTTP transports
 
 
 def format_agent_roles(agent: str, config: Optional[Dict[str, Any]] = None) -> str:
     """Format an agent's roles for display.
-    
+
     Args:
         agent: Agent name
         config: Optional pre-loaded config
-        
+
     Returns:
         Comma-separated list of role labels, or "none" if no roles
     """
     roles = get_agent_roles(agent, config)
     if not roles:
         return "none"
-    
+
     # Try to get labels
     try:
         template_data = load_roles_template()
@@ -348,24 +347,24 @@ def format_agent_roles(agent: str, config: Optional[Dict[str, Any]] = None) -> s
 
 def copy_role_md_file(role_id: str) -> bool:
     """Copy a role's markdown file to .agentweave/roles/.
-    
+
     Args:
         role_id: The role ID (e.g., 'backend_dev', 'tech_lead')
-        
+
     Returns:
         True if file was copied or already exists, False on error
     """
     from .constants import ROLES_DIR
     from .templates import get_role_md
-    
+
     try:
         ROLES_DIR.mkdir(exist_ok=True)
         role_md_path = ROLES_DIR / f"{role_id}.md"
-        
+
         # Skip if already exists
         if role_md_path.exists():
             return True
-        
+
         # Get role markdown from templates
         role_md_content = get_role_md(role_id)
         role_md_path.write_text(role_md_content, encoding="utf-8")

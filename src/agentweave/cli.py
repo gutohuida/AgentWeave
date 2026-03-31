@@ -34,7 +34,6 @@ from .roles import (
     save_roles_config,
     set_agent_roles,
     sync_roles_to_hub,
-    validate_role,
 )
 from .session import Session
 from .task import Task
@@ -456,7 +455,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
         # Get dev roles (tech_lead, backend_dev, etc.)
         dev_roles = get_agent_roles(agent, roles_config)
         roles_display = ", ".join(dev_roles) if dev_roles else session_role
-        
+
         inbox = MessageBus.get_inbox(agent)
         agent_tasks = [t for t in active_tasks if t.assignee == agent]
         in_prog = [t for t in agent_tasks if t.status == "in_progress"]
@@ -1870,6 +1869,34 @@ def cmd_agent_set_model(args: argparse.Namespace) -> int:
     agent = args.agent_name
     model = args.model
 
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+    if agent not in session.agent_names:
+        print_error(f"Agent {agent!r} is not in the current session")
+        return 1
+
+    runner_config = session.get_runner_config(agent)
+    if runner_config.get("runner") != "claude_proxy":
+        print_error(
+            f"{agent} is not configured as claude_proxy. "
+            f"Run 'agentweave agent configure {agent} --runner claude_proxy' first."
+        )
+        return 1
+
+    # Get existing config
+    env_vars = runner_config.get("env_vars", {})
+
+    # Update model
+    session.set_runner_config(agent, "claude_proxy", env_vars, model=model)
+    if not session.save():
+        print_error("Failed to save session")
+        return 1
+
+    print_success(f"Model set for {agent}: {model}")
+    return 0
+
 
 def cmd_roles_list(_args: argparse.Namespace) -> int:
     """List all agents and their assigned roles."""
@@ -1879,22 +1906,22 @@ def cmd_roles_list(_args: argparse.Namespace) -> int:
         return 1
 
     config = load_roles_config()
-    
+
     print("[ROLES] Agent role assignments")
     print("-" * 60)
-    
+
     for agent in session.agent_names:
         principal_marker = " [principal]" if agent == session.principal else ""
         roles_str = format_agent_roles(agent, config)
         print(f"   {agent}{principal_marker}: {roles_str}")
-    
+
     print()
     print("Commands:")
     print("  agentweave roles add <agent> <role>")
     print("  agentweave roles remove <agent> <role>")
     print("  agentweave roles set <agent> <role1,role2,...>")
     print("  agentweave roles available")
-    
+
     return 0
 
 
@@ -1915,7 +1942,7 @@ def cmd_roles_add(args: argparse.Namespace) -> int:
 
     # Load current config
     config = load_roles_config()
-    
+
     # Add the role
     success, message, config = add_role_to_agent(agent, role, config)
     if not success:
@@ -1937,12 +1964,12 @@ def cmd_roles_add(args: argparse.Namespace) -> int:
         print_warning(f"Role guide not found for: {role}")
 
     print_success(message)
-    
+
     # Show updated roles
     current_roles = get_agent_roles(agent, config)
     if current_roles:
         print(f"   Current roles: {', '.join(current_roles)}")
-    
+
     return 0
 
 
@@ -1982,14 +2009,14 @@ def cmd_roles_remove(args: argparse.Namespace) -> int:
     sync_roles_to_hub(config)
 
     print_success(message)
-    
+
     # Show updated roles
     current_roles = get_agent_roles(agent, config)
     if current_roles:
         print(f"   Current roles: {', '.join(current_roles)}")
     else:
         print("   Current roles: none")
-    
+
     return 0
 
 
@@ -2010,14 +2037,14 @@ def cmd_roles_set(args: argparse.Namespace) -> int:
 
     # Parse roles
     roles_list = [r.strip() for r in roles_str.split(",") if r.strip()]
-    
+
     if not roles_list:
         print_error("No valid roles provided")
         return 1
 
     # Load current config
     config = load_roles_config()
-    
+
     # Set the roles
     success, message, config = set_agent_roles(agent, roles_list, config)
     if not success:
@@ -2040,63 +2067,35 @@ def cmd_roles_set(args: argparse.Namespace) -> int:
             roles_copied.append(f"{role_id}.md")
         else:
             roles_missing.append(role_id)
-    
+
     if roles_copied:
         print_info(f"Role guides copied: {', '.join(roles_copied)}")
     if roles_missing:
         print_warning(f"Role guides not found: {', '.join(roles_missing)}")
 
     print_success(message)
-    
+
     return 0
 
 
 def cmd_roles_available(_args: argparse.Namespace) -> int:
     """List all available role types."""
     roles = get_available_roles()
-    
+
     print("[AVAILABLE ROLES]")
     print("-" * 60)
-    
+
     for role_id, label, description in roles:
         print(f"   {role_id}")
         print(f"      Label: {label}")
         if description:
             print(f"      Responsibilities: {description}")
         print()
-    
+
     print("Usage:")
     print("  agentweave roles add <agent> <role_id>")
     print("  agentweave roles remove <agent> <role_id>")
-    
-    return 0
 
-    session = Session.load()
-    if not session:
-        print_error("No session found. Run: agentweave init")
-        return 1
-    if agent not in session.agent_names:
-        print_error(f"Agent {agent!r} is not in the current session")
-        return 1
-
-    runner_config = session.get_runner_config(agent)
-    if runner_config.get("runner") != "claude_proxy":
-        print_error(
-            f"{agent} is not configured as claude_proxy. "
-            f"Run 'agentweave agent configure {agent} --runner claude_proxy' first."
-        )
-        return 1
-
-    # Get existing config
-    env_vars = runner_config.get("env_vars", {})
-
-    # Update model
-    session.set_runner_config(agent, "claude_proxy", env_vars, model=model)
-    if not session.save():
-        print_error("Failed to save session")
-        return 1
-
-    print_success(f"Model set for {agent}: {model}")
     return 0
 
 
