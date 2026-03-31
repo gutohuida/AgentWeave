@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.14.0] - 2026-03-31
+
+### Added (CLI)
+- **Documentation site** with MkDocs and Material theme
+- **24 documentation pages** covering getting started, guides, reference, architecture, and contributing
+- **GitHub Actions workflow** for automatic docs deployment to GitHub Pages
+- **Role-based agent system** with `roles.json` configuration and per-role behavioral guides in `roles/*.md` 
+- **New guides**: Session modes, Context files, Dashboard usage, FAQ
+- **Expanded CLI reference** with all commands including logs, MCP, and context management
+
+### Added (Hub v0.8.0)
+- **Agent roles configuration** API endpoints for pushing and retrieving role assignments
+- **Documentation site** hosted alongside the project
+
+---
+
 ## [0.13.0] - 2026-03-31
 
 ### Fixed (CLI)
