@@ -300,6 +300,7 @@ async def post_agent_output(
         project_id,
         "agent_output",
         {
+            "id": row.id,
             "agent": name,
             "session_id": body.session_id,
             "content": body.content,

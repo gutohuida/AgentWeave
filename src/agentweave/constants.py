@@ -143,9 +143,9 @@ CLAUDE_PROXY_PROVIDERS: dict = {
         "model": "MiniMax-M2.7",
     },
     "glm": {
-        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
         "api_key_var": "ZHIPU_API_KEY",
-        "model": "glm-4",
+        "model": "glm-5",
     },
 }
 

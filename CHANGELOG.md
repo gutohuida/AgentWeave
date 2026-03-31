@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.13.0] - 2026-03-31
+
+### Fixed (CLI)
+- **Watchdog output duplication**: `_parse_claude_stream_line` was emitting the `result` field from the final `result`-type JSONL message, which is a full copy of the already-streamed assistant response. The field is now ignored; only the cost line is emitted from `result` messages.
+- **GLM provider config** (`CLAUDE_PROXY_PROVIDERS`): switched GLM base URL from `/paas/v4` (OpenAI-compatible) to `/anthropic` (Anthropic-compatible) and upgraded default model from `glm-4` to `glm-5`.
+
+### Fixed (Hub v0.7.0)
+- **Hub dashboard output duplication**: `agent_output` SSE broadcast payload now includes the server-assigned row ID (`id: row.id`). The frontend SSE handler uses this ID directly instead of generating a throwaway `live-*` ID, so the polling deduplication check correctly suppresses the same line when it arrives via the 2-second poll.
+
+---
+
 ## [0.12.0] - 2026-03-30
 
 ### Added (CLI)

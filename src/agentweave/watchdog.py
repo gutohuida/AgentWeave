@@ -599,14 +599,9 @@ def _parse_claude_stream_line(line: str) -> list:
         subtype = data.get("subtype", "")
         if subtype == "error":
             return [f"[ERROR] {data.get('error', 'unknown error')}"]
-        parts = []
-        result_text = data.get("result", "").strip()
-        if result_text:
-            parts.append(result_text)
+        # result_text duplicates the already-streamed assistant messages — skip it
         cost = data.get("total_cost_usd")
-        if cost is not None:
-            parts.append(f"[done] cost: ${cost:.4f}")
-        return parts if parts else []
+        return [f"[done] cost: ${cost:.4f}"] if cost is not None else []
 
     # system/init and everything else — ignore
     return []

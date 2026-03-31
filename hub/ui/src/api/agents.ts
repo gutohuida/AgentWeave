@@ -161,19 +161,20 @@ export function useAgentOutput(name: string | null) {
   const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
   handleSSE.current = (event: SSEEvent) => {
     if (event.type !== 'agent_output') return
-    const d = event.data as { agent: string; content: string; session_id?: string; timestamp: string }
+    const d = event.data as { id: string; agent: string; content: string; session_id?: string; timestamp: string }
     if (d.agent !== nameRef.current) return
-    
+
     const agentKey = d.agent
     const newLine: AgentOutputLine = {
-      id: `live-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: d.id,
       agent: d.agent,
       session_id: d.session_id,
       content: d.content,
       timestamp: d.timestamp
     }
-    
+
     const current = linesCache.get(agentKey) || []
+    if (current.some(l => l.id === newLine.id)) return
     linesCache.set(agentKey, [...current, newLine])
     queryClient.invalidateQueries({ queryKey: ['agents', d.agent, 'lines'] })
   }
