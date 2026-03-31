@@ -453,6 +453,100 @@ Defined in `pyproject.toml` `[project.scripts]`:
 | `agentweave-watch` | `agentweave.watchdog:main` | File watchdog daemon |
 | `agentweave-mcp` | `agentweave.mcp.server:main` | MCP server (stdio) |
 
+## Role Management
+
+Agents can have multiple roles assigned. Roles define responsibilities and are used to:
+- Generate appropriate AI_CONTEXT.md sections
+- Copy role-specific guides to `.agentweave/roles/{role}.md`
+- Sync to Hub when using HTTP transport
+
+### CLI Commands
+
+```bash
+# List all agents and their roles
+agentweave roles list
+
+# Add a role to an agent
+agentweave roles add <agent> <role_id>
+
+# Remove a role from an agent
+agentweave roles remove <agent> <role_id>
+
+# Set multiple roles for an agent (replaces existing)
+agentweave roles set <agent> <role1,role2,...>
+
+# List available role types
+agentweave roles available
+```
+
+### Available Roles
+
+Roles are defined in `src/agentweave/templates/roles/`:
+
+| Role ID | Label | Description |
+|---------|-------|-------------|
+| `backend_dev` | Backend Developer | API, database, business logic |
+| `frontend_dev` | Frontend Developer | UI components, user experience |
+| `tech_lead` | Technical Lead | Architecture, code review, standards |
+| `qa_engineer` | QA Engineer | Testing, quality assurance |
+| `devops_engineer` | DevOps Engineer | Infrastructure, CI/CD, deployment |
+| `security_engineer` | Security Engineer | Security review, compliance |
+| `docs_writer` | Documentation Writer | User docs, API docs, guides |
+| `product_manager` | Product Manager | Requirements, prioritization |
+| `project_manager` | Project Manager | Planning, coordination, tracking |
+| `ui_designer` | UI Designer | Visual design, design systems |
+| `ux_researcher` | UX Researcher | User research, usability testing |
+| `data_engineer` | Data Engineer | Data pipelines, warehousing |
+| `data_scientist` | Data Scientist | ML models, analytics, insights |
+| `mobile_dev` | Mobile Developer | iOS/Android apps |
+
+### Configuration
+
+Roles are stored in `.agentweave/roles.json`:
+
+```json
+{
+  "version": 2,
+  "agent_roles": {
+    "claude": ["tech_lead", "backend_dev"],
+    "kimi": ["backend_dev"],
+    "gemini": ["frontend_dev"]
+  },
+  "roles_defs": {
+    "backend_dev": {"label": "Backend Developer", ...},
+    ...
+  }
+}
+```
+
+**Backward compatibility**: Legacy `agent_assignments` (single role per agent) is automatically migrated to `agent_roles` (array).
+
+### Programmatic API
+
+```python
+from agentweave.roles import (
+    load_roles_config,
+    add_role_to_agent,
+    remove_role_from_agent,
+    set_agent_roles,
+    get_agent_roles,
+    copy_role_md_file,
+    sync_roles_to_hub,
+)
+
+# Load config
+config = load_roles_config()
+
+# Add role
+success, message, config = add_role_to_agent("kimi", "backend_dev", config)
+
+# Set multiple roles
+success, message, config = set_agent_roles("kimi", ["backend_dev", "qa_engineer"], config)
+
+# Sync to Hub (if HTTP transport active)
+sync_roles_to_hub(config)
+```
+
 ## Adding New Features
 
 ### Adding a CLI Command
