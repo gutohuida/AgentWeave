@@ -97,6 +97,18 @@ agentweave log         # view structured event log
 agentweave log -f      # watch log in real-time
 ```
 
+## Roles
+
+```bash
+agentweave roles list                          # show all agents and their roles
+agentweave roles add <agent> <role_id>         # add a role to an agent
+agentweave roles remove <agent> <role_id>      # remove a role from an agent
+agentweave roles set <agent> <role1,role2,...> # set multiple roles (replaces existing)
+agentweave roles available                     # list available role types
+```
+
+**Available roles:** `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
+
 ## MCP
 
 ```bash
