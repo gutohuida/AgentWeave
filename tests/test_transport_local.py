@@ -1,7 +1,5 @@
 """Tests for agentweave.transport.local (LocalTransport)."""
 
-import pytest
-
 from agentweave.transport.local import LocalTransport
 from agentweave.utils import ensure_dirs, generate_id, now_iso
 

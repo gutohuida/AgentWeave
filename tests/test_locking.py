@@ -1,8 +1,5 @@
 """Tests for agentweave.locking."""
 
-import threading
-import time
-
 import pytest
 
 from agentweave.locking import LockError, acquire_lock, is_locked, lock, release_lock
@@ -36,9 +33,8 @@ def test_context_manager_releases_on_exception(tmp_path, monkeypatch):
 def test_lock_timeout_raises(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     acquire_lock("busy-lock")
-    with pytest.raises(LockError):
-        with lock("busy-lock", timeout=0.1):
-            pass
+    with pytest.raises(LockError), lock("busy-lock", timeout=0.1):
+        pass
     release_lock("busy-lock")
 
 

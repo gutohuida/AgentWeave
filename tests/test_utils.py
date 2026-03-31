@@ -1,18 +1,12 @@
 """Tests for agentweave.utils."""
 
-import json
-import tempfile
-from pathlib import Path
-
-import pytest
-
 from agentweave.utils import generate_id, load_json, now_iso, save_json
 
 
 def test_generate_id_format():
     id_ = generate_id("task")
     assert id_.startswith("task-")
-    suffix = id_[len("task-"):]
+    suffix = id_[len("task-") :]
     assert len(suffix) == 8
 
 
@@ -30,6 +24,7 @@ def test_now_iso_format():
     ts = now_iso()
     # Should be parseable as ISO datetime
     from datetime import datetime
+
     dt = datetime.fromisoformat(ts)
     assert dt is not None
 

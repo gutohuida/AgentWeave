@@ -1,7 +1,5 @@
 """Tests for agentweave.session."""
 
-import pytest
-
 from agentweave.session import Session
 
 

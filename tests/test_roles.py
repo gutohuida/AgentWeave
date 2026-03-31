@@ -2,10 +2,6 @@
 
 import json
 import os
-import tempfile
-from pathlib import Path
-
-import pytest
 
 from agentweave.roles import (
     add_role_to_agent,
@@ -23,60 +19,51 @@ from agentweave.roles import (
 class TestRolesConfig:
     """Test roles configuration loading and saving."""
 
-    def test_load_nonexistent_config(self, monkeypatch):
+    def test_load_nonexistent_config(self, tmp_path, monkeypatch):
         """Loading a non-existent config returns None."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.chdir(tmpdir)
-            os.makedirs(".agentweave", exist_ok=True)
-            result = load_roles_config()
-            assert result is None
+        monkeypatch.chdir(tmp_path)
+        os.makedirs(".agentweave", exist_ok=True)
+        result = load_roles_config()
+        assert result is None
 
-    def test_save_and_load_config(self, monkeypatch):
+    def test_save_and_load_config(self, tmp_path, monkeypatch):
         """Save and load a config."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.chdir(tmpdir)
-            os.makedirs(".agentweave", exist_ok=True)
-            
-            config = {
-                "version": 2,
-                "agent_roles": {
-                    "claude": ["tech_lead"],
-                    "kimi": ["backend_dev", "code_reviewer"]
-                },
-                "roles": {}
-            }
-            
-            save_roles_config(config)
-            loaded = load_roles_config()
-            
-            assert loaded["version"] == 2
-            assert loaded["agent_roles"]["claude"] == ["tech_lead"]
-            assert loaded["agent_roles"]["kimi"] == ["backend_dev", "code_reviewer"]
+        monkeypatch.chdir(tmp_path)
+        os.makedirs(".agentweave", exist_ok=True)
 
-    def test_backward_compatibility_legacy_format(self, monkeypatch):
+        config = {
+            "version": 2,
+            "agent_roles": {"claude": ["tech_lead"], "kimi": ["backend_dev", "code_reviewer"]},
+            "roles": {},
+        }
+
+        save_roles_config(config)
+        loaded = load_roles_config()
+
+        assert loaded["version"] == 2
+        assert loaded["agent_roles"]["claude"] == ["tech_lead"]
+        assert loaded["agent_roles"]["kimi"] == ["backend_dev", "code_reviewer"]
+
+    def test_backward_compatibility_legacy_format(self, tmp_path, monkeypatch):
         """Legacy agent_assignments format is converted to agent_roles."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            monkeypatch.chdir(tmpdir)
-            os.makedirs(".agentweave", exist_ok=True)
-            
-            # Write legacy config
-            legacy_config = {
-                "version": 1,
-                "agent_assignments": {
-                    "claude": "tech_lead",
-                    "kimi": "backend_dev"
-                },
-                "roles": {}
-            }
-            with open(".agentweave/roles.json", "w") as f:
-                json.dump(legacy_config, f)
-            
-            loaded = load_roles_config()
-            
-            # Should have normalized to agent_roles
-            assert "agent_roles" in loaded
-            assert loaded["agent_roles"]["claude"] == ["tech_lead"]
-            assert loaded["agent_roles"]["kimi"] == ["backend_dev"]
+        monkeypatch.chdir(tmp_path)
+        os.makedirs(".agentweave", exist_ok=True)
+
+        # Write legacy config
+        legacy_config = {
+            "version": 1,
+            "agent_assignments": {"claude": "tech_lead", "kimi": "backend_dev"},
+            "roles": {},
+        }
+        with open(".agentweave/roles.json", "w") as f:
+            json.dump(legacy_config, f)
+
+        loaded = load_roles_config()
+
+        # Should have normalized to agent_roles
+        assert "agent_roles" in loaded
+        assert loaded["agent_roles"]["claude"] == ["tech_lead"]
+        assert loaded["agent_roles"]["kimi"] == ["backend_dev"]
 
 
 class TestRoleManagement:
@@ -86,7 +73,7 @@ class TestRoleManagement:
         """Add a role to an agent."""
         config = None
         success, msg, config = add_role_to_agent("kimi", "backend_dev", config)
-        
+
         assert success is True
         assert "Added" in msg
         assert "backend_dev" in config["agent_roles"]["kimi"]
@@ -96,7 +83,7 @@ class TestRoleManagement:
         config = None
         config = add_role_to_agent("kimi", "backend_dev", config)[2]
         config = add_role_to_agent("kimi", "code_reviewer", config)[2]
-        
+
         roles = get_agent_roles("kimi", config)
         assert "backend_dev" in roles
         assert "code_reviewer" in roles
@@ -106,7 +93,7 @@ class TestRoleManagement:
         config = None
         config = add_role_to_agent("kimi", "backend_dev", config)[2]
         success, msg, config = add_role_to_agent("kimi", "backend_dev", config)
-        
+
         assert success is False
         assert "already has role" in msg
 
@@ -114,7 +101,7 @@ class TestRoleManagement:
         """Adding an invalid role fails."""
         config = None
         success, msg, config = add_role_to_agent("kimi", "invalid_role", config)
-        
+
         assert success is False
         assert "Invalid role" in msg
 
@@ -123,9 +110,9 @@ class TestRoleManagement:
         config = None
         config = add_role_to_agent("kimi", "backend_dev", config)[2]
         config = add_role_to_agent("kimi", "code_reviewer", config)[2]
-        
+
         success, msg, config = remove_role_from_agent("kimi", "backend_dev", config)
-        
+
         assert success is True
         assert "Removed" in msg
         assert "backend_dev" not in config["agent_roles"]["kimi"]
@@ -135,9 +122,9 @@ class TestRoleManagement:
         """Removing a role the agent doesn't have fails."""
         config = None
         config = add_role_to_agent("kimi", "backend_dev", config)[2]
-        
+
         success, msg, config = remove_role_from_agent("kimi", "code_reviewer", config)
-        
+
         assert success is False
         assert "does not have role" in msg
 
@@ -145,7 +132,7 @@ class TestRoleManagement:
         """Set multiple roles at once."""
         config = None
         success, msg, config = set_agent_roles("claude", ["tech_lead", "architect"], config)
-        
+
         assert success is True
         assert "tech_lead" in config["agent_roles"]["claude"]
         assert "architect" in config["agent_roles"]["claude"]
@@ -155,17 +142,19 @@ class TestRoleManagement:
         config = None
         config = add_role_to_agent("kimi", "backend_dev", config)[2]
         config = add_role_to_agent("kimi", "code_reviewer", config)[2]
-        
+
         success, msg, config = set_agent_roles("kimi", ["qa_engineer"], config)
-        
+
         roles = get_agent_roles("kimi", config)
         assert roles == ["qa_engineer"]
 
     def test_set_roles_deduplicates(self):
         """Setting roles with duplicates removes duplicates."""
         config = None
-        success, msg, config = set_agent_roles("kimi", ["backend_dev", "backend_dev", "code_reviewer"], config)
-        
+        success, msg, config = set_agent_roles(
+            "kimi", ["backend_dev", "backend_dev", "code_reviewer"], config
+        )
+
         roles = get_agent_roles("kimi", config)
         assert roles == ["backend_dev", "code_reviewer"]
 
@@ -194,7 +183,7 @@ class TestRoleValidation:
         """Get available roles returns list."""
         roles = get_available_roles()
         assert len(roles) > 0
-        
+
         # Each role is a tuple of (id, label, description)
         for role in roles:
             assert len(role) == 3
@@ -209,7 +198,7 @@ class TestAgentRolesDisplay:
         """Format agent with roles."""
         config = None
         config = add_role_to_agent("kimi", "backend_dev", config)[2]
-        
+
         formatted = format_agent_roles("kimi", config)
         assert "Backend Developer" in formatted or "backend_dev" in formatted
 
@@ -227,10 +216,6 @@ class TestAgentRolesDisplay:
 
     def test_get_agent_roles_legacy_string(self):
         """Handle legacy string role format."""
-        config = {
-            "agent_roles": {
-                "kimi": "backend_dev"  # Legacy: string instead of list
-            }
-        }
+        config = {"agent_roles": {"kimi": "backend_dev"}}  # Legacy: string instead of list
         roles = get_agent_roles("kimi", config)
         assert roles == ["backend_dev"]

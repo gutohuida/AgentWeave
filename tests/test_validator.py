@@ -1,7 +1,5 @@
 """Tests for agentweave.validator."""
 
-import pytest
-
 from agentweave.validator import (
     sanitize_task_data,
     validate_message,
@@ -9,10 +7,10 @@ from agentweave.validator import (
     validate_task,
 )
 
-
 # ---------------------------------------------------------------------------
 # validate_task
 # ---------------------------------------------------------------------------
+
 
 def _base_task():
     return {
@@ -53,8 +51,14 @@ def test_validate_task_invalid_priority():
 
 def test_validate_task_valid_all_statuses():
     statuses = [
-        "pending", "assigned", "in_progress", "completed",
-        "under_review", "revision_needed", "approved", "rejected",
+        "pending",
+        "assigned",
+        "in_progress",
+        "completed",
+        "under_review",
+        "revision_needed",
+        "approved",
+        "rejected",
     ]
     for s in statuses:
         ok, errors = validate_task({**_base_task(), "status": s})
@@ -76,6 +80,7 @@ def test_validate_task_invalid_assignee():
 # ---------------------------------------------------------------------------
 # validate_message
 # ---------------------------------------------------------------------------
+
 
 def _base_message():
     return {
@@ -117,6 +122,7 @@ def test_validate_message_valid_types():
 # validate_session
 # ---------------------------------------------------------------------------
 
+
 def _base_session():
     return {
         "id": "sess-abc12345",
@@ -149,6 +155,7 @@ def test_validate_session_missing_field():
 # ---------------------------------------------------------------------------
 # sanitize_task_data
 # ---------------------------------------------------------------------------
+
 
 def test_sanitize_task_data_basic():
     data = {

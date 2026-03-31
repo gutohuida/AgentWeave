@@ -1,7 +1,5 @@
 """Tests for agentweave.messaging via LocalTransport."""
 
-import pytest
-
 from agentweave.messaging import Message, MessageBus
 from agentweave.utils import ensure_dirs
 

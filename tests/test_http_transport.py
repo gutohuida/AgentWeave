@@ -2,7 +2,6 @@
 
 import json
 import unittest
-from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from agentweave.transport.http import HttpTransport
@@ -29,19 +28,22 @@ class TestHttpTransport(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_send_message_success(self, mock_urlopen):
         mock_urlopen.return_value = _make_response({"id": "msg-abc"})
-        result = self.transport.send_message({
-            "id": "msg-abc",
-            "from": "claude",
-            "to": "kimi",
-            "subject": "Hi",
-            "content": "Hello",
-        })
+        result = self.transport.send_message(
+            {
+                "id": "msg-abc",
+                "from": "claude",
+                "to": "kimi",
+                "subject": "Hi",
+                "content": "Hello",
+            }
+        )
         self.assertTrue(result)
         mock_urlopen.assert_called_once()
 
     @patch("urllib.request.urlopen")
     def test_send_message_failure(self, mock_urlopen):
         import urllib.error
+
         mock_urlopen.side_effect = urllib.error.URLError("connection refused")
         result = self.transport.send_message({"from": "claude", "to": "kimi", "content": "Hi"})
         self.assertFalse(result)
@@ -56,6 +58,7 @@ class TestHttpTransport(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_get_pending_messages_failure(self, mock_urlopen):
         import urllib.error
+
         mock_urlopen.side_effect = urllib.error.URLError("timeout")
         result = self.transport.get_pending_messages("kimi")
         self.assertEqual(result, [])
@@ -69,11 +72,13 @@ class TestHttpTransport(unittest.TestCase):
     @patch("urllib.request.urlopen")
     def test_send_task(self, mock_urlopen):
         mock_urlopen.return_value = _make_response({"id": "task-abc"})
-        result = self.transport.send_task({
-            "id": "task-abc",
-            "title": "Build feature",
-            "assignee": "kimi",
-        })
+        result = self.transport.send_task(
+            {
+                "id": "task-abc",
+                "title": "Build feature",
+                "assignee": "kimi",
+            }
+        )
         self.assertTrue(result)
 
     @patch("urllib.request.urlopen")
