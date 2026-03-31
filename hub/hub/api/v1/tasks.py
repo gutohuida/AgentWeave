@@ -52,7 +52,9 @@ async def create_task(
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_created", {"id": task_id, "title": body.title})
     await persist_event(
-        session, project_id, "task_created",
+        session,
+        project_id,
+        "task_created",
         {"id": task_id, "title": body.title},
         agent=body.assignee,
     )
@@ -118,7 +120,9 @@ async def update_task(
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
     await persist_event(
-        session, project_id, "task_updated",
+        session,
+        project_id,
+        "task_updated",
         {"id": task_id, "status": task.status},
         agent=task.assignee,
     )

@@ -36,12 +36,12 @@ async def get_chat_history(
     session: AsyncSession = Depends(get_session),
 ):
     """Get conversation history for a specific agent session.
-    
+
     Returns messages between user and agent for the given session,
     including both direct messages and agent output.
     """
     project_id, _ = project
-    
+
     # Get messages from user to this agent
     # Look for messages where session_id is in the content or metadata
     msg_q = (
@@ -55,7 +55,7 @@ async def get_chat_history(
     )
     msg_result = await session.execute(msg_q)
     user_messages = msg_result.scalars().all()
-    
+
     # Get agent output for this session
     output_q = (
         select(AgentOutput)
@@ -68,10 +68,10 @@ async def get_chat_history(
     )
     output_result = await session.execute(output_q)
     agent_outputs = output_result.scalars().all()
-    
+
     # Build chat messages
     messages: List[ChatMessage] = []
-    
+
     # Add user messages (those containing the session_id in content or all if no specific session)
     for msg in user_messages:
         # Include message if it's for this session or if no session filtering needed
@@ -83,11 +83,13 @@ async def get_chat_history(
                 ChatMessage(
                     id=msg.id,
                     role="user",
-                    content=content.split("\n\n[Session:")[0] if "[Session:" in content else content,
+                    content=(
+                        content.split("\n\n[Session:")[0] if "[Session:" in content else content
+                    ),
                     timestamp=msg.timestamp,
                 )
             )
-    
+
     # Add agent outputs as agent messages
     for output in agent_outputs:
         messages.append(
@@ -98,10 +100,10 @@ async def get_chat_history(
                 timestamp=output.timestamp,
             )
         )
-    
+
     # Sort by timestamp
     messages.sort(key=lambda m: m.timestamp)
-    
+
     return ChatHistoryResponse(
         session_id=session_id,
         agent=agent,
@@ -117,12 +119,12 @@ async def get_recent_chat(
     session: AsyncSession = Depends(get_session),
 ):
     """Get recent chat messages with an agent across all sessions.
-    
+
     Returns the most recent messages between user and agent,
     useful for a general chat view without session filtering.
     """
     project_id, _ = project
-    
+
     # Get recent messages from user to agent
     msg_q = (
         select(Message)
@@ -136,7 +138,7 @@ async def get_recent_chat(
     )
     msg_result = await session.execute(msg_q)
     user_messages = msg_result.scalars().all()
-    
+
     # Get recent agent outputs
     output_q = (
         select(AgentOutput)
@@ -149,10 +151,10 @@ async def get_recent_chat(
     )
     output_result = await session.execute(output_q)
     agent_outputs = output_result.scalars().all()
-    
+
     # Build chat messages
     messages: List[ChatMessage] = []
-    
+
     for msg in user_messages:
         content = msg.content or ""
         messages.append(
@@ -163,7 +165,7 @@ async def get_recent_chat(
                 timestamp=msg.timestamp,
             )
         )
-    
+
     for output in agent_outputs:
         messages.append(
             ChatMessage(
@@ -173,7 +175,7 @@ async def get_recent_chat(
                 timestamp=output.timestamp,
             )
         )
-    
+
     # Sort by timestamp and limit
     messages.sort(key=lambda m: m.timestamp)
     return messages[-limit:]

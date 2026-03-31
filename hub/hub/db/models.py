@@ -4,7 +4,14 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Index, String, Text, JSON, func,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    JSON,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -36,9 +43,7 @@ class ApiKey(Base):
     __tablename__ = "api_keys"
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)  # aw_live_...
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), nullable=False
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     label: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -52,9 +57,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), nullable=False
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     sender: Mapped[str] = mapped_column(String(64), nullable=False)
     recipient: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     subject: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
@@ -79,9 +82,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), nullable=False
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False, index=True)
@@ -111,9 +112,7 @@ class Question(Base):
     __tablename__ = "questions"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), nullable=False
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     from_agent: Mapped[str] = mapped_column(String(64), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -142,9 +141,7 @@ class EventLog(Base):
         DateTime(timezone=True), default=_now, nullable=False
     )
 
-    __table_args__ = (
-        Index("ix_event_logs_project_ts", "project_id", "timestamp"),
-    )
+    __table_args__ = (Index("ix_event_logs_project_ts", "project_id", "timestamp"),)
 
 
 class AgentHeartbeat(Base):
@@ -159,9 +156,7 @@ class AgentHeartbeat(Base):
         DateTime(timezone=True), default=_now, nullable=False
     )
 
-    __table_args__ = (
-        Index("ix_agent_heartbeats_project_agent", "project_id", "agent"),
-    )
+    __table_args__ = (Index("ix_agent_heartbeats_project_agent", "project_id", "agent"),)
 
 
 class ProjectSession(Base):
@@ -174,9 +169,7 @@ class ProjectSession(Base):
 
     __tablename__ = "project_sessions"
 
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), primary_key=True
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
     data: Mapped[Any] = mapped_column(JSON, nullable=False)
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
@@ -192,9 +185,7 @@ class ProjectRolesConfig(Base):
 
     __tablename__ = "project_roles_config"
 
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), primary_key=True
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
     data: Mapped[Any] = mapped_column(JSON, nullable=False)
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False

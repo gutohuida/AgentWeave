@@ -79,11 +79,7 @@ def get_available_roles() -> List[Tuple[str, str, str]]:
         template_data = load_roles_template()
         roles_defs = template_data.get("roles", {})
         return [
-            (
-                role_id,
-                info.get("label", role_id),
-                info.get("responsibilities_short", "")
-            )
+            (role_id, info.get("label", role_id), info.get("responsibilities_short", ""))
             for role_id, info in roles_defs.items()
             if not role_id.startswith("_")
         ]
@@ -97,7 +93,11 @@ def get_available_roles() -> List[Tuple[str, str, str]]:
             ("fullstack_dev", "Full Stack Developer", "Backend and frontend features"),
             ("qa_engineer", "QA / Test Engineer", "Tests, quality assurance, edge cases"),
             ("devops_engineer", "DevOps Engineer", "CI/CD, infrastructure, deployment"),
-            ("security_engineer", "Security Engineer", "Security review, auth/authz, vulnerability audit"),
+            (
+                "security_engineer",
+                "Security Engineer",
+                "Security review, auth/authz, vulnerability audit",
+            ),
             ("data_engineer", "Data Engineer", "Data pipelines, ETL, analytics"),
             ("ml_engineer", "ML / AI Engineer", "ML models, training pipelines, inference"),
             ("technical_writer", "Technical Writer", "Documentation, READMEs, API docs"),
@@ -149,7 +149,9 @@ def get_agent_roles(agent: str, config: Optional[Dict[str, Any]] = None) -> List
     return list(roles)
 
 
-def add_role_to_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def add_role_to_agent(
+    agent: str, role: str, config: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Add a role to an agent.
 
     Args:
@@ -171,11 +173,7 @@ def add_role_to_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = 
 
     if config is None:
         # Create new config
-        config = {
-            "version": 2,
-            "agent_roles": {},
-            "roles": {}
-        }
+        config = {"version": 2, "agent_roles": {}, "roles": {}}
         # Copy role definitions from template
         try:
             template_data = load_roles_template()
@@ -205,7 +203,9 @@ def add_role_to_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = 
     return True, f"Added '{role}' to '{agent}'", config
 
 
-def remove_role_from_agent(agent: str, role: str, config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def remove_role_from_agent(
+    agent: str, role: str, config: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Remove a role from an agent.
 
     Args:
@@ -239,7 +239,9 @@ def remove_role_from_agent(agent: str, role: str, config: Optional[Dict[str, Any
     return True, f"Removed '{role}' from '{agent}'", config
 
 
-def set_agent_roles(agent: str, roles: List[str], config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+def set_agent_roles(
+    agent: str, roles: List[str], config: Optional[Dict[str, Any]] = None
+) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """Set/replace all roles for an agent.
 
     Args:
@@ -262,11 +264,7 @@ def set_agent_roles(agent: str, roles: List[str], config: Optional[Dict[str, Any
 
     if config is None:
         # Create new config
-        config = {
-            "version": 2,
-            "agent_roles": {},
-            "roles": {}
-        }
+        config = {"version": 2, "agent_roles": {}, "roles": {}}
         # Copy role definitions from template
         try:
             template_data = load_roles_template()

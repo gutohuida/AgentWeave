@@ -40,9 +40,7 @@ async def get_project(
             detail="Invalid or revoked API key",
         )
 
-    proj_result = await session.execute(
-        select(Project).where(Project.id == key_row.project_id)
-    )
+    proj_result = await session.execute(select(Project).where(Project.id == key_row.project_id))
     project = proj_result.scalar_one_or_none()
     project_name = project.name if project else key_row.project_id
 

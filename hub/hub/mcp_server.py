@@ -20,9 +20,7 @@ from typing import Any, Dict, List, Optional
 try:
     from fastmcp import FastMCP
 except ImportError as e:
-    raise ImportError(
-        "fastmcp is required. Install it with: pip install fastmcp"
-    ) from e
+    raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from e
 
 mcp = FastMCP(
     name="agentweave-hub",
@@ -36,6 +34,7 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 # Internal helper — makes authenticated requests to the Hub REST API
 # ---------------------------------------------------------------------------
+
 
 def _hub_request(
     method: str,
@@ -102,14 +101,18 @@ def send_message(
         Dict with 'id' of the created message.
     """
     try:
-        result = _hub_request("POST", "/messages", {
-            "from": from_agent,
-            "to": to_agent,
-            "subject": subject,
-            "content": content,
-            "type": message_type,
-            "task_id": task_id,
-        })
+        result = _hub_request(
+            "POST",
+            "/messages",
+            {
+                "from": from_agent,
+                "to": to_agent,
+                "subject": subject,
+                "content": content,
+                "type": message_type,
+                "task_id": task_id,
+            },
+        )
         return {"success": True, "message_id": result.get("id")}
     except RuntimeError as e:
         return {"success": False, "error": str(e)}
@@ -178,15 +181,19 @@ def create_task(
         Created task dict.
     """
     try:
-        return _hub_request("POST", "/tasks", {
-            "title": title,
-            "description": description,
-            "assignee": assignee,
-            "assigner": assigner,
-            "priority": priority,
-            "requirements": requirements or [],
-            "acceptance_criteria": acceptance_criteria or [],
-        })
+        return _hub_request(
+            "POST",
+            "/tasks",
+            {
+                "title": title,
+                "description": description,
+                "assignee": assignee,
+                "assigner": assigner,
+                "priority": priority,
+                "requirements": requirements or [],
+                "acceptance_criteria": acceptance_criteria or [],
+            },
+        )
     except RuntimeError as e:
         return {"error": str(e)}
 
@@ -331,11 +338,15 @@ def ask_user(
         Dict with 'question_id' for use in get_answer().
     """
     try:
-        result = _hub_request("POST", "/questions", {
-            "from_agent": from_agent,
-            "question": question,
-            "blocking": blocking,
-        })
+        result = _hub_request(
+            "POST",
+            "/questions",
+            {
+                "from_agent": from_agent,
+                "question": question,
+                "blocking": blocking,
+            },
+        )
         return {"success": True, "question_id": result.get("id")}
     except RuntimeError as e:
         return {"success": False, "error": str(e)}

@@ -34,7 +34,9 @@ async def create_message(
         subject=body.subject,
         content=body.content,
         type=body.type,
-        timestamp=datetime.fromisoformat(body.timestamp) if body.timestamp else datetime.now(timezone.utc),
+        timestamp=(
+            datetime.fromisoformat(body.timestamp) if body.timestamp else datetime.now(timezone.utc)
+        ),
         task_id=body.task_id,
     )
     session.add(msg)

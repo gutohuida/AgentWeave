@@ -68,10 +68,12 @@ def create_app() -> FastAPI:
             # Inject runtime config so the dashboard connects automatically.
             # The Hub is serving the dashboard, so it already knows its own key.
             html = (UI_DIST / "index.html").read_text()
-            config = json.dumps({
-                "apiKey": settings.aw_bootstrap_api_key,
-                "projectId": settings.aw_bootstrap_project_id,
-            })
+            config = json.dumps(
+                {
+                    "apiKey": settings.aw_bootstrap_api_key,
+                    "projectId": settings.aw_bootstrap_project_id,
+                }
+            )
             script = f"<script>window.__AW_CONFIG__={config};</script>"
             html = html.replace("</head>", f"{script}</head>")
             return HTMLResponse(html)

@@ -39,28 +39,32 @@ async def get_status(
             select(func.count()).select_from(Message).where(Message.project_id == project_id)
         ),
         session.scalar(
-            select(func.count()).select_from(Message).where(
-                Message.project_id == project_id, Message.read == False  # noqa: E712
-            )
+            select(func.count())
+            .select_from(Message)
+            .where(Message.project_id == project_id, Message.read == False)  # noqa: E712
         ),
         session.execute(
-            select(Task.status, func.count()).where(Task.project_id == project_id).group_by(Task.status)
+            select(Task.status, func.count())
+            .where(Task.project_id == project_id)
+            .group_by(Task.status)
         ),
         session.scalar(
             select(func.count()).select_from(Question).where(Question.project_id == project_id)
         ),
         session.scalar(
-            select(func.count()).select_from(Question).where(
-                Question.project_id == project_id, Question.answered == False  # noqa: E712
-            )
+            select(func.count())
+            .select_from(Question)
+            .where(Question.project_id == project_id, Question.answered == False)  # noqa: E712
         ),
         session.execute(
-            select(Message.sender).distinct().where(
-                Message.project_id == project_id, Message.timestamp >= cutoff
-            )
+            select(Message.sender)
+            .distinct()
+            .where(Message.project_id == project_id, Message.timestamp >= cutoff)
         ),
         session.execute(
-            select(Task.assignee).distinct().where(
+            select(Task.assignee)
+            .distinct()
+            .where(
                 Task.project_id == project_id,
                 Task.assignee.isnot(None),
                 Task.status.in_(_ACTIVE_TASK_STATUSES),

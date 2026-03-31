@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, ProjectRolesConfig, ProjectSession, Task
+from ...db.models import (
+    AgentHeartbeat,
+    AgentOutput,
+    EventLog,
+    Message,
+    ProjectRolesConfig,
+    ProjectSession,
+    Task,
+)
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -37,9 +45,7 @@ async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]
     2. Local filesystem fallback — for developers running the Hub directly
        (not in Docker) alongside the CLI in the same working directory.
     """
-    result = await db.execute(
-        select(ProjectSession).where(ProjectSession.project_id == project_id)
-    )
+    result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
     row = result.scalars().first()
     if row:
         return row.data
@@ -107,19 +113,31 @@ async def list_agents(
     # This covers the Docker case where the hub can't read the host's session.json —
     # the watchdog pushes heartbeats on startup to register agents.
     if not session_agents_meta:
-        senders_q = select(Message.sender).distinct().where(
-            Message.project_id == project_id, Message.timestamp >= cutoff
+        senders_q = (
+            select(Message.sender)
+            .distinct()
+            .where(Message.project_id == project_id, Message.timestamp >= cutoff)
         )
-        recipients_q = select(Message.recipient).distinct().where(
-            Message.project_id == project_id, Message.timestamp >= cutoff
+        recipients_q = (
+            select(Message.recipient)
+            .distinct()
+            .where(Message.project_id == project_id, Message.timestamp >= cutoff)
         )
-        hb_q = select(AgentHeartbeat.agent).distinct().where(
-            AgentHeartbeat.project_id == project_id,
-            AgentHeartbeat.timestamp >= cutoff,
+        hb_q = (
+            select(AgentHeartbeat.agent)
+            .distinct()
+            .where(
+                AgentHeartbeat.project_id == project_id,
+                AgentHeartbeat.timestamp >= cutoff,
+            )
         )
-        out_q = select(AgentOutput.agent).distinct().where(
-            AgentOutput.project_id == project_id,
-            AgentOutput.timestamp >= cutoff,
+        out_q = (
+            select(AgentOutput.agent)
+            .distinct()
+            .where(
+                AgentOutput.project_id == project_id,
+                AgentOutput.timestamp >= cutoff,
+            )
         )
         s_res, r_res, hb_res, out_res = await asyncio.gather(
             session.execute(senders_q),
@@ -190,11 +208,11 @@ async def list_agents(
                 dev_role_keys = legacy_role
             else:
                 dev_role_keys = [legacy_role] if legacy_role else []
-        
+
         # Get primary role (first one) for single-role display
         dev_role_key = dev_role_keys[0] if dev_role_keys else None
         dev_role_meta = roles_defs.get(dev_role_key, {}) if dev_role_key else {}
-        
+
         # Build list of role labels for all roles
         dev_role_labels = []
         for role_key in dev_role_keys:
@@ -203,7 +221,7 @@ async def list_agents(
                 dev_role_labels.append(role_def.get("label", role_key))
             else:
                 dev_role_labels.append(role_key)
-        
+
         summaries.append(
             AgentSummary(
                 name=agent_name,

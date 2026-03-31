@@ -2720,10 +2720,7 @@ For more help: https://github.com/gutohuida/AgentWeave
     # roles add
     roles_add = roles_subparsers.add_parser("add", help="Add a role to an agent")
     roles_add.add_argument("agent", help="Agent name (e.g., claude, kimi)")
-    roles_add.add_argument(
-        "role",
-        help=f"Role ID (e.g., {', '.join(VALID_ROLE_IDS[:3])}, ...)"
-    )
+    roles_add.add_argument("role", help=f"Role ID (e.g., {', '.join(VALID_ROLE_IDS[:3])}, ...)")
 
     # roles remove
     roles_remove = roles_subparsers.add_parser("remove", help="Remove a role from an agent")
@@ -2734,8 +2731,7 @@ For more help: https://github.com/gutohuida/AgentWeave
     roles_set = roles_subparsers.add_parser("set", help="Set/replace all roles for an agent")
     roles_set.add_argument("agent", help="Agent name")
     roles_set.add_argument(
-        "roles",
-        help="Comma-separated role IDs (e.g., 'backend_dev,code_reviewer')"
+        "roles", help="Comma-separated role IDs (e.g., 'backend_dev,code_reviewer')"
     )
 
     # roles available

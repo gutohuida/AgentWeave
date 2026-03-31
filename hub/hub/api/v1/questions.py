@@ -36,11 +36,14 @@ async def ask_question(
     await session.commit()
     await session.refresh(question)
     await sse_manager.broadcast(
-        project_id, "question_asked",
-        {"id": q_id, "from_agent": body.from_agent, "blocking": body.blocking}
+        project_id,
+        "question_asked",
+        {"id": q_id, "from_agent": body.from_agent, "blocking": body.blocking},
     )
     await persist_event(
-        session, project_id, "question_asked",
+        session,
+        project_id,
+        "question_asked",
         {"id": q_id, "from_agent": body.from_agent, "blocking": body.blocking},
         agent=body.from_agent,
     )
@@ -112,11 +115,11 @@ async def answer_question(
     await session.refresh(question)
 
     await sse_manager.broadcast(
-        project_id, "question_answered",
-        {"id": question_id, "answer": body.answer}
+        project_id, "question_answered", {"id": question_id, "answer": body.answer}
     )
     await sse_manager.broadcast(
-        project_id, "message_created",
+        project_id,
+        "message_created",
         {
             "id": msg_id,
             "from": "user",
@@ -127,7 +130,9 @@ async def answer_question(
         },
     )
     await persist_event(
-        session, project_id, "question_answered",
+        session,
+        project_id,
+        "question_answered",
         {"id": question_id, "answer": body.answer},
     )
     return question

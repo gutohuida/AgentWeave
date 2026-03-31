@@ -6,8 +6,14 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, field_validator
 
 _TASK_STATUSES = [
-    "pending", "assigned", "in_progress", "completed",
-    "under_review", "revision_needed", "approved", "rejected",
+    "pending",
+    "assigned",
+    "in_progress",
+    "completed",
+    "under_review",
+    "revision_needed",
+    "approved",
+    "rejected",
 ]
 _PRIORITIES = ["low", "medium", "high", "critical"]
 

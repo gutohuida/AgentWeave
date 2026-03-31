@@ -27,6 +27,7 @@ class MessageCreate(BaseModel):
     def validate_type(cls, v: str) -> str:
         # Reference the module-level variable dynamically
         import hub.schemas.messages as _mod
+
         if v not in _mod._MESSAGE_TYPES:
             raise ValueError(f"type must be one of {_mod._MESSAGE_TYPES}")
         return v

@@ -34,15 +34,13 @@ class TriggerAgentRequest(BaseModel):
     message: str = Field(..., description="Message/prompt to send to the agent")
     session_mode: str = Field(
         default="new",
-        description="Session mode: 'new' for new session, 'resume' for existing session"
+        description="Session mode: 'new' for new session, 'resume' for existing session",
     )
     session_id: Optional[str] = Field(
-        default=None,
-        description="Session ID to resume (required when session_mode='resume')"
+        default=None, description="Session ID to resume (required when session_mode='resume')"
     )
     work_dir: Optional[str] = Field(
-        default=None,
-        description="Working directory for the agent (defaults to project root)"
+        default=None, description="Working directory for the agent (defaults to project root)"
     )
 
 
@@ -61,28 +59,27 @@ async def trigger_agent(
     session: AsyncSession = Depends(get_session),
 ):
     """Trigger an agent to run with a message.
-    
+
     This creates a message in the database that the host-side watchdog
     will pick up and execute on the host machine (where the CLIs are installed).
-    
+
     Examples:
     - New session: `{"agent": "claude", "message": "Hello", "session_mode": "new"}`
     - Resume session: `{"agent": "claude", "message": "Continue", "session_mode": "resume", "session_id": "sess-abc"}`
     """
     project_id, _ = project
-    
+
     # Validate session_mode
     if body.session_mode not in ("new", "resume"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_mode must be 'new' or 'resume'"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="session_mode must be 'new' or 'resume'"
         )
-    
+
     # Build message content with session info
     content_parts = [body.message]
     if body.session_mode == "resume" and body.session_id:
         content_parts.append(f"\n\n[Session: {body.session_id}]")
-    
+
     # Create a message that looks like it's from "user" to the agent
     # The watchdog will detect this and trigger the agent
     msg_id = f"msg-{short_id()}"
@@ -97,11 +94,11 @@ async def trigger_agent(
         timestamp=datetime.now(timezone.utc),
         read=False,  # Mark as unread so watchdog picks it up
     )
-    
+
     session.add(msg)
     await session.commit()
     await session.refresh(msg)
-    
+
     # Broadcast to SSE so UI updates immediately
     await sse_manager.broadcast(
         project_id,
@@ -113,9 +110,9 @@ async def trigger_agent(
             "subject": msg.subject,
             "type": "direct_trigger",  # Tell UI this is a direct trigger
             "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-        }
+        },
     )
-    
+
     await persist_event(
         session,
         project_id,
@@ -128,7 +125,7 @@ async def trigger_agent(
         },
         agent=body.agent,
     )
-    
+
     return TriggerAgentResponse(
         success=True,
         message=f"Message queued for {body.agent}. The watchdog on your host will execute it shortly.",
@@ -145,14 +142,14 @@ async def get_agent_sessions(
     session: AsyncSession = Depends(get_session),
 ):
     """Get unique session IDs for an agent from AgentOutput table.
-    
+
     Returns sessions that the agent has generated output for, ordered by recency.
     """
     from sqlalchemy import select, distinct
     from ...db.models import AgentOutput
-    
+
     project_id, _ = project
-    
+
     # Get distinct session_ids for this agent, ordered by timestamp (most recent first)
     q = (
         select(AgentOutput.session_id, AgentOutput.timestamp)
@@ -166,7 +163,7 @@ async def get_agent_sessions(
     )
     result = await session.execute(q)
     rows = result.all()
-    
+
     # Extract unique session IDs (preserving order)
     seen_sessions = set()
     sessions = []
@@ -174,13 +171,15 @@ async def get_agent_sessions(
         session_id = row.session_id
         if session_id and session_id not in seen_sessions:
             seen_sessions.add(session_id)
-            sessions.append({
-                "id": session_id,
-                "type": "agent",
-                "path": f".agentweave/agents/{agent}-session.json",
-                "last_active": row.timestamp.isoformat() if row.timestamp else None,
-            })
-    
+            sessions.append(
+                {
+                    "id": session_id,
+                    "type": "agent",
+                    "path": f".agentweave/agents/{agent}-session.json",
+                    "last_active": row.timestamp.isoformat() if row.timestamp else None,
+                }
+            )
+
     return {"sessions": sessions}
 
 
