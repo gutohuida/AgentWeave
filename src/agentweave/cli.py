@@ -1944,10 +1944,11 @@ def cmd_roles_add(args: argparse.Namespace) -> int:
     config = load_roles_config()
 
     # Add the role
-    success, message, config = add_role_to_agent(agent, role, config)
-    if not success:
+    success, message, updated_config = add_role_to_agent(agent, role, config)
+    if not success or updated_config is None:
         print_error(message)
         return 1
+    config = updated_config
 
     # Save config
     if not save_roles_config(config):
@@ -1995,10 +1996,11 @@ def cmd_roles_remove(args: argparse.Namespace) -> int:
         return 1
 
     # Remove the role
-    success, message, config = remove_role_from_agent(agent, role, config)
-    if not success:
+    success, message, updated_config = remove_role_from_agent(agent, role, config)
+    if not success or updated_config is None:
         print_error(message)
         return 1
+    config = updated_config
 
     # Save config
     if not save_roles_config(config):
@@ -2046,10 +2048,11 @@ def cmd_roles_set(args: argparse.Namespace) -> int:
     config = load_roles_config()
 
     # Set the roles
-    success, message, config = set_agent_roles(agent, roles_list, config)
-    if not success:
+    success, message, updated_config = set_agent_roles(agent, roles_list, config)
+    if not success or updated_config is None:
         print_error(message)
         return 1
+    config = updated_config
 
     # Save config
     if not save_roles_config(config):

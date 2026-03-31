@@ -44,7 +44,8 @@ class JSONRotatingFileHandler(logging.handlers.RotatingFileHandler):
             extra_data = getattr(record, "data", {})
             if extra_data:
                 entry.update(extra_data)
-            self.stream.write(json.dumps(entry) + "\n")
+            if self.stream:
+                self.stream.write(json.dumps(entry) + "\n")
             self.flush()
         except Exception:
             self.handleError(record)
