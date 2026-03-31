@@ -107,7 +107,7 @@ src/agentweave/
                   templates/__init__.py — templates are .md files in that directory
   transport/      Pluggable transport layer (see below)
 
-.agentweave/      Runtime state — gitignored except README.md, protocol.md, ai_context.md, ROLES.md
+.agentweave/      Runtime state — gitignored except README.md, protocol.md, ai_context.md, roles.json, roles/*.md
 CLAUDE.md         Auto-read by Claude each session; generated from .agentweave/ai_context.md
 AGENTS.md         Auto-read by Kimi/other agents; generated from .agentweave/ai_context.md
 ROADMAP.md        Full architecture plan: transport layer, git transport, planned Hub (MCP)

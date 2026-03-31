@@ -16,6 +16,8 @@ class AgentSummary(BaseModel):
     role: Optional[str] = None  # "principal" | "delegate" | "collaborator"
     yolo: bool = False
     runner: str = "native"  # "native" | "claude_proxy" | "manual"
+    dev_role: Optional[str] = None        # e.g. "tech_lead", "backend_dev"
+    dev_role_label: Optional[str] = None  # e.g. "Tech Lead", "Backend Developer"
 
     model_config = {"from_attributes": True}
 

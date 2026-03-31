@@ -1311,6 +1311,19 @@ def main() -> None:
             except Exception as _exc:
                 print(f"[WARN] Could not sync session with hub: {_exc}", file=sys.stderr)
 
+        # Push roles config so Hub knows dev roles even after a restart
+        try:
+            import json as _json
+
+            from .constants import ROLES_CONFIG_FILE
+
+            if ROLES_CONFIG_FILE.exists():
+                _roles = _json.loads(ROLES_CONFIG_FILE.read_text(encoding="utf-8"))
+                watchdog.transport.push_roles_config(_roles)
+                print("[HUB] Roles config synced")
+        except Exception as _exc:
+            print(f"[WARN] Could not sync roles config with hub: {_exc}", file=sys.stderr)
+
     # Combine all callbacks into one
     if callbacks:
 

@@ -40,6 +40,10 @@ class BaseTransport(ABC):
         """Push session data to the backend (no-op on non-HTTP transports)."""
         return False
 
+    def push_roles_config(self, roles_config: Dict[str, Any]) -> bool:
+        """Push roles config to the backend (no-op on non-HTTP transports)."""
+        return False
+
     def push_log(
         self,
         event_type: str,

@@ -12,9 +12,9 @@ from .constants import (
     AGENT_CONTEXT_FILES,
     AGENT_CONTEXT_FILES_DEFAULT,
     AGENTWEAVE_DIR,
-    DEFAULT_AGENT_ROLES,
     DEFAULT_AGENTS,
-    DEV_ROLE_LABELS,
+    ROLES_CONFIG_FILE,
+    ROLES_DIR,
     SHARED_DIR,
     TRANSPORT_CONFIG_FILE,
     VALID_AGENTS,
@@ -24,7 +24,13 @@ from .locking import acquire_lock, release_lock
 from .messaging import Message, MessageBus
 from .session import Session
 from .task import Task
-from .templates import get_skill_template, get_template, list_skill_templates
+from .templates import (
+    get_role_md,
+    get_skill_template,
+    get_template,
+    list_skill_templates,
+    load_roles_template,
+)
 from .utils import (
     ensure_dirs,
     print_error,
@@ -113,7 +119,8 @@ agentweave summary
 
 - `session.json` — Session configuration
 - `protocol.md` — Collaboration protocol (MCP vs manual relay, workflow)
-- `ROLES.md` — Agent role assignments (edit freely)
+- `roles.json` — Agent role assignments and role registry (edit freely)
+- `roles/` — Per-role behavioral guides (read yours at session start)
 - `ai_context.md` — Project DNA source (edit this, then run update-template)
 - `agents/` — Agent status
 - `tasks/active/` — Active tasks
@@ -139,30 +146,61 @@ agentweave summary
         except FileNotFoundError:
             pass  # Non-fatal
 
-        # Write ROLES.md — agent role assignments (auto-filled, user-editable)
+        # Write roles.json and copy active role MD files to .agentweave/roles/
         try:
-            role_rows = []
-            for ag in session.agent_names:
-                dev_role_key = DEFAULT_AGENT_ROLES.get(ag, "fullstack_dev")
-                dev_role_label = DEV_ROLE_LABELS.get(dev_role_key, "Full Stack Developer")
-                session_role = session.get_agent_role(ag)
-                responsibility = _role_responsibility(dev_role_key)
-                role_rows.append(
-                    f"| **{ag}** | {dev_role_label} (`{session_role}`) | {responsibility} |"
-                )
+            import json as _json
 
-            roles_content = (
-                get_template("roles_template")
-                .replace("{project_name}", session.name)
-                .replace("{session_id}", session.id)
-                .replace("{mode}", session.mode)
-                .replace("{principal}", session.principal)
-                .replace("{role_rows}", "\n".join(role_rows))
+            roles_template_data = load_roles_template()
+            all_role_defs = roles_template_data["roles"]
+
+            # Build default-for map from _default_for metadata in the template
+            default_for_map: dict = {}
+            for role_id, role_def in all_role_defs.items():
+                for ag_name in role_def.get("_default_for", []):
+                    default_for_map[ag_name] = role_id
+
+            # Assign roles to this session's agents
+            agent_assignments: dict = {}
+            active_role_keys: set = set()
+            for ag in session.agent_names:
+                role_key = default_for_map.get(ag, "fullstack_dev")
+                agent_assignments[ag] = role_key
+                active_role_keys.add(role_key)
+
+            # Build the project roles.json (strip internal _* fields)
+            roles_config = {
+                "version": 1,
+                "agent_assignments": agent_assignments,
+                "roles": {
+                    k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")}
+                    for k, v in all_role_defs.items()
+                    if k in active_role_keys
+                },
+            }
+            ROLES_CONFIG_FILE.write_text(
+                _json.dumps(roles_config, indent=2, ensure_ascii=False), encoding="utf-8"
             )
-            roles_path = AGENTWEAVE_DIR / "ROLES.md"
-            with open(roles_path, "w", encoding="utf-8") as f:
-                f.write(roles_content)
-        except FileNotFoundError:
+
+            # Push roles config to Hub if HTTP transport is active
+            try:
+                from .transport import get_transport
+
+                _t = get_transport()
+                if _t.get_transport_type() == "http":
+                    _t.push_roles_config(roles_config)
+            except Exception:
+                pass  # Non-fatal
+
+            # Copy active role MD files
+            import contextlib
+
+            ROLES_DIR.mkdir(exist_ok=True)
+            for role_key in active_role_keys:
+                with contextlib.suppress(FileNotFoundError):
+                    (ROLES_DIR / f"{role_key}.md").write_text(
+                        get_role_md(role_key), encoding="utf-8"
+                    )
+        except Exception:
             pass  # Non-fatal
 
         # Write .agentweave/ai_context.md — hidden source template (agents don't read this directly).
@@ -253,7 +291,10 @@ agentweave summary
         print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
         print("\n[DIR] Created .agentweave/")
         print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
-        print("     ROLES.md             <- agent role assignments (edit freely)")
+        print("     roles.json           <- agent role assignments and role registry (edit freely)")
+        print(
+            "     roles/               <- per-role behavioral guides (read yours at session start)"
+        )
         print(
             "     ai_context.md        <- project DNA source — fill this in, then update agent files"
         )
@@ -300,26 +341,6 @@ agentweave summary
     except ValueError as e:
         print_error(str(e))
         return 1
-
-
-def _role_responsibility(role_key: str) -> str:
-    """Return a short responsibility description for a dev role."""
-    responsibilities = {
-        "tech_lead": "Architecture decisions, code review, integration",
-        "architect": "System design, data models, API contracts",
-        "backend_dev": "APIs, database, business logic, server-side",
-        "frontend_dev": "UI components, styling, client-side state",
-        "fullstack_dev": "Backend and frontend features",
-        "qa_engineer": "Tests, quality assurance, edge cases",
-        "devops_engineer": "CI/CD, infrastructure, deployment",
-        "security_engineer": "Security review, auth/authz, vulnerability audit",
-        "data_engineer": "Data pipelines, ETL, analytics",
-        "ml_engineer": "ML models, training pipelines, inference",
-        "technical_writer": "Documentation, READMEs, API docs",
-        "code_reviewer": "Pull request reviews, style enforcement",
-        "project_manager": "Task tracking, progress coordination",
-    }
-    return responsibilities.get(role_key, "General development tasks")
 
 
 def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = False) -> int:

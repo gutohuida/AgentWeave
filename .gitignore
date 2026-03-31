@@ -45,6 +45,9 @@ Thumbs.db
 htmlcov/
 .tox/
 
+# MkDocs build output
+site/
+
 # MyPy
 .mypy_cache/
 .dmypy.json

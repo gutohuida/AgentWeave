@@ -14,6 +14,8 @@ export interface AgentSummary {
   role?: string  // "principal" | "delegate" | "collaborator"
   yolo?: boolean
   runner?: string  // "native" | "claude_proxy" | "manual"
+  dev_role?: string        // e.g. "tech_lead", "backend_dev"
+  dev_role_label?: string  // e.g. "Tech Lead", "Backend Developer"
 }
 
 export interface AgentTimelineEvent {

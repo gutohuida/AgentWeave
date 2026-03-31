@@ -110,7 +110,7 @@ Your template should include:
 
 **Before doing ANY work, complete these steps in order:**
 
-1. **Read `.agentweave/ROLES.md`** — find your assigned role.
+1. **Read `.agentweave/roles.json`** — find your assigned role in `agent_assignments.<your_name>`, then read the corresponding guide in `.agentweave/roles/<role_key>.md`.
 2. **Read `.agentweave/protocol.md`** — learn the collaboration protocol.
 3. **Read `.agentweave/shared/context.md`** — see current focus.
 4. **Check for AgentWeave MCP tools** — look for `send_message`, `get_inbox`, etc.
@@ -620,6 +620,6 @@ If you've added support for a new agent that others might find useful:
 
 ## Questions?
 
-- Check the main [AGENTS.md](../AGENTS.md) for framework overview
+- Check the main [AGENTS.md](https://github.com/gutohuida/AgentWeave/blob/master/AGENTS.md) for framework overview
 - Review existing agent implementations as reference
 - Open an issue on GitHub for help

@@ -309,6 +309,24 @@ class HttpTransport(BaseTransport):
             )
             return False
 
+    def push_roles_config(self, roles_config: Dict[str, Any]) -> bool:
+        """PUT /api/v1/agents/roles/config — push roles.json to the Hub.
+
+        Called at agentweave init so the Hub knows each agent's dev role.
+        """
+        try:
+            self._request("PUT", "/agents/roles/config", roles_config)
+            return True
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "push_roles_config", "error": str(exc)},
+                },
+            )
+            return False
+
     def push_log(
         self,
         event_type: str,

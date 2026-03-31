@@ -497,7 +497,8 @@ The following are gitignored and should never be committed:
 **Safe to commit**:
 - `.agentweave/README.md`
 - `.agentweave/protocol.md`
-- `.agentweave/ROLES.md`
+- `.agentweave/roles.json`
+- `.agentweave/roles/*.md`
 - `.agentweave/ai_context.md`
 - `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` (project root — agent-specific context files)
 

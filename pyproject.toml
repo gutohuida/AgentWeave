@@ -37,11 +37,12 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
 ]
+docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
 all = ["fastmcp>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/gutohuida/AgentWeave"
-Documentation = "https://github.com/gutohuida/AgentWeave#readme"
+Documentation = "https://gutohuida.github.io/AgentWeave/"
 Repository = "https://github.com/gutohuida/AgentWeave"
 Issues = "https://github.com/gutohuida/AgentWeave/issues"
 Changelog = "https://github.com/gutohuida/AgentWeave/blob/master/CHANGELOG.md"
@@ -56,7 +57,7 @@ agentweave-mcp = "agentweave.mcp.server:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-agentweave = ["templates/*"]
+agentweave = ["templates/*", "templates/roles/*", "templates/skills/*"]
 
 [tool.black]
 line-length = 100

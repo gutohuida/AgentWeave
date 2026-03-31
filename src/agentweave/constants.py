@@ -72,57 +72,9 @@ DEFAULT_AGENTS = ["claude", "kimi"]
 # Backward-compatible alias used in old code paths
 VALID_AGENTS = KNOWN_AGENTS
 
-# Software development roles for ROLES.md
-VALID_DEV_ROLES = [
-    "tech_lead",
-    "architect",
-    "backend_dev",
-    "frontend_dev",
-    "fullstack_dev",
-    "qa_engineer",
-    "devops_engineer",
-    "security_engineer",
-    "data_engineer",
-    "ml_engineer",
-    "technical_writer",
-    "code_reviewer",
-    "project_manager",
-]
-
-# Human-readable role labels
-DEV_ROLE_LABELS = {
-    "tech_lead": "Tech Lead",
-    "architect": "Architect",
-    "backend_dev": "Backend Developer",
-    "frontend_dev": "Frontend Developer",
-    "fullstack_dev": "Full Stack Developer",
-    "qa_engineer": "QA / Test Engineer",
-    "devops_engineer": "DevOps Engineer",
-    "security_engineer": "Security Engineer",
-    "data_engineer": "Data Engineer",
-    "ml_engineer": "ML / AI Engineer",
-    "technical_writer": "Technical Writer",
-    "code_reviewer": "Code Reviewer",
-    "project_manager": "Project Manager",
-}
-
-# Default dev role per known agent (suggested starting point for ROLES.md)
-DEFAULT_AGENT_ROLES = {
-    "claude": "tech_lead",
-    "kimi": "backend_dev",
-    "gemini": "fullstack_dev",
-    "codex": "backend_dev",
-    "aider": "code_reviewer",
-    "cline": "fullstack_dev",
-    "cursor": "frontend_dev",
-    "windsurf": "frontend_dev",
-    "copilot": "code_reviewer",
-    "opendevin": "devops_engineer",
-    "gpt": "technical_writer",
-    "qwen": "backend_dev",
-    "minimax": "backend_dev",
-    "glm": "backend_dev",
-}
+# Runtime roles directory and config file paths
+ROLES_DIR = AGENTWEAVE_DIR / "roles"
+ROLES_CONFIG_FILE = AGENTWEAVE_DIR / "roles.json"
 
 # Mapping from agent name to the root-level context file that agent auto-reads.
 # claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.

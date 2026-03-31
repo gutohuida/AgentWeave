@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, ProjectSession, Task
+from ...db.models import AgentHeartbeat, AgentOutput, EventLog, Message, ProjectRolesConfig, ProjectSession, Task
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -94,6 +94,15 @@ async def list_agents(
     session_data = await _get_session_data(project_id, session)
     session_agents_meta: dict = session_data.get("agents", {}) if session_data else {}
 
+    # Load roles config for dev_role / dev_role_label
+    roles_result = await session.execute(
+        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
+    )
+    roles_row = roles_result.scalars().first()
+    roles_data = roles_row.data if roles_row else {}
+    agent_assignments: dict = roles_data.get("agent_assignments", {})
+    roles_defs: dict = roles_data.get("roles", {})
+
     # If no session.json, fall back to agents seen in DB activity (last 24h).
     # This covers the Docker case where the hub can't read the host's session.json —
     # the watchdog pushes heartbeats on startup to register agents.
@@ -164,6 +173,8 @@ async def list_agents(
         task_res = await session.execute(task_q)
         task_count = len(task_res.scalars().all())
 
+        dev_role_key = agent_assignments.get(agent_name)
+        dev_role_meta = roles_defs.get(dev_role_key, {}) if dev_role_key else {}
         summaries.append(
             AgentSummary(
                 name=agent_name,
@@ -175,10 +186,52 @@ async def list_agents(
                 role=agent_meta.get("role"),
                 yolo=bool(agent_meta.get("yolo", False)),
                 runner=agent_meta.get("runner", "native"),
+                dev_role=dev_role_key,
+                dev_role_label=dev_role_meta.get("label"),
             )
         )
 
     return summaries
+
+
+@router.put("/roles/config", status_code=200)
+async def put_roles_config(
+    body: dict,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Upsert the roles.json config pushed from the CLI at init time."""
+    project_id, _ = project
+    result = await session.execute(
+        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
+    )
+    row = result.scalars().first()
+    if row:
+        row.data = body
+        from datetime import datetime, timezone
+
+        row.synced_at = datetime.now(timezone.utc)
+    else:
+        row = ProjectRolesConfig(project_id=project_id, data=body)
+        session.add(row)
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.get("/roles/config")
+async def get_roles_config(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return the stored roles.json config for this project."""
+    project_id, _ = project
+    result = await session.execute(
+        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
+    )
+    row = result.scalars().first()
+    if not row:
+        return {}
+    return row.data
 
 
 @router.get("/{name}/timeline", response_model=List[AgentTimelineEvent])

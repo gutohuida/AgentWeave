@@ -183,6 +183,24 @@ class ProjectSession(Base):
     )
 
 
+class ProjectRolesConfig(Base):
+    """Stores the synced roles.json content pushed from the CLI at init time.
+
+    One row per project — upserted whenever the local roles.json changes.
+    Allows the Hub to know each agent's dev role without filesystem access.
+    """
+
+    __tablename__ = "project_roles_config"
+
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), primary_key=True
+    )
+    data: Mapped[Any] = mapped_column(JSON, nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+
 class AgentOutput(Base):
     __tablename__ = "agent_outputs"
 

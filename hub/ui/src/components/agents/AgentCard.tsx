@@ -94,13 +94,26 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
       </div>
       {/* Role badge */}
       {roleCfg && (
-        <div className="mt-1.5 flex gap-1.5">
+        <div className="mt-1.5 flex gap-1.5 flex-wrap">
           <span
             className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
             style={{ background: roleCfg.bg, color: roleCfg.color, fontSize: '0.65rem' }}
           >
             {agent.role}
           </span>
+          {agent.dev_role && (
+            <span
+              className="m3-label-small px-1.5 py-0.5 rounded-full"
+              title={`Dev role: ${agent.dev_role}`}
+              style={{
+                background: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
+                color: '#8b5cf6',
+                fontSize: '0.65rem',
+              }}
+            >
+              {agent.dev_role_label ?? agent.dev_role}
+            </span>
+          )}
           {agent.runner && agent.runner !== 'native' && (
             <span
               className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"

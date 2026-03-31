@@ -11,7 +11,7 @@
 
 **Before doing ANY work, complete these steps in order:**
 
-1. **Read `.agentweave/ROLES.md`** — find your assigned role. This is your ONLY responsibility this session.
+1. **Load your role** — follow the steps in the **Your Role** section below.
 2. **Read `.agentweave/protocol.md`** — learn the collaboration protocol and who the other agents are.
 3. **Read `.agentweave/shared/context.md`** — see current focus and recent decisions.
 4. **Check for AgentWeave MCP tools** — look for `send_message`, `get_inbox`, `update_task`, `ask_user` in your available tools.
@@ -19,13 +19,29 @@
    - If no MCP tools → use `agentweave relay` / `agentweave inbox` CLI commands.
 5. **Run `agentweave status`** — see all pending tasks before starting any work.
 
-**Do NOT skip this checklist.** An agent that begins work without reading ROLES.md has no valid role and must stop and complete the checklist.
+**Do NOT skip this checklist.** An agent that begins work without knowing its role has no valid scope and must stop and complete the checklist.
+
+---
+
+## Your Role
+
+Your role config is at `.agentweave/roles.json`.
+
+**On each session start:**
+
+1. Read `.agentweave/roles.json` — find `agent_assignments.claude` to get your role key,
+   then note `roles.<role_key>.version`.
+2. **If you already know this role key + version** from this conversation: skip to step 4.
+3. **If new or version changed:** read the file at `roles.<role_key>.file`
+   (e.g. `.agentweave/roles/tech_lead.md`) in full.
+   Say to yourself: *"I am claude, assigned <role_key> v<version>."*
+4. **Do NOT read other agents' role files** — only yours.
+
+This is your ONLY responsibility this session. Your role file defines what you own and what you must not do.
 
 ---
 
 ## Role Adherence Rules
-
-**Your role is defined in `.agentweave/ROLES.md`. It is your ONLY responsibility this session.**
 
 ### MUST
 - Identify your assigned role before taking any action.

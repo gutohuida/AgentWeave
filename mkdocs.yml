@@ -1,0 +1,95 @@
+site_name: AgentWeave
+site_description: Multi-agent AI collaboration framework — Claude, Kimi, Gemini, Codex, and more
+site_author: gutohuida
+site_url: https://gutohuida.github.io/AgentWeave/
+repo_name: gutohuida/AgentWeave
+repo_url: https://github.com/gutohuida/AgentWeave
+edit_uri: edit/master/docs/
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/installation.md
+    - getting-started/quickstart.md
+    - getting-started/configuration.md
+    - getting-started/alternative-modes.md
+  - Guides:
+    - guides/adding-new-agents.md
+    - guides/context-files.md
+    - guides/session-modes.md
+    - guides/claude-proxy-agents.md
+    - guides/cross-machine-collab.md
+    - guides/dashboard.md
+    - guides/logging-guide.md
+    - guides/faq.md
+  - Reference:
+    - reference/cli-commands.md
+    - reference/mcp-tools.md
+    - reference/task-lifecycle.md
+    - reference/hub-api.md
+    - reference/env-variables.md
+  - Architecture:
+    - architecture/overview.md
+    - architecture/transport-layer.md
+    - architecture/messaging.md
+    - architecture/locking.md
+  - Contributing:
+    - contributing/development.md
+    - contributing/release-process.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/gutohuida/AgentWeave
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/agentweave-ai/
+
+copyright: Copyright &copy; 2025 gutohuida — MIT License

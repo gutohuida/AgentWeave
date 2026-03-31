@@ -13,7 +13,7 @@ together on the same project through a shared `.agentweave/` directory and optio
 
 **Session mode:** {mode}
 **Principal agent:** {principal} — architecture, planning, review, final decisions
-**Other agents:** {agents_list} — see `.agentweave/ROLES.md` for role assignments
+**Other agents:** {agents_list} — see `.agentweave/roles.json` for role assignments
 
 ---
 
@@ -189,7 +189,8 @@ Either agent can ask another to invoke one of their specialized sub-agents:
 .agentweave/
   session.json          Session config (id, mode, principal, agents)
   protocol.md           This file — collaboration protocol
-  ROLES.md              Agent role assignments (edit freely)
+  roles.json            Agent role assignments (edit freely)
+  roles/*.md            Per-role behavioral guides
   README.md             Quick command reference
   ai_context.md         Project DNA source — edit this, then run update-template
   watchdog.log          Ping activity log (gitignored, machine-local)

@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "agent_assignments": {},
+  "roles": {
+    "tech_lead": {
+      "label": "Tech Lead",
+      "version": 1,
+      "responsibilities_short": "Architecture decisions, code review, integration",
+      "file": "roles/tech_lead.md",
+      "_default_for": ["claude"]
+    },
+    "architect": {
+      "label": "Architect",
+      "version": 1,
+      "responsibilities_short": "System design, data models, API contracts",
+      "file": "roles/architect.md",
+      "_default_for": []
+    },
+    "backend_dev": {
+      "label": "Backend Developer",
+      "version": 1,
+      "responsibilities_short": "APIs, database, business logic, server-side",
+      "file": "roles/backend_dev.md",
+      "_default_for": ["kimi", "codex", "qwen", "minimax", "glm"]
+    },
+    "frontend_dev": {
+      "label": "Frontend Developer",
+      "version": 1,
+      "responsibilities_short": "UI components, styling, client-side state",
+      "file": "roles/frontend_dev.md",
+      "_default_for": ["cursor", "windsurf"]
+    },
+    "fullstack_dev": {
+      "label": "Full Stack Developer",
+      "version": 1,
+      "responsibilities_short": "Backend and frontend features",
+      "file": "roles/fullstack_dev.md",
+      "_default_for": ["gemini", "cline"]
+    },
+    "qa_engineer": {
+      "label": "QA / Test Engineer",
+      "version": 1,
+      "responsibilities_short": "Tests, quality assurance, edge cases",
+      "file": "roles/qa_engineer.md",
+      "_default_for": []
+    },
+    "devops_engineer": {
+      "label": "DevOps Engineer",
+      "version": 1,
+      "responsibilities_short": "CI/CD, infrastructure, deployment",
+      "file": "roles/devops_engineer.md",
+      "_default_for": ["opendevin"]
+    },
+    "security_engineer": {
+      "label": "Security Engineer",
+      "version": 1,
+      "responsibilities_short": "Security review, auth/authz, vulnerability audit",
+      "file": "roles/security_engineer.md",
+      "_default_for": []
+    },
+    "data_engineer": {
+      "label": "Data Engineer",
+      "version": 1,
+      "responsibilities_short": "Data pipelines, ETL, analytics",
+      "file": "roles/data_engineer.md",
+      "_default_for": []
+    },
+    "ml_engineer": {
+      "label": "ML / AI Engineer",
+      "version": 1,
+      "responsibilities_short": "ML models, training pipelines, inference",
+      "file": "roles/ml_engineer.md",
+      "_default_for": []
+    },
+    "technical_writer": {
+      "label": "Technical Writer",
+      "version": 1,
+      "responsibilities_short": "Documentation, READMEs, API docs",
+      "file": "roles/technical_writer.md",
+      "_default_for": ["gpt"]
+    },
+    "code_reviewer": {
+      "label": "Code Reviewer",
+      "version": 1,
+      "responsibilities_short": "Pull request reviews, style enforcement",
+      "file": "roles/code_reviewer.md",
+      "_default_for": ["aider", "copilot"]
+    },
+    "project_manager": {
+      "label": "Project Manager",
+      "version": 1,
+      "responsibilities_short": "Task tracking, progress coordination",
+      "file": "roles/project_manager.md",
+      "_default_for": []
+    }
+  }
+}

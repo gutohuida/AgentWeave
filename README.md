@@ -5,6 +5,8 @@
 [![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://badge.fury.io/py/agentweave-ai)
 
 > **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, Minimax, GLM, and more**
+>
+> 📖 [Documentation](https://gutohuida.github.io/AgentWeave/)
 
 AgentWeave lets multiple AI agents work together on the same project through a shared protocol. The **AgentWeave Hub** is a self-hosted server with a web dashboard — the recommended way to run it.
 
@@ -389,7 +391,7 @@ make lint
 |-------|--------|-------------|
 | Local transport | ✅ Done | Single-machine via `.agentweave/` filesystem |
 | Git transport | ✅ Done (v0.2.0) | Cross-machine via orphan branch, zero infra |
-| N-agent support | ✅ Done (v0.3.0) | Multi-agent teams with ROLES.md and cluster naming |
+| N-agent support | ✅ Done (v0.3.0) | Multi-agent teams with roles.json and cluster naming |
 | Local MCP server | ✅ Done (v0.4.0) | Native tool integration, zero-relay with watchdog pinger |
 | HTTP transport | ✅ Done (v0.5.0) | CLI ↔ Hub via REST |
 | AgentWeave Hub | ✅ Done (v0.2.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
