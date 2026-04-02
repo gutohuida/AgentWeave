@@ -113,3 +113,5 @@ testrun/
 *.test/
 
 prints/
+
+.agentweave/

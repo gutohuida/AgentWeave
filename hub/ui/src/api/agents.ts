@@ -36,6 +36,13 @@ export interface AgentOutputLine {
   timestamp: string
 }
 
+export interface AgentSession {
+  id: string
+  type: string
+  path: string
+  last_active?: string
+}
+
 export function useAgents() {
   const { isConfigured } = useConfigStore()
   const queryClient = useQueryClient()
@@ -186,4 +193,14 @@ export function useAgentOutput(name: string | null) {
   useSSE((event) => handleSSE.current(event))
 
   return { lines, isLoading }
+}
+
+export function useAgentSessions(agentName: string | null) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<{ sessions: AgentSession[] }>({
+    queryKey: ['agent', agentName, 'sessions'],
+    queryFn: () => getJson<{ sessions: AgentSession[] }>(`/api/v1/agent/sessions/${agentName}`),
+    enabled: isConfigured && !!agentName,
+    refetchInterval: 10000,
+  })
 }

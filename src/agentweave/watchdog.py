@@ -796,11 +796,24 @@ def _run_agent_subprocess(
         if env_vars:
             proc_env = os.environ.copy()
             proc_env.update(env_vars)
-            # If ANTHROPIC_API_KEY_VAR is set, resolve it and set ANTHROPIC_API_KEY
+            # If ANTHROPIC_API_KEY_VAR is set, resolve it and set ANTHROPIC_API_KEY.
             # (Claude CLI needs ANTHROPIC_API_KEY, not ANTHROPIC_API_KEY_VAR)
+            # Always overwrite ANTHROPIC_API_KEY so the parent shell's Claude key
+            # is never accidentally forwarded to a proxy provider.
             api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR")
-            if api_key_var and api_key_var in os.environ:
-                proc_env["ANTHROPIC_API_KEY"] = os.environ[api_key_var]
+            if api_key_var:
+                resolved = os.environ.get(api_key_var, "")
+                if resolved:
+                    proc_env["ANTHROPIC_API_KEY"] = resolved
+                else:
+                    # Key var declared but not exported — clear inherited Claude key
+                    # so the failure is an explicit 401 rather than a silent wrong-key error.
+                    proc_env.pop("ANTHROPIC_API_KEY", None)
+                    print(
+                        f"[WARN] {api_key_var} is not set in the environment. "
+                        f"Export it before starting the watchdog.",
+                        file=sys.stderr,
+                    )
 
         proc = subprocess.Popen(
             run_cmd,
@@ -1175,8 +1188,9 @@ def _make_direct_trigger_callback(
             match = _re.search(r"\[Session:\s*([^\]]+)\]", content)
             if match:
                 session_id = match.group(1).strip()
-        if session_id is None:
-            session_id = _load_agent_session(recipient)
+        # For direct triggers, no [Session:] tag means the user explicitly chose
+        # "New conversation" in the UI. Do NOT fall back to the saved session,
+        # or the message will be routed to the previous session.
 
         prompt = (
             f"You have a new AgentWeave message from user. "

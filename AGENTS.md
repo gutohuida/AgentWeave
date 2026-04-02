@@ -1,91 +1,141 @@
 # AgentWeave Framework - Agent Guide
 
-> This file provides essential information for AI coding agents working on the AgentWeave Framework codebase.
+> This file provides essential information for AI coding agents working on the **AgentWeave Framework** codebase itself (v0.15.0).
 
 ## Project Overview
 
-**AgentWeave** is a multi-agent AI collaboration framework that enables multiple AI agents (Claude, Kimi, Gemini, Codex, and more) to work together on the same project. Agents communicate through:
+**AgentWeave** is a multi-agent AI collaboration framework that enables multiple AI agents (Claude, Kimi, Gemini, Codex, Minimax, GLM, and more) to work together on the same project.
 
-1. **A shared `.agentweave/` directory** (filesystem-based protocol)
-2. **A local MCP server** (for native tool integration)
-3. **AgentWeave Hub** (self-hosted FastAPI server with web dashboard)
+This repository contains the framework source code — NOT a project using AgentWeave. You are working on:
+- **CLI package** (`src/agentweave/`) — Python 3.8+, zero runtime dependencies
+- **Hub server** (`hub/`) — FastAPI backend + React dashboard for web-based collaboration
+- **Documentation site** (`docs/`) — MkDocs with Material theme
 
-The framework supports three modes:
-- **Manual relay mode**: Zero dependencies, you paste relay prompts between agents
-- **Zero-relay MCP mode**: Agents communicate autonomously via MCP tools + watchdog daemon
-- **Hub mode**: Multi-machine collaboration via self-hosted server with web UI
+### Three Operation Modes
+
+| Mode | How it works | Best for |
+|------|--------------|----------|
+| **Hub** (recommended) | Self-hosted FastAPI server with web dashboard | Teams, multi-machine, real-time monitoring |
+| **Zero-relay MCP** | MCP tools + watchdog daemon | Autonomous loops, same machine |
+| **Manual relay** | Paste relay prompts between agents | Quick one-off delegation |
 
 ## Technology Stack
 
 | Component | Technology |
 |-----------|------------|
-| Language | Python 3.8+ (zero runtime dependencies for CLI) |
-| Package Manager | pip |
+| Language | Python 3.8+ (CLI), TypeScript/React (Hub UI) |
+| Package Manager | pip (CLI), npm (Hub UI) |
 | Build System | setuptools (PEP 517) |
-| Linting | ruff, black |
-| Type Checking | mypy |
+| CLI Linting/Formatting | ruff, black |
+| CLI Type Checking | mypy |
 | Testing | pytest |
-| MCP Server | fastmcp (optional dependency) |
+| MCP Server | fastmcp |
 | Hub Backend | FastAPI + SQLAlchemy + SQLite/PostgreSQL |
-| Hub Frontend | React + TypeScript + Vite |
+| Hub Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| Docs | MkDocs + Material |
 
 ## Repository Layout
 
 ```
 AgentWeave/
-├── src/agentweave/              # CLI package (Python 3.8+, zero runtime deps) — v0.5.0
+├── src/agentweave/              # CLI package (v0.15.0)
 │   ├── __init__.py              # Package exports and version
-│   ├── cli.py                   # All CLI commands (argparse) — main entry point
+│   ├── cli.py                   # All CLI commands (argparse)
 │   ├── session.py               # Session lifecycle management
 │   ├── task.py                  # Task CRUD operations
 │   ├── messaging.py             # MessageBus for agent communication
 │   ├── locking.py               # File-based mutex for concurrency
 │   ├── validator.py             # JSON schema validation
 │   ├── watchdog.py              # File monitoring daemon with auto-ping
-│   ├── eventlog.py              # Structured event logging
+│   ├── eventlog.py              # Event logging (read-path utilities)
+│   ├── runner.py                # Agent runner helpers (claude_proxy support)
+│   ├── roles.py                 # Multi-role agent management
 │   ├── constants.py             # All constants and valid values
 │   ├── utils.py                 # Utility functions
+│   ├── logging_config.py        # Python logging stdlib configuration
 │   ├── templates/               # Markdown prompt templates
-│   │   ├── __init__.py          # Template loader (get_template())
-│   │   ├── agents_guide.md      # Collaboration guide template
+│   │   ├── __init__.py          # Template loader
 │   │   ├── ai_context.md        # AI context template
-│   │   ├── roles_template.md    # Roles assignment template
+│   │   ├── roles/               # Role-specific guides
+│   │   │   ├── backend_dev.md
+│   │   │   ├── frontend_dev.md
+│   │   │   └── ...
 │   │   └── ...
 │   ├── transport/               # Pluggable transport layer
-│   │   ├── base.py              # BaseTransport ABC (6 abstract methods)
+│   │   ├── base.py              # BaseTransport ABC
 │   │   ├── local.py             # Local filesystem transport
 │   │   ├── git.py               # Git orphan branch transport
 │   │   ├── http.py              # HTTP/REST transport for Hub
-│   │   └── config.py            # Transport factory (get_transport())
+│   │   └── config.py            # Transport factory
 │   └── mcp/                     # MCP server implementation
 │       └── server.py            # FastMCP-based MCP server
-├── hub/                         # AgentWeave Hub server (FastAPI + React)
-│   ├── hub/                     # Hub Python package
+│
+├── hub/                         # AgentWeave Hub (v0.9.0)
+│   ├── hub/                     # Python package
 │   │   ├── main.py              # FastAPI app factory
-│   │   ├── mcp_server.py        # Hub-side MCP server
+│   │   ├── mcp_server.py        # Hub-side MCP server (11 tools)
+│   │   ├── db/                  # SQLAlchemy models
 │   │   ├── api/v1/              # REST API endpoints
-│   │   ├── db/                  # SQLAlchemy models and engine
-│   │   └── ...
-│   ├── ui/                      # React dashboard (built into Docker image)
-│   └── docker-compose.yml       # Self-hosted deployment
+│   │   │   ├── agents.py        # Agent management
+│   │   │   ├── messages.py      # Message CRUD
+│   │   │   ├── tasks.py         # Task CRUD
+│   │   │   ├── questions.py     # Human questions
+│   │   │   ├── events.py        # SSE endpoint
+│   │   │   ├── logs.py          # Agent output logs
+│   │   │   ├── agent_chat.py    # Per-agent chat history
+│   │   │   ├── agent_trigger.py # Trigger agent endpoint
+│   │   │   └── ...
+│   │   └── schemas/             # Pydantic schemas
+│   ├── ui/                      # React dashboard
+│   │   ├── src/
+│   │   │   ├── App.tsx
+│   │   │   ├── api/             # API client hooks
+│   │   │   │   ├── agents.ts    # Agent queries + SSE
+│   │   │   │   ├── messages.ts
+│   │   │   │   ├── tasks.ts
+│   │   │   │   ├── agentChat.ts # Chat history
+│   │   │   │   └── ...
+│   │   │   ├── components/
+│   │   │   │   ├── agents/      # Agent UI components
+│   │   │   │   │   ├── AgentsPage.tsx
+│   │   │   │   │   ├── AgentCard.tsx
+│   │   │   │   │   ├── AgentPromptPanel.tsx    # Chat interface
+│   │   │   │   │   ├── AgentOutputPanel.tsx    # Output logs
+│   │   │   │   │   ├── AgentActivityTab.tsx
+│   │   │   │   │   └── ...
+│   │   │   │   ├── tasks/       # Task board components
+│   │   │   │   ├── messages/    # Message feed components
+│   │   │   │   ├── questions/   # Human Q&A panel
+│   │   │   │   ├── logs/        # Log viewer
+│   │   │   │   └── layout/      # Sidebar, status bar
+│   │   │   ├── store/           # Zustand stores
+│   │   │   └── hooks/           # Custom React hooks
+│   │   └── package.json
+│   ├── docker-compose.yml
+│   └── Dockerfile
+│
 ├── tests/                       # CLI unit tests (pytest)
-│   ├── test_session.py
-│   ├── test_task.py
-│   ├── test_messaging.py
-│   ├── test_validator.py
-│   ├── test_locking.py
-│   └── ...
-├── pyproject.toml               # Package configuration
-├── Makefile                     # Convenience targets for CLI and Hub
-└── README.md                    # User documentation
+├── docs/                        # MkDocs documentation
+│   ├── index.md
+│   ├── getting-started/
+│   ├── guides/
+│   ├── reference/
+│   └── architecture/
+│
+├── pyproject.toml               # CLI package config
+├── README.md                    # User documentation
+├── CHANGELOG.md                 # Release notes
+├── ROADMAP.md                   # Future plans
+├── AGENTS.md                    # This file — for framework contributors
+└── CLAUDE.md                    # Claude-specific guidance
 ```
 
 ## Build and Development Commands
 
-### Installation
+### CLI Development
 
 ```bash
-# Development install (editable) — CLI only
+# Development install (editable)
 pip install -e ".[dev]"
 
 # With MCP support
@@ -94,152 +144,91 @@ pip install -e ".[mcp]"
 # With all extras
 pip install -e ".[all]"
 
-# Install both CLI and Hub
-make install-all
-```
+# Code quality
+ruff check src/          # Linting (line length: 100)
+black src/               # Formatting
+mypy src/                # Type checking
 
-### Code Quality
-
-```bash
-# Linting (line length: 100)
-ruff check src/
-
-# Formatting
-black src/ hub/hub/
-
-# Type checking
-mypy src/
-
-# Run all linting
-make lint
-make format
-```
-
-### Testing
-
-```bash
-# Run CLI tests
+# Testing
 pytest tests/ -v
-
-# With coverage
 pytest tests/ -v --cov=agentweave --cov-report=term-missing
-
-# Run Hub tests
-pytest hub/tests/ -v
-
-# Run all tests
-make test-all
 ```
 
-### CLI Verification
+### Hub Development
 
 ```bash
-# Verify installation
-agentweave --help
-aw --help                    # alias
-agentweave-watch --help      # watchdog
-agentweave-mcp               # MCP server (stdio)
-```
-
-### Hub (Docker)
-
-```bash
-# Build and start Hub
-make hub-build
-
-# Start existing image
-make hub-up
-
-# Stop Hub
-make hub-down
+# Start Hub for development
+cd hub
+docker compose up -d
 
 # UI development (hot-reload)
-cd hub/ui && npm install && npm run dev  # dashboard at http://localhost:5173
+cd hub/ui
+npm install
+npm run dev              # http://localhost:5173
+
+# Build UI for production
+npm run build            # Outputs to dist/
+```
+
+### Documentation
+
+```bash
+# Serve docs locally
+mkdocs serve
+
+# Build docs
+mkdocs build
+
+# Deploy (CI/CD handles this)
+mkdocs gh-deploy
 ```
 
 ## Key Architectural Concepts
 
-### 1. Session Management
+### 1. Multi-Role Agent System (v0.15.0)
 
-Sessions are stored in `.agentweave/session.json`:
-
-```python
-from agentweave import Session
-
-session = Session.create(
-    name="My Project",
-    principal="claude",
-    mode="hierarchical",  # or "peer", "review"
-    agents=["claude", "kimi", "gemini"]
-)
-session.save()
-```
-
-**Session modes:**
-- `hierarchical`: Principal assigns work, delegates execute
-- `peer`: Agents can assign tasks to each other
-- `review`: Review-focused workflow
-
-**Agent name validation:** Use `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` from `constants.py`. Any name matching this regex is accepted.
-
-### 2. Task Lifecycle
-
-Valid statuses (defined in `constants.py`):
-
-```
-pending → assigned → in_progress → completed → under_review → approved
-                                             ↘ revision_needed (loops back)
-                                             ↘ rejected
-```
-
-Task operations:
-```python
-from agentweave import Task
-
-task = Task.create(
-    title="Implement feature",
-    description="Detailed description",
-    assignee="kimi",
-    assigner="claude",
-    priority="high"
-)
-task.save()
-task.update(status="in_progress")
-task.move_to_completed()  # When approved/completed
-```
-
-### 3. Messaging System
-
-Messages are routed through the transport layer:
+Agents can have multiple roles assigned simultaneously:
 
 ```python
-from agentweave import Message, MessageBus
+from agentweave.roles import add_role_to_agent, set_agent_roles
 
-msg = Message.create(
-    sender="claude",
-    recipient="kimi",
-    subject="Task assignment",
-    content="Please implement...",
-    message_type="delegation",
-    task_id="task-abc123"
-)
-MessageBus.send(msg)
+# Add single role
+add_role_to_agent("kimi", "backend_dev", config)
 
-# Receive messages
-inbox = MessageBus.get_inbox("kimi")
+# Set multiple roles
+set_agent_roles("claude", ["tech_lead", "backend_dev"], config)
 ```
 
-### 4. Transport Layer
+Available roles: `backend_dev`, `frontend_dev`, `tech_lead`, `qa_engineer`, `devops_engineer`, `security_engineer`, `docs_writer`, `product_manager`, `project_manager`, `ui_designer`, `ux_researcher`, `data_engineer`, `data_scientist`, `mobile_dev`
 
-The transport layer abstracts message/task I/O:
+Role guides are auto-copied to `.agentweave/roles/{role}.md` when assigned.
+
+### 2. Claude-Proxy Agents (v0.12.0+)
+
+Run Minimax, GLM, or any OpenAI-compatible model through Claude Code CLI:
+
+```bash
+# Configure proxy agent
+agentweave agent configure minimax --runner claude_proxy
+
+# Switch to proxy in shell
+eval $(agentweave switch minimax)
+
+# Run with automatic delegation
+agentweave run --agent minimax "task description"
+```
+
+Built-in providers in `CLAUDE_PROXY_PROVIDERS`:
+- **minimax**: Default model `MiniMax-Text-01`
+- **glm**: Default model `glm-5`
+
+### 3. Transport Layer
 
 | Transport | Type | Use Case |
 |-----------|------|----------|
-| `LocalTransport` | local | Single-machine collaboration (default) |
+| `LocalTransport` | local | Single-machine collaboration |
 | `GitTransport` | git | Cross-machine via orphan branch |
-| `HttpTransport` | http | AgentWeave Hub (self-hosted or hosted) |
-
-Transport selection is automatic based on `.agentweave/transport.json`.
+| `HttpTransport` | http | AgentWeave Hub |
 
 **BaseTransport ABC (6 methods):**
 ```python
@@ -258,116 +247,117 @@ class BaseTransport(ABC):
     def get_transport_type(self) -> str: ...
 ```
 
-### 5. File Locking
+### 4. Task Lifecycle
 
-All task file operations that modify state must use locking:
-
-```python
-from agentweave.locking import lock
-
-with lock("task-abc123"):
-    task = Task.load("task-abc123")
-    task.update(status="completed")
-    task.save()
+```
+pending → assigned → in_progress → completed → under_review → approved
+                                             ↘ revision_needed (loops back)
+                                             ↘ rejected
 ```
 
-Locks have a 5-minute automatic timeout to prevent deadlocks.
+### 5. Hub MCP Server Tools (11 tools)
 
-### 6. Validation
-
-All saves must pass through validator functions:
-
-```python
-from agentweave.validator import validate_task, sanitize_task_data
-
-is_valid, errors = validate_task(task_data)
-if is_valid:
-    sanitized = sanitize_task_data(task_data)
-    # ... save
-```
-
-### 7. Event Logging
-
-Structured events are logged to `.agentweave/logs/events.jsonl`:
-
-```python
-from agentweave.eventlog import log_event, INFO, WARN, ERROR
-
-log_event("task_created", task_id=task.id, title=task.title)
-log_event("custom_event", severity=WARN, detail="something happened")
-```
-
-### 8. MCP Server Tools
-
-When MCP is enabled, agents have these native tools:
-
-| Tool | What it does |
-|------|-------------|
-| `send_message(from, to, subject, content)` | Send a message to another agent |
+| Tool | Purpose |
+|------|---------|
+| `send_message(from, to, subject, content)` | Send inter-agent message |
 | `get_inbox(agent)` | Read unread messages |
-| `mark_read(message_id)` | Archive a message after processing |
+| `mark_read(message_id)` | Archive message |
 | `list_tasks(agent?)` | List active tasks |
 | `get_task(task_id)` | Get task details |
 | `update_task(task_id, status)` | Update task status |
-| `create_task(title, ...)` | Create and assign a new task |
-| `get_status()` | Session-wide summary + task counts |
-| `ask_user(from_agent, question)` | Post a question to the human (Hub only) |
-| `get_answer(question_id)` | Check if human answered (Hub only) |
+| `create_task(title, ...)` | Create new task |
+| `get_status()` | Session summary + counts |
+| `ask_user(from_agent, question)` | Ask human (Hub only) |
+| `get_answer(question_id)` | Check human answer |
+| `get_agent_config(agent)` | Get agent runner config |
+
+### 6. Logging Architecture (v0.11.0+)
+
+Uses Python `logging` stdlib with two handlers:
+- `JSONRotatingFileHandler`: Writes to `.agentweave/logs/events.jsonl` (10MB rotation, 5 backups)
+- `HubHandler`: Forwards INFO+/WARNING+/ERROR+ to Hub when HTTP transport active
+
+Environment variables:
+- `AW_LOG_LEVEL`: Default `WARNING`
+- `AW_LOG_FILE`: Optional custom log path
+
+### 7. Hub UI Components
+
+Key React components in `hub/ui/src/components/`:
+
+| Component | Purpose |
+|-----------|---------|
+| `AgentsPage.tsx` | Main agent list + detail view |
+| `AgentPromptPanel.tsx` | Chat interface with session selector |
+| `AgentOutputPanel.tsx` | Real-time output log viewer |
+| `AgentCard.tsx` | Agent summary card with roles badges |
+| `TasksBoard.tsx` | Kanban-style task board |
+| `MessagesFeed.tsx` | Inbox + message history |
+| `QuestionsPanel.tsx` | Human Q&A interface |
+| `LogsView.tsx` | Structured log viewer |
 
 ## Code Style Guidelines
 
-### Python Style
+### Python (CLI)
 
-- **Line length**: 100 characters (configured in `pyproject.toml`)
+- **Line length**: 100 characters
 - **Formatter**: black
 - **Linter**: ruff
 - **Type hints**: Required (enforced by mypy)
 
+### TypeScript/React (Hub UI)
+
+- **Formatter**: Prettier (via ESLint)
+- **Linter**: ESLint
+- **Style**: Functional components with hooks
+- **State**: Zustand for global state, React Query for server state
+
 ### Naming Conventions
 
-- **Modules**: `snake_case.py`
+- **Modules**: `snake_case.py` / `camelCase.ts`
 - **Classes**: `PascalCase`
-- **Functions/Variables**: `snake_case`
-- **Constants**: `UPPER_CASE` (defined in `constants.py`)
+- **Functions/Variables**: `snake_case` (Python) / `camelCase` (TS)
+- **Constants**: `UPPER_CASE`
 
-### Critical Rules
+## Critical Rules
 
-1. **Agent name validation**: Use `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` from `constants.py`. Any name matching this regex is accepted.
+1. **Agent name validation**: Use `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` from `constants.py`
 
-2. **Never hardcode template strings**: Use `get_template("name")` from `templates/__init__.py`.
+2. **Never hardcode template strings**: Use `get_template("name")` from `templates/__init__.py`
 
-3. **Always use locking**: Task modifications must use `with lock("name"):`.
+3. **Always use locking**: Task modifications must use `with lock("name"):`
 
-4. **Always validate**: Run `validate_task()` and `sanitize_task_data()` before saving.
+4. **Always validate**: Run `validate_task()` and `sanitize_task_data()` before saving
 
-5. **Never modify working tree in GitTransport**: Use only git plumbing commands (`hash-object`, `mktree`, `commit-tree`, `push`).
+5. **Never modify working tree in GitTransport**: Use only git plumbing commands
 
-6. **is_locked() is read-only**: Never delete files in `is_locked()` — only `acquire_lock()` cleans stale locks.
+6. **is_locked() is read-only**: Never delete files in `is_locked()`
 
-7. **HttpTransport uses stdlib only**: `urllib.request` — no new CLI dependencies.
+7. **HttpTransport uses stdlib only**: `urllib.request` — no new CLI dependencies
+
+8. **UI uses React Query**: All API calls go through hooks in `hub/ui/src/api/`
+
+9. **SSE for real-time updates**: Hub uses Server-Sent Events for live data
 
 ## Testing Strategy
 
-### Test Structure
+### CLI Tests
 
 ```
 tests/
-├── __init__.py
-├── test_session.py      # Session CRUD operations
-├── test_task.py         # Task lifecycle
-├── test_messaging.py    # Message routing
-├── test_validator.py    # Validation functions
-├── test_locking.py      # Locking mechanism
-├── test_transport_local.py  # Local transport
-└── test_http_transport.py   # HTTP transport
+├── test_session.py
+├── test_task.py
+├── test_messaging.py
+├── test_validator.py
+├── test_locking.py
+├── test_transport_local.py
+└── test_http_transport.py
 ```
 
 ### Hub Tests
 
 ```
 hub/tests/
-├── __init__.py
-├── conftest.py
 ├── test_auth.py
 ├── test_messages.py
 ├── test_tasks.py
@@ -376,229 +366,116 @@ hub/tests/
 └── test_status.py
 ```
 
-### Running Tests
+### UI Tests
 
-```bash
-# CLI tests only
-pytest tests/ -v
+Hub UI uses manual testing via browser. Key flows to verify:
+1. Agent list loads and shows connected agents
+2. Clicking agent opens chat with session selector
+3. "New chat" button creates new conversation
+4. Task board shows tasks and allows status updates
+5. Messages feed displays inbox + history
+6. Questions panel allows answering agent questions
 
-# Hub tests only
-pytest hub/tests/ -v
+## Recent Session Work (Agent Chat UI Fixes)
 
-# All tests with coverage
-make test-all
+### April 1, 2026 — Session Routing & Chat History Fixes
+
+Fixed critical end-to-end bugs where new-chat messages were routed to the wrong session and chat history either leaked across sessions or disappeared entirely.
+
+#### Files Changed
+- `src/agentweave/watchdog.py`
+- `hub/hub/api/v1/agent_trigger.py`
+- `hub/hub/api/v1/agent_chat.py`
+- `hub/hub/db/models.py`
+- `hub/hub/migrations/versions/0003_add_message_session_id.py`
+- `hub/ui/src/components/agents/AgentPromptPanel.tsx`
+
+#### Bug: New Chat Messages Routed to Previous Session
+**Issue**: Clicking "New chat" and sending a message resumed the previous CLI session instead of creating a new one.
+**Root Cause**: In `watchdog.py`, `_make_direct_trigger_callback()` fell back to `_load_agent_session()` when no `[Session: ...]` tag was found. This loaded the old `.agentweave/agents/{agent}-session.json` and passed `--resume <old_id>` to the CLI.
+**Solution**: Removed the fallback. For Hub UI direct triggers, the absence of a session tag now explicitly means "start a new session."
+
+#### Bug: Chat History Disappeared or Leaked Across Sessions
+**Issue**: After earlier fixes, conversations either showed in every session (cross-leak) or vanished completely.
+**Root Cause**: The chat history endpoint (`agent_chat.py`) had no reliable way to know which untagged `Message` row belonged to which session. Heuristics based on timestamps were too brittle — user messages are created *before* any agent output exists, so they fell outside calculated time windows and were excluded.
+**Solution**:
+1. Added `session_id` column to the `messages` table via Alembic migration `0003_add_message_session_id.py`.
+2. Updated `agent_trigger.py` to store `session_id` on the `Message` row for resume-mode triggers.
+3. Rewrote `agent_chat.py` to use a three-tier lookup:
+   - Exact match on `Message.session_id` (post-migration resume messages)
+   - Content fallback `[Session: {id}]` (pre-migration resume messages)
+   - Time-window heuristic **only** for `session_id=NULL` new-session messages, with a 5-minute buffer before the first agent output
+
+#### Bug: UI Blink and Lost Optimistic Messages
+**Issue**: In new chat mode, the screen blinked and the user's optimistic message disappeared.
+**Root Cause**: When the UI auto-switched from `new` to `resume` mode after detecting a session ID, the resume-mode effect replaced `localMessages` with `chatHistory` even when the history was still empty, wiping the optimistic temp message.
+**Solution**:
+- Added `chatHistory.messages.length > 0` guard before merging history into local state.
+- Added `newSessionOutputIndexRef` so session detection only looks at output lines that arrived *after* clicking "New chat" — prevents immediately snapping back to a cached previous session.
+- Merged history with existing local messages instead of replacing them, preserving temp messages and early agent outputs.
+
+### March 31, 2026 — Session Management Bug Fixes
+
+Fixed critical bugs in the Hub UI Agent Chat (`AgentPromptPanel.tsx`):
+
+#### Bug 1: New Session Not Created
+**Issue**: Clicking "New chat" kept resuming the last session instead of creating a new one.
+**Root Cause**: Auto-selection effect was overriding user's choice.
+**Solution**: Added `userChoseNewRef` to track when user explicitly wants a new session, preventing auto-selection from interfering.
+
+#### Bug 2: Input Blocked in New Session  
+**Issue**: After clicking "New chat", the input field was disabled.
+**Root Cause**: `isInputDisabled` checked `selectedSessionId === NEW_SESSION_ID` which blocked input.
+**Solution**: Removed the check — input should be enabled when user wants to start a new conversation.
+
+#### Bug 3: Messages Routed to Wrong Session
+**Issue**: Messages sent in a new session would disappear and appear in the previous session instead.
+**Root Cause**: **Stale closure** in `handleSend`. The function captured `sessionMode` and `selectedSessionId` from the render where it was created. If user sent a message before React finished re-rendering after "New chat", stale values were used.
+**Solution**: Added refs (`sessionModeRef`, `selectedSessionIdRef`) synced with state values. `handleSend` now reads from refs to always get current values, avoiding stale closures.
+
+```typescript
+// Pattern used to avoid stale closures
+const sessionModeRef = useRef(sessionMode)
+useEffect(() => { sessionModeRef.current = sessionMode }, [sessionMode])
+
+// In handleSend, read from ref instead of closure
+const currentMode = sessionModeRef.current
 ```
 
 ## Security Considerations
 
-1. **File locking**: Prevents race conditions when multiple agents write simultaneously.
-
-2. **Schema validation**: All JSON state files are validated before saving.
-
-3. **Input sanitization**: String length limits and type coercion before any write.
-
-4. **Path traversal protection**: Task IDs are validated with regex `^[a-zA-Z0-9_-]+$` before file operations.
-
-5. **Git transport safety**:
-   - Uses git plumbing only — never touches working tree or HEAD
-   - UUID-suffixed filenames prevent conflicts between concurrent pushes
-   - Retry logic with exponential backoff for push conflicts
-
-6. **API security (Hub)**:
-   - API key format: `aw_live_{random32}` — never commit keys
-   - Bearer token authentication on all endpoints
-   - Project-scoped access control
-
-## Deployment Process
-
-### PyPI Release (CLI)
-
-```bash
-# Build distribution
-python -m build
-
-# Upload to PyPI
-python -m twine upload dist/*
-```
-
-### Version Management
-
-Version is defined in:
-- `pyproject.toml` (`[project]` section): **0.5.0**
-- `src/agentweave/__init__.py` (`__version__`)
-
-Keep these in sync when bumping versions.
-
-### Hub Deployment
-
-```bash
-# End-user install (no source needed)
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-cp .env.example .env  # edit AW_BOOTSTRAP_API_KEY
-docker compose up -d
-
-# Build from source
-cd hub && docker compose up --build -d
-```
-
-## Entry Points
-
-Defined in `pyproject.toml` `[project.scripts]`:
-
-| Command | Entry Point | Purpose |
-|---------|-------------|---------|
-| `agentweave` | `agentweave.cli:main` | Main CLI |
-| `aw` | `agentweave.cli:main` | CLI alias |
-| `agentweave-watch` | `agentweave.watchdog:main` | File watchdog daemon |
-| `agentweave-mcp` | `agentweave.mcp.server:main` | MCP server (stdio) |
-
-## Role Management
-
-Agents can have multiple roles assigned. Roles define responsibilities and are used to:
-- Generate appropriate AI_CONTEXT.md sections
-- Copy role-specific guides to `.agentweave/roles/{role}.md`
-- Sync to Hub when using HTTP transport
-
-### CLI Commands
-
-```bash
-# List all agents and their roles
-agentweave roles list
-
-# Add a role to an agent
-agentweave roles add <agent> <role_id>
-
-# Remove a role from an agent
-agentweave roles remove <agent> <role_id>
-
-# Set multiple roles for an agent (replaces existing)
-agentweave roles set <agent> <role1,role2,...>
-
-# List available role types
-agentweave roles available
-```
-
-### Available Roles
-
-Roles are defined in `src/agentweave/templates/roles/`:
-
-| Role ID | Label | Description |
-|---------|-------|-------------|
-| `backend_dev` | Backend Developer | API, database, business logic |
-| `frontend_dev` | Frontend Developer | UI components, user experience |
-| `tech_lead` | Technical Lead | Architecture, code review, standards |
-| `qa_engineer` | QA Engineer | Testing, quality assurance |
-| `devops_engineer` | DevOps Engineer | Infrastructure, CI/CD, deployment |
-| `security_engineer` | Security Engineer | Security review, compliance |
-| `docs_writer` | Documentation Writer | User docs, API docs, guides |
-| `product_manager` | Product Manager | Requirements, prioritization |
-| `project_manager` | Project Manager | Planning, coordination, tracking |
-| `ui_designer` | UI Designer | Visual design, design systems |
-| `ux_researcher` | UX Researcher | User research, usability testing |
-| `data_engineer` | Data Engineer | Data pipelines, warehousing |
-| `data_scientist` | Data Scientist | ML models, analytics, insights |
-| `mobile_dev` | Mobile Developer | iOS/Android apps |
-
-### Configuration
-
-Roles are stored in `.agentweave/roles.json`:
-
-```json
-{
-  "version": 2,
-  "agent_roles": {
-    "claude": ["tech_lead", "backend_dev"],
-    "kimi": ["backend_dev"],
-    "gemini": ["frontend_dev"]
-  },
-  "roles_defs": {
-    "backend_dev": {"label": "Backend Developer", ...},
-    ...
-  }
-}
-```
-
-**Backward compatibility**: Legacy `agent_assignments` (single role per agent) is automatically migrated to `agent_roles` (array).
-
-### Programmatic API
-
-```python
-from agentweave.roles import (
-    load_roles_config,
-    add_role_to_agent,
-    remove_role_from_agent,
-    set_agent_roles,
-    get_agent_roles,
-    copy_role_md_file,
-    sync_roles_to_hub,
-)
-
-# Load config
-config = load_roles_config()
-
-# Add role
-success, message, config = add_role_to_agent("kimi", "backend_dev", config)
-
-# Set multiple roles
-success, message, config = set_agent_roles("kimi", ["backend_dev", "qa_engineer"], config)
-
-# Sync to Hub (if HTTP transport active)
-sync_roles_to_hub(config)
-```
-
-## Adding New Features
-
-### Adding a CLI Command
-
-1. Add `cmd_<name>()` function in `cli.py`
-2. Add subparser in `create_parser()` function
-3. Add routing branch in `main()` function
-
-### Adding a Transport
-
-1. Create class in `transport/<name>.py` extending `BaseTransport`
-2. Implement all 6 abstract methods
-3. Add `elif transport_type == "..."` branch in `transport/config.py`
-4. Add CLI handling in `cmd_transport_setup()`
-
-### Adding a Template
-
-1. Create `.md` file in `templates/`
-2. Reference via `get_template("filename_without_extension")`
-
-### Adding an MCP Tool
-
-1. Add `@mcp.tool()` decorated function in `mcp/server.py`
-2. Import and use existing core modules (session, task, messaging)
-3. Follow existing patterns for error handling and return types
+1. **File locking**: Prevents race conditions
+2. **Schema validation**: All JSON state files validated before saving
+3. **Path traversal protection**: Task IDs validated with regex before file operations
+4. **API key format**: `aw_live_{random32}` — never commit keys
+5. **Bearer token auth**: All Hub endpoints require authentication
+6. **CORS**: Configurable via `AW_CORS_ORIGINS`
 
 ## Files to Never Commit
 
-The following are gitignored and should never be committed:
+Gitignored and must never be committed:
 
-- `.agentweave/tasks/*/` — Task state files
-- `.agentweave/messages/*/` — Message state files
-- `.agentweave/agents/*.json` — Agent status
-- `.agentweave/session.json` — Session config
-- `.agentweave/transport.json` — Transport config (may contain secrets)
-- `.agentweave/.git_seen/` — Git transport seen-set
-- `.agentweave/logs/` — Event logs
-- `.agentweave/watchdog.pid` — Watchdog PID
-- `.agentweave/watchdog.log` — Watchdog logs
-- `kimichanges.md`, `kimiwork.md` — Working files
+- `.agentweave/tasks/*/`
+- `.agentweave/messages/*/`
+- `.agentweave/agents/*.json`
+- `.agentweave/session.json`
+- `.agentweave/transport.json` (may contain secrets)
+- `.agentweave/.git_seen/`
+- `.agentweave/logs/`
+- `kimichanges.md`, `kimiwork.md`
 
-**Safe to commit**:
+Safe to commit:
 - `.agentweave/README.md`
 - `.agentweave/protocol.md`
 - `.agentweave/roles.json`
 - `.agentweave/roles/*.md`
 - `.agentweave/ai_context.md`
-- `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` (project root — agent-specific context files)
+- `CLAUDE.md`, `AGENTS.md`
 
 ## Resources
 
 - **GitHub**: https://github.com/gutohuida/AgentWeave
 - **PyPI**: https://pypi.org/project/agentweave-ai/
+- **Documentation**: https://gutohuida.github.io/AgentWeave/
 - **Issues**: https://github.com/gutohuida/AgentWeave/issues
-- **Roadmap**: `ROADMAP.md` in repository root
+- **Roadmap**: `ROADMAP.md`

@@ -1,175 +1,306 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working on the **AgentWeave Framework** codebase itself.
 
-## Project Overview
-File-based collaboration protocol enabling Claude Code and Kimi Code to work together through a shared `.agentweave/` directory. Zero external dependencies — pure Python stdlib. Supports single-machine (local) and cross-machine (git orphan branch) collaboration. The AgentWeave Hub (self-hosted FastAPI server) is now available in `hub/` — see ROADMAP.md.
+## Project Context
 
-## Tech Stack
-- Python 3.8+, no external runtime dependencies
-- Package manager: pip (editable install: `pip install -e .`)
-- Entry points: `agentweave`, `aw` → `agentweave.cli:main`
-- Watchdog entry point: `agentweave-watch` → `agentweave.watchdog:main`
+You are working on the **AgentWeave Framework** — a multi-agent AI collaboration platform consisting of:
+- **CLI** (`src/agentweave/`) — Python 3.8+, zero runtime dependencies, published as `agentweave-ai` on PyPI
+- **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard, self-hosted via Docker
+- **Documentation** (`docs/`) — MkDocs with Material theme, deployed to GitHub Pages
 
-## Essential Commands
+Current version: **v0.15.0** (CLI + Hub v0.9.0)
+
+## Quick Commands
+
+### Development Setup
 
 ```bash
-# Install
-pip install -e .                              # runtime only
-pip install -e ".[dev]"                       # include pytest, black, ruff, mypy
+# CLI (editable install)
+pip install -e ".[dev,mcp]"
 
 # Verify
 agentweave --help
+aw --help
 
-# Session lifecycle
-agentweave init --project "Name" --principal claude
-agentweave status
-agentweave summary
+# Hub (Docker)
+cd hub && docker compose up -d
 
-# Delegation workflow
-agentweave quick --to kimi "task description"
-agentweave relay --agent kimi                 # NOTE: flag is --agent, not --to
-agentweave inbox --agent claude
+# Hub UI (hot-reload)
+cd hub/ui && npm install && npm run dev  # http://localhost:5173
 
-# Tasks
-agentweave task list
-agentweave task show <task_id>
-agentweave task update <task_id> --status in_progress
-agentweave task update <task_id> --status completed
-
-# Cross-machine transport (git)
-agentweave transport setup --type git         # one-time setup per developer
-agentweave transport status                   # show active transport
-agentweave transport pull                     # force immediate fetch
-agentweave transport disable                  # revert to local filesystem
-
-# Hub — end-user install (no source code needed, pulls pre-built image)
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-cp .env.example .env   # edit AW_BOOTSTRAP_API_KEY
-docker compose up -d
-
-# Hub — build and run from source (inside hub/ directory)
-docker compose up --build -d
-
-# UI development (hot-reload, proxies /api → Hub at localhost:8000)
-cd hub/ui && npm install && npm run dev       # dashboard at http://localhost:5173
-cd hub/ui && npm run build                    # produces dist/ (copied into Docker image)
-
-# Connect CLI to Hub
-agentweave transport setup --type http --url http://localhost:8000 \
-  --api-key aw_live_... --project-id proj-default
-
-# Human interaction
-agentweave reply --id <question_id> "Your answer"
-
-# Template maintenance
-agentweave update-template --agent claude --template-path ~/Documents/projects/template.txt
+# Documentation
+mkdocs serve  # http://localhost:8000
 ```
 
-## Dev / Quality Commands
+### Code Quality
 
 ```bash
-# Lint and format (line length 100)
+# Python (CLI)
 ruff check src/
 black src/
-
-# Type checking
 mypy src/
 
-# Tests (tests/ directory does not yet exist — needs to be created)
-pytest
+# TypeScript (Hub UI)
+cd hub/ui && npm run lint
 ```
 
-## Architecture
+### Testing
+
+```bash
+# CLI tests
+pytest tests/ -v
+
+# Hub tests
+pytest hub/tests/ -v
+
+# All tests
+make test-all
+```
+
+## Architecture Overview
+
+### CLI (`src/agentweave/`)
 
 ```
-hub/                  AgentWeave Hub server (FastAPI + SQLite + MCP)
-  hub/main.py         FastAPI app factory + lifespan
-  hub/db/             SQLAlchemy async models + engine (5 tables)
-  hub/api/v1/         REST endpoints (messages, tasks, questions, status, events SSE)
-  hub/mcp_server.py   FastMCP server (10 tools: 8 existing + ask_user + get_answer)
-  docker-compose.yml  Self-hosted deployment
-  pyproject.toml      Hub dependencies (FastAPI, SQLAlchemy, fastmcp, etc.)
-
 src/agentweave/
-  cli.py          All CLI commands (argparse). To add a command: add cmd_*, add subparser in
-                  create_parser(), add routing branch in main()
-  session.py      Session lifecycle (create, load, save, add_task, complete_task)
-  task.py         Task CRUD; Task.load() validates task_id with ^[a-zA-Z0-9_-]+$
-  messaging.py    MessageBus (send, get_inbox, mark_read) — routes through transport layer
-  locking.py      File-based mutex; prefer `with lock("name"):` over raw acquire/release
-  validator.py    validate_task/message/session + sanitize_task_data — run before every save
-  watchdog.py     Polls for new files; transport-aware (local glob or remote fetch)
-  constants.py    All valid values and directory Path constants — source of truth
-  utils.py        load_json, save_json, generate_id, now_iso, print_* helpers
-  templates/      Markdown prompt templates; load via get_template("name") from
-                  templates/__init__.py — templates are .md files in that directory
-  transport/      Pluggable transport layer (see below)
-
-.agentweave/      Runtime state — gitignored except README.md, protocol.md, ai_context.md, roles.json, roles/*.md
-CLAUDE.md         Auto-read by Claude each session; generated from .agentweave/ai_context.md
-AGENTS.md         Auto-read by Kimi/other agents; generated from .agentweave/ai_context.md
-ROADMAP.md        Full architecture plan: transport layer, git transport, planned Hub (MCP)
+├── cli.py              # All CLI commands. To add: cmd_* function, subparser in create_parser(),
+│                       # routing branch in main()
+├── session.py          # Session lifecycle, JSON persistence
+├── task.py             # Task CRUD, file-based storage with locking
+├── messaging.py        # MessageBus — routes through transport layer
+├── locking.py          # File-based mutex (use: `with lock("name"):`)
+├── validator.py        # validate_task/message/session + sanitize functions
+├── watchdog.py         # Polls for new messages/tasks, auto-pings agents
+├── eventlog.py         # Read-path utilities for events.jsonl
+├── logging_config.py   # Python logging stdlib setup (JSONRotatingFileHandler, HubHandler)
+├── runner.py           # Agent runner helpers (claude_proxy support, env var resolution)
+├── roles.py            # Multi-role agent management (v0.15.0)
+├── constants.py        # All valid values, regex patterns, directory paths
+├── utils.py            # load_json, save_json, generate_id, now_iso, print_* helpers
+├── templates/          # Markdown templates loaded via get_template("name")
+│   ├── roles/          # Role-specific behavioral guides
+│   └── ...
+├── transport/          # Pluggable transport layer
+│   ├── base.py         # BaseTransport ABC (6 abstract methods)
+│   ├── local.py        # Local filesystem transport
+│   ├── git.py          # Git orphan branch transport (plumbing only)
+│   ├── http.py         # HTTP transport for Hub
+│   └── config.py       # get_transport() factory
+└── mcp/
+    └── server.py       # FastMCP server (stdio transport)
 ```
 
-## Transport Layer
-
-All message and task I/O goes through `BaseTransport`. Selection is automatic:
+### Hub (`hub/`)
 
 ```
-No transport.json  →  LocalTransport   (default, unchanged single-machine behavior)
-type: "git"        →  GitTransport     (orphan branch agentweave/collab, cross-machine)
-type: "http"       →  HttpTransport    (AgentWeave Hub — not yet implemented, see ROADMAP.md)
+hub/
+├── hub/                      # Python package
+│   ├── main.py               # FastAPI app factory + lifespan
+│   ├── mcp_server.py         # Hub-side MCP server (11 tools)
+│   ├── db/                   # SQLAlchemy async models (5 tables)
+│   │   ├── models.py
+│   │   └── engine.py
+│   ├── api/v1/               # REST endpoints
+│   │   ├── agents.py         # GET /api/v1/agents (+ roles, sessions, runner)
+│   │   ├── messages.py       # Messages CRUD
+│   │   ├── tasks.py          # Tasks CRUD
+│   │   ├── questions.py      # Human Q&A
+│   │   ├── events.py         # SSE endpoint for real-time updates
+│   │   ├── logs.py           # Agent output logs
+│   │   ├── agent_chat.py     # Per-agent chat history
+│   │   ├── agent_trigger.py  # POST /api/v1/agent/trigger
+│   │   └── session_sync.py   # Session sync endpoint
+│   └── schemas/              # Pydantic schemas
+├── ui/                       # React dashboard
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── api/              # React Query hooks
+│   │   │   ├── agents.ts     # useAgents, useAgentOutput, useAgentSessions
+│   │   │   ├── messages.ts   # useMessages, useMessageHistory
+│   │   │   ├── tasks.ts
+│   │   │   ├── agentChat.ts  # useAgentChatHistory
+│   │   │   └── ...
+│   │   ├── components/
+│   │   │   ├── agents/       # Agent UI
+│   │   │   │   ├── AgentsPage.tsx
+│   │   │   │   ├── AgentCard.tsx          # Role badges, runner badge
+│   │   │   │   ├── AgentPromptPanel.tsx   # Chat + session selector
+│   │   │   │   ├── AgentOutputPanel.tsx   # Live output logs
+│   │   │   │   ├── AgentActivityTab.tsx
+│   │   │   │   ├── AgentInfoTab.tsx
+│   │   │   │   ├── AgentMessageSender.tsx
+│   │   │   │   └── AgentTimeline.tsx
+│   │   │   ├── tasks/        # TaskBoard, TaskCard
+│   │   │   ├── messages/     # MessagesFeed, MessageCard, ConversationGroup
+│   │   │   ├── questions/    # QuestionsPanel, AnswerForm
+│   │   │   ├── logs/         # LogsView, LogLine
+│   │   │   ├── activity/     # ActivityLog, EventRow
+│   │   │   ├── layout/       # Sidebar, StatusBar, SetupModal
+│   │   │   └── common/       # Badge, Icon, EmptyState
+│   │   ├── store/            # Zustand stores (configStore)
+│   │   └── hooks/            # useSSE, useCopy, useApiConfig
+│   └── package.json
+├── docker-compose.yml
+└── Dockerfile
 ```
 
-```
-src/agentweave/transport/
-  base.py     BaseTransport ABC — 6 abstract methods all transports must implement
-  local.py    LocalTransport — wraps existing .agentweave/ filesystem behavior
-  git.py      GitTransport — git plumbing only (hash-object, mktree, commit-tree, push)
-  http.py     HttpTransport stub — defines Hub API contract, raises NotImplementedError
-  config.py   get_transport() factory — reads .agentweave/transport.json
-  __init__.py re-exports get_transport(), BaseTransport, all transport classes
+## Key Features (v0.15.0)
+
+### Multi-Role Agent System
+
+Agents can have multiple roles assigned:
+
+```bash
+# CLI commands
+agentweave roles list
+agentweave roles add <agent> <role>
+agentweave roles set <agent> <role1,role2,...>
+agentweave roles available
 ```
 
-**GitTransport design principles:**
-- Uses only git plumbing — never touches working tree or HEAD
-- Files on the branch are append-only; UUID suffix prevents conflicts between concurrent pushes
-- Message filename: `{iso_ts}-{from}-{to}-{uuid6}.json` (recipient encoded in name)
-- Seen-set in `.agentweave/.git_seen/{agent}-seen.txt` tracks archived message IDs (gitignored)
-- Watchdog for git transport tracks known remote filenames in memory (does NOT add to seen set)
+Role guides auto-copied to `.agentweave/roles/{role}.md`.
 
-**Adding a new transport:** Create a class in `transport/` that extends `BaseTransport`,
-implement all 6 abstract methods, add a `elif transport_type == "..."` branch in `config.py`,
-and add CLI handling in `cmd_transport_setup()`.
+### Claude-Proxy Agents
+
+Run Minimax, GLM through Claude Code CLI:
+
+```bash
+# Configure
+agentweave agent configure minimax --runner claude_proxy
+
+# Built-in providers: minimax, glm
+
+# Run
+agentweave run --agent minimax "task"
+# or
+eval $(agentweave switch minimax)
+```
+
+### Transport Layer
+
+```
+No transport.json  → LocalTransport (default)
+type: "git"        → GitTransport (cross-machine)
+type: "http"       → HttpTransport (Hub)
+```
+
+**GitTransport principles:**
+- Uses git plumbing only (`hash-object`, `mktree`, `commit-tree`, `push`)
+- Never touches working tree or HEAD
+- Append-only with UUID-suffixed filenames
+
+**HttpTransport:**
+- Uses stdlib `urllib.request` only
+- No new CLI dependencies
+
+### Logging (v0.11.0+)
+
+Python `logging` stdlib with:
+- `JSONRotatingFileHandler`: 10MB rotation, 5 backups → `.agentweave/logs/events.jsonl`
+- `HubHandler`: Forwards to Hub when HTTP transport active
+
+Env vars: `AW_LOG_LEVEL` (default WARNING), `AW_LOG_FILE`
+
+## Hub UI Patterns
+
+### Adding a Component
+
+1. Create component in `hub/ui/src/components/{category}/ComponentName.tsx`
+2. Use existing components (Badge, Icon, EmptyState) for consistency
+3. Add to barrel export if applicable
+4. Use React Query for data fetching (see `hub/ui/src/api/`)
+
+### Adding an API Hook
+
+```typescript
+// hub/ui/src/api/feature.ts
+import { useQuery } from '@tanstack/react-query'
+import { getJson } from './client'
+import { useConfigStore } from '@/store/configStore'
+
+export function useFeature() {
+  const { isConfigured } = useConfigStore()
+  return useQuery({
+    queryKey: ['feature'],
+    queryFn: () => getJson('/api/v1/feature'),
+    enabled: isConfigured,
+  })
+}
+```
+
+### Real-time Updates
+
+Hub uses SSE (Server-Sent Events) for live updates:
+- `useSSE` hook in `hub/ui/src/hooks/useSSE.ts`
+- Events: `agent_output`, `session_synced`, `task_updated`, etc.
+- Frontend invalidates React Query cache on events
 
 ## Task Status Lifecycle
 
 ```
 pending → assigned → in_progress → completed → under_review → approved
-                                             ↘ needs_revision (loops back)
+                                             ↘ revision_needed
                                              ↘ rejected
 ```
 
-Valid statuses (from `constants.py`): `pending`, `assigned`, `in_progress`, `completed`, `under_review`, `revision_needed`, `approved`, `rejected`
-
 ## Critical Rules
 
-- Agent names are validated by `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` in `constants.py`. Any name matching this regex is accepted. `KNOWN_AGENTS` is a documentation/suggestion list only, not a validation gate.
+- Agent names validated by `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` — any match accepted
 - `VALID_MODES = ["hierarchical", "peer", "review"]`
-- ALL saves must pass through `validator.py` sanitize functions first
-- ALL task file operations that modify state must use `locking.py` context manager (`with lock("name"):`)
-- Templates use `get_template("name")` from `templates/__init__.py` — never hardcode template strings in `cli.py`
-- `is_locked()` is read-only — it must never delete files (only `acquire_lock()` cleans stale locks)
-- NEVER commit `.agentweave/tasks/`, `messages/`, `agents/`, `session.json` (already gitignored)
-- NEVER commit `.agentweave/transport.json` or `.agentweave/.git_seen/` (gitignored, machine-local)
-- `kimichanges.md` and `kimiwork.md` are gitignored working files — never commit them
-- The `relay` subcommand flag is `--agent`, not `--to` — never write `relay --to`
-- Hub API key format is `aw_live_{random32}` — never commit keys
-- Hub is in `hub/` subdirectory; CLI is in `src/agentweave/` — two separate packages
-- HttpTransport uses stdlib `urllib.request` only — no new CLI dependencies
+- ALL saves pass through `validator.py` sanitize functions
+- ALL task modifications use `with lock("name"):`
+- Templates via `get_template("name")` — never hardcode in `cli.py`
+- `is_locked()` is read-only — never delete files
+- NEVER commit `.agentweave/tasks/`, `messages/`, `agents/`, `session.json`, `transport.json`
+- NEVER commit `kimichanges.md`, `kimiwork.md`
+- Hub API key format: `aw_live_{random32}`
+- HttpTransport uses stdlib `urllib.request` only
+
+## Common Tasks
+
+### Adding a CLI Command
+
+1. Add `cmd_<name>()` function in `cli.py`
+2. Add subparser in `create_parser()`
+3. Add routing branch in `main()`
+4. Add tests in `tests/test_cli.py`
+
+### Adding a Transport
+
+1. Create class in `transport/<name>.py` extending `BaseTransport`
+2. Implement all 6 abstract methods
+3. Add branch in `transport/config.py`
+4. Add CLI handling in `cmd_transport_setup()`
+
+### Adding an MCP Tool
+
+1. Add `@mcp.tool()` decorated function in `mcp/server.py` (CLI) or `hub/mcp_server.py` (Hub)
+2. Import and use existing core modules
+3. Follow existing error handling patterns
+
+### Adding a UI Component
+
+1. Create in `hub/ui/src/components/{category}/`
+2. Use TypeScript + functional components
+3. Use Tailwind CSS + CSS variables for theming
+4. Use React Query for data, Zustand for global state
+5. Use `Icon` component for Material Symbols
 
 ## When Compacting
 
-Keep in context: current task IDs being worked on, session mode, which agent is principal, active transport type, any pending messages in `.agentweave/messages/pending/`, which CLI command is being added/modified.
+Keep in context:
+- Current task IDs being worked on
+- Session mode (hierarchical/peer/review)
+- Principal agent name
+- Active transport type (local/git/http)
+- Pending messages in `.agentweave/messages/pending/`
+- Which CLI command or UI component is being modified
+- Any proxy agents (minimax, glm) and their runner config
+
+## Resources
+
+- GitHub: https://github.com/gutohuida/AgentWeave
+- PyPI: https://pypi.org/project/agentweave-ai/
+- Docs: https://gutohuida.github.io/AgentWeave/
+- Issues: https://github.com/gutohuida/AgentWeave/issues

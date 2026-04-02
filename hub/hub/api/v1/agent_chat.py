@@ -1,11 +1,11 @@
 """Agent chat endpoints — GET /api/v1/agent/{agent}/chat/{session_id}"""
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
@@ -42,8 +42,24 @@ async def get_chat_history(
     """
     project_id, _ = project
 
-    # Get messages from user to this agent
-    # Look for messages where session_id is in the content or metadata
+    # Get agent outputs for this session
+    output_q = (
+        select(AgentOutput)
+        .where(
+            AgentOutput.project_id == project_id,
+            AgentOutput.agent == agent,
+            AgentOutput.session_id == session_id,
+        )
+        .order_by(AgentOutput.timestamp.asc())
+    )
+    output_result = await session.execute(output_q)
+    session_outputs = output_result.scalars().all()
+
+    # Build time window for this session (used for untagged messages)
+    session_first_ts = min((o.timestamp for o in session_outputs), default=None)
+    session_last_ts = max((o.timestamp for o in session_outputs), default=None)
+
+    # Get all user messages to this agent
     msg_q = (
         select(Message)
         .where(
@@ -56,29 +72,27 @@ async def get_chat_history(
     msg_result = await session.execute(msg_q)
     user_messages = msg_result.scalars().all()
 
-    # Get agent output for this session
-    output_q = (
-        select(AgentOutput)
+    # Get first-output timestamps for all OTHER sessions (used for Tier 3 attribution)
+    other_starts_q = (
+        select(func.min(AgentOutput.timestamp))
         .where(
             AgentOutput.project_id == project_id,
             AgentOutput.agent == agent,
-            AgentOutput.session_id == session_id,
+            AgentOutput.session_id.isnot(None),
+            AgentOutput.session_id != session_id,
         )
-        .order_by(AgentOutput.timestamp.asc())
+        .group_by(AgentOutput.session_id)
     )
-    output_result = await session.execute(output_q)
-    agent_outputs = output_result.scalars().all()
+    other_starts_result = await session.execute(other_starts_q)
+    other_first_timestamps = [row[0] for row in other_starts_result.all() if row[0] is not None]
 
-    # Build chat messages
     messages: List[ChatMessage] = []
 
-    # Add user messages (those containing the session_id in content or all if no specific session)
     for msg in user_messages:
-        # Include message if it's for this session or if no session filtering needed
-        # For now, include all user messages to the agent as they may be relevant
         content = msg.content or ""
-        # Check if this message is related to the session
-        if session_id in content or not any(session_id in str(m.content) for m in user_messages):
+
+        # 1. Exact match by session_id column (post-migration resume messages)
+        if msg.session_id == session_id:
             messages.append(
                 ChatMessage(
                     id=msg.id,
@@ -89,9 +103,46 @@ async def get_chat_history(
                     timestamp=msg.timestamp,
                 )
             )
+            continue
 
-    # Add agent outputs as agent messages
-    for output in agent_outputs:
+        # 2. Fallback: content tag match (pre-migration resume messages)
+        if f"[Session: {session_id}]" in content:
+            messages.append(
+                ChatMessage(
+                    id=msg.id,
+                    role="user",
+                    content=(
+                        content.split("\n\n[Session:")[0] if "[Session:" in content else content
+                    ),
+                    timestamp=msg.timestamp,
+                )
+            )
+            continue
+
+        # 3. Untagged messages (new-session messages with session_id=None).
+        #    Only include if they fall within this session's time window AND no other
+        #    session started closer to the message (nearest-session wins, prevents
+        #    messages from previous new-sessions bleeding into the current one).
+        if msg.session_id is None and "[Session:" not in content:
+            if session_first_ts is not None and session_last_ts is not None:
+                in_window = session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
+                # Exclude if another session started between this message and the current session
+                closer_session_exists = any(
+                    msg.timestamp <= other_ts < session_first_ts
+                    for other_ts in other_first_timestamps
+                )
+                if in_window and not closer_session_exists:
+                    messages.append(
+                        ChatMessage(
+                            id=msg.id,
+                            role="user",
+                            content=content,
+                            timestamp=msg.timestamp,
+                        )
+                    )
+
+    # Add agent outputs for this session
+    for output in session_outputs:
         messages.append(
             ChatMessage(
                 id=output.id,

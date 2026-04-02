@@ -93,6 +93,7 @@ async def trigger_agent(
         type="message",  # Use standard message type (direct_trigger caused validation issues)
         timestamp=datetime.now(timezone.utc),
         read=False,  # Mark as unread so watchdog picks it up
+        session_id=body.session_id if body.session_mode == "resume" else None,
     )
 
     session.add(msg)

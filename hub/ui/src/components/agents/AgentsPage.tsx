@@ -1,19 +1,18 @@
 import { useState } from 'react'
-import { useAgents, useAgentOutput } from '@/api/agents'
+import { useAgents } from '@/api/agents'
 import { AgentCard } from './AgentCard'
-import { AgentTimeline } from './AgentTimeline'
-import { AgentOutputPanel } from './AgentOutputPanel'
-import { AgentMessageSender } from './AgentMessageSender'
+import { AgentPromptPanel } from './AgentPromptPanel'
+import { AgentActivityTab } from './AgentActivityTab'
+import { AgentInfoTab } from './AgentInfoTab'
 import { EmptyState } from '@/components/common/EmptyState'
 
-type ActiveTab = 'output' | 'timeline' | 'send'
+type ActiveTab = 'chat' | 'activity' | 'info'
 
 export function AgentsPage() {
   const { data: agents = [], isLoading } = useAgents()
   const [selected, setSelected] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<ActiveTab>('output')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('chat')
   const selectedAgent = agents.find((a) => a.name === selected) ?? null
-  const { lines } = useAgentOutput(selected)
 
   if (isLoading) {
     return <div className="p-6 m3-body-medium" style={{ color: 'var(--on-sv)' }}>Loading agents…</div>
@@ -58,7 +57,7 @@ export function AgentsPage() {
               className="flex shrink-0 border-b"
               style={{ background: 'var(--surface-high)', borderColor: 'var(--outline-variant)' }}
             >
-              {(['output', 'timeline', 'send'] as ActiveTab[]).map((tab) => (
+              {(['chat', 'activity', 'info'] as ActiveTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -67,7 +66,7 @@ export function AgentsPage() {
                     color: activeTab === tab ? 'var(--primary)' : 'var(--on-sv)',
                   }}
                 >
-                  {tab === 'send' ? 'Send Message' : tab}
+                  {tab}
                   {activeTab === tab && (
                     <span
                       className="absolute bottom-0 left-0 right-0 h-0.5"
@@ -78,16 +77,12 @@ export function AgentsPage() {
               ))}
             </div>
             <div className="flex-1 overflow-hidden">
-              {activeTab === 'output' ? (
-                <AgentOutputPanel agent={selectedAgent} />
-              ) : activeTab === 'timeline' ? (
-                <AgentTimeline agent={selectedAgent} />
+              {activeTab === 'chat' ? (
+                <AgentPromptPanel key={selectedAgent.name} agent={selectedAgent} />
+              ) : activeTab === 'activity' ? (
+                <AgentActivityTab key={selectedAgent.name} agent={selectedAgent} />
               ) : (
-                <AgentMessageSender
-                  agent={selectedAgent.name}
-                  existingSessionId={lines.find(l => l.session_id)?.session_id}
-                  runner={selectedAgent.runner}
-                />
+                <AgentInfoTab key={selectedAgent.name} agent={selectedAgent} />
               )}
             </div>
           </>

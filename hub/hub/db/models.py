@@ -69,6 +69,7 @@ class Message(Base):
     read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="messages")
 

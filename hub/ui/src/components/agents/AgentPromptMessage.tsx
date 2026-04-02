@@ -3,9 +3,10 @@ import { ChatMessage } from '@/api/agentChat'
 
 interface AgentPromptMessageProps {
   message: ChatMessage
+  agentName?: string
 }
 
-export function AgentPromptMessage({ message }: AgentPromptMessageProps) {
+export function AgentPromptMessage({ message, agentName }: AgentPromptMessageProps) {
   const isUser = message.role === 'user'
   const timestamp = new Date(message.timestamp)
 
@@ -27,7 +28,7 @@ export function AgentPromptMessage({ message }: AgentPromptMessageProps) {
         {/* Header */}
         <div className="flex items-center gap-2 mb-1">
           <span className="m3-label-small font-medium">
-            {isUser ? 'You' : 'Agent'}
+            {isUser ? 'You' : (agentName || 'Agent')}
           </span>
           <span
             className="m3-label-small"

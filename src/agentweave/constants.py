@@ -90,7 +90,7 @@ RUNNER_TYPES = ["native", "claude_proxy", "manual"]
 # Agents that run through Claude CLI with custom env vars (no native CLI of their own)
 CLAUDE_PROXY_PROVIDERS: dict = {
     "minimax": {
-        "base_url": "https://api.minimax.chat/v1",
+        "base_url": "https://api.minimax.io/anthropic",
         "api_key_var": "MINIMAX_API_KEY",
         "model": "MiniMax-M2.7",
     },
