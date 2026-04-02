@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.16.0] - 2026-04-02
+
+### Added (CLI)
+- **AgentWeave skills system** — 8 new collaboration skills in `.claude/skills/`:
+  - `aw-collab-start` — orient yourself at the start of an AgentWeave session
+  - `aw-delegate` — delegate a task to another agent
+  - `aw-done` — mark a task as completed
+  - `aw-relay` — generate a relay prompt for manual handoff
+  - `aw-review` — request a code review
+  - `aw-revise` — accept a revision request
+  - `aw-status` — show full collaboration overview
+  - `aw-sync` — regenerate agent context files
+- **Session-based chat history** in Hub UI — messages now tracked per-session
+- **Watchdog session routing fix** — new chat no longer falls back to previous session
+
+### Added (Hub v0.10.0)
+- **Database migration 0003** — adds `session_id` column to messages table
+- **Three-tier chat history lookup** — exact match, content fallback, time-window heuristic
+- **New UI components** — `AgentActivityTab`, `AgentInfoTab` for detailed agent views
+- **UI stability fixes** — eliminated blink and lost optimistic messages in chat panel
+- **Updated API endpoints** — `agent_chat.py` and `agent_trigger.py` session handling
+
+---
+
 ## [0.15.0] - 2026-03-31
 
 ### Added (CLI)
