@@ -20,7 +20,9 @@ const SSE_EVENT_TYPES = [
   'question_answered',
   'agent_heartbeat',
   'agent_output',
+  'agent_session_changed',
   'log_event',
+  'context_warning',
 ]
 
 const MAX_BUFFERED = 200
@@ -119,8 +121,16 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['status'] })
           break
         case 'agent_heartbeat':
+        case 'context_warning':
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break
+        case 'agent_session_changed': {
+          const d = event.data as { agent?: string }
+          if (d?.agent) {
+            queryClient.invalidateQueries({ queryKey: ['agent', d.agent, 'sessions'] })
+          }
+          break
+        }
       }
       onEventRef.current?.(event)
     }

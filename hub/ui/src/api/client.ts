@@ -40,3 +40,11 @@ export async function patchJson<T>(path: string, body: unknown): Promise<T> {
   })
   return res.json() as Promise<T>
 }
+
+export async function postJson<T>(path: string, body: unknown = {}): Promise<T> {
+  const res = await fetchWithAuth(path, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  return res.json() as Promise<T>
+}

@@ -3,7 +3,7 @@
 
 import argparse
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -82,7 +82,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         if agents_arg:
             agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()]
 
-        principal = args.principal or "claude"
+        principal = args.principal or (agent_list[0] if agent_list else DEFAULT_AGENTS[0])
 
         session = Session.create(
             name=args.project or "Unnamed Project",
@@ -231,14 +231,18 @@ agentweave summary
         version_comment = f"AgentWeave v{__version__}"
         written_root_files: set = set()
         for ag in session.agent_names:
-            root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+            _runner = session.get_runner_config(ag).get("runner", "native")
+            if _runner == "claude_proxy":
+                root_filename = "CLAUDE.md"
+            else:
+                root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
             if root_filename in written_root_files:
                 continue  # multiple agents may share AGENTS.md — only write once
             root_path = Path.cwd() / root_filename
             if root_path.exists():
                 written_root_files.add(root_filename)
                 continue  # never overwrite an existing file
-            template_name = "claude_context" if ag == "claude" else "kimi_context"
+            template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
             try:
                 context_content = get_template(template_name).replace("{version}", version_comment)
                 with open(root_path, "w", encoding="utf-8") as f:
@@ -1093,15 +1097,19 @@ def cmd_sync_context(args: argparse.Namespace) -> int:
     skipped_files: list = []
 
     for ag in agents_to_sync:
-        root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+        _runner = session.get_runner_config(ag).get("runner", "native")
+        if _runner == "claude_proxy":
+            root_filename = "CLAUDE.md"
+        else:
+            root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
         root_path = Path.cwd() / root_filename
 
         if root_path.exists() and not force:
             skipped_files.append(root_filename)
             continue
 
-        # Select template based on agent
-        template_name = "claude_context" if ag == "claude" else "kimi_context"
+        # Select template based on context file
+        template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
         try:
             context_content = get_template(template_name).replace("{version}", version_comment)
             with open(root_path, "w", encoding="utf-8") as f:
@@ -1824,6 +1832,23 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
         print_error("Failed to save session")
         return 1
 
+    # Ensure the agent has a root-level context file
+    if runner == "claude_proxy":
+        root_filename = "CLAUDE.md"
+    else:
+        root_filename = AGENT_CONTEXT_FILES.get(agent, AGENT_CONTEXT_FILES_DEFAULT)
+    root_path = Path.cwd() / root_filename
+    if not root_path.exists():
+        template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
+        try:
+            context_content = get_template(template_name).replace(
+                "{version}", f"AgentWeave v{__version__}"
+            )
+            root_path.write_text(context_content, encoding="utf-8")
+            print_info(f"Created context file: {root_filename}")
+        except FileNotFoundError:
+            pass  # Non-fatal
+
     print_success(f"Runner configured: {agent} → {runner}")
     if runner == "claude_proxy":
         print(f"  ANTHROPIC_BASE_URL = {base_url}")
@@ -1895,6 +1920,74 @@ def cmd_agent_set_model(args: argparse.Namespace) -> int:
         return 1
 
     print_success(f"Model set for {agent}: {model}")
+    return 0
+
+
+def cmd_checkpoint(args: argparse.Namespace) -> int:
+    """Write a context checkpoint skeleton for an agent before compacting."""
+    session = Session.load()
+    if not session:
+        print_error("No session found. Run: agentweave init")
+        return 1
+
+    agent = args.agent
+    reason = getattr(args, "reason", "manual")
+    note = getattr(args, "note", None)
+
+    checkpoints_dir = SHARED_DIR / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+    active_tasks = Task.list_all(active_only=True)
+    agent_tasks = [t for t in active_tasks if t.assignee == agent]
+    task_rows = "\n".join(
+        f"| {t.id} | {t.title[:60]} | {t.status} |" for t in agent_tasks
+    ) or "| (none) | | |"
+
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    filename = f"{agent}-{ts}.md"
+    filepath = checkpoints_dir / filename
+
+    note_line = f"*Note: {note}*\n" if note else ""
+    content = f"""# Context Checkpoint — {agent} — {dt_display}
+
+## Session Intent
+<!-- One paragraph: what was this session trying to accomplish -->
+
+## Active Tasks at Checkpoint
+| Task ID | Title | Status |
+|---------|-------|--------|
+{task_rows}
+
+## Files Modified This Session
+<!-- List only files you wrote or edited. Format: `path/to/file` — what changed -->
+
+## Decisions Made
+<!-- 1. [Decision] — [why — this is the critical part; the code exists, the rationale does not] -->
+
+## Blockers and Open Questions
+<!-- - [ ] [Unresolved item] -->
+
+## Next Steps
+<!-- 1. [Exact first action after resuming] -->
+
+## Verification Commands
+```bash
+# add commands to confirm current state
+```
+
+---
+*Checkpoint saved by: {agent}*
+*AgentWeave session: {session.id} ({session.name})*
+*Reason: {reason}*
+{note_line}"""
+
+    filepath.write_text(content, encoding="utf-8")
+
+    print_success(f"Checkpoint created: {filepath}")
+    print("\nFill in the qualitative sections, then run /compact")
+    print("After compacting, re-read this file to resume:")
+    print(f"  {filepath}")
     return 0
 
 
@@ -2280,6 +2373,28 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--force",
         action="store_true",
         help="Force overwrite existing session",
+    )
+
+    # Checkpoint
+    checkpoint_parser = subparsers.add_parser(
+        "checkpoint",
+        help="Write a context checkpoint for an agent before compacting",
+    )
+    checkpoint_parser.add_argument(
+        "--agent",
+        "-a",
+        required=True,
+        help="Agent name (e.g. claude, kimi)",
+    )
+    checkpoint_parser.add_argument(
+        "--reason",
+        choices=["token_threshold", "phase_complete", "pre_handoff", "pre_sleep", "manual"],
+        default="manual",
+        help="Why the checkpoint is being written (default: manual)",
+    )
+    checkpoint_parser.add_argument(
+        "--note",
+        help="Optional free-text note to include in the checkpoint",
     )
 
     # Status
@@ -2876,6 +2991,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_switch(parsed_args)
         elif parsed_args.command == "run":
             return cmd_run(parsed_args)
+        elif parsed_args.command == "checkpoint":
+            return cmd_checkpoint(parsed_args)
         else:
             parser.print_help()
             return 0

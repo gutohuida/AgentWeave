@@ -16,11 +16,13 @@ Run the following steps in order:
 2. Run `agentweave inbox` to see unread messages addressed to you.
 3. Run `agentweave task list` to see all active tasks, then filter by your agent name if needed.
 4. Read `.agentweave/shared/context.md` for today's focus and any recent decisions.
+5. Check `.agentweave/shared/checkpoints/` for any checkpoint file matching your agent name (e.g. `claude-*.md`). If one exists, read the most recent file — your "Next Steps" from the last session is your starting point for this session.
 
 After completing the steps above, briefly report:
 - Your assigned role and responsibilities
 - Number of unread messages (and from whom)
 - Your assigned tasks and their current status
 - Any blockers or items needing attention
+- Whether you found a prior checkpoint (and if so, what the next step is)
 
 If you are the principal agent ({principal}), also check whether any delegates have completed tasks that need review.

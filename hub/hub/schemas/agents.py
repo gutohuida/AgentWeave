@@ -20,6 +20,7 @@ class AgentSummary(BaseModel):
     dev_role_label: Optional[str] = None  # e.g. "Tech Lead", "Backend Developer"
     dev_roles: Optional[List[str]] = None  # All role IDs (new multi-role support)
     dev_role_labels: Optional[List[str]] = None  # Labels for all roles
+    context_usage: Optional[Dict[str, Any]] = None  # {percent, warning, model, threshold_warning, updated_at}
 
     model_config = {"from_attributes": True}
 

@@ -18,6 +18,7 @@
    - If MCP tools are available → use them exclusively for all coordination.
    - If no MCP tools → use `agentweave relay` / `agentweave inbox` CLI commands.
 5. **Run `agentweave status`** — see all pending tasks before starting any work.
+6. **Check for a prior checkpoint** — look for `.agentweave/shared/checkpoints/{your_name}-*.md`. If one exists, read the most recent file. Your "Next Steps" from the last session is your starting point.
 
 **Do NOT skip this checklist.** An agent that begins work without knowing its role has no valid scope and must stop and complete the checklist.
 
@@ -154,8 +155,8 @@ These generate relay prompts that require **manual human action**. In Hub mode, 
 
 **Correct delegation in Hub/MCP mode:**
 ```
-1. create_task(title="...", assignee="claude", assigner="kimi", ...)
-2. send_message(from_agent="kimi", to_agent="claude",
+1. create_task(title="...", assignee="another_agent", assigner="{your_name}", ...)
+2. send_message(from_agent="{your_name}", to_agent="another_agent",
                subject="New task: ...", content="...",
                message_type="delegation", task_id="<id>")
    → watchdog fires automatically, no relay, no user action needed
@@ -175,11 +176,11 @@ These generate relay prompts that require **manual human action**. In Hub mode, 
 **Planning Phase — Look for these parallel splits:**
 | Situation | Parallel Work Distribution |
 |-----------|---------------------------|
-| API + Frontend | You: API implementation → Claude: Frontend with mocks → Integrate when API ready |
-| Feature + Tests | You: Core implementation → Claude: Test scaffolding + edge cases |
-| Multiple endpoints | You: Auth endpoints → Claude: CRUD endpoints → Someone: Integration tests |
-| Refactor + Feature | You: Refactor existing code → Claude: New feature using stable API |
-| Research + Build | You: Build with assumptions → Claude: Research to validate assumptions |
+| API + Frontend | You: API implementation → Another agent: Frontend with mocks → Integrate when API ready |
+| Feature + Tests | You: Core implementation → Another agent: Test scaffolding + edge cases |
+| Multiple endpoints | You: Auth endpoints → Another agent: CRUD endpoints → Someone: Integration tests |
+| Refactor + Feature | You: Refactor existing code → Another agent: New feature using stable API |
+| Research + Build | You: Build with assumptions → Another agent: Research to validate assumptions |
 
 **Execution Pattern:**
 1. Create YOUR task first (so you don't become a manager-only)
@@ -210,6 +211,29 @@ If no phase is specified, default to: **Explore → share findings → await Pla
 - Use `agentweave task update <id> --status <status>` for every transition.
 - **Run all `agentweave` CLI commands via Bash automatically.** Never ask the user to run them.
 
+### A2A Communication Standard (all agent-to-agent messages)
+
+**Rule: structured fields, no prose.** Agents receiving a message need data, not explanation.
+
+All `send_message()` calls between agents MUST use this format in the `content` field:
+
+```
+COMPLETED:    <deliverables — file paths, names, IDs>
+CONTEXT:      <decisions and constraints — 1 line each>
+REMAINING:    <exact next action for recipient — imperative, specific>
+CONSTRAINTS:  <what recipient must not do — omit entirely if none>
+VERIFICATION: <runnable command>
+```
+
+Message length budgets:
+- Delegation: 10 lines max — Completion: 8 lines max — Blocker/question: 5 lines max
+
+**Never write preamble** ("I've finished..."), **never write postamble** ("Let me know if you need help").
+Write A2A messages like a function call, not an email.
+Use natural language ONLY for `ask_user()` and `send_message(to="user")`.
+
+---
+
 ### User Communication (Hub Mode Only)
 
 Distinguish between questions that need answers and informational updates:
@@ -229,11 +253,11 @@ Distinguish between questions that need answers and informational updates:
 - Starting a significant task ("Beginning the auth refactor now")
 - Completed a milestone ("Database schema deployed, tests passing")
 - Found an issue but have a solution ("Discovered race condition, fixing with mutex")
-- Unblocking others ("Fixed the API bug Claude was waiting on")
+- Unblocking others ("Fixed the API bug another agent was waiting on")
 
 **Principal's Duty: Keep the User Informed**
 - Send a message at the start of major phases
-- Notify when work is parallelized ("Claude is building backend while I do frontend")
+- Notify when work is parallelized ("Another agent is building backend while I do frontend")
 - Report completion of significant milestones
 - Warn early about blockers or delays ("Running 30min behind due to X")
 
@@ -252,7 +276,7 @@ Distinguish between questions that need answers and informational updates:
 
 ## Sub-Agent Setup
 
-Create these in `.claude/agents/` based on project type. Each agent outputs findings
+Create these in `.agentweave/subagents/` based on project type. Each agent outputs findings
 with severity: CRITICAL / HIGH / MEDIUM / INFO.
 
 ### Always Create
@@ -274,6 +298,73 @@ with severity: CRITICAL / HIGH / MEDIUM / INFO.
 
 ---
 
-## When Compacting
+## Context Checkpoint Protocol
 
-[Replace with: current phase, modified files, failing tests, active AgentWeave task IDs]
+**Never compact without writing a checkpoint first.**
+
+### When to checkpoint — act at ALL of these triggers
+
+- About to clear context
+- Completed a phase (Explore done, Plan approved, Implement complete)
+- About to hand off work to another agent
+- About to end session / go idle
+- Modified 5+ files since last checkpoint
+- Struggling to recall decisions made earlier in the session
+
+### How to checkpoint
+
+**Option A — MCP tool (preferred):**
+Call `save_checkpoint(agent="{your_name}", session_intent="...", files_modified=[...], decisions=[...], next_steps=[...], reason="<reason>")`.
+
+**Option B — CLI:**
+Run `agentweave checkpoint --agent {your_name} --reason <reason>`, then fill in the generated skeleton at `.agentweave/shared/checkpoints/`.
+
+**Option C — Write manually:**
+Create `.agentweave/shared/checkpoints/{your_name}-<timestamp>.md` with these sections:
+
+```markdown
+# Context Checkpoint — {your_name} — <datetime>
+
+## Session Intent
+One paragraph: what was this session trying to accomplish.
+
+## Active Tasks at Checkpoint
+| Task ID | Title | Status |
+
+## Files Modified This Session
+- `path/to/file` — what changed
+
+## Decisions Made
+1. [Decision] — [why — this is the critical part; the code exists, the rationale does not]
+
+## Blockers and Open Questions
+- [ ] unresolved item
+
+## Next Steps
+1. Exact first action after resuming
+
+## Verification Commands
+```bash
+pytest tests/
+```
+---
+Reason: token_threshold | phase_complete | pre_handoff | pre_sleep | manual
+```
+
+### After writing a checkpoint
+
+1. Clear your context
+2. Immediately re-read your checkpoint file
+3. Re-read `.agentweave/shared/context.md`
+4. Resume from "Next Steps" in the checkpoint
+
+### Context thresholds by model
+
+| Model | Compact at |
+|-------|-----------|
+| You | 55–60% context fill |
+| Claude | 40–50% |
+| GLM | 60–65% |
+| Minimax | built-in at 30% |
+
+If the watchdog or Hub UI signals a `context_warning`, write a checkpoint immediately.

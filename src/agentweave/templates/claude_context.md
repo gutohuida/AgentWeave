@@ -18,6 +18,7 @@
    - If MCP tools are available → use them exclusively for all coordination.
    - If no MCP tools → use `agentweave relay` / `agentweave inbox` CLI commands.
 5. **Run `agentweave status`** — see all pending tasks before starting any work.
+6. **Check for a prior checkpoint** — look for `.agentweave/shared/checkpoints/{your_name}-*.md`. If one exists, read the most recent file. Your "Next Steps" from the last session is your starting point.
 
 **Do NOT skip this checklist.** An agent that begins work without knowing its role has no valid scope and must stop and complete the checklist.
 
@@ -29,12 +30,12 @@ Your role config is at `.agentweave/roles.json`.
 
 **On each session start:**
 
-1. Read `.agentweave/roles.json` — find `agent_assignments.claude` to get your role key,
+1. Read `.agentweave/roles.json` — find `agent_assignments.{your_name}` to get your role key,
    then note `roles.<role_key>.version`.
 2. **If you already know this role key + version** from this conversation: skip to step 4.
 3. **If new or version changed:** read the file at `roles.<role_key>.file`
    (e.g. `.agentweave/roles/tech_lead.md`) in full.
-   Say to yourself: *"I am claude, assigned <role_key> v<version>."*
+   Say to yourself: *"I am {your_name}, assigned <role_key> v<version>."*
 4. **Do NOT read other agents' role files** — only yours.
 
 This is your ONLY responsibility this session. Your role file defines what you own and what you must not do.
@@ -154,8 +155,8 @@ These generate relay prompts that require **manual human action**. In Hub mode, 
 
 **Correct delegation in Hub/MCP mode:**
 ```
-1. create_task(title="...", assignee="minimax", assigner="claude", ...)
-2. send_message(from_agent="claude", to_agent="minimax",
+1. create_task(title="...", assignee="minimax", assigner="{your_name}", ...)
+2. send_message(from_agent="{your_name}", to_agent="minimax",
                subject="New task: ...", content="...",
                message_type="delegation", task_id="<id>")
    → watchdog fires automatically, no relay, no user action needed
@@ -210,6 +211,29 @@ If no phase is specified, default to: **Explore → share findings → await Pla
 - Use `agentweave task update <id> --status <status>` for every transition.
 - **Run all `agentweave` CLI commands via Bash automatically.** Never ask the user to run them.
 
+### A2A Communication Standard (all agent-to-agent messages)
+
+**Rule: structured fields, no prose.** Agents receiving a message need data, not explanation.
+
+All `send_message()` calls between agents MUST use this format in the `content` field:
+
+```
+COMPLETED:    <deliverables — file paths, names, IDs>
+CONTEXT:      <decisions and constraints — 1 line each>
+REMAINING:    <exact next action for recipient — imperative, specific>
+CONSTRAINTS:  <what recipient must not do — omit entirely if none>
+VERIFICATION: <runnable command>
+```
+
+Message length budgets:
+- Delegation: 10 lines max — Completion: 8 lines max — Blocker/question: 5 lines max
+
+**Never write preamble** ("I've finished..."), **never write postamble** ("Let me know if you need help").
+Write A2A messages like a function call, not an email.
+Use natural language ONLY for `ask_user()` and `send_message(to="user")`.
+
+---
+
 ### User Communication (Hub Mode Only)
 
 Distinguish between questions that need answers and informational updates:
@@ -252,7 +276,7 @@ Distinguish between questions that need answers and informational updates:
 
 ## Sub-Agent Setup
 
-Create these in `.claude/agents/` based on project type. Each agent outputs findings
+Create these in `.agentweave/subagents/` based on project type. Each agent outputs findings
 with severity: CRITICAL / HIGH / MEDIUM / INFO.
 
 ### Always Create
@@ -274,6 +298,73 @@ with severity: CRITICAL / HIGH / MEDIUM / INFO.
 
 ---
 
-## When Compacting
+## Context Checkpoint Protocol
 
-[Replace with: current phase, modified files, failing tests, active AgentWeave task IDs]
+**Never compact without writing a checkpoint first.**
+
+### When to checkpoint — act at ALL of these triggers
+
+- About to `/compact` or clear context
+- Completed a phase (Explore done, Plan approved, Implement complete)
+- About to hand off work to another agent
+- About to end session / go idle
+- Modified 5+ files since last checkpoint
+- Struggling to recall decisions made earlier in the session
+
+### How to checkpoint
+
+**Option A — MCP tool (preferred):**
+Call `save_checkpoint(agent="{your_name}", session_intent="...", files_modified=[...], decisions=[...], next_steps=[...], reason="<reason>")`.
+
+**Option B — CLI:**
+Run `agentweave checkpoint --agent {your_name} --reason <reason>`, then fill in the generated skeleton at `.agentweave/shared/checkpoints/`.
+
+**Option C — Write manually:**
+Create `.agentweave/shared/checkpoints/{your_name}-<timestamp>.md` with these sections:
+
+```markdown
+# Context Checkpoint — {your_name} — <datetime>
+
+## Session Intent
+One paragraph: what was this session trying to accomplish.
+
+## Active Tasks at Checkpoint
+| Task ID | Title | Status |
+
+## Files Modified This Session
+- `path/to/file` — what changed
+
+## Decisions Made
+1. [Decision] — [why — this is the critical part; the code exists, the rationale does not]
+
+## Blockers and Open Questions
+- [ ] unresolved item
+
+## Next Steps
+1. Exact first action after resuming
+
+## Verification Commands
+```bash
+pytest tests/
+```
+---
+Reason: token_threshold | phase_complete | pre_handoff | pre_sleep | manual
+```
+
+### After writing a checkpoint
+
+1. Run `/compact`
+2. Immediately re-read your checkpoint file
+3. Re-read `.agentweave/shared/context.md`
+4. Resume from "Next Steps" in the checkpoint
+
+### Context thresholds by model
+
+| Model | Compact at |
+|-------|-----------|
+| You | 40–50% context fill |
+| Kimi | 55–60% |
+| GLM | 60–65% |
+| Minimax | built-in at 30% |
+
+If the watchdog or Hub UI signals a `context_warning`, write a checkpoint immediately.

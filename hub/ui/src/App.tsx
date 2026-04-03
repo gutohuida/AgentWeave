@@ -9,9 +9,10 @@ import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { ActivityLog } from '@/components/activity/ActivityLog'
 import { LogsView } from '@/components/logs/LogsView'
 import { AgentsPage } from '@/components/agents/AgentsPage'
+import { MissionControlPage } from '@/components/agents/MissionControlPage'
 import { useSSE } from '@/hooks/useSSE'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents'
+type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control'
 
 export default function App() {
   const { isConfigured, theme, mode } = useConfigStore()
@@ -44,6 +45,7 @@ export default function App() {
             {page === 'activity'  && <div className="h-full overflow-auto"><ActivityLog /></div>}
             {page === 'logs'      && <div className="h-full flex flex-col"><LogsView /></div>}
             {page === 'agents'    && <div className="h-full flex flex-col"><AgentsPage /></div>}
+            {page === 'mission-control' && <div className="h-full flex flex-col"><MissionControlPage /></div>}
           </main>
         </div>
       </div>

@@ -55,10 +55,12 @@ user to paste it into the target agent's session.
 3. update_task(task_id, status="in_progress")
 4. … do the work …
 5. update_task(task_id, status="completed")
-6. send_message(from_agent="<your-agent>", to_agent="{principal}",
+6. send_message(from_agent="<your-agent>", to_agent="<reviewer-or-principal>",
                subject="Done: <title>", content="Summary of what was done",
                message_type="message", task_id="<id>")
-   → watchdog auto-pings {principal}'s CLI
+   → watchdog auto-pings the recipient's CLI
+
+**You may message any agent directly.** If a task should be reviewed by someone other than the principal, send the completion message to that agent instead.
 ```
 
 ### Check session state at any time:
@@ -99,27 +101,54 @@ agentweave msg send --to {principal} --subject "Done: <title>" --message "..."
 
 ---
 
-## Handoff Message Format
+## Handoff Message Format (MANDATORY for all A2A messages)
 
-When sending a task or completing a handoff, structure the message body with these fields.
-Do NOT paste full conversation history or file contents — compress to the minimum the recipient needs.
+> **Rule:** ALL agent-to-agent messages MUST use this format. No prose preamble ("I've finished..."),
+> no postamble ("Let me know if you need anything"), no conversation filler. Start with a field.
+> Natural language is for humans only — `ask_user()` and `send_message(to="user")` only.
 
 ```
-COMPLETED: [what was finished — specific deliverables, not "did the task"]
-CONTEXT:   [decisions made, constraints discovered, relevant state — summarized]
-REMAINING: [the specific next action the recipient should take]
-CONSTRAINTS: [anything the recipient must NOT do]
-VERIFICATION: [exact command to run to confirm the work is correct]
+COMPLETED:    [specific deliverables — file paths, endpoints, IDs. NOT "did the work"]
+CONTEXT:      [decisions made, constraints found — one line per item max]
+REMAINING:    [exact next action for recipient — imperative verb, specific scope]
+CONSTRAINTS:  [what recipient must NOT do — omit this field entirely if none]
+VERIFICATION: [exact runnable command to confirm correctness]
 ```
 
-**Example:**
+**Format rules:**
+- Each field: one or two lines maximum
+- No markdown headings, bullet lists, or code blocks inside the fields
+- Omit any field that has nothing to say — do not write "N/A" or "None"
+- `send_message` subject line: max 80 chars, format `[TYPE] verb noun` e.g. `[DONE] Implement JWT auth`
+
+**Non-compliant (FORBIDDEN):**
 ```
-COMPLETED: Implemented JWT auth endpoints (POST /login, POST /refresh, DELETE /logout)
-CONTEXT:   Used HS256, tokens expire in 1h, refresh tokens stored in Redis with 7d TTL
-REMAINING: Build the frontend login form and wire it to POST /login
-CONSTRAINTS: Do not change the token schema — backend validation depends on current shape
-VERIFICATION: Run `pytest tests/test_auth.py` — all 12 tests should pass
+Hi Kimi! I've finished working on the authentication module. It was quite a challenge
+but I managed to get everything working. The JWT implementation is complete and I've
+written tests for it. You should be able to build the frontend login form now. Let me
+know if you have any questions or if anything needs to be clarified!
 ```
+
+**Compliant:**
+```
+COMPLETED:    src/auth/ — POST /login, POST /refresh, DELETE /logout
+CONTEXT:      HS256, 1h access token, 7d refresh token in Redis key auth:refresh:<user_id>
+REMAINING:    Build frontend login form wired to POST /login; expect {token, refresh_token} in response
+CONSTRAINTS:  Do not change token schema — backend validation hard-codes current field names
+VERIFICATION: pytest tests/test_auth.py  (expect 12 passed)
+```
+
+## A2A Message Length Budget
+
+| Message type | Max lines | Format |
+|---|---|---|
+| Task delegation | 10 | Handoff format only |
+| Task completion | 8 | Handoff format only |
+| Blocker / question | 5 | 1 line problem + 1 line context + 1 line ask |
+| Status update | 3 | One sentence what changed, one sentence why it matters |
+
+If your message exceeds the budget for its type, you are including information the recipient
+does not need. Cut it.
 
 ---
 
@@ -141,7 +170,7 @@ When delegating, specify which phase you want. This prevents wasted work if scop
 If blocked or uncertain at any point:
 
 1. Check `.agentweave/shared/context.md` for recent decisions that may unblock you
-2. Send a message to {principal} with the specific question — do not silently stall
+2. Send a message to the relevant agent (e.g., {principal} or the assigned reviewer) with the specific question — do not silently stall
 3. If Hub transport: use `ask_user` MCP tool for questions that require human input
 4. **Do NOT silently skip a blocked task** — update its status to `revision_needed` with a note explaining what is needed
 

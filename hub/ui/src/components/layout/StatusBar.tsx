@@ -1,5 +1,6 @@
 import { Icon } from '@/components/common/Icon'
 import { useStatus } from '@/api/status'
+import { useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
 
 interface StatusBarProps {
@@ -8,7 +9,12 @@ interface StatusBarProps {
 
 export function StatusBar({ onOpenSetup }: StatusBarProps) {
   const { data } = useStatus()
+  const { data: agents = [] } = useAgents()
   const { mode, setMode } = useConfigStore()
+
+  const contextWarningCount = agents.filter(
+    (a) => a.context_usage?.warning || a.context_usage?.critical
+  ).length
 
   const pendingMsgs = data?.message_counts?.pending ?? 0
   const activeTasks = data ? Object.values(data.task_counts).reduce((a, b) => a + b, 0) : 0
@@ -78,6 +84,19 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
           <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{agentCount}</span>
           <span>agent{agentCount !== 1 ? 's' : ''}</span>
         </div>
+
+        {/* Context warning chip */}
+        {contextWarningCount > 0 && (
+          <div
+            className="m3-chip m3-label-medium flex items-center gap-1.5"
+            style={{ background: 'var(--error-cont)', color: 'var(--on-error-cont)' }}
+            title="One or more agents need context management"
+          >
+            <Icon name="memory" size={14} />
+            <span style={{ fontWeight: 500 }}>{contextWarningCount}</span>
+            <span>ctx{contextWarningCount !== 1 ? '!' : '!'}</span>
+          </div>
+        )}
 
         {data?.project_name && (
           <span className="m3-label-medium" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>

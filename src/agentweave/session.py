@@ -129,7 +129,7 @@ class Session:
     def create(
         cls,
         name: str,
-        principal: str = "claude",
+        principal: Optional[str] = None,
         mode: str = "hierarchical",
         agents: Optional[List[str]] = None,
     ) -> "Session":
@@ -137,17 +137,21 @@ class Session:
 
         Args:
             name:      Project/session name.
-            principal: The lead agent (must be in agents list).
+            principal: The lead agent (must be in agents list). Defaults to the
+                       first agent in the agents list.
             mode:      Collaboration mode.
             agents:    List of agent names. Defaults to DEFAULT_AGENTS.
                        Any name matching AGENT_NAME_RE is accepted.
         """
-        if not AGENT_NAME_RE.match(principal):
-            raise ValueError(f"Invalid principal name: {principal!r}")
         if mode not in VALID_MODES:
             raise ValueError(f"Invalid mode: {mode}")
 
         agent_list = agents if agents else DEFAULT_AGENTS
+        if principal is None:
+            principal = agent_list[0]
+
+        if not AGENT_NAME_RE.match(principal):
+            raise ValueError(f"Invalid principal name: {principal!r}")
         # Ensure principal is included
         if principal not in agent_list:
             agent_list = [principal] + agent_list

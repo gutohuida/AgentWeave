@@ -138,6 +138,27 @@ They require manual human action. `send_message` + watchdog is fully automatic f
 **Correct delegation (Hub mode):** `create_task(...)` → `send_message(...)` → done.
 **CLI relay is ONLY valid** when you have no MCP tools (local/git transport without Hub).
 
+### A2A Communication Standard (all agent-to-agent messages)
+
+**Rule: structured fields, no prose.** Agents receiving a message need data, not explanation.
+
+All `send_message()` calls between agents MUST use this format in the `content` field:
+
+```
+COMPLETED:    <deliverables — file paths, names, IDs>
+CONTEXT:      <decisions and constraints — 1 line each>
+REMAINING:    <exact next action for recipient — imperative, specific>
+CONSTRAINTS:  <what recipient must not do — omit entirely if none>
+VERIFICATION: <runnable command>
+```
+
+Message length budgets:
+- Delegation: 10 lines max — Completion: 8 lines max — Blocker/question: 5 lines max
+
+**Never write preamble** ("I've finished..."), **never write postamble** ("Let me know if you need help").
+Write A2A messages like a function call, not an email.
+Use natural language ONLY for `ask_user()` and `send_message(to="user")`.
+
 ### User Communication (Hub Mode Only)
 
 | Use | Tool | When |
@@ -152,6 +173,41 @@ They require manual human action. `send_message` + watchdog is fully automatic f
 
 ---
 
-## When Compacting
+## Context Checkpoint Protocol
 
-[Replace with: current phase, modified files, failing tests, active AgentWeave task IDs]
+**Never compact without writing a checkpoint first.**
+
+### When to checkpoint — act at ALL of these triggers
+
+- About to `/compact` or clear context
+- Completed a phase (Explore done, Plan approved, Implement complete)
+- About to hand off work to another agent
+- About to end session / go idle
+- Modified 5+ files since last checkpoint
+- Struggling to recall decisions made earlier in the session
+
+### How to checkpoint
+
+Call `save_checkpoint(agent="<your-name>", session_intent="...", files_modified=[...], decisions=[...], next_steps=[...], reason="<reason>")` MCP tool, OR run `agentweave checkpoint --agent <your-name>` from Bash.
+
+Checkpoint file location: `.agentweave/shared/checkpoints/<agent>-<timestamp>.md`
+
+Required sections: **Session Intent** · **Active Tasks** · **Files Modified** · **Decisions Made** (with rationale — this is what gets lost) · **Blockers** · **Next Steps** · **Verification Commands**
+
+### After writing a checkpoint
+
+1. Run `/compact`
+2. Re-read your checkpoint file
+3. Re-read `.agentweave/shared/context.md`
+4. Resume from "Next Steps"
+
+### Context thresholds by model
+
+| Model | Compact at |
+|-------|-----------|
+| Claude | 40–50% context fill |
+| Kimi | 55–60% |
+| GLM | 60–65% |
+| Minimax | built-in at 30% |
+
+If the watchdog or Hub UI signals a `context_warning`, write a checkpoint immediately.

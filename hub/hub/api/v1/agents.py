@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
@@ -222,6 +222,21 @@ async def list_agents(
             else:
                 dev_role_labels.append(role_key)
 
+        # Latest context_warning event for this agent
+        ctx_q = (
+            select(EventLog)
+            .where(
+                EventLog.project_id == project_id,
+                EventLog.agent == agent_name,
+                EventLog.event_type == "context_warning",
+            )
+            .order_by(EventLog.timestamp.desc())
+            .limit(1)
+        )
+        ctx_res = await session.execute(ctx_q)
+        ctx_row = ctx_res.scalars().first()
+        context_usage = ctx_row.data if ctx_row else None
+
         summaries.append(
             AgentSummary(
                 name=agent_name,
@@ -237,6 +252,7 @@ async def list_agents(
                 dev_role_label=dev_role_meta.get("label"),
                 dev_roles=dev_role_keys,
                 dev_role_labels=dev_role_labels,
+                context_usage=context_usage,
             )
         )
 
@@ -389,6 +405,19 @@ async def post_agent_output(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+
+    # Detect if this is the first output for this session_id (new session)
+    is_new_session = False
+    if body.session_id:
+        count_result = await session.execute(
+            select(func.count(AgentOutput.id)).where(
+                AgentOutput.project_id == project_id,
+                AgentOutput.agent == name,
+                AgentOutput.session_id == body.session_id,
+            )
+        )
+        is_new_session = (count_result.scalar() or 0) == 0
+
     row = AgentOutput(
         id=f"out-{short_id()}",
         project_id=project_id,
@@ -409,7 +438,95 @@ async def post_agent_output(
             "timestamp": row.timestamp.isoformat(),
         },
     )
+    if is_new_session:
+        await sse_manager.broadcast(
+            project_id,
+            "agent_session_changed",
+            {"agent": name, "session_id": body.session_id},
+        )
     return {"id": row.id}
+
+
+@router.post("/{name}/context-usage", status_code=status.HTTP_201_CREATED)
+async def post_context_usage(
+    name: str,
+    body: dict,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Receive a context usage report from the watchdog and broadcast to Hub UI via SSE.
+
+    Expected body: {agent, model, tokens_used, tokens_limit, percent, warning,
+                    critical, threshold_warning, threshold_critical, updated_at}
+    """
+    project_id, _ = project
+    payload = {**body, "agent": name}
+    severity = "warning" if body.get("warning") else "info"
+    await persist_event(
+        session, project_id, "context_warning", payload, agent=name, severity=severity
+    )
+    await sse_manager.broadcast(project_id, "context_warning", payload)
+    return {"status": "ok", "agent": name}
+
+
+@router.post("/{name}/compact", status_code=status.HTTP_201_CREATED)
+async def post_compact_request(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Send a compact request to the agent's inbox."""
+    project_id, _ = project
+    msg = Message(
+        id=f"msg-{short_id()}",
+        project_id=project_id,
+        sender="hub",
+        recipient=name,
+        subject="compact_request",
+        content=(
+            "**Context management: Compact requested**\n\n"
+            "1. Run `/aw-checkpoint` to save your session state.\n"
+            "2. Run `/compact` in your session.\n"
+            "3. After compacting, re-read your checkpoint and resume from Next Steps."
+        ),
+        type="message",
+    )
+    session.add(msg)
+    await session.commit()
+    payload = {"agent": name, "action": "compact", "message_id": msg.id}
+    await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
+    await persist_event(session, project_id, "compact_request", payload, agent=name)
+    return {"status": "ok", "message_id": msg.id}
+
+
+@router.post("/{name}/new-session", status_code=status.HTTP_201_CREATED)
+async def post_new_session_request(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Send a new-session request to the agent's inbox."""
+    project_id, _ = project
+    msg = Message(
+        id=f"msg-{short_id()}",
+        project_id=project_id,
+        sender="hub",
+        recipient=name,
+        subject="new_session_request",
+        content=(
+            "**Context management: New session requested**\n\n"
+            "1. Run `/aw-checkpoint` to save your session state.\n"
+            "2. Your principal will start a fresh session for you.\n"
+            "3. The new session will read your checkpoint as its first action."
+        ),
+        type="message",
+    )
+    session.add(msg)
+    await session.commit()
+    payload = {"agent": name, "action": "new_session", "message_id": msg.id}
+    await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
+    await persist_event(session, project_id, "new_session_request", payload, agent=name)
+    return {"status": "ok", "message_id": msg.id}
 
 
 @router.get("/{name}/output", response_model=List[AgentOutputResponse])

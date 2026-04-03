@@ -19,6 +19,10 @@ TASKS_COMPLETED_DIR = TASKS_DIR / "completed"
 MESSAGES_PENDING_DIR = MESSAGES_DIR / "pending"
 MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
 
+# Context management paths
+CONTEXT_USAGE_DIR = SHARED_DIR / "context_usage"
+COMPACT_DECISION_FILE = SHARED_DIR / "compact_decision.md"
+
 # File paths
 SESSION_FILE = AGENTWEAVE_DIR / "session.json"
 WATCHDOG_PID_FILE = AGENTWEAVE_DIR / "watchdog.pid"  # gitignored, machine-local

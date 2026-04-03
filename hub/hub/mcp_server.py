@@ -271,6 +271,41 @@ def get_status() -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Agent roster tool
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_agents() -> Dict[str, Any]:
+    """List all agents in the session with their roles and runners.
+
+    Returns:
+        Dict with 'agents' list. Each entry has:
+        - name: agent name
+        - session_role: principal / delegate / collaborator / reviewer
+        - runner: native / claude_proxy / manual
+        - dev_roles: list of role IDs from roles.json
+        - is_principal: bool
+    """
+    try:
+        agents = _hub_request("GET", "/agents")
+        result = []
+        for a in agents:
+            result.append(
+                {
+                    "name": a.get("name"),
+                    "session_role": a.get("role"),
+                    "runner": a.get("runner", "native"),
+                    "dev_roles": a.get("dev_roles", []),
+                    "is_principal": a.get("role") == "principal",
+                }
+            )
+        return {"agents": result}
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Agent configuration tool
 # ---------------------------------------------------------------------------
 

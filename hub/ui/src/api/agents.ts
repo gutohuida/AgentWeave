@@ -18,6 +18,20 @@ export interface AgentSummary {
   dev_role_label?: string  // Primary dev role label
   dev_roles?: string[]        // All role IDs (new multi-role support)
   dev_role_labels?: string[]  // Labels for all roles
+  context_usage?: ContextUsage
+}
+
+export interface ContextUsage {
+  agent?: string
+  model?: string
+  tokens_used?: number
+  tokens_limit?: number
+  percent?: number
+  warning?: boolean
+  critical?: boolean
+  threshold_warning?: number
+  threshold_critical?: number
+  updated_at?: string
 }
 
 export interface AgentTimelineEvent {
@@ -41,6 +55,7 @@ export interface AgentSession {
   type: string
   path: string
   last_active?: string
+  started_at?: string
 }
 
 export function useAgents() {

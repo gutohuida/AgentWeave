@@ -14,6 +14,7 @@ Configure in Kimi Code:
     kimi mcp add --transport stdio agentweave -- agentweave-mcp
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 try:
@@ -282,6 +283,159 @@ def get_status() -> Dict[str, Any]:
     result["task_counts"] = counts
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Agent roster tool
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_agents() -> Dict[str, Any]:
+    """List all agents in the session with their roles and runners.
+
+    Returns:
+        Dict with 'agents' list. Each entry has:
+        - name: agent name
+        - session_role: principal / delegate / collaborator / reviewer
+        - runner: native / claude_proxy / manual
+        - dev_roles: list of role IDs from roles.json
+        - is_principal: bool
+    """
+    from ..roles import get_agent_roles, load_roles_config
+    from ..session import Session
+
+    session = Session.load()
+    if not session:
+        return {"agents": []}
+
+    roles_config = load_roles_config()
+    agents = []
+    for name in session.agent_names:
+        runner_cfg = session.get_runner_config(name)
+        agents.append(
+            {
+                "name": name,
+                "session_role": session.get_agent_role(name),
+                "runner": runner_cfg.get("runner", "native"),
+                "dev_roles": get_agent_roles(name, roles_config),
+                "is_principal": name == session.principal,
+            }
+        )
+
+    return {"agents": agents}
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint tool
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def save_checkpoint(
+    agent: str,
+    session_intent: str,
+    files_modified: List[str],
+    decisions: List[str],
+    next_steps: List[str],
+    reason: str = "manual",
+    blockers: Optional[List[str]] = None,
+    verification_commands: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Save a context checkpoint before compacting or ending a session.
+
+    Write a structured summary to .agentweave/shared/checkpoints/<agent>-<timestamp>.md.
+    Call this BEFORE using /compact or handing off to another agent.
+
+    Args:
+        agent: Your agent name (e.g. "claude")
+        session_intent: One paragraph describing what this session was trying to accomplish
+        files_modified: Files you modified, each as "path/to/file — what changed"
+        decisions: Decisions made with rationale, e.g. "Use HS256 — simpler key management"
+        next_steps: Ordered list of actions for the next session or handoff agent
+        reason: Why checkpoint is being written. One of:
+                token_threshold | phase_complete | pre_handoff | pre_sleep | manual
+        blockers: Optional list of unresolved blockers or open questions
+        verification_commands: Optional shell commands that confirm current state
+
+    Returns:
+        Dict with 'success' bool, 'path' str (checkpoint file path), or 'error' str.
+    """
+    from ..constants import SHARED_DIR
+    from ..task import Task
+
+    try:
+        checkpoints_dir = SHARED_DIR / "checkpoints"
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+        # Pre-populate active tasks for this agent
+        active_tasks = Task.list_all(active_only=True)
+        agent_tasks = [t for t in active_tasks if t.assignee == agent]
+        task_rows = "\n".join(
+            f"| {t.id} | {t.title[:60]} | {t.status} |" for t in agent_tasks
+        ) or "| (none) | | |"
+
+        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        filepath = checkpoints_dir / f"{agent}-{ts}.md"
+
+        files_section = "\n".join(f"- `{f}`" for f in files_modified) or "- (none)"
+        decisions_section = "\n".join(
+            f"{i + 1}. {d}" for i, d in enumerate(decisions)
+        ) or "1. (none recorded)"
+        next_steps_section = "\n".join(
+            f"{i + 1}. {s}" for i, s in enumerate(next_steps)
+        ) or "1. (none recorded)"
+        blockers_section = (
+            "\n".join(f"- [ ] {b}" for b in blockers) if blockers else "- (none)"
+        )
+        verification_section = (
+            "\n".join(f"```bash\n{c}\n```" for c in verification_commands)
+            if verification_commands
+            else "```bash\n# no verification commands recorded\n```"
+        )
+
+        content = f"""# Context Checkpoint — {agent} — {dt_display}
+
+## Session Intent
+{session_intent}
+
+## Active Tasks at Checkpoint
+| Task ID | Title | Status |
+|---------|-------|--------|
+{task_rows}
+
+## Files Modified This Session
+{files_section}
+
+## Decisions Made
+{decisions_section}
+
+## Blockers and Open Questions
+{blockers_section}
+
+## Next Steps
+{next_steps_section}
+
+## Verification Commands
+{verification_section}
+
+---
+*Checkpoint saved by: {agent}*
+*Reason: {reason}*
+"""
+        filepath.write_text(content, encoding="utf-8")
+
+        return {
+            "success": True,
+            "path": str(filepath),
+            "message": (
+                f"Checkpoint saved to {filepath}. "
+                "Now run /compact and re-read this file to resume."
+            ),
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # ---------------------------------------------------------------------------

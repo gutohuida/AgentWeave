@@ -3,7 +3,7 @@ import { useQuestions } from '@/api/questions'
 import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents'
+type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control'
 
 interface SidebarProps {
   activePage: Page
@@ -12,12 +12,13 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
-  { id: 'messages',  label: 'Messages',  icon: 'chat' },
-  { id: 'tasks',     label: 'Tasks',     icon: 'task_alt' },
-  { id: 'questions', label: 'Questions', icon: 'help' },
-  { id: 'activity',  label: 'Activity',  icon: 'monitoring' },
-  { id: 'logs',      label: 'Logs',      icon: 'terminal' },
-  { id: 'agents',    label: 'Agents',    icon: 'smart_toy' },
+  { id: 'messages',        label: 'Messages',  icon: 'chat' },
+  { id: 'tasks',           label: 'Tasks',     icon: 'task_alt' },
+  { id: 'questions',       label: 'Questions', icon: 'help' },
+  { id: 'activity',        label: 'Activity',  icon: 'monitoring' },
+  { id: 'logs',            label: 'Logs',      icon: 'terminal' },
+  { id: 'agents',          label: 'Agents',    icon: 'smart_toy' },
+  { id: 'mission-control', label: 'Control',   icon: 'dashboard' },
 ]
 
 export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {

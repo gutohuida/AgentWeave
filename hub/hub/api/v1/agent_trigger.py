@@ -145,41 +145,42 @@ async def get_agent_sessions(
     """Get unique session IDs for an agent from AgentOutput table.
 
     Returns sessions that the agent has generated output for, ordered by recency.
+    Each session includes last_active (most recent output) and started_at (first output).
     """
-    from sqlalchemy import select, distinct
+    from sqlalchemy import select, func
     from ...db.models import AgentOutput
 
     project_id, _ = project
 
-    # Get distinct session_ids for this agent, ordered by timestamp (most recent first)
+    # Group by session_id to get first and last output timestamps per session
     q = (
-        select(AgentOutput.session_id, AgentOutput.timestamp)
+        select(
+            AgentOutput.session_id,
+            func.max(AgentOutput.timestamp).label("last_active"),
+            func.min(AgentOutput.timestamp).label("started_at"),
+        )
         .where(
             AgentOutput.project_id == project_id,
             AgentOutput.agent == agent,
             AgentOutput.session_id.isnot(None),
         )
-        .order_by(AgentOutput.timestamp.desc())
-        .distinct()
+        .group_by(AgentOutput.session_id)
+        .order_by(func.max(AgentOutput.timestamp).desc())
     )
     result = await session.execute(q)
     rows = result.all()
 
-    # Extract unique session IDs (preserving order)
-    seen_sessions = set()
-    sessions = []
-    for row in rows:
-        session_id = row.session_id
-        if session_id and session_id not in seen_sessions:
-            seen_sessions.add(session_id)
-            sessions.append(
-                {
-                    "id": session_id,
-                    "type": "agent",
-                    "path": f".agentweave/agents/{agent}-session.json",
-                    "last_active": row.timestamp.isoformat() if row.timestamp else None,
-                }
-            )
+    sessions = [
+        {
+            "id": row.session_id,
+            "type": "agent",
+            "path": f".agentweave/agents/{agent}-session.json",
+            "last_active": row.last_active.isoformat() if row.last_active else None,
+            "started_at": row.started_at.isoformat() if row.started_at else None,
+        }
+        for row in rows
+        if row.session_id
+    ]
 
     return {"sessions": sessions}
 

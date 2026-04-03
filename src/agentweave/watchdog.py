@@ -12,7 +12,13 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from .constants import AGENTS_DIR, MESSAGES_PENDING_DIR, TASKS_ACTIVE_DIR
+from .constants import (
+    AGENTS_DIR,
+    COMPACT_DECISION_FILE,
+    CONTEXT_USAGE_DIR,
+    MESSAGES_PENDING_DIR,
+    TASKS_ACTIVE_DIR,
+)
 from .utils import load_json
 
 logger = logging.getLogger(__name__)
@@ -55,6 +61,8 @@ class Watchdog:
         self.running = False
         self.retry_after = retry_after  # seconds; None = no retry
         self.pinged_at: Dict[str, float] = {}  # msg_id -> unix time of last ping
+        self.context_warned: Dict[str, bool] = {}  # agent -> currently in warning state
+        self.compact_decision_mtime: float = 0.0  # mtime of last-processed compact_decision.md
 
     def _default_callback(self, event_type: str, data: dict) -> None:
         """Default callback that prints to stdout."""
@@ -71,6 +79,21 @@ class Watchdog:
         elif event_type == "task_completed":
             print(f"\n[OK] Task completed: {data.get('title', 'Untitled')}")
             print("   Ready for review!")
+            print()
+        elif event_type == "context_warning":
+            agent = data.get("agent", "unknown")
+            percent = data.get("percent", 0)
+            model = data.get("model", "?")
+            threshold = data.get("threshold_warning", "?")
+            print(f"\n[CTX] Context warning: {agent} ({model}) at {percent}% (threshold: {threshold}%)")
+            print(f"   Run /aw-checkpoint in {agent}'s session, then choose an action.")
+            self._write_compact_decision(data)
+            print()
+        elif event_type == "compact_decision":
+            agent = data.get("agent", "unknown")
+            choice = data.get("choice", "unknown")
+            print(f"\n[CTX] Compact decision received for {agent}: {choice}")
+            self._handle_compact_decision(data)
             print()
 
     def _scan_messages(self) -> Set[str]:
@@ -230,6 +253,178 @@ class Watchdog:
 
         self.known_tasks = current_tasks
 
+        # Context management monitoring
+        self._check_context_usage()
+        self._check_compact_decision()
+
+    def _check_context_usage(self) -> None:
+        """Scan context_usage/ dir; fire context_warning when an agent hits its threshold."""
+        if not CONTEXT_USAGE_DIR.exists():
+            return
+        for usage_file in CONTEXT_USAGE_DIR.glob("*.json"):
+            data = load_json(usage_file) or {}
+            agent = data.get("agent", usage_file.stem)
+            warning = bool(data.get("warning", False))
+            if warning and not self.context_warned.get(agent):
+                self.context_warned[agent] = True
+                logger.info(
+                    "context_warning",
+                    extra={
+                        "event": "context_warning",
+                        "data": {
+                            "agent": agent,
+                            "percent": data.get("percent"),
+                            "model": data.get("model"),
+                        },
+                    },
+                )
+                self.callback("context_warning", data)
+                if self.transport.get_transport_type() == "http":
+                    self._post_context_usage_to_hub(agent, data)
+            elif not warning and self.context_warned.get(agent):
+                # Warning cleared (agent compacted or threshold dropped)
+                self.context_warned[agent] = False
+
+    def _check_compact_decision(self) -> None:
+        """Detect when user marks [x] in compact_decision.md and notify the agent."""
+        if not COMPACT_DECISION_FILE.exists():
+            return
+        try:
+            mtime = COMPACT_DECISION_FILE.stat().st_mtime
+        except OSError:
+            return
+        if mtime <= self.compact_decision_mtime:
+            return  # unchanged since last check
+
+        content = COMPACT_DECISION_FILE.read_text(encoding="utf-8")
+
+        # Parse agent name from header: "# Context Decision Required — <agent> — ..."
+        agent_match = re.search(r"^# Context Decision Required — (\S+) —", content, re.MULTILINE)
+        agent = agent_match.group(1) if agent_match else ""
+
+        if re.search(r"\[x\]\s+\*\*Compact\*\*", content, re.IGNORECASE):
+            choice = "compact"
+        elif re.search(r"\[x\]\s+\*\*New Session\*\*", content, re.IGNORECASE):
+            choice = "new_session"
+        elif re.search(r"\[x\]\s+\*\*Continue\*\*", content, re.IGNORECASE):
+            choice = "continue"
+        else:
+            return  # no choice marked yet
+
+        self.compact_decision_mtime = mtime
+        logger.info(
+            "compact_decision",
+            extra={"event": "compact_decision", "data": {"agent": agent, "choice": choice}},
+        )
+        self.callback("compact_decision", {"agent": agent, "choice": choice})
+
+    def _write_compact_decision(self, usage_data: dict) -> None:
+        """Write compact_decision.md so the user can choose compact/new-session/continue."""
+        from datetime import datetime
+
+        agent = usage_data.get("agent", "unknown")
+        model = usage_data.get("model", "?")
+        percent = usage_data.get("percent", 0)
+        threshold = usage_data.get("threshold_warning", "?")
+        dt = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        next_threshold = min(int(percent) + 20, 90) if isinstance(percent, int) else 90
+
+        content = (
+            f"# Context Decision Required — {agent} — {dt}\n\n"
+            f"Agent **{agent}** ({model}) has reached **{percent}%** context utilization.\n"
+            f"Recommended action threshold for this model: {threshold}%.\n\n"
+            f"Run `/aw-checkpoint` in {agent}'s session first, then choose one action below.\n\n"
+            "## Choose one action\n\n"
+            "- [ ] **Compact** — agent writes checkpoint, then runs /compact and resumes\n"
+            "- [ ] **New Session** — agent writes checkpoint, then you start a fresh session\n"
+            f"- [ ] **Continue** — skip this warning; next alert at {next_threshold}%\n\n"
+            "Mark one option with [x] and save this file. The watchdog will notify the agent.\n"
+        )
+        try:
+            COMPACT_DECISION_FILE.parent.mkdir(parents=True, exist_ok=True)
+            COMPACT_DECISION_FILE.write_text(content, encoding="utf-8")
+            print(f"   Decision file: {COMPACT_DECISION_FILE}")
+            print("   Edit that file: mark [x] your choice, then save.")
+        except OSError as exc:
+            print(f"   [WARN] Could not write decision file: {exc}", file=sys.stderr)
+
+    def _handle_compact_decision(self, data: dict) -> None:
+        """Send the user's compact decision to the agent's inbox."""
+        from .messaging import Message, MessageBus
+
+        agent = data.get("agent", "")
+        choice = data.get("choice", "")
+        if not agent or not choice:
+            return
+
+        if choice == "compact":
+            subject = "Context: please compact now"
+            content = (
+                "**Context decision: Compact**\n\n"
+                "1. Run `/aw-checkpoint` if you haven't already.\n"
+                "2. Run `/compact` in your session.\n"
+                "3. After compacting, re-read your checkpoint file and resume from Next Steps."
+            )
+        elif choice == "new_session":
+            subject = "Context: new session requested"
+            content = (
+                "**Context decision: New Session**\n\n"
+                "1. Run `/aw-checkpoint` if you haven't already.\n"
+                "2. Your principal will start a fresh session for you.\n"
+                "3. The new session will read your checkpoint as its first action."
+            )
+        elif choice == "continue":
+            subject = "Context: warning dismissed"
+            content = (
+                "**Context decision: Continue**\n\n"
+                "Warning dismissed. You may continue without compacting.\n"
+                "Context monitoring will resume at the next threshold."
+            )
+            # Reset warned state so the next threshold level can trigger
+            if agent in self.context_warned:
+                self.context_warned[agent] = False
+        else:
+            return
+
+        msg = Message.create(
+            sender="watchdog",
+            recipient=agent,
+            subject=subject,
+            content=content,
+            message_type="message",
+        )
+        ok = MessageBus.send(msg)
+        if ok:
+            print(f"   Message sent to {agent}: {subject}")
+        else:
+            print(f"   [WARN] Could not send message to {agent}", file=sys.stderr)
+
+    def _post_context_usage_to_hub(self, agent: str, data: dict) -> None:
+        """POST context usage data to the Hub so Mission Control can display it."""
+        import json as _json
+        import urllib.error as _uerr
+        import urllib.request as _req
+
+        from .constants import TRANSPORT_CONFIG_FILE
+        from .utils import load_json as _load_json
+
+        config = _load_json(TRANSPORT_CONFIG_FILE)
+        if not config:
+            return
+        url = config["url"].rstrip("/")
+        api_key = config.get("api_key", "")
+        body = _json.dumps(data).encode()
+        request = _req.Request(
+            f"{url}/api/v1/agents/{agent}/context-usage", data=body, method="POST"
+        )
+        request.add_header("Authorization", f"Bearer {api_key}")
+        request.add_header("Content-Type", "application/json")
+        try:
+            with _req.urlopen(request, timeout=5):
+                pass
+        except (_uerr.HTTPError, _uerr.URLError) as exc:
+            print(f"   [WARN] Could not post context usage to Hub: {exc}", file=sys.stderr)
+
     def _init_http_state(self) -> None:
         """Seed known message/task IDs from Hub so we don't re-fire on startup."""
         messages = self.transport.get_pending_messages(self.agent or "")
@@ -245,6 +440,9 @@ class Watchdog:
 
     def _check_once_http(self) -> None:
         """Poll Hub REST API for new messages and tasks."""
+        # Context files are always local, even when using HTTP transport
+        self._check_context_usage()
+
         messages = self.transport.get_pending_messages(self.agent or "")
         for msg in messages:
             msg_id = msg.get("id", "")
