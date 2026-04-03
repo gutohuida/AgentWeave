@@ -85,7 +85,9 @@ class Watchdog:
             percent = data.get("percent", 0)
             model = data.get("model", "?")
             threshold = data.get("threshold_warning", "?")
-            print(f"\n[CTX] Context warning: {agent} ({model}) at {percent}% (threshold: {threshold}%)")
+            print(
+                f"\n[CTX] Context warning: {agent} ({model}) at {percent}% (threshold: {threshold}%)"
+            )
             print(f"   Run /aw-checkpoint in {agent}'s session, then choose an action.")
             self._write_compact_decision(data)
             print()

@@ -1939,9 +1939,10 @@ def cmd_checkpoint(args: argparse.Namespace) -> int:
 
     active_tasks = Task.list_all(active_only=True)
     agent_tasks = [t for t in active_tasks if t.assignee == agent]
-    task_rows = "\n".join(
-        f"| {t.id} | {t.title[:60]} | {t.status} |" for t in agent_tasks
-    ) or "| (none) | | |"
+    task_rows = (
+        "\n".join(f"| {t.id} | {t.title[:60]} | {t.status} |" for t in agent_tasks)
+        or "| (none) | | |"
+    )
 
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")

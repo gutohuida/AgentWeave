@@ -125,7 +125,9 @@ async def get_chat_history(
         #    messages from previous new-sessions bleeding into the current one).
         if msg.session_id is None and "[Session:" not in content:
             if session_first_ts is not None and session_last_ts is not None:
-                in_window = session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
+                in_window = (
+                    session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
+                )
                 # Exclude if another session started between this message and the current session
                 closer_session_exists = any(
                     msg.timestamp <= other_ts < session_first_ts

@@ -371,24 +371,23 @@ def save_checkpoint(
         # Pre-populate active tasks for this agent
         active_tasks = Task.list_all(active_only=True)
         agent_tasks = [t for t in active_tasks if t.assignee == agent]
-        task_rows = "\n".join(
-            f"| {t.id} | {t.title[:60]} | {t.status} |" for t in agent_tasks
-        ) or "| (none) | | |"
+        task_rows = (
+            "\n".join(f"| {t.id} | {t.title[:60]} | {t.status} |" for t in agent_tasks)
+            or "| (none) | | |"
+        )
 
         ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         filepath = checkpoints_dir / f"{agent}-{ts}.md"
 
         files_section = "\n".join(f"- `{f}`" for f in files_modified) or "- (none)"
-        decisions_section = "\n".join(
-            f"{i + 1}. {d}" for i, d in enumerate(decisions)
-        ) or "1. (none recorded)"
-        next_steps_section = "\n".join(
-            f"{i + 1}. {s}" for i, s in enumerate(next_steps)
-        ) or "1. (none recorded)"
-        blockers_section = (
-            "\n".join(f"- [ ] {b}" for b in blockers) if blockers else "- (none)"
+        decisions_section = (
+            "\n".join(f"{i + 1}. {d}" for i, d in enumerate(decisions)) or "1. (none recorded)"
         )
+        next_steps_section = (
+            "\n".join(f"{i + 1}. {s}" for i, s in enumerate(next_steps)) or "1. (none recorded)"
+        )
+        blockers_section = "\n".join(f"- [ ] {b}" for b in blockers) if blockers else "- (none)"
         verification_section = (
             "\n".join(f"```bash\n{c}\n```" for c in verification_commands)
             if verification_commands

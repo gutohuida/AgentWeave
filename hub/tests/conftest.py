@@ -21,7 +21,9 @@ async def app():
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
     # (create_all + bootstrap key) explicitly before each test.
     await init_db()
-    async with AsyncClient(transport=ASGITransport(app=application), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=application), base_url="http://test"
+    ) as client:
         yield client
 
 
