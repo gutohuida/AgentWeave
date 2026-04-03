@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.17.0] - 2026-04-02
+
+### Added (CLI)
+- **OpenSpec workflow** — new CLI commands and skills for structured change management:
+  - `opsx explore`, `opsx propose`, `opsx apply`, `opsx archive`
+- **New `aw-checkpoint` skill template** — save context checkpoints before handoffs
+- **Enhanced context management** — updated `ai_context.md`, `claude_context.md`, `kimi_context.md`, and `collab_protocol.md`
+- **Watchdog and session improvements** — better session lifecycle handling in CLI
+
+### Added (Hub v0.11.0)
+- **Mission Control UI** — new `MissionControlPage` for centralized agent oversight
+- **Agent context API** — new `context.ts` endpoint and related backend support
+- **MCP server enhancements** — additional tools for agent introspection
+- **UI layout updates** — `Sidebar` and `StatusBar` improvements for better navigation
+- **Agent trigger and agents API updates** — improved agent configuration and triggering
+
+---
+
 ## [0.16.0] - 2026-04-02
 
 ### Added (CLI)
