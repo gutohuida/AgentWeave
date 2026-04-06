@@ -507,7 +507,9 @@ class _KimiParser:
 
     _EVENT_RE = re.compile(r"^([A-Z][A-Za-z]+)\(")
     # Events we parse and render
-    _RENDER = frozenset({"TurnBegin", "StepBegin", "ThinkPart", "TextPart", "ToolCall", "ToolResult"})
+    _RENDER = frozenset(
+        {"TurnBegin", "StepBegin", "ThinkPart", "TextPart", "ToolCall", "ToolResult"}
+    )
 
     def __init__(self) -> None:
         self._buf: List[str] = []

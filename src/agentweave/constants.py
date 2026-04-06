@@ -119,7 +119,16 @@ RUNNER_CONFIGS: dict = {
         # Session ID is on the last stdout line: "To resume this session: kimi -r <ID>"
         "session_source": "stdout_resume_line",
         "context_flag": "--agent-file",
-        "mcp_add_cmd": ["kimi", "mcp", "add", "--transport", "stdio", "{name}", "--", "{server_cmd}"],
+        "mcp_add_cmd": [
+            "kimi",
+            "mcp",
+            "add",
+            "--transport",
+            "stdio",
+            "{name}",
+            "--",
+            "{server_cmd}",
+        ],
     },
     "manual": {
         "cli": None,
