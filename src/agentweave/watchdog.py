@@ -9,7 +9,6 @@ import subprocess
 import sys
 import threading
 import time
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .constants import (

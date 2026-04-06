@@ -1182,10 +1182,10 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
     lines.append("### Session Start Checklist (run these steps each new session)")
     lines.append("")
     lines.append("1. Run `get_status()` to check session info and your assigned role")
-    lines.append("2. Run `get_inbox('{agent}')` to check for unread messages".format(agent=agent))
+    lines.append(f"2. Run `get_inbox('{agent}')` to check for unread messages")
     lines.append("3. Run `list_tasks()` to see active tasks assigned to you")
     lines.append("4. Read `.agentweave/shared/context.md` for current focus and decisions")
-    lines.append("5. Check `.agentweave/agents/{agent}-checkpoint.md` for prior checkpoint if it exists".format(agent=agent))
+    lines.append(f"5. Check `.agentweave/agents/{agent}-checkpoint.md` for prior checkpoint if it exists")
     lines.append("")
     lines.append("### MCP Tools Available")
     lines.append("")
@@ -1208,8 +1208,6 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
     lines.append("")
     for ag in session.agent_names:
         runner_type = session.get_runner_config(ag).get("runner", "native")
-        rc = RUNNER_CONFIGS.get(runner_type, {})
-        cli = rc.get("cli") or ag
         display_model = {
             "claude": "Claude",
             "claude_proxy": session.get_runner_config(ag).get("model", "Claude Proxy"),
@@ -1241,9 +1239,7 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
                     lines.append("")
             else:
                 lines.append(f"### {role_id}")
-                lines.append("(role guide not found — run `agentweave roles add {agent} {role_id}`)".format(
-                    agent=agent, role_id=role_id
-                ))
+                lines.append(f"(role guide not found — run `agentweave roles add {agent} {role_id}`)")
                 lines.append("")
     else:
         lines.append("## Your Role")
@@ -1449,7 +1445,6 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
 
     results = {}
     for agent in agent_list:
-        from .constants import RUNNER_CONFIGS
 
         _runner_type = session.get_runner_config(agent).get("runner", "native") if session else "native"
         _rc = RUNNER_CONFIGS.get(_runner_type, RUNNER_CONFIGS["native"])
