@@ -89,17 +89,19 @@ Generated on `init`. Describes:
 
 Auto-generated role configuration. Contains:
 
-- `agent_assignments` — maps each agent to their role key (e.g., `"claude": "tech_lead"`)
+- `agent_roles` — maps each agent to an array of role keys (e.g., `"claude": ["tech_lead", "backend_dev"]`)
+- `agent_assignments` — legacy single-role map (auto-converted to `agent_roles` for backward compatibility)
 - `roles` — role definitions with labels and responsibilities
 
 Example:
 
 ```json
 {
-  "version": 1,
-  "agent_assignments": {
-    "claude": "tech_lead",
-    "kimi": "backend_dev"
+  "version": 2,
+  "agent_roles": {
+    "claude": ["tech_lead", "backend_dev"],
+    "kimi": ["backend_dev"],
+    "codex": ["frontend_dev", "ui_designer"]
   },
   "roles": {
     "tech_lead": {
@@ -109,12 +111,45 @@ Example:
     "backend_dev": {
       "label": "Backend Developer",
       "responsibilities_short": "APIs, database, business logic, server-side"
+    },
+    "frontend_dev": {
+      "label": "Frontend Developer", 
+      "responsibilities_short": "UI components, client-side state, styling"
+    },
+    "ui_designer": {
+      "label": "UI Designer",
+      "responsibilities_short": "Visual design, component styling, UX polish"
     }
   }
 }
 ```
 
-To change an agent's role, edit the `agent_assignments` section.
+### Multi-Role Support
+
+Agents can have **multiple roles simultaneously**. This is useful when:
+
+- An agent needs to both architect and implement (e.g., `tech_lead` + `backend_dev`)
+- A small team where agents wear multiple hats
+- Specialized tasks that cross traditional boundaries
+
+**Managing roles via CLI:**
+
+```bash
+# List all agents and their roles
+agentweave roles list
+
+# Add a role to an agent
+agentweave roles add claude backend_dev
+
+# Remove a role from an agent
+agentweave roles remove claude backend_dev
+
+# Set multiple roles (replaces existing)
+agentweave roles set claude tech_lead,backend_dev
+
+# List available role types
+agentweave roles available
+```
 
 ## .agentweave/roles/*.md
 
@@ -129,9 +164,16 @@ Per-role behavioral guides. Available roles include:
 | `devops_engineer.md` | CI/CD, infrastructure | opendevin |
 | `qa_engineer.md` | Tests, quality assurance | — |
 | `security_engineer.md` | Security review, auth | — |
-| `architect.md` | System design, API contracts | — |
+| `docs_writer.md` | Documentation, guides, READMEs | — |
+| `product_manager.md` | Product requirements, prioritization | — |
+| `project_manager.md` | Project planning, coordination | — |
+| `ui_designer.md` | Visual design, component styling | — |
+| `ux_researcher.md` | User research, usability analysis | — |
+| `data_engineer.md` | Data pipelines, ETL, warehousing | — |
+| `data_scientist.md` | Analytics, ML models, insights | — |
+| `mobile_dev.md` | iOS, Android, React Native | — |
 
-Agents read their assigned role file at session start.
+Agents read all their assigned role files at session start.
 
 ## .agentweave/shared/context.md
 
@@ -178,15 +220,35 @@ Agents read their assigned role file at session start.
 
 When you run `agentweave init`, Claude Code skills are auto-generated in `.claude/skills/`:
 
+### Collaboration Skills
+
 | Skill | Purpose |
 |-------|---------|
+| `/aw-collab-start` | Orient yourself at session start — check role, inbox, tasks |
 | `/aw-delegate` | Delegate a task to another agent |
-| `/aw-status` | Show collaboration status |
+| `/aw-status` | Show full collaboration overview |
 | `/aw-done` | Mark task complete and notify principal |
 | `/aw-review` | Request a code review |
-| `/aw-relay` | Generate relay prompt |
-| `/aw-sync` | Sync context files |
-| `/aw-revise` | Accept and begin a revision |
+| `/aw-relay` | Generate relay prompt for manual handoff |
+| `/aw-sync` | Sync context files from `AI_CONTEXT.md` |
+| `/aw-revise` | Accept a revision request and move task to in_progress |
+
+### AW-Spec Workflow Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `/aw-spec-explore` | Explore an idea — think before implementing |
+| `/aw-spec-propose` | Create a structured proposal with design and tasks |
+| `/aw-spec-apply` | Implement tasks from a proposal |
+| `/aw-spec-archive` | Archive a completed change |
+
+### Utility Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `/aw-checkpoint` | Save context checkpoint before handoffs |
+| `/aw-deploy` | Release a new version of AgentWeave |
+| `/check-build` | Check GitHub Actions CI build status |
 
 ## See Also
 

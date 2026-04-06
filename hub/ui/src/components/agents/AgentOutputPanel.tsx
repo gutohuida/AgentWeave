@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
-import { AgentSummary, useAgentOutput } from '@/api/agents'
+import { AgentSummary, useAgentOutput, useAgentSessions } from '@/api/agents'
+import { useConfigStore } from '@/store/configStore'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
 }
+
+const NEW_SESSION_VALUE = '__new__'
 
 export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
@@ -13,6 +16,21 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoscroll, setAutoscroll] = useState(true)
   const { copied, copy } = useCopy(2000)
+
+  // Send message state
+  const { apiKey } = useConfigStore()
+  const [message, setMessage] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('')
+  const { data: sessionsData } = useAgentSessions(agent.name)
+  const sessions = sessionsData?.sessions || []
+
+  // Auto-select most recent session
+  useEffect(() => {
+    if (sessions.length > 0 && !selectedSessionId) {
+      setSelectedSessionId(sessions[0].id)
+    }
+  }, [sessions, selectedSessionId])
 
   useEffect(() => {
     if (autoscroll && bottomRef.current) {
@@ -29,6 +47,39 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
 
   const sessionId = [...lines].reverse().find((l) => l.session_id)?.session_id
   const isRunning = agent.status === 'running'
+
+  const handleSend = async () => {
+    if (!message.trim() || !apiKey) return
+    setIsSending(true)
+    try {
+      const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
+      await fetch('/api/v1/agent/trigger', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          agent: agent.name,
+          message: message.trim(),
+          session_mode: isNew ? 'new' : 'resume',
+          session_id: isNew ? undefined : selectedSessionId,
+        }),
+      })
+      setMessage('')
+    } catch (err) {
+      console.error('Failed to send message:', err)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--background)' }}>
@@ -109,6 +160,68 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
           ))
         )}
         <div ref={bottomRef} />
+      </div>
+
+      {/* Send message footer */}
+      <div
+        className="shrink-0 border-t px-3 py-2 flex flex-col gap-2"
+        style={{ background: 'var(--surface-high)', borderColor: 'var(--outline-variant)' }}
+      >
+        {/* Session selector */}
+        <select
+          value={selectedSessionId}
+          onChange={(e) => setSelectedSessionId(e.target.value)}
+          className="w-full px-2 py-1 rounded-lg m3-body-small border"
+          style={{
+            background: 'var(--surface)',
+            borderColor: 'var(--outline-variant)',
+            color: 'var(--on-sv)',
+          }}
+        >
+          <option value={NEW_SESSION_VALUE}>New session</option>
+          {sessions.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.id.slice(0, 28)}{s.id.length > 28 ? '…' : ''}
+              {s.last_active && ` (${new Date(s.last_active).toLocaleDateString()})`}
+            </option>
+          ))}
+        </select>
+
+        {/* Input row */}
+        <div className="flex gap-2">
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={isRunning ? `${agent.name} is responding…` : `Message ${agent.name}…`}
+            rows={1}
+            disabled={isRunning || isSending}
+            className="flex-1 px-3 py-2 rounded-lg m3-body-small resize-none border disabled:opacity-50"
+            style={{
+              background: 'var(--surface)',
+              borderColor: 'var(--outline-variant)',
+              color: 'var(--on-sv)',
+              minHeight: '36px',
+              maxHeight: '96px',
+            }}
+            onInput={(e) => {
+              const t = e.target as HTMLTextAreaElement
+              t.style.height = 'auto'
+              t.style.height = `${Math.min(t.scrollHeight, 96)}px`
+            }}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!message.trim() || isSending || isRunning}
+            className="px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: message.trim() && !isSending && !isRunning ? 'var(--primary)' : 'var(--surface)',
+              color: message.trim() && !isSending && !isRunning ? 'var(--primary-foreground)' : 'var(--on-sv)',
+            }}
+          >
+            <Icon name="send" size={18} />
+          </button>
+        </div>
       </div>
     </div>
   )

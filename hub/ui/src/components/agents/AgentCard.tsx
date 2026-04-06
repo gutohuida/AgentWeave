@@ -21,16 +21,18 @@ const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
   collaborator: { bg: 'color-mix(in srgb, var(--on-sv) 12%, transparent)', color: 'var(--on-sv)' },
 }
 
-const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
+const RUNNER_CONFIG: Record<string, { bg: string; color: string }> = {
   claude_proxy: {
     bg: 'color-mix(in srgb, #f59e0b 15%, transparent)',
     color: '#f59e0b',
-    label: 'proxy'
+  },
+  kimi: {
+    bg: 'color-mix(in srgb, #06b6d4 15%, transparent)',
+    color: '#06b6d4',
   },
   manual: {
     bg: 'color-mix(in srgb, #6b7280 15%, transparent)',
     color: '#6b7280',
-    label: 'manual'
   },
 }
 
@@ -132,16 +134,17 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
               {agent.dev_role_label ?? agent.dev_role}
             </span>
           )}
-          {agent.runner && agent.runner !== 'native' && (
+          {agent.display_model && (
             <span
-              className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
+              className="m3-label-small px-1.5 py-0.5 rounded-full"
+              title={`Runner: ${agent.runner}`}
               style={{
-                background: RUNNER_CONFIG[agent.runner]?.bg || RUNNER_CONFIG.manual.bg,
-                color: RUNNER_CONFIG[agent.runner]?.color || RUNNER_CONFIG.manual.color,
+                background: RUNNER_CONFIG[agent.runner ?? 'manual']?.bg || RUNNER_CONFIG.manual.bg,
+                color: RUNNER_CONFIG[agent.runner ?? 'manual']?.color || RUNNER_CONFIG.manual.color,
                 fontSize: '0.65rem'
               }}
             >
-              {RUNNER_CONFIG[agent.runner]?.label || agent.runner}
+              {agent.display_model}
             </span>
           )}
         </div>

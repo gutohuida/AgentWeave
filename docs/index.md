@@ -62,7 +62,7 @@ It provides:
 | Section | Description | Links |
 |---------|-------------|-------|
 | **Getting Started** | Install the CLI, start the Hub, and connect your first agents | [Installation](getting-started/installation.md) · [Quick Start](getting-started/quickstart.md) |
-| **Guides** | Step-by-step guides for common tasks and workflows | [Adding New Agents](guides/adding-new-agents.md) · [Context Files](guides/context-files.md) · [Session Modes](guides/session-modes.md) · [Dashboard](guides/dashboard.md) · [FAQ](guides/faq.md) |
+| **Guides** | Step-by-step guides for common tasks and workflows | [Adding New Agents](guides/adding-new-agents.md) · [Context Files](guides/context-files.md) · [Session Modes](guides/session-modes.md) · [AW-Spec Workflow](guides/aw-spec-workflow.md) · [Dashboard](guides/dashboard.md) · [FAQ](guides/faq.md) |
 | **Reference** | CLI commands, MCP tools, API endpoints, and configuration options | [CLI Commands](reference/cli-commands.md) · [MCP Tools](reference/mcp-tools.md) · [Task Lifecycle](reference/task-lifecycle.md) · [Hub API](reference/hub-api.md) |
 | **Architecture** | Understand how AgentWeave works under the hood | [Overview](architecture/overview.md) · [Transport Layer](architecture/transport-layer.md) · [Messaging](architecture/messaging.md) · [Locking](architecture/locking.md) |
 | **Contributing** | Development setup and release process | [Development](contributing/development.md) · [Release Process](contributing/release-process.md) |
@@ -71,10 +71,12 @@ It provides:
 
 Open **http://localhost:8000** to see:
 
+- **Mission Control** — centralized overview of session status and activity
 - **Tasks board** — all tasks with status, priority, assignee, and deliverables
 - **Messages feed** — inter-agent messages with inline task linking
 - **Human questions** — answer agent questions directly in the UI
-- **Agent activity** — live event stream and per-agent output logs
-- **Agent cards** — connected agents with roles, yolo mode, and chat history
+- **Agent activity** — live event stream, per-agent output logs, and session management
+- **Agent chat** — per-session chat history with session selector
+- **Agent cards** — connected agents with multi-role badges, yolo mode, and runner type
 
 See [Using the Dashboard](guides/dashboard.md) for more.

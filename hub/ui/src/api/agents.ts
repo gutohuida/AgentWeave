@@ -13,7 +13,8 @@ export interface AgentSummary {
   active_task_count: number
   role?: string  // "principal" | "delegate" | "collaborator"
   yolo?: boolean
-  runner?: string  // "native" | "claude_proxy" | "manual"
+  runner?: string  // "native" | "claude_proxy" | "kimi" | "manual"
+  display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   dev_role?: string        // Primary dev role (backward compatibility)
   dev_role_label?: string  // Primary dev role label
   dev_roles?: string[]        // All role IDs (new multi-role support)

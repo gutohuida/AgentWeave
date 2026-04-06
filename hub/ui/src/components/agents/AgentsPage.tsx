@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { useAgents } from '@/api/agents'
 import { AgentCard } from './AgentCard'
-import { AgentPromptPanel } from './AgentPromptPanel'
+import { AgentOutputPanel } from './AgentOutputPanel'
 import { AgentActivityTab } from './AgentActivityTab'
 import { AgentInfoTab } from './AgentInfoTab'
 import { EmptyState } from '@/components/common/EmptyState'
 
-type ActiveTab = 'chat' | 'activity' | 'info'
+type ActiveTab = 'output' | 'activity' | 'info'
 
 export function AgentsPage() {
   const { data: agents = [], isLoading } = useAgents()
   const [selected, setSelected] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<ActiveTab>('chat')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('output')
   const selectedAgent = agents.find((a) => a.name === selected) ?? null
 
   if (isLoading) {
@@ -57,7 +57,7 @@ export function AgentsPage() {
               className="flex shrink-0 border-b"
               style={{ background: 'var(--surface-high)', borderColor: 'var(--outline-variant)' }}
             >
-              {(['chat', 'activity', 'info'] as ActiveTab[]).map((tab) => (
+              {(['output', 'activity', 'info'] as ActiveTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -77,8 +77,8 @@ export function AgentsPage() {
               ))}
             </div>
             <div className="flex-1 overflow-hidden">
-              {activeTab === 'chat' ? (
-                <AgentPromptPanel key={selectedAgent.name} agent={selectedAgent} />
+              {activeTab === 'output' ? (
+                <AgentOutputPanel key={selectedAgent.name} agent={selectedAgent} />
               ) : activeTab === 'activity' ? (
                 <AgentActivityTab key={selectedAgent.name} agent={selectedAgent} />
               ) : (

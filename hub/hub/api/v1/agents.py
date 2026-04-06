@@ -237,6 +237,14 @@ async def list_agents(
         ctx_row = ctx_res.scalars().first()
         context_usage = ctx_row.data if ctx_row else None
 
+        _runner = agent_meta.get("runner", "native")
+        _display_model = {
+            "claude": "Claude",
+            "claude_proxy": agent_meta.get("model", "Claude Proxy"),
+            "kimi": "Kimi",
+            "manual": "Manual",
+        }.get(_runner, _runner.replace("_", " ").title())
+
         summaries.append(
             AgentSummary(
                 name=agent_name,
@@ -247,7 +255,8 @@ async def list_agents(
                 active_task_count=task_count,
                 role=agent_meta.get("role"),
                 yolo=bool(agent_meta.get("yolo", False)),
-                runner=agent_meta.get("runner", "native"),
+                runner=_runner,
+                display_model=_display_model,
                 dev_role=dev_role_key,
                 dev_role_label=dev_role_meta.get("label"),
                 dev_roles=dev_role_keys,

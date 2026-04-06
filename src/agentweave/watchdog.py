@@ -13,10 +13,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .constants import (
+    AGENT_CONTEXT_DIR,
     AGENTS_DIR,
     COMPACT_DECISION_FILE,
     CONTEXT_USAGE_DIR,
     MESSAGES_PENDING_DIR,
+    RUNNER_CONFIGS,
     TASKS_ACTIVE_DIR,
 )
 from .utils import load_json
@@ -501,14 +503,12 @@ class _KimiParser:
             encrypted=None
         )
     Example output:
-        ['  💭 I need to check my inbox.']
+        ['  \u1f4ad I need to check my inbox.']
     """
 
     _EVENT_RE = re.compile(r"^([A-Z][A-Za-z]+)\(")
     # Events we parse and render
-    _RENDER = frozenset(
-        {"TurnBegin", "StepBegin", "ThinkPart", "TextPart", "ToolCall", "ToolResult"}
-    )
+    _RENDER = frozenset({"TurnBegin", "StepBegin", "ThinkPart", "TextPart", "ToolCall", "ToolResult"})
 
     def __init__(self) -> None:
         self._buf: List[str] = []
@@ -574,14 +574,14 @@ class _KimiParser:
             m = re.search(r'user_input=["\'](.+?)["\']', block, re.DOTALL)
             text = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
             if len(text) > 120:
-                text = text[:120] + "…"
-            sep = "─" * 56
-            return [sep, f"📨  {text}", sep]
+                text = text[:120] + "\u2026"
+            sep = "\u2500" * 56
+            return [sep, f"\U0001f4e8  {text}", sep]
 
         if name == "StepBegin":
             m = re.search(r"n=(\d+)", block)
             n = m.group(1) if m else "?"
-            return [f"  ── Step {n} " + "─" * 46]
+            return [f"  \u2500\u2500 Step {n} " + "\u2500" * 46]
 
         if name == "ThinkPart":
             m = re.search(r"think='(.*?)',\s*encrypted", block, re.DOTALL)
@@ -590,8 +590,8 @@ class _KimiParser:
             if m:
                 thinking = re.sub(r"\s+", " ", m.group(1).replace("\\n", " ")).strip()
                 if len(thinking) > 200:
-                    thinking = thinking[:200] + "…"
-                return [f"  💭 {thinking}"]
+                    thinking = thinking[:200] + "\u2026"
+                return [f"  \U0001f4ad {thinking}"]
             return []
 
         if name == "TextPart":
@@ -601,7 +601,7 @@ class _KimiParser:
             if m:
                 text = m.group(1).replace("\\n", "\n").strip()
                 if text:
-                    return [f"  💬 {text}"]
+                    return [f"  \U0001f4ac {text}"]
             return []
 
         if name == "ToolCall":
@@ -625,77 +625,85 @@ class _KimiParser:
         if name == "ToolResult":
             id_m = re.search(r"tool_call_id='([^']+)'", block)
             call_id = id_m.group(1) if id_m else ""
-            tool_name = self._pending.pop(call_id, "")
+            self._pending.pop(call_id, "")
 
             is_error = "is_error=True" in block
             if is_error:
                 err_m = re.search(r"text='([^']+)'", block)
                 err = err_m.group(1)[:100] if err_m else "unknown error"
-                return [f"     ✗ {err}"]
+                return [f"     \u2717 {err}"]
 
-            # Meaningful message (e.g. "File successfully overwritten")
             msg_m = re.search(r"message='([^']+)'", block)
             if msg_m and msg_m.group(1).strip():
-                return [f"     ✓ {msg_m.group(1).strip()[:100]}"]
+                return [f"     \u2713 {msg_m.group(1).strip()[:100]}"]
 
-            # get_inbox — count messages in result
-            if tool_name == "get_inbox":
-                count = len(re.findall(r'"id":', block))
-                if count:
-                    return [f"     ✓ {count} message(s)"]
-
-            return ["     ✓ ok"]
+            return ["     \u2713 ok"]
 
         return []
 
     @staticmethod
     def _fmt_tool(tool_name: str, args: dict) -> str:
-        # Drop large/noisy fields
         skip_keys = {"content", "body", "text", "new_text", "old_text"}
         display = {k: v for k, v in args.items() if k not in skip_keys}
         parts = []
         for k, v in list(display.items())[:4]:
             v_str = str(v)
             if len(v_str) > 60:
-                v_str = v_str[:60] + "…"
+                v_str = v_str[:60] + "\u2026"
             parts.append(f'{k}="{v_str}"')
-        return f"  🔧 {tool_name}({', '.join(parts)})"
+        return f"  \U0001f527 {tool_name}({', '.join(parts)})"
+
+
+def _get_runner_type(agent: str) -> str:
+    """Return the runner type for an agent, loading from session config."""
+    from .constants import AGENT_RUNNER_DEFAULTS
+    from .session import Session
+
+    session = Session.load()
+    if session:
+        return session.get_runner_config(agent).get("runner", "native")
+    return AGENT_RUNNER_DEFAULTS.get(agent, "native")
 
 
 def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -> list:
     """Return the CLI command to ping an agent with a prompt.
 
-    Kimi uses --print; Claude and others use --output-format stream-json so we can
-    parse JSONL lines in real-time and extract the session_id for resumption.
+    Dispatches based on runner type from session config, not agent name.
+    Kimi uses --print (plain Python-repr events) with --session for resumption.
+    Claude/claude_proxy use --output-format stream-json --verbose with --resume.
     """
-    from .constants import AGENT_RUNNER_DEFAULTS
     from .session import Session
 
-    if agent == "kimi":
+    runner_type = _get_runner_type(agent)
+    rc = RUNNER_CONFIGS.get(runner_type, RUNNER_CONFIGS["native"])
+
+    if runner_type == "kimi":
         cmd = ["kimi", "--print"]
+        # Inject per-agent context file if it exists
+        context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
+        if context_file.exists():
+            cmd += ["--agent-file", str(context_file)]
         if session_id:
             cmd += ["--session", session_id]
         cmd += ["-p", prompt]
         return cmd
 
-    # Determine CLI and model: claude_proxy agents use 'claude' CLI with custom model
-    cli = agent
+    # claude, claude_proxy, native — all use stream-json JSONL output
+    cli = rc.get("cli") or agent  # native: use agent name as CLI
     model = None
     session = Session.load()
     if session:
         runner_config = session.get_runner_config(agent)
-        if runner_config.get("runner") == "claude_proxy":
-            cli = "claude"
-            model = runner_config.get("model")
-    elif AGENT_RUNNER_DEFAULTS.get(agent) == "claude_proxy":
-        cli = "claude"
+        model = runner_config.get("model")
 
-    # Claude and other CLIs — stream-json gives real-time JSONL lines with thinking,
-    # assistant messages, tool calls, and session_id for resumption.
-    # --verbose is required when using --output-format with --print (-p).
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
+    # Inject per-agent context file for claude/claude_proxy if it exists
+    if runner_type in ("claude", "claude_proxy", "native"):
+        context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
+        if context_file.exists():
+            cmd += ["--append-system-prompt-file", str(context_file)]
     if session_id:
         cmd += ["--resume", session_id]
     cmd += ["-p", prompt]
@@ -807,33 +815,18 @@ def _parse_claude_stream_line(line: str) -> list:
     return []
 
 
-def _extract_kimi_session_id(sessions_before: set, sessions_after: set) -> Optional[str]:
-    """Return the new Kimi session name by diffing before/after ~/.kimi/sessions/ listings."""
-    new_sessions = sessions_after - sessions_before
-    if new_sessions:
-        return next(iter(new_sessions))
-    return None
+_KIMI_RESUME_RE = re.compile(r"kimi -r ([a-f0-9\-]{36})")
 
 
-def _get_kimi_session_from_json(work_dir: Optional[str] = None) -> Optional[str]:
-    """Read Kimi session ID from ~/.kimi/kimi.json for the given working directory.
+def _extract_kimi_session_from_stdout(stdout_lines: List[str]) -> Optional[str]:
+    """Extract Kimi session ID from stdout.
 
-    Kimi stores the last_session_id per work_dir in this JSON file.
-    This is more reliable than detecting new session directories.
+    Kimi prints: "To resume this session: kimi -r <UUID>" as the last line.
     """
-    kimi_json = Path.home() / ".kimi" / "kimi.json"
-    if not kimi_json.exists():
-        return None
-    try:
-        data = json.loads(kimi_json.read_text())
-        work_dirs = data.get("work_dirs", [])
-        # Use provided work_dir or current working directory
-        target_dir = work_dir or str(Path.cwd())
-        for entry in work_dirs:
-            if entry.get("path") == target_dir:
-                return entry.get("last_session_id")
-    except Exception:
-        pass
+    for line in reversed(stdout_lines):
+        m = _KIMI_RESUME_RE.search(line)
+        if m:
+            return m.group(1)
     return None
 
 
@@ -846,12 +839,8 @@ def _run_agent_subprocess(
     env_vars: Optional[Dict[str, str]] = None,
 ) -> None:
     """Background thread: run agent, stream output to Hub, save session ID."""
-    # Snapshot kimi sessions before launch
-    sessions_before: set = set()
-    if agent == "kimi":
-        kimi_dir = Path.home() / ".kimi" / "sessions"
-        if kimi_dir.exists():
-            sessions_before = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
+    runner_type = _get_runner_type(agent)
+    is_kimi = runner_type == "kimi"
 
     # Send "running" heartbeat + diagnostic start marker
     if is_http:
@@ -873,7 +862,9 @@ def _run_agent_subprocess(
     session_id: Optional[str] = None
     # Mutable container so the stderr thread can read the latest session_id
     session_id_ref: List[Optional[str]] = [None]
-    kimi_parser = _KimiParser() if agent == "kimi" else None
+    # Collect all stdout lines for Kimi session ID extraction
+    kimi_stdout_lines: List[str] = []
+    kimi_parser = _KimiParser() if is_kimi else None
 
     def _drain_stderr(proc: subprocess.Popen) -> None:
         """Read stderr in a background thread and post each line as agent output
@@ -884,6 +875,11 @@ def _run_agent_subprocess(
                 err_line = raw.rstrip("\n")
                 if not err_line.strip():
                     continue
+                # For Kimi: capture session ID from stderr resume line in real-time
+                if is_kimi and session_id_ref[0] is None:
+                    m = _KIMI_RESUME_RE.search(err_line)
+                    if m:
+                        session_id_ref[0] = m.group(1)
                 msg = f"[stderr] {err_line}"
                 if is_http:
                     try:
@@ -909,83 +905,6 @@ def _run_agent_subprocess(
                     "data": {"agent": agent, "error": str(exc)},
                 },
             )
-
-    def _detect_kimi_session() -> None:
-        """Background thread: poll for new Kimi session shortly after start."""
-        nonlocal session_id, session_id_ref
-        if agent != "kimi":
-            return
-        kimi_dir = Path.home() / ".kimi" / "sessions"
-        if not kimi_dir.exists():
-            logger.warning(
-                "watchdog_kimi_no_sessions_dir",
-                extra={"event": "watchdog_kimi_no_sessions_dir", "data": {}},
-            )
-            return
-
-        # Also read kimi.json for the current working directory
-        work_dir = str(Path.cwd())
-
-        # Poll for up to 5 seconds to find new session
-        for i in range(50):
-            if session_id is not None:
-                logger.info(
-                    "watchdog_kimi_session_already_set",
-                    extra={
-                        "event": "watchdog_kimi_session_already_set",
-                        "data": {"session_id": session_id},
-                    },
-                )
-                return
-            time.sleep(0.1)
-
-            # Method 1: Check for new session directories
-            try:
-                sessions_now = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
-                new_sessions = sessions_now - sessions_before
-                if new_sessions:
-                    found_session = next(iter(new_sessions))
-                    session_id = found_session
-                    session_id_ref[0] = found_session
-                    logger.info(
-                        "watchdog_kimi_session_found",
-                        extra={
-                            "event": "watchdog_kimi_session_found",
-                            "data": {
-                                "session_id": found_session,
-                                "attempts": i,
-                                "method": "directory",
-                            },
-                        },
-                    )
-                    return
-            except Exception as e:
-                logger.warning(
-                    "watchdog_kimi_session_error",
-                    extra={"event": "watchdog_kimi_session_error", "data": {"error": str(e)}},
-                )
-
-            # Method 2: Read from kimi.json (more reliable)
-            try:
-                from_json = _get_kimi_session_from_json(work_dir)
-                if from_json and from_json not in sessions_before:
-                    session_id = from_json
-                    session_id_ref[0] = from_json
-                    logger.info(
-                        "watchdog_kimi_session_found",
-                        extra={
-                            "event": "watchdog_kimi_session_found",
-                            "data": {"session_id": from_json, "attempts": i, "method": "kimi_json"},
-                        },
-                    )
-                    return
-            except Exception:
-                pass
-
-        logger.warning(
-            "watchdog_kimi_session_not_found",
-            extra={"event": "watchdog_kimi_session_not_found", "data": {"after_attempts": 50}},
-        )
 
     def _run_cmd(run_cmd: list, run_session_id: Optional[str]) -> int:
         """Run agent command, stream output. Returns process returncode."""
@@ -1027,30 +946,35 @@ def _run_agent_subprocess(
         stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
         stderr_thread.start()
 
-        # Start Kimi session detection in background (for real-time session_id)
-        if agent == "kimi":
-            threading.Thread(target=_detect_kimi_session, daemon=True).start()
-
         output_line_count = 0
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
-            # Try to extract session_id from JSONL (always attempt for Claude)
-            if agent != "kimi" and session_id is None:
-                extracted = _extract_claude_session_id(line)
-                if extracted:
-                    session_id = extracted
-                    session_id_ref[0] = session_id
-            # Parse output into human-readable lines
-            if kimi_parser is not None:
-                readable_lines = kimi_parser.feed(line)
+
+            if is_kimi:
+                # Collect all lines for post-exit session ID extraction
+                kimi_stdout_lines.append(line)
+                # Extract session ID in real-time if seen on stdout
+                if session_id is None:
+                    m = _KIMI_RESUME_RE.search(line)
+                    if m:
+                        session_id = m.group(1)
+                        session_id_ref[0] = session_id
+                # Parse Kimi's Python-repr events streamed in real-time
+                readable_lines = kimi_parser.feed(line) if kimi_parser is not None else []
             else:
+                # Try to extract session_id from JSONL stream (Claude/claude_proxy)
+                if session_id is None:
+                    extracted = _extract_claude_session_id(line)
+                    if extracted:
+                        session_id = extracted
+                        session_id_ref[0] = session_id
                 readable_lines = _parse_claude_stream_line(line)
+
             # Stream to Hub or local stdout
             if is_http:
                 for readable in readable_lines:
                     output_line_count += 1
                     try:
-                        # Use session_id_ref[0] to get latest session (updated by detection thread for Kimi)
                         ok = transport.post_agent_output(
                             agent, readable, session_id=session_id_ref[0]
                         )
@@ -1092,8 +1016,8 @@ def _run_agent_subprocess(
         returncode = _run_cmd(cmd, session_id)
 
         # If the process failed and we used a session ID, the session may be
-        # expired. Clear it and retry once without --resume.
-        saved_session = _load_agent_session(agent) if agent != "kimi" else None
+        # expired. Clear it and retry once without --resume/--session.
+        saved_session = _load_agent_session(agent)
         if returncode != 0 and saved_session:
             logger.warning(
                 "watchdog_session_retry",
@@ -1108,7 +1032,7 @@ def _run_agent_subprocess(
             )
             print(
                 f"[WARN] {agent} exited with code {returncode} — session may be stale, "
-                f"clearing and retrying without --resume",
+                f"clearing and retrying without session ID",
                 file=sys.stderr,
             )
             # Clear the stale session file
@@ -1117,6 +1041,7 @@ def _run_agent_subprocess(
                 session_file.unlink(missing_ok=True)
             session_id = None
             session_id_ref[0] = None
+            kimi_stdout_lines.clear()
             retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None)  # cmd[-1] is the prompt
             returncode = _run_cmd(retry_cmd, None)
 
@@ -1145,47 +1070,26 @@ def _run_agent_subprocess(
         )
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
-    # Extract kimi session ID after process exits (fallback if _detect_kimi_session missed it)
-    if agent == "kimi" and session_id is None:
-        work_dir = str(Path.cwd())
-
-        # Method 1: Try reading from kimi.json (most reliable)
-        from_json = _get_kimi_session_from_json(work_dir)
-        if from_json:
-            session_id = from_json
-            session_id_ref[0] = from_json
+    # Extract Kimi session ID from collected stdout lines (post-exit)
+    if is_kimi and session_id is None and kimi_stdout_lines:
+        found = _extract_kimi_session_from_stdout(kimi_stdout_lines)
+        if found:
+            session_id = found
+            session_id_ref[0] = found
             logger.info(
-                "watchdog_kimi_session_fallback",
+                "watchdog_kimi_session_found",
                 extra={
-                    "event": "watchdog_kimi_session_fallback",
-                    "data": {"session_id": from_json, "method": "kimi_json"},
+                    "event": "watchdog_kimi_session_found",
+                    "data": {"session_id": found, "method": "stdout_resume_line"},
                 },
             )
-
-        # Method 2: Diff session directories
-        if session_id is None:
-            kimi_dir = Path.home() / ".kimi" / "sessions"
-            if kimi_dir.exists():
-                sessions_after = {p.name for p in kimi_dir.iterdir() if p.is_dir()}
-                session_id = _extract_kimi_session_id(sessions_before, sessions_after)
-                if session_id:
-                    session_id_ref[0] = session_id
-                    logger.info(
-                        "watchdog_kimi_session_fallback",
-                        extra={
-                            "event": "watchdog_kimi_session_fallback",
-                            "data": {"session_id": session_id, "method": "directory_diff"},
-                        },
-                    )
 
     # Persist session ID for next run
     if session_id:
         with contextlib.suppress(Exception):
             _save_agent_session(agent, session_id)
         # For Kimi, post a synthetic output line so the Hub/UI learns the session ID.
-        # All real output lines were posted without session_id (detected post-exit),
-        # so without this the UI would never see the session ID chip.
-        if agent == "kimi" and is_http:
+        if is_kimi and is_http:
             with contextlib.suppress(Exception):
                 transport.post_agent_output(
                     agent, f"[session: {session_id}]", session_id=session_id
@@ -1209,21 +1113,10 @@ def _check_cli_available(agent: str) -> bool:
     """Check if an agent's CLI is available in PATH."""
     import shutil
 
-    from .constants import AGENT_RUNNER_DEFAULTS
-    from .session import Session
-
-    # For claude_proxy agents, check for 'claude' CLI
-    session = Session.load()
-    if session:
-        runner_config = session.get_runner_config(agent)
-        if runner_config.get("runner") == "claude_proxy":
-            return shutil.which("claude") is not None
-    # Fallback to registry defaults
-    if AGENT_RUNNER_DEFAULTS.get(agent) == "claude_proxy":
-        return shutil.which("claude") is not None
-
-    cli_name = "kimi" if agent == "kimi" else agent
-    return shutil.which(cli_name) is not None
+    runner_type = _get_runner_type(agent)
+    rc = RUNNER_CONFIGS.get(runner_type, RUNNER_CONFIGS["native"])
+    cli = rc.get("cli") or agent  # native: use agent name as CLI
+    return shutil.which(cli) is not None
 
 
 def _make_ping_callback(
@@ -1302,7 +1195,7 @@ def _make_ping_callback(
         session = Session.load()
         if session:
             runner_config = session.get_runner_config(recipient)
-            if runner_config.get("runner") == "claude_proxy":
+            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
                 env_vars = runner_config.get("env_vars")
 
         import time as _t
@@ -1405,7 +1298,7 @@ def _make_direct_trigger_callback(
         session = Session.load()
         if session:
             runner_config = session.get_runner_config(recipient)
-            if runner_config.get("runner") == "claude_proxy":
+            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
                 env_vars = runner_config.get("env_vars")
 
         logger.info(

@@ -65,6 +65,7 @@ nav:
     - guides/adding-new-agents.md
     - guides/context-files.md
     - guides/session-modes.md
+    - guides/aw-spec-workflow.md
     - guides/claude-proxy-agents.md
     - guides/cross-machine-collab.md
     - guides/dashboard.md

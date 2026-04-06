@@ -107,7 +107,22 @@ agentweave roles set <agent> <role1,role2,...> # set multiple roles (replaces ex
 agentweave roles available                     # list available role types
 ```
 
-**Available roles:** `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
+**Available roles:** `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `data_scientist`, `mobile_dev`, `docs_writer`, `product_manager`, `project_manager`, `ui_designer`, `ux_researcher`
+
+### Multi-Role Examples
+
+```bash
+# Add backend_dev role to claude (claude already has tech_lead)
+agentweave roles add claude backend_dev
+
+# Set multiple roles at once (replaces any existing roles)
+agentweave roles set kimi backend_dev,frontend_dev
+
+# Remove a specific role
+agentweave roles remove claude backend_dev
+```
+
+When an agent has multiple roles, they receive all corresponding role guides at session start.
 
 ## MCP
 
