@@ -75,10 +75,16 @@ async def trigger_agent(
             status_code=status.HTTP_400_BAD_REQUEST, detail="session_mode must be 'new' or 'resume'"
         )
 
-    # Build message content with session info
+    # Build message content with session info.
+    # The watchdog parses these tags to determine session handling:
+    #   [Session: <id>]  → resume the specified session
+    #   [NewSession]     → explicitly start a new session
+    #   (no tag)         → fall back to the agent's last saved session
     content_parts = [body.message]
     if body.session_mode == "resume" and body.session_id:
         content_parts.append(f"\n\n[Session: {body.session_id}]")
+    elif body.session_mode == "new":
+        content_parts.append("\n\n[NewSession]")
 
     # Create a message that looks like it's from "user" to the agent
     # The watchdog will detect this and trigger the agent

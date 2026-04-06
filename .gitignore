@@ -81,9 +81,10 @@ kimiwork.md
 .agentweave/transport.json
 .agentweave/.git_seen/
 
-# Watchdog daemon PID and log (machine-local)
+# Watchdog daemon PID, log, and triggered-message tracking (machine-local)
 .agentweave/watchdog.pid
 .agentweave/watchdog.log
+.agentweave/triggered_direct.json
 
 # UI design concepts — kept locally for reference, not tracked
 hub/ui-concepts/

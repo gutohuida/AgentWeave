@@ -19,6 +19,7 @@ from .constants import (
     MESSAGES_PENDING_DIR,
     RUNNER_CONFIGS,
     TASKS_ACTIVE_DIR,
+    TRIGGERED_DIRECT_FILE,
 )
 from .utils import load_json
 
@@ -730,6 +731,65 @@ def _save_agent_session(agent: str, session_id: str) -> None:
     session_file.write_text(json.dumps({"session_id": session_id}))
 
 
+def _load_triggered_ids(max_age_hours: int = 24) -> Set[str]:
+    """Load recently-triggered direct-trigger message IDs from disk.
+
+    Returns IDs whose timestamp is within max_age_hours. Also rewrites the file
+    without expired entries so it doesn't grow unboundedly.
+    """
+    if not TRIGGERED_DIRECT_FILE.exists():
+        return set()
+    try:
+        data: Dict[str, str] = json.loads(TRIGGERED_DIRECT_FILE.read_text())
+        cutoff = time.time() - max_age_hours * 3600
+        recent: Dict[str, str] = {}
+        result: Set[str] = set()
+        for msg_id, ts_str in data.items():
+            try:
+                # Parse ISO timestamp
+                import datetime as _dt
+
+                ts = _dt.datetime.fromisoformat(ts_str).timestamp()
+            except Exception:
+                continue
+            if ts >= cutoff:
+                recent[msg_id] = ts_str
+                result.add(msg_id)
+        # Rewrite without expired entries
+        if len(recent) != len(data):
+            with contextlib.suppress(Exception):
+                TRIGGERED_DIRECT_FILE.write_text(json.dumps(recent))
+        return result
+    except Exception:
+        return set()
+
+
+def _save_triggered_id(msg_id: str) -> None:
+    """Persist a triggered direct-trigger message ID to disk.
+
+    Appends to TRIGGERED_DIRECT_FILE. Suppresses all exceptions and logs a
+    warning on failure so the caller is never blocked.
+    """
+    from datetime import datetime, timezone
+
+    ts_str = datetime.now(timezone.utc).isoformat()
+    try:
+        existing: Dict[str, str] = {}
+        if TRIGGERED_DIRECT_FILE.exists():
+            with contextlib.suppress(Exception):
+                existing = json.loads(TRIGGERED_DIRECT_FILE.read_text())
+        existing[msg_id] = ts_str
+        TRIGGERED_DIRECT_FILE.write_text(json.dumps(existing))
+    except Exception as exc:
+        logger.warning(
+            "triggered_direct_write_failed",
+            extra={
+                "event": "triggered_direct_write_failed",
+                "data": {"msg_id": msg_id, "error": str(exc)},
+            },
+        )
+
+
 def _extract_claude_session_id(line: str) -> Optional[str]:
     """Parse a JSONL line from claude --output-format stream-json, return session_id if present."""
     try:
@@ -1230,7 +1290,8 @@ def _make_direct_trigger_callback(
     to be executed on the host machine (where the CLIs are installed).
     """
     is_http = transport is not None and transport.get_transport_type() == "http"
-    seen: Set[str] = set()
+    # Pre-populate from disk so restarts don't re-trigger already-processed messages.
+    seen: Set[str] = _load_triggered_ids()
 
     if not is_http:
         # Direct triggers only work with HTTP transport (Hub)
@@ -1252,6 +1313,7 @@ def _make_direct_trigger_callback(
         if msg_id in seen:
             return
         seen.add(msg_id)
+        _save_triggered_id(msg_id)
 
         # Skip if CLI is not available
         if not _check_cli_available(recipient):
@@ -1282,9 +1344,14 @@ def _make_direct_trigger_callback(
             match = _re.search(r"\[Session:\s*([^\]]+)\]", content)
             if match:
                 session_id = match.group(1).strip()
-        # For direct triggers, no [Session:] tag means the user explicitly chose
-        # "New conversation" in the UI. Do NOT fall back to the saved session,
-        # or the message will be routed to the previous session.
+        elif "[NewSession]" in content:
+            # Hub UI explicitly requested a new session — leave session_id as None.
+            pass
+        else:
+            # No session tag present: fall back to the agent's last saved session.
+            # This prevents unnecessary new sessions when the Hub UI sends a message
+            # before its session-selector has finished loading.
+            session_id = _load_agent_session(recipient)
 
         prompt = (
             f"You have a new AgentWeave message from user. "

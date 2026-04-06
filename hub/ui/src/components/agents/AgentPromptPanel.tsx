@@ -218,7 +218,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
   }
 
   const messages = localMessages
-  const isInputDisabled = !message.trim() || isSending || isAgentRunning || 
+  const isInputDisabled = !message.trim() || isSending || isAgentRunning || isLoadingSessions ||
     (sessionMode === 'resume' && !selectedSessionId)
 
   return (
