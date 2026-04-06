@@ -98,7 +98,8 @@ def cmd_init(args: argparse.Namespace) -> int:
         agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
         readme_path = AGENTWEAVE_DIR / "README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
-            f.write(f"""# AgentWeave Session: {session.name}
+            f.write(
+                f"""# AgentWeave Session: {session.name}
 
 **ID:** {session.id}
 **Mode:** {session.mode}
@@ -143,7 +144,8 @@ agentweave summary
 - `messages/pending/` — Unread messages
 - `messages/archive/` — Message history
 - `shared/` — Shared context and decisions
-""")
+"""
+            )
 
         # Write protocol.md — collaboration guide inside .agentweave/
         non_principal = [a for a in session.agent_names if a != session.principal]
@@ -1453,7 +1455,6 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
 
     results = {}
     for agent in agent_list:
-
         _runner_type = (
             session.get_runner_config(agent).get("runner", "native") if session else "native"
         )
