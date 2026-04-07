@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
-## [0.19.0] - 2026-04-05
+## [0.19.0] - 2026-04-07
 
 ### Added (CLI)
 - **AW-Spec workflow skill templates** — 4 new skills for structured change management:
@@ -15,10 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `/aw-spec-apply` — implement a proposal with optional agent delegation
   - `/aw-spec-archive` — archive completed proposals
 - **Documentation updates** — comprehensive docs for multi-role agents, new MCP tools, and dashboard features
+- **Watchdog session handling fix** — fixed direct-trigger session persistence with [NewSession] marker
 
-### Added (Hub v0.13.0)
-- **Agent UI improvements** — enhanced Agent Output Panel with session management
-- **Agent Card enhancements** — runner type badges and improved role display
+### Added (Hub v0.14.0)
+- **Code quality improvements** — black 26.x formatting compatibility fixes
 
 ---
 ## [0.18.0] - 2026-04-05
