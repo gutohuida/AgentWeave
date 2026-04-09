@@ -237,6 +237,27 @@ async def list_agents(
         ctx_row = ctx_res.scalars().first()
         context_usage = ctx_row.data if ctx_row else None
 
+        # Get session started_at from the most recent session with output
+        session_started_at = None
+        session_q = (
+            select(
+                AgentOutput.session_id,
+                func.min(AgentOutput.timestamp).label("started_at"),
+            )
+            .where(
+                AgentOutput.project_id == project_id,
+                AgentOutput.agent == agent_name,
+                AgentOutput.session_id.isnot(None),
+            )
+            .group_by(AgentOutput.session_id)
+            .order_by(func.max(AgentOutput.timestamp).desc())
+            .limit(1)
+        )
+        session_res = await session.execute(session_q)
+        session_row = session_res.first()
+        if session_row and session_row.started_at:
+            session_started_at = session_row.started_at
+
         _runner = agent_meta.get("runner", "native")
         _display_model = {
             "claude": "Claude",
@@ -262,6 +283,7 @@ async def list_agents(
                 dev_roles=dev_role_keys,
                 dev_role_labels=dev_role_labels,
                 context_usage=context_usage,
+                session_started_at=session_started_at,
             )
         )
 

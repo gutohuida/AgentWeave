@@ -20,6 +20,7 @@ export interface AgentSummary {
   dev_roles?: string[]        // All role IDs (new multi-role support)
   dev_role_labels?: string[]  // Labels for all roles
   context_usage?: ContextUsage
+  session_started_at?: string  // ISO timestamp when current session started
 }
 
 export interface ContextUsage {

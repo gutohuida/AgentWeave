@@ -9,17 +9,21 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .constants import (
     AGENT_CONTEXT_DIR,
     AGENTS_DIR,
     COMPACT_DECISION_FILE,
+    CONTEXT_NUDGE_THRESHOLD,
     CONTEXT_USAGE_DIR,
+    KIMI_WIRE_MODE,
     MESSAGES_PENDING_DIR,
     RUNNER_CONFIGS,
     TASKS_ACTIVE_DIR,
     TRIGGERED_DIRECT_FILE,
+    _get_context_limit,
 )
 from .utils import load_json
 
@@ -64,7 +68,12 @@ class Watchdog:
         self.retry_after = retry_after  # seconds; None = no retry
         self.pinged_at: Dict[str, float] = {}  # msg_id -> unix time of last ping
         self.context_warned: Dict[str, bool] = {}  # agent -> currently in warning state
+        self._last_context_posted: Dict[str, dict] = {}  # agent -> last context data posted to Hub
         self.compact_decision_mtime: float = 0.0  # mtime of last-processed compact_decision.md
+        # Per-agent in-session message counter for checkpoint nudges
+        self.agent_message_counts: Dict[str, int] = {}  # agent -> message count in current session
+        self.agent_nudged_at: Dict[str, Set[int]] = {}  # agent -> set of thresholds already nudged
+        self._is_startup_scan: bool = False  # True during initial message scan at startup
 
     def _default_callback(self, event_type: str, data: dict) -> None:
         """Default callback that prints to stdout."""
@@ -153,15 +162,19 @@ class Watchdog:
         )
         write_heartbeat()
 
-        # Initial scan
-        if transport_type == "local":
-            self.known_messages = self._scan_messages()
-            self.known_tasks = self._scan_tasks()
-        elif transport_type == "http":
-            self._init_http_state()
-        else:
-            self.transport._fetch()  # type: ignore[union-attr]
-            self.known_remote_files = set(self.transport.list_remote_filenames())  # type: ignore[union-attr]
+        # Initial scan (suppress nudge increments for pre-existing messages)
+        self._is_startup_scan = True
+        try:
+            if transport_type == "local":
+                self.known_messages = self._scan_messages()
+                self.known_tasks = self._scan_tasks()
+            elif transport_type == "http":
+                self._init_http_state()
+            else:
+                self.transport._fetch()  # type: ignore[union-attr]
+                self.known_remote_files = set(self.transport.list_remote_filenames())  # type: ignore[union-attr]
+        finally:
+            self._is_startup_scan = False
 
         self.running = True
 
@@ -216,6 +229,13 @@ class Watchdog:
                     },
                 },
             )
+            # Track message count for both sender and recipient
+            recipient = msg_data.get("to", "")
+            sender = msg_data.get("from", "")
+            if recipient:
+                self._on_new_message_for_agent(recipient)
+            if sender and sender != recipient:
+                self._on_new_message_for_agent(sender)
             self.callback("new_message", msg_data)
 
         self.known_messages = current_messages
@@ -262,13 +282,21 @@ class Watchdog:
         self._check_compact_decision()
 
     def _check_context_usage(self) -> None:
-        """Scan context_usage/ dir; fire context_warning when an agent hits its threshold."""
+        """Scan context_usage/ dir; post updates to Hub and fire warning callbacks."""
         if not CONTEXT_USAGE_DIR.exists():
             return
         for usage_file in CONTEXT_USAGE_DIR.glob("*.json"):
             data = load_json(usage_file) or {}
             agent = data.get("agent", usage_file.stem)
             warning = bool(data.get("warning", False))
+
+            # Always post to Hub when data changes (not just at warning threshold)
+            if self.transport.get_transport_type() == "http":
+                last = self._last_context_posted.get(agent)
+                if data != last:
+                    self._last_context_posted[agent] = dict(data)
+                    self._post_context_usage_to_hub(agent, data)
+
             if warning and not self.context_warned.get(agent):
                 self.context_warned[agent] = True
                 logger.info(
@@ -283,8 +311,6 @@ class Watchdog:
                     },
                 )
                 self.callback("context_warning", data)
-                if self.transport.get_transport_type() == "http":
-                    self._post_context_usage_to_hub(agent, data)
             elif not warning and self.context_warned.get(agent):
                 # Warning cleared (agent compacted or threshold dropped)
                 self.context_warned[agent] = False
@@ -403,6 +429,39 @@ class Watchdog:
         else:
             print(f"   [WARN] Could not send message to {agent}", file=sys.stderr)
 
+    def _on_new_message_for_agent(self, agent: str) -> None:
+        """Track message count and send checkpoint nudge if threshold crossed.
+
+        Called whenever a new message is detected for an agent (inbox or outbox).
+        Increments the per-agent counter and sends a nudge if the count reaches
+        a non-zero multiple of CONTEXT_NUDGE_THRESHOLD.
+        """
+        # Skip if nudging is disabled (threshold = 0)
+        if CONTEXT_NUDGE_THRESHOLD <= 0:
+            return
+
+        # Skip during startup scan to avoid counting pre-existing messages
+        if self._is_startup_scan:
+            return
+
+        # Increment counter for this agent
+        current_count = self.agent_message_counts.get(agent, 0) + 1
+        self.agent_message_counts[agent] = current_count
+
+        # Check if we've crossed a threshold boundary
+        if current_count > 0 and current_count % CONTEXT_NUDGE_THRESHOLD == 0:
+            # Track which thresholds we've already nudged for to avoid duplicates
+            nudged_set = self.agent_nudged_at.setdefault(agent, set())
+            threshold_boundary = current_count // CONTEXT_NUDGE_THRESHOLD
+            if threshold_boundary not in nudged_set:
+                nudged_set.add(threshold_boundary)
+                _send_checkpoint_nudge(agent, current_count)
+
+    def _reset_agent_message_count(self, agent: str) -> None:
+        """Reset message count and nudge tracking for an agent (e.g., on new session)."""
+        self.agent_message_counts[agent] = 0
+        self.agent_nudged_at[agent] = set()
+
     def _post_context_usage_to_hub(self, agent: str, data: dict) -> None:
         """POST context usage data to the Hub so Mission Control can display it."""
         import json as _json
@@ -452,6 +511,13 @@ class Watchdog:
             msg_id = msg.get("id", "")
             if msg_id and msg_id not in self.known_messages:
                 self.known_messages.add(msg_id)
+                # Track message count for both sender and recipient
+                recipient = msg.get("to", "")
+                sender = msg.get("from", "")
+                if recipient:
+                    self._on_new_message_for_agent(recipient)
+                if sender and sender != recipient:
+                    self._on_new_message_for_agent(sender)
                 self.callback("new_message", msg)
 
         tasks = self.transport.get_active_tasks(self.agent or None)
@@ -656,6 +722,129 @@ class _KimiParser:
         return f"  \U0001f527 {tool_name}({', '.join(parts)})"
 
 
+class _KimiWireParser:
+    """Parser for kimi --wire JSON-RPC 2.0 streaming output.
+
+    Wire mode uses bidirectional stdin/stdout communication with JSON-RPC 2.0:
+    - Send: {"jsonrpc": "2.0", "method": "prompt", "id": "<uuid>", "params": {"user_input": "..."}}
+    - Receive: Events as JSON-RPC 2.0 response objects with "result" containing event data
+
+    Events we handle:
+    - ContentPart: Text output from the model
+    - ThinkPart: Model's thinking/reasoning
+    - ToolCall: Tool invocation
+    - ToolResult: Tool execution result
+    - StatusUpdate: Contains context_usage ratio
+    - CompactionBegin/CompactionEnd: Context compaction events
+    - TurnEnd: End of a turn (contains session_id in some versions)
+    """
+
+    def __init__(self) -> None:
+        self._pending_tool_calls: Dict[str, str] = {}  # id -> name
+        self._context_usage: Optional[Dict[str, Any]] = None  # Latest context usage data
+        self._session_id: Optional[str] = None  # Session ID from turn completion
+        self._in_compaction = False
+
+    def feed(self, line: str) -> List[str]:
+        """Feed one JSON-RPC line; returns list of display strings."""
+        stripped = line.strip()
+        if not stripped:
+            return []
+
+        try:
+            data = json.loads(stripped)
+        except json.JSONDecodeError:
+            return []
+
+        # Handle JSON-RPC 2.0 response format
+        if "result" in data:
+            result = data.get("result", {})
+            if isinstance(result, dict):
+                return self._handle_event(result)
+        # Handle direct event format (some versions)
+        if "type" in data:
+            return self._handle_event(data)
+
+        return []
+
+    def _handle_event(self, event: Dict[str, Any]) -> List[str]:
+        """Handle a single event and return display strings."""
+        event_type = event.get("type", "")
+
+        if event_type == "ContentPart":
+            content_type = event.get("content_type", "")
+            content = event.get("content", "")
+            if content_type == "text" and content:
+                return [f"  💬 {content}"]
+            elif content_type == "think" and content:
+                # Prefix thinking with emoji for visibility
+                thinking = content.replace("\n", "\n  💭 ")
+                return [f"  💭 {thinking}"]
+
+        elif event_type == "ToolCall":
+            name = event.get("name", "unknown")
+            arguments = event.get("arguments", {})
+            call_id = event.get("id", "")
+            if call_id:
+                self._pending_tool_calls[call_id] = name
+            args_str = json.dumps(arguments, ensure_ascii=False)
+            if len(args_str) > 300:
+                args_str = args_str[:300] + "…"
+            return [f"  🔧 {name}({args_str})"]
+
+        elif event_type == "ToolResult":
+            call_id = event.get("tool_call_id", "")
+            is_error = event.get("is_error", False)
+            content = event.get("content", "")
+            self._pending_tool_calls.pop(call_id, None)
+
+            if is_error:
+                err_text = str(content)[:100] if content else "unknown error"
+                return [f"     ✗ {err_text}"]
+            if content:
+                return [f"     ✓ {str(content)[:100]}"]
+            return ["     ✓ ok"]
+
+        elif event_type == "StatusUpdate":
+            # Extract context usage data
+            context_usage = event.get("context_usage")
+            if context_usage is not None:
+                self._context_usage = {
+                    "percent": int(context_usage * 100),
+                    "context_usage_ratio": context_usage,
+                    "context_tokens": event.get("context_tokens"),
+                    "max_context_tokens": event.get("max_context_tokens"),
+                }
+
+        elif event_type == "CompactionBegin":
+            self._in_compaction = True
+            return ["  🔄 Context compaction started..."]
+
+        elif event_type == "CompactionEnd":
+            self._in_compaction = False
+            return ["  ✅ Context compaction complete"]
+
+        elif event_type == "TurnEnd":
+            # Some versions include session_id in TurnEnd
+            session_id = event.get("session_id")
+            if session_id:
+                self._session_id = session_id
+
+        return []
+
+    def get_context_usage(self) -> Optional[Dict[str, Any]]:
+        """Return the latest context usage data, if any."""
+        return self._context_usage
+
+    def get_session_id(self) -> Optional[str]:
+        """Return the session ID if captured from TurnEnd."""
+        return self._session_id
+
+    def is_in_compaction(self) -> bool:
+        """Return True if we're currently in a compaction."""
+        return self._in_compaction
+
+
 def _get_runner_type(agent: str) -> str:
     """Return the runner type for an agent, loading from session config."""
     from .constants import AGENT_RUNNER_DEFAULTS
@@ -667,11 +856,13 @@ def _get_runner_type(agent: str) -> str:
     return AGENT_RUNNER_DEFAULTS.get(agent, "native")
 
 
-def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -> list:
+def _agent_ping_cmd(
+    agent: str, prompt: str, session_id: Optional[str] = None, use_wire_mode: bool = False
+) -> list:
     """Return the CLI command to ping an agent with a prompt.
 
     Dispatches based on runner type from session config, not agent name.
-    Kimi uses --print (plain Python-repr events) with --session for resumption.
+    Kimi uses --print (plain Python-repr events) or --wire (JSON-RPC 2.0) with --session for resumption.
     Claude/claude_proxy use --output-format stream-json --verbose with --resume.
     """
     from .session import Session
@@ -680,14 +871,22 @@ def _agent_ping_cmd(agent: str, prompt: str, session_id: Optional[str] = None) -
     rc = RUNNER_CONFIGS.get(runner_type, RUNNER_CONFIGS["native"])
 
     if runner_type == "kimi":
-        cmd = ["kimi", "--print"]
+        # Check for wire mode env var if not explicitly passed
+        if not use_wire_mode:
+            use_wire_mode = KIMI_WIRE_MODE
+        # Use wire mode if enabled (for better context monitoring), otherwise fallback to print
+        cmd = ["kimi", "--wire"] if use_wire_mode else ["kimi", "--print"]
         # Inject per-agent context file if it exists
         context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
         if context_file.exists():
             cmd += ["--agent-file", str(context_file)]
         if session_id:
             cmd += ["--session", session_id]
-        cmd += ["-p", prompt]
+        if use_wire_mode:
+            # Wire mode reads prompt from stdin as JSON-RPC, not from -p
+            cmd += ["--no-interactive"]
+        else:
+            cmd += ["-p", prompt]
         return cmd
 
     # claude, claude_proxy, native — all use stream-json JSONL output
@@ -729,6 +928,109 @@ def _save_agent_session(agent: str, session_id: str) -> None:
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     session_file = AGENTS_DIR / f"{agent}-session.json"
     session_file.write_text(json.dumps({"session_id": session_id}))
+
+
+def _write_context_usage(
+    agent: str,
+    input_tokens: int,
+    model: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Write context usage data to .agentweave/shared/context_usage/<agent>.json.
+
+    Computes percent based on model's context limit, with warning at 70% and
+    critical at 90%. Returns the usage_data dict on success, None on error.
+    """
+    context_limit = _get_context_limit(model or "")
+    percent = min(100, int((input_tokens / context_limit) * 100)) if context_limit > 0 else 0
+    warning = percent >= 70
+    critical = percent >= 90
+
+    usage_data: Dict[str, Any] = {
+        "agent": agent,
+        "percent": percent,
+        "model": model or "unknown",
+        "input_tokens": input_tokens,
+        "context_limit": context_limit,
+        "warning": warning,
+        "critical": critical,
+        "threshold_warning": 70,
+        "threshold_critical": 90,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
+        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
+        usage_file.write_text(json.dumps(usage_data, indent=2))
+        return usage_data
+    except OSError as exc:
+        logger.warning(
+            "context_usage_write_failed",
+            extra={"event": "context_usage_write_failed", "data": {"agent": agent, "error": str(exc)}},
+        )
+        return None
+
+
+def _reset_context_usage(agent: str) -> None:
+    """Reset context usage to 0% (e.g., on new session detection)."""
+    usage_data = {
+        "agent": agent,
+        "percent": 0,
+        "warning": False,
+        "critical": False,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
+        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
+        usage_file.write_text(json.dumps(usage_data, indent=2))
+    except OSError as exc:
+        logger.warning(
+            "context_usage_reset_failed",
+            extra={"event": "context_usage_reset_failed", "data": {"agent": agent, "error": str(exc)}},
+        )
+
+
+def _write_context_usage_from_wire(
+    agent: str,
+    wire_usage: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Write context usage data from Kimi wire mode StatusUpdate event.
+
+    Args:
+        agent: The agent name
+        wire_usage: Dict with 'percent', 'context_usage_ratio', 'context_tokens', 'max_context_tokens'
+
+    Returns the usage_data dict on success, None on error.
+    """
+    percent = wire_usage.get("percent", 0)
+    warning = percent >= 70
+    critical = percent >= 90
+
+    usage_data: Dict[str, Any] = {
+        "agent": agent,
+        "percent": percent,
+        "model": "kimi-wire",
+        "input_tokens": wire_usage.get("context_tokens", 0),
+        "context_limit": wire_usage.get("max_context_tokens", 0),
+        "warning": warning,
+        "critical": critical,
+        "threshold_warning": 70,
+        "threshold_critical": 90,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
+        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
+        usage_file.write_text(json.dumps(usage_data, indent=2))
+        return usage_data
+    except OSError as exc:
+        logger.warning(
+            "context_usage_wire_write_failed",
+            extra={"event": "context_usage_wire_write_failed", "data": {"agent": agent, "error": str(exc)}},
+        )
+        return None
 
 
 def _load_triggered_ids(max_age_hours: int = 24) -> Set[str]:
@@ -790,6 +1092,51 @@ def _save_triggered_id(msg_id: str) -> None:
         )
 
 
+def _send_checkpoint_nudge(agent: str, message_count: int) -> bool:
+    """Send a checkpoint nudge message to an agent.
+
+    Args:
+        agent: The agent name to send the nudge to
+        message_count: The current message count (for context in the message)
+
+    Returns:
+        True if message was sent successfully, False otherwise
+    """
+    from .messaging import Message, MessageBus
+
+    msg = Message.create(
+        sender="watchdog",
+        recipient=agent,
+        subject="Context checkpoint reminder",
+        content=(
+            f"**Context checkpoint reminder**\n\n"
+            f"You have processed {message_count} messages in this session. "
+            f"Consider running `save_checkpoint` to save your session state "
+            f"before continuing. This helps prevent context loss and enables faster recovery."
+        ),
+        message_type="message",
+    )
+    ok = MessageBus.send(msg)
+    if ok:
+        print(f"[NUDGE] Sent checkpoint reminder to {agent} at {message_count} messages")
+        logger.info(
+            "checkpoint_nudge_sent",
+            extra={
+                "event": "checkpoint_nudge_sent",
+                "data": {"agent": agent, "message_count": message_count},
+            },
+        )
+    else:
+        logger.warning(
+            "checkpoint_nudge_failed",
+            extra={
+                "event": "checkpoint_nudge_failed",
+                "data": {"agent": agent, "message_count": message_count},
+            },
+        )
+    return ok
+
+
 def _extract_claude_session_id(line: str) -> Optional[str]:
     """Parse a JSONL line from claude --output-format stream-json, return session_id if present."""
     try:
@@ -799,18 +1146,21 @@ def _extract_claude_session_id(line: str) -> Optional[str]:
         return None
 
 
-def _parse_claude_stream_line(line: str) -> list:
+def _parse_claude_stream_line(line: str) -> tuple:
     """Parse one JSONL line from `claude --output-format stream-json`.
 
-    Returns a list of human-readable strings to post as agent output.
-    Empty list means the line carries no user-visible content.
+    Returns a tuple of (display_strings, usage_data) where:
+    - display_strings: list of human-readable strings to post as agent output
+    - usage_data: dict with usage info if this is a result message, else None
+
+    Empty display_strings means the line carries no user-visible content.
     """
     try:
         data = json.loads(line)
     except Exception:
         # Non-JSON line — pass through as-is if non-empty
         stripped = line.strip()
-        return [stripped] if stripped else []
+        return ([stripped] if stripped else [], None)
 
     msg_type = data.get("type", "")
 
@@ -819,7 +1169,7 @@ def _parse_claude_stream_line(line: str) -> list:
         # Some CLI versions nest content under "message", others put it at the top level
         content = message.get("content", data.get("content", []))
         if isinstance(content, str):
-            return [content] if content.strip() else []
+            return ([content] if content.strip() else [], None)
         results = []
         for block in content:
             if not isinstance(block, dict):
@@ -829,13 +1179,13 @@ def _parse_claude_stream_line(line: str) -> list:
                 thinking = block.get("thinking", "").strip()
                 if thinking:
                     # Prefix each line so it's visually distinct in the log
-                    prefixed = "\n".join(f"💭 {line}" for line in thinking.splitlines())
+                    prefixed = "\n".join(f"💭 {ln}" for ln in thinking.splitlines())
                     results.append(prefixed)
             elif block_type == "text":
                 text = block.get("text", "").strip()
                 if text:
                     results.append(text)
-        return results
+        return (results, None)
 
     if msg_type == "tool_use":
         name = data.get("name", "unknown")
@@ -846,13 +1196,13 @@ def _parse_claude_stream_line(line: str) -> list:
                 inp_str = inp_str[:300] + "…"
         except Exception:
             inp_str = str(inp)
-        return [f"🔧 {name}({inp_str})"]
+        return ([f"🔧 {name}({inp_str})"], None)
 
     if msg_type == "tool_result":
         content = data.get("content", [])
         if isinstance(content, str):
             stripped = content.strip()
-            return [f"  → {stripped[:500]}"] if stripped else []
+            return ([f"  → {stripped[:500]}"] if stripped else [], None)
         if isinstance(content, list):
             texts = []
             for block in content:
@@ -861,19 +1211,28 @@ def _parse_claude_stream_line(line: str) -> list:
                     if t:
                         snippet = t[:500] + ("…" if len(t) > 500 else "")
                         texts.append(f"  → {snippet}")
-            return texts
-        return []
+            return (texts, None)
+        return ([], None)
 
     if msg_type == "result":
         subtype = data.get("subtype", "")
         if subtype == "error":
-            return [f"[ERROR] {data.get('error', 'unknown error')}"]
+            return ([f"[ERROR] {data.get('error', 'unknown error')}"], None)
         # result_text duplicates the already-streamed assistant messages — skip it
         cost = data.get("total_cost_usd")
-        return [f"[done] cost: ${cost:.4f}"] if cost is not None else []
+        display = [f"[done] cost: ${cost:.4f}"] if cost is not None else []
+        # Extract usage data for context monitoring
+        usage = data.get("usage", {})
+        usage_data = None
+        if usage and "input_tokens" in usage:
+            usage_data = {
+                "input_tokens": usage.get("input_tokens"),
+                "output_tokens": usage.get("output_tokens"),
+            }
+        return (display, usage_data)
 
     # system/init and everything else — ignore
-    return []
+    return ([], None)
 
 
 _KIMI_RESUME_RE = re.compile(r"kimi -r ([a-f0-9\-]{36})")
@@ -898,10 +1257,46 @@ def _run_agent_subprocess(
     transport: Any,
     is_http: bool,
     env_vars: Optional[Dict[str, str]] = None,
+    prompt: str = "",
+    known_session_id: Optional[str] = None,
 ) -> None:
     """Background thread: run agent, stream output to Hub, save session ID."""
+    from .locking import acquire_lock, release_lock
+
+    # Acquire lock to prevent concurrent spawns of the same agent
+    lock_name = f"spawn_{agent}"
+    if not acquire_lock(lock_name, timeout=0.1):  # Short timeout - try once, don't block
+        logger.info(
+            "spawn_skipped_already_running",
+            extra={
+                "event": "spawn_skipped_already_running",
+                "data": {"agent": agent, "reason": "another_instance_is_running"},
+            },
+        )
+        print(f"[SKIP] {agent} is already running, skipping spawn", file=sys.stderr)
+        return
+
+    try:
+        _do_run_agent_subprocess(agent, cmd, subject, transport, is_http, env_vars, prompt, known_session_id)
+    finally:
+        release_lock(lock_name)
+
+
+def _do_run_agent_subprocess(
+    agent: str,
+    cmd: list,
+    subject: str,
+    transport: Any,
+    is_http: bool,
+    env_vars: Optional[Dict[str, str]] = None,
+    prompt: str = "",
+    known_session_id: Optional[str] = None,
+) -> None:
+    """Internal: run agent, stream output to Hub, save session ID (must hold spawn lock)."""
     runner_type = _get_runner_type(agent)
     is_kimi = runner_type == "kimi"
+    # Detect wire mode: --wire flag in cmd indicates JSON-RPC bidirectional mode
+    is_wire_mode = is_kimi and "--wire" in cmd
 
     # Send "running" heartbeat + diagnostic start marker
     if is_http:
@@ -920,12 +1315,17 @@ def _run_agent_subprocess(
         except Exception as exc:
             print(f"[ERROR] Could not post start marker to Hub: {exc}", file=sys.stderr)
 
-    session_id: Optional[str] = None
+    session_id: Optional[str] = known_session_id
     # Mutable container so the stderr thread can read the latest session_id
-    session_id_ref: List[Optional[str]] = [None]
-    # Collect all stdout lines for Kimi session ID extraction
+    session_id_ref: List[Optional[str]] = [known_session_id]
+    # Collect all stdout lines for Kimi session ID extraction (print mode only)
     kimi_stdout_lines: List[str] = []
-    kimi_parser = _KimiParser() if is_kimi else None
+    # Select appropriate parser based on mode
+    kimi_parser: Optional[Any] = None
+    if is_wire_mode:
+        kimi_parser = _KimiWireParser()
+    elif is_kimi:
+        kimi_parser = _KimiParser()
 
     def _drain_stderr(proc: subprocess.Popen) -> None:
         """Read stderr in a background thread and post each line as agent output
@@ -995,11 +1395,14 @@ def _run_agent_subprocess(
                         file=sys.stderr,
                     )
 
+        # Wire mode requires bidirectional stdin/stdout communication
+        stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
+
         proc = subprocess.Popen(
             run_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            stdin=subprocess.DEVNULL,
+            stdin=stdin_config,
             text=True,
             bufsize=1,
             env=proc_env,
@@ -1007,11 +1410,57 @@ def _run_agent_subprocess(
         stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
         stderr_thread.start()
 
+        # For wire mode, send the JSON-RPC prompt immediately after starting
+        if is_wire_mode and kimi_parser is not None:
+            # Use the provided prompt parameter, or fallback to a default
+            wire_prompt = prompt if prompt else (
+                "You have a new AgentWeave message. "
+                "Call get_inbox to retrieve it and respond."
+            )
+            jsonrpc_request = {
+                "jsonrpc": "2.0",
+                "method": "prompt",
+                "id": f"{agent}-{int(time.time() * 1000)}",
+                "params": {"user_input": wire_prompt},
+            }
+            try:
+                proc.stdin.write(json.dumps(jsonrpc_request) + "\n")  # type: ignore[union-attr]
+                proc.stdin.flush()  # type: ignore[union-attr]
+            except Exception as exc:
+                logger.warning(
+                    "wire_mode_prompt_write_failed",
+                    extra={
+                        "event": "wire_mode_prompt_write_failed",
+                        "data": {"agent": agent, "error": str(exc)},
+                    },
+                )
+
         output_line_count = 0
+        usage_data_for_context: Optional[Dict[str, Any]] = None
+        # Track compaction state to only reset on transition into compaction
+        was_in_compaction = False
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
 
-            if is_kimi:
+            if is_wire_mode and kimi_parser is not None:
+                # Parse Kimi's JSON-RPC wire mode events
+                readable_lines = kimi_parser.feed(line)
+                # Extract context usage from StatusUpdate events
+                wire_context_usage = kimi_parser.get_context_usage()
+                if wire_context_usage is not None:
+                    usage_data_for_context = wire_context_usage
+                # Check for compaction events - only reset on transition into compaction
+                is_in_compaction = kimi_parser.is_in_compaction()
+                if is_in_compaction and not was_in_compaction:
+                    _reset_context_usage(agent)
+                was_in_compaction = is_in_compaction
+                # Capture session ID from TurnEnd events
+                # Always update — Kimi may create a new session even when resuming with --session
+                wire_session_id = kimi_parser.get_session_id()
+                if wire_session_id:
+                    session_id = wire_session_id
+                    session_id_ref[0] = wire_session_id
+            elif is_kimi:
                 # Collect all lines for post-exit session ID extraction
                 kimi_stdout_lines.append(line)
                 # Extract session ID in real-time if seen on stdout
@@ -1029,7 +1478,10 @@ def _run_agent_subprocess(
                     if extracted:
                         session_id = extracted
                         session_id_ref[0] = session_id
-                readable_lines = _parse_claude_stream_line(line)
+                readable_lines, usage_data = _parse_claude_stream_line(line)
+                # Capture usage data from result messages for context monitoring
+                if usage_data:
+                    usage_data_for_context = usage_data
 
             # Stream to Hub or local stdout
             if is_http:
@@ -1071,40 +1523,34 @@ def _run_agent_subprocess(
             with contextlib.suppress(Exception):
                 transport.post_agent_output(agent, summary, session_id=session_id_ref[0])
 
+        # Write context usage if we captured usage data (Claude/claude_proxy or Kimi wire mode)
+        if not is_kimi and usage_data_for_context and proc.returncode == 0:
+            input_tokens = usage_data_for_context.get("input_tokens")
+            if input_tokens is not None:
+                # Get model from session config
+                model = None
+                from .session import Session
+
+                _sess = Session.load()
+                if _sess:
+                    runner_config = _sess.get_runner_config(agent)
+                    model = runner_config.get("model")
+                ctx_data = _write_context_usage(agent, input_tokens, model)
+                if is_http and ctx_data:
+                    with contextlib.suppress(Exception):
+                        transport.post_context_usage(agent, ctx_data)
+
+        # Write context usage for Kimi wire mode (uses context_usage ratio instead of input_tokens)
+        if is_wire_mode and usage_data_for_context and proc.returncode == 0:
+            ctx_data = _write_context_usage_from_wire(agent, usage_data_for_context)
+            if is_http and ctx_data:
+                with contextlib.suppress(Exception):
+                    transport.post_context_usage(agent, ctx_data)
+
         return proc.returncode or 0
 
     try:
         returncode = _run_cmd(cmd, session_id)
-
-        # If the process failed and we used a session ID, the session may be
-        # expired. Clear it and retry once without --resume/--session.
-        saved_session = _load_agent_session(agent)
-        if returncode != 0 and saved_session:
-            logger.warning(
-                "watchdog_session_retry",
-                extra={
-                    "event": "watchdog_session_retry",
-                    "data": {
-                        "agent": agent,
-                        "exit_code": returncode,
-                        "reason": "stale session cleared",
-                    },
-                },
-            )
-            print(
-                f"[WARN] {agent} exited with code {returncode} — session may be stale, "
-                f"clearing and retrying without session ID",
-                file=sys.stderr,
-            )
-            # Clear the stale session file
-            session_file = AGENTS_DIR / f"{agent}-session.json"
-            with contextlib.suppress(Exception):
-                session_file.unlink(missing_ok=True)
-            session_id = None
-            session_id_ref[0] = None
-            kimi_stdout_lines.clear()
-            retry_cmd = _agent_ping_cmd(agent, cmd[-1], session_id=None)  # cmd[-1] is the prompt
-            returncode = _run_cmd(retry_cmd, None)
 
         if returncode != 0:
             logger.warning(
@@ -1131,8 +1577,9 @@ def _run_agent_subprocess(
         )
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
-    # Extract Kimi session ID from collected stdout lines (post-exit)
-    if is_kimi and session_id is None and kimi_stdout_lines:
+    # Extract Kimi session ID from collected stdout lines (post-exit) for print mode
+    # Wire mode captures session ID from TurnEnd events in real-time
+    if is_kimi and not is_wire_mode and session_id is None and kimi_stdout_lines:
         found = _extract_kimi_session_from_stdout(kimi_stdout_lines)
         if found:
             session_id = found
@@ -1144,6 +1591,16 @@ def _run_agent_subprocess(
                     "data": {"session_id": found, "method": "stdout_resume_line"},
                 },
             )
+
+    # Wire mode: log if we captured session ID from TurnEnd event
+    if is_wire_mode and session_id:
+        logger.info(
+            "watchdog_kimi_wire_session_found",
+            extra={
+                "event": "watchdog_kimi_wire_session_found",
+                "data": {"session_id": session_id, "method": "TurnEnd_event"},
+            },
+        )
 
     # Persist session ID for next run
     if session_id:
@@ -1273,7 +1730,7 @@ def _make_ping_callback(
 
         t = threading.Thread(
             target=_run_agent_subprocess,
-            args=(recipient, cmd, subject, transport, is_http, env_vars),
+            args=(recipient, cmd, subject, transport, is_http, env_vars, prompt, session_id),
             daemon=True,
         )
         t.start()
@@ -1283,11 +1740,16 @@ def _make_ping_callback(
 
 def _make_direct_trigger_callback(
     transport: Any = None,
+    watchdog_instance: Optional["Watchdog"] = None,
 ) -> Callable:
     """Return a callback that polls for and executes direct trigger messages from Hub UI.
 
     These are messages created by the Hub UI's "Send Message" feature that need
     to be executed on the host machine (where the CLIs are installed).
+
+    Args:
+        transport: The transport instance to use for communication
+        watchdog_instance: Optional Watchdog instance for accessing state (e.g., message counts)
     """
     is_http = transport is not None and transport.get_transport_type() == "http"
     # Pre-populate from disk so restarts don't re-trigger already-processed messages.
@@ -1338,6 +1800,7 @@ def _make_direct_trigger_callback(
         # this watchdog session.
         content = data.get("content", "")
         session_id = None
+        is_new_session = False
         if "[Session:" in content:
             import re as _re
 
@@ -1346,12 +1809,36 @@ def _make_direct_trigger_callback(
                 session_id = match.group(1).strip()
         elif "[NewSession]" in content:
             # Hub UI explicitly requested a new session — leave session_id as None.
-            pass
+            is_new_session = True
         else:
             # No session tag present: fall back to the agent's last saved session.
             # This prevents unnecessary new sessions when the Hub UI sends a message
             # before its session-selector has finished loading.
             session_id = _load_agent_session(recipient)
+
+        # Reset context usage and message count when starting a new session
+        if is_new_session:
+            _reset_context_usage(recipient)
+            # Immediately notify Hub to clear the context bar in Mission Control
+            if is_http and transport is not None:
+                try:
+                    reset_data = {
+                        "agent": recipient,
+                        "percent": 0,
+                        "warning": False,
+                        "critical": False,
+                        "threshold_warning": 70,
+                        "threshold_critical": 90,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    transport.post_context_usage(recipient, reset_data)
+                except Exception:
+                    pass
+            # Reset message count on watchdog instance if available
+            if watchdog_instance is not None:
+                watchdog_instance.agent_message_counts[recipient] = 0
+                watchdog_instance.agent_nudged_at.pop(recipient, None)
+                watchdog_instance._last_context_posted.pop(recipient, None)
 
         prompt = (
             f"You have a new AgentWeave message from user. "
@@ -1385,7 +1872,7 @@ def _make_direct_trigger_callback(
         # Message is intentionally left unread so the agent can read it via get_inbox.
         t = threading.Thread(
             target=_run_agent_subprocess,
-            args=(recipient, cmd, "Direct trigger from Hub", transport, is_http, env_vars),
+            args=(recipient, cmd, "Direct trigger from Hub", transport, is_http, env_vars, prompt, session_id),
             daemon=True,
         )
         t.start()
@@ -1470,7 +1957,7 @@ def main() -> None:
 
     # Always enable direct trigger callback for HTTP transport
     # This allows Hub UI "Send Message" to work
-    callbacks.append(_make_direct_trigger_callback(transport=watchdog.transport))
+    callbacks.append(_make_direct_trigger_callback(transport=watchdog.transport, watchdog_instance=watchdog))
     print("[TRIGGER] Direct trigger handler enabled (for Hub UI messages)")
 
     # On HTTP transport: push session config to the Hub so it knows the full

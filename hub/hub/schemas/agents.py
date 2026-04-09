@@ -24,6 +24,7 @@ class AgentSummary(BaseModel):
     context_usage: Optional[Dict[str, Any]] = (
         None  # {percent, warning, model, threshold_warning, updated_at}
     )
+    session_started_at: Optional[datetime] = None  # When the current session started
 
     model_config = {"from_attributes": True}
 

@@ -1,5 +1,6 @@
 """Constants for the AgentWeave framework."""
 
+import os
 import re
 from enum import Enum
 from pathlib import Path
@@ -201,3 +202,34 @@ VALID_ROLE_IDS = [
     "code_reviewer",
     "project_manager",
 ]
+
+# Claude context window limits by model name substring (all Claude 3.x/4.x are 200K)
+CLAUDE_CONTEXT_LIMITS: dict = {
+    "claude-opus-4": 200000,
+    "claude-sonnet-4": 200000,
+    "claude-haiku-4": 200000,
+    "claude-3-opus": 200000,
+    "claude-3-sonnet": 200000,
+    "claude-3-haiku": 200000,
+    "claude-3-5-sonnet": 200000,
+    "claude-3-5-haiku": 200000,
+}
+
+# Context nudge threshold: number of messages after which to prompt agent to checkpoint
+# Set to 0 to disable nudge messages. Default: 20 messages.
+CONTEXT_NUDGE_THRESHOLD = int(os.environ.get("AW_CONTEXT_NUDGE_THRESHOLD", "20"))
+
+# Kimi wire mode: set to "1", "true", or "yes" to enable JSON-RPC bidirectional mode
+# instead of the default --print mode. Default: disabled (print mode).
+KIMI_WIRE_MODE = os.environ.get("AW_KIMI_WIRE_MODE", "").lower() in ("1", "true", "yes")
+
+
+def _get_context_limit(model: str) -> int:
+    """Return context limit for a Claude model, defaulting to 200K for unknown models."""
+    if not model:
+        return 200000
+    model_lower = model.lower()
+    for substr, limit in CLAUDE_CONTEXT_LIMITS.items():
+        if substr in model_lower:
+            return limit
+    return 200000  # Default for all current and future Claude models

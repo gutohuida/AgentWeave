@@ -290,6 +290,21 @@ class HttpTransport(BaseTransport):
             )
             return False
 
+    def post_context_usage(self, agent: str, data: Dict[str, Any]) -> bool:
+        """POST /api/v1/agents/{name}/context-usage — update context usage in Mission Control."""
+        try:
+            self._request("POST", f"/agents/{agent}/context-usage", data)
+            return True
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "post_context_usage", "error": str(exc)},
+                },
+            )
+            return False
+
     def push_session(self, session_data: Dict[str, Any]) -> bool:
         """POST /api/v1/session/sync — push session.json config to the Hub.
 

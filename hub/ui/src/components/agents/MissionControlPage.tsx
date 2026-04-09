@@ -223,7 +223,7 @@ function MissionCard({ agent }: MissionCardProps) {
       {/* Context bar */}
       <ContextBar agent={agent} />
 
-      {/* Active session info */}
+      {/* Session age and checkpoint info */}
       <div
         className="mt-3 rounded-lg px-3 py-2"
         style={{ background: 'color-mix(in srgb, var(--on-sv) 5%, transparent)', border: '1px solid var(--outline-variant)' }}
@@ -231,38 +231,28 @@ function MissionCard({ agent }: MissionCardProps) {
         <div className="flex items-center gap-1 mb-1">
           <Icon name="history" size={12} style={{ color: 'var(--on-sv)', opacity: 0.5 } as React.CSSProperties} />
           <span className="m3-label-small font-medium" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
-            Active Session
+            Session
           </span>
-          {sessions.length > 0 && (
-            <span
-              className="ml-auto m3-label-small px-1.5 py-0.5 rounded-full"
-              style={{ background: 'color-mix(in srgb, var(--primary) 12%, transparent)', color: 'var(--primary)', fontSize: '0.6rem' }}
-            >
-              {sessions.length} total
-            </span>
-          )}
         </div>
-        {activeSession ? (
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-2 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
-              <span title={activeSession.id} style={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                {activeSession.id.slice(0, 8)}…
-              </span>
-              <span className="ml-auto">
-                {activeSession.last_active
-                  ? formatDistanceToNow(new Date(activeSession.last_active), { addSuffix: true })
-                  : '—'}
-              </span>
-            </div>
-            {activeSession.started_at && (
-              <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.45, fontSize: '0.6rem' }}>
-                started {formatDistanceToNow(new Date(activeSession.started_at), { addSuffix: true })}
-              </span>
-            )}
+        
+        {/* Session age display */}
+        {agent.session_started_at ? (
+          <div className="flex items-center gap-1 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+            <span>Session age:</span>
+            <span className="font-medium">{formatDistanceToNow(new Date(agent.session_started_at))}</span>
+          </div>
+        ) : activeSession ? (
+          <div className="flex items-center gap-1 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+            <span>Session:</span>
+            <span style={{ fontFamily: 'monospace', fontSize: '0.65rem' }}>
+              {activeSession.id.slice(0, 8)}…
+            </span>
           </div>
         ) : (
           <p className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.4 }}>No session data yet</p>
         )}
+
+
       </div>
 
       {/* Action buttons */}
