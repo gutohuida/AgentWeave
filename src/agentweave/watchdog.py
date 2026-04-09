@@ -966,7 +966,10 @@ def _write_context_usage(
     except OSError as exc:
         logger.warning(
             "context_usage_write_failed",
-            extra={"event": "context_usage_write_failed", "data": {"agent": agent, "error": str(exc)}},
+            extra={
+                "event": "context_usage_write_failed",
+                "data": {"agent": agent, "error": str(exc)},
+            },
         )
         return None
 
@@ -987,7 +990,10 @@ def _reset_context_usage(agent: str) -> None:
     except OSError as exc:
         logger.warning(
             "context_usage_reset_failed",
-            extra={"event": "context_usage_reset_failed", "data": {"agent": agent, "error": str(exc)}},
+            extra={
+                "event": "context_usage_reset_failed",
+                "data": {"agent": agent, "error": str(exc)},
+            },
         )
 
 
@@ -1028,7 +1034,10 @@ def _write_context_usage_from_wire(
     except OSError as exc:
         logger.warning(
             "context_usage_wire_write_failed",
-            extra={"event": "context_usage_wire_write_failed", "data": {"agent": agent, "error": str(exc)}},
+            extra={
+                "event": "context_usage_wire_write_failed",
+                "data": {"agent": agent, "error": str(exc)},
+            },
         )
         return None
 
@@ -1277,7 +1286,9 @@ def _run_agent_subprocess(
         return
 
     try:
-        _do_run_agent_subprocess(agent, cmd, subject, transport, is_http, env_vars, prompt, known_session_id)
+        _do_run_agent_subprocess(
+            agent, cmd, subject, transport, is_http, env_vars, prompt, known_session_id
+        )
     finally:
         release_lock(lock_name)
 
@@ -1413,9 +1424,13 @@ def _do_run_agent_subprocess(
         # For wire mode, send the JSON-RPC prompt immediately after starting
         if is_wire_mode and kimi_parser is not None:
             # Use the provided prompt parameter, or fallback to a default
-            wire_prompt = prompt if prompt else (
-                "You have a new AgentWeave message. "
-                "Call get_inbox to retrieve it and respond."
+            wire_prompt = (
+                prompt
+                if prompt
+                else (
+                    "You have a new AgentWeave message. "
+                    "Call get_inbox to retrieve it and respond."
+                )
             )
             jsonrpc_request = {
                 "jsonrpc": "2.0",
@@ -1872,7 +1887,16 @@ def _make_direct_trigger_callback(
         # Message is intentionally left unread so the agent can read it via get_inbox.
         t = threading.Thread(
             target=_run_agent_subprocess,
-            args=(recipient, cmd, "Direct trigger from Hub", transport, is_http, env_vars, prompt, session_id),
+            args=(
+                recipient,
+                cmd,
+                "Direct trigger from Hub",
+                transport,
+                is_http,
+                env_vars,
+                prompt,
+                session_id,
+            ),
             daemon=True,
         )
         t.start()
@@ -1957,7 +1981,9 @@ def main() -> None:
 
     # Always enable direct trigger callback for HTTP transport
     # This allows Hub UI "Send Message" to work
-    callbacks.append(_make_direct_trigger_callback(transport=watchdog.transport, watchdog_instance=watchdog))
+    callbacks.append(
+        _make_direct_trigger_callback(transport=watchdog.transport, watchdog_instance=watchdog)
+    )
     print("[TRIGGER] Direct trigger handler enabled (for Hub UI messages)")
 
     # On HTTP transport: push session config to the Hub so it knows the full
