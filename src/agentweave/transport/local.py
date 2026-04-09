@@ -155,7 +155,7 @@ class LocalTransport(BaseTransport):
         # Trigger the agent in a background thread (non-blocking)
         import contextlib
 
-        def _trigger():
+        def _trigger() -> None:
             with contextlib.suppress(Exception):  # Error already logged
                 self._do_fire_job(job, run, trigger)
 
@@ -163,7 +163,7 @@ class LocalTransport(BaseTransport):
         t.start()
         return True
 
-    def _do_fire_job(self, job, run, trigger: str) -> None:
+    def _do_fire_job(self, job: Any, run: Any, trigger: str) -> None:
         """Actually fire the job by running the agent subprocess."""
         import logging
         import subprocess

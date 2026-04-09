@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Optional croniter import (only required for [jobs] extra)
 try:
-    from croniter import CroniterBadCronError, croniter
+    from croniter import CroniterBadCronError, croniter  # type: ignore[import-untyped]
 
     CRONITER_AVAILABLE = True
 except ImportError:
@@ -116,7 +116,7 @@ class Job:
     synced: bool = False
     last_session_id: Optional[str] = None  # For resume mode
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default created_at if not provided."""
         if not self.created_at:
             self.created_at = now_iso()
@@ -284,7 +284,7 @@ class Job:
         Returns:
             List of Job instances
         """
-        jobs = []
+        jobs: List[Job] = []
 
         if not JOBS_DIR.exists():
             return jobs
