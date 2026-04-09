@@ -70,7 +70,6 @@ class Watchdog:
         self._last_context_posted: Dict[str, dict] = {}  # agent -> last context data posted to Hub
         self.compact_decision_mtime: float = 0.0  # mtime of last-processed compact_decision.md
 
-
     def _default_callback(self, event_type: str, data: dict) -> None:
         """Default callback that prints to stdout."""
         if event_type == "new_message":
@@ -407,7 +406,16 @@ class Watchdog:
         is_http = self.transport.get_transport_type() == "http"
         t = threading.Thread(
             target=_run_agent_subprocess,
-            args=(agent, cmd, f"Job: {job.name}", self.transport, is_http, env_vars, message, session_id),
+            args=(
+                agent,
+                cmd,
+                f"Job: {job.name}",
+                self.transport,
+                is_http,
+                env_vars,
+                message,
+                session_id,
+            ),
             daemon=True,
         )
         t.start()
@@ -1295,7 +1303,9 @@ def _build_agent_context(agent: str, session: Any) -> str:
                 except Exception:
                     lines.append(f"- Role `{role_id}` (content unavailable)")
             else:
-                lines.append(f"- Role `{role_id}` (guide not found at .agentweave/roles/{role_id}.md)")
+                lines.append(
+                    f"- Role `{role_id}` (guide not found at .agentweave/roles/{role_id}.md)"
+                )
         lines.append("")
 
     # --- Quick Start ---

@@ -275,9 +275,7 @@ class AIJob(Base):
     run_count: Mapped[int] = mapped_column(
         default=0, nullable=False, server_default="0"
     )
-    last_session_id: Mapped[Optional[str]] = mapped_column(
-        String(128), nullable=True
-    )
+    last_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     source: Mapped[str] = mapped_column(
         String(16), default="hub", nullable=False
     )  # "local" or "hub" - tracks origin for sync logic
@@ -314,12 +312,8 @@ class JobRun(Base):
     trigger: Mapped[str] = mapped_column(
         String(16), default="scheduled", nullable=False
     )  # "scheduled" or "manual"
-    session_id: Mapped[Optional[str]] = mapped_column(
-        String(128), nullable=True
-    )
+    session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     job: Mapped["AIJob"] = relationship(back_populates="runs")
 
-    __table_args__ = (
-        Index("ix_job_runs_job_fired", "job_id", "fired_at"),
-    )
+    __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)

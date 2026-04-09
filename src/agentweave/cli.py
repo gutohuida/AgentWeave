@@ -98,7 +98,8 @@ def cmd_init(args: argparse.Namespace) -> int:
         agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
         readme_path = AGENTWEAVE_DIR / "README.md"
         with open(readme_path, "w", encoding="utf-8") as f:
-            f.write(f"""# AgentWeave Session: {session.name}
+            f.write(
+                f"""# AgentWeave Session: {session.name}
 
 **ID:** {session.id}
 **Mode:** {session.mode}
@@ -143,7 +144,8 @@ agentweave summary
 - `messages/pending/` — Unread messages
 - `messages/archive/` — Message history
 - `shared/` — Shared context and decisions
-""")
+"""
+            )
 
         # Write protocol.md — collaboration guide inside .agentweave/
         non_principal = [a for a in session.agent_names if a != session.principal]
@@ -2216,7 +2218,9 @@ def cmd_jobs_list(args: argparse.Namespace) -> int:
         return 0
 
     # Print table header
-    print(f"{'ID':<15} {'Name':<20} {'Agent':<12} {'Cron':<15} {'Enabled':<8} {'Last Run':<20} {'Next Run':<20}")
+    print(
+        f"{'ID':<15} {'Name':<20} {'Agent':<12} {'Cron':<15} {'Enabled':<8} {'Last Run':<20} {'Next Run':<20}"
+    )
     print("-" * 120)
 
     for job in jobs:
@@ -2228,7 +2232,9 @@ def cmd_jobs_list(args: argparse.Namespace) -> int:
         last_run = job.get("last_run", "Never")[:19]
         next_run = job.get("next_run", "-")[:19]
 
-        print(f"{job_id:<15} {name:<20} {agent:<12} {cron:<15} {enabled:<8} {last_run:<20} {next_run:<20}")
+        print(
+            f"{job_id:<15} {name:<20} {agent:<12} {cron:<15} {enabled:<8} {last_run:<20} {next_run:<20}"
+        )
 
     print(f"\nTotal: {len(jobs)} job(s)")
     return 0
@@ -3175,7 +3181,9 @@ For more help: https://github.com/gutohuida/AgentWeave
     jobs_create.add_argument("--name", "-n", required=True, help="Job name")
     jobs_create.add_argument("--agent", "-a", required=True, help="Target agent name")
     jobs_create.add_argument("--message", "-m", required=True, help="Message to send to agent")
-    jobs_create.add_argument("--cron", "-c", required=True, help="Cron expression (e.g., '0 9 * * 1-5')")
+    jobs_create.add_argument(
+        "--cron", "-c", required=True, help="Cron expression (e.g., '0 9 * * 1-5')"
+    )
     jobs_create.add_argument(
         "--session-mode",
         choices=["new", "resume"],

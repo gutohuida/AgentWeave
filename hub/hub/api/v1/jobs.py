@@ -31,6 +31,7 @@ async def create_job(
     # Validate cron using croniter
     try:
         from croniter import CroniterBadCronError, croniter
+
         croniter(body.cron)
     except ImportError:
         # croniter not installed - skip validation
@@ -338,7 +339,9 @@ async def run_job(
             )
 
         # Pass the session to avoid duplicate work
-        success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
+        success = await scheduler._fire_job_internal(
+            job, trigger="manual", session=session
+        )
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -351,7 +354,10 @@ async def run_job(
         from ...db.models import JobRun
 
         result = await session.execute(
-            select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(1)
+            select(JobRun)
+            .where(JobRun.job_id == job_id)
+            .order_by(JobRun.fired_at.desc())
+            .limit(1)
         )
         latest_run = result.scalar_one_or_none()
         run_id = latest_run.id if latest_run else "unknown"
