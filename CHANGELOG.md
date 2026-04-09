@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.20.0] - 2026-04-09
+
+### Added (CLI v0.20.0)
+- **Agent pause/resume functionality** — agents can now be paused and resumed via API and CLI
+- **Session mission control** — new watchdog session management features for better multi-session handling
+- **Enhanced HTTP transport** — improved transport layer with better error handling
+- **New agent state constants** — added `AGENT_STATE_PAUSED` and related state management constants
+
+### Added (Hub v0.15.0)
+- **Mission Control dashboard enhancements** — improved agent management UI with pause/resume controls
+- **Agent state API endpoints** — new endpoints for managing agent paused/active states
+- **UI improvements** — updated MissionControlPage with better agent status visualization
+
+---
 ## [0.19.0] - 2026-04-07
 
 ### Added (CLI)
