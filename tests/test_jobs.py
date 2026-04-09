@@ -160,7 +160,7 @@ class TestJobValidation:
     def test_validate_cron_valid(self):
         if not CRONITER_AVAILABLE:
             pytest.skip("croniter not available")
-        
+
         # Should not raise
         Job.validate_cron("0 9 * * *")
         Job.validate_cron("*/5 * * * *")
@@ -169,7 +169,7 @@ class TestJobValidation:
     def test_validate_cron_invalid(self):
         if not CRONITER_AVAILABLE:
             pytest.skip("croniter not available")
-        
+
         with pytest.raises(ValueError, match="Invalid cron"):
             Job.validate_cron("invalid")
         with pytest.raises(ValueError, match="Invalid cron"):
@@ -219,7 +219,7 @@ class TestJobPersistence:
 
     def test_job_list_all(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        
+
         # Create some jobs
         job1 = Job(id="job-1", name="Job 1", agent="kimi", message="M1", cron="0 9 * * *")
         job2 = Job(id="job-2", name="Job 2", agent="claude", message="M2", cron="0 10 * * *")
@@ -243,15 +243,17 @@ class TestJobPersistence:
 
     def test_job_delete(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        job = Job(id="job-delete", name="Delete Me", agent="kimi", message="Delete", cron="0 9 * * *")
+        job = Job(
+            id="job-delete", name="Delete Me", agent="kimi", message="Delete", cron="0 9 * * *"
+        )
         job.save()
-        
+
         # Verify it exists
         assert Job.load("job-delete") is not None
-        
+
         # Delete it
         assert job.delete() is True
-        
+
         # Verify it's gone
         assert Job.load("job-delete") is None
 
@@ -303,21 +305,21 @@ class TestJobShouldFire:
     def test_should_fire_old_last_run(self, monkeypatch):
         """Test job fires when last run was long ago."""
         from datetime import datetime as dt
-        
+
         # Mock datetime.now() to a known minute boundary (10:00:00)
         mock_now = dt(2024, 1, 15, 10, 0, 0)
-        
+
         class MockDateTime:
             @classmethod
             def now(cls, tz=None):
                 return mock_now
-            
+
             @classmethod
             def fromisoformat(cls, s):
                 return dt.fromisoformat(s)
-        
+
         monkeypatch.setattr("agentweave.jobs.datetime", MockDateTime)
-        
+
         # Create a job that ran 5 minutes ago (at 9:55:00)
         old_run = (mock_now - timedelta(minutes=5)).isoformat()
         job = Job(
@@ -349,12 +351,12 @@ class TestJobRecordRun:
         job.save()
 
         run = job.record_run(status="fired", trigger="manual", session_id="sess-test")
-        
+
         assert run.job_id == job.id
         assert run.status == "fired"
         assert run.trigger == "manual"
         assert run.session_id == "sess-test"
-        
+
         # Job stats should be updated
         assert job.run_count == 1
         assert job.last_session_id == "sess-test"

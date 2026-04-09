@@ -5,6 +5,7 @@ import pytest
 # Check if croniter is available
 try:
     from croniter import croniter
+
     CRONITER_AVAILABLE = True
 except ImportError:
     CRONITER_AVAILABLE = False
@@ -399,11 +400,11 @@ async def test_job_history_tracks_runs(app, auth_headers):
 
     # Run the job
     run_resp = await app.post(f"/api/v1/jobs/{job_id}/run", headers=auth_headers)
-    
+
     # If scheduler not available, skip this test
     if run_resp.status_code == 503:
         pytest.skip("Scheduler not available in test environment")
-    
+
     # Should succeed
     assert run_resp.status_code == 200
     assert run_resp.json()["success"] is True

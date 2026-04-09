@@ -104,7 +104,9 @@ def test_save_triggered_id_suppresses_exceptions(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _make_callback_and_fire(content: str, saved_session: Optional[str], tmp_path: Path, monkeypatch):
+def _make_callback_and_fire(
+    content: str, saved_session: Optional[str], tmp_path: Path, monkeypatch
+):
     """Helper: build a direct trigger callback, fire it with the given message content,
     and return the session_id that was passed to _agent_ping_cmd."""
     from agentweave import watchdog as wd
