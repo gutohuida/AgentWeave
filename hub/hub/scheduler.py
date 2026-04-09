@@ -158,9 +158,7 @@ class JobScheduler:
             # Job might not exist in scheduler
             return False
 
-    async def _prune_job_history(
-        self, session: AsyncSession, job_id: str, keep: int = 100
-    ) -> None:
+    async def _prune_job_history(self, session: AsyncSession, job_id: str, keep: int = 100) -> None:
         """Prune old job runs, keeping only the most recent `keep` entries.
 
         Called automatically after each job fire to maintain history size.
@@ -246,9 +244,7 @@ class JobScheduler:
                 fired_at=fired_at,
                 status="fired",
                 trigger=trigger,
-                session_id=job.last_session_id
-                if job.session_mode == "resume"
-                else None,
+                session_id=job.last_session_id if job.session_mode == "resume" else None,
             )
             session.add(run)
 
@@ -274,9 +270,7 @@ class JobScheduler:
                 type="message",
                 timestamp=fired_at,
                 read=False,
-                session_id=job.last_session_id
-                if job.session_mode == "resume"
-                else None,
+                session_id=job.last_session_id if job.session_mode == "resume" else None,
             )
             session.add(msg)
 

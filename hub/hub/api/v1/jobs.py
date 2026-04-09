@@ -88,9 +88,7 @@ async def create_job(
     except Exception:
         pass  # Scheduler might not be initialized yet
 
-    await sse_manager.broadcast(
-        project_id, "job_created", {"id": job_id, "name": body.name}
-    )
+    await sse_manager.broadcast(project_id, "job_created", {"id": job_id, "name": body.name})
     await persist_event(
         session,
         project_id,
@@ -131,12 +129,7 @@ async def get_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     # Load last 10 runs
-    q = (
-        select(JobRun)
-        .where(JobRun.job_id == job_id)
-        .order_by(JobRun.fired_at.desc())
-        .limit(10)
-    )
+    q = select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(10)
     result = await session.execute(q)
     runs = result.scalars().all()
 
@@ -243,9 +236,7 @@ async def update_job(
         except Exception:
             pass
 
-    await sse_manager.broadcast(
-        project_id, "job_updated", {"id": job_id, "enabled": job.enabled}
-    )
+    await sse_manager.broadcast(project_id, "job_updated", {"id": job_id, "enabled": job.enabled})
 
     return job
 
@@ -299,12 +290,7 @@ async def get_job_history(
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    q = (
-        select(JobRun)
-        .where(JobRun.job_id == job_id)
-        .order_by(JobRun.fired_at.desc())
-        .limit(limit)
-    )
+    q = select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()
 
@@ -339,9 +325,7 @@ async def run_job(
             )
 
         # Pass the session to avoid duplicate work
-        success = await scheduler._fire_job_internal(
-            job, trigger="manual", session=session
-        )
+        success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -354,10 +338,7 @@ async def run_job(
         from ...db.models import JobRun
 
         result = await session.execute(
-            select(JobRun)
-            .where(JobRun.job_id == job_id)
-            .order_by(JobRun.fired_at.desc())
-            .limit(1)
+            select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(1)
         )
         latest_run = result.scalar_one_or_none()
         run_id = latest_run.id if latest_run else "unknown"

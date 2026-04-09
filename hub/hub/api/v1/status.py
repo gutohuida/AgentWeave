@@ -36,16 +36,12 @@ async def get_status(
         assignee_rows,
     ) = await asyncio.gather(
         session.scalar(
-            select(func.count())
-            .select_from(Message)
-            .where(Message.project_id == project_id)
+            select(func.count()).select_from(Message).where(Message.project_id == project_id)
         ),
         session.scalar(
             select(func.count())
             .select_from(Message)
-            .where(
-                Message.project_id == project_id, Message.read == False
-            )  # noqa: E712
+            .where(Message.project_id == project_id, Message.read == False)  # noqa: E712
         ),
         session.execute(
             select(Task.status, func.count())
@@ -53,16 +49,12 @@ async def get_status(
             .group_by(Task.status)
         ),
         session.scalar(
-            select(func.count())
-            .select_from(Question)
-            .where(Question.project_id == project_id)
+            select(func.count()).select_from(Question).where(Question.project_id == project_id)
         ),
         session.scalar(
             select(func.count())
             .select_from(Question)
-            .where(
-                Question.project_id == project_id, Question.answered == False
-            )  # noqa: E712
+            .where(Question.project_id == project_id, Question.answered == False)  # noqa: E712
         ),
         session.execute(
             select(Message.sender)

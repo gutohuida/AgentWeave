@@ -27,7 +27,7 @@ def main():
 
     print("Phase 1: Architecture (Claude)")
     print("-" * 40)
-    
+
     # Claude designs architecture
     arch_task = Task.create(
         title="Design System Architecture",
@@ -39,23 +39,23 @@ def main():
     arch_task.save()
     arch_task.update(status="in_progress")
     arch_task.save()
-    
+
     print("Claude is designing architecture...")
     print()
-    
+
     # Claude completes and splits into parallel tasks
     arch_task.update(status="completed")
     arch_task.save()
     arch_task.move_to_completed()
     session.complete_task(arch_task.id)
-    
+
     print("Architecture complete!")
     print("Splitting into parallel workstreams...")
     print()
 
     print("Phase 2: Parallel Implementation")
     print("-" * 40)
-    
+
     # Backend work for Kimi
     backend_task = Task.create(
         title="Implement Backend API",
@@ -67,7 +67,7 @@ def main():
     backend_task.save()
     backend_task.update(status="in_progress")
     backend_task.save()
-    
+
     # Frontend work for Claude
     frontend_task = Task.create(
         title="Design Frontend Components",
@@ -79,11 +79,11 @@ def main():
     frontend_task.save()
     frontend_task.update(status="in_progress")
     frontend_task.save()
-    
+
     session.add_task(backend_task.id)
     session.add_task(frontend_task.id)
     session.save()
-    
+
     print(f"Backend Task ({backend_task.id}): Kimi - IN_PROGRESS")
     print(f"Frontend Task ({frontend_task.id}): Claude - IN_PROGRESS")
     print()
@@ -95,17 +95,17 @@ def main():
     backend_task.save()
     backend_task.move_to_completed()
     session.complete_task(backend_task.id)
-    
+
     frontend_task.update(status="completed")
     frontend_task.save()
     frontend_task.move_to_completed()
     session.complete_task(frontend_task.id)
-    
+
     session.save()
 
     print("Phase 3: Integration")
     print("-" * 40)
-    
+
     integration_task = Task.create(
         title="Integrate Frontend and Backend",
         description="Connect frontend to backend API",
@@ -116,10 +116,10 @@ def main():
     integration_task.save()
     integration_task.update(status="in_progress")
     integration_task.save()
-    
+
     print(f"Integration Task ({integration_task.id}): Kimi")
     print()
-    
+
     integration_task.update(status="completed")
     integration_task.save()
     integration_task.move_to_completed()
@@ -131,10 +131,10 @@ def main():
     print("Parallel Workflow Complete!")
     print("=" * 60)
     print()
-    
+
     all_tasks = Task.list_all()
     completed = [t for t in all_tasks if t.status in ["completed", "approved"]]
-    
+
     print(f"Total tasks: {len(all_tasks)}")
     print(f"Completed: {len(completed)}")
     print()

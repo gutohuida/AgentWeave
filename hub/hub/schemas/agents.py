@@ -16,9 +16,7 @@ class AgentSummary(BaseModel):
     role: Optional[str] = None  # "principal" | "delegate" | "collaborator"
     yolo: bool = False
     runner: str = "native"  # "native" | "claude_proxy" | "kimi" | "manual"
-    display_model: Optional[
-        str
-    ] = None  # e.g. "Claude", "Kimi", "Minimax" — derived from runner
+    display_model: Optional[str] = None  # e.g. "Claude", "Kimi", "Minimax" — derived from runner
     dev_role: Optional[str] = None  # e.g. "tech_lead", "backend_dev" (primary role)
     dev_role_label: Optional[str] = None  # e.g. "Tech Lead", "Backend Developer"
     dev_roles: Optional[List[str]] = None  # All role IDs (new multi-role support)

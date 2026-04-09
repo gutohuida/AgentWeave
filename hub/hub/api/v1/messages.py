@@ -35,9 +35,7 @@ async def create_message(
         content=body.content,
         type=body.type,
         timestamp=(
-            datetime.fromisoformat(body.timestamp)
-            if body.timestamp
-            else datetime.now(timezone.utc)
+            datetime.fromisoformat(body.timestamp) if body.timestamp else datetime.now(timezone.utc)
         ),
         task_id=body.task_id,
     )
@@ -45,9 +43,7 @@ async def create_message(
     await session.commit()
     await session.refresh(msg)
     await sse_manager.broadcast(project_id, "message_created", _msg_dict(msg))
-    await persist_event(
-        session, project_id, "message_created", _msg_dict(msg), agent=msg.sender
-    )
+    await persist_event(session, project_id, "message_created", _msg_dict(msg), agent=msg.sender)
     return msg
 
 
