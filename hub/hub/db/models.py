@@ -37,6 +37,7 @@ class Project(Base):
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
     tasks: Mapped[List["Task"]] = relationship(back_populates="project")
     questions: Mapped[List["Question"]] = relationship(back_populates="project")
+    jobs: Mapped[List["AIJob"]] = relationship(back_populates="project")
 
 
 class ApiKey(Base):
@@ -240,4 +241,85 @@ class AgentOutput(Base):
     __table_args__ = (
         Index("ix_agent_outputs_project_agent", "project_id", "agent"),
         Index("ix_agent_outputs_project_ts", "project_id", "timestamp"),
+    )
+
+
+class AIJob(Base):
+    """Scheduled AI job for recurring agent tasks."""
+
+    __tablename__ = "ai_jobs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    cron: Mapped[str] = mapped_column(String(128), nullable=False)
+    session_mode: Mapped[str] = mapped_column(
+        String(16), default="new", nullable=False
+    )  # "new" or "resume"
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    last_run: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    next_run: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    run_count: Mapped[int] = mapped_column(
+        default=0, nullable=False, server_default="0"
+    )
+    last_session_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(16), default="hub", nullable=False
+    )  # "local" or "hub" - tracks origin for sync logic
+
+    project: Mapped["Project"] = relationship(back_populates="jobs")
+    runs: Mapped[List["JobRun"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_ai_jobs_project_agent", "project_id", "agent"),
+        Index("ix_ai_jobs_project_enabled", "project_id", "enabled"),
+    )
+
+
+class JobRun(Base):
+    """Execution record for an AI job."""
+
+    __tablename__ = "job_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    job_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("ai_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False
+    )
+    fired_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="fired", nullable=False
+    )  # "fired" or "failed"
+    trigger: Mapped[str] = mapped_column(
+        String(16), default="scheduled", nullable=False
+    )  # "scheduled" or "manual"
+    session_id: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True
+    )
+
+    job: Mapped["AIJob"] = relationship(back_populates="runs")
+
+    __table_args__ = (
+        Index("ix_job_runs_job_fired", "job_id", "fired_at"),
     )

@@ -36,6 +36,34 @@ class BaseTransport(ABC):
     def get_transport_type(self) -> str:
         """Return transport identifier: 'local', 'git', or 'http'."""
 
+    # ------------------------------------------------------------------
+    # AI Jobs (optional, raises NotImplementedError if not supported)
+    # ------------------------------------------------------------------
+
+    def create_job(self, job_data: Dict[str, Any]) -> Optional[str]:
+        """Create a new AI job. Returns job ID or None on failure."""
+        raise NotImplementedError("Jobs not supported by this transport")
+
+    def list_jobs(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List all jobs, optionally filtered by agent."""
+        raise NotImplementedError("Jobs not supported by this transport")
+
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Get a single job by ID, including history."""
+        raise NotImplementedError("Jobs not supported by this transport")
+
+    def update_job(self, job_id: str, updates: Dict[str, Any]) -> bool:
+        """Update job fields (enabled, name, message, cron, session_mode)."""
+        raise NotImplementedError("Jobs not supported by this transport")
+
+    def delete_job(self, job_id: str) -> bool:
+        """Delete a job and its history."""
+        raise NotImplementedError("Jobs not supported by this transport")
+
+    def fire_job(self, job_id: str, trigger: str = "manual") -> bool:
+        """Fire a job immediately."""
+        raise NotImplementedError("Jobs not supported by this transport")
+
     def push_session(self, session_data: Dict[str, Any]) -> bool:
         """Push session data to the backend (no-op on non-HTTP transports)."""
         return False

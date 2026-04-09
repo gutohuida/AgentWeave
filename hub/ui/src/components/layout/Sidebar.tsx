@@ -3,7 +3,7 @@ import { useQuestions } from '@/api/questions'
 import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control'
+type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs'
 
 interface SidebarProps {
   activePage: Page
@@ -14,6 +14,7 @@ interface SidebarProps {
 const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
   { id: 'messages',        label: 'Messages',  icon: 'chat' },
   { id: 'tasks',           label: 'Tasks',     icon: 'task_alt' },
+  { id: 'jobs',            label: 'Jobs',      icon: 'schedule' },
   { id: 'questions',       label: 'Questions', icon: 'help' },
   { id: 'activity',        label: 'Activity',  icon: 'monitoring' },
   { id: 'logs',            label: 'Logs',      icon: 'terminal' },

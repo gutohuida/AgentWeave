@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.20.1] - 2026-04-09
+
+### Fixed (CLI v0.20.1)
+- **YAML parse error in auto-generated context** — Fixed `_build_agent_context` generating `*` at column 1 (YAML alias marker) which crashed Kimi Code when parsing `--agent-file`
+- **Removed unwanted checkpoint nudge** — Removed automatic checkpoint reminder messages after every 20 messages; use `/aw-checkpoint` skill or SSE events instead
+
+### Added (Hub v0.16.0)
+- **AI Jobs (Scheduled Tasks)** — New feature for scheduling recurring agent tasks:
+  - Create jobs with cron expressions to trigger agents automatically
+  - Jobs can start new sessions or resume existing ones
+  - Job run history tracking with automatic pruning
+  - New API endpoints: `/api/v1/jobs`, `/api/v1/jobs/{id}/run`, `/api/v1/jobs/{id}/toggle`
+  - New React components: `JobsPage`, `JobCard`, `JobForm`, `JobHistoryPanel`
+  - New MCP tools: `create_job`, `list_jobs`, `get_job`, `toggle_job`, `delete_job`, `run_job`
+
+### Fixed (Hub v0.16.0)
+- **Cron auto-run not working** — Fixed APScheduler job store pickling issue where bound methods holding event loops couldn't be serialized; jobs now auto-fire correctly at scheduled times
+
+---
 ## [0.20.0] - 2026-04-09
 
 ### Added (CLI v0.20.0)

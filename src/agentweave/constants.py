@@ -16,6 +16,10 @@ SHARED_DIR = AGENTWEAVE_DIR / "shared"
 TASKS_ACTIVE_DIR = TASKS_DIR / "active"
 TASKS_COMPLETED_DIR = TASKS_DIR / "completed"
 
+# Job directories
+JOBS_DIR = AGENTWEAVE_DIR / "jobs"
+JOBS_HISTORY_DIR = JOBS_DIR / "history"
+
 # Message directories
 MESSAGES_PENDING_DIR = MESSAGES_DIR / "pending"
 MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
@@ -214,10 +218,6 @@ CLAUDE_CONTEXT_LIMITS: dict = {
     "claude-3-5-sonnet": 200000,
     "claude-3-5-haiku": 200000,
 }
-
-# Context nudge threshold: number of messages after which to prompt agent to checkpoint
-# Set to 0 to disable nudge messages. Default: 20 messages.
-CONTEXT_NUDGE_THRESHOLD = int(os.environ.get("AW_CONTEXT_NUDGE_THRESHOLD", "20"))
 
 # Kimi wire mode: set to "1", "true", or "yes" to enable JSON-RPC bidirectional mode
 # instead of the default --print mode. Default: disabled (print mode).

@@ -363,3 +363,141 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/logs", body)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------
+    # AI Jobs
+    # ------------------------------------------------------------------
+
+    def create_job(self, job_data: Dict[str, Any]) -> Optional[str]:
+        """POST /api/v1/jobs — create a new job on the Hub."""
+        try:
+            result = self._request("POST", "/jobs", job_data)
+            return result.get("id")
+        except RuntimeError as exc:
+            logger.error(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "create_job", "error": str(exc)},
+                },
+            )
+            return None
+
+    def list_jobs(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:
+        """GET /api/v1/jobs — list jobs from the Hub."""
+        try:
+            params: Dict[str, str] = {}
+            if agent:
+                params["agent"] = agent
+            result = self._request("GET", "/jobs", params=params)
+            if isinstance(result, list):
+                return result
+            return []
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "list_jobs", "error": str(exc)},
+                },
+            )
+            return []
+
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """GET /api/v1/jobs/{id} — get job details with history."""
+        try:
+            return self._request("GET", f"/jobs/{job_id}")
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "get_job", "error": str(exc)},
+                },
+            )
+            return None
+
+    def update_job(self, job_id: str, updates: Dict[str, Any]) -> bool:
+        """PATCH /api/v1/jobs/{id} — update job on the Hub."""
+        try:
+            self._request("PATCH", f"/jobs/{job_id}", updates)
+            return True
+        except RuntimeError as exc:
+            logger.error(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "update_job", "error": str(exc)},
+                },
+            )
+            return False
+
+    def delete_job(self, job_id: str) -> bool:
+        """DELETE /api/v1/jobs/{id} — delete job from the Hub."""
+        try:
+            self._request("DELETE", f"/jobs/{job_id}")
+            return True
+        except RuntimeError as exc:
+            logger.error(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "delete_job", "error": str(exc)},
+                },
+            )
+            return False
+
+    def fire_job(self, job_id: str, trigger: str = "manual") -> bool:
+        """POST /api/v1/jobs/{id}/run — fire job immediately on the Hub."""
+        try:
+            self._request("POST", f"/jobs/{job_id}/run", {"trigger": trigger})
+            return True
+        except RuntimeError as exc:
+            logger.error(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "fire_job", "error": str(exc)},
+                },
+            )
+            return False
+
+    def sync_local_jobs(self) -> int:
+        """Sync local jobs to Hub when transport switches to HTTP.
+
+        Returns:
+            Number of jobs synced
+        """
+        from ..jobs import Job
+
+        synced = 0
+        local_jobs = Job.list_all()
+
+        for job in local_jobs:
+            if job.synced:
+                continue
+
+            try:
+                result = self._request("POST", "/jobs", job.to_dict())
+                if result.get("id"):
+                    job.synced = True
+                    job.source = "hub"
+                    job.save()
+                    synced += 1
+            except RuntimeError as exc:
+                # 409 Conflict means job already exists - mark as synced
+                if "409" in str(exc) or "Conflict" in str(exc):
+                    job.synced = True
+                    job.source = "hub"
+                    job.save()
+                    synced += 1
+                else:
+                    logger.warning(
+                        "job_sync_failed",
+                        extra={
+                            "event": "job_sync_failed",
+                            "data": {"job_id": job.id, "error": str(exc)},
+                        },
+                    )
+
+        return synced

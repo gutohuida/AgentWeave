@@ -16,7 +16,6 @@ from .constants import (
     AGENT_CONTEXT_DIR,
     AGENTS_DIR,
     COMPACT_DECISION_FILE,
-    CONTEXT_NUDGE_THRESHOLD,
     CONTEXT_USAGE_DIR,
     KIMI_WIRE_MODE,
     MESSAGES_PENDING_DIR,
@@ -70,10 +69,7 @@ class Watchdog:
         self.context_warned: Dict[str, bool] = {}  # agent -> currently in warning state
         self._last_context_posted: Dict[str, dict] = {}  # agent -> last context data posted to Hub
         self.compact_decision_mtime: float = 0.0  # mtime of last-processed compact_decision.md
-        # Per-agent in-session message counter for checkpoint nudges
-        self.agent_message_counts: Dict[str, int] = {}  # agent -> message count in current session
-        self.agent_nudged_at: Dict[str, Set[int]] = {}  # agent -> set of thresholds already nudged
-        self._is_startup_scan: bool = False  # True during initial message scan at startup
+
 
     def _default_callback(self, event_type: str, data: dict) -> None:
         """Default callback that prints to stdout."""
@@ -162,19 +158,15 @@ class Watchdog:
         )
         write_heartbeat()
 
-        # Initial scan (suppress nudge increments for pre-existing messages)
-        self._is_startup_scan = True
-        try:
-            if transport_type == "local":
-                self.known_messages = self._scan_messages()
-                self.known_tasks = self._scan_tasks()
-            elif transport_type == "http":
-                self._init_http_state()
-            else:
-                self.transport._fetch()  # type: ignore[union-attr]
-                self.known_remote_files = set(self.transport.list_remote_filenames())  # type: ignore[union-attr]
-        finally:
-            self._is_startup_scan = False
+        # Initial scan
+        if transport_type == "local":
+            self.known_messages = self._scan_messages()
+            self.known_tasks = self._scan_tasks()
+        elif transport_type == "http":
+            self._init_http_state()
+        else:
+            self.transport._fetch()  # type: ignore[union-attr]
+            self.known_remote_files = set(self.transport.list_remote_filenames())  # type: ignore[union-attr]
 
         self.running = True
 
@@ -229,13 +221,6 @@ class Watchdog:
                     },
                 },
             )
-            # Track message count for both sender and recipient
-            recipient = msg_data.get("to", "")
-            sender = msg_data.get("from", "")
-            if recipient:
-                self._on_new_message_for_agent(recipient)
-            if sender and sender != recipient:
-                self._on_new_message_for_agent(sender)
             self.callback("new_message", msg_data)
 
         self.known_messages = current_messages
@@ -281,6 +266,10 @@ class Watchdog:
         self._check_context_usage()
         self._check_compact_decision()
 
+        # Check scheduled jobs (local/git mode only)
+        if self.transport.get_transport_type() in ("local", "git"):
+            self._check_jobs()
+
     def _check_context_usage(self) -> None:
         """Scan context_usage/ dir; post updates to Hub and fire warning callbacks."""
         if not CONTEXT_USAGE_DIR.exists():
@@ -314,6 +303,116 @@ class Watchdog:
             elif not warning and self.context_warned.get(agent):
                 # Warning cleared (agent compacted or threshold dropped)
                 self.context_warned[agent] = False
+
+    def _check_jobs(self) -> None:
+        """Check and fire scheduled jobs for local/git transport.
+
+        Iterates enabled jobs, evaluates cron vs current time using croniter.
+        Fires jobs that should run, with locking to prevent double-fires.
+        """
+        from .jobs import Job
+
+        try:
+            jobs = Job.list_all()
+        except Exception:
+            return
+
+        for job in jobs:
+            if not job.enabled:
+                continue
+
+            # Check if job should fire
+            if not job.should_fire():
+                continue
+
+            # Acquire lock to prevent concurrent fires
+            lock_name = f"job-{job.id}"
+            from .locking import acquire_lock, release_lock
+
+            if not acquire_lock(lock_name, timeout=0.1):
+                continue  # Another process is firing this job
+
+            try:
+                self._fire_job(job, trigger="scheduled")
+            finally:
+                release_lock(lock_name)
+
+    def _fire_job(self, job: Any, trigger: str = "scheduled") -> bool:
+        """Fire a job by running the agent subprocess.
+
+        Args:
+            job: The Job to fire
+            trigger: "scheduled" or "manual"
+
+        Returns:
+            True if fired successfully, False otherwise
+        """
+        from .jobs import Job
+
+        if isinstance(job, dict):
+            job = Job.from_dict(job)
+
+        agent = job.agent
+        message = job.message
+
+        # Skip if CLI not available
+        if not _check_cli_available(agent):
+            logger.warning(
+                "job_fire_skipped",
+                extra={
+                    "event": "job_fire_skipped",
+                    "data": {"job_id": job.id, "agent": agent, "reason": "CLI not found"},
+                },
+            )
+            job.record_run(status="failed", trigger=trigger)
+            return False
+
+        # Determine session mode
+        session_id = None
+        if job.session_mode == "resume":
+            session_id = job.last_session_id or _load_agent_session(agent)
+
+        # Build command
+        cmd = _agent_ping_cmd(agent, message, session_id=session_id)
+
+        # Record the run before firing (so we have the session_id for resume)
+        job.record_run(status="fired", trigger=trigger, session_id=session_id)
+
+        logger.info(
+            "job_firing",
+            extra={
+                "event": "job_firing",
+                "data": {
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "agent": agent,
+                    "trigger": trigger,
+                    "session_id": session_id,
+                },
+            },
+        )
+        print(f"[JOB] Firing {job.name} → {agent} (trigger: {trigger})")
+
+        # Load env_vars from session config for claude_proxy agents
+        env_vars = None
+        from .session import Session
+
+        session = Session.load()
+        if session:
+            runner_config = session.get_runner_config(agent)
+            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+                env_vars = runner_config.get("env_vars")
+
+        # Fire in background thread
+        is_http = self.transport.get_transport_type() == "http"
+        t = threading.Thread(
+            target=_run_agent_subprocess,
+            args=(agent, cmd, f"Job: {job.name}", self.transport, is_http, env_vars, message, session_id),
+            daemon=True,
+        )
+        t.start()
+
+        return True
 
     def _check_compact_decision(self) -> None:
         """Detect when user marks [x] in compact_decision.md and notify the agent."""
@@ -429,39 +528,6 @@ class Watchdog:
         else:
             print(f"   [WARN] Could not send message to {agent}", file=sys.stderr)
 
-    def _on_new_message_for_agent(self, agent: str) -> None:
-        """Track message count and send checkpoint nudge if threshold crossed.
-
-        Called whenever a new message is detected for an agent (inbox or outbox).
-        Increments the per-agent counter and sends a nudge if the count reaches
-        a non-zero multiple of CONTEXT_NUDGE_THRESHOLD.
-        """
-        # Skip if nudging is disabled (threshold = 0)
-        if CONTEXT_NUDGE_THRESHOLD <= 0:
-            return
-
-        # Skip during startup scan to avoid counting pre-existing messages
-        if self._is_startup_scan:
-            return
-
-        # Increment counter for this agent
-        current_count = self.agent_message_counts.get(agent, 0) + 1
-        self.agent_message_counts[agent] = current_count
-
-        # Check if we've crossed a threshold boundary
-        if current_count > 0 and current_count % CONTEXT_NUDGE_THRESHOLD == 0:
-            # Track which thresholds we've already nudged for to avoid duplicates
-            nudged_set = self.agent_nudged_at.setdefault(agent, set())
-            threshold_boundary = current_count // CONTEXT_NUDGE_THRESHOLD
-            if threshold_boundary not in nudged_set:
-                nudged_set.add(threshold_boundary)
-                _send_checkpoint_nudge(agent, current_count)
-
-    def _reset_agent_message_count(self, agent: str) -> None:
-        """Reset message count and nudge tracking for an agent (e.g., on new session)."""
-        self.agent_message_counts[agent] = 0
-        self.agent_nudged_at[agent] = set()
-
     def _post_context_usage_to_hub(self, agent: str, data: dict) -> None:
         """POST context usage data to the Hub so Mission Control can display it."""
         import json as _json
@@ -511,14 +577,13 @@ class Watchdog:
             msg_id = msg.get("id", "")
             if msg_id and msg_id not in self.known_messages:
                 self.known_messages.add(msg_id)
-                # Track message count for both sender and recipient
-                recipient = msg.get("to", "")
-                sender = msg.get("from", "")
-                if recipient:
-                    self._on_new_message_for_agent(recipient)
-                if sender and sender != recipient:
-                    self._on_new_message_for_agent(sender)
                 self.callback("new_message", msg)
+
+                # Auto-trigger agent for messages from "user" (job triggers, direct triggers)
+                sender = msg.get("from", "")
+                recipient = msg.get("to", "")
+                if sender == "user" and recipient:
+                    self._trigger_agent_from_message(recipient, msg)
 
         tasks = self.transport.get_active_tasks(self.agent or None)
         for task in tasks:
@@ -526,6 +591,136 @@ class Watchdog:
             if task_id and task_id not in self.known_tasks:
                 self.known_tasks.add(task_id)
                 self.callback("new_task", task)
+
+    def _ensure_agent_context(self, agent: str) -> bool:
+        """Ensure the per-agent context file exists, generating it if needed.
+
+        This tells the agent who it is and what its roles are.
+        Returns True if context file exists or was generated successfully.
+        """
+        from .constants import AGENT_CONTEXT_DIR
+        from .session import Session
+
+        AGENT_CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
+        context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
+
+        # If context already exists, just return True
+        if context_file.exists():
+            return True
+
+        # Try to generate context
+        session = Session.load()
+        if not session:
+            return False
+
+        # Only generate for agents in session
+        if agent not in session.agent_names:
+            return False
+
+        try:
+            content = _build_agent_context(agent, session)
+            context_file.write_text(content, encoding="utf-8")
+            logger.info(
+                "agent_context_generated",
+                extra={
+                    "event": "agent_context_generated",
+                    "data": {"agent": agent, "path": str(context_file)},
+                },
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                "agent_context_generation_failed",
+                extra={
+                    "event": "agent_context_generation_failed",
+                    "data": {"agent": agent, "error": str(exc)},
+                },
+            )
+            return False
+
+    def _trigger_agent_from_message(self, agent: str, msg: dict) -> None:
+        """Trigger an agent to run based on a Hub message.
+
+        This is called when the watchdog detects a new message from "user"
+        (indicating a job trigger or direct trigger from the Hub).
+        """
+        msg_id = msg.get("id", "")
+        content = msg.get("content", "")
+        subject = msg.get("subject", "Message from Hub")
+
+        # Ensure agent context file exists (so agent knows its identity/roles)
+        self._ensure_agent_context(agent)
+
+        # Skip if CLI not available
+        if not _check_cli_available(agent):
+            logger.warning(
+                "agent_trigger_skipped",
+                extra={
+                    "event": "agent_trigger_skipped",
+                    "data": {"agent": agent, "msg_id": msg_id, "reason": "CLI not found"},
+                },
+            )
+            print(f"[SKIP] Cannot trigger {agent}: CLI not found", file=sys.stderr)
+            return
+
+        # Parse session info from content tags
+        # [Session: <id>] → resume the specified session
+        # [NewSession] → explicitly start a new session
+        session_id = None
+        import re
+
+        session_match = re.search(r"\[Session:\s*([^\]]+)\]", content)
+        new_session_match = re.search(r"\[NewSession\]", content)
+
+        if session_match:
+            session_id = session_match.group(1).strip()
+        elif new_session_match:
+            session_id = None  # Explicit new session
+        else:
+            # No tag - fall back to agent's last saved session
+            session_id = _load_agent_session(agent)
+
+        # Clean up content by removing session tags for the actual prompt
+        prompt = content
+        prompt = re.sub(r"\[Session:\s*[^\]]+\]\n?\n?", "", prompt)
+        prompt = re.sub(r"\[NewSession\]\n?\n?", "", prompt)
+        prompt = prompt.strip()
+
+        # Build command
+        cmd = _agent_ping_cmd(agent, prompt, session_id=session_id)
+
+        logger.info(
+            "agent_triggering_from_hub",
+            extra={
+                "event": "agent_triggering_from_hub",
+                "data": {
+                    "agent": agent,
+                    "msg_id": msg_id,
+                    "session_id": session_id,
+                    "subject": subject,
+                },
+            },
+        )
+        print(f"[TRIGGER] Firing {agent} from Hub message (session: {session_id or 'new'})")
+
+        # Load env_vars from session config for claude_proxy agents
+        env_vars = None
+        from .session import Session
+
+        session = Session.load()
+        if session:
+            runner_config = session.get_runner_config(agent)
+            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+                env_vars = runner_config.get("env_vars")
+
+        # Fire in background thread
+        is_http = True
+        t = threading.Thread(
+            target=_run_agent_subprocess,
+            args=(agent, cmd, subject, self.transport, is_http, env_vars, prompt, session_id),
+            daemon=True,
+        )
+        t.start()
 
     def _check_once_remote(self) -> None:
         """Scan remote transport for new files without consuming messages.
@@ -876,10 +1071,8 @@ def _agent_ping_cmd(
             use_wire_mode = KIMI_WIRE_MODE
         # Use wire mode if enabled (for better context monitoring), otherwise fallback to print
         cmd = ["kimi", "--wire"] if use_wire_mode else ["kimi", "--print"]
-        # Inject per-agent context file if it exists
-        context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
-        if context_file.exists():
-            cmd += ["--agent-file", str(context_file)]
+        # Note: --agent-file expects YAML format; our context files are markdown,
+        # so we inject role info into the prompt instead (see below).
         if session_id:
             cmd += ["--session", session_id]
         if use_wire_mode:
@@ -1042,6 +1235,80 @@ def _write_context_usage_from_wire(
         return None
 
 
+def _build_agent_context(agent: str, session: Any) -> str:
+    """Build the per-agent context file content for .agentweave/context/<agent>.md.
+
+    Tells the agent who it is, its roles, and the team structure.
+    Format uses HTML comments at the start (Kimi-compatible, no YAML frontmatter).
+    """
+    from . import __version__
+    from .constants import ROLES_DIR
+    from .roles import get_agent_roles
+
+    version_comment = f"AgentWeave v{__version__}"
+    lines = []
+    # Start with HTML comments (Kimi expects this format, not markdown headers)
+    lines.append(f"<!-- Auto-generated by {version_comment} on trigger from Hub -->")
+    lines.append(f"<!-- Context for {agent} — tells you who you are in this session -->")
+    lines.append("")
+
+    # --- Identity section ---
+    lines.append(f"# You are {agent}")
+    lines.append("")
+    agent_roles = get_agent_roles(agent)
+    if agent_roles:
+        lines.append("Role(s): " + ", ".join(agent_roles))
+    else:
+        lines.append("(No specific role assigned)")
+    lines.append("")
+
+    # --- Team Directory ---
+    lines.append("## Team")
+    lines.append("")
+    for ag in session.agent_names:
+        runner_type = session.get_runner_config(ag).get("runner", "native")
+        display_model = {
+            "claude": "Claude",
+            "claude_proxy": session.get_runner_config(ag).get("model", "Claude Proxy"),
+            "kimi": "Kimi",
+            "manual": "Manual",
+        }.get(runner_type, runner_type.title())
+
+        ag_roles = get_agent_roles(ag)
+        roles_str = ", ".join(ag_roles) if ag_roles else "no role"
+        marker = " **← YOU**" if ag == agent else ""
+        lines.append(f"- **{ag}** ({display_model}): {roles_str}{marker}")
+    lines.append("")
+
+    # --- Role Guide(s) ---
+    if agent_roles:
+        lines.append("## Your Responsibilities")
+        lines.append("")
+        for role_id in agent_roles:
+            role_file = ROLES_DIR / f"{role_id}.md"
+            if role_file.exists():
+                try:
+                    role_content = role_file.read_text(encoding="utf-8").strip()
+                    # Add role content without the header (we already have one)
+                    lines.append(role_content)
+                    lines.append("")
+                except Exception:
+                    lines.append(f"- Role `{role_id}` (content unavailable)")
+            else:
+                lines.append(f"- Role `{role_id}` (guide not found at .agentweave/roles/{role_id}.md)")
+        lines.append("")
+
+    # --- Quick Start ---
+    lines.append("## Quick Start")
+    lines.append("")
+    lines.append(f'1. Check inbox: `get_inbox("{agent}")`')
+    lines.append("2. List tasks: `list_tasks()`")
+    lines.append("3. Read current focus: `.agentweave/shared/context.md`")
+    lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
 def _load_triggered_ids(max_age_hours: int = 24) -> Set[str]:
     """Load recently-triggered direct-trigger message IDs from disk.
 
@@ -1099,51 +1366,6 @@ def _save_triggered_id(msg_id: str) -> None:
                 "data": {"msg_id": msg_id, "error": str(exc)},
             },
         )
-
-
-def _send_checkpoint_nudge(agent: str, message_count: int) -> bool:
-    """Send a checkpoint nudge message to an agent.
-
-    Args:
-        agent: The agent name to send the nudge to
-        message_count: The current message count (for context in the message)
-
-    Returns:
-        True if message was sent successfully, False otherwise
-    """
-    from .messaging import Message, MessageBus
-
-    msg = Message.create(
-        sender="watchdog",
-        recipient=agent,
-        subject="Context checkpoint reminder",
-        content=(
-            f"**Context checkpoint reminder**\n\n"
-            f"You have processed {message_count} messages in this session. "
-            f"Consider running `save_checkpoint` to save your session state "
-            f"before continuing. This helps prevent context loss and enables faster recovery."
-        ),
-        message_type="message",
-    )
-    ok = MessageBus.send(msg)
-    if ok:
-        print(f"[NUDGE] Sent checkpoint reminder to {agent} at {message_count} messages")
-        logger.info(
-            "checkpoint_nudge_sent",
-            extra={
-                "event": "checkpoint_nudge_sent",
-                "data": {"agent": agent, "message_count": message_count},
-            },
-        )
-    else:
-        logger.warning(
-            "checkpoint_nudge_failed",
-            extra={
-                "event": "checkpoint_nudge_failed",
-                "data": {"agent": agent, "message_count": message_count},
-            },
-        )
-    return ok
 
 
 def _extract_claude_session_id(line: str) -> Optional[str]:
@@ -1849,10 +2071,8 @@ def _make_direct_trigger_callback(
                     transport.post_context_usage(recipient, reset_data)
                 except Exception:
                     pass
-            # Reset message count on watchdog instance if available
+            # Clear context usage cache on watchdog instance if available
             if watchdog_instance is not None:
-                watchdog_instance.agent_message_counts[recipient] = 0
-                watchdog_instance.agent_nudged_at.pop(recipient, None)
                 watchdog_instance._last_context_posted.pop(recipient, None)
 
         prompt = (

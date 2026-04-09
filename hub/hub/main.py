@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from .api.v1 import v1_router
 from .config import settings
 from .db.engine import init_db
+from .scheduler import init_scheduler, shutdown_scheduler
 
 UI_DIST = Path(__file__).parent / "static" / "ui"
 
@@ -20,7 +21,9 @@ UI_DIST = Path(__file__).parent / "static" / "ui"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await init_scheduler()
     yield
+    await shutdown_scheduler()
 
 
 def create_app() -> FastAPI:

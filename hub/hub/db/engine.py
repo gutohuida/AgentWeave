@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..config import settings
-from .models import Base, ApiKey, Project
+from .models import Base, ApiKey, Project, AIJob, JobRun
 
 engine = create_async_engine(
     settings.database_url,

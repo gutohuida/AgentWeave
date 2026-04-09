@@ -2164,6 +2164,198 @@ def cmd_roles_list(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_jobs_create(args: argparse.Namespace) -> int:
+    """Create a new AI job."""
+    from .jobs import Job
+    from .transport import get_transport
+
+    try:
+        job = Job.create(
+            name=args.name,
+            agent=args.agent,
+            message=args.message,
+            cron=args.cron,
+            session_mode=args.session_mode,
+        )
+    except ValueError as e:
+        print_error(f"Invalid job: {e}")
+        return 1
+
+    # Save via transport (local or Hub)
+    transport = get_transport()
+    try:
+        job_id = transport.create_job(job.to_dict())
+        if job_id:
+            print_success(f"Job created: {job_id}")
+            print(f"  Name: {job.name}")
+            print(f"  Agent: {job.agent}")
+            print(f"  Cron: {job.cron}")
+            print(f"  Next run: {job.next_run or 'Not computed'}")
+            return 0
+        else:
+            print_error("Failed to create job via transport")
+            return 1
+    except Exception as e:
+        print_error(f"Failed to create job: {e}")
+        return 1
+
+
+def cmd_jobs_list(args: argparse.Namespace) -> int:
+    """List all jobs."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    try:
+        jobs = transport.list_jobs(agent=getattr(args, "agent", None))
+    except Exception as e:
+        print_error(f"Failed to list jobs: {e}")
+        return 1
+
+    if not jobs:
+        print_info("No jobs found")
+        return 0
+
+    # Print table header
+    print(f"{'ID':<15} {'Name':<20} {'Agent':<12} {'Cron':<15} {'Enabled':<8} {'Last Run':<20} {'Next Run':<20}")
+    print("-" * 120)
+
+    for job in jobs:
+        job_id = job.get("id", "unknown")[:14]
+        name = job.get("name", "Untitled")[:19]
+        agent = job.get("agent", "unknown")[:11]
+        cron = job.get("cron", "-")[:14]
+        enabled = "Yes" if job.get("enabled", True) else "No"
+        last_run = job.get("last_run", "Never")[:19]
+        next_run = job.get("next_run", "-")[:19]
+
+        print(f"{job_id:<15} {name:<20} {agent:<12} {cron:<15} {enabled:<8} {last_run:<20} {next_run:<20}")
+
+    print(f"\nTotal: {len(jobs)} job(s)")
+    return 0
+
+
+def cmd_jobs_get(args: argparse.Namespace) -> int:
+    """Show job details and history."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    try:
+        job = transport.get_job(args.job_id)
+    except Exception as e:
+        print_error(f"Failed to get job: {e}")
+        return 1
+
+    if not job:
+        print_error(f"Job not found: {args.job_id}")
+        return 1
+
+    print(f"Job: {job.get('name', 'Untitled')}")
+    print(f"  ID: {job.get('id')}")
+    print(f"  Agent: {job.get('agent')}")
+    print(f"  Message: {job.get('message', '-')}")
+    print(f"  Cron: {job.get('cron')}")
+    print(f"  Session Mode: {job.get('session_mode', 'new')}")
+    print(f"  Enabled: {'Yes' if job.get('enabled', True) else 'No'}")
+    print(f"  Created: {job.get('created_at', '-')}")
+    print(f"  Last Run: {job.get('last_run', 'Never')}")
+    print(f"  Next Run: {job.get('next_run', '-')}")
+    print(f"  Run Count: {job.get('run_count', 0)}")
+
+    history = job.get("history", [])
+    if history:
+        print(f"\nLast {len(history)} run(s):")
+        print(f"{'Fired At':<25} {'Status':<10} {'Trigger':<10} {'Session ID':<20}")
+        print("-" * 70)
+        for run in history:
+            fired_at = run.get("fired_at", "-")[:24]
+            status = run.get("status", "-")
+            trigger = run.get("trigger", "-")
+            session_id = (run.get("session_id") or "-")[:19]
+            print(f"{fired_at:<25} {status:<10} {trigger:<10} {session_id:<20}")
+    else:
+        print("\nNo run history")
+
+    return 0
+
+
+def cmd_jobs_pause(args: argparse.Namespace) -> int:
+    """Pause/disable a job."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    try:
+        success = transport.update_job(args.job_id, {"enabled": False})
+        if success:
+            print_success(f"Job paused: {args.job_id}")
+            return 0
+        else:
+            print_error(f"Failed to pause job: {args.job_id}")
+            return 1
+    except Exception as e:
+        print_error(f"Failed to pause job: {e}")
+        return 1
+
+
+def cmd_jobs_resume(args: argparse.Namespace) -> int:
+    """Resume/enable a job."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    try:
+        success = transport.update_job(args.job_id, {"enabled": True})
+        if success:
+            print_success(f"Job resumed: {args.job_id}")
+            return 0
+        else:
+            print_error(f"Failed to resume job: {args.job_id}")
+            return 1
+    except Exception as e:
+        print_error(f"Failed to resume job: {e}")
+        return 1
+
+
+def cmd_jobs_delete(args: argparse.Namespace) -> int:
+    """Delete a job."""
+    from .transport import get_transport
+
+    if not args.force:
+        response = input(f"Delete job {args.job_id}? [y/N]: ")
+        if response.lower() != "y":
+            print_info("Cancelled")
+            return 0
+
+    transport = get_transport()
+    try:
+        success = transport.delete_job(args.job_id)
+        if success:
+            print_success(f"Job deleted: {args.job_id}")
+            return 0
+        else:
+            print_error(f"Failed to delete job: {args.job_id}")
+            return 1
+    except Exception as e:
+        print_error(f"Failed to delete job: {e}")
+        return 1
+
+
+def cmd_jobs_run(args: argparse.Namespace) -> int:
+    """Run a job immediately."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    try:
+        success = transport.fire_job(args.job_id, trigger="manual")
+        if success:
+            print_success(f"Job fired: {args.job_id}")
+            return 0
+        else:
+            print_error(f"Failed to fire job: {args.job_id}")
+            return 1
+    except Exception as e:
+        print_error(f"Failed to fire job: {e}")
+        return 1
+
+
 def cmd_roles_add(args: argparse.Namespace) -> int:
     """Add a role to an agent."""
     session = Session.load()
@@ -2974,6 +3166,48 @@ For more help: https://github.com/gutohuida/AgentWeave
     yolo_parser.add_argument("--enable", action="store_true", help="Enable yolo mode")
     yolo_parser.add_argument("--disable", action="store_true", help="Disable yolo mode")
 
+    # Jobs management
+    jobs_parser = subparsers.add_parser("jobs", help="Manage AI Jobs (scheduled agent tasks)")
+    jobs_subparsers = jobs_parser.add_subparsers(dest="jobs_command")
+
+    # jobs create
+    jobs_create = jobs_subparsers.add_parser("create", help="Create a new scheduled job")
+    jobs_create.add_argument("--name", "-n", required=True, help="Job name")
+    jobs_create.add_argument("--agent", "-a", required=True, help="Target agent name")
+    jobs_create.add_argument("--message", "-m", required=True, help="Message to send to agent")
+    jobs_create.add_argument("--cron", "-c", required=True, help="Cron expression (e.g., '0 9 * * 1-5')")
+    jobs_create.add_argument(
+        "--session-mode",
+        choices=["new", "resume"],
+        default="new",
+        help="Session mode: new (fresh session) or resume (continue previous)",
+    )
+
+    # jobs list
+    jobs_list = jobs_subparsers.add_parser("list", help="List all jobs")
+    jobs_list.add_argument("--agent", "-a", help="Filter by agent name")
+
+    # jobs get
+    jobs_get = jobs_subparsers.add_parser("get", help="Show job details and history")
+    jobs_get.add_argument("job_id", help="Job ID")
+
+    # jobs pause
+    jobs_pause = jobs_subparsers.add_parser("pause", help="Pause/disable a job")
+    jobs_pause.add_argument("job_id", help="Job ID")
+
+    # jobs resume
+    jobs_resume = jobs_subparsers.add_parser("resume", help="Resume/enable a job")
+    jobs_resume.add_argument("job_id", help="Job ID")
+
+    # jobs delete
+    jobs_delete = jobs_subparsers.add_parser("delete", help="Delete a job")
+    jobs_delete.add_argument("job_id", help="Job ID")
+    jobs_delete.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+
+    # jobs run
+    jobs_run = jobs_subparsers.add_parser("run", help="Run a job immediately")
+    jobs_run.add_argument("job_id", help="Job ID")
+
     # Roles management
     roles_parser = subparsers.add_parser("roles", help="Manage agent roles")
     roles_subparsers = roles_parser.add_subparsers(dest="roles_command")
@@ -3139,6 +3373,24 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_run(parsed_args)
         elif parsed_args.command == "checkpoint":
             return cmd_checkpoint(parsed_args)
+        elif parsed_args.command == "jobs":
+            if parsed_args.jobs_command == "create":
+                return cmd_jobs_create(parsed_args)
+            elif parsed_args.jobs_command == "list":
+                return cmd_jobs_list(parsed_args)
+            elif parsed_args.jobs_command == "get":
+                return cmd_jobs_get(parsed_args)
+            elif parsed_args.jobs_command == "pause":
+                return cmd_jobs_pause(parsed_args)
+            elif parsed_args.jobs_command == "resume":
+                return cmd_jobs_resume(parsed_args)
+            elif parsed_args.jobs_command == "delete":
+                return cmd_jobs_delete(parsed_args)
+            elif parsed_args.jobs_command == "run":
+                return cmd_jobs_run(parsed_args)
+            else:
+                parser.parse_args(["jobs", "--help"])
+                return 0
         else:
             parser.print_help()
             return 0

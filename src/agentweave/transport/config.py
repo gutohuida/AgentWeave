@@ -79,11 +79,17 @@ def get_transport() -> BaseTransport:
     elif transport_type == "http":
         from .http import HttpTransport
 
-        return HttpTransport(
+        transport = HttpTransport(
             url=config.get("url", ""),
             api_key=config.get("api_key", ""),
             project_id=config.get("project_id", ""),
         )
+        # Sync local jobs to Hub on connect
+        import contextlib
+
+        with contextlib.suppress(Exception):  # Don't fail transport creation if sync fails
+            transport.sync_local_jobs()
+        return transport
     else:
         from .local import LocalTransport
 

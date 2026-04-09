@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentweave-ai"
-version = "0.20.0"
+version = "0.20.1"
 description = "Multi-agent AI collaboration framework (Claude, Kimi, Gemini, Codex, and more)"
 readme = "README.md"
 license = {text = "MIT"}
@@ -30,6 +30,7 @@ dependencies = []
 
 [project.optional-dependencies]
 mcp = ["fastmcp>=2.0"]
+jobs = ["croniter>=2.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -38,7 +39,7 @@ dev = [
     "mypy>=1.0",
 ]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
-all = ["fastmcp>=2.0"]
+all = ["fastmcp>=2.0", "croniter>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/gutohuida/AgentWeave"

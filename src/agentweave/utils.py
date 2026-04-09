@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -42,8 +42,8 @@ def generate_id(prefix: str = "id") -> str:
 
 
 def now_iso() -> str:
-    """Get current timestamp in ISO format."""
-    return datetime.now().isoformat()
+    """Get current timestamp in ISO format (UTC)."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def load_json(filepath: Path) -> Optional[Dict[str, Any]]:

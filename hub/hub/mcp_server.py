@@ -1,4 +1,4 @@
-"""AgentWeave Hub MCP server — 10 tools backed by the Hub DB.
+"""AgentWeave Hub MCP server — 16 tools backed by the Hub DB.
 
 Can be run as stdio (default) or mounted at /mcp via sse_app().
 
@@ -410,6 +410,137 @@ def get_answer(question_id: str) -> Dict[str, Any]:
         }
     except RuntimeError as e:
         return {"answered": False, "answer": None, "pending": True, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# AI Jobs tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def create_job(
+    name: str,
+    agent: str,
+    message: str,
+    cron: str,
+    session_mode: str = "new",
+) -> Dict[str, Any]:
+    """Create a new scheduled AI job.
+
+    Args:
+        name: Human-readable job name
+        agent: Target agent name (e.g. "claude", "kimi")
+        message: Message to send to the agent when job fires
+        cron: Cron expression (e.g., "0 9 * * 1-5" for weekdays at 9am)
+        session_mode: "new" for fresh session or "resume" to continue previous
+
+    Returns:
+        Dict with 'success', 'job_id', and 'message'.
+    """
+    try:
+        result = _hub_request(
+            "POST",
+            "/jobs",
+            {
+                "name": name,
+                "agent": agent,
+                "message": message,
+                "cron": cron,
+                "session_mode": session_mode,
+            },
+        )
+        return {"success": True, "job_id": result.get("id"), "message": "Job created"}
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def list_jobs(agent: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List all AI jobs, optionally filtered by agent.
+
+    Args:
+        agent: Filter by agent name. Omit to list all jobs.
+
+    Returns:
+        List of job dicts with id, name, agent, cron, enabled, etc.
+    """
+    try:
+        return _hub_request("GET", "/jobs", params={"agent": agent})
+    except RuntimeError:
+        return []
+
+
+@mcp.tool()
+def get_job(job_id: str) -> Dict[str, Any]:
+    """Get full details of a job including run history.
+
+    Args:
+        job_id: Job ID (e.g., "job-abc123")
+
+    Returns:
+        Job dict with history, or {'error': '...'} if not found.
+    """
+    try:
+        return _hub_request("GET", f"/jobs/{job_id}")
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def delete_job(job_id: str) -> Dict[str, Any]:
+    """Delete a job and its history.
+
+    Args:
+        job_id: Job ID to delete
+
+    Returns:
+        Dict with 'success' and 'message'.
+    """
+    try:
+        _hub_request("DELETE", f"/jobs/{job_id}")
+        return {"success": True, "message": f"Job {job_id} deleted"}
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
+    """Enable or disable a job.
+
+    Args:
+        job_id: Job ID to update
+        enabled: True to enable, False to disable
+
+    Returns:
+        Dict with 'success' and 'message'.
+    """
+    try:
+        _hub_request("PATCH", f"/jobs/{job_id}", {"enabled": enabled})
+        status = "enabled" if enabled else "disabled"
+        return {"success": True, "message": f"Job {job_id} {status}"}
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def run_job(job_id: str) -> Dict[str, Any]:
+    """Run a job immediately (regardless of schedule).
+
+    Args:
+        job_id: Job ID to run
+
+    Returns:
+        Dict with 'success', 'message', and 'run_id'.
+    """
+    try:
+        result = _hub_request("POST", f"/jobs/{job_id}/run")
+        return {
+            "success": True,
+            "message": f"Job {job_id} fired",
+            "run_id": result.get("run_id"),
+        }
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
 
 
 # ---------------------------------------------------------------------------

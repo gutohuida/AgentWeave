@@ -574,6 +574,145 @@ def get_answer(question_id: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# AI Jobs tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def create_job(
+    name: str,
+    agent: str,
+    message: str,
+    cron: str,
+    session_mode: str = "new",
+) -> Dict[str, Any]:
+    """Create a new scheduled AI job.
+
+    Args:
+        name: Human-readable job name
+        agent: Target agent name (e.g. "claude", "kimi")
+        message: Message to send to the agent when job fires
+        cron: Cron expression (e.g., "0 9 * * 1-5" for weekdays at 9am)
+        session_mode: "new" for fresh session or "resume" to continue previous
+
+    Returns:
+        Dict with 'success', 'job_id', and 'message'.
+    """
+    transport = get_transport()
+    try:
+        job_id = transport.create_job(
+            {
+                "name": name,
+                "agent": agent,
+                "message": message,
+                "cron": cron,
+                "session_mode": session_mode,
+            }
+        )
+        if job_id:
+            return {"success": True, "job_id": job_id, "message": "Job created"}
+        return {"success": False, "error": "Failed to create job"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def list_jobs(agent: Optional[str] = None) -> List[Dict[str, Any]]:
+    """List all AI jobs, optionally filtered by agent.
+
+    Args:
+        agent: Filter by agent name. Omit to list all jobs.
+
+    Returns:
+        List of job dicts with id, name, agent, cron, enabled, etc.
+    """
+    transport = get_transport()
+    try:
+        return transport.list_jobs(agent=agent)
+    except Exception:
+        return []
+
+
+@mcp.tool()
+def get_job(job_id: str) -> Dict[str, Any]:
+    """Get full details of a job including run history.
+
+    Args:
+        job_id: Job ID (e.g., "job-abc123")
+
+    Returns:
+        Job dict with history, or {'error': '...'} if not found.
+    """
+    transport = get_transport()
+    try:
+        return transport.get_job(job_id) or {"error": f"Job '{job_id}' not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def delete_job(job_id: str) -> Dict[str, Any]:
+    """Delete a job and its history.
+
+    Args:
+        job_id: Job ID to delete
+
+    Returns:
+        Dict with 'success' and 'message'.
+    """
+    transport = get_transport()
+    try:
+        ok = transport.delete_job(job_id)
+        if ok:
+            return {"success": True, "message": f"Job {job_id} deleted"}
+        return {"success": False, "error": f"Failed to delete job {job_id}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
+    """Enable or disable a job.
+
+    Args:
+        job_id: Job ID to update
+        enabled: True to enable, False to disable
+
+    Returns:
+        Dict with 'success' and 'message'.
+    """
+    transport = get_transport()
+    try:
+        ok = transport.update_job(job_id, {"enabled": enabled})
+        if ok:
+            status = "enabled" if enabled else "disabled"
+            return {"success": True, "message": f"Job {job_id} {status}"}
+        return {"success": False, "error": f"Failed to update job {job_id}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def run_job(job_id: str) -> Dict[str, Any]:
+    """Run a job immediately (regardless of schedule).
+
+    Args:
+        job_id: Job ID to run
+
+    Returns:
+        Dict with 'success' and 'message'.
+    """
+    transport = get_transport()
+    try:
+        ok = transport.fire_job(job_id, trigger="manual")
+        if ok:
+            return {"success": True, "message": f"Job {job_id} fired"}
+        return {"success": False, "error": f"Failed to fire job {job_id}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

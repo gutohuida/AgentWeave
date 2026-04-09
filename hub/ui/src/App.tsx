@@ -10,9 +10,10 @@ import { ActivityLog } from '@/components/activity/ActivityLog'
 import { LogsView } from '@/components/logs/LogsView'
 import { AgentsPage } from '@/components/agents/AgentsPage'
 import { MissionControlPage } from '@/components/agents/MissionControlPage'
+import { JobsPage } from '@/components/jobs/JobsPage'
 import { useSSE } from '@/hooks/useSSE'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control'
+type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs'
 
 export default function App() {
   const { isConfigured, theme, mode } = useConfigStore()
@@ -46,6 +47,7 @@ export default function App() {
             {page === 'logs'      && <div className="h-full flex flex-col"><LogsView /></div>}
             {page === 'agents'    && <div className="h-full flex flex-col"><AgentsPage /></div>}
             {page === 'mission-control' && <div className="h-full flex flex-col"><MissionControlPage /></div>}
+            {page === 'jobs'       && <div className="h-full flex flex-col"><JobsPage /></div>}
           </main>
         </div>
       </div>
