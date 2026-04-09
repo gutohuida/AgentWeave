@@ -13,7 +13,9 @@ from .models import Base, ApiKey, Project
 engine = create_async_engine(
     settings.database_url,
     echo=False,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    connect_args={"check_same_thread": False}
+    if "sqlite" in settings.database_url
+    else {},
 )
 
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)

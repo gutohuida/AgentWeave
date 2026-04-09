@@ -84,7 +84,9 @@ async def get_chat_history(
         .group_by(AgentOutput.session_id)
     )
     other_starts_result = await session.execute(other_starts_q)
-    other_first_timestamps = [row[0] for row in other_starts_result.all() if row[0] is not None]
+    other_first_timestamps = [
+        row[0] for row in other_starts_result.all() if row[0] is not None
+    ]
 
     messages: List[ChatMessage] = []
 
@@ -98,7 +100,9 @@ async def get_chat_history(
                     id=msg.id,
                     role="user",
                     content=(
-                        content.split("\n\n[Session:")[0] if "[Session:" in content else content
+                        content.split("\n\n[Session:")[0]
+                        if "[Session:" in content
+                        else content
                     ),
                     timestamp=msg.timestamp,
                 )
@@ -112,7 +116,9 @@ async def get_chat_history(
                     id=msg.id,
                     role="user",
                     content=(
-                        content.split("\n\n[Session:")[0] if "[Session:" in content else content
+                        content.split("\n\n[Session:")[0]
+                        if "[Session:" in content
+                        else content
                     ),
                     timestamp=msg.timestamp,
                 )
@@ -126,7 +132,9 @@ async def get_chat_history(
         if msg.session_id is None and "[Session:" not in content:
             if session_first_ts is not None and session_last_ts is not None:
                 in_window = (
-                    session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
+                    session_first_ts - timedelta(minutes=5)
+                    <= msg.timestamp
+                    <= session_last_ts
                 )
                 # Exclude if another session started between this message and the current session
                 closer_session_exists = any(
@@ -214,7 +222,9 @@ async def get_recent_chat(
             ChatMessage(
                 id=msg.id,
                 role="user",
-                content=content.split("\n\n[Session:")[0] if "[Session:" in content else content,
+                content=content.split("\n\n[Session:")[0]
+                if "[Session:" in content
+                else content,
                 timestamp=msg.timestamp,
             )
         )

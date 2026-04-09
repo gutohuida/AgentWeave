@@ -37,10 +37,12 @@ class TriggerAgentRequest(BaseModel):
         description="Session mode: 'new' for new session, 'resume' for existing session",
     )
     session_id: Optional[str] = Field(
-        default=None, description="Session ID to resume (required when session_mode='resume')"
+        default=None,
+        description="Session ID to resume (required when session_mode='resume')",
     )
     work_dir: Optional[str] = Field(
-        default=None, description="Working directory for the agent (defaults to project root)"
+        default=None,
+        description="Working directory for the agent (defaults to project root)",
     )
 
 
@@ -72,7 +74,8 @@ async def trigger_agent(
     # Validate session_mode
     if body.session_mode not in ("new", "resume"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="session_mode must be 'new' or 'resume'"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_mode must be 'new' or 'resume'",
         )
 
     # Build message content with session info.

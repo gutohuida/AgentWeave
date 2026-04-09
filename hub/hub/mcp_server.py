@@ -20,7 +20,9 @@ from typing import Any, Dict, List, Optional
 try:
     from fastmcp import FastMCP
 except ImportError as e:
-    raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from e
+    raise ImportError(
+        "fastmcp is required. Install it with: pip install fastmcp"
+    ) from e
 
 mcp = FastMCP(
     name="agentweave-hub",
@@ -54,7 +56,9 @@ def _hub_request(
 
     url = f"{base_url}/api/v1{path}"
     if params:
-        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+        url += "?" + urllib.parse.urlencode(
+            {k: v for k, v in params.items() if v is not None}
+        )
 
     payload: Optional[bytes] = None
     if body is not None:

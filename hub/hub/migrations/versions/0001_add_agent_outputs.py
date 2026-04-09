@@ -20,7 +20,9 @@ def upgrade() -> None:
     op.create_table(
         "agent_outputs",
         sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("project_id", sa.String(64), sa.ForeignKey("projects.id"), nullable=False),
+        sa.Column(
+            "project_id", sa.String(64), sa.ForeignKey("projects.id"), nullable=False
+        ),
         sa.Column("agent", sa.String(64), nullable=False, index=True),
         sa.Column("session_id", sa.String(128), nullable=True),
         sa.Column("content", sa.Text, nullable=False),
@@ -31,8 +33,12 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
-    op.create_index("ix_agent_outputs_project_agent", "agent_outputs", ["project_id", "agent"])
-    op.create_index("ix_agent_outputs_project_ts", "agent_outputs", ["project_id", "timestamp"])
+    op.create_index(
+        "ix_agent_outputs_project_agent", "agent_outputs", ["project_id", "agent"]
+    )
+    op.create_index(
+        "ix_agent_outputs_project_ts", "agent_outputs", ["project_id", "timestamp"]
+    )
 
 
 def downgrade() -> None:

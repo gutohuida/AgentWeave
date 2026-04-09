@@ -8,7 +8,11 @@ async def test_ask_and_answer_question(app, auth_headers):
     # Ask a question
     resp = await app.post(
         "/api/v1/questions",
-        json={"from_agent": "claude", "question": "Which approach should I use?", "blocking": True},
+        json={
+            "from_agent": "claude",
+            "question": "Which approach should I use?",
+            "blocking": True,
+        },
         headers=auth_headers,
     )
     assert resp.status_code == 201

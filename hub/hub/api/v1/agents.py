@@ -45,7 +45,9 @@ async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]
     2. Local filesystem fallback — for developers running the Hub directly
        (not in Docker) alongside the CLI in the same working directory.
     """
-    result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
+    result = await db.execute(
+        select(ProjectSession).where(ProjectSession.project_id == project_id)
+    )
     row = result.scalars().first()
     if row:
         return row.data
@@ -525,7 +527,9 @@ async def post_compact_request(
     session.add(msg)
     await session.commit()
     payload = {"agent": name, "action": "compact", "message_id": msg.id}
-    await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
+    await sse_manager.broadcast(
+        project_id, "message_created", {"id": msg.id, "recipient": name}
+    )
     await persist_event(session, project_id, "compact_request", payload, agent=name)
     return {"status": "ok", "message_id": msg.id}
 
@@ -555,7 +559,9 @@ async def post_new_session_request(
     session.add(msg)
     await session.commit()
     payload = {"agent": name, "action": "new_session", "message_id": msg.id}
-    await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
+    await sse_manager.broadcast(
+        project_id, "message_created", {"id": msg.id, "recipient": name}
+    )
     await persist_event(session, project_id, "new_session_request", payload, agent=name)
     return {"status": "ok", "message_id": msg.id}
 

@@ -8,7 +8,12 @@ async def test_create_and_list_message(app, auth_headers):
     # Create a message
     resp = await app.post(
         "/api/v1/messages",
-        json={"from": "claude", "to": "kimi", "subject": "Hello", "content": "Hi there"},
+        json={
+            "from": "claude",
+            "to": "kimi",
+            "subject": "Hello",
+            "content": "Hi there",
+        },
         headers=auth_headers,
     )
     assert resp.status_code == 201

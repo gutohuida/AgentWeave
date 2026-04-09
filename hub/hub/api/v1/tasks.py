@@ -50,7 +50,9 @@ async def create_task(
     session.add(task)
     await session.commit()
     await session.refresh(task)
-    await sse_manager.broadcast(project_id, "task_created", {"id": task_id, "title": body.title})
+    await sse_manager.broadcast(
+        project_id, "task_created", {"id": task_id, "title": body.title}
+    )
     await persist_event(
         session,
         project_id,
@@ -118,7 +120,9 @@ async def update_task(
     task.updated = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(task)
-    await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
+    await sse_manager.broadcast(
+        project_id, "task_updated", {"id": task_id, "status": task.status}
+    )
     await persist_event(
         session,
         project_id,
