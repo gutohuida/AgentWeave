@@ -70,10 +70,67 @@ Post a question to the human. Returns a question ID.
 
 Check if the human has answered the question.
 
+### `register_session(from_agent, session_id)`
+
+Register a session ID for a pilot agent. This enables the Hub to track which session an agent is using.
+
+**Parameters:**
+- `from_agent` — Your agent name
+- `session_id` — The session ID to register
+
+**Returns:** Object with `success` boolean and `launch_command` string.
+
 ## Agent Configuration (Hub only)
 
 ### `get_agent_config(agent)`
 
 Get configuration for a specific agent including runner type, base URL, and API key environment variable name. Useful for orchestrators that need to understand proxy agent setup.
 
-**Returns:** Object with `runner`, `base_url`, and `api_key_var` fields.
+**Returns:** Object with `runner`, `base_url`, `api_key_var`, and `pilot` fields.
+
+## Jobs (Hub only)
+
+AI Jobs allow scheduling recurring tasks for agents using cron expressions.
+
+### `create_job(name, agent, message, cron, session_mode?)`
+
+Create a new scheduled job.
+
+**Parameters:**
+- `name` — Human-readable job name
+- `agent` — Target agent name
+- `message` — Message/prompt sent to the agent
+- `cron` — Cron expression for scheduling (e.g., `"0 9 * * 1-5"`)
+- `session_mode` — `"new"` (default) or `"resume"`
+
+**Returns:** Object with `success` boolean, `job_id`, and `message`.
+
+### `list_jobs(agent?)`
+
+List all jobs, optionally filtered by agent.
+
+**Returns:** Array of job objects with `id`, `name`, `agent`, `cron`, `enabled`, `next_run`, etc.
+
+### `get_job(job_id)`
+
+Get detailed information about a job including run history.
+
+**Returns:** Job object with `history` array of recent runs.
+
+### `toggle_job(job_id, enabled)`
+
+Enable or disable a job.
+
+**Parameters:**
+- `job_id` — Job ID to update
+- `enabled` — `true` to enable, `false` to disable
+
+### `delete_job(job_id)`
+
+Delete a job and its history.
+
+### `run_job(job_id)`
+
+Manually trigger a job to run immediately, regardless of schedule.
+
+See [AI Jobs Guide](../guides/ai-jobs.md) for more details.

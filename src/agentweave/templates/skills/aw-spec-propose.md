@@ -1,6 +1,6 @@
 ---
 name: aw-spec-propose
-description: Propose a new change — creates a full spec (proposal, design, tasks) in one step. Tasks are annotated with the most suitable AgentWeave agent and role for each piece of work, ready for delegation.
+description: Propose a new change — creates a full spec (proposal, design, tasks, team) in one step. Tasks are annotated with the most suitable AgentWeave agent and role for each piece of work, ready for delegation.
 ---
 
 Propose a new change — generate all spec artifacts in one step, role-annotated and ready for the team.
@@ -14,6 +14,7 @@ Artifacts created:
 - `proposal.md` — what & why, with involved agents/roles
 - `design.md` — how, with role ownership per subsystem
 - `tasks.md` — implementation tasks grouped and annotated by role
+- `team.md` — ideal team for this spec, gap vs. current session, setup commands
 
 When ready to implement, run `/aw-spec-apply`.
 
@@ -57,7 +58,7 @@ mkdir -p spec/changes/<name>
 
 ### 5. Create artifacts in order
 
-Use **TodoWrite** to track progress through the 3 artifacts.
+Use **TodoWrite** to track progress through the 4 artifacts.
 
 ---
 
@@ -169,6 +170,46 @@ Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>
 
 ---
 
+#### 5d. `team.md`
+
+Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>/team.md`.
+
+**Team recommendation is spec-driven, not session-constrained.** Derive the ideal team from the project scope — what does this spec genuinely require? Then compare against the current session to surface gaps.
+
+```markdown
+> **Note:** This team recommendation was generated from the spec on <date>.
+> Regenerate if the spec scope changes significantly.
+
+# Team: <change-name>
+
+## Recommended Team
+
+| Role | Label | Why Needed |
+|------|-------|------------|
+| `role_id` | Role Label | One-line reason specific to this spec |
+
+## Role Reasoning
+
+### {Role Label}
+[Paragraph grounding this role in a specific decision or scope item from proposal.md or design.md.
+Must reference something concrete — not generic role descriptions.]
+
+## Gap Analysis
+
+| Role | Label | Status |
+|------|-------|--------|
+| `role_id` | Role Label | ✓ {agent_name} / ✗ Missing |
+```
+
+Read `.agentweave/roles.json` to populate the Gap Analysis. If it doesn't exist or session has no roles assigned, write:
+> Session state was not available. Showing full recommended team without gap diff.
+
+For Setup Commands, include one `agentweave roles add <agent> <role_id>` per missing role. If no roles are missing, write: "Your current session covers all recommended roles."
+
+**Standalone regeneration:** If `team.md` already exists and the user asks to regenerate it, update only `team.md` from the current `proposal.md` — do not modify other artifacts.
+
+---
+
 ### 6. Show final summary
 
 ```
@@ -180,11 +221,11 @@ Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>
 - proposal.md — [one-line summary]
 - design.md — [key design decision]
 - tasks.md — N tasks across M agents
+- team.md — [N roles recommended, M missing from current session]
 
-**Team:**
-- <agent-a> (tech_lead, backend_dev): X tasks
-- <agent-b> (frontend_dev): Y tasks
-- <agent-c> (qa_engineer): Z tasks
+**Recommended Team:**
+- ✓ <agent-a> covers [role1, role2]
+- ✗ Missing: [role3] — run `agentweave roles add <agent> <role3>`
 
 Ready to implement. Run `/aw-spec-apply` to start.
 ```

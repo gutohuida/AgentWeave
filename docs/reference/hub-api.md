@@ -74,6 +74,40 @@ http://localhost:8000/api/v1
 | `POST` | `/session/sync` | Sync session data to Hub |
 | `GET` | `/session/sync` | Get synced session data |
 
+### Jobs
+
+AI Jobs endpoints for scheduled recurring agent tasks.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/jobs` | List all jobs |
+| `POST` | `/jobs` | Create a new job |
+| `GET` | `/jobs/{id}` | Get job details and history |
+| `PATCH` | `/jobs/{id}` | Update job (enable/disable, modify settings) |
+| `DELETE` | `/jobs/{id}` | Delete a job |
+| `POST` | `/jobs/{id}/run` | Manually trigger a job |
+| `POST` | `/jobs/{id}/toggle` | Toggle job enabled state |
+
+**Job Object:**
+```json
+{
+  "id": "job-abc123",
+  "name": "Daily Report",
+  "agent": "claude",
+  "message": "Generate daily summary",
+  "cron": "0 9 * * 1-5",
+  "session_mode": "new",
+  "enabled": true,
+  "created_at": "2026-04-01T09:00:00Z",
+  "last_run": "2026-04-12T09:00:00Z",
+  "next_run": "2026-04-13T09:00:00Z",
+  "run_count": 10,
+  "history": [...]
+}
+```
+
+See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage.
+
 ### Status
 
 | Method | Path | Description |

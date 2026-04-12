@@ -4,17 +4,26 @@
 
 ```bash
 agentweave init --project "Name" --agents claude,kimi
-agentweave status
-agentweave summary
+agentweave status                          # show full session status with watchdog state
+agentweave summary                         # quick overview for relay decisions
+agentweave session register --agent <name> --session <id>   # register pilot agent session
 ```
+
+### Summary Output
+
+The `summary` command provides a quick status overview before delegation:
+- Tasks by status (waiting, in progress, ready for review)
+- Unread messages per agent
+- Action items (who to notify, what to review)
 
 ## Delegation
 
 ```bash
-agentweave quick --to kimi "Task description"
-agentweave relay --agent kimi
-agentweave relay --agent minimax --run     # auto-run for claude_proxy agents
-agentweave inbox --agent claude
+agentweave quick --to kimi "Task description"       # quick task delegation
+agentweave delegate --to kimi "Task description"    # alias for 'quick'
+agentweave relay --agent kimi                       # generate relay prompt
+agentweave relay --agent minimax --run              # auto-run for claude_proxy agents
+agentweave inbox --agent claude                     # check agent inbox
 ```
 
 ## Messages
@@ -24,7 +33,9 @@ agentweave msg send --to kimi --subject "Update" --message "Task is done"
 agentweave msg read <message_id>           # mark message as read
 ```
 
-## Agent Runner (claude_proxy setup)
+## Agent Runner
+
+### Claude Proxy Agents (Minimax, GLM, etc.)
 
 ```bash
 agentweave agent configure minimax                      # use built-in defaults
@@ -39,6 +50,16 @@ agentweave agent set-model minimax <model-name>         # set model for claude_p
 agentweave switch minimax        # output eval-able export commands
 agentweave run --agent minimax   # set env vars + launch Claude with relay prompt
 ```
+
+### Pilot Mode
+
+```bash
+agentweave agent configure kimi --pilot                 # enable pilot mode
+agentweave agent configure kimi --no-pilot              # disable pilot mode
+agentweave session register --agent kimi --session <id> # register session ID
+```
+
+Pilot mode disables auto-triggering, giving you manual control over agent sessions. See [Pilot Mode Guide](../guides/pilot-mode.md) for details.
 
 ## Tasks
 
@@ -123,6 +144,43 @@ agentweave roles remove claude backend_dev
 ```
 
 When an agent has multiple roles, they receive all corresponding role guides at session start.
+
+## Jobs (Scheduled Tasks)
+
+```bash
+# Create a scheduled job
+agentweave jobs create \
+  --name "Daily Report" \
+  --agent claude \
+  --message "Generate daily summary" \
+  --cron "0 9 * * 1-5" \
+  --session-mode new
+
+# Manage jobs
+agentweave jobs list                    # list all jobs
+agentweave jobs list --agent kimi       # filter by agent
+agentweave jobs get <job_id>            # show details and run history
+agentweave jobs pause <job_id>          # disable a job
+agentweave jobs resume <job_id>         # re-enable a job
+agentweave jobs run <job_id>            # run immediately (manual trigger)
+agentweave jobs delete <job_id>         # delete a job (--force to skip confirm)
+```
+
+See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage and examples.
+
+## Session Management
+
+```bash
+# Save a context checkpoint before compacting or handoffs
+agentweave checkpoint --agent claude --reason pre_handoff --note "Mid-implementation"
+```
+
+Creates a checkpoint file at `.agentweave/shared/checkpoints/<agent>-<timestamp>.md` with:
+- Active tasks at time of checkpoint
+- Files modified this session
+- Decisions made with rationale
+- Next steps for resuming
+- Blockers and open questions
 
 ## MCP
 

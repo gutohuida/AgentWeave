@@ -37,6 +37,8 @@ The Model Context Protocol (MCP) server exposes AgentWeave operations as native 
 
 The watchdog is a background process that monitors the shared directory (or polls the Hub) and triggers agents when new messages or tasks arrive.
 
+See [Watchdog Architecture](watchdog.md) for details on triggering, auto-ping, and session management.
+
 ## Repository Layout
 
 ```

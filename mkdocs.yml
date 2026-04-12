@@ -67,6 +67,8 @@ nav:
     - guides/session-modes.md
     - guides/aw-spec-workflow.md
     - guides/claude-proxy-agents.md
+    - guides/pilot-mode.md
+    - guides/ai-jobs.md
     - guides/cross-machine-collab.md
     - guides/dashboard.md
     - guides/logging-guide.md
@@ -81,6 +83,7 @@ nav:
     - architecture/overview.md
     - architecture/transport-layer.md
     - architecture/messaging.md
+    - architecture/watchdog.md
     - architecture/locking.md
   - Contributing:
     - contributing/development.md

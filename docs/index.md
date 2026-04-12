@@ -62,7 +62,7 @@ It provides:
 | Section | Description | Links |
 |---------|-------------|-------|
 | **Getting Started** | Install the CLI, start the Hub, and connect your first agents | [Installation](getting-started/installation.md) · [Quick Start](getting-started/quickstart.md) |
-| **Guides** | Step-by-step guides for common tasks and workflows | [Adding New Agents](guides/adding-new-agents.md) · [Context Files](guides/context-files.md) · [Session Modes](guides/session-modes.md) · [AW-Spec Workflow](guides/aw-spec-workflow.md) · [Dashboard](guides/dashboard.md) · [FAQ](guides/faq.md) |
+| **Guides** | Step-by-step guides for common tasks and workflows | [Adding New Agents](guides/adding-new-agents.md) · [Context Files](guides/context-files.md) · [Session Modes](guides/session-modes.md) · [AW-Spec Workflow](guides/aw-spec-workflow.md) · [AI Jobs](guides/ai-jobs.md) · [Pilot Mode](guides/pilot-mode.md) · [Dashboard](guides/dashboard.md) · [FAQ](guides/faq.md) |
 | **Reference** | CLI commands, MCP tools, API endpoints, and configuration options | [CLI Commands](reference/cli-commands.md) · [MCP Tools](reference/mcp-tools.md) · [Task Lifecycle](reference/task-lifecycle.md) · [Hub API](reference/hub-api.md) |
 | **Architecture** | Understand how AgentWeave works under the hood | [Overview](architecture/overview.md) · [Transport Layer](architecture/transport-layer.md) · [Messaging](architecture/messaging.md) · [Locking](architecture/locking.md) |
 | **Contributing** | Development setup and release process | [Development](contributing/development.md) · [Release Process](contributing/release-process.md) |

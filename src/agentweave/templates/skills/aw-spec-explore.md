@@ -62,8 +62,8 @@ Scan `spec/changes/` for active changes (directories that are not in `archive/`)
 - Challenge assumptions, reframe the problem
 - Map out the codebase areas involved
 
-**Consider the team**
-- Which agents/roles are relevant to this change?
+**Consider the ideal team**
+- What roles would this project ideally need? (reason from the scope, not from current agents)
 - Are there dependencies between roles? (e.g., backend_dev must deliver API before frontend_dev can wire it)
 - Visualize handoff points between agents
 
@@ -118,11 +118,38 @@ When things crystallize, offer a summary:
 
 **The problem**: [crystallized understanding]
 **The approach**: [if one emerged]
-**Roles involved**: [which agents own which pieces]
 **Open questions**: [if any remain]
 
 Next: run /aw-spec-propose to formalize, or keep exploring.
 ```
+
+### Team Recommendation at Closure
+
+When the conversation has converged enough that a proposal could be written, always offer both:
+
+> "This feels solid enough to propose. Want me to create a proposal — and also recommend a team for this project?"
+
+**If the user asks "what team would I need for this?"** at any point during exploration, generate an inline team recommendation immediately — no formal proposal required first:
+
+```
+## Team for This Project
+
+| Role | Why |
+|------|-----|
+| `backend_dev` | [reason from what we explored] |
+| `frontend_dev` | [reason from what we explored] |
+| ...  | ... |
+
+**You currently have:** [roles from session]
+**Missing:** [roles not yet in session]
+
+To add missing roles: `agentweave roles add <agent> <role_id>`
+```
+
+**Key rules for team recommendations:**
+- Derive roles from the project scope discussed — **not** from which agents are currently in the session
+- Always surface the gap explicitly: "You currently have X; this project also needs Y and Z"
+- Don't recommend roles the project doesn't warrant — fewer good reasons beats more generic ones
 
 ---
 
@@ -133,4 +160,4 @@ Next: run /aw-spec-propose to formalize, or keep exploring.
 - Don't force conclusions — let patterns emerge
 - Do ground discussions in the actual codebase
 - Do visualize — diagrams beat paragraphs
-- Do factor in which agents/roles are available and what they own
+- Do think about what team the project warrants — unconstrained by the current session

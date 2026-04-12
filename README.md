@@ -93,11 +93,13 @@ Restart your Claude / Kimi sessions so they pick up the new MCP server. That's i
 
 Open **http://localhost:8000** to see:
 
+- **Mission Control** — centralized overview of session status, agent states, and recent activity
 - **Tasks board** — all tasks with status, priority, assignee, requirements, acceptance criteria, and deliverables (click any card to expand)
 - **Messages feed** — inter-agent messages with expand-to-read for long content; message type and linked task shown inline
 - **Human questions** — questions agents have asked you; answer directly in the dashboard
+- **AI Jobs** — scheduled recurring tasks with cron expressions, run history, and enable/disable controls
 - **Agent activity** — live event stream and per-agent output log
-- **Agent cards** — connected agents auto-discovered from your session; shows role, yolo mode, and per-agent chat history
+- **Agent cards** — connected agents auto-discovered from your session; shows role, yolo mode, pilot status, and per-agent chat history
 
 ---
 
@@ -232,6 +234,7 @@ Deploy the Hub once, connect all agents via HTTP transport. The dashboard shows 
 agentweave init --project "Name" --agents claude,kimi
 agentweave status
 agentweave summary
+agentweave checkpoint --agent claude --reason pre_handoff   # save context before handoff
 ```
 
 ### Delegation
@@ -253,9 +256,35 @@ agentweave agent configure mymodel \                    # custom OpenAI-compatib
   --base-url https://api.example.com/v1 \
   --api-key-var MY_MODEL_API_KEY
 agentweave agent set-session minimax <session-id>       # register Claude resume ID manually
+agentweave agent set-model minimax <model-name>         # update model for proxy agent
 
 agentweave switch minimax        # output eval-able export commands
 agentweave run --agent minimax   # set env vars + launch Claude with relay prompt
+```
+
+### Pilot Mode (manual session control)
+
+```bash
+agentweave agent configure kimi --pilot                 # enable pilot mode
+agentweave session register --agent kimi --session <id> # register session ID
+```
+
+Pilot mode disables auto-triggering for an agent, giving you manual control over when sessions start and resume. Useful for Kimi Code CLI and long-running sessions.
+
+### AI Jobs (scheduled tasks)
+
+```bash
+# Create a daily recurring job
+agentweave jobs create --name "Daily Report" --agent claude \
+  --message "Generate summary of yesterday's commits" --cron "0 9 * * 1-5"
+
+# Manage jobs
+agentweave jobs list                    # list all scheduled jobs
+agentweave jobs get <job_id>            # view job details and run history
+agentweave jobs pause <job_id>          # disable a job
+agentweave jobs resume <job_id>         # re-enable a job
+agentweave jobs run <job_id>            # trigger immediately
+agentweave jobs delete <job_id>         # remove a job
 ```
 
 ### Tasks
@@ -310,6 +339,10 @@ Available to agents in both local MCP mode and via Hub MCP:
 | `get_status()` | Session-wide summary + task counts |
 | `ask_user(from_agent, question)` | Post a question to the human (Hub only) |
 | `get_answer(question_id)` | Check if the human answered (Hub only) |
+| `create_job(name, agent, message, cron)` | Create a scheduled recurring job (Hub only) |
+| `list_jobs(agent?)` | List scheduled jobs (Hub only) |
+| `run_job(job_id)` | Trigger a job immediately (Hub only) |
+| `register_session(agent, session_id)` | Register a pilot agent session |
 
 ---
 
@@ -401,6 +434,8 @@ make lint
 | Yolo mode | ✅ Done (v0.10.0) | Per-agent flag to suppress confirmation prompts for autonomous loops |
 | Claude-proxy agents | ✅ Done (v0.12.0) | Run Minimax, GLM, and any OpenAI-compatible provider via Claude CLI proxy |
 | Multi-role support | ✅ Done (v0.15.0) | Multiple roles per agent with `agentweave roles` CLI and Hub sync |
+| AI Jobs | ✅ Done (v0.20.1) | Scheduled recurring agent tasks with cron expressions |
+| Pilot Mode | ✅ Done (v0.21.0) | Manual session management for Kimi and proxy agents |
 | Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
 ---
