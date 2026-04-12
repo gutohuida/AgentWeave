@@ -17,7 +17,6 @@ from .constants import (
     AGENTS_DIR,
     COMPACT_DECISION_FILE,
     CONTEXT_USAGE_DIR,
-    KIMI_WIRE_MODE,
     MESSAGES_PENDING_DIR,
     RUNNER_CONFIGS,
     TASKS_ACTIVE_DIR,
@@ -1757,10 +1756,8 @@ def _do_run_agent_subprocess(
                 readable_lines = kimi_parser.feed(line)
                 # Close stdin on TurnEnd — clean signal that kimi finished this turn
                 if kimi_parser.is_turn_ended() and proc.stdin and not proc.stdin.closed:
-                    try:
+                    with contextlib.suppress(OSError):
                         proc.stdin.close()  # type: ignore[union-attr]
-                    except OSError:
-                        pass
                 # Extract context usage from StatusUpdate events
                 wire_context_usage = kimi_parser.get_context_usage()
                 if wire_context_usage is not None:

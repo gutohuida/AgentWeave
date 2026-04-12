@@ -1458,7 +1458,6 @@ def cmd_start(args: argparse.Namespace) -> int:
     a new message arrives. PID is written to .agentweave/watchdog.pid.
     Any stale watchdog processes from previous sessions are killed first.
     """
-    import os
     import subprocess as _sp
 
     from .constants import WATCHDOG_PID_FILE
@@ -2166,7 +2165,7 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
             version_comment = f"AgentWeave v{__version__}"
             agent_ctx_content = _build_agent_context(agent, session, version_comment)
             agent_ctx_path.write_text(agent_ctx_content, encoding="utf-8")
-            yaml_path = _generate_kimi_agent_yaml(agent)
+            _generate_kimi_agent_yaml(agent)
             print_info(f"Generated agent context: .agentweave/context/{agent}.md")
             print_info(f"Generated agent YAML:    .agentweave/agent-{agent}.yaml")
             print()

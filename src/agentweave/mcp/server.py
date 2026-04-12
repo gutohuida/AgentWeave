@@ -14,6 +14,7 @@ Configure in Kimi Code:
     kimi mcp add --transport stdio agentweave -- agentweave-mcp
 """
 
+import contextlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -735,7 +736,6 @@ def register_session(
     Returns:
         Dict with 'success' bool, 'launch_command' string, and agent info.
     """
-    from pathlib import Path
 
     from ..constants import AGENT_CONTEXT_DIR, AGENTWEAVE_DIR
     from ..session import Session
@@ -804,10 +804,8 @@ def register_session(
 
         yaml_path = AGENTWEAVE_DIR / f"agent-{from_agent}.yaml"
         if not yaml_path.exists():
-            try:
+            with contextlib.suppress(Exception):
                 _generate_kimi_agent_yaml(from_agent)
-            except Exception:
-                pass
         launch_cmd = f"kimi --agent-file .agentweave/agent-{from_agent}.yaml --session {session_id}"
     else:
         launch_cmd = f"# Agent: {from_agent}, Session: {session_id}"
