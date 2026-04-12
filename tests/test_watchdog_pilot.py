@@ -31,9 +31,7 @@ def test_watchdog_skips_execution_for_pilot_agent(tmp_path, monkeypatch):
     monkeypatch.setattr(wd, "_run_agent_subprocess", mock_run_subprocess)
     monkeypatch.setattr(wd, "_agent_ping_cmd", lambda *a, **kw: ["echo", "test"])
     monkeypatch.setattr(wd, "_check_cli_available", lambda agent: True)
-    monkeypatch.setattr(
-        wd.Watchdog, "_ensure_agent_context", lambda self, agent: True
-    )
+    monkeypatch.setattr(wd.Watchdog, "_ensure_agent_context", lambda self, agent: True)
 
     # Trigger the pilot agent
     with patch("agentweave.watchdog.threading.Thread"):
@@ -80,9 +78,7 @@ def test_watchdog_executes_for_non_pilot_agent(tmp_path, monkeypatch):
     monkeypatch.setattr(wd, "_run_agent_subprocess", mock_run_subprocess)
     monkeypatch.setattr(wd, "_agent_ping_cmd", lambda *a, **kw: ["echo", "test"])
     monkeypatch.setattr(wd, "_check_cli_available", lambda agent: True)
-    monkeypatch.setattr(
-        wd.Watchdog, "_ensure_agent_context", lambda self, agent: True
-    )
+    monkeypatch.setattr(wd.Watchdog, "_ensure_agent_context", lambda self, agent: True)
 
     # Trigger the non-pilot agent
     thread_started = {"started": False}
@@ -136,9 +132,7 @@ def test_watchdog_pilot_check_with_no_session(tmp_path, monkeypatch):
     monkeypatch.setattr(wd, "_run_agent_subprocess", mock_run_subprocess)
     monkeypatch.setattr(wd, "_agent_ping_cmd", lambda *a, **kw: ["echo", "test"])
     monkeypatch.setattr(wd, "_check_cli_available", lambda agent: True)
-    monkeypatch.setattr(
-        wd.Watchdog, "_ensure_agent_context", lambda self, agent: True
-    )
+    monkeypatch.setattr(wd.Watchdog, "_ensure_agent_context", lambda self, agent: True)
 
     # Trigger without session - should still try to execute (no pilot check blocks it)
     thread_started = {"started": False}

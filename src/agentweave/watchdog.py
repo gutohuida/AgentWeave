@@ -1060,7 +1060,9 @@ class _KimiWireParser:
             call_id = payload.get("tool_call_id", "")
             self._pending_tool_calls.pop(call_id, None)
             return_value = payload.get("return_value", {})
-            is_error = return_value.get("is_error", False) if isinstance(return_value, dict) else False
+            is_error = (
+                return_value.get("is_error", False) if isinstance(return_value, dict) else False
+            )
             output = return_value.get("output", []) if isinstance(return_value, dict) else []
             content = ""
             for item in output:
