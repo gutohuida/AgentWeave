@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.21.0] - 2026-04-12
+
+### Added (CLI v0.21.0 / Hub v0.17.0)
+- **Pilot Mode for Agent Session Management** — New feature for managing long-running agent sessions:
+  - Hub DB `agents` table with `pilot` flag and `registered_session_id` (migration 0004)
+  - CLI `session-register` command for registering pilot agents with session IDs
+  - Auto-generation of kimi `--agent-file` YAML for seamless pilot mode integration
+  - Watchdog pilot mode handling for file monitoring and process management
+  - Hub UI updates to display pilot status and session information in AgentInfoTab
+  - New MCP tools: `register_session`, `get_agent_config`
+  - API endpoints for agent CRUD and session registration
+
+---
 ## [0.20.1] - 2026-04-09
 
 ### Fixed (CLI v0.20.1)
