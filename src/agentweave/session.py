@@ -65,6 +65,17 @@ class Session:
         self._data["agents"][agent]["yolo"] = enabled
         self._data["updated"] = now_iso()
 
+    def get_agent_pilot(self, agent: str) -> bool:
+        """Return True if pilot mode is enabled for the agent."""
+        return bool(self.agents.get(agent, {}).get("pilot", False))
+
+    def set_agent_pilot(self, agent: str, enabled: bool) -> None:
+        """Enable or disable pilot mode for an agent."""
+        if agent not in self._data.get("agents", {}):
+            raise ValueError(f"Agent {agent!r} not in session")
+        self._data["agents"][agent]["pilot"] = enabled
+        self._data["updated"] = now_iso()
+
     def get_runner_config(self, agent: str) -> dict:
         """Return runner config for an agent.
 

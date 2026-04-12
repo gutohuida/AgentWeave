@@ -3,7 +3,14 @@
 import re
 from typing import Any, Dict, List, Tuple
 
-from .constants import AGENT_NAME_RE, MESSAGE_TYPES, PRIORITIES, RUNNER_TYPES, TASK_STATUSES
+from .constants import (
+    AGENT_NAME_RE,
+    MESSAGE_TYPES,
+    PRIORITIES,
+    RUNNER_TYPES,
+    TASK_STATUSES,
+    VALID_AGENT_CONFIG_KEYS,
+)
 
 _ENV_VAR_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
@@ -147,6 +154,46 @@ def validate_runner_config(runner: str, env_vars: dict) -> Tuple[bool, List[str]
                 f"ANTHROPIC_API_KEY_VAR must be a valid env var name (uppercase, no spaces): "
                 f"{api_key_var!r}"
             )
+
+    return len(errors) == 0, errors
+
+
+def validate_agent_config(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
+    """Validate agent configuration data.
+
+    Returns:
+        (is_valid, list_of_errors)
+    """
+    errors = []
+
+    # Check for unknown keys
+    for key in data:
+        if key not in VALID_AGENT_CONFIG_KEYS:
+            errors.append(f"Invalid config key: {key!r}. Must be one of {VALID_AGENT_CONFIG_KEYS}")
+
+    # Validate runner type if present
+    if "runner" in data and data["runner"] not in RUNNER_TYPES:
+        errors.append(f"Invalid runner type: {data['runner']!r}. Must be one of {RUNNER_TYPES}")
+
+    # Validate env_vars is a dict if present
+    if "env_vars" in data and not isinstance(data["env_vars"], dict):
+        errors.append("env_vars must be a dictionary")
+
+    # Validate yolo is boolean if present
+    if "yolo" in data and not isinstance(data["yolo"], bool):
+        errors.append("yolo must be a boolean")
+
+    # Validate pilot is boolean if present
+    if "pilot" in data and not isinstance(data["pilot"], bool):
+        errors.append("pilot must be a boolean")
+
+    # Validate model is string if present
+    if "model" in data and not isinstance(data["model"], str):
+        errors.append("model must be a string")
+
+    # Validate role is string if present
+    if "role" in data and not isinstance(data["role"], str):
+        errors.append("role must be a string")
 
     return len(errors) == 0, errors
 

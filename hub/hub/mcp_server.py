@@ -349,6 +349,34 @@ def get_agent_config(agent: str) -> Dict[str, Any]:
         return {"error": str(e)}
 
 
+@mcp.tool()
+def register_session(
+    from_agent: str,
+    session_id: str,
+) -> Dict[str, Any]:
+    """Register a session ID for a pilot agent.
+
+    Call this from your interactive session to register your --resume session ID
+    with the Hub. This enables pilot mode (manual control, disables auto-execution).
+
+    Args:
+        from_agent: Your agent name (e.g. "claude", "kimi")
+        session_id: Your current --resume session ID
+
+    Returns:
+        Dict with 'success' bool, 'launch_command' string, and agent info.
+    """
+    try:
+        result = _hub_request(
+            "POST",
+            f"/agents/{from_agent}/register-session",
+            {"session_id": session_id},
+        )
+        return result
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
+
+
 # ---------------------------------------------------------------------------
 # Human interaction tools (NEW)
 # ---------------------------------------------------------------------------

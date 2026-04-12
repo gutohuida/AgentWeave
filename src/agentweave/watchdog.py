@@ -591,7 +591,11 @@ class Watchdog:
                 sender = msg.get("from", "")
                 recipient = msg.get("to", "")
                 if sender == "user" and recipient:
-                    self._trigger_agent_from_message(recipient, msg)
+                    # Skip messages already handled by _make_direct_trigger_callback
+                    # (those with "Direct message from Hub" in subject)
+                    subject = msg.get("subject", "")
+                    if "Direct message from Hub" not in subject:
+                        self._trigger_agent_from_message(recipient, msg)
 
         tasks = self.transport.get_active_tasks(self.agent or None)
         for task in tasks:
@@ -655,6 +659,21 @@ class Watchdog:
         msg_id = msg.get("id", "")
         content = msg.get("content", "")
         subject = msg.get("subject", "Message from Hub")
+
+        # Check if agent is in pilot mode - skip auto-execution
+        from .session import Session
+
+        session = Session.load()
+        if session and session.get_agent_pilot(agent):
+            logger.debug(
+                "agent_trigger_skipped_pilot",
+                extra={
+                    "event": "agent_trigger_skipped_pilot",
+                    "data": {"agent": agent, "msg_id": msg_id, "reason": "pilot mode"},
+                },
+            )
+            print(f"[PILOT] Skipping execution for pilot agent {agent} (manual control)")
+            return
 
         # Ensure agent context file exists (so agent knows its identity/roles)
         self._ensure_agent_context(agent)
@@ -928,25 +947,31 @@ class _KimiParser:
 class _KimiWireParser:
     """Parser for kimi --wire JSON-RPC 2.0 streaming output.
 
-    Wire mode uses bidirectional stdin/stdout communication with JSON-RPC 2.0:
-    - Send: {"jsonrpc": "2.0", "method": "prompt", "id": "<uuid>", "params": {"user_input": "..."}}
-    - Receive: Events as JSON-RPC 2.0 response objects with "result" containing event data
+    Kimi emits events as JSON-RPC 2.0 notifications:
+      {"jsonrpc":"2.0","method":"event","params":{"type":"<EventType>","payload":{...}}}
 
-    Events we handle:
-    - ContentPart: Text output from the model
-    - ThinkPart: Model's thinking/reasoning
-    - ToolCall: Tool invocation
-    - ToolResult: Tool execution result
-    - StatusUpdate: Contains context_usage ratio
-    - CompactionBegin/CompactionEnd: Context compaction events
-    - TurnEnd: End of a turn (contains session_id in some versions)
+    The event type is in params["type"] and the data is in params["payload"].
+
+    Events handled:
+    - ContentPart: payload {"type":"text"/"think","text":"..."} — streamed word by word;
+      buffered and flushed as a single line on non-text events or TurnEnd.
+    - ToolCallPart: payload {"arguments_part":"..."} — accumulated until ToolCall arrives
+    - ToolCall: payload {"id":"...","function":{"name":"...","arguments":"..."}}
+    - ToolResult: payload {"tool_call_id":"...","return_value":{"is_error":bool,"output":[...]}}
+    - StatusUpdate: payload {"context_usage":0-1,"context_tokens":N,"max_context_tokens":N}
+    - CompactionBegin/CompactionEnd: context compaction lifecycle
+    - TurnEnd: end of turn; flushes any buffered text
     """
 
     def __init__(self) -> None:
-        self._pending_tool_calls: Dict[str, str] = {}  # id -> name
-        self._context_usage: Optional[Dict[str, Any]] = None  # Latest context usage data
-        self._session_id: Optional[str] = None  # Session ID from turn completion
+        self._pending_tool_calls: Dict[str, str] = {}  # call_id -> tool_name
+        self._pending_tool_args: str = ""  # accumulated from ToolCallPart events
+        self._context_usage: Optional[Dict[str, Any]] = None
+        self._session_id: Optional[str] = None
         self._in_compaction = False
+        self._turn_ended = False
+        self._text_buf: str = ""  # buffered ContentPart text (flushed on non-text event)
+        self._think_buf: str = ""  # buffered think text
 
     def feed(self, line: str) -> List[str]:
         """Feed one JSON-RPC line; returns list of display strings."""
@@ -959,81 +984,123 @@ class _KimiWireParser:
         except json.JSONDecodeError:
             return []
 
-        # Handle JSON-RPC 2.0 response format
+        # Primary format: JSON-RPC 2.0 notification
+        # {"jsonrpc":"2.0","method":"event","params":{"type":"...","payload":{...}}}
+        if "method" in data and "params" in data:
+            params = data.get("params", {})
+            if isinstance(params, dict):
+                event_type = params.get("type", "")
+                payload = params.get("payload", {})
+                if not isinstance(payload, dict):
+                    payload = {}
+                return self._handle_event(event_type, payload)
+
+        # Legacy response format: {"result": {"type": "...", ...}}
         if "result" in data:
             result = data.get("result", {})
             if isinstance(result, dict):
-                return self._handle_event(result)
-        # Handle direct event format (some versions)
+                return self._handle_event(result.get("type", ""), result)
+
+        # Direct format: {"type": "...", ...}
         if "type" in data:
-            return self._handle_event(data)
+            return self._handle_event(data.get("type", ""), data)
 
         return []
 
-    def _handle_event(self, event: Dict[str, Any]) -> List[str]:
-        """Handle a single event and return display strings."""
-        event_type = event.get("type", "")
+    def _flush_text(self) -> List[str]:
+        """Flush any buffered ContentPart text as a single display line."""
+        out: List[str] = []
+        if self._text_buf:
+            out.append(f"  💬 {self._text_buf}")
+            self._text_buf = ""
+        if self._think_buf:
+            thinking = self._think_buf.replace("\n", "\n  💭 ")
+            out.append(f"  💭 {thinking}")
+            self._think_buf = ""
+        return out
 
+    def _handle_event(self, event_type: str, payload: Dict[str, Any]) -> List[str]:
+        """Handle a single event and return display strings."""
         if event_type == "ContentPart":
-            content_type = event.get("content_type", "")
-            content = event.get("content", "")
-            if content_type == "text" and content:
-                return [f"  💬 {content}"]
-            elif content_type == "think" and content:
-                # Prefix thinking with emoji for visibility
-                thinking = content.replace("\n", "\n  💭 ")
-                return [f"  💭 {thinking}"]
+            # payload: {"type": "text"/"think", "text": "..."}
+            content_type = payload.get("type", "")
+            text = payload.get("text", "")
+            if content_type == "text":
+                self._text_buf += text
+            elif content_type == "think":
+                self._think_buf += text
+            return []
+
+        # Non-text event: flush any buffered text first
+        out = self._flush_text()
+
+        if event_type == "ToolCallPart":
+            # payload: {"arguments_part": "..."}
+            self._pending_tool_args += payload.get("arguments_part", "")
 
         elif event_type == "ToolCall":
-            name = event.get("name", "unknown")
-            arguments = event.get("arguments", {})
-            call_id = event.get("id", "")
+            # payload: {"id":"...","function":{"name":"...","arguments":"..."}}
+            func = payload.get("function", {})
+            name = func.get("name") or payload.get("name", "unknown")
+            arguments_str = self._pending_tool_args or func.get("arguments", "")
+            self._pending_tool_args = ""
+            call_id = payload.get("id", "")
             if call_id:
                 self._pending_tool_calls[call_id] = name
+            try:
+                arguments = json.loads(arguments_str) if arguments_str else {}
+            except (json.JSONDecodeError, ValueError):
+                arguments = {}
             args_str = json.dumps(arguments, ensure_ascii=False)
             if len(args_str) > 300:
                 args_str = args_str[:300] + "…"
-            return [f"  🔧 {name}({args_str})"]
+            out.append(f"  🔧 {name}({args_str})")
 
         elif event_type == "ToolResult":
-            call_id = event.get("tool_call_id", "")
-            is_error = event.get("is_error", False)
-            content = event.get("content", "")
+            # payload: {"tool_call_id":"...","return_value":{"is_error":bool,"output":[{"type":"text","text":"..."}]}}
+            call_id = payload.get("tool_call_id", "")
             self._pending_tool_calls.pop(call_id, None)
-
+            return_value = payload.get("return_value", {})
+            is_error = return_value.get("is_error", False) if isinstance(return_value, dict) else False
+            output = return_value.get("output", []) if isinstance(return_value, dict) else []
+            content = ""
+            for item in output:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    content = item.get("text", "")
+                    break
             if is_error:
-                err_text = str(content)[:100] if content else "unknown error"
-                return [f"     ✗ {err_text}"]
-            if content:
-                return [f"     ✓ {str(content)[:100]}"]
-            return ["     ✓ ok"]
+                out.append(f"     ✗ {content[:100] if content else 'error'}")
+            elif content:
+                out.append(f"     ✓ {content[:100]}")
+            else:
+                out.append("     ✓ ok")
 
         elif event_type == "StatusUpdate":
-            # Extract context usage data
-            context_usage = event.get("context_usage")
+            # payload: {"context_usage":0-1,"context_tokens":N,"max_context_tokens":N,...}
+            context_usage = payload.get("context_usage")
             if context_usage is not None:
                 self._context_usage = {
                     "percent": int(context_usage * 100),
                     "context_usage_ratio": context_usage,
-                    "context_tokens": event.get("context_tokens"),
-                    "max_context_tokens": event.get("max_context_tokens"),
+                    "context_tokens": payload.get("context_tokens"),
+                    "max_context_tokens": payload.get("max_context_tokens"),
                 }
 
         elif event_type == "CompactionBegin":
             self._in_compaction = True
-            return ["  🔄 Context compaction started..."]
+            out.append("  🔄 Context compaction started...")
 
         elif event_type == "CompactionEnd":
             self._in_compaction = False
-            return ["  ✅ Context compaction complete"]
+            out.append("  ✅ Context compaction complete")
 
         elif event_type == "TurnEnd":
-            # Some versions include session_id in TurnEnd
-            session_id = event.get("session_id")
+            self._turn_ended = True
+            session_id = payload.get("session_id")
             if session_id:
                 self._session_id = session_id
 
-        return []
+        return out
 
     def get_context_usage(self) -> Optional[Dict[str, Any]]:
         """Return the latest context usage data, if any."""
@@ -1042,6 +1109,10 @@ class _KimiWireParser:
     def get_session_id(self) -> Optional[str]:
         """Return the session ID if captured from TurnEnd."""
         return self._session_id
+
+    def is_turn_ended(self) -> bool:
+        """Return True if a TurnEnd event has been received."""
+        return self._turn_ended
 
     def is_in_compaction(self) -> bool:
         """Return True if we're currently in a compaction."""
@@ -1074,20 +1145,10 @@ def _agent_ping_cmd(
     rc = RUNNER_CONFIGS.get(runner_type, RUNNER_CONFIGS["native"])
 
     if runner_type == "kimi":
-        # Check for wire mode env var if not explicitly passed
-        if not use_wire_mode:
-            use_wire_mode = KIMI_WIRE_MODE
-        # Use wire mode if enabled (for better context monitoring), otherwise fallback to print
-        cmd = ["kimi", "--wire"] if use_wire_mode else ["kimi", "--print"]
-        # Note: --agent-file expects YAML format; our context files are markdown,
-        # so we inject role info into the prompt instead (see below).
+        # Use wire mode for JSON-RPC streaming with context usage reporting
+        cmd = ["kimi", "--wire"]
         if session_id:
             cmd += ["--session", session_id]
-        if use_wire_mode:
-            # Wire mode reads prompt from stdin as JSON-RPC, not from -p
-            cmd += ["--no-interactive"]
-        else:
-            cmd += ["-p", prompt]
         return cmd
 
     # claude, claude_proxy, native — all use stream-json JSONL output
@@ -1673,6 +1734,8 @@ def _do_run_agent_subprocess(
             try:
                 proc.stdin.write(json.dumps(jsonrpc_request) + "\n")  # type: ignore[union-attr]
                 proc.stdin.flush()  # type: ignore[union-attr]
+                # Do NOT close stdin here — kimi's async loop reads EOF as "terminate now"
+                # and exits before making the API call. We close stdin later on TurnEnd.
             except Exception as exc:
                 logger.warning(
                     "wire_mode_prompt_write_failed",
@@ -1692,6 +1755,12 @@ def _do_run_agent_subprocess(
             if is_wire_mode and kimi_parser is not None:
                 # Parse Kimi's JSON-RPC wire mode events
                 readable_lines = kimi_parser.feed(line)
+                # Close stdin on TurnEnd — clean signal that kimi finished this turn
+                if kimi_parser.is_turn_ended() and proc.stdin and not proc.stdin.closed:
+                    try:
+                        proc.stdin.close()  # type: ignore[union-attr]
+                    except OSError:
+                        pass
                 # Extract context usage from StatusUpdate events
                 wire_context_usage = kimi_parser.get_context_usage()
                 if wire_context_usage is not None:
@@ -1824,6 +1893,12 @@ def _do_run_agent_subprocess(
         )
         print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
 
+    # Sync session_id from cross-thread reference — the stderr drain thread may
+    # have captured the ID from Kimi's "To resume this session: kimi -r <uuid>"
+    # line even when the wire-mode TurnEnd event did not include a session_id.
+    if session_id is None and session_id_ref[0] is not None:
+        session_id = session_id_ref[0]
+
     # Extract Kimi session ID from collected stdout lines (post-exit) for print mode
     # Wire mode captures session ID from TurnEnd events in real-time
     if is_kimi and not is_wire_mode and session_id is None and kimi_stdout_lines:
@@ -1941,6 +2016,21 @@ def _make_ping_callback(
             )
             return
 
+        # Check if agent is in pilot mode - skip auto-execution
+        from .session import Session as _Session
+
+        _sess = _Session.load()
+        if _sess and _sess.get_agent_pilot(recipient):
+            logger.debug(
+                "agent_ping_skipped_pilot",
+                extra={
+                    "event": "agent_ping_skipped_pilot",
+                    "data": {"agent": recipient, "msg_id": msg_id, "reason": "pilot mode"},
+                },
+            )
+            print(f"[PILOT] Skipping ping for pilot agent {recipient} (manual control)")
+            return
+
         prompt = (
             f"You have a new AgentWeave message from {data.get('from', 'another agent')}. "
             f"Call get_inbox('{recipient}') to retrieve it and respond."
@@ -2037,6 +2127,21 @@ def _make_direct_trigger_callback(
                     },
                 },
             )
+            return
+
+        # Check if agent is in pilot mode - skip auto-execution
+        from .session import Session as _Session
+
+        _sess = _Session.load()
+        if _sess and _sess.get_agent_pilot(recipient):
+            logger.debug(
+                "agent_trigger_skipped_pilot",
+                extra={
+                    "event": "agent_trigger_skipped_pilot",
+                    "data": {"agent": recipient, "reason": "pilot mode (manual control)"},
+                },
+            )
+            print(f"[PILOT] Skipping direct trigger for pilot agent {recipient} (manual control)")
             return
 
         # Extract optional session ID from content tag, then discard raw content.

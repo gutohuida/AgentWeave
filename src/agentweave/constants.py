@@ -82,6 +82,9 @@ DEFAULT_AGENTS = ["claude", "kimi"]
 # Backward-compatible alias used in old code paths
 VALID_AGENTS = KNOWN_AGENTS
 
+# Valid agent configuration keys
+VALID_AGENT_CONFIG_KEYS = ["role", "since", "runner", "env_vars", "model", "yolo", "pilot"]
+
 # Runtime roles directory and config file paths
 ROLES_DIR = AGENTWEAVE_DIR / "roles"
 ROLES_CONFIG_FILE = AGENTWEAVE_DIR / "roles.json"
@@ -98,13 +101,20 @@ AGENT_CONTEXT_FILES: dict = {
 AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
 
 # Agent runner types — how the agent CLI is invoked
-RUNNER_TYPES = ["native", "claude_proxy", "kimi", "manual"]
+RUNNER_TYPES = ["claude", "native", "claude_proxy", "kimi", "manual"]
 
 # Runner configuration — CLI properties per runner type.
 # Used by watchdog and CLI to dispatch commands without hardcoding agent names.
 RUNNER_CONFIGS: dict = {
+    "claude": {
+        "cli": "claude",  # explicit Claude Code CLI
+        "session_flag": "--resume",
+        "output_format": "stream-json",
+        "session_source": "jsonl",
+        "mcp_add_cmd": ["claude", "mcp", "add", "{name}", "--", "{server_cmd}"],
+    },
     "native": {
-        "cli": None,  # uses the agent name as CLI (e.g. "claude")
+        "cli": None,  # uses the agent name as CLI (e.g. for custom agent binaries)
         "session_flag": "--resume",
         "output_format": "stream-json",
         "session_source": "jsonl",
@@ -158,6 +168,7 @@ CLAUDE_PROXY_PROVIDERS: dict = {
 
 # Default runner per known agent; agents not listed here default to "native"
 AGENT_RUNNER_DEFAULTS: dict = {
+    "claude": "claude",
     "kimi": "kimi",
     "minimax": "claude_proxy",
     "glm": "claude_proxy",
@@ -219,9 +230,9 @@ CLAUDE_CONTEXT_LIMITS: dict = {
     "claude-3-5-haiku": 200000,
 }
 
-# Kimi wire mode: set to "1", "true", or "yes" to enable JSON-RPC bidirectional mode
-# instead of the default --print mode. Default: disabled (print mode).
-KIMI_WIRE_MODE = os.environ.get("AW_KIMI_WIRE_MODE", "").lower() in ("1", "true", "yes")
+# Kimi wire mode: now always enabled by default for context tracking.
+# This constant is kept for backward compatibility but wire mode is always on.
+KIMI_WIRE_MODE = True
 
 
 def _get_context_limit(model: str) -> int:

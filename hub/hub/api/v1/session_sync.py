@@ -19,8 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import ProjectSession
+from ...db.models import Agent, ProjectSession
 from ...sse import sse_manager
+from ...utils import short_id
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -57,6 +58,28 @@ async def sync_session(
             synced_at=datetime.now(timezone.utc),
         )
         session.add(row)
+
+    # Sync pilot flags from session data to the Agent table
+    agents_data = body.data.get("agents", {})
+    for agent_name, agent_cfg in agents_data.items():
+        pilot_flag = bool(agent_cfg.get("pilot", False))
+        agent_result = await session.execute(
+            select(Agent).where(
+                Agent.project_id == project_id, Agent.name == agent_name
+            )
+        )
+        agent_row = agent_result.scalars().first()
+        if agent_row:
+            agent_row.pilot = pilot_flag
+        else:
+            session.add(
+                Agent(
+                    id=f"agent-{short_id()}",
+                    project_id=project_id,
+                    name=agent_name,
+                    pilot=pilot_flag,
+                )
+            )
 
     await session.commit()
 

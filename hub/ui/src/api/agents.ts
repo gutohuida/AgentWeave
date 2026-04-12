@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE, SSEEvent } from '@/hooks/useSSE'
@@ -21,6 +21,8 @@ export interface AgentSummary {
   dev_role_labels?: string[]  // Labels for all roles
   context_usage?: ContextUsage
   session_started_at?: string  // ISO timestamp when current session started
+  pilot?: boolean  // Pilot mode: manual control, disables auto-execution
+  registered_session_id?: string | null  // Registered --resume session ID for pilot agents
 }
 
 export interface ContextUsage {
@@ -91,6 +93,70 @@ export function useAgentTimeline(name: string | null) {
 
 // Global cache for agent output lines that persists across component mounts
 const linesCache = new Map<string, AgentOutputLine[]>()
+
+interface RegisterSessionVars {
+  agent: string
+  sessionId: string
+}
+
+export function useRegisterSession() {
+  const queryClient = useQueryClient()
+  const { apiKey } = useConfigStore()
+
+  return useMutation<unknown, Error, RegisterSessionVars>({
+    mutationFn: async ({ agent, sessionId }: RegisterSessionVars) => {
+      const response = await fetch(`/api/v1/agents/${agent}/register-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to register session')
+      }
+      return response.json()
+    },
+    onSuccess: (_data, variables) => {
+      // Invalidate agent data to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      queryClient.invalidateQueries({ queryKey: ['agents', variables.agent] })
+    },
+  })
+}
+
+interface SetPilotModeVars {
+  agent: string
+  enabled: boolean
+}
+
+export function useSetPilotMode() {
+  const queryClient = useQueryClient()
+  const { apiKey } = useConfigStore()
+
+  return useMutation<unknown, Error, SetPilotModeVars>({
+    mutationFn: async ({ agent, enabled }: SetPilotModeVars) => {
+      const response = await fetch(`/api/v1/agents/${agent}/pilot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ enabled }),
+      })
+      if (!response.ok) {
+        throw new Error('Failed to set pilot mode')
+      }
+      return response.json()
+    },
+    onSuccess: (_data, variables) => {
+      // Invalidate agent data to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      queryClient.invalidateQueries({ queryKey: ['agents', variables.agent] })
+    },
+  })
+}
 
 export function useAgentOutput(name: string | null) {
   const { isConfigured, apiKey } = useConfigStore()

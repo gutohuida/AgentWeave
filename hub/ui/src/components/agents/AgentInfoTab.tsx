@@ -1,7 +1,8 @@
-import { AgentSummary, useAgentSessions } from '@/api/agents'
+import { AgentSummary, useAgentSessions, useRegisterSession, useSetPilotMode } from '@/api/agents'
 import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
 import { formatDistanceToNow } from 'date-fns'
+import { useState } from 'react'
 
 interface AgentInfoTabProps {
   agent: AgentSummary
@@ -30,11 +31,22 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
   // Fetch sessions using React Query hook
   const { data: sessionsData, isLoading: isLoadingSessions } = useAgentSessions(agent.name)
   const sessions = sessionsData?.sessions || []
+  const registerSession = useRegisterSession()
+  const setPilotMode = useSetPilotMode()
+  const [sessionIdInput, setSessionIdInput] = useState('')
 
   const statusCfg = STATUS_CONFIG[agent.status] ?? {
     dotColor: 'var(--border)', label: agent.status, pulse: false, labelColor: 'var(--on-sv)',
   }
   const roleCfg = agent.role ? (ROLE_CONFIG[agent.role] ?? ROLE_CONFIG.collaborator) : null
+
+  const handleRegisterSession = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (sessionIdInput.trim()) {
+      registerSession.mutate({ agent: agent.name, sessionId: sessionIdInput.trim() })
+      setSessionIdInput('')
+    }
+  }
 
   return (
     <div
@@ -99,6 +111,107 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           </div>
         )}
       </section>
+
+      {/* Pilot Mode Section */}
+      {agent.pilot ? (
+        <section className="m3-card-elevated p-4 rounded-xl">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="m3-title-small flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+              <Icon name="flight" size={18} style={{ color: '#ec4899' }} />
+              Pilot Mode
+            </h3>
+            <button
+              onClick={() => setPilotMode.mutate({ agent: agent.name, enabled: false })}
+              disabled={setPilotMode.isPending}
+              className="m3-label-small px-3 py-1 rounded-lg"
+              style={{
+                background: 'var(--surface)',
+                color: 'var(--on-sv)',
+                border: '1px solid var(--outline-variant)',
+                opacity: setPilotMode.isPending ? 0.5 : 1,
+              }}
+              title="Disable pilot mode to allow auto-execution"
+            >
+              {setPilotMode.isPending ? 'Disabling...' : 'Disable'}
+            </button>
+          </div>
+
+          {/* Registered Session ID */}
+          {agent.registered_session_id && (
+            <div className="mb-4">
+              <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+                Active Session
+              </p>
+              <RegisteredSessionRow sessionId={agent.registered_session_id} />
+            </div>
+          )}
+
+          {/* Register Session Form */}
+          <form onSubmit={handleRegisterSession} className="space-y-2">
+            <p className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+              Register New Session
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={sessionIdInput}
+                onChange={(e) => setSessionIdInput(e.target.value)}
+                placeholder="Enter session ID..."
+                className="flex-1 px-3 py-2 rounded-lg m3-body-small"
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--outline-variant)',
+                  color: 'var(--foreground)',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!sessionIdInput.trim() || registerSession.isPending}
+                className="px-4 py-2 rounded-lg m3-label-small"
+                style={{
+                  background: 'var(--primary)',
+                  color: 'var(--on-p)',
+                  opacity: !sessionIdInput.trim() || registerSession.isPending ? 0.5 : 1,
+                }}
+              >
+                {registerSession.isPending ? 'Registering...' : 'Register'}
+              </button>
+            </div>
+            {registerSession.isError && (
+              <p className="m3-body-small" style={{ color: '#ef4444' }}>
+                Failed to register session
+              </p>
+            )}
+          </form>
+        </section>
+      ) : (
+        <section className="m3-card-elevated p-4 rounded-xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="m3-title-small mb-1 flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+                <Icon name="flight" size={18} style={{ color: 'var(--on-sv)' }} />
+                Pilot Mode
+              </h3>
+              <p className="m3-body-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+                Enable manual control and disable auto-execution
+              </p>
+            </div>
+            <button
+              onClick={() => setPilotMode.mutate({ agent: agent.name, enabled: true })}
+              disabled={setPilotMode.isPending}
+              className="m3-label-small px-4 py-2 rounded-lg"
+              style={{
+                background: '#ec4899',
+                color: '#fff',
+                opacity: setPilotMode.isPending ? 0.5 : 1,
+              }}
+              title="Enable pilot mode for manual control"
+            >
+              {setPilotMode.isPending ? 'Enabling...' : 'Enable'}
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Roles & Configuration Section */}
       <section className="m3-card-elevated p-4 rounded-xl">
@@ -283,6 +396,41 @@ function SessionRow({ session }: { session: { id: string; type: string; path: st
           {formatDistanceToNow(new Date(session.last_active), { addSuffix: true })}
         </span>
       )}
+    </div>
+  )
+}
+
+function RegisteredSessionRow({ sessionId }: { sessionId: string }) {
+  const { copied, copy } = useCopy()
+
+  return (
+    <div
+      className="flex items-center gap-3 p-3 rounded-lg"
+      style={{ background: 'var(--surface)' }}
+    >
+      <button
+        onClick={() => copy(sessionId)}
+        className="flex-1 min-w-0 text-left group"
+        title="Click to copy session ID"
+      >
+        <code
+          className="m3-body-small block truncate"
+          style={{
+            background: copied ? 'color-mix(in srgb, #22c55e 15%, transparent)' : 'var(--surface-high)',
+            color: copied ? '#22c55e' : 'var(--on-sv)',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontFamily: 'monospace',
+          }}
+        >
+          {copied ? 'Copied!' : sessionId}
+        </code>
+      </button>
+      <Icon
+        name={copied ? 'check' : 'content_copy'}
+        size={16}
+        style={{ color: copied ? '#22c55e' : 'var(--on-sv)' }}
+      />
     </div>
   )
 }

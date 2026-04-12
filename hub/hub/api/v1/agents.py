@@ -6,13 +6,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
+    Agent,
     AgentHeartbeat,
     AgentOutput,
     EventLog,
@@ -156,6 +157,13 @@ async def list_agents(
             fallback_names.add(name)
         session_agents_meta = {name: {} for name in fallback_names}
 
+    # Also include agents from the Agent table (pilot mode agents)
+    agent_q = select(Agent).where(Agent.project_id == project_id)
+    agent_res = await session.execute(agent_q)
+    for agent_row in agent_res.scalars().all():
+        if agent_row.name not in session_agents_meta:
+            session_agents_meta[agent_row.name] = {}
+
     summaries = []
     for agent_name in sorted(session_agents_meta):
         agent_meta = session_agents_meta.get(agent_name, {})
@@ -266,6 +274,14 @@ async def list_agents(
             "manual": "Manual",
         }.get(_runner, _runner.replace("_", " ").title())
 
+        # Get pilot mode info from Agent model
+        agent_row_result = await session.execute(
+            select(Agent).where(Agent.project_id == project_id, Agent.name == agent_name)
+        )
+        agent_row = agent_row_result.scalars().first()
+        _pilot = agent_row.pilot if agent_row else False
+        _registered_session_id = agent_row.registered_session_id if agent_row else None
+
         summaries.append(
             AgentSummary(
                 name=agent_name,
@@ -284,6 +300,8 @@ async def list_agents(
                 dev_role_labels=dev_role_labels,
                 context_usage=context_usage,
                 session_started_at=session_started_at,
+                pilot=_pilot,
+                registered_session_id=_registered_session_id,
             )
         )
 
@@ -582,3 +600,93 @@ async def get_agent_output(
     q = q.order_by(AgentOutput.timestamp.asc()).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()
+
+
+@router.post("/{name}/register-session")
+async def register_session(
+    name: str,
+    body: dict,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Register a session ID for a pilot agent.
+
+    Creates or updates the agent record with pilot=true and the registered session ID.
+    """
+    project_id, _ = project
+    session_id = body.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    # Check if agent exists
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
+    )
+    agent_row = result.scalars().first()
+
+    if agent_row:
+        # Update existing agent
+        agent_row.registered_session_id = session_id
+        agent_row.pilot = True
+        agent_row.updated = datetime.now(timezone.utc)
+    else:
+        # Create new agent with pilot=true
+        agent_row = Agent(
+            id=f"agent-{short_id()}",
+            project_id=project_id,
+            name=name,
+            pilot=True,
+            registered_session_id=session_id,
+        )
+        session.add(agent_row)
+
+    await session.commit()
+
+    return {
+        "success": True,
+        "agent": name,
+        "session_id": session_id,
+        "pilot": True,
+    }
+
+
+@router.post("/{name}/pilot")
+async def set_agent_pilot(
+    name: str,
+    body: dict,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Enable or disable pilot mode for an agent.
+
+    Creates the agent record if it doesn't exist.
+    """
+    project_id, _ = project
+    enabled = body.get("enabled", True)
+
+    # Check if agent exists
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
+    )
+    agent_row = result.scalars().first()
+
+    if agent_row:
+        agent_row.pilot = enabled
+        agent_row.updated = datetime.now(timezone.utc)
+    else:
+        agent_row = Agent(
+            id=f"agent-{short_id()}",
+            project_id=project_id,
+            name=name,
+            pilot=enabled,
+            registered_session_id=None,
+        )
+        session.add(agent_row)
+
+    await session.commit()
+
+    return {
+        "success": True,
+        "agent": name,
+        "pilot": enabled,
+    }

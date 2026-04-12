@@ -713,6 +713,120 @@ def run_job(job_id: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Pilot mode tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def register_session(
+    from_agent: str,
+    session_id: str,
+) -> Dict[str, Any]:
+    """Register a session ID for a pilot agent.
+
+    Call this from your interactive session to register your --resume session ID
+    with the Hub. This enables the Hub UI to show your active session and
+    disables auto-execution for your agent (pilot mode).
+
+    Args:
+        from_agent: Your agent name (e.g. "claude", "kimi")
+        session_id: Your current --resume session ID
+
+    Returns:
+        Dict with 'success' bool, 'launch_command' string, and agent info.
+    """
+    from pathlib import Path
+
+    from ..constants import AGENT_CONTEXT_DIR, AGENTWEAVE_DIR
+    from ..session import Session
+
+    _session = Session.load()
+    if not _session:
+        return {"success": False, "error": "No session found. Run: agentweave init"}
+
+    if from_agent not in _session.agent_names:
+        return {"success": False, "error": f"Agent '{from_agent}' not in session"}
+
+    # Register with Hub if HTTP transport
+    hub_result = None
+    transport = get_transport()
+    if transport.get_transport_type() == TransportType.HTTP:
+        try:
+            hub_result = transport.register_session(from_agent, session_id)
+        except Exception as exc:
+            return {"success": False, "error": f"Hub registration failed: {exc}"}
+
+    # Update local agent session file
+    agent_session_file = AGENTWEAVE_DIR / "agents" / f"{from_agent}-session.json"
+    try:
+        agent_session_file.parent.mkdir(parents=True, exist_ok=True)
+        import json
+
+        agent_session_data = {
+            "session_id": session_id,
+            "registered_at": datetime.utcnow().isoformat(),
+        }
+        agent_session_file.write_text(json.dumps(agent_session_data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        return {"success": False, "error": f"Failed to save local session: {exc}"}
+
+    # Enable pilot mode in session
+    try:
+        _session.set_agent_pilot(from_agent, True)
+        _session.save()
+    except Exception:
+        pass  # Non-fatal
+
+    # Regenerate agent context file
+    try:
+        from ..cli import _build_agent_context
+
+        AGENT_CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
+        agent_ctx_path = AGENT_CONTEXT_DIR / f"{from_agent}.md"
+        from .. import __version__
+
+        version_comment = f"AgentWeave v{__version__}"
+        agent_ctx_content = _build_agent_context(from_agent, _session, version_comment)
+        agent_ctx_path.write_text(agent_ctx_content, encoding="utf-8")
+    except Exception:
+        pass  # Non-fatal
+
+    # Build launch command
+    runner_cfg = _session.get_runner_config(from_agent)
+    runner = runner_cfg.get("runner", "native")
+
+    if runner in ("claude", "native", "claude_proxy"):
+        context_file = f".agentweave/context/{from_agent}.md"
+        launch_cmd = f"claude --resume {session_id} --append-system-prompt-file {context_file}"
+    elif runner == "kimi":
+        from ..cli import _generate_kimi_agent_yaml
+        from ..constants import AGENTWEAVE_DIR
+
+        yaml_path = AGENTWEAVE_DIR / f"agent-{from_agent}.yaml"
+        if not yaml_path.exists():
+            try:
+                _generate_kimi_agent_yaml(from_agent)
+            except Exception:
+                pass
+        launch_cmd = f"kimi --agent-file .agentweave/agent-{from_agent}.yaml --session {session_id}"
+    else:
+        launch_cmd = f"# Agent: {from_agent}, Session: {session_id}"
+
+    result = {
+        "success": True,
+        "agent": from_agent,
+        "session_id": session_id,
+        "pilot": True,
+        "launch_command": launch_cmd,
+    }
+
+    if hub_result:
+        result["hub_registered"] = True
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

@@ -25,6 +25,8 @@ class AgentSummary(BaseModel):
         Dict[str, Any]
     ] = None  # {percent, warning, model, threshold_warning, updated_at}
     session_started_at: Optional[datetime] = None  # When the current session started
+    pilot: bool = False  # Pilot mode: manual control, disables auto-execution
+    registered_session_id: Optional[str] = None  # Registered --resume session ID for pilot agents
 
     model_config = {"from_attributes": True}
 

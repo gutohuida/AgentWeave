@@ -2,6 +2,7 @@
 
 from agentweave.validator import (
     sanitize_task_data,
+    validate_agent_config,
     validate_message,
     validate_session,
     validate_task,
@@ -190,3 +191,64 @@ def test_sanitize_task_data_truncates_long_strings():
     result = sanitize_task_data(data)
     assert len(result["title"]) <= 200
     assert len(result["description"]) <= 5000
+
+
+# ---------------------------------------------------------------------------
+# validate_agent_config
+# ---------------------------------------------------------------------------
+
+
+def test_validate_agent_config_valid():
+    """Test valid agent config with all allowed keys."""
+    data = {
+        "role": "backend_dev",
+        "runner": "native",
+        "env_vars": {},
+        "model": "claude-3-5-sonnet",
+        "yolo": True,
+        "pilot": False,
+    }
+    ok, errors = validate_agent_config(data)
+    assert ok, errors
+    assert errors == []
+
+
+def test_validate_agent_config_invalid_key():
+    """Test that invalid config keys are rejected."""
+    data = {"invalid_key": "value"}
+    ok, errors = validate_agent_config(data)
+    assert not ok
+    assert any("invalid_key" in e for e in errors)
+
+
+def test_validate_agent_config_invalid_runner():
+    """Test that invalid runner types are rejected."""
+    data = {"runner": "invalid_runner"}
+    ok, errors = validate_agent_config(data)
+    assert not ok
+    assert any("runner" in e for e in errors)
+
+
+def test_validate_agent_config_invalid_types():
+    """Test that invalid types for known keys are rejected."""
+    data = {
+        "yolo": "not_a_boolean",
+        "pilot": "not_a_boolean",
+        "env_vars": "not_a_dict",
+        "model": 123,
+        "role": 456,
+    }
+    ok, errors = validate_agent_config(data)
+    assert not ok
+    assert any("yolo" in e for e in errors)
+    assert any("pilot" in e for e in errors)
+    assert any("env_vars" in e for e in errors)
+    assert any("model" in e for e in errors)
+    assert any("role" in e for e in errors)
+
+
+def test_validate_agent_config_empty():
+    """Test that empty config is valid."""
+    ok, errors = validate_agent_config({})
+    assert ok
+    assert errors == []

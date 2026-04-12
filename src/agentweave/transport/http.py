@@ -342,6 +342,23 @@ class HttpTransport(BaseTransport):
             )
             return False
 
+    def register_session(self, agent: str, session_id: str) -> Optional[Dict[str, Any]]:
+        """POST /api/v1/agents/{agent}/register-session — register a session ID for pilot mode."""
+        try:
+            result = self._request(
+                "POST", f"/agents/{agent}/register-session", {"session_id": session_id}
+            )
+            return result if isinstance(result, dict) else None
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "register_session", "agent": agent, "error": str(exc)},
+                },
+            )
+            return None
+
     def push_log(
         self,
         event_type: str,

@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Message
+from ...db.models import Agent, Message
 from ...schemas.common import SuccessResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -65,10 +65,15 @@ async def trigger_agent(
     This creates a message in the database that the host-side watchdog
     will pick up and execute on the host machine (where the CLIs are installed).
 
+    If the agent is in pilot mode, the message is created but no execution
+    will occur — the pilot agent must manually check their inbox.
+
     Examples:
     - New session: `{"agent": "claude", "message": "Hello", "session_mode": "new"}`
     - Resume session: `{"agent": "claude", "message": "Continue", "session_mode": "resume", "session_id": "sess-abc"}`
     """
+    from sqlalchemy import select
+
     project_id, _ = project
 
     # Validate session_mode
@@ -77,6 +82,13 @@ async def trigger_agent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_mode must be 'new' or 'resume'",
         )
+
+    # Check if agent is in pilot mode
+    agent_result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == body.agent)
+    )
+    agent_row = agent_result.scalars().first()
+    is_pilot = agent_row.pilot if agent_row else False
 
     # Build message content with session info.
     # The watchdog parses these tags to determine session handling:
@@ -135,6 +147,15 @@ async def trigger_agent(
         },
         agent=body.agent,
     )
+
+    if is_pilot:
+        return TriggerAgentResponse(
+            success=True,
+            message=f"Message created for {body.agent}, but agent is in pilot mode (manual control). The message will appear in their inbox.",
+            agent=body.agent,
+            message_id=msg_id,
+            session_id=body.session_id,
+        )
 
     return TriggerAgentResponse(
         success=True,

@@ -38,6 +38,31 @@ class Project(Base):
     tasks: Mapped[List["Task"]] = relationship(back_populates="project")
     questions: Mapped[List["Question"]] = relationship(back_populates="project")
     jobs: Mapped[List["AIJob"]] = relationship(back_populates="project")
+    agents: Mapped[List["Agent"]] = relationship(back_populates="project")
+
+
+class Agent(Base):
+    """Agent configuration and pilot mode status."""
+
+    __tablename__ = "agents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    pilot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    registered_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    updated: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="agents")
+
+    __table_args__ = (
+        Index("ix_agents_project_name", "project_id", "name"),
+    )
 
 
 class ApiKey(Base):

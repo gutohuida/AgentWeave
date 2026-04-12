@@ -219,7 +219,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
 
   const messages = localMessages
   const isInputDisabled = !message.trim() || isSending || isAgentRunning || isLoadingSessions ||
-    (sessionMode === 'resume' && !selectedSessionId)
+    (sessionMode === 'resume' && !selectedSessionId) || agent.pilot
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--surface-low)' }}>
@@ -358,7 +358,13 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isAgentRunning ? `${agentName} is responding…` : `Message ${agentName}...`}
+            placeholder={
+              agent.pilot
+                ? `Pilot mode — ${agentName} is manually controlled`
+                : isAgentRunning
+                  ? `${agentName} is responding…`
+                  : `Message ${agentName}...`
+            }
             rows={1}
             disabled={isAgentRunning}
             className="flex-1 px-4 py-3 rounded-xl m3-body-medium resize-none border disabled:opacity-50"
@@ -378,6 +384,13 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
           <button
             onClick={handleSend}
             disabled={isInputDisabled}
+            title={
+              agent.pilot
+                ? 'Pilot mode — agent is manually controlled'
+                : isAgentRunning
+                  ? 'Agent is responding...'
+                  : 'Send message'
+            }
             className="px-4 py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: message.trim() && !isSending && !isAgentRunning ? 'var(--primary)' : 'var(--surface)',

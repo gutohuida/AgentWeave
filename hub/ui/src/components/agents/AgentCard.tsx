@@ -147,6 +147,21 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
               {agent.display_model}
             </span>
           )}
+          {/* Pilot badge */}
+          {agent.pilot && (
+            <span
+              className="m3-label-small px-1.5 py-0.5 rounded-full"
+              title="Pilot mode — agent is manually controlled"
+              style={{
+                background: 'color-mix(in srgb, #ec4899 15%, transparent)',
+                color: '#ec4899',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+              }}
+            >
+              PILOT
+            </span>
+          )}
         </div>
       )}
       <div className="mt-1.5 flex gap-3 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
