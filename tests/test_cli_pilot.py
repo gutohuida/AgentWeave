@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 # Skip all tests if agentweave is not installed
 agentweave_installed = (
     subprocess.run(
