@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.22.0] - 2026-04-12
+
+### Added (CLI v0.22.0 / Hub v0.18.0)
+- **Documentation and Skill Template Updates** — Enhanced user guides and AI skills:
+  - New pilot mode documentation with detailed setup and usage guides
+  - New AI jobs guide for scheduling recurring agent tasks
+  - Updated CLI command reference with new `--agent-file` and session management options
+  - Enhanced Hub API documentation with new endpoints
+  - Improved skill templates for explore, propose, and team workflows
+  - Added watchdog architecture documentation
+
+### Fixed (CLI v0.22.0)
+- **BaseTransport compatibility** — Added `register_session` method to BaseTransport ABC for mypy compatibility
+- **Code formatting** — Applied black 26.x formatting fixes across the codebase
+
+---
 ## [0.21.0] - 2026-04-12
 
 ### Added (CLI v0.21.0 / Hub v0.17.0)
