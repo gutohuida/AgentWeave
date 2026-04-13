@@ -40,7 +40,9 @@ class TestActivateCommand:
         )
 
         assert result.returncode != 0
-        assert "agentweave.yml" in result.stderr.lower() or "agentweave.yml" in result.stdout.lower()
+        assert (
+            "agentweave.yml" in result.stderr.lower() or "agentweave.yml" in result.stdout.lower()
+        )
 
     def test_activate_creates_session(self, tmp_path, monkeypatch):
         """Test that activate creates session from agentweave.yml."""

@@ -59,7 +59,9 @@ class TestHubHealthCheck:
 
     def test_health_check_failure(self):
         """Test that _hub_health_check returns False when Hub is not responding."""
-        with patch("agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")):
+        with patch(
+            "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
+        ):
             assert _hub_health_check(timeout=1) is False
 
 
@@ -78,7 +80,9 @@ class TestFetchSetupToken:
 
     def test_fetch_token_failure(self):
         """Test that _fetch_setup_token returns None on failure."""
-        with patch("agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")):
+        with patch(
+            "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
+        ):
             assert _fetch_setup_token() is None
 
 
@@ -113,7 +117,9 @@ class TestHubStopCommand:
 
     def test_hub_stop_not_running(self, capsys):
         """Test that hub stop reports success when Hub is not running."""
-        with patch("agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")):
+        with patch(
+            "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
+        ):
             result = cmd_hub_stop(MagicMock())
             assert result == 0
             captured = capsys.readouterr()
@@ -141,7 +147,9 @@ class TestHubStatusCommand:
 
     def test_hub_status_stopped(self, capsys):
         """Test that hub status reports stopped when Hub is not responding."""
-        with patch("agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")):
+        with patch(
+            "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
+        ):
             result = cmd_hub_status(MagicMock())
             captured = capsys.readouterr()
             assert "stopped" in captured.out.lower()

@@ -23,10 +23,10 @@ class TestCronValidation:
         """Test various valid cron expressions."""
         valid = [
             "0 9 * * 1-5",  # Weekdays at 9am
-            "0 0 * * *",    # Daily at midnight
+            "0 0 * * *",  # Daily at midnight
             "*/5 * * * *",  # Every 5 minutes
-            "0 0 1 * *",    # Monthly on the 1st
-            "0 0 * * 0",    # Weekly on Sunday
+            "0 0 1 * *",  # Monthly on the 1st
+            "0 0 * * 0",  # Weekly on Sunday
         ]
         for expr in valid:
             assert _validate_cron(expr), f"Should be valid: {expr}"
@@ -34,10 +34,10 @@ class TestCronValidation:
     def test_invalid_cron_expressions(self):
         """Test various invalid cron expressions."""
         invalid = [
-            "0 9 * *",      # Missing field
+            "0 9 * *",  # Missing field
             "0 9 * * * *",  # Extra field
-            "",             # Empty
-            "invalid",      # Not a cron expression
+            "",  # Empty
+            "invalid",  # Not a cron expression
         ]
         for expr in invalid:
             assert not _validate_cron(expr), f"Should be invalid: {expr}"

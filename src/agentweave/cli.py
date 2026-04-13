@@ -79,6 +79,7 @@ def cmd_init(args: argparse.Namespace) -> int:
             print_info("Generating agentweave.yml from current configuration...")
             try:
                 from .config import generate_agentweave_yml
+
                 generate_agentweave_yml(existing_session)
                 print_success("Generated agentweave.yml from existing session")
                 print_info("Run 'agentweave activate' to apply configuration")
@@ -405,6 +406,7 @@ agentweave summary
         # Generate agentweave.yml configuration file
         try:
             from .config import generate_agentweave_yml
+
             yml_path = generate_agentweave_yml(session)
             print(f"\n[CONFIG] Created {yml_path}")
             print("  This file defines your project agents and settings.")
@@ -2052,7 +2054,9 @@ def cmd_transport_disable(_args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 HUB_DIR = Path.home() / ".agentweave" / "hub"
-HUB_COMPOSE_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/docker-compose.yml"
+HUB_COMPOSE_URL = (
+    "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/docker-compose.yml"
+)
 HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/.env.example"
 
 
@@ -2187,9 +2191,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
                 env_content = env_file.read_text()
                 # Replace or add HUB_HTTP_PORT
                 if "HUB_HTTP_PORT=" in env_content:
-                    env_content = env_content.replace(
-                        "HUB_HTTP_PORT=8000", f"HUB_HTTP_PORT={port}"
-                    )
+                    env_content = env_content.replace("HUB_HTTP_PORT=8000", f"HUB_HTTP_PORT={port}")
                 else:
                     env_content += f"\nHUB_HTTP_PORT={port}\n"
                 env_file.write_text(env_content)
@@ -2215,7 +2217,9 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         if local:
             print_info("Check logs with: docker compose -f hub/docker-compose.yml logs")
         else:
-            print_info("Check logs with: docker compose -f ~/.agentweave/hub/docker-compose.yml logs")
+            print_info(
+                "Check logs with: docker compose -f ~/.agentweave/hub/docker-compose.yml logs"
+            )
         return 1
 
     print_success(f"Hub ready at {hub_url}")

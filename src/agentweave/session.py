@@ -232,7 +232,9 @@ class Session:
             "completed_tasks_count": len(self._data.get("completed_tasks", [])),
         }
 
-    def sync_agents(self, declared_agents: Dict[str, Dict[str, Any]]) -> tuple[List[str], List[str], List[str]]:
+    def sync_agents(
+        self, declared_agents: Dict[str, Dict[str, Any]]
+    ) -> tuple[List[str], List[str], List[str]]:
         """Sync session agents with declared configuration from agentweave.yml.
 
         Args:
@@ -262,7 +264,11 @@ class Session:
             agent_data = self._data["agents"][agent_name]
             was_updated = False
 
-            if "runner" in config and config["runner"] and agent_data.get("runner") != config["runner"]:
+            if (
+                "runner" in config
+                and config["runner"]
+                and agent_data.get("runner") != config["runner"]
+            ):
                 agent_data["runner"] = config["runner"]
                 was_updated = True
             if "model" in config and config["model"] and agent_data.get("model") != config["model"]:
@@ -320,6 +326,7 @@ class Session:
     def _now(self) -> str:
         """Get current ISO timestamp."""
         from .utils import now_iso
+
         return now_iso()
 
 

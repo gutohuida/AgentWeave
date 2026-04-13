@@ -172,8 +172,7 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
     """Validate and parse an agent configuration section."""
     if not isinstance(data, dict):
         raise ConfigValidationError(
-            f"agents.{name}: must be a mapping",
-            line_map.get(f"agents.{name}")
+            f"agents.{name}: must be a mapping", line_map.get(f"agents.{name}")
         )
 
     # Validate runner if present
@@ -182,7 +181,7 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
         raise ConfigValidationError(
             f"agents.{name}.runner: invalid runner '{runner}'. "
             f"Must be one of: {', '.join(RUNNER_TYPES)}",
-            line_map.get(f"agents.{name}.runner")
+            line_map.get(f"agents.{name}.runner"),
         )
 
     # Validate env field
@@ -195,17 +194,17 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
         if not isinstance(base_url, str):
             raise ConfigValidationError(
                 f"agents.{name}.base_url: must be a string, got {type(base_url).__name__}",
-                line_map.get(f"agents.{name}.base_url")
+                line_map.get(f"agents.{name}.base_url"),
             )
         if not base_url:
             raise ConfigValidationError(
                 f"agents.{name}.base_url: must be a non-empty string",
-                line_map.get(f"agents.{name}.base_url")
+                line_map.get(f"agents.{name}.base_url"),
             )
         if not base_url.startswith(("http://", "https://")):
             raise ConfigValidationError(
                 f"agents.{name}.base_url: must start with http:// or https://",
-                line_map.get(f"agents.{name}.base_url")
+                line_map.get(f"agents.{name}.base_url"),
             )
 
     return AgentConfig(
@@ -222,26 +221,20 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
 def _validate_job_config(name: str, data: Any, line_map: Dict[str, int]) -> JobConfig:
     """Validate and parse a job configuration section."""
     if not isinstance(data, dict):
-        raise ConfigValidationError(
-            f"jobs.{name}: must be a mapping",
-            line_map.get(f"jobs.{name}")
-        )
+        raise ConfigValidationError(f"jobs.{name}: must be a mapping", line_map.get(f"jobs.{name}"))
 
     # Required fields
     if "schedule" not in data:
         raise ConfigValidationError(
-            f"jobs.{name}: missing required field 'schedule'",
-            line_map.get(f"jobs.{name}")
+            f"jobs.{name}: missing required field 'schedule'", line_map.get(f"jobs.{name}")
         )
     if "agent" not in data:
         raise ConfigValidationError(
-            f"jobs.{name}: missing required field 'agent'",
-            line_map.get(f"jobs.{name}")
+            f"jobs.{name}: missing required field 'agent'", line_map.get(f"jobs.{name}")
         )
     if "prompt" not in data:
         raise ConfigValidationError(
-            f"jobs.{name}: missing required field 'prompt'",
-            line_map.get(f"jobs.{name}")
+            f"jobs.{name}: missing required field 'prompt'", line_map.get(f"jobs.{name}")
         )
 
     # Validate cron expression
@@ -250,7 +243,7 @@ def _validate_job_config(name: str, data: Any, line_map: Dict[str, int]) -> JobC
         raise ConfigValidationError(
             f"jobs.{name}.schedule: invalid cron expression '{schedule}'. "
             f"Use format: 'minute hour day month weekday' (e.g., '0 9 * * 1-5')",
-            line_map.get(f"jobs.{name}.schedule")
+            line_map.get(f"jobs.{name}.schedule"),
         )
 
     return JobConfig(
@@ -282,7 +275,12 @@ def _build_line_map(content: str) -> Dict[str, int]:
                 line_map[key] = line_num
                 current_section = key
         # Check for subsection (2-space indent, ends with colon)
-        elif line.startswith("  ") and not line.startswith("    ") and ":" in stripped and current_section:
+        elif (
+            line.startswith("  ")
+            and not line.startswith("    ")
+            and ":" in stripped
+            and current_section
+        ):
             key = stripped.split(":")[0].strip()
             line_map[f"{current_section}.{key}"] = line_num
 
@@ -330,17 +328,14 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
     # Parse project section
     project_data = data.get("project", {})
     if not isinstance(project_data, dict):
-        raise ConfigValidationError(
-            "project: must be a mapping",
-            line_map.get("project")
-        )
+        raise ConfigValidationError("project: must be a mapping", line_map.get("project"))
     project_name = project_data.get("name", "Unnamed Project")
     project_mode = project_data.get("mode", "hierarchical")
     if project_mode not in VALID_MODES:
         raise ConfigValidationError(
             f"project.mode: invalid mode '{project_mode}'. "
             f"Must be one of: {', '.join(VALID_MODES)}",
-            line_map.get("project.mode")
+            line_map.get("project.mode"),
         )
     project = ProjectConfig(name=project_name, mode=project_mode)
 
@@ -355,8 +350,7 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
     if not isinstance(agents_data, dict):
         raise ConfigValidationError("agents: must be a mapping", line_map.get("agents"))
     agents = {
-        name: _validate_agent_config(name, cfg, line_map)
-        for name, cfg in agents_data.items()
+        name: _validate_agent_config(name, cfg, line_map) for name, cfg in agents_data.items()
     }
 
     # Parse jobs section (optional)
@@ -365,10 +359,7 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
     if jobs_data is not None:
         if not isinstance(jobs_data, dict):
             raise ConfigValidationError("jobs: must be a mapping", line_map.get("jobs"))
-        jobs = {
-            name: _validate_job_config(name, cfg, line_map)
-            for name, cfg in jobs_data.items()
-        }
+        jobs = {name: _validate_job_config(name, cfg, line_map) for name, cfg in jobs_data.items()}
 
     return AgentWeaveConfig(
         project=project,
