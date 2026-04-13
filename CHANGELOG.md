@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.23.0] - 2026-04-13
+
+### Added (CLI v0.23.0)
+- **Declarative configuration (`agentweave.yml`)** — New YAML-based project configuration with `agentweave activate` command
+- **`python -m agentweave` support** — Added `__main__.py` for module execution
+- **Documentation** — Added migration guide and `agentweave.yml` reference documentation
+- **Session management improvements** — Updated session and watchdog for new config flow
+
+### Added (Hub v0.19.0)
+- **Setup API** — New `/api/v1/setup` endpoints for Hub initialization tokens
+
+### Fixed (CLI v0.23.0)
+- **Lint and code quality** — Fixed ruff issues across `cli.py`, `config.py`, and `session.py`
+
+---
 ## [0.22.0] - 2026-04-12
 
 ### Added (CLI v0.22.0 / Hub v0.18.0)
