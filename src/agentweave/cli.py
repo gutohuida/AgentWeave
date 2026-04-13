@@ -9,7 +9,10 @@ import sys
 import urllib.request
 from datetime import date, datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from .config import AgentWeaveConfig
 
 from . import __version__
 from .constants import (
@@ -2103,7 +2106,7 @@ def _hub_health_check(port: int = 8000, timeout: int = 120) -> bool:
     return False
 
 
-def _fetch_setup_token(port: int = 8000) -> str | None:
+def _fetch_setup_token(port: int = 8000) -> Optional[str]:
     """Fetch the API key from Hub's /setup/token endpoint (localhost only)."""
     import json as _json
     import urllib.request as _req
@@ -2390,7 +2393,7 @@ def cmd_activate(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _activate_transport(config) -> int:
+def _activate_transport(config: "AgentWeaveConfig") -> int:
     """Configure transport by fetching API key from Hub if needed."""
     import json as _json
 
@@ -2433,7 +2436,7 @@ def _activate_transport(config) -> int:
     return 0
 
 
-def _activate_agents(config) -> int:
+def _activate_agents(config: "AgentWeaveConfig") -> int:
     """Sync agents from agentweave.yml to session.json."""
     session = Session.load()
 
@@ -2558,7 +2561,7 @@ def _activate_watchdog() -> int:
         return 0  # Non-fatal
 
 
-def _activate_jobs(config) -> int:
+def _activate_jobs(config: "AgentWeaveConfig") -> int:
     """Sync jobs from agentweave.yml to Hub."""
     if not config.jobs:
         return 0
@@ -2610,13 +2613,15 @@ def _activate_jobs(config) -> int:
     return 0
 
 
-def _activate_kimi_pilot(config) -> int:
+def _activate_kimi_pilot(config: "AgentWeaveConfig") -> int:
     """Generate agent files for kimi pilot agents."""
     for agent_name, agent_config in config.agents.items():
         if agent_config.runner == "kimi" and agent_config.pilot:
             try:
-                _refresh_kimi_pilot_yaml(agent_name, Session.load())
-                print(f"[PILOT] Generated files for {agent_name}")
+                session = Session.load()
+                if session is not None:
+                    _refresh_kimi_pilot_yaml(agent_name, session)
+                    print(f"[PILOT] Generated files for {agent_name}")
             except Exception:
                 pass  # Non-fatal
     return 0

@@ -38,6 +38,7 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
     "pyyaml>=6.0",
+    "types-PyYAML>=6.0",
 ]
 docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
 all = ["fastmcp>=2.0", "croniter>=2.0", "pyyaml>=6.0"]
