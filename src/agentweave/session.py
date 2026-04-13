@@ -1,6 +1,6 @@
 """Session management for AgentWeave."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .constants import (
     AGENT_NAME_RE,
@@ -234,7 +234,7 @@ class Session:
 
     def sync_agents(
         self, declared_agents: Dict[str, Dict[str, Any]]
-    ) -> tuple[List[str], List[str], List[str]]:
+    ) -> Tuple[List[str], List[str], List[str]]:
         """Sync session agents with declared configuration from agentweave.yml.
 
         Args:
