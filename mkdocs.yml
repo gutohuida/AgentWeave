@@ -60,6 +60,7 @@ nav:
     - getting-started/installation.md
     - getting-started/quickstart.md
     - getting-started/configuration.md
+    - getting-started/migration.md
     - getting-started/alternative-modes.md
   - Guides:
     - guides/adding-new-agents.md
@@ -78,6 +79,7 @@ nav:
     - reference/mcp-tools.md
     - reference/task-lifecycle.md
     - reference/hub-api.md
+    - reference/agentweave-yml.md
     - reference/env-variables.md
   - Architecture:
     - architecture/overview.md
