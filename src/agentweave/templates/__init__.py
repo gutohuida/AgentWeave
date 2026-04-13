@@ -20,7 +20,7 @@ def get_template(name: str) -> str:
     """
     template_file = TEMPLATES_DIR / f"{name}.md"
     if template_file.exists():
-        return template_file.read_text()
+        return template_file.read_text(encoding="utf-8")
     raise FileNotFoundError(f"Template not found: {name}")
 
 
@@ -48,7 +48,7 @@ def get_skill_template(name: str) -> str:
     """
     template_file = SKILLS_DIR / f"{name}.md"
     if template_file.exists():
-        return template_file.read_text()
+        return template_file.read_text(encoding="utf-8")
     raise FileNotFoundError(f"Skill template not found: {name}")
 
 

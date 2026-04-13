@@ -72,7 +72,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     existing_session = None
     if SESSION_FILE.exists():
         try:
-            existing_session_data = _json.loads(SESSION_FILE.read_text())
+            existing_session_data = _json.loads(SESSION_FILE.read_text(encoding="utf-8"))
             existing_session = Session(existing_session_data)
         except Exception:
             pass
@@ -489,7 +489,7 @@ def cmd_status(_args: argparse.Namespace) -> int:
     watchdog_pid = None
     if WATCHDOG_PID_FILE.exists():
         try:
-            watchdog_pid = int(WATCHDOG_PID_FILE.read_text().strip())
+            watchdog_pid = int(WATCHDOG_PID_FILE.read_text(encoding="utf-8").strip())
             _os.kill(watchdog_pid, 0)
             watchdog_status = f"running (PID {watchdog_pid})"
         except (OSError, ProcessLookupError, ValueError):
@@ -2191,7 +2191,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         # Update .env with custom port if needed
         if port != 8000:
             try:
-                env_content = env_file.read_text()
+                env_content = env_file.read_text(encoding="utf-8")
                 # Replace or add HUB_HTTP_PORT
                 if "HUB_HTTP_PORT=" in env_content:
                     env_content = env_content.replace("HUB_HTTP_PORT=8000", f"HUB_HTTP_PORT={port}")

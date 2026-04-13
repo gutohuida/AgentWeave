@@ -1180,7 +1180,7 @@ def _load_agent_session(agent: str) -> Optional[str]:
     if not session_file.exists():
         return None
     try:
-        data = json.loads(session_file.read_text())
+        data = json.loads(session_file.read_text(encoding="utf-8"))
         return data.get("session_id")
     except Exception:
         return None
@@ -1390,7 +1390,7 @@ def _load_triggered_ids(max_age_hours: int = 24) -> Set[str]:
     if not TRIGGERED_DIRECT_FILE.exists():
         return set()
     try:
-        data: Dict[str, str] = json.loads(TRIGGERED_DIRECT_FILE.read_text())
+        data: Dict[str, str] = json.loads(TRIGGERED_DIRECT_FILE.read_text(encoding="utf-8"))
         cutoff = time.time() - max_age_hours * 3600
         recent: Dict[str, str] = {}
         result: Set[str] = set()
@@ -1427,7 +1427,7 @@ def _save_triggered_id(msg_id: str) -> None:
         existing: Dict[str, str] = {}
         if TRIGGERED_DIRECT_FILE.exists():
             with contextlib.suppress(Exception):
-                existing = json.loads(TRIGGERED_DIRECT_FILE.read_text())
+                existing = json.loads(TRIGGERED_DIRECT_FILE.read_text(encoding="utf-8"))
         existing[msg_id] = ts_str
         TRIGGERED_DIRECT_FILE.write_text(json.dumps(existing))
     except Exception as exc:

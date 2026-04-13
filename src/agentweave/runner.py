@@ -55,7 +55,7 @@ def get_claude_session_id(agent: str) -> Optional[str]:
     if not session_file.exists():
         return None
     try:
-        data = json.loads(session_file.read_text())
+        data = json.loads(session_file.read_text(encoding="utf-8"))
         return data.get("session_id")
     except Exception:
         return None
