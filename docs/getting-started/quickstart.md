@@ -1,6 +1,6 @@
 # Quick Start
 
-This guide walks you through the recommended setup: **AgentWeave Hub + CLI + MCP**.
+Get started with AgentWeave in **3 commands**. No manual configuration needed.
 
 ## Prerequisites
 
@@ -12,92 +12,135 @@ This guide walks you through the recommended setup: **AgentWeave Hub + CLI + MCP
 
 ## Step 1 — Start the Hub
 
-```bash
-# Download config files
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-
-# Create your environment file
-cp .env.example .env
-```
-
-Generate a secure API key:
+The Hub manages agent communication and provides a web dashboard.
 
 ```bash
-python -c "import secrets; print('aw_live_' + secrets.token_hex(16))"
+agentweave hub start
 ```
 
-Paste the result into `.env` as `AW_BOOTSTRAP_API_KEY`, then start the Hub:
-
-```bash
-docker compose up -d
-```
-
-Open **http://localhost:8000** in your browser to confirm it's running.
+This downloads the Hub configuration, starts the Docker container, and fetches the API key automatically. The Hub will be available at **http://localhost:8000**.
 
 ---
 
-## Step 2 — Install the CLI
-
-```bash
-pip install "agentweave-ai[mcp]"
-```
-
----
-
-## Step 3 — Initialize Your Project
+## Step 2 — Initialize Your Project
 
 Navigate to your project and run:
 
 ```bash
 cd /path/to/your-project
-agentweave init --project "My App" --agents claude,kimi
+agentweave init --project "My App"
 ```
 
 This creates:
 
-- `AI_CONTEXT.md` — fill this in once with your stack, architecture, and standards
+- `agentweave.yml` — your project configuration (edit to add/remove agents)
 - `.agentweave/` — shared context, roles, and protocol files
+- `CLAUDE.md` / `AGENTS.md` — agent context files at project root
 
 ---
 
-## Step 4 — Connect the CLI to the Hub
+## Step 3 — Activate
+
+Apply your configuration and start collaborating:
 
 ```bash
-agentweave transport setup --type http \
-  --url http://localhost:8000 \
-  --api-key aw_live_<your-key> \
-  --project-id proj-default
+agentweave activate
 ```
+
+This single command:
+- Connects the CLI to the Hub
+- Registers all agents from `agentweave.yml`
+- Sets up MCP for agent communication
+- Starts the background watchdog
 
 ---
 
-## Step 5 — Register MCP and Start the Watchdog
+## You're Ready!
+
+Open **http://localhost:8000** to see the dashboard. Your agents can now:
+
+- Send messages to each other via the Hub
+- Create and manage tasks
+- Ask you questions when they need clarification
+
+Start your first agent (Claude, Kimi, etc.) in your project directory — it will auto-read its context file.
+
+---
+
+## Daily Workflow
+
+### Check Status
 
 ```bash
-# Register MCP with all session agents
-agentweave mcp setup
-
-# Start the background watchdog
-agentweave start
+agentweave status
 ```
 
-Stop it later with:
+### Add a New Agent
+
+Edit `agentweave.yml`:
+
+```yaml
+agents:
+  claude:
+    runner: claude
+  kimi:
+    runner: kimi
+  gemini:          # Add new agent
+    runner: native
+```
+
+Then run `agentweave activate` to apply changes.
+
+### Stop Everything
 
 ```bash
-agentweave stop
+agentweave hub stop      # Stop the Hub
+agentweave stop          # Stop the watchdog
 ```
-
-Restart your Claude / Kimi sessions so they pick up the new MCP server. That's it — agents can now communicate through the Hub and you can monitor everything in the dashboard.
 
 ---
 
 ## What's Next?
 
-- [Configuration Guide](configuration.md) — transports, agents, and environment variables
-- [Context Files](../guides/context-files.md) — how AI_CONTEXT.md and agent files work
+- [Configuration Guide](configuration.md) — `agentweave.yml` reference and options
+- [Context Files](../guides/context-files.md) — how `ai_context.md` and agent files work
 - [Session Modes](../guides/session-modes.md) — hierarchical vs peer vs review
 - [CLI Commands Reference](../reference/cli-commands.md) — full command listing
 - [MCP Tools Reference](../reference/mcp-tools.md) — tools available to agents
 - [Using the Dashboard](../guides/dashboard.md) — what you'll see at localhost:8000
 - [FAQ](../guides/faq.md) — common questions and answers
+
+---
+
+## Troubleshooting
+
+### "Docker is not available"
+
+Make sure Docker Desktop (Mac/Windows) or Docker Engine (Linux) is running:
+
+```bash
+docker --version
+docker compose version
+```
+
+### "No agentweave.yml found"
+
+Run `agentweave init` in your project directory first.
+
+### "Hub failed to start"
+
+Check the Hub logs:
+
+```bash
+docker compose -f ~/.agentweave/hub/docker-compose.yml logs
+```
+
+### Need to reset everything?
+
+```bash
+agentweave hub stop
+agentweave stop
+rm -rf .agentweave/ agentweave.yml CLAUDE.md AGENTS.md
+```
+
+Then start over from Step 1.

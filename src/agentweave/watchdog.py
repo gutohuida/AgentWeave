@@ -1968,8 +1968,10 @@ def _make_ping_callback(
     Handles any number of agents. Non-blocking (spawns a daemon thread per ping).
     Uses session persistence to resume the same agent session across pings.
     A seen-set prevents double-pings for the same message ID.
+    Agent list is reloaded from session.json on each message so agents added
+    after the watchdog starts are picked up automatically.
     """
-    agent_set = set(agents)
+    initial_agent_set = set(agents)
     seen: Set[str] = set()
     is_http = transport is not None and transport.get_transport_type() == "http"
 
@@ -1985,8 +1987,7 @@ def _make_ping_callback(
         if event_type != "new_message":
             return
         recipient = data.get("to", "")
-        if recipient not in agent_set:
-            return
+
         # Direct trigger messages (from Hub UI) are handled by _make_direct_trigger_callback
         # which also uses get_inbox flow.  Skip here to avoid launching a second process.
         if data.get("from", "") == "user":
@@ -1994,6 +1995,19 @@ def _make_ping_callback(
         msg_id = data.get("id", "")
         if msg_id in seen:
             return
+
+        # Reload the live agent list from session.json so agents added after
+        # watchdog startup are included without requiring a restart.
+        from .session import Session as _Session
+
+        _sess = _Session.load()
+        current_agent_set = set(_sess.agent_names) if _sess else initial_agent_set
+        if recipient not in current_agent_set:
+            return
+
+        if recipient not in initial_agent_set:
+            print(f"[PING] Detected new agent since startup: {recipient}")
+
         seen.add(msg_id)
 
         # Skip if CLI is not available
@@ -2016,9 +2030,6 @@ def _make_ping_callback(
             return
 
         # Check if agent is in pilot mode - skip auto-execution
-        from .session import Session as _Session
-
-        _sess = _Session.load()
         if _sess and _sess.get_agent_pilot(recipient):
             logger.debug(
                 "agent_ping_skipped_pilot",
@@ -2044,11 +2055,8 @@ def _make_ping_callback(
 
         # Load env_vars from session config for claude_proxy agents
         env_vars = None
-        from .session import Session
-
-        session = Session.load()
-        if session:
-            runner_config = session.get_runner_config(recipient)
+        if _sess:
+            runner_config = _sess.get_runner_config(recipient)
             if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
                 env_vars = runner_config.get("env_vars")
 
@@ -2238,10 +2246,44 @@ def _make_direct_trigger_callback(
     return callback
 
 
+def _load_dotenv(path: Optional[str] = None) -> None:
+    """Load key=value pairs from a .env file into os.environ.
+
+    Skips lines that are blank, start with #, or have no '='.
+    Never overwrites variables already set in the environment.
+
+    Args:
+        path: Path to .env file. Defaults to .env in the current directory.
+    """
+    import pathlib
+
+    env_path = pathlib.Path(path) if path else pathlib.Path.cwd() / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Strip inline comments and surrounding quotes
+            if " #" in value:
+                value = value[: value.index(" #")].strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except Exception:
+        pass  # Never crash the watchdog over a .env parse failure
+
+
 def main() -> None:
     """CLI entry point for watchdog."""
     from .logging_handlers import _configure_logging
 
+    _load_dotenv()
     _configure_logging()
 
     import argparse

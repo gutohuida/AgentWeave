@@ -2,7 +2,11 @@
 """Command-line interface for AgentWeave."""
 
 import argparse
+import os
+import shutil
+import subprocess
 import sys
+import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
@@ -17,6 +21,7 @@ from .constants import (
     ROLES_CONFIG_FILE,
     ROLES_DIR,
     RUNNER_CONFIGS,
+    SESSION_FILE,
     SHARED_DIR,
     TRANSPORT_CONFIG_FILE,
     VALID_AGENTS,
@@ -58,13 +63,44 @@ from .validator import validate_message, validate_task
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Initialize a new session."""
+    import json as _json
+
+    # Check for existing session (migration path)
+    existing_session = None
+    if SESSION_FILE.exists():
+        try:
+            existing_session_data = _json.loads(SESSION_FILE.read_text())
+            existing_session = Session(existing_session_data)
+        except Exception:
+            pass
+
+        if existing_session and not args.force:
+            print_info("Existing session detected.")
+            print_info("Generating agentweave.yml from current configuration...")
+            try:
+                from .config import generate_agentweave_yml
+                generate_agentweave_yml(existing_session)
+                print_success("Generated agentweave.yml from existing session")
+                print_info("Run 'agentweave activate' to apply configuration")
+                return 0
+            except Exception as e:
+                print_error(f"Failed to generate agentweave.yml: {e}")
+                return 1
+
     if AGENTWEAVE_DIR.exists() and not args.force:
         if AGENTWEAVE_DIR.is_file():
             print_error(".agentweave exists as a file, not a directory.")
             print_info("Remove it with: rm .agentweave")
             return 1
-        print_warning(".agentweave/ already exists. Use --force to overwrite.")
-        return 1
+        # Directory exists - check if it has meaningful content (not just logs)
+        # The logs directory is created automatically by logging setup
+        has_session = SESSION_FILE.exists()
+        has_agents_dir = (AGENTWEAVE_DIR / "agents").exists()
+        has_tasks_dir = (AGENTWEAVE_DIR / "tasks").exists()
+        if has_session or has_agents_dir or has_tasks_dir:
+            print_warning(".agentweave/ already exists. Use --force to overwrite.")
+            return 1
+        # Directory only contains logs/other non-essential files - allow init
 
     # Handle case where .agentweave exists as a file with --force
     if AGENTWEAVE_DIR.exists() and args.force and AGENTWEAVE_DIR.is_file():
@@ -75,22 +111,30 @@ def cmd_init(args: argparse.Namespace) -> int:
             print_error(f"Cannot remove .agentweave file: {e}")
             return 1
 
+    # Handle deprecation warning for --agents
+    agents_arg = getattr(args, "agents", None)
+    if agents_arg:
+        print_warning("--agents is deprecated. Define agents in agentweave.yml instead.")
+
     ensure_dirs()
 
     try:
         # Parse agent list: --agents claude,kimi,gemini  OR fall back to default
-        agents_arg = getattr(args, "agents", None)
         agent_list = None
         if agents_arg:
             agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()]
 
         principal = args.principal or (agent_list[0] if agent_list else DEFAULT_AGENTS[0])
 
+        # In the declarative workflow, only create the principal at init time.
+        # Additional agents are declared in agentweave.yml and synced by activate.
+        effective_agents = agent_list if agent_list else DEFAULT_AGENTS
+
         session = Session.create(
             name=args.project or "Unnamed Project",
             principal=principal,
             mode=args.mode or "hierarchical",
-            agents=agent_list,
+            agents=effective_agents,
         )
         session.save()
 
@@ -178,9 +222,12 @@ agentweave summary
             agent_assignments: dict = {}
             active_role_keys: set = set()
             for ag in session.agent_names:
-                role_key = default_for_map.get(ag, "fullstack_dev")
-                agent_assignments[ag] = role_key
-                active_role_keys.add(role_key)
+                role_key = default_for_map.get(ag)
+                if role_key:
+                    agent_assignments[ag] = role_key
+                    active_role_keys.add(role_key)
+                # Agents not in _default_for start with no role.
+                # Use agentweave.yml + `agentweave activate` to assign roles.
 
             # Build the project roles.json (strip internal _* fields)
             roles_config = {
@@ -354,6 +401,16 @@ agentweave summary
             print("    /aw-sync       sync context files from ai_context.md")
             print("    /aw-revise     accept and begin a revision")
             print("  (aw-collab-start runs automatically at session start)")
+
+        # Generate agentweave.yml configuration file
+        try:
+            from .config import generate_agentweave_yml
+            yml_path = generate_agentweave_yml(session)
+            print(f"\n[CONFIG] Created {yml_path}")
+            print("  This file defines your project agents and settings.")
+            print("  Edit it to add/remove agents, then run 'agentweave activate'")
+        except Exception as exc:
+            print_warning(f"Could not create agentweave.yml: {exc}")
 
         return 0
 
@@ -1990,6 +2047,577 @@ def cmd_transport_disable(_args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Hub lifecycle commands (start, stop, status)
+# ---------------------------------------------------------------------------
+
+HUB_DIR = Path.home() / ".agentweave" / "hub"
+HUB_COMPOSE_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/docker-compose.yml"
+HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/.env.example"
+
+
+def _hub_url(port: int = 8000) -> str:
+    """Get the Hub base URL for a given port."""
+    return f"http://localhost:{port}"
+
+
+def _hub_health_url(port: int = 8000) -> str:
+    """Get the Hub health endpoint URL for a given port."""
+    return f"{_hub_url(port)}/health"
+
+
+def _hub_setup_token_url(port: int = 8000) -> str:
+    """Get the Hub setup token endpoint URL for a given port."""
+    return f"{_hub_url(port)}/api/v1/setup/token"
+
+
+def _docker_available() -> bool:
+    """Check if Docker and docker compose are available."""
+    if not shutil.which("docker"):
+        return False
+    # Check for docker compose (v2) or docker-compose (v1)
+    result = subprocess.run(["docker", "compose", "version"], capture_output=True)
+    if result.returncode == 0:
+        return True
+    # Fallback to docker-compose
+    return bool(shutil.which("docker-compose"))
+
+
+def _hub_health_check(port: int = 8000, timeout: int = 120) -> bool:
+    """Poll Hub health endpoint until it responds or timeout."""
+    import time as _time
+
+    start = _time.time()
+    while _time.time() - start < timeout:
+        try:
+            with urllib.request.urlopen(_hub_health_url(port), timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+        _time.sleep(1)
+    return False
+
+
+def _fetch_setup_token(port: int = 8000) -> str | None:
+    """Fetch the API key from Hub's /setup/token endpoint (localhost only)."""
+    import json as _json
+    import urllib.request as _req
+
+    try:
+        with _req.urlopen(_hub_setup_token_url(port), timeout=5) as resp:
+            data = _json.loads(resp.read())
+            return data.get("api_key")
+    except Exception:
+        return None
+
+
+def cmd_hub_start(args: argparse.Namespace) -> int:
+    """Start the AgentWeave Hub Docker container."""
+    import subprocess as _sp
+    import urllib.request as _req
+
+    port = getattr(args, "port", 8000)
+    local = getattr(args, "local", False)
+    hub_url = _hub_url(port)
+    health_url = _hub_health_url(port)
+
+    if not _docker_available():
+        print_error("Docker is not available")
+        print_info("Please install Docker: https://docs.docker.com/get-docker/")
+        print_info("Docker Desktop is recommended for Windows/Mac users.")
+        return 1
+
+    # Check if Hub is already running on this port
+    try:
+        with _req.urlopen(health_url, timeout=2) as resp:
+            if resp.status == 200:
+                print_info(f"Hub is already running at {hub_url}")
+                return 0
+    except Exception:
+        pass
+
+    if local:
+        # Local dev mode: build and run from ./hub/ in the current directory
+        local_hub_dir = Path.cwd() / "hub"
+        compose_file = local_hub_dir / "docker-compose.yml"
+        if not compose_file.exists():
+            print_error(f"Local hub not found: {compose_file}")
+            print_info("Run this command from the AgentWeave repository root.")
+            return 1
+
+        print_info(f"Building and starting Hub from {local_hub_dir} on port {port}...")
+        env = os.environ.copy()
+        env["AW_PORT"] = str(port)
+        result = _sp.run(
+            ["docker", "compose", "up", "--build", "-d"],
+            cwd=local_hub_dir,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        if result.returncode != 0:
+            print_error(f"Failed to start Hub: {result.stderr}")
+            return 1
+    else:
+        HUB_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Download docker-compose.yml if not present
+        compose_file = HUB_DIR / "docker-compose.yml"
+        if not compose_file.exists():
+            print_info("Downloading Hub configuration...")
+            try:
+                _req.urlretrieve(HUB_COMPOSE_URL, compose_file)
+            except Exception as exc:
+                print_error(f"Failed to download docker-compose.yml: {exc}")
+                return 1
+
+        # Download .env if not present
+        env_file = HUB_DIR / ".env"
+        if not env_file.exists():
+            try:
+                _req.urlretrieve(HUB_ENV_URL, env_file)
+            except Exception as exc:
+                print_error(f"Failed to download .env: {exc}")
+                return 1
+
+        # Update .env with custom port if needed
+        if port != 8000:
+            try:
+                env_content = env_file.read_text()
+                # Replace or add HUB_HTTP_PORT
+                if "HUB_HTTP_PORT=" in env_content:
+                    env_content = env_content.replace(
+                        "HUB_HTTP_PORT=8000", f"HUB_HTTP_PORT={port}"
+                    )
+                else:
+                    env_content += f"\nHUB_HTTP_PORT={port}\n"
+                env_file.write_text(env_content)
+            except Exception as exc:
+                print_warning(f"Could not update port in .env: {exc}")
+
+        # Start the Hub
+        print_info(f"Starting AgentWeave Hub on port {port}...")
+        result = _sp.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=HUB_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print_error(f"Failed to start Hub: {result.stderr}")
+            return 1
+
+    # Wait for Hub to be healthy
+    print_info("Waiting for Hub to be ready (this may take a while for first build)...")
+    if not _hub_health_check(port=port, timeout=120):
+        print_error("Hub failed to start within 120 seconds")
+        if local:
+            print_info("Check logs with: docker compose -f hub/docker-compose.yml logs")
+        else:
+            print_info("Check logs with: docker compose -f ~/.agentweave/hub/docker-compose.yml logs")
+        return 1
+
+    print_success(f"Hub ready at {hub_url}")
+    return 0
+
+
+def cmd_hub_stop(args: argparse.Namespace) -> int:
+    """Stop the AgentWeave Hub Docker container."""
+    import subprocess as _sp
+    import urllib.request as _req
+
+    port = getattr(args, "port", 8000)
+    local = getattr(args, "local", False)
+    health_url = _hub_health_url(port)
+
+    # Check if Hub is running
+    try:
+        with _req.urlopen(health_url, timeout=2) as resp:
+            if resp.status != 200:
+                print_info("Hub is not running")
+                return 0
+    except Exception:
+        print_info("Hub is not running")
+        return 0
+
+    if local:
+        compose_dir = Path.cwd() / "hub"
+        if not (compose_dir / "docker-compose.yml").exists():
+            print_error(f"Local hub not found: {compose_dir / 'docker-compose.yml'}")
+            print_info("Run this command from the AgentWeave repository root.")
+            return 1
+    else:
+        if not HUB_DIR.exists():
+            print_error("Hub directory not found. Did you run 'agentweave hub start'?")
+            return 1
+        compose_dir = HUB_DIR
+
+    print_info("Stopping AgentWeave Hub...")
+    env = os.environ.copy()
+    env["AW_PORT"] = str(port)
+    result = _sp.run(
+        ["docker", "compose", "down"],
+        cwd=compose_dir,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if result.returncode != 0:
+        print_error(f"Failed to stop Hub: {result.stderr}")
+        return 1
+
+    print_success("Hub stopped")
+    return 0
+
+
+def cmd_hub_status(args: argparse.Namespace) -> int:
+    """Check the status of the AgentWeave Hub."""
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.request as _req
+
+    port = getattr(args, "port", 8000)
+    hub_url = _hub_url(port)
+    health_url = _hub_health_url(port)
+
+    try:
+        with _req.urlopen(health_url, timeout=5) as resp:
+            if resp.status == 200:
+                data = _json.loads(resp.read())
+                print("[HUB] Status: running")
+                print(f"   URL:    {hub_url}")
+                if data.get("version"):
+                    print(f"   Version: {data['version']}")
+                return 0
+    except _uerr.HTTPError as exc:
+        print(f"[HUB] Status: error (HTTP {exc.code})")
+        return 1
+    except Exception:
+        pass
+
+    print("[HUB] Status: stopped")
+    print("       Run 'agentweave hub start' to start the Hub")
+    return 0
+
+
+def cmd_activate(_args: argparse.Namespace) -> int:
+    """Activate the AgentWeave project - reconcile agentweave.yml with runtime state.
+
+    This idempotent command:
+    1. Configures transport (fetches API key from Hub if needed)
+    2. Syncs agents from agentweave.yml to session.json
+    3. Registers MCP server if not already registered
+    4. Starts watchdog if not running
+    5. Syncs jobs from agentweave.yml to Hub
+    """
+    from .config import (
+        AGENTWEAVE_YML_PATH,
+        ConfigValidationError,
+        load_agentweave_yml,
+    )
+
+    # Check for agentweave.yml
+    if not AGENTWEAVE_YML_PATH.exists():
+        print_error("No agentweave.yml found. Run 'agentweave init' to create one.")
+        return 1
+
+    # Load configuration
+    try:
+        config = load_agentweave_yml()
+    except ConfigValidationError as exc:
+        print_error(f"Configuration error: {exc}")
+        return 1
+    except FileNotFoundError:
+        print_error("Configuration file not found.")
+        return 1
+
+    print(f"[ACTIVATE] Project: {config.project.name}")
+    print(f"           Mode: {config.project.mode}")
+    print()
+
+    # Step 1: Configure transport
+    transport_result = _activate_transport(config)
+    if transport_result != 0:
+        return transport_result
+
+    # Step 2: Sync agents
+    agents_result = _activate_agents(config)
+    if agents_result != 0:
+        return agents_result
+
+    # Step 3: MCP setup
+    mcp_result = _activate_mcp()
+    if mcp_result != 0:
+        return mcp_result
+
+    # Step 4: Watchdog
+    watchdog_result = _activate_watchdog()
+    if watchdog_result != 0:
+        return watchdog_result
+
+    # Step 5: Jobs sync (if jobs section exists)
+    if config.jobs:
+        jobs_result = _activate_jobs(config)
+        if jobs_result != 0:
+            return jobs_result
+
+    # Step 6: Kimi pilot side effects
+    _activate_kimi_pilot(config)
+
+    # Step 7: Regenerate context files to reflect any role changes
+    print()
+    print("[CONTEXT] Regenerating agent context files...")
+    try:
+        sync_args = argparse.Namespace(force=False)
+        cmd_sync_context(sync_args)
+    except Exception as e:
+        print(f"[WARNING] Context sync failed: {e}")
+        print("          Run 'agentweave sync-context' manually after fixing the issue.")
+
+    print()
+    print_success("Activate complete!")
+    print("Your project is ready for multi-agent collaboration.")
+    print()
+    print("Next steps:")
+    print("  agentweave status          # Check session status")
+    print("  agentweave relay --agent <name>  # Generate relay prompt for an agent")
+
+    return 0
+
+
+def _activate_transport(config) -> int:
+    """Configure transport by fetching API key from Hub if needed."""
+    import json as _json
+
+    from .utils import load_json, save_json
+
+    hub_url = config.hub.url
+
+    # Check if transport is already configured with same URL
+    existing = load_json(TRANSPORT_CONFIG_FILE)
+    if existing and existing.get("type") == "http" and existing.get("url") == hub_url:
+        print("[TRANSPORT] Already configured")
+        return 0
+
+    # Try to fetch setup token from Hub
+    setup_token_url = f"{hub_url.rstrip('/')}/api/v1/setup/token"
+    try:
+        with urllib.request.urlopen(setup_token_url, timeout=5) as resp:
+            data = _json.loads(resp.read())
+            api_key = data.get("api_key")
+            if api_key:
+                # Save transport config
+                TRANSPORT_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                save_json(
+                    TRANSPORT_CONFIG_FILE,
+                    {
+                        "type": "http",
+                        "url": hub_url,
+                        "api_key": api_key,
+                        "project_id": "proj-default",
+                    },
+                )
+                print(f"[TRANSPORT] Connected to Hub at {hub_url}")
+                return 0
+    except Exception as exc:
+        print_warning(f"Could not auto-configure transport: {exc}")
+        print_info("You may need to run 'agentweave transport setup' manually")
+        # Continue anyway - transport might be optional for some workflows
+        return 0
+
+    return 0
+
+
+def _activate_agents(config) -> int:
+    """Sync agents from agentweave.yml to session.json."""
+    session = Session.load()
+
+    # Create session if it doesn't exist
+    if not session:
+        session = Session.create(
+            name=config.project.name,
+            principal=list(config.agents.keys())[0] if config.agents else "claude",
+            mode=config.project.mode,
+            agents=list(config.agents.keys()),
+        )
+        print(f"[SESSION] Created new session: {session.name}")
+
+    # Build declared agents dict from config
+    declared = {
+        name: {
+            "runner": agent.runner,
+            "model": agent.model,
+            "roles": agent.roles,
+            "yolo": agent.yolo,
+            "pilot": agent.pilot,
+            "env": agent.env,
+            "base_url": agent.base_url,
+        }
+        for name, agent in config.agents.items()
+    }
+
+    # Sync agents
+    added, updated, orphaned = session.sync_agents(declared)
+
+    # Print results
+    if added:
+        for name in added:
+            print(f"[AGENTS] Added: {name}")
+    if updated:
+        for name in updated:
+            print(f"[AGENTS] Updated: {name}")
+    if orphaned:
+        for name in orphaned:
+            print(f"[AGENTS] Orphaned (in session, not in YAML): {name}")
+            print(f"         Run 'agentweave agent remove {name}' to clean up")
+
+    if not added and not updated and not orphaned:
+        print("[AGENTS] Up to date")
+
+    # Save session
+    session.save()
+
+    return 0
+
+
+def _activate_mcp() -> int:
+    """Register MCP server if not already registered."""
+    import subprocess as _sp
+
+    # Check if MCP is already registered by testing with a dummy call
+    # This is a heuristic - we try to check if the mcp command works
+    session = Session.load()
+    if not session:
+        return 0  # No session, skip MCP
+
+    # Try to check if MCP is configured for the principal agent
+    principal = session.principal
+    runner_cfg = session.get_runner_config(principal)
+    runner = runner_cfg.get("runner", "native")
+
+    from .constants import RUNNER_CONFIGS
+
+    rc = RUNNER_CONFIGS.get(runner, RUNNER_CONFIGS["native"])
+    cli = rc.get("cli") or principal
+
+    # Check if agentweave-mcp is already in the MCP list
+    try:
+        check_result = _sp.run(
+            [cli, "mcp", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if "agentweave" in check_result.stdout:
+            print("[MCP] Already registered")
+            return 0
+    except Exception:
+        pass  # Continue to registration attempt
+
+    # Try to register
+    try:
+        mcp_args_result = cmd_mcp_setup(argparse.Namespace())
+        if mcp_args_result == 0:
+            print("[MCP] Registered")
+        return mcp_args_result
+    except Exception as exc:
+        print_warning(f"Could not register MCP: {exc}")
+        return 0  # Non-fatal
+
+
+def _activate_watchdog() -> int:
+    """Start watchdog if not already running."""
+    import os
+
+    from .constants import WATCHDOG_PID_FILE
+
+    # Check if watchdog is running
+    if WATCHDOG_PID_FILE.exists():
+        try:
+            pid = int(WATCHDOG_PID_FILE.read_text().strip())
+            os.kill(pid, 0)  # Check if process exists
+            print("[WATCHDOG] Already running")
+            return 0
+        except (OSError, ProcessLookupError, ValueError):
+            # Stale PID file
+            WATCHDOG_PID_FILE.unlink(missing_ok=True)
+
+    # Start watchdog
+    try:
+        result = cmd_start(argparse.Namespace())
+        if result == 0:
+            print("[WATCHDOG] Started")
+        return result
+    except Exception as exc:
+        print_warning(f"Could not start watchdog: {exc}")
+        return 0  # Non-fatal
+
+
+def _activate_jobs(config) -> int:
+    """Sync jobs from agentweave.yml to Hub."""
+    if not config.jobs:
+        return 0
+
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() != "http":
+        print_warning("[JOBS] HTTP transport not configured, skipping job sync")
+        return 0
+
+    # Get existing jobs from Hub
+    try:
+        existing_jobs = transport.list_jobs()
+        existing_by_name = {job.get("name", job.get("id")): job for job in existing_jobs}
+    except Exception:
+        existing_by_name = {}
+
+    for job_name, job_config in config.jobs.items():
+        job_data = {
+            "name": job_name,
+            "agent": job_config.agent,
+            "message": job_config.prompt,
+            "cron": job_config.schedule,
+            "enabled": job_config.enabled,
+        }
+
+        if job_name in existing_by_name:
+            # Update existing job
+            job_id = existing_by_name[job_name]["id"]
+            try:
+                transport.update_job(job_id, job_data)
+                status = "paused" if not job_config.enabled else "active"
+                print(f"[JOBS] Updated: {job_name} ({status})")
+            except Exception as exc:
+                print_warning(f"Could not update job {job_name}: {exc}")
+        else:
+            # Create new job
+            try:
+                job_id = transport.create_job(job_data)
+                if job_id:
+                    print(f"[JOBS] Created: {job_name}")
+                    if not job_config.enabled:
+                        transport.update_job(job_id, {"enabled": False})
+                        print(f"[JOBS] Paused: {job_name}")
+            except Exception as exc:
+                print_warning(f"Could not create job {job_name}: {exc}")
+
+    return 0
+
+
+def _activate_kimi_pilot(config) -> int:
+    """Generate agent files for kimi pilot agents."""
+    for agent_name, agent_config in config.agents.items():
+        if agent_config.runner == "kimi" and agent_config.pilot:
+            try:
+                _refresh_kimi_pilot_yaml(agent_name, Session.load())
+                print(f"[PILOT] Generated files for {agent_name}")
+            except Exception:
+                pass  # Non-fatal
+    return 0
+
+
 def cmd_reply(args: argparse.Namespace) -> int:
     """Reply to a question asked by an agent (HTTP transport only)."""
     from .utils import load_json as _load_json
@@ -2914,7 +3542,11 @@ For more help: https://github.com/gutohuida/AgentWeave
     )
     init_parser.add_argument(
         "--agents",
-        help=f"Comma-separated agent list, e.g. claude,kimi,gemini (default: {','.join(DEFAULT_AGENTS)})",
+        help=(
+            f"[DEPRECATED] Comma-separated agent list. "
+            f"Agents are now defined in agentweave.yml. "
+            f"Default: {','.join(DEFAULT_AGENTS)}"
+        ),
     )
     init_parser.add_argument(
         "--mode",
@@ -3388,6 +4020,67 @@ For more help: https://github.com/gutohuida/AgentWeave
     # transport disable
     transport_subparsers.add_parser("disable", help="Disable transport, revert to local")
 
+    # Activate command
+    subparsers.add_parser(
+        "activate",
+        help="Activate project - reconcile agentweave.yml with runtime state",
+    )
+
+    # Hub commands (lifecycle management)
+    hub_parser = subparsers.add_parser(
+        "hub",
+        help="Manage the AgentWeave Hub Docker container",
+    )
+    hub_subparsers = hub_parser.add_subparsers(dest="hub_command")
+
+    hub_start = hub_subparsers.add_parser(
+        "start",
+        help="Start the Hub container (downloads config if needed)",
+    )
+    hub_start.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8000,
+        help="Port to expose the Hub on (default: 8000)",
+    )
+    hub_start.add_argument(
+        "--local",
+        action="store_true",
+        default=False,
+        help="Build and run from ./hub/ (for Hub development)",
+    )
+
+    hub_stop = hub_subparsers.add_parser(
+        "stop",
+        help="Stop the Hub container",
+    )
+    hub_stop.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8000,
+        help="Port the Hub is running on (default: 8000)",
+    )
+    hub_stop.add_argument(
+        "--local",
+        action="store_true",
+        default=False,
+        help="Stop the locally-built Hub (for Hub development)",
+    )
+
+    hub_status = hub_subparsers.add_parser(
+        "status",
+        help="Check if the Hub is running",
+    )
+    hub_status.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=8000,
+        help="Port to check for Hub (default: 8000)",
+    )
+
     # Hub heartbeat (http transport only)
     hb_parser = subparsers.add_parser(
         "hub-heartbeat",
@@ -3583,6 +4276,18 @@ def main(args: Optional[List[str]] = None) -> int:
                 return cmd_transport_disable(parsed_args)
             else:
                 parser.parse_args(["transport", "--help"])
+                return 0
+        elif parsed_args.command == "activate":
+            return cmd_activate(parsed_args)
+        elif parsed_args.command == "hub":
+            if parsed_args.hub_command == "start":
+                return cmd_hub_start(parsed_args)
+            elif parsed_args.hub_command == "stop":
+                return cmd_hub_stop(parsed_args)
+            elif parsed_args.hub_command == "status":
+                return cmd_hub_status(parsed_args)
+            else:
+                parser.parse_args(["hub", "--help"])
                 return 0
         elif parsed_args.command == "reply":
             return cmd_reply(parsed_args)

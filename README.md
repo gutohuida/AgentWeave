@@ -12,80 +12,58 @@ AgentWeave lets multiple AI agents work together on the same project through a s
 
 ---
 
-## Quick Start — AgentWeave Hub (Recommended)
+## Quick Start — 3 Commands
 
 The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time visibility into agent activity.
 
-### Step 1 — Start the Hub (Docker)
+### Prerequisites
+
+- Python 3.8+ and pip
+- Docker and Docker Compose
+
+### Step 1 — Start the Hub
 
 ```bash
-# Download the two config files
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-
-# Create your .env
-cp .env.example .env
+agentweave hub start
 ```
 
-Open `.env` and set your API key:
-
-```bash
-# Generate a secure key
-python -c "import secrets; print('aw_live_' + secrets.token_hex(16))"
-```
-
-Paste the output as `AW_BOOTSTRAP_API_KEY` in `.env`, then start the Hub:
-
-```bash
-docker compose up -d
-```
-
-The Hub is now running at **http://localhost:8000** — open it in your browser to see the dashboard.
+This downloads the configuration, starts the Hub, and fetches the API key automatically. The dashboard is now at **http://localhost:8000**.
 
 ---
 
-### Step 2 — Install the CLI
-
-```bash
-pip install "agentweave-ai[mcp]"
-```
-
----
-
-### Step 3 — Initialize your project
+### Step 2 — Initialize your project
 
 ```bash
 cd /path/to/your-project
-agentweave init --project "My App" --agents claude,kimi
+agentweave init --project "My App"
 ```
 
-This creates `AI_CONTEXT.md` (fill it in once: stack, architecture, standards) and `.agentweave/` with agent roles and shared context.
+This creates:
+- `agentweave.yml` — project configuration (edit to add/remove agents)
+- `.agentweave/` — shared context, roles, and protocol files
+- `CLAUDE.md` / `AGENTS.md` — agent context files
 
 ---
 
-### Step 4 — Connect the CLI to the Hub
+### Step 3 — Activate
 
 ```bash
-agentweave transport setup --type http \
-  --url http://localhost:8000 \
-  --api-key aw_live_<your-key> \
-  --project-id proj-default
+agentweave activate
 ```
+
+This connects to the Hub, registers agents, sets up MCP, and starts the watchdog. Done!
 
 ---
 
-### Step 5 — Register the MCP server and start the watchdog
+Start your Claude / Kimi sessions in the project directory — they auto-read their context files. Agents now communicate through the Hub and you monitor everything in the dashboard.
+
+### Daily Commands
 
 ```bash
-# Register MCP with all session agents (one command)
-agentweave mcp setup
-
-# Start the background watchdog (one terminal, all agents)
-agentweave start
-# Stop later with: agentweave stop
+agentweave status          # Check session status
+agentweave hub stop        # Stop the Hub
+agentweave stop            # Stop the watchdog
 ```
-
-Restart your Claude / Kimi sessions so they pick up the new MCP server. That's it — agents communicate through the Hub and you monitor everything in the dashboard.
 
 ---
 
@@ -122,18 +100,19 @@ Data persists in a Docker volume (`hub-data`) — no manual backup needed for lo
 
 | Mode | Setup | Best for |
 |------|-------|----------|
-| **Hub** | Docker + `agentweave transport setup --type http` | Teams, multi-machine, web dashboard *(recommended)* |
-| **Zero-relay MCP** | `agentweave mcp setup` + watchdog | Autonomous loops, same machine, no server |
-| **Manual relay** | Zero — just install | Quick one-off delegation |
+| **Hub** | `agentweave hub start` + `agentweave activate` | Teams, multi-machine, web dashboard *(recommended)* |
+| **Zero-relay MCP** | `agentweave activate` (no Hub) | Autonomous loops, same machine |
+| **Manual relay** | `agentweave init` only | Quick one-off delegation |
 
 ### Zero-relay MCP (no Hub)
+
+Skip the Hub steps and activate locally:
 
 ```bash
 pip install "agentweave-ai[mcp]"
 cd your-project/
-agentweave init --project "My App" --agents claude,kimi
-agentweave mcp setup   # configure MCP in agent settings
-agentweave start       # start background watchdog
+agentweave init --project "My App"
+agentweave activate    # Sets up MCP and watchdog locally
 ```
 
 ### Manual relay (simplest possible)
@@ -141,8 +120,8 @@ agentweave start       # start background watchdog
 ```bash
 pip install agentweave-ai
 cd your-project/
-agentweave init --project "My App" --agents claude,kimi
-# Ask Claude to delegate; it runs agentweave quick + relay and gives you a prompt to paste into Kimi
+agentweave init --project "My App"
+# Use agentweave quick + relay to manually hand off work between agents
 ```
 
 ---
@@ -160,19 +139,27 @@ This is called a **`claude_proxy` runner**. AgentWeave tracks a separate Claude 
 
 ### Setup
 
-```bash
-# 1. Initialize with a proxy agent
-agentweave init --project "My App" --agents claude,minimax
+Add to `agentweave.yml`:
 
-# 2. Configure the runner (uses built-in defaults for minimax and glm)
-agentweave agent configure minimax
-
-# Or supply custom values for any OpenAI-compatible provider:
-agentweave agent configure mymodel \
-  --runner claude_proxy \
-  --base-url https://api.example.com/v1 \
-  --api-key-var MY_MODEL_API_KEY
+```yaml
+agents:
+  claude:
+    runner: claude
+  
+  minimax:           # Built-in defaults for minimax/glm
+    runner: claude_proxy
+    env:
+      - MINIMAX_API_KEY
+    yolo: true
+  
+  mymodel:           # Custom provider
+    runner: claude_proxy
+    model: custom-model-name
+    env:
+      - MY_MODEL_API_KEY
 ```
+
+Then run `agentweave activate` to apply.
 
 ### Running a proxy agent
 

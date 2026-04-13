@@ -232,6 +232,96 @@ class Session:
             "completed_tasks_count": len(self._data.get("completed_tasks", [])),
         }
 
+    def sync_agents(self, declared_agents: Dict[str, Dict[str, Any]]) -> tuple[List[str], List[str], List[str]]:
+        """Sync session agents with declared configuration from agentweave.yml.
+
+        Args:
+            declared_agents: Dict mapping agent name to agent config dict.
+                Each config dict may contain: runner, model, roles, yolo, pilot, env, base_url
+
+        Returns:
+            Tuple of (added_agents, updated_agents, orphaned_agents)
+        """
+        from .roles import set_agent_roles
+
+        added: List[str] = []
+        updated: List[str] = []
+
+        # Add or update agents from YAML
+        for agent_name, config in declared_agents.items():
+            is_new = agent_name not in self._data.get("agents", {})
+            if is_new:
+                # New agent - add to session
+                self._data["agents"][agent_name] = {
+                    "role": "delegate",
+                    "since": self._now(),
+                }
+                added.append(agent_name)
+
+            # Update agent configuration
+            agent_data = self._data["agents"][agent_name]
+            was_updated = False
+
+            if "runner" in config and config["runner"] and agent_data.get("runner") != config["runner"]:
+                agent_data["runner"] = config["runner"]
+                was_updated = True
+            if "model" in config and config["model"] and agent_data.get("model") != config["model"]:
+                agent_data["model"] = config["model"]
+                was_updated = True
+            if "yolo" in config:
+                new_yolo = bool(config["yolo"])
+                if agent_data.get("yolo") != new_yolo:
+                    agent_data["yolo"] = new_yolo
+                    was_updated = True
+            if "pilot" in config:
+                new_pilot = bool(config["pilot"])
+                if agent_data.get("pilot") != new_pilot:
+                    agent_data["pilot"] = new_pilot
+                    was_updated = True
+            if "env" in config and config["env"]:
+                if config.get("base_url"):
+                    # claude_proxy pattern: first env entry is the API key var;
+                    # store it as ANTHROPIC_API_KEY_VAR so runner.py can resolve it.
+                    new_env_vars = {
+                        "ANTHROPIC_BASE_URL": config["base_url"],
+                        "ANTHROPIC_API_KEY_VAR": config["env"][0],
+                    }
+                else:
+                    # Convert env list to env_vars dict format used in session.json
+                    # The values are the env var names themselves (to be resolved at runtime)
+                    new_env_vars = {var: var for var in config["env"]}
+                if agent_data.get("env_vars") != new_env_vars:
+                    agent_data["env_vars"] = new_env_vars
+                    was_updated = True
+            elif config.get("base_url"):
+                # base_url with no env list — URL only, no API key var
+                new_env_vars = {"ANTHROPIC_BASE_URL": config["base_url"]}
+                if agent_data.get("env_vars") != new_env_vars:
+                    agent_data["env_vars"] = new_env_vars
+                    was_updated = True
+
+            # Sync roles if specified in config
+            if "roles" in config and config["roles"]:
+                set_agent_roles(agent_name, config["roles"])
+                was_updated = True
+
+            # Track as updated if modified (but not if just added)
+            if not is_new and was_updated:
+                updated.append(agent_name)
+
+        # Find orphaned agents (in session but not in YAML)
+        current_agents = set(self.agent_names)
+        declared_names = set(declared_agents.keys())
+        orphaned = list(current_agents - declared_names)
+
+        self._data["updated"] = self._now()
+        return added, updated, orphaned
+
+    def _now(self) -> str:
+        """Get current ISO timestamp."""
+        from .utils import now_iso
+        return now_iso()
+
 
 def _push_session_to_hub(session_data: Dict[str, Any]) -> None:
     """Push session config to the Hub if HTTP transport is configured.
