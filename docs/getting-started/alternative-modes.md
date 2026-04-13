@@ -17,7 +17,7 @@ In this mode, agents communicate directly through the local MCP server and a bac
 ```bash
 pip install "agentweave-ai[mcp]"
 cd your-project/
-agentweave init --project "My App" --agents claude,kimi
+agentweave init --project "My App"
 agentweave mcp setup   # configure MCP in agent settings
 agentweave start       # start background watchdog
 ```
@@ -31,7 +31,7 @@ The original AgentWeave mode — zero dependencies, zero background processes.
 ```bash
 pip install agentweave-ai
 cd your-project/
-agentweave init --project "My App" --agents claude,kimi
+agentweave init --project "My App"
 ```
 
 Then just ask Claude to delegate. It runs `agentweave quick` and `agentweave relay`, and gives you a prompt to paste into Kimi (or any other agent).

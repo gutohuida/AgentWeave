@@ -14,10 +14,18 @@ This is called a **`claude_proxy` runner**. AgentWeave tracks a separate Claude 
 ### Built-in Providers
 
 ```bash
-# Initialize with a proxy agent
-agentweave init --project "My App" --agents claude,minimax
+# Initialize your project
+agentweave init --project "My App"
 
-# Configure using built-in defaults
+# Add to agentweave.yml, then activate
+# agents:
+#   minimax:
+#     runner: claude_proxy
+#     env:
+#       - MINIMAX_API_KEY
+agentweave activate
+
+# Or configure imperatively
 agentweave agent configure minimax
 agentweave agent configure glm
 ```

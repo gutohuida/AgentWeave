@@ -114,6 +114,15 @@ See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage.
 |--------|------|-------------|
 | `GET` | `/status` | Session-wide summary and task counts |
 
+### Setup
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/setup/token` | Get bootstrap API key and project info |
+| `GET` | `/setup/health` | Check Hub setup status |
+
+Used by `agentweave activate` to auto-configure HTTP transport without manual API key entry.
+
 ### Agent Trigger
 
 | Method | Path | Description |

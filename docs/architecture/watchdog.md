@@ -166,7 +166,7 @@ The watchdog reads configuration from:
 Check if `.agentweave/` directory exists:
 
 ```bash
-agentweave init --project "My Project" --agents claude,kimi
+agentweave init --project "My Project"
 ```
 
 ### Stale PID file

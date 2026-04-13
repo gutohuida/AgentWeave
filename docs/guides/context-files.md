@@ -77,6 +77,8 @@ After editing, regenerate agent files:
 agentweave sync-context
 ```
 
+Running `agentweave activate` also regenerates context files as its final step.
+
 ## .agentweave/protocol.md
 
 Generated on `init`. Describes:

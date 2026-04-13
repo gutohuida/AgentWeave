@@ -9,29 +9,18 @@ AgentWeave lets multiple AI agents work together on the same project through a s
 Get up and running in 5 minutes:
 
 ```bash
-# 1. Start the Hub (Docker)
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml
-curl -O https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example
-cp .env.example .env
-# Edit .env and set AW_BOOTSTRAP_API_KEY
-docker compose up -d
+# 1. Start the Hub
+agentweave hub start
 
 # 2. Install the CLI
 pip install "agentweave-ai[mcp]"
 
 # 3. Initialize your project
 cd /path/to/your-project
-agentweave init --project "My App" --agents claude,kimi
+agentweave init --project "My App"
 
-# 4. Connect to the Hub
-agentweave transport setup --type http \
-  --url http://localhost:8000 \
-  --api-key aw_live_<your-key> \
-  --project-id proj-default
-
-# 5. Start the watchdog
-agentweave mcp setup
-agentweave start
+# 4. Activate (connects Hub, sets up MCP, starts watchdog)
+agentweave activate
 ```
 
 See the [Getting Started](getting-started/quickstart.md) guide for full details.

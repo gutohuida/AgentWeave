@@ -84,7 +84,7 @@ AgentWeave can auto-generate Kimi configuration files for seamless pilot integra
 ### 1. Configure with Pilot Flag
 
 ```bash
-agentweave agent configure kimi --runner kim --pilot
+agentweave agent configure kimi --runner kimi --pilot
 ```
 
 This generates:
@@ -223,7 +223,7 @@ config = get_agent_config("kimi")
 Ensure you've initialized AgentWeave:
 
 ```bash
-agentweave init --project "My Project" --agents claude,kimi
+agentweave init --project "My Project"
 ```
 
 ### Session not showing in Hub
@@ -242,7 +242,7 @@ agentweave init --project "My Project" --agents claude,kimi
 Make sure to use `--pilot` when configuring:
 
 ```bash
-agentweave agent configure kimi --runner kim --pilot
+agentweave agent configure kimi --runner kimi --pilot
 ```
 
 If still missing, manually generate:

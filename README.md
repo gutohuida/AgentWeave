@@ -218,7 +218,7 @@ Deploy the Hub once, connect all agents via HTTP transport. The dashboard shows 
 ### Session
 
 ```bash
-agentweave init --project "Name" --agents claude,kimi
+agentweave init --project "Name"
 agentweave status
 agentweave summary
 agentweave checkpoint --agent claude --reason pre_handoff   # save context before handoff

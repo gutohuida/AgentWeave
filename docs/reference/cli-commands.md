@@ -3,7 +3,8 @@
 ## Session
 
 ```bash
-agentweave init --project "Name" --agents claude,kimi
+agentweave init --project "Name"
+agentweave activate                        # reconcile agentweave.yml with runtime state
 agentweave status                          # show full session status with watchdog state
 agentweave summary                         # quick overview for relay decisions
 agentweave session register --agent <name> --session <id>   # register pilot agent session
@@ -181,6 +182,23 @@ Creates a checkpoint file at `.agentweave/shared/checkpoints/<agent>-<timestamp>
 - Decisions made with rationale
 - Next steps for resuming
 - Blockers and open questions
+
+## Activate
+
+```bash
+agentweave activate      # idempotent: transport + agents + MCP + watchdog + jobs + context
+```
+
+The `activate` command is the single entry point for applying your `agentweave.yml` configuration. It:
+
+1. Configures HTTP transport (auto-fetches API key from Hub if needed)
+2. Syncs agents from `agentweave.yml` to `session.json`
+3. Registers the MCP server
+4. Starts the background watchdog
+5. Syncs scheduled jobs (if defined)
+6. Regenerates agent context files
+
+See [Migration Guide](../getting-started/migration.md) and [agentweave.yml Reference](agentweave-yml.md) for details.
 
 ## MCP
 

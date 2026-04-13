@@ -68,23 +68,25 @@ retries up to 3 times with exponential backoff.
 
 ---
 
-### Phase 3 — AgentWeave Hub v0.1.0 (DONE)
+### Phase 3 — AgentWeave Hub v0.1.0+ (DONE)
 
 Self-hosted FastAPI server with SQLite, REST + SSE + MCP interfaces.
 
 ```
 hub/
   hub/main.py           FastAPI app factory + lifespan
-  hub/db/               SQLAlchemy async models + engine (5 tables)
-  hub/api/v1/           REST endpoints (messages, tasks, questions, status, events SSE, agents, logs)
-  hub/mcp_server.py     FastMCP server (10 tools)
+  hub/db/               SQLAlchemy async models + engine
+  hub/api/v1/           REST endpoints (messages, tasks, questions, status, events SSE, agents, logs, jobs, setup)
+  hub/mcp_server.py     FastMCP server (15+ tools)
   docker-compose.yml    Self-hosted deployment
 ```
 
 **MCP tools:**
 ```
 send_message, get_inbox, mark_read, list_tasks, get_task,
-update_task, create_task, get_status, ask_user, get_answer
+update_task, create_task, get_status, ask_user, get_answer,
+register_session, get_agent_config, list_agents,
+create_job, list_jobs, get_job, toggle_job, delete_job, run_job
 ```
 
 ---
@@ -93,14 +95,15 @@ update_task, create_task, get_status, ask_user, get_answer
 
 React dashboard built into the Docker image. No separate server or CORS config.
 
-**New in v0.2.0:**
+**New in v0.2.0+:**
 
 | Feature | Description |
 |---------|-------------|
 | **Agent Trigger** | `POST /api/v1/agent/trigger` — triggers an agent without CLIs in Docker; creates a message the host-side watchdog picks up and executes on the host machine |
 | **Session listing** | `GET /api/v1/agent/sessions/{agent}` — lists available CLI sessions for an agent |
-| **Agent Configurator UI** | Add/remove configured agents; reads from `session.json` or manual list |
+| **Agent Configurator UI** | Add/remove configured agents; reads from `session.json` or manual list *(later replaced by session sync)* |
 | **Agent Message Sender UI** | Compose and send prompts to agents from the dashboard, with session resume support |
+| **Agent Chat** | Per-session chat history with live updates |
 | **Agent configure API** | `POST/DELETE/GET /api/v1/agents/configure` per project |
 | **UI refresh** | Redesigned all dashboard components, new Tailwind config, dark theme |
 | **Dockerfile.dev** | Hot-reload development workflow for Hub |
@@ -133,16 +136,91 @@ Agent-specific Markdown prompt templates generated via `agentweave update-templa
 
 ---
 
+### Phase 6 — Yolo Mode + Session Sync (DONE, v0.10.0)
+
+- **Yolo mode** — per-agent flag to suppress confirmation prompts
+- **Session sync to Hub** — `session.json` auto-pushed to Hub; agents appear in dashboard without manual configuration
+
+---
+
+### Phase 7 — Claude-Proxy Agents (DONE, v0.12.0)
+
+Run MiniMax, GLM, and any OpenAI-compatible provider through the Claude CLI by injecting `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY`.
+
+- Built-in provider registry (minimax, glm)
+- `agentweave switch`, `agentweave run`, `agentweave agent configure`
+- Per-agent session tracking
+
+---
+
+### Phase 8 — Multi-Role Support (DONE, v0.15.0)
+
+Agents can have multiple roles simultaneously.
+
+- `agentweave roles` CLI commands
+- Role guide auto-copy to `.agentweave/roles/{role}.md`
+- Hub sync for role changes
+
+---
+
+### Phase 9 — AgentWeave Skills + Session-Based Chat (DONE, v0.16.0-0.17.0)
+
+- 8 collaboration skills (`aw-delegate`, `aw-status`, `aw-done`, etc.)
+- AW-Spec workflow skills (`aw-spec-explore`, `aw-spec-propose`, `aw-spec-apply`, `aw-spec-archive`)
+- Per-session chat history in Hub UI
+- Mission Control dashboard
+
+---
+
+### Phase 10 — AI Jobs (DONE, v0.20.1)
+
+Scheduled recurring agent tasks with cron expressions.
+
+- `agentweave jobs` CLI
+- Hub scheduler with run history
+- MCP tools for job management
+
+---
+
+### Phase 11 — Pilot Mode (DONE, v0.21.0)
+
+Manual session management for long-running agents.
+
+- Pilot flag per agent
+- Session registration (`agentweave session register`)
+- Kimi agent-file auto-generation
+- Dashboard pilot badges
+
+---
+
+### Phase 12 — Declarative Configuration (DONE, v0.23.0)
+
+Single YAML-based project configuration with `agentweave activate`.
+
+- `agentweave.yml` — agents, hub, jobs, roles
+- `agentweave activate` — idempotent apply
+- Auto transport setup via `/api/v1/setup/token`
+- Migration path from existing `session.json`
+
+---
+
 ## Phasing Summary
 
 ```
 Phase 1 (DONE):   Transport abstraction (LocalTransport, GitTransport, HttpTransport)
 Phase 2 (DONE):   HttpTransport implementation (urllib.request → Hub REST API)
-Phase 3 (DONE):   AgentWeave Hub v0.1.0 — FastAPI + SQLite + MCP server
-Phase 4 (DONE):   Hub Web UI v0.2.0 — task board, messages, agent trigger, configurator
+Phase 3 (DONE):   AgentWeave Hub — FastAPI + SQLite + MCP server
+Phase 4 (DONE):   Hub Web UI — task board, messages, agent trigger, chat
 Phase 5 (DONE):   Per-agent context templates (claude, kimi, collab_protocol)
+Phase 6 (DONE):   Yolo mode + Session sync to Hub
+Phase 7 (DONE):   Claude-proxy agents (minimax, glm, custom providers)
+Phase 8 (DONE):   Multi-role support
+Phase 9 (DONE):   AgentWeave skills + AW-Spec workflow + session chat
+Phase 10 (DONE):  AI Jobs — scheduled recurring tasks
+Phase 11 (DONE):  Pilot Mode — manual session management
+Phase 12 (DONE):  Declarative configuration (agentweave.yml + activate)
 
-Phase 6 (next):   Official hosted Hub at hub.agentweave.dev
+Phase 13 (next):  Official hosted Hub at hub.agentweave.dev
                    Supabase (PostgreSQL + Auth + Realtime) + Vercel + Railway
                    Community-hosted option for teams without infra
 ```

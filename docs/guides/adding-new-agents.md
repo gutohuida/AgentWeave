@@ -421,7 +421,7 @@ After making all changes:
 
 2. **Initialize a test session:**
    ```bash
-   agentweave init --project "Test Project" --agents claude,minimax
+   agentweave init --project "Test Project"
    ```
 
 3. **Verify the agent context file was created:**

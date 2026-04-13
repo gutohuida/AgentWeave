@@ -50,6 +50,15 @@ Each agent maintains separate conversation sessions. Use the session selector to
 - Start a new chat for a different topic
 - Review historical interactions
 
+### AI Jobs
+
+View and manage scheduled recurring tasks:
+
+- **Jobs list** — all scheduled jobs with cron expressions and next run times
+- **Job history** — recent execution results and status
+- **Toggle controls** — enable or disable jobs directly in the UI
+- **Manual trigger** — run a job immediately outside its schedule
+
 ### Agent Cards
 
 Connected agents are auto-discovered from your session. Each card shows:
@@ -57,6 +66,7 @@ Connected agents are auto-discovered from your session. Each card shows:
 - Agent name and roles (as badges)
 - Runner type (native, claude_proxy, or manual)
 - Yolo mode status
+- Pilot mode indicator
 - Quick actions: Chat, View Activity
 
 ## Tips

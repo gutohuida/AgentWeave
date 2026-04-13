@@ -49,6 +49,19 @@ The Claude CLI will proxy requests to that endpoint using your existing API key 
 
 AgentWeave uses file-based locking with automatic timeout. Only one agent can modify a task at a time. See [Locking](../architecture/locking.md) for details.
 
+## What is `agentweave.yml`?
+
+`agentweave.yml` is the declarative configuration file for your AgentWeave project. It defines:
+
+- Project name and collaboration mode
+- Hub connection settings
+- Agent configurations (runner, roles, yolo, pilot, env vars)
+- Scheduled jobs
+
+After editing `agentweave.yml`, run `agentweave activate` to apply changes. This file should be committed to version control.
+
+See [agentweave.yml Reference](../reference/agentweave-yml.md) and [Migration Guide](../getting-started/migration.md) for details.
+
 ## Can I run the Hub without Docker?
 
 The Hub is designed to run via Docker Compose for ease of deployment. You can also run it from source by installing the Hub package and starting the FastAPI server manually, but Docker is the supported path.

@@ -28,7 +28,7 @@ Other agents are **delegates** who:
 ### Setup
 
 ```bash
-agentweave init --project "My App" --agents claude,kimi --mode hierarchical --principal claude
+agentweave init --project "My App" --mode hierarchical --principal claude
 ```
 
 ## Peer Mode
@@ -44,7 +44,7 @@ Use this for small teams where everyone contributes equally.
 ### Setup
 
 ```bash
-agentweave init --project "My App" --agents claude,kimi,gemini --mode peer
+agentweave init --project "My App" --mode peer
 ```
 
 ## Review Mode
@@ -60,7 +60,7 @@ Use this when code quality and formal reviews are critical.
 ### Setup
 
 ```bash
-agentweave init --project "My App" --agents claude,kimi --mode review
+agentweave init --project "My App" --mode review
 ```
 
 ## Session Roles
