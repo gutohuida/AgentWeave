@@ -18,6 +18,33 @@ from .constants import (
 )
 
 
+def load_dotenv(path: str = ".env") -> None:
+    """Load KEY=VALUE pairs from .env file into os.environ (if not already set)."""
+    import os
+
+    env_path = Path(path)
+    if not env_path.is_file():
+        return
+    try:
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                # Strip inline comments and surrounding quotes
+                if " #" in value:
+                    value = value[: value.index(" #")].strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception:
+        pass
+
+
 def ensure_dirs() -> None:
     """Ensure all required directories exist."""
     for d in [

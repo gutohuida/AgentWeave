@@ -23,7 +23,7 @@ from .constants import (
     TRIGGERED_DIRECT_FILE,
     _get_context_limit,
 )
-from .utils import load_json
+from .utils import load_dotenv, load_json
 
 logger = logging.getLogger(__name__)
 
@@ -2283,7 +2283,7 @@ def main() -> None:
     """CLI entry point for watchdog."""
     from .logging_handlers import _configure_logging
 
-    _load_dotenv()
+    load_dotenv()
     _configure_logging()
 
     import argparse

@@ -56,6 +56,7 @@ from .templates import (
 )
 from .utils import (
     ensure_dirs,
+    load_dotenv,
     print_error,
     print_info,
     print_success,
@@ -4304,6 +4305,9 @@ For more help: https://github.com/gutohuida/AgentWeave
 
 def main(args: Optional[List[str]] = None) -> int:
     """Main entry point."""
+    # Load .env file before any command dispatch so all CLI commands benefit
+    load_dotenv()
+
     # Ensure stdout/stderr handle Unicode (e.g. emoji in messages) on Windows
     import sys as _sys
 
