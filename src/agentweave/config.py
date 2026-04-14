@@ -41,6 +41,7 @@ class AgentConfig:
     env: List[str] = field(default_factory=list)
     yolo: bool = False
     pilot: bool = False
+    principal: bool = False
     base_url: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -56,6 +57,8 @@ class AgentConfig:
             result["yolo"] = True
         if self.pilot:
             result["pilot"] = True
+        if self.principal:
+            result["principal"] = True
         if self.base_url:
             result["base_url"] = self.base_url
         return result
@@ -214,6 +217,7 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
         env=env_list,
         yolo=data.get("yolo", False),
         pilot=data.get("pilot", False),
+        principal=bool(data.get("principal", False)),
         base_url=base_url,
     )
 
@@ -352,6 +356,13 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
     agents = {
         name: _validate_agent_config(name, cfg, line_map) for name, cfg in agents_data.items()
     }
+
+    # Validate at most one principal agent
+    principal_agents = [name for name, cfg in agents.items() if cfg.principal]
+    if len(principal_agents) > 1:
+        raise ConfigValidationError(
+            f"Only one agent can have 'principal: true'. Found: {', '.join(principal_agents)}"
+        )
 
     # Parse jobs section (optional)
     jobs_data = data.get("jobs")

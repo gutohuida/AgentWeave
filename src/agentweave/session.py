@@ -202,6 +202,20 @@ class Session:
         self._data.update(kwargs)
         self._data["updated"] = now_iso()
 
+    def set_principal(self, name: str) -> None:
+        """Set the principal agent, updating both the top-level field and agent role
+        entries."""
+        if name not in self._data.get("agents", {}):
+            raise ValueError(f"Agent {name!r} not in session")
+        # Demote old principal
+        old = self._data.get("principal")
+        if old and old in self._data["agents"] and old != name:
+            self._data["agents"][old]["role"] = "delegate"
+        # Promote new principal
+        self._data["agents"][name]["role"] = "principal"
+        self._data["principal"] = name
+        self._data["updated"] = now_iso()
+
     def add_task(self, task_id: str) -> None:
         """Add task to active tasks."""
         tasks = self._data.get("active_tasks", [])
@@ -308,7 +322,10 @@ class Session:
 
             # Sync roles if specified in config
             if "roles" in config and config["roles"]:
-                set_agent_roles(agent_name, config["roles"])
+                from .roles import save_roles_config
+                _ok, _msg, _updated_cfg = set_agent_roles(agent_name, config["roles"])
+                if _ok and _updated_cfg:
+                    save_roles_config(_updated_cfg)
                 was_updated = True
 
             # Track as updated if modified (but not if just added)

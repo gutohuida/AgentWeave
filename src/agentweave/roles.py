@@ -239,6 +239,28 @@ def remove_role_from_agent(
     return True, f"Removed '{role}' from '{agent}'", config
 
 
+def remove_agent_from_roles(agent: str) -> bool:
+    """Remove all role entries for an agent from roles.json.
+
+    Called when an agent is removed from the session (orphaned by activate).
+    """
+    config = load_roles_config()
+    if not config:
+        return True  # Nothing to clean up
+
+    changed = False
+    if agent in config.get("agent_roles", {}):
+        del config["agent_roles"][agent]
+        changed = True
+    if agent in config.get("agent_assignments", {}):
+        del config["agent_assignments"][agent]
+        changed = True
+
+    if changed:
+        save_roles_config(config)
+    return True
+
+
 def set_agent_roles(
     agent: str, roles: List[str], config: Optional[Dict[str, Any]] = None
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
@@ -290,6 +312,20 @@ def set_agent_roles(
 
     # Set the roles
     config["agent_roles"][agent] = unique_roles
+
+    # Ensure role definitions exist for all assigned roles
+    try:
+        template_data = load_roles_template()
+        all_role_defs = template_data.get("roles", {})
+        if "roles" not in config:
+            config["roles"] = {}
+        for role_id in unique_roles:
+            if role_id not in config["roles"] and role_id in all_role_defs:
+                config["roles"][role_id] = {
+                    k: v for k, v in all_role_defs[role_id].items() if not k.startswith("_")
+                }
+    except Exception:
+        pass
 
     return True, f"Set roles for '{agent}': {', '.join(unique_roles)}", config
 

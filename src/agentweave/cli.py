@@ -2513,12 +2513,47 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
         for name in updated:
             print(f"[AGENTS] Updated: {name}")
     if orphaned:
+        from .roles import remove_agent_from_roles
         for name in orphaned:
             session.remove_agent(name)
+            remove_agent_from_roles(name)
             print(f"[AGENTS] Removed: {name}")
+
+    # Always reconcile roles.json against current session agents
+    # (handles agents removed in previous runs that were missed)
+    from .roles import load_roles_config, remove_agent_from_roles
+    _roles_cfg = load_roles_config()
+    if _roles_cfg:
+        _session_names = set(session.agent_names)
+        _ghost_roles = [
+            a for a in list(_roles_cfg.get("agent_roles", {}).keys())
+            + list(_roles_cfg.get("agent_assignments", {}).keys())
+            if a not in _session_names
+        ]
+        for _ghost in set(_ghost_roles):
+            remove_agent_from_roles(_ghost)
 
     if not added and not updated and not orphaned:
         print("[AGENTS] Up to date")
+
+    # Apply principal from agentweave.yml if specified
+    declared_principal = next(
+        (name for name, agent in config.agents.items() if getattr(agent, "principal", False)),
+        None,
+    )
+    if declared_principal and session.principal != declared_principal:
+        session.set_principal(declared_principal)
+        print(f"[SESSION] Principal set: {declared_principal}")
+    elif session.principal not in session.agent_names and session.agent_names:
+        # Fallback: fix stale principal not in declared agent list
+        session.set_principal(session.agent_names[0])
+        print(f"[SESSION] Principal updated: {session.principal}")
+
+    # Always ensure the principal agent's role field is "principal" (may have been
+    # set to "delegate" in a prior run before set_principal() existed)
+    _p = session.principal
+    if _p and _p in session._data.get("agents", {}) and session._data["agents"][_p].get("role") != "principal":
+        session.set_principal(_p)
 
     # Save session
     session.save()
@@ -2536,6 +2571,12 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
                 print_warning("Hub session sync failed — agents may not appear in dashboard")
     except Exception as _exc:
         print_warning(f"Hub session sync failed: {_exc}")
+
+    # Push roles.json to Hub
+    from .roles import load_roles_config, sync_roles_to_hub
+    _roles_cfg = load_roles_config()
+    if _roles_cfg:
+        sync_roles_to_hub(_roles_cfg)
 
     return 0
 
