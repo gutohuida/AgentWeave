@@ -9,11 +9,11 @@ AgentWeave lets multiple AI agents work together on the same project through a s
 Get up and running in 5 minutes:
 
 ```bash
-# 1. Start the Hub
-agentweave hub start
-
-# 2. Install the CLI
+# 1. Install the CLI
 pip install "agentweave-ai[mcp]"
+
+# 2. Start the Hub
+agentweave hub start
 
 # 3. Initialize your project
 cd /path/to/your-project

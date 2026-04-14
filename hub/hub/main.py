@@ -71,12 +71,29 @@ def create_app() -> FastAPI:
             # Inject runtime config so the dashboard connects automatically.
             # The Hub is serving the dashboard, so it already knows its own key.
             html = (UI_DIST / "index.html").read_text()
-            config = json.dumps(
-                {
-                    "apiKey": settings.aw_bootstrap_api_key,
-                    "projectId": settings.aw_bootstrap_project_id,
-                }
-            )
+
+            # Fetch the live API key from DB — it may be auto-generated and
+            # not present in settings.aw_bootstrap_api_key (env file)
+            from sqlalchemy import select as _select
+
+            from .db.engine import async_session_factory as _sf
+            from .db.models import ApiKey as _ApiKey
+
+            api_key_value = settings.aw_bootstrap_api_key
+            project_id_value = settings.aw_bootstrap_project_id
+            try:
+                async with _sf() as _db:
+                    _res = await _db.execute(
+                        _select(_ApiKey).where(_ApiKey.revoked == False).limit(1)  # noqa: E712
+                    )
+                    _row = _res.scalar_one_or_none()
+                    if _row:
+                        api_key_value = _row.id
+                        project_id_value = _row.project_id
+            except Exception:
+                pass  # fall back to settings values
+
+            config = json.dumps({"apiKey": api_key_value, "projectId": project_id_value})
             script = f"<script>window.__AW_CONFIG__={config};</script>"
             html = html.replace("</head>", f"{script}</head>")
             return HTMLResponse(html)

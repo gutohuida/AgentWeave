@@ -248,7 +248,7 @@ When you run `agentweave init`, Claude Code skills are auto-generated in `.claud
 
 | Skill | Purpose |
 |-------|---------|
-| `/aw-checkpoint` | Save context checkpoint before handoffs |
+| `agentweave checkpoint` | Save context checkpoint before handoffs (CLI command) |
 | `/aw-deploy` | Release a new version of AgentWeave |
 | `/check-build` | Check GitHub Actions CI build status |
 

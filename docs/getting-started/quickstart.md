@@ -6,6 +6,12 @@ Get started with AgentWeave in **3 commands**. No manual configuration needed.
 
 - Python 3.8+ installed
 - Docker and Docker Compose installed
+- The AgentWeave CLI installed:
+
+  ```bash
+  pip install "agentweave-ai[mcp]"
+  ```
+
 - A project directory you want agents to collaborate on
 
 ---

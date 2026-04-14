@@ -316,7 +316,8 @@ class HttpTransport(BaseTransport):
             return True
         except RuntimeError as exc:
             logger.warning(
-                "transport_error",
+                "push_session failed: %s",
+                str(exc),
                 extra={
                     "event": "transport_error",
                     "data": {"method": "push_session", "error": str(exc)},

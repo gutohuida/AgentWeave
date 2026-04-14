@@ -323,6 +323,14 @@ class Session:
         self._data["updated"] = self._now()
         return added, updated, orphaned
 
+    def remove_agent(self, name: str) -> bool:
+        """Remove an agent from the session by name."""
+        if name in self._data.get("agents", {}):
+            del self._data["agents"][name]
+            self._data["updated"] = self._now()
+            return True
+        return False
+
     def _now(self) -> str:
         """Get current ISO timestamp."""
         from .utils import now_iso

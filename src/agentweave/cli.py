@@ -2058,9 +2058,9 @@ def cmd_transport_disable(_args: argparse.Namespace) -> int:
 
 HUB_DIR = Path.home() / ".agentweave" / "hub"
 HUB_COMPOSE_URL = (
-    "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/docker-compose.yml"
+    "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml"
 )
-HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/main/hub/.env.example"
+HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example"
 
 
 def _hub_url(port: int = 8000) -> str:
@@ -2382,7 +2382,32 @@ def cmd_activate(_args: argparse.Namespace) -> int:
         print(f"[WARNING] Context sync failed: {e}")
         print("          Run 'agentweave sync-context' manually after fixing the issue.")
 
-    print()
+    # Print run instructions for piloted agents
+    pilot_agents = [
+        (name, agent)
+        for name, agent in config.agents.items()
+        if getattr(agent, "pilot", False) or getattr(agent, "runner", "") == "claude_proxy"
+    ]
+    if pilot_agents:
+        from .runner import get_claude_session_id as _get_sid
+
+        print("[PILOT] Piloted agents — run commands:")
+        for name, agent in pilot_agents:
+            _runner = getattr(agent, "runner", "") or ""
+            if _runner == "claude_proxy":
+                print(f"  {name}:  eval $(agentweave switch {name})")
+            elif not _runner or _runner in ("native", "claude"):
+                _ctx = f".agentweave/context/{name}.md"
+                _sid = _get_sid(name)
+                if _sid:
+                    print(f"  {name}:  claude --resume {_sid} --append-system-prompt-file {_ctx}")
+                else:
+                    print(f"  {name}:  claude --append-system-prompt-file {_ctx}")
+            else:
+                # kimi and other runners
+                print(f'  {name}:  agentweave run --agent {name} "<task>"')
+        print()
+
     print_success("Activate complete!")
     print("Your project is ready for multi-agent collaboration.")
     print()
@@ -2404,7 +2429,20 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
     # Check if transport is already configured with same URL
     existing = load_json(TRANSPORT_CONFIG_FILE)
     if existing and existing.get("type") == "http" and existing.get("url") == hub_url:
-        print("[TRANSPORT] Already configured")
+        # Re-fetch setup token to detect if Hub was restarted with a new API key
+        setup_token_url = f"{hub_url.rstrip('/')}/api/v1/setup/token"
+        try:
+            with urllib.request.urlopen(setup_token_url, timeout=5) as resp:
+                data = _json.loads(resp.read())
+                fresh_key = data.get("api_key")
+                if fresh_key and fresh_key != existing.get("api_key"):
+                    existing["api_key"] = fresh_key
+                    save_json(TRANSPORT_CONFIG_FILE, existing)
+                    print("[TRANSPORT] API key refreshed (Hub restarted)")
+                else:
+                    print("[TRANSPORT] Already configured")
+        except Exception:
+            print("[TRANSPORT] Already configured")
         return 0
 
     # Try to fetch setup token from Hub
@@ -2476,14 +2514,28 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
             print(f"[AGENTS] Updated: {name}")
     if orphaned:
         for name in orphaned:
-            print(f"[AGENTS] Orphaned (in session, not in YAML): {name}")
-            print(f"         Run 'agentweave agent remove {name}' to clean up")
+            session.remove_agent(name)
+            print(f"[AGENTS] Removed: {name}")
 
     if not added and not updated and not orphaned:
         print("[AGENTS] Up to date")
 
     # Save session
     session.save()
+
+    # Explicit Hub sync with visible feedback
+    try:
+        from .transport import get_transport as _get_transport
+
+        _transport = _get_transport()
+        if _transport.get_transport_type() == "http":
+            ok = _transport.push_session(session.to_dict())
+            if ok:
+                print("[HUB] Session synced")
+            else:
+                print_warning("Hub session sync failed — agents may not appear in dashboard")
+    except Exception as _exc:
+        print_warning(f"Hub session sync failed: {_exc}")
 
     return 0
 

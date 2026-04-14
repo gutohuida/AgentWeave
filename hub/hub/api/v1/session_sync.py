@@ -61,12 +61,12 @@ async def sync_session(
 
     # Sync pilot flags from session data to the Agent table
     agents_data = body.data.get("agents", {})
+    current_agent_names = set(agents_data.keys())
+
     for agent_name, agent_cfg in agents_data.items():
         pilot_flag = bool(agent_cfg.get("pilot", False))
         agent_result = await session.execute(
-            select(Agent).where(
-                Agent.project_id == project_id, Agent.name == agent_name
-            )
+            select(Agent).where(Agent.project_id == project_id, Agent.name == agent_name)
         )
         agent_row = agent_result.scalars().first()
         if agent_row:
@@ -80,6 +80,12 @@ async def sync_session(
                     pilot=pilot_flag,
                 )
             )
+
+    # Remove Agent rows for agents no longer in the session
+    all_agents_result = await session.execute(select(Agent).where(Agent.project_id == project_id))
+    for agent_row in all_agents_result.scalars().all():
+        if agent_row.name not in current_agent_names:
+            await session.delete(agent_row)
 
     await session.commit()
 
