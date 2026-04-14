@@ -323,6 +323,7 @@ class Session:
             # Sync roles if specified in config
             if "roles" in config and config["roles"]:
                 from .roles import save_roles_config
+
                 _ok, _msg, _updated_cfg = set_agent_roles(agent_name, config["roles"])
                 if _ok and _updated_cfg:
                     save_roles_config(_updated_cfg)

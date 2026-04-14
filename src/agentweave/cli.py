@@ -2514,6 +2514,7 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
             print(f"[AGENTS] Updated: {name}")
     if orphaned:
         from .roles import remove_agent_from_roles
+
         for name in orphaned:
             session.remove_agent(name)
             remove_agent_from_roles(name)
@@ -2522,11 +2523,13 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
     # Always reconcile roles.json against current session agents
     # (handles agents removed in previous runs that were missed)
     from .roles import load_roles_config, remove_agent_from_roles
+
     _roles_cfg = load_roles_config()
     if _roles_cfg:
         _session_names = set(session.agent_names)
         _ghost_roles = [
-            a for a in list(_roles_cfg.get("agent_roles", {}).keys())
+            a
+            for a in list(_roles_cfg.get("agent_roles", {}).keys())
             + list(_roles_cfg.get("agent_assignments", {}).keys())
             if a not in _session_names
         ]
@@ -2552,7 +2555,11 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
     # Always ensure the principal agent's role field is "principal" (may have been
     # set to "delegate" in a prior run before set_principal() existed)
     _p = session.principal
-    if _p and _p in session._data.get("agents", {}) and session._data["agents"][_p].get("role") != "principal":
+    if (
+        _p
+        and _p in session._data.get("agents", {})
+        and session._data["agents"][_p].get("role") != "principal"
+    ):
         session.set_principal(_p)
 
     # Save session
@@ -2574,6 +2581,7 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
 
     # Push roles.json to Hub
     from .roles import load_roles_config, sync_roles_to_hub
+
     _roles_cfg = load_roles_config()
     if _roles_cfg:
         sync_roles_to_hub(_roles_cfg)
