@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.25.0] - 2026-04-14
+
+### Added (CLI v0.25.0)
+- **`principal` field in `agentweave.yml`** — Declare the principal agent explicitly with `principal: true`
+- **Roles reconciliation during activate** — `roles.json` is now cleaned of ghost agents and synced to the Hub automatically
+
+### Fixed (CLI v0.25.0)
+- **Principal agent metadata** — `session.set_principal()` now updates both the top-level principal and the per-agent `role` entry, fixing incorrect "delegate" display in the Hub
+- **Role persistence** — `agentweave activate` now correctly saves role assignments and copies missing role definitions into `roles.json`
+
+---
 ## [0.24.0] - 2026-04-14
 
 ### Added (CLI v0.24.0)
