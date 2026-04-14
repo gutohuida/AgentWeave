@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.24.0] - 2026-04-14
+
+### Added (CLI v0.24.0)
+- **Activate improvements** — Auto-remove orphaned agents, print explicit Hub sync feedback, and show pilot agent run commands
+- **Encoding fixes** — Always use UTF-8 for file reads on Windows
+- **Python 3.8 compatibility** — Use `typing.Tuple` instead of `tuple[]`
+- **Documentation** — Updated README and docs for `agentweave.yml` workflow, added missing pages to mkdocs nav
+
+### Added (Hub v0.20.0)
+- **SPA auto-config** — Inject live API key from database into dashboard `window.__AW_CONFIG__`
+- **Session sync cleanup** — Delete orphaned `Agent` rows when agents are removed from session sync
+
+### Fixed (CLI v0.24.0)
+- **Code quality** — Fixed mypy type errors, added missing dev dependencies, applied black formatting
+
+---
+
 ## [0.23.0] - 2026-04-13
 
 ### Added (CLI v0.23.0)
