@@ -51,12 +51,21 @@ eval $(agentweave switch minimax)          # exports ANTHROPIC_BASE_URL + ANTHRO
 claude --resume <session-id> -p "..."
 ```
 
+You can also place the key in a `.env` file at the project root — AgentWeave loads it automatically.
+
 ### Option B — Auto-Run
 
 Let AgentWeave handle it (sets env + launches Claude with relay prompt):
 
 ```bash
 export MINIMAX_API_KEY=<your-key>
+agentweave run --agent minimax
+```
+
+Or create a `.env` file in the project root:
+
+```bash
+echo "MINIMAX_API_KEY=<your-key>" > .env
 agentweave run --agent minimax
 ```
 
@@ -84,7 +93,7 @@ agentweave agent set-session minimax <session-id>
 
 ## Security Note
 
-API keys are **never stored** in `session.json`. Only the env var *name* is stored (e.g. `MINIMAX_API_KEY`). The actual value is resolved from your shell at runtime.
+API keys are **never stored** in `session.json`. Only the env var *name* is stored (e.g. `MINIMAX_API_KEY`). The actual value is resolved from your shell at runtime, or from a `.env` file in the project root if present. Shell-exported variables always take precedence over `.env` values.
 
 ## See Also
 

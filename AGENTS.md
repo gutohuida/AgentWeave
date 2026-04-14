@@ -211,6 +211,9 @@ Run Minimax, GLM, or any OpenAI-compatible model through Claude Code CLI:
 # Configure proxy agent
 agentweave agent configure minimax --runner claude_proxy
 
+# Place API key in .env at project root (auto-loaded)
+echo "MINIMAX_API_KEY=<your-key>" > .env
+
 # Switch to proxy in shell
 eval $(agentweave switch minimax)
 

@@ -24,7 +24,7 @@ Set these in your shell for CLI behavior:
 
 ## Proxy Agent Variables
 
-Set these in your shell before running proxy agents:
+Set these in your shell before running proxy agents, or place them in a `.env` file at the project root:
 
 | Variable | Provider |
 |----------|----------|
@@ -32,8 +32,10 @@ Set these in your shell before running proxy agents:
 | `ZHIPU_API_KEY` | Zhipu GLM |
 | `YOUR_CUSTOM_VAR` | Any custom `claude_proxy` provider |
 
+AgentWeave automatically loads a `.env` file from the current working directory. Shell-exported variables always take precedence over `.env` values.
+
 ## Security Notes
 
 - Never commit `AW_BOOTSTRAP_API_KEY` to version control
-- API keys for proxy agents are resolved at runtime from environment variables
+- API keys for proxy agents are resolved at runtime from environment variables or a `.env` file in the project root
 - Only the environment variable *name* is stored in AgentWeave config files
