@@ -335,6 +335,19 @@ class Watchdog:
             finally:
                 release_lock(lock_name)
 
+    def _is_self_registered_poll(self, agent: str) -> bool:
+        """Check if an agent is self-registered with contact_mode='poll'.
+
+        Returns True only when using HTTP transport and the Hub reports
+        self_registered=True and contact_mode='poll'.
+        """
+        if self.transport.get_transport_type() != "http":
+            return False
+        reg = self.transport.get_agent_registration(agent)
+        if reg:
+            return bool(reg.get("self_registered")) and reg.get("contact_mode") == "poll"
+        return False
+
     def _fire_job(self, job: Any, trigger: str = "scheduled") -> bool:
         """Fire a job by running the agent subprocess.
 
@@ -352,6 +365,17 @@ class Watchdog:
 
         agent = job.agent
         message = job.message
+
+        # Skip self-registered poll agents — they manage their own polling
+        if self._is_self_registered_poll(agent):
+            logger.debug(
+                "job_fire_skipped_self_registered",
+                extra={
+                    "event": "job_fire_skipped_self_registered",
+                    "data": {"job_id": job.id, "agent": agent, "reason": "self-registered poll agent"},
+                },
+            )
+            return False
 
         # Skip if CLI not available
         if not _check_cli_available(agent):
@@ -658,6 +682,18 @@ class Watchdog:
         msg_id = msg.get("id", "")
         content = msg.get("content", "")
         subject = msg.get("subject", "Message from Hub")
+
+        # Skip self-registered poll agents — they manage their own inbox polling
+        if self._is_self_registered_poll(agent):
+            logger.debug(
+                "agent_trigger_skipped_self_registered",
+                extra={
+                    "event": "agent_trigger_skipped_self_registered",
+                    "data": {"agent": agent, "msg_id": msg_id, "reason": "self-registered poll agent"},
+                },
+            )
+            print(f"[SKIP] Self-registered poll agent {agent} handles its own polling")
+            return
 
         # Check if agent is in pilot mode - skip auto-execution
         from .session import Session

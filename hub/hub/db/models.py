@@ -51,6 +51,11 @@ class Agent(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     pilot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     registered_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    contact_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    self_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    mcp_endpoint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    spawn_cmd: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    config: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

@@ -437,6 +437,120 @@ def get_answer(question_id: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Self-registration tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def register_agent(
+    name: str,
+    contact_mode: str,
+    role_request: Optional[str] = None,
+    mcp_endpoint: Optional[str] = None,
+    spawn_cmd: Optional[List[str]] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Register or re-register an agent with the Hub.
+
+    Args:
+        name: Agent name
+        contact_mode: One of: poll, mcp-push, watchdog-spawn
+        role_request: Requested role ID (optional)
+        mcp_endpoint: URL of the agent's MCP server (optional)
+        spawn_cmd: Command to spawn the agent (optional)
+        config: Agent configuration dict (optional)
+
+    Returns:
+        Dict with 'role' and 'context' on success, or 'error' on failure.
+    """
+    try:
+        return _hub_request(
+            "POST",
+            "/agents/register",
+            {
+                "name": name,
+                "contact_mode": contact_mode,
+                "role_request": role_request,
+                "mcp_endpoint": mcp_endpoint,
+                "spawn_cmd": spawn_cmd,
+                "config": config,
+            },
+        )
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def update_agent_config(
+    name: str,
+    config: Optional[Dict[str, Any]] = None,
+    contact_mode: Optional[str] = None,
+    mcp_endpoint: Optional[str] = None,
+    spawn_cmd: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Partially update a self-registered agent's configuration.
+
+    Args:
+        name: Agent name
+        config: Config dict to merge (optional)
+        contact_mode: One of: poll, mcp-push, watchdog-spawn (optional)
+        mcp_endpoint: URL of the agent's MCP server (optional)
+        spawn_cmd: Command to spawn the agent (optional)
+
+    Returns:
+        Dict with updated agent fields on success, or 'error' on failure.
+    """
+    body: Dict[str, Any] = {}
+    if config is not None:
+        body["config"] = config
+    if contact_mode is not None:
+        body["contact_mode"] = contact_mode
+    if mcp_endpoint is not None:
+        body["mcp_endpoint"] = mcp_endpoint
+    if spawn_cmd is not None:
+        body["spawn_cmd"] = spawn_cmd
+
+    try:
+        return _hub_request("PATCH", f"/agents/{name}", body)
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def get_context(role: str) -> Dict[str, Any]:
+    """Get the markdown role guide for a given role.
+
+    Args:
+        role: Role ID (e.g. "backend_dev")
+
+    Returns:
+        Dict with 'content' on success, or 'error' on failure.
+    """
+    try:
+        result = _hub_request("GET", "/agents/context", params={"role": role})
+        return {"success": True, "content": result.get("content", "")}
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def heartbeat(agent: str) -> Dict[str, Any]:
+    """Send a heartbeat to the Hub to signal liveness.
+
+    Args:
+        agent: Agent name
+
+    Returns:
+        Dict with 'ok' bool.
+    """
+    try:
+        _hub_request("POST", f"/agents/{agent}/heartbeat", {"status": "active"})
+        return {"ok": True}
+    except RuntimeError as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # AI Jobs tools
 # ---------------------------------------------------------------------------
 

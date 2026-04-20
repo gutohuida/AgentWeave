@@ -26,7 +26,7 @@ except ImportError as e:
         "Install it with: pip install 'agentweave-ai[mcp]'"
     ) from e
 
-from ..constants import MESSAGE_TYPES, PRIORITIES, TASK_STATUSES, TransportType
+from ..constants import CONTACT_MODES, MESSAGE_TYPES, PRIORITIES, TASK_STATUSES, TransportType
 from ..locking import LockError, lock
 from ..messaging import Message, MessageBus
 from ..task import Task
@@ -822,6 +822,245 @@ def register_session(
         result["hub_registered"] = True
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Self-registration tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def register_agent(
+    name: str,
+    contact_mode: str,
+    role_request: Optional[str] = None,
+    mcp_endpoint: Optional[str] = None,
+    spawn_cmd: Optional[List[str]] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Register or re-register an agent with the Hub.
+
+    Args:
+        name: Agent name (e.g. "hermes")
+        contact_mode: One of: poll, mcp-push, watchdog-spawn
+        role_request: Requested role ID (optional)
+        mcp_endpoint: URL of the agent's MCP server (optional)
+        spawn_cmd: Command to spawn the agent (optional)
+        config: Agent configuration dict (optional) — e.g. {"runner": "kimi", "model": "kimi-k2", "roles": ["backend_dev"], "yolo": true}
+
+    Returns:
+        Dict with 'role' and 'context' on success, or 'error' on failure.
+    """
+    transport = get_transport()
+    if transport.get_transport_type() != TransportType.HTTP:
+        return {"error": "register_agent requires HTTP transport (AgentWeave Hub)"}
+
+    if contact_mode not in CONTACT_MODES:
+        return {
+            "error": f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}"
+        }
+
+    from ..session import Session
+
+    session = Session.load()
+    if session and name in session.agent_names:
+        return {"error": f"Agent name '{name}' is reserved for a configured agent"}
+
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.request as _req
+
+    from ..constants import TRANSPORT_CONFIG_FILE
+    from ..utils import load_json as _load_json
+
+    transport_config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not transport_config:
+        return {"error": "No transport config found"}
+
+    url = transport_config["url"].rstrip("/")
+    api_key = transport_config["api_key"]
+    body = _json.dumps(
+        {
+            "name": name,
+            "contact_mode": contact_mode,
+            "role_request": role_request,
+            "mcp_endpoint": mcp_endpoint,
+            "spawn_cmd": spawn_cmd,
+            "config": config,
+        }
+    ).encode()
+    request = _req.Request(f"{url}/api/v1/agents/register", data=body, method="POST")
+    request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with _req.urlopen(request, timeout=10) as resp:
+            result = _json.loads(resp.read())
+        return {"success": True, "role": result.get("role"), "context": result.get("context")}
+    except _uerr.HTTPError as exc:
+        try:
+            detail = _json.loads(exc.read()).get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        return {"error": detail}
+    except _uerr.URLError as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def update_agent_config(
+    name: str,
+    config: Optional[Dict[str, Any]] = None,
+    contact_mode: Optional[str] = None,
+    mcp_endpoint: Optional[str] = None,
+    spawn_cmd: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Partially update a self-registered agent's configuration.
+
+    Args:
+        name: Agent name
+        config: Config dict to merge (optional)
+        contact_mode: One of: poll, mcp-push, watchdog-spawn (optional)
+        mcp_endpoint: URL of the agent's MCP server (optional)
+        spawn_cmd: Command to spawn the agent (optional)
+
+    Returns:
+        Dict with updated agent fields on success, or 'error' on failure.
+    """
+    transport = get_transport()
+    if transport.get_transport_type() != TransportType.HTTP:
+        return {"error": "update_agent_config requires HTTP transport (AgentWeave Hub)"}
+
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.request as _req
+
+    from ..constants import TRANSPORT_CONFIG_FILE
+    from ..utils import load_json as _load_json
+
+    transport_config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not transport_config:
+        return {"error": "No transport config found"}
+
+    url = transport_config["url"].rstrip("/")
+    api_key = transport_config["api_key"]
+
+    body: Dict[str, Any] = {}
+    if config is not None:
+        body["config"] = config
+    if contact_mode is not None:
+        body["contact_mode"] = contact_mode
+    if mcp_endpoint is not None:
+        body["mcp_endpoint"] = mcp_endpoint
+    if spawn_cmd is not None:
+        body["spawn_cmd"] = spawn_cmd
+
+    payload = _json.dumps(body).encode()
+    request = _req.Request(f"{url}/api/v1/agents/{name}", data=payload, method="PATCH")
+    request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with _req.urlopen(request, timeout=10) as resp:
+            result = _json.loads(resp.read())
+        return {"success": True, **result}
+    except _uerr.HTTPError as exc:
+        try:
+            detail = _json.loads(exc.read()).get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        return {"error": detail}
+    except _uerr.URLError as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def get_context(role: str) -> Dict[str, Any]:
+    """Get the markdown role guide for a given role.
+
+    Args:
+        role: Role ID (e.g. "backend_dev")
+
+    Returns:
+        Dict with 'content' on success, or 'error' on failure.
+    """
+    transport = get_transport()
+    if transport.get_transport_type() != TransportType.HTTP:
+        return {"error": "get_context requires HTTP transport (AgentWeave Hub)"}
+
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.parse as _uparse
+    import urllib.request as _req
+
+    from ..constants import TRANSPORT_CONFIG_FILE
+    from ..utils import load_json as _load_json
+
+    config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not config:
+        return {"error": "No transport config found"}
+
+    url = config["url"].rstrip("/")
+    api_key = config["api_key"]
+    qs = _uparse.urlencode({"role": role})
+    request = _req.Request(f"{url}/api/v1/agents/context?{qs}")
+    request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Accept", "application/json")
+    try:
+        with _req.urlopen(request, timeout=10) as resp:
+            result = _json.loads(resp.read())
+        return {"success": True, "content": result.get("content", "")}
+    except _uerr.HTTPError as exc:
+        try:
+            detail = _json.loads(exc.read()).get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        return {"error": detail}
+    except _uerr.URLError as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def heartbeat(agent: str) -> Dict[str, Any]:
+    """Send a heartbeat to the Hub to signal liveness.
+
+    Args:
+        agent: Agent name (e.g. "hermes")
+
+    Returns:
+        Dict with 'ok' bool.
+    """
+    transport = get_transport()
+    if transport.get_transport_type() != TransportType.HTTP:
+        return {"error": "heartbeat requires HTTP transport (AgentWeave Hub)"}
+
+    # Validate agent is known to the Hub
+    if not transport.is_agent_registered(agent):
+        return {"error": f"Agent '{agent}' is not registered"}
+
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.request as _req
+
+    from ..constants import TRANSPORT_CONFIG_FILE
+    from ..utils import load_json as _load_json
+
+    config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not config:
+        return {"error": "No transport config found"}
+
+    url = config["url"].rstrip("/")
+    api_key = config["api_key"]
+    body = _json.dumps({"status": "active"}).encode()
+    request = _req.Request(f"{url}/api/v1/agents/{agent}/heartbeat", data=body, method="POST")
+    request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Content-Type", "application/json")
+    try:
+        with _req.urlopen(request, timeout=10) as resp:
+            _json.loads(resp.read())
+        return {"ok": True}
+    except (_uerr.HTTPError, _uerr.URLError) as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------

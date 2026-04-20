@@ -200,6 +200,9 @@ MESSAGE_TYPES = ["message", "delegation", "review", "discussion"]
 # Priorities
 PRIORITIES = ["low", "medium", "high", "critical"]
 
+# Contact modes for self-registered agents
+CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
+
 # Valid role IDs (from templates/roles/roles.json)
 VALID_ROLE_IDS = [
     "tech_lead",

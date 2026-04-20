@@ -110,6 +110,15 @@ async def list_agents(
     agent_assignments: dict = roles_data.get("agent_assignments", {})
     roles_defs: dict = roles_data.get("roles", {})
 
+    # Fallback to bundled roles.json (works in Docker without CLI sync)
+    if not roles_defs:
+        bundled_roles = Path(__file__).parent.parent.parent / "data" / "roles" / "roles.json"
+        if bundled_roles.exists():
+            try:
+                roles_defs = json.loads(bundled_roles.read_text(encoding="utf-8")).get("roles", {})
+            except (json.JSONDecodeError, IOError):
+                pass
+
     # If no session.json, fall back to agents seen in DB activity (last 24h).
     # This covers the Docker case where the hub can't read the host's session.json —
     # the watchdog pushes heartbeats on startup to register agents.
@@ -157,16 +166,23 @@ async def list_agents(
             fallback_names.add(name)
         session_agents_meta = {name: {} for name in fallback_names}
 
-    # Also include agents from the Agent table (pilot mode agents)
+    # Also include agents from the Agent table (pilot mode and self-registered agents)
     agent_q = select(Agent).where(Agent.project_id == project_id)
     agent_res = await session.execute(agent_q)
+    db_agents: dict[str, Agent] = {}
     for agent_row in agent_res.scalars().all():
+        db_agents[agent_row.name] = agent_row
         if agent_row.name not in session_agents_meta:
             session_agents_meta[agent_row.name] = {}
 
     summaries = []
     for agent_name in sorted(session_agents_meta):
         agent_meta = session_agents_meta.get(agent_name, {})
+
+        # Merge stored config from DB for self-registered agents
+        agent_row = db_agents.get(agent_name)
+        if agent_row and agent_row.config:
+            agent_meta = {**(agent_row.config or {}), **agent_meta}
 
         # Latest heartbeat
         hb_q = (
@@ -216,6 +232,14 @@ async def list_agents(
                 dev_role_keys = legacy_role
             else:
                 dev_role_keys = [legacy_role] if legacy_role else []
+
+        # Fallback to roles stored in agent config (self-registered agents)
+        if not dev_role_keys and agent_meta.get("roles"):
+            _meta_roles = agent_meta["roles"]
+            if isinstance(_meta_roles, list):
+                dev_role_keys = _meta_roles
+            else:
+                dev_role_keys = [_meta_roles]
 
         # Get primary role (first one) for single-role display
         dev_role_key = dev_role_keys[0] if dev_role_keys else None
@@ -272,15 +296,23 @@ async def list_agents(
             "claude_proxy": agent_meta.get("model", "Claude Proxy"),
             "kimi": "Kimi",
             "manual": "Manual",
-        }.get(_runner, _runner.replace("_", " ").title())
+        }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
-        # Get pilot mode info from Agent model
-        agent_row_result = await session.execute(
-            select(Agent).where(Agent.project_id == project_id, Agent.name == agent_name)
-        )
-        agent_row = agent_row_result.scalars().first()
         _pilot = agent_row.pilot if agent_row else False
         _registered_session_id = agent_row.registered_session_id if agent_row else None
+        _self_registered = agent_row.self_registered if agent_row else False
+
+        # Liveness: online if heartbeat within 2 minutes (only for self-registered agents)
+        _liveness = None
+        if _self_registered and hb and hb.timestamp:
+            now = datetime.now(timezone.utc)
+            ts = hb.timestamp
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            age = now - ts
+            _liveness = "online" if age <= timedelta(minutes=2) else "offline"
+        elif _self_registered:
+            _liveness = "offline"
 
         summaries.append(
             AgentSummary(
@@ -302,6 +334,8 @@ async def list_agents(
                 session_started_at=session_started_at,
                 pilot=_pilot,
                 registered_session_id=_registered_session_id,
+                self_registered=_self_registered,
+                liveness=_liveness,
             )
         )
 
@@ -421,6 +455,199 @@ async def agent_timeline(
 
     events.sort(key=lambda e: e.timestamp, reverse=True)
     return events[:50]
+
+
+def _load_role_content(role: str) -> str:
+    """Load role guide markdown content.
+
+    Tries, in order:
+    1. .agentweave/roles/{role}.md (synced by CLI — may be customized)
+    2. Bundled templates inside the Hub package (works in Docker)
+    3. agentweave.templates package (when CLI is co-installed)
+    4. Project-relative fallback for local dev
+    """
+    role_file = Path(".agentweave/roles") / f"{role}.md"
+    if role_file.exists():
+        return role_file.read_text(encoding="utf-8")
+
+    # Bundled templates shipped with the Hub package
+    bundled = Path(__file__).parent.parent.parent / "data" / "roles" / f"{role}.md"
+    if bundled.exists():
+        return bundled.read_text(encoding="utf-8")
+
+    try:
+        from agentweave.templates import get_role_md
+
+        return get_role_md(role)
+    except Exception:
+        pass
+
+    # Fallback for local dev when agentweave isn't installed as a package
+    pkg_file = (
+        Path(__file__).parent.parent.parent.parent.parent.parent
+        / "src"
+        / "agentweave"
+        / "templates"
+        / "roles"
+        / f"{role}.md"
+    )
+    if pkg_file.exists():
+        return pkg_file.read_text(encoding="utf-8")
+
+    raise FileNotFoundError(f"Role template not found: {role}")
+
+
+@router.post("/register")
+async def register_agent(
+    body: dict,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Register or re-register a self-registered agent."""
+    project_id, _ = project
+    name = body.get("name")
+    contact_mode = body.get("contact_mode")
+    role_request = body.get("role_request")
+    mcp_endpoint = body.get("mcp_endpoint")
+    spawn_cmd = body.get("spawn_cmd")
+    config = body.get("config") or {}
+
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
+
+    if contact_mode not in CONTACT_MODES:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}"
+        )
+
+    # Reject collision with configured agents
+    session_data = await _get_session_data(project_id, session)
+    if session_data and name in session_data.get("agents", {}):
+        raise HTTPException(
+            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
+        )
+
+    # Sync role_request and config.roles
+    if role_request and not config.get("roles"):
+        config["roles"] = [role_request]
+    elif config.get("roles") and not role_request:
+        role_request = config["roles"][0]
+
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
+    )
+    agent_row = result.scalars().first()
+
+    if agent_row:
+        agent_row.contact_mode = contact_mode
+        agent_row.self_registered = True
+        agent_row.mcp_endpoint = mcp_endpoint
+        agent_row.spawn_cmd = spawn_cmd
+        # Merge config on re-registration so omitted fields don't wipe existing config
+        if config:
+            agent_row.config = {**(agent_row.config or {}), **config}
+        agent_row.updated = datetime.now(timezone.utc)
+    else:
+        agent_row = Agent(
+            id=f"agent-{short_id()}",
+            project_id=project_id,
+            name=name,
+            contact_mode=contact_mode,
+            self_registered=True,
+            mcp_endpoint=mcp_endpoint,
+            spawn_cmd=spawn_cmd,
+            config=config,
+        )
+        session.add(agent_row)
+
+    await session.commit()
+
+    role = role_request or "collaborator"
+
+    try:
+        context = _load_role_content(role)
+    except FileNotFoundError:
+        context = ""
+
+    return {"role": role, "context": context}
+
+
+@router.patch("/{name}")
+async def patch_agent(
+    name: str,
+    body: dict,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Partially update a self-registered agent's fields.
+
+    Only fields present in the body are modified. Config is merged
+    (existing keys preserved unless overridden).
+    """
+    project_id, _ = project
+
+    # Reject collision with configured agents
+    session_data = await _get_session_data(project_id, session)
+    if session_data and name in session_data.get("agents", {}):
+        raise HTTPException(
+            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
+        )
+
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
+    )
+    agent_row = result.scalars().first()
+    if not agent_row:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+    # Update top-level fields if provided
+    if "contact_mode" in body:
+        contact_mode = body["contact_mode"]
+        CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
+        if contact_mode not in CONTACT_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}",
+            )
+        agent_row.contact_mode = contact_mode
+
+    if "mcp_endpoint" in body:
+        agent_row.mcp_endpoint = body["mcp_endpoint"]
+    if "spawn_cmd" in body:
+        agent_row.spawn_cmd = body["spawn_cmd"]
+
+    # Merge config if provided
+    if "config" in body:
+        new_config = body["config"] or {}
+        agent_row.config = {**(agent_row.config or {}), **new_config}
+
+    agent_row.updated = datetime.now(timezone.utc)
+    await session.commit()
+
+    return {
+        "id": agent_row.id,
+        "name": agent_row.name,
+        "contact_mode": agent_row.contact_mode,
+        "self_registered": agent_row.self_registered,
+        "mcp_endpoint": agent_row.mcp_endpoint,
+        "spawn_cmd": agent_row.spawn_cmd,
+        "config": agent_row.config,
+    }
+
+
+@router.get("/context")
+async def get_agent_context(
+    role: str,
+    project: Tuple[str, str] = Depends(get_project),
+):
+    """Get role guide content for an agent."""
+    try:
+        content = _load_role_content(role)
+        return {"content": content}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Role template not found: {role}")
 
 
 @router.post("/{name}/heartbeat", status_code=status.HTTP_201_CREATED)

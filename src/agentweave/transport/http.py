@@ -360,6 +360,50 @@ class HttpTransport(BaseTransport):
             )
             return None
 
+    def is_agent_registered(self, agent: str) -> bool:
+        """Check whether an agent exists in the Hub (configured or self-registered)."""
+        try:
+            agents = self._request("GET", "/agents")
+            if isinstance(agents, list):
+                return any(a.get("name") == agent for a in agents)
+            return False
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "is_agent_registered", "agent": agent, "error": str(exc)},
+                },
+            )
+            return False
+
+    def get_agent_registration(self, agent: str) -> Optional[Dict[str, Any]]:
+        """Return registration metadata for an agent from the Hub.
+
+        Returns a dict with 'self_registered' and 'contact_mode' if found,
+        otherwise None.
+        """
+        try:
+            agents = self._request("GET", "/agents")
+            if isinstance(agents, list):
+                match = next((a for a in agents if a.get("name") == agent), None)
+                if match:
+                    return {
+                        "self_registered": bool(match.get("self_registered", False)),
+                        "contact_mode": match.get("contact_mode"),
+                        "config": match.get("config", {}),
+                    }
+            return None
+        except RuntimeError as exc:
+            logger.warning(
+                "transport_error",
+                extra={
+                    "event": "transport_error",
+                    "data": {"method": "get_agent_registration", "agent": agent, "error": str(exc)},
+                },
+            )
+            return None
+
     def push_log(
         self,
         event_type: str,

@@ -1,4 +1,4 @@
-.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format hub-build hub-up hub-down hub-full-build
+.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format hub-build hub-up hub-down hub-full-build sync-roles
 
 # ── CLI (src/agentweave) ─────────────────────────────────────────────────────
 
@@ -42,5 +42,11 @@ hub-up:
 hub-down:
 	cd hub && docker compose down
 
-hub-full-build:
+# Sync role templates from CLI source into Hub package so they are bundled in Docker builds
+sync-roles:
+	mkdir -p hub/hub/data/roles
+	cp src/agentweave/templates/roles/*.md hub/hub/data/roles/
+	cp src/agentweave/templates/roles/roles.json hub/hub/data/roles/roles.json
+
+hub-full-build: sync-roles
 	cd hub && docker compose -f docker-compose.yml -f docker-compose.build.yml build

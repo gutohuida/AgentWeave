@@ -23,6 +23,8 @@ export interface AgentSummary {
   session_started_at?: string  // ISO timestamp when current session started
   pilot?: boolean  // Pilot mode: manual control, disables auto-execution
   registered_session_id?: string | null  // Registered --resume session ID for pilot agents
+  self_registered?: boolean  // True if agent joined via self-registration
+  liveness?: 'online' | 'offline' | null  // Liveness for self-registered agents
 }
 
 export interface ContextUsage {

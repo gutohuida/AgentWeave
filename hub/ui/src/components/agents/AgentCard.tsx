@@ -36,6 +36,19 @@ const RUNNER_CONFIG: Record<string, { bg: string; color: string }> = {
   },
 }
 
+const LIVENESS_CONFIG: Record<string, { dot: string; bg: string; label: string }> = {
+  online: {
+    dot: '#22c55e',
+    bg: 'color-mix(in srgb, #22c55e 15%, transparent)',
+    label: 'Online',
+  },
+  offline: {
+    dot: '#ef4444',
+    bg: 'color-mix(in srgb, #ef4444 15%, transparent)',
+    label: 'Offline',
+  },
+}
+
 interface AgentCardProps {
   agent: AgentSummary
   selected: boolean
@@ -80,6 +93,24 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
         >
           {agent.name}
         </span>
+        {/* Liveness indicator for self-registered agents */}
+        {agent.self_registered && agent.liveness && (
+          <span
+            className="m3-label-small px-1.5 py-0.5 rounded-full flex items-center gap-1"
+            style={{
+              background: LIVENESS_CONFIG[agent.liveness].bg,
+              color: LIVENESS_CONFIG[agent.liveness].dot,
+              fontSize: '0.65rem',
+              fontWeight: 600,
+            }}
+          >
+            <span
+              className="inline-flex rounded-full h-1.5 w-1.5"
+              style={{ background: LIVENESS_CONFIG[agent.liveness].dot }}
+            />
+            {LIVENESS_CONFIG[agent.liveness].label}
+          </span>
+        )}
         {/* Yolo indicator */}
         {agent.yolo && (
           <span
@@ -145,6 +176,21 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
               }}
             >
               {agent.display_model}
+            </span>
+          )}
+          {/* Self-registered badge */}
+          {agent.self_registered && (
+            <span
+              className="m3-label-small px-1.5 py-0.5 rounded-full"
+              title="Self-registered agent"
+              style={{
+                background: 'color-mix(in srgb, #10b981 15%, transparent)',
+                color: '#10b981',
+                fontSize: '0.65rem',
+                fontWeight: 600,
+              }}
+            >
+              EXTERNAL
             </span>
           )}
           {/* Pilot badge */}
