@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.28.0] - 2026-04-20
+
+### Added (CLI v0.28.0 / Hub v0.23.0)
+- **Quality governance framework** — Configurable quality controls via `agentweave.yml`: `review_required`, `docs_threshold`, `echo_chamber_guard`, `attribution_tag`, `dependency_check`
+- **QualityConfig** — New dataclass in `config.py` with validation and serialization
+- **Hub UI Quality Health panel** — Real-time quality metrics dashboard
+- **aw-verify skill** — Structured zero-trust quality review for completed tasks
+- **code_decision.md template** — Standardized documentation for AI-generated changes
+- **Updated role guides** — All roles now include quality governance awareness
+- **Updated skills** — All skills reference quality checks and decision documentation
+
+### Fixed (CLI v0.28.0)
+- **CI reliability** — Updated codecov action to v4, added `fail-fast: false` to test matrix
+- **MCP test compatibility** — Skip MCP server tests when `fastmcp` is unavailable
+
+---
 ## [0.27.0] - 2026-04-20
 
 ### Added (CLI v0.27.0 / Hub v0.22.0)
