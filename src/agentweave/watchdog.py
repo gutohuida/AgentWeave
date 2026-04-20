@@ -372,7 +372,11 @@ class Watchdog:
                 "job_fire_skipped_self_registered",
                 extra={
                     "event": "job_fire_skipped_self_registered",
-                    "data": {"job_id": job.id, "agent": agent, "reason": "self-registered poll agent"},
+                    "data": {
+                        "job_id": job.id,
+                        "agent": agent,
+                        "reason": "self-registered poll agent",
+                    },
                 },
             )
             return False
@@ -689,7 +693,11 @@ class Watchdog:
                 "agent_trigger_skipped_self_registered",
                 extra={
                     "event": "agent_trigger_skipped_self_registered",
-                    "data": {"agent": agent, "msg_id": msg_id, "reason": "self-registered poll agent"},
+                    "data": {
+                        "agent": agent,
+                        "msg_id": msg_id,
+                        "reason": "self-registered poll agent",
+                    },
                 },
             )
             print(f"[SKIP] Self-registered poll agent {agent} handles its own polling")

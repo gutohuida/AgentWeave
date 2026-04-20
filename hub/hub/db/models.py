@@ -65,9 +65,7 @@ class Agent(Base):
 
     project: Mapped["Project"] = relationship(back_populates="agents")
 
-    __table_args__ = (
-        Index("ix_agents_project_name", "project_id", "name"),
-    )
+    __table_args__ = (Index("ix_agents_project_name", "project_id", "name"),)
 
 
 class ApiKey(Base):

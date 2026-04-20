@@ -62,9 +62,7 @@ async def get_setup_token(request: Request) -> dict[str, Any]:
 
     async with async_session_factory() as session:
         # Get the first non-revoked API key
-        result = await session.execute(
-            select(ApiKey).where(ApiKey.revoked == False).limit(1)
-        )
+        result = await session.execute(select(ApiKey).where(ApiKey.revoked == False).limit(1))
         api_key = result.scalar_one_or_none()
 
         if not api_key:

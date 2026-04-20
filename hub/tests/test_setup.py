@@ -29,8 +29,8 @@ async def test_setup_token_requires_localhost():
 
     source = inspect.getsource(get_setup_token)
     # Verify the check for 127.0.0.1 is present
-    assert '127.0.0.1' in source
-    assert '403' in source or 'Forbidden' in source
+    assert "127.0.0.1" in source
+    assert "403" in source or "Forbidden" in source
 
 
 @pytest.mark.asyncio

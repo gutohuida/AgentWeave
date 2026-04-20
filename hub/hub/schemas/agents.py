@@ -21,9 +21,9 @@ class AgentSummary(BaseModel):
     dev_role_label: Optional[str] = None  # e.g. "Tech Lead", "Backend Developer"
     dev_roles: Optional[List[str]] = None  # All role IDs (new multi-role support)
     dev_role_labels: Optional[List[str]] = None  # Labels for all roles
-    context_usage: Optional[
-        Dict[str, Any]
-    ] = None  # {percent, warning, model, threshold_warning, updated_at}
+    context_usage: Optional[Dict[str, Any]] = (
+        None  # {percent, warning, model, threshold_warning, updated_at}
+    )
     session_started_at: Optional[datetime] = None  # When the current session started
     pilot: bool = False  # Pilot mode: manual control, disables auto-execution
     registered_session_id: Optional[str] = None  # Registered --resume session ID for pilot agents

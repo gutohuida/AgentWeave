@@ -5,6 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+try:
+    import fastmcp  # noqa: F401
+except ImportError:
+    pytest.skip("fastmcp not available", allow_module_level=True)
+
 
 class TestRegisterAgent:
     @patch("agentweave.mcp.server.get_transport")

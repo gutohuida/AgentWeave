@@ -519,7 +519,8 @@ async def register_agent(
 
     if contact_mode not in CONTACT_MODES:
         raise HTTPException(
-            status_code=400, detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}"
+            status_code=400,
+            detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}",
         )
 
     # Reject collision with configured agents
