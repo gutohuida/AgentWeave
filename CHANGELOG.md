@@ -6,13 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.27.0] - 2026-04-20
+
+### Added (CLI v0.27.0 / Hub v0.22.0)
+- **Agent self-registration** — External agents can join a session dynamically via `register_agent(name, contact_mode)` MCP tool without being pre-declared in `agentweave.yml`
+- **Config parity for self-registered agents** — Self-registered agents can store full configuration (`runner`, `model`, `roles`, `yolo`) in a JSON blob, making them indistinguishable from configured agents in the Hub UI
+- **PATCH /api/v1/agents/{name}** — Partial config updates for self-registered agents without re-registration
+- **MCP tools** — New `register_agent`, `get_context`, `heartbeat`, and `update_agent_config` tools on both CLI and Hub MCP servers
+- **Role template bundling** — Hub Docker image now bundles built-in role templates so `get_context` works even when the CLI package isn't installed
+- **Liveness indicators** — Hub UI shows online/offline dots for self-registered agents based on heartbeat age
+- **Watchdog guards** — Self-registered `poll` agents are skipped by the watchdog for job firing and message triggers
+
+### Fixed (CLI v0.27.0 / Hub v0.22.0)
+- **Cross-package import** — Removed `from agentweave.constants import CONTACT_MODES` from Hub code that caused 500 errors in Docker
+- **`spawn_cmd` type mismatch** — Aligned Hub MCP `spawn_cmd` type with CLI (`List[str]`)
+
+### Database
+- Migration `0005` — Adds `contact_mode`, `self_registered`, `mcp_endpoint`, `spawn_cmd` to `agents` table
+- Migration `0006` — Adds `config` JSON column to `agents` table
+
 ## [0.26.0] - 2026-04-14
 
 ### Added (CLI v0.26.0)
 - **`.env` file auto-loading** — AgentWeave now automatically loads a `.env` file from the project root. This makes `claude_proxy` agents (MiniMax, GLM, etc.) work out of the box without manually exporting API keys in the shell. Shell-exported variables still take precedence.
 - **Code formatting** — Applied `black` formatting fixes across the codebase.
 
----
 ## [0.25.0] - 2026-04-14
 
 ### Added (CLI v0.25.0)
@@ -23,7 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Principal agent metadata** — `session.set_principal()` now updates both the top-level principal and the per-agent `role` entry, fixing incorrect "delegate" display in the Hub
 - **Role persistence** — `agentweave activate` now correctly saves role assignments and copies missing role definitions into `roles.json`
 
----
 ## [0.24.0] - 2026-04-14
 
 ### Added (CLI v0.24.0)
@@ -39,7 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (CLI v0.24.0)
 - **Code quality** — Fixed mypy type errors, added missing dev dependencies, applied black formatting
 
----
 
 ## [0.23.0] - 2026-04-13
 
@@ -55,7 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (CLI v0.23.0)
 - **Lint and code quality** — Fixed ruff issues across `cli.py`, `config.py`, and `session.py`
 
----
 ## [0.22.0] - 2026-04-12
 
 ### Added (CLI v0.22.0 / Hub v0.18.0)
@@ -71,7 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BaseTransport compatibility** — Added `register_session` method to BaseTransport ABC for mypy compatibility
 - **Code formatting** — Applied black 26.x formatting fixes across the codebase
 
----
 ## [0.21.0] - 2026-04-12
 
 ### Added (CLI v0.21.0 / Hub v0.17.0)
@@ -84,7 +98,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New MCP tools: `register_session`, `get_agent_config`
   - API endpoints for agent CRUD and session registration
 
----
 ## [0.20.1] - 2026-04-09
 
 ### Fixed (CLI v0.20.1)
@@ -103,7 +116,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (Hub v0.16.0)
 - **Cron auto-run not working** — Fixed APScheduler job store pickling issue where bound methods holding event loops couldn't be serialized; jobs now auto-fire correctly at scheduled times
 
----
 ## [0.20.0] - 2026-04-09
 
 ### Added (CLI v0.20.0)
@@ -117,7 +129,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent state API endpoints** — new endpoints for managing agent paused/active states
 - **UI improvements** — updated MissionControlPage with better agent status visualization
 
----
 ## [0.19.0] - 2026-04-07
 
 ### Added (CLI)
@@ -132,7 +143,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (Hub v0.14.0)
 - **Code quality improvements** — black 26.x formatting compatibility fixes
 
----
 ## [0.18.0] - 2026-04-05
 
 ### Added (CLI)
@@ -145,7 +155,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (Hub v0.12.0)
 - Code quality improvements — black formatting fixes across Hub and CLI
 
----
 
 
 ## [0.17.0] - 2026-04-02
@@ -164,7 +173,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI layout updates** — `Sidebar` and `StatusBar` improvements for better navigation
 - **Agent trigger and agents API updates** — improved agent configuration and triggering
 
----
 
 ## [0.16.0] - 2026-04-02
 
@@ -188,7 +196,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI stability fixes** — eliminated blink and lost optimistic messages in chat panel
 - **Updated API endpoints** — `agent_chat.py` and `agent_trigger.py` session handling
 
----
 
 ## [0.15.0] - 2026-03-31
 
@@ -208,7 +215,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-role display in dashboard** — agent cards show all assigned roles as badges
 - **Hub API updated** — `dev_roles` and `dev_role_labels` arrays in AgentSummary schema
 
----
 
 ## [0.14.0] - 2026-03-31
 
@@ -224,7 +230,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent roles configuration** API endpoints for pushing and retrieving role assignments
 - **Documentation site** hosted alongside the project
 
----
 
 ## [0.13.0] - 2026-03-31
 
@@ -235,7 +240,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (Hub v0.7.0)
 - **Hub dashboard output duplication**: `agent_output` SSE broadcast payload now includes the server-assigned row ID (`id: row.id`). The frontend SSE handler uses this ID directly instead of generating a throwaway `live-*` ID, so the polling deduplication check correctly suppresses the same line when it arrives via the 2-second poll.
 
----
 
 ## [0.12.0] - 2026-03-30
 
@@ -261,7 +265,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Proxy and manual warnings in trigger panel** (`hub/ui/src/components/agents/AgentMessageSender.tsx`): amber warning for claude_proxy agents (env vars must be set on host watchdog); grey info banner for manual agents (no automation, requires human action).
 - **`runner` field in TypeScript `AgentSummary`** (`hub/ui/src/api/agents.ts`): UI type matches API response.
 
----
 
 ## [0.11.0] - 2026-03-30
 
@@ -277,7 +280,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (Hub v0.5.0)
 - Hub Docker build and `publish.yml` tag filter fix from v0.10.0 release cycle now included in Hub image.
 
----
 
 ## [0.10.0] - 2026-03-27
 
@@ -295,7 +297,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed (Hub)
 - **Agent Configurator UI** (`AgentConfigurator.tsx`) and associated manual `/configure` endpoints — replaced by automatic session sync
 
----
 
 ## [0.1.0] - 2024-03-07
 
@@ -325,7 +326,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Git Integration**: All state stored in Git-trackable files
 - **Capability-Based Routing**: Automatic task assignment based on agent strengths
 
----
 
 ## [0.7.0] - 2026-03-22
 
@@ -356,7 +356,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AgentPromptMessage UI component**: renders individual chat messages with role-based styling (user vs agent)
 - **agentChat API client** (`hub/ui/src/api/agentChat.ts`): React hooks `useAgentChatHistory` and `useAgentRecentChat` for polling agent conversation history
 
----
 
 ## [0.6.1] - 2026-03-21
 
@@ -369,7 +368,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (Hub)
 - `questions.py`: reply message sender changed from `"human"` to `"user"` for consistency with message schema
 
----
 
 ## [0.6.0] - 2026-03-19
 
@@ -395,7 +393,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Major UI refresh across all dashboard components (AgentsPage, ActivityLog, EventRow, AgentCard, AgentOutputPanel, Sidebar, StatusBar, LogLine, LogsView, MessageCard, MessagesFeed, QuestionsPanel, TaskCard, TasksBoard, Badge, EmptyState, SetupModal)
 - Tailwind config and global CSS overhaul for consistent dark theme styling
 
----
 
 ## [0.5.1] - 2026-03-15
 
@@ -411,7 +408,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI: all ruff, black, and mypy errors resolved; lint checks scoped to Python 3.11 to avoid black version skew
 - pyproject.toml: corrected PEP 621 `license` field format
 
----
 
 ## [Unreleased]
 
@@ -423,7 +419,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin system
 - VS Code extension
 
----
 
 ## Release Notes Template
 
