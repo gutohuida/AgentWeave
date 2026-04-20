@@ -31,17 +31,24 @@ If $ARGUMENTS is empty or unclear, use **AskUserQuestion** (open-ended):
 
 **Do not proceed without knowing what to build.**
 
-### 2. Load team context
+### 2. Load team context and quality config
 
-Read the team state to use throughout artifact generation:
+Read the team state and quality settings to use throughout artifact generation:
 
 1. Read `.agentweave/session.json` → agent list, mode, principal
 2. Read `.agentweave/roles.json` → role assignments per agent
+3. Read `agentweave.yml` `quality:` section (if it exists) → `review_required`, `docs_threshold`, `echo_chamber_guard`, `docs_path`
 
 Build a role map:
 ```
 { "tech_lead": ["agent-a"], "backend_dev": ["agent-a"], "frontend_dev": ["agent-b"], "qa_engineer": ["agent-c"] }
 ```
+
+Build a quality summary to display alongside the team map:
+```
+Quality: review_required=true | docs_threshold=non_trivial | echo_chamber=enforce | docs_path=code-docs/
+```
+If no `quality:` section exists, show: `Quality: not configured (governance off)`
 
 If `.agentweave/roles.json` doesn't exist or agents have no roles assigned, note this and continue — tasks will include role suggestions without agent names.
 
@@ -121,6 +128,12 @@ Read `proposal.md` for context, then create `spec/changes/<name>/design.md`:
 - **[Decision 1]**: [Chosen approach and why]
 - **[Decision 2]**: [Chosen approach and why]
 
+## Security Considerations
+- [Permissions: any new IAM roles, CORS settings, or file permissions introduced?]
+- [Sensitive data flows: does this feature touch user data, credentials, or external APIs?]
+- [New dependencies: list packages being introduced — verify they exist on the real registry]
+- [Input handling: any new paths where external input reaches sensitive operations?]
+
 ## Dependencies & Sequencing
 [Which pieces must be built before others? Note cross-role dependencies.]
 
@@ -168,6 +181,24 @@ Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>
 - The "Cross-Role Dependencies" section is only needed if ordering matters between agents
 - If no roles are assigned, create a single flat list with a `**Suggested role**: <role>` note per task
 
+**Quality governance — when `quality:` settings are active, structure each implementation group as:**
+```
+## QA Engineer — <agent>  (if qa_engineer role is assigned)
+- [ ] Write test spec for <feature> (before implementation)
+
+## <Impl Role> — <agent>
+- [ ] Implement <feature>
+- [ ] Produce decision doc at <docs_path>/<task-id>.md  ← only if docs_threshold applies
+
+## Code Reviewer — <agent>  (MUST be different agent than implementer)
+- [ ] Review: <feature> (use /aw-verify <task-id>)
+```
+
+If no agent has `code_reviewer` role and `review_required: true`, add to the review task:
+> ⚠ No reviewer assigned — add via: `agentweave roles add <agent> code_reviewer`
+
+This structure enforces echo-chamber separation at spec time: the review task is assigned to a different agent than the implementation task.
+
 ---
 
 #### 5d. `team.md`
@@ -205,6 +236,13 @@ Read `.agentweave/roles.json` to populate the Gap Analysis. If it doesn't exist 
 > Session state was not available. Showing full recommended team without gap diff.
 
 For Setup Commands, include one `agentweave roles add <agent> <role_id>` per missing role. If no roles are missing, write: "Your current session covers all recommended roles."
+
+**Quality governance — flag `code_reviewer` as a blocker when `review_required: true`:**
+In the Gap Analysis table, if `code_reviewer` is missing and `review_required: true` is set, mark it as:
+```
+| `code_reviewer` | Code Reviewer | ⚠ Quality gate blocker — review_required is enabled but no reviewer is assigned |
+```
+And add to Setup Commands: `agentweave roles add <agent> code_reviewer  ← required before tasks can be approved`
 
 **Standalone regeneration:** If `team.md` already exists and the user asks to regenerate it, update only `team.md` from the current `proposal.md` — do not modify other artifacts.
 

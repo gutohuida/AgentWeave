@@ -15,7 +15,9 @@ Steps:
 1. Check whether `.agentweave/ai_context.md` exists and show the user its last few lines so they can confirm it is up to date.
 2. Run `agentweave sync-context` to regenerate all agent context files.
 3. Show which files were updated (the command prints this).
-4. Remind the user:
+4. If `agentweave.yml` has a `quality:` section, note:
+   > Quality config (`review_required`, `docs_threshold`, `echo_chamber_guard`, etc.) is propagated to agents via `session.json` sync — agents read it via `aw-collab-start`. No separate action needed.
+5. Remind the user:
    > Agent context files have been updated. Each agent will see the new context on their **next session start** — no action needed if sessions are already running.
 
 If `agentweave sync-context` is not available, instruct the user to run it manually or check that AgentWeave is installed correctly (`agentweave --help`).

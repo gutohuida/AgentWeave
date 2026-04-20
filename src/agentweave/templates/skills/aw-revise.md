@@ -14,8 +14,14 @@ Parse $ARGUMENTS as: `<task-id> ["optional description of revision plan"]`
 Steps:
 
 1. Run `agentweave task show <task-id>` to display the task details, including any revision notes left by the reviewer. Show this to the user so the scope of the revision is clear.
-2. Run `agentweave task update <task-id> --status in_progress --note "Revision started. <plan if provided>"`
-3. Run `agentweave msg send --to {principal} --type message --subject "Revision started: <task-title>" --task-id <task-id> --message "Starting revision on task <task-id>. <plan if provided>"`
+
+2. **Check for doc/code mismatch flag in the revision notes.**
+   If the notes mention "decision doc", "doc mismatch", "doc/code", or "requirement mismatch":
+   - Surface this explicitly: "The decision doc also needs to be updated as part of this revision — the reviewer found that the doc and code do not match."
+   - The revision plan should include: fix the code AND update the decision doc at `<docs_path>/<task-id>.md`
+
+3. Run `agentweave task update <task-id> --status in_progress --note "Revision started. <plan if provided>"`
+4. Run `agentweave msg send --to {principal} --type message --subject "Revision started: <task-title>" --task-id <task-id> --message "Starting revision on task <task-id>. <plan if provided>"`
 4. Check transport: run `agentweave transport status`
    - If transport is **local**: run `agentweave relay --agent {principal}` and show the relay prompt.
    - If transport is **http** or **git**: confirm the notification was delivered automatically.

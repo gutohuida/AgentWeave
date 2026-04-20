@@ -23,12 +23,17 @@ If $ARGUMENTS specifies a change name, use it. Otherwise:
 
 Announce: "Applying change: `<name>`"
 
-### 2. Read context
+### 2. Read context and quality config
 
 Read all spec artifacts:
 1. `spec/changes/<name>/proposal.md` — understand the goal and involved agents
 2. `spec/changes/<name>/design.md` — understand the architecture and role ownership
 3. `spec/changes/<name>/tasks.md` — get the task list with role assignments
+
+Read quality settings from `agentweave.yml` `quality:` section (if present):
+- `review_required`, `docs_threshold`, `docs_path`, `echo_chamber_guard`
+
+Display the active quality settings alongside the progress summary so they are visible throughout implementation.
 
 ### 3. Show current state
 
@@ -62,11 +67,16 @@ Check if any tasks are assigned to other agents (`{agents_list}`). If so, note t
 For each pending task assigned to `{principal}`:
 
 1. Announce: "Working on: [task description]"
-2. Implement the change — keep it minimal and scoped to this task
-3. Mark complete in `tasks.md`: `- [ ]` → `- [x]`
-4. Update the progress counter in the `## Progress` line
-5. Announce: "Done: [task description]"
-6. Continue to the next task
+2. **Write tests first** (TDD) — before implementing, write the test spec for what this task must do
+3. Implement the change — keep it minimal and scoped to this task
+4. **Produce decision doc before marking complete** (if `docs_threshold` applies to this task):
+   - Resolve path: `<docs_path>/<task-id>.md` or `.agentweave/code-docs/<task-id>.md`
+   - Use the `code_decision.md` template — fill in `requirement` from the task description, list modified files and AI-generated files
+   - Do not mark the task complete until the doc exists
+5. Mark complete in `tasks.md`: `- [ ]` → `- [x]`
+6. Update the progress counter in the `## Progress` line
+7. Announce: "Done: [task description]"
+8. Continue to the next task
 
 **Pause if:**
 - Task is ambiguous → ask for clarification before proceeding
@@ -83,8 +93,11 @@ If other agents have tasks and the session is active, ask:
 
 If yes, for each agent with pending tasks:
 ```bash
-agentweave quick --to <agent> "Continue spec change '<name>'. Run /aw-spec-apply to work on your tasks. Spec is at spec/changes/<name>/"
+agentweave quick --to <agent> "Continue spec change '<name>'. Run /aw-spec-apply to work on your tasks. Spec is at spec/changes/<name>/
+Quality: docs_threshold=<value> | review_required=<true/false> | docs_path=<path>"
 ```
+
+Include the active quality settings so the receiving agent knows what is expected of them.
 
 Report: which agents were notified and how many tasks each has.
 

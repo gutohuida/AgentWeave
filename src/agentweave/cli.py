@@ -2563,6 +2563,12 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
     ):
         session.set_principal(_p)
 
+    # Sync quality config from agentweave.yml into session data
+    if config.quality is not None:
+        session._data["quality"] = config.quality.to_dict()
+    elif "quality" in session._data:
+        del session._data["quality"]
+
     # Save session
     session.save()
 

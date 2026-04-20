@@ -24,6 +24,23 @@ If $ARGUMENTS specifies a change name, use it. Otherwise:
 
 Read `spec/changes/<name>/tasks.md` and check for any unchecked tasks (`- [ ]`).
 
+Also check AgentWeave task status for pending reviews:
+```bash
+agentweave task list --status under_review
+agentweave task list --status revision_needed
+```
+
+If any tasks for this change are still `under_review` or `revision_needed`, warn strongly:
+```
+## ⚠ Pending Reviews
+
+The following tasks are not yet approved:
+- [task-id]: <title> (status: under_review)
+
+Archive means this change is done. Tasks under review are not done.
+```
+Use **AskUserQuestion**: "These tasks have not been approved yet. Archive anyway?"
+
 If incomplete tasks exist:
 ```
 ## Not Ready to Archive
@@ -46,6 +63,10 @@ If yes:
 - For each file in `spec/changes/<name>/specs/`:
   - If the file doesn't exist in `spec/specs/`, copy it there
   - If it does exist, ask the user whether to merge, overwrite, or skip
+
+### 3b. Move decision docs to archive staging
+
+If decision docs exist for this change's tasks (check `<docs_path>/` or `.agentweave/code-docs/`), they will move automatically with the change directory in the next step. No separate action needed — the archive includes all decision docs.
 
 ### 4. Archive the change
 

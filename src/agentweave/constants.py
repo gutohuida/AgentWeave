@@ -182,6 +182,10 @@ VALID_ROLES = ["principal", "delegate", "reviewer", "collaborator"]
 # Valid modes
 VALID_MODES = ["hierarchical", "peer", "review"]
 
+# Quality governance constants
+VALID_DOC_THRESHOLDS = ["all", "non_trivial", "never"]
+VALID_ECHO_GUARD = ["off", "warn", "enforce"]
+
 # Task statuses
 TASK_STATUSES = [
     "pending",

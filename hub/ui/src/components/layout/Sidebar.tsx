@@ -2,8 +2,9 @@ import { Icon } from '@/components/common/Icon'
 import { useQuestions } from '@/api/questions'
 import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
+import { useSessionSync } from '@/api/status'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs'
+type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs' | 'quality'
 
 interface SidebarProps {
   activePage: Page
@@ -20,21 +21,25 @@ const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
   { id: 'logs',            label: 'Logs',      icon: 'terminal' },
   { id: 'agents',          label: 'Agents',    icon: 'smart_toy' },
   { id: 'mission-control', label: 'Control',   icon: 'dashboard' },
+  { id: 'quality',         label: 'Quality',   icon: 'verified_user' },
 ]
 
 export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
-  const { data: questions } = useQuestions(false)
-  const { data: messages }  = useMessages()
-  const { data: agents }    = useAgents()
+  const { data: questions }    = useQuestions(false)
+  const { data: messages }     = useMessages()
+  const { data: agents }       = useAgents()
+  const { data: sessionSync }  = useSessionSync()
 
   const unanswered   = questions?.length ?? 0
   const unread       = messages?.filter((m) => !m.read).length ?? 0
   const activeAgents = agents?.filter((a) => a.status === 'active').length ?? 0
+  const qualityActive = !!(sessionSync?.data?.quality)
 
   function getBadge(id: Page): { count: number; danger: boolean } | null {
-    if (id === 'messages'  && unread > 0)      return { count: unread, danger: false }
-    if (id === 'questions' && unanswered > 0)  return { count: unanswered, danger: true }
-    if (id === 'agents'    && activeAgents > 0) return { count: activeAgents, danger: false }
+    if (id === 'messages'  && unread > 0)        return { count: unread, danger: false }
+    if (id === 'questions' && unanswered > 0)    return { count: unanswered, danger: true }
+    if (id === 'agents'    && activeAgents > 0)  return { count: activeAgents, danger: false }
+    if (id === 'quality'   && qualityActive)     return { count: 1, danger: false }
     return null
   }
 

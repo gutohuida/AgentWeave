@@ -11,9 +11,10 @@ import { LogsView } from '@/components/logs/LogsView'
 import { AgentsPage } from '@/components/agents/AgentsPage'
 import { MissionControlPage } from '@/components/agents/MissionControlPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
+import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { useSSE } from '@/hooks/useSSE'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs'
+type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs' | 'quality'
 
 export default function App() {
   const { isConfigured, theme, mode } = useConfigStore()
@@ -48,6 +49,7 @@ export default function App() {
             {page === 'agents'    && <div className="h-full flex flex-col"><AgentsPage /></div>}
             {page === 'mission-control' && <div className="h-full flex flex-col"><MissionControlPage /></div>}
             {page === 'jobs'       && <div className="h-full flex flex-col"><JobsPage /></div>}
+            {page === 'quality'    && <div className="h-full overflow-auto"><QualityHealthPanel /></div>}
           </main>
         </div>
       </div>

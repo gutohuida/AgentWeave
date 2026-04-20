@@ -16,11 +16,12 @@ Enter explore mode. Think deeply. Visualize freely. Follow the conversation wher
 
 ## Step 1 — Load AgentWeave Context
 
-Before exploring, build a picture of the team:
+Before exploring, build a picture of the team and quality settings:
 
 1. Read `.agentweave/session.json` to confirm agents and session mode.
 2. Read `.agentweave/roles.json` to get role assignments.
-3. Display a quick team map:
+3. Read `agentweave.yml` `quality:` section (if present).
+4. Display a quick team map with quality settings:
 
 ```
 TEAM
@@ -32,7 +33,11 @@ Agent       Roles
 <agent-c>   qa_engineer
 ────────────────────────────────
 Mode: {mode}  Principal: {principal}
+
+Quality: review_required=true | docs_threshold=non_trivial | echo_chamber=enforce
 ```
+
+If `quality:` is not configured, show: `Quality: not configured`
 
 If `.agentweave/session.json` doesn't exist, skip this step silently.
 
@@ -123,6 +128,9 @@ When things crystallize, offer a summary:
 Next: run /aw-spec-propose to formalize, or keep exploring.
 ```
 
+When offering to propose, if quality settings are active, add:
+> "With your current quality settings, implementation tasks will require decision docs (`docs_threshold: <value>`). The spec will include review tasks assigned to a separate `code_reviewer` agent."
+
 ### Team Recommendation at Closure
 
 When the conversation has converged enough that a proposal could be written, always offer both:
@@ -150,6 +158,7 @@ To add missing roles: `agentweave roles add <agent> <role_id>`
 - Derive roles from the project scope discussed — **not** from which agents are currently in the session
 - Always surface the gap explicitly: "You currently have X; this project also needs Y and Z"
 - Don't recommend roles the project doesn't warrant — fewer good reasons beats more generic ones
+- If `review_required: true` is set in quality config, always include `code_reviewer` in the recommended team with: *"required — review_required is enabled in quality config"*
 
 ---
 

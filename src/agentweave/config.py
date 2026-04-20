@@ -14,7 +14,7 @@ try:
 except ImportError:
     yaml = None  # type: ignore
 
-from .constants import RUNNER_TYPES, VALID_MODES
+from .constants import RUNNER_TYPES, VALID_DOC_THRESHOLDS, VALID_ECHO_GUARD, VALID_MODES
 
 # Path to agentweave.yml at project root
 AGENTWEAVE_YML_PATH = Path("agentweave.yml")
@@ -29,6 +29,35 @@ class ConfigValidationError(Exception):
             super().__init__(f"Line {line}: {message}")
         else:
             super().__init__(message)
+
+
+@dataclass
+class QualityConfig:
+    """Quality governance settings for AI-generated code."""
+
+    review_required: bool = False
+    docs_path: Optional[str] = None
+    docs_threshold: str = "never"
+    echo_chamber_guard: str = "off"
+    attribution_tag: bool = False
+    dependency_check: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        result: Dict[str, Any] = {}
+        if self.review_required:
+            result["review_required"] = True
+        if self.docs_path is not None:
+            result["docs_path"] = self.docs_path
+        if self.docs_threshold != "never":
+            result["docs_threshold"] = self.docs_threshold
+        if self.echo_chamber_guard != "off":
+            result["echo_chamber_guard"] = self.echo_chamber_guard
+        if self.attribution_tag:
+            result["attribution_tag"] = True
+        if self.dependency_check:
+            result["dependency_check"] = True
+        return result
 
 
 @dataclass
@@ -116,6 +145,7 @@ class AgentWeaveConfig:
     hub: HubConfig = field(default_factory=HubConfig)
     agents: Dict[str, AgentConfig] = field(default_factory=dict)
     jobs: Optional[Dict[str, JobConfig]] = None
+    quality: Optional[QualityConfig] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -126,6 +156,8 @@ class AgentWeaveConfig:
         }
         if self.jobs is not None:
             result["jobs"] = {name: cfg.to_dict() for name, cfg in self.jobs.items()}
+        if self.quality is not None:
+            result["quality"] = self.quality.to_dict()
         return result
 
 
@@ -372,11 +404,41 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
             raise ConfigValidationError("jobs: must be a mapping", line_map.get("jobs"))
         jobs = {name: _validate_job_config(name, cfg, line_map) for name, cfg in jobs_data.items()}
 
+    # Parse quality section (optional)
+    quality_data = data.get("quality")
+    quality: Optional[QualityConfig] = None
+    if quality_data is not None:
+        if not isinstance(quality_data, dict):
+            raise ConfigValidationError("quality: must be a mapping", line_map.get("quality"))
+        docs_threshold = quality_data.get("docs_threshold", "never")
+        if docs_threshold not in VALID_DOC_THRESHOLDS:
+            raise ConfigValidationError(
+                f"quality.docs_threshold: invalid value '{docs_threshold}'. "
+                f"Must be one of: {', '.join(VALID_DOC_THRESHOLDS)}",
+                line_map.get("quality.docs_threshold"),
+            )
+        echo_chamber_guard = quality_data.get("echo_chamber_guard", "off")
+        if echo_chamber_guard not in VALID_ECHO_GUARD:
+            raise ConfigValidationError(
+                f"quality.echo_chamber_guard: invalid value '{echo_chamber_guard}'. "
+                f"Must be one of: {', '.join(VALID_ECHO_GUARD)}",
+                line_map.get("quality.echo_chamber_guard"),
+            )
+        quality = QualityConfig(
+            review_required=bool(quality_data.get("review_required", False)),
+            docs_path=quality_data.get("docs_path"),
+            docs_threshold=docs_threshold,
+            echo_chamber_guard=echo_chamber_guard,
+            attribution_tag=bool(quality_data.get("attribution_tag", False)),
+            dependency_check=bool(quality_data.get("dependency_check", False)),
+        )
+
     return AgentWeaveConfig(
         project=project,
         hub=hub,
         agents=agents,
         jobs=jobs,
+        quality=quality,
     )
 
 
@@ -442,6 +504,28 @@ def generate_agentweave_yml(
 
 """
 
+    quality_comment = """# quality:
+#   # Enable a human or agent review gate before tasks are marked done.
+#   review_required: false
+#
+#   # Where to write decision docs (ADR-lite).  Default: .agentweave/code-docs
+#   # docs_path: code-docs
+#
+#   # Which tasks require a decision doc: all | non_trivial | never
+#   docs_threshold: never
+#
+#   # Prevent the same agent from implementing and reviewing the same task.
+#   # off | warn | enforce  (enforce degrades to warn in single-agent sessions)
+#   echo_chamber_guard: off
+#
+#   # Stamp completed tasks with the agent name and session ID.
+#   attribution_tag: false
+#
+#   # Flag hallucinated / unresolvable package names during review.
+#   dependency_check: false
+
+"""
+
     yaml_content = yaml.dump(
         config.to_dict(),
         default_flow_style=False,
@@ -449,7 +533,7 @@ def generate_agentweave_yml(
         allow_unicode=True,
     )
 
-    target_path.write_text(header + yaml_content, encoding="utf-8")
+    target_path.write_text(header + yaml_content + quality_comment, encoding="utf-8")
     return target_path
 
 

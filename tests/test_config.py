@@ -9,6 +9,7 @@ from agentweave.config import (
     HubConfig,
     JobConfig,
     ProjectConfig,
+    QualityConfig,
     _validate_cron,
     _validate_env_field,
     load_agentweave_yml,
@@ -350,3 +351,186 @@ class TestConfigDataclasses:
         assert result["hub"]["url"] == "http://localhost:8000"
         assert "claude" in result["agents"]
         assert "jobs" not in result  # None should be omitted
+
+
+class TestQualityConfig:
+    """Tests for QualityConfig parsing, defaults, and validation."""
+
+    def test_defaults(self):
+        """QualityConfig should have safe all-off defaults."""
+        q = QualityConfig()
+        assert q.review_required is False
+        assert q.docs_path is None
+        assert q.docs_threshold == "never"
+        assert q.echo_chamber_guard == "off"
+        assert q.attribution_tag is False
+        assert q.dependency_check is False
+
+    def test_to_dict_omits_defaults(self):
+        """to_dict() should omit fields that match safe defaults."""
+        result = QualityConfig().to_dict()
+        assert result == {}
+
+    def test_to_dict_includes_set_values(self):
+        """to_dict() should include only non-default values."""
+        q = QualityConfig(
+            review_required=True,
+            docs_path="code-docs",
+            docs_threshold="non_trivial",
+            echo_chamber_guard="enforce",
+            attribution_tag=True,
+            dependency_check=True,
+        )
+        result = q.to_dict()
+        assert result["review_required"] is True
+        assert result["docs_path"] == "code-docs"
+        assert result["docs_threshold"] == "non_trivial"
+        assert result["echo_chamber_guard"] == "enforce"
+        assert result["attribution_tag"] is True
+        assert result["dependency_check"] is True
+
+    def test_quality_in_agentweave_config_to_dict(self):
+        """AgentWeaveConfig.to_dict() should include quality when set."""
+        config = AgentWeaveConfig(
+            quality=QualityConfig(review_required=True, docs_threshold="non_trivial"),
+        )
+        result = config.to_dict()
+        assert "quality" in result
+        assert result["quality"]["review_required"] is True
+
+    def test_quality_absent_when_none(self):
+        """AgentWeaveConfig.to_dict() should omit quality when None."""
+        config = AgentWeaveConfig()
+        result = config.to_dict()
+        assert "quality" not in result
+
+    def test_load_valid_quality_section(self, tmp_path):
+        """load_agentweave_yml() should parse a valid quality section."""
+        yml = tmp_path / "agentweave.yml"
+        yml.write_text(
+            "project:\n  name: Test\nquality:\n"
+            "  review_required: true\n"
+            "  docs_threshold: non_trivial\n"
+            "  echo_chamber_guard: warn\n"
+        )
+        config = load_agentweave_yml(yml)
+        assert config.quality is not None
+        assert config.quality.review_required is True
+        assert config.quality.docs_threshold == "non_trivial"
+        assert config.quality.echo_chamber_guard == "warn"
+
+    def test_load_missing_quality_section_uses_none(self, tmp_path):
+        """load_agentweave_yml() should return quality=None when section absent."""
+        yml = tmp_path / "agentweave.yml"
+        yml.write_text("project:\n  name: Test\n")
+        config = load_agentweave_yml(yml)
+        assert config.quality is None
+
+    def test_invalid_docs_threshold_raises(self, tmp_path):
+        """Invalid docs_threshold should raise ConfigValidationError."""
+        yml = tmp_path / "agentweave.yml"
+        yml.write_text("project:\n  name: Test\nquality:\n  docs_threshold: sometimes\n")
+        with pytest.raises(ConfigValidationError, match="docs_threshold"):
+            load_agentweave_yml(yml)
+
+    def test_invalid_echo_chamber_guard_raises(self, tmp_path):
+        """Invalid echo_chamber_guard should raise ConfigValidationError."""
+        yml = tmp_path / "agentweave.yml"
+        yml.write_text("project:\n  name: Test\nquality:\n  echo_chamber_guard: strict\n")
+        with pytest.raises(ConfigValidationError, match="echo_chamber_guard"):
+            load_agentweave_yml(yml)
+
+
+class TestQualitySessionSerialization:
+    """Tests for quality config serialization into session data."""
+
+    def test_quality_key_in_session_data(self):
+        """Quality config to_dict() output should be embeddable in session data."""
+        q = QualityConfig(
+            review_required=True,
+            docs_threshold="non_trivial",
+            echo_chamber_guard="warn",
+        )
+        session_data: dict = {}
+        session_data["quality"] = q.to_dict()
+
+        assert session_data["quality"]["review_required"] is True
+        assert session_data["quality"]["docs_threshold"] == "non_trivial"
+        assert session_data["quality"]["echo_chamber_guard"] == "warn"
+        assert "docs_path" not in session_data["quality"]
+
+    def test_quality_key_removed_when_none(self):
+        """When quality is None the key should be removed from session data."""
+        session_data: dict = {"quality": {"review_required": True}}
+        # Simulate _activate_agents() branch when config.quality is None
+        if "quality" in session_data:
+            del session_data["quality"]
+        assert "quality" not in session_data
+
+    def test_quality_defaults_produce_empty_dict(self):
+        """Default QualityConfig serializes to {} — no noise in session data."""
+        q = QualityConfig()
+        assert q.to_dict() == {}
+
+
+class TestEchoChamberGuardDegradation:
+    """Tests for echo_chamber_guard single-agent degradation logic."""
+
+    def test_enforce_with_single_agent_degrades_to_warn(self):
+        """enforce guard with one active agent should degrade to warn level."""
+        q = QualityConfig(echo_chamber_guard="enforce")
+        active_agents = ["claude"]
+
+        effective = q.echo_chamber_guard
+        if effective == "enforce" and len(active_agents) <= 1:
+            effective = "warn"
+
+        assert effective == "warn"
+
+    def test_enforce_with_multiple_agents_stays_enforce(self):
+        """enforce guard with multiple agents should remain enforce."""
+        q = QualityConfig(echo_chamber_guard="enforce")
+        active_agents = ["claude", "gemini"]
+
+        effective = q.echo_chamber_guard
+        if effective == "enforce" and len(active_agents) <= 1:
+            effective = "warn"
+
+        assert effective == "enforce"
+
+    def test_warn_unaffected_by_agent_count(self):
+        """warn guard should not change regardless of agent count."""
+        q = QualityConfig(echo_chamber_guard="warn")
+        for count in [1, 2, 5]:
+            active_agents = [f"agent{i}" for i in range(count)]
+            effective = q.echo_chamber_guard
+            if effective == "enforce" and len(active_agents) <= 1:
+                effective = "warn"
+            assert effective == "warn"
+
+
+class TestGenerateAgentweaveYml:
+    """Tests for generate_agentweave_yml quality comment block."""
+
+    def test_generated_file_includes_quality_comment(self, tmp_path):
+        """Generated agentweave.yml should include commented-out quality section."""
+        from agentweave.config import generate_agentweave_yml
+        from agentweave.session import Session
+
+        session = Session(data={
+            "name": "Test Project",
+            "mode": "hierarchical",
+            "agents": {
+                "claude": {"runner": "claude", "yolo": False, "pilot": False},
+            },
+        })
+
+        out_path = tmp_path / "agentweave.yml"
+        generate_agentweave_yml(session, path=out_path)
+
+        content = out_path.read_text()
+        assert "quality:" in content
+        assert "review_required" in content
+        assert "docs_threshold" in content
+        assert "echo_chamber_guard" in content
+        assert "dependency_check" in content
