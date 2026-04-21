@@ -263,8 +263,8 @@ pending → assigned → in_progress → completed → under_review → approved
 | Tool | Purpose |
 |------|---------|
 | `send_message(from, to, subject, content)` | Send inter-agent message |
-| `get_inbox(agent)` | Read unread messages |
-| `mark_read(message_id)` | Archive message |
+| `get_inbox(agent)` | Read unread messages (auto-marked as read) |
+| `mark_read(message_id)` | Manually archive message (optional) |
 | `list_tasks(agent?)` | List active tasks |
 | `get_task(task_id)` | Get task details |
 | `update_task(task_id, status)` | Update task status |

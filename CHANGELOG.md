@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.29.0] - 2026-04-21
+
+### Added (CLI v0.29.0 / Hub v0.24.0)
+- **Auto-mark as read** — `get_inbox()` now automatically archives messages after returning them. Agents no longer need to call `mark_read()` separately in either local or Hub MCP mode.
+
+---
 ## [0.28.0] - 2026-04-20
 
 ### Added (CLI v0.28.0 / Hub v0.23.0)

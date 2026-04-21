@@ -10,11 +10,11 @@ Send a message to another agent.
 
 ### `get_inbox(agent)`
 
-Read unread messages for the specified agent.
+Read unread messages for the specified agent. Messages are automatically archived after being returned — no need to call `mark_read()` separately.
 
 ### `mark_read(message_id)`
 
-Archive a message after processing.
+Archive a message manually. Usually not needed since `get_inbox` auto-marks messages as read.
 
 ## Tasks
 

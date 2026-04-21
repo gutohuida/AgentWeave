@@ -317,8 +317,8 @@ Available to agents in both local MCP mode and via Hub MCP:
 | Tool | What it does |
 |------|-------------|
 | `send_message(from, to, subject, content)` | Send a message to another agent |
-| `get_inbox(agent)` | Read unread messages |
-| `mark_read(message_id)` | Archive a message after processing |
+| `get_inbox(agent)` | Read unread messages (auto-marked as read) |
+| `mark_read(message_id)` | Manually archive a message (optional) |
 | `list_tasks(agent?)` | List active tasks |
 | `get_task(task_id)` | Get full task details |
 | `update_task(task_id, status)` | Update task status |
@@ -369,8 +369,8 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.28.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.23.0
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.29.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.24.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server

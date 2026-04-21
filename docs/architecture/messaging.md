@@ -37,11 +37,8 @@ from agentweave import MessageBus
 # Send a message
 MessageBus.send(msg)
 
-# Read inbox
+# Read inbox (messages are auto-marked as read)
 inbox = MessageBus.get_inbox("kimi")
-
-# Archive after processing
-MessageBus.mark_read("msg-abc123")
 ```
 
 ## Task Lifecycle Integration
