@@ -50,12 +50,11 @@ user to paste it into the target agent's session.
 
 ### Delegate agent reads inbox and works:
 ```
-1. get_inbox("<your-agent-name>")      → returns unread messages
-2. mark_read(message_id)               → archive after processing
-3. update_task(task_id, status="in_progress")
-4. … do the work …
-5. update_task(task_id, status="completed")
-6. send_message(from_agent="<your-agent>", to_agent="<reviewer-or-principal>",
+1. get_inbox("<your-agent-name>")      → returns unread messages (auto-marked as read)
+2. update_task(task_id, status="in_progress")
+3. … do the work …
+4. update_task(task_id, status="completed")
+5. send_message(from_agent="<your-agent>", to_agent="<reviewer-or-principal>",
                subject="Done: <title>", content="Summary of what was done",
                message_type="message", task_id="<id>")
    → watchdog auto-pings the recipient's CLI

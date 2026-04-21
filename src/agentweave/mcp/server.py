@@ -87,7 +87,10 @@ def send_message(
 
 @mcp.tool()
 def get_inbox(agent: str) -> List[Dict[str, Any]]:
-    """Get all unread messages for an agent.
+    """Get all unread messages for an agent and mark them as read.
+
+    Messages are automatically archived after being returned — no need to
+    call mark_read() separately.
 
     Args:
         agent: Agent name to fetch messages for (e.g. "claude")
@@ -97,7 +100,10 @@ def get_inbox(agent: str) -> List[Dict[str, Any]]:
         type, timestamp, task_id.
     """
     messages = MessageBus.get_inbox(agent)
-    return [m.to_dict() for m in messages]
+    result = [m.to_dict() for m in messages]
+    for m in messages:
+        MessageBus.mark_read(m.id)
+    return result
 
 
 @mcp.tool()
