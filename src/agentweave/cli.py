@@ -1690,7 +1690,7 @@ def _write_opencode_mcp_config(server_cmd: str) -> tuple:
         except _json.JSONDecodeError as exc:
             print_error(f"Malformed opencode.json: {exc}")
             print("Manual configuration snippet:")
-            print('  {')
+            print("  {")
             print('    "mcp": {')
             print('      "agentweave": {')
             print('        "type": "local",')
@@ -1799,7 +1799,11 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
     print()
 
     # Print manual commands only for agents that couldn't be configured automatically
-    failed = [a for a, s in results.items() if s not in ("ok", "already configured") and "updated" not in s]
+    failed = [
+        a
+        for a, s in results.items()
+        if s not in ("ok", "already configured") and "updated" not in s
+    ]
     if failed:
         print("Manual configuration for agents not found automatically:")
         print()
@@ -3592,10 +3596,7 @@ def cmd_switch(args: argparse.Namespace) -> int:
         return 0
 
     if runner != "claude_proxy":
-        print_info(
-            f"{agent} uses runner '{runner}' — "
-            f"no env var switch needed"
-        )
+        print_info(f"{agent} uses runner '{runner}' — " f"no env var switch needed")
         return 0
 
     missing = get_missing_api_key_var(session, agent)
