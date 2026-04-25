@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.30.0] - 2026-04-25
+
+### Added (CLI)
+- **OpenCode agent support** — New runner type for the OpenCode terminal-based AI coding agent
+  - Stable session IDs (`agentweave-{agent}`)
+  - File-based MCP registration via auto-generated `opencode.json`
+  - Context file injection via `--file` flag
+  - Model selection via `--model` flag
+
+---
 ## [0.29.0] - 2026-04-21
 
 ### Added (CLI v0.29.0 / Hub v0.24.0)
