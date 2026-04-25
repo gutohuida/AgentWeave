@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.31.0] - 2026-04-25
+
+### Added (CLI)
+- **Codex runner support** — Full support for OpenAI Codex as an AgentWeave runner
+  - Headless execution via `codex exec --json` with JSONL output parsing
+  - Thread-based session resumption (`codex exec resume <thread_id>`)
+  - Context file injection via `-c model_instructions_file=<path>`
+  - Model selection via `--model` flag
+  - Memory mode control via `runner_options.memory`
+  - Auto-approval bypass when `yolo: true` (`--dangerously-bypass-approvals-and-sandbox`)
+  - Context usage monitoring with model-aware token limits
+  - Hub UI badge and Mission Control integration
+- `runner_options` per-agent configuration in `agentweave.yml`
+- Data-driven JSONL session ID extraction (`session_id_field`, `session_event_type`)
+
+### Added (Hub v0.25.0)
+- `runner_options` exposed in `AgentSummary` schema and API
+- SSE broadcast for `new_session_request` events
+
+### Fixed
+- Codex parser handles actual `item.started` / `item.completed` event types
+- Run Codex from `.codex-run/` subdir to avoid bootstrap mode while preserving MCP transport discovery
+- Absolute context file paths for neutral cwd execution
+
+---
 ## [0.30.0] - 2026-04-25
 
 ### Added (CLI)

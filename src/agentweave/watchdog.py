@@ -7,7 +7,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -623,10 +622,8 @@ class Watchdog:
                     if _sess and _sess.get_runner_config(recipient).get("runner") == "codex":
                         self._handle_codex_new_session(recipient)
                         self.known_messages.add(msg_id)
-                        try:
+                        with contextlib.suppress(Exception):
                             self.transport.archive_message(msg_id)
-                        except Exception:
-                            pass
                         continue
 
                 self.known_messages.add(msg_id)
@@ -634,11 +631,8 @@ class Watchdog:
 
                 # Auto-trigger agent for messages from "user" (job triggers, direct triggers)
                 sender = msg.get("from", "")
-                if sender == "user" and recipient:
-                    # Skip messages already handled by _make_direct_trigger_callback
-                    # (those with "Direct message from Hub" in subject)
-                    if "Direct message from Hub" not in subject:
-                        self._trigger_agent_from_message(recipient, msg)
+                if sender == "user" and recipient and "Direct message from Hub" not in subject:
+                    self._trigger_agent_from_message(recipient, msg)
 
         tasks = self.transport.get_active_tasks(self.agent or None)
         for task in tasks:

@@ -2921,9 +2921,8 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
     model = args.model
 
     # Apply registry defaults for known claude_proxy providers when flags are omitted
-    if runner == "codex":
-        if not os.environ.get("CODEX_API_KEY"):
-            print_warning("CODEX_API_KEY not set — Codex will fail at runtime")
+    if runner == "codex" and not os.environ.get("CODEX_API_KEY"):
+        print_warning("CODEX_API_KEY not set — Codex will fail at runtime")
 
     if runner == "claude_proxy" and agent in CLAUDE_PROXY_PROVIDERS:
         defaults = CLAUDE_PROXY_PROVIDERS[agent]
@@ -3663,7 +3662,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     if runner == "codex":
         print_warning(f"{agent} uses the Codex CLI. Run it directly or use relay.")
-        print(f'  codex exec --json "<prompt>"')
+        print('  codex exec --json "<prompt>"')
         return 0
 
     if runner != "claude_proxy":
