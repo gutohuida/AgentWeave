@@ -546,7 +546,9 @@ def generate_agentweave_yml(
         allow_unicode=True,
     )
 
-    target_path.write_text(header + yaml_content + runner_options_comment + quality_comment, encoding="utf-8")
+    target_path.write_text(
+        header + yaml_content + runner_options_comment + quality_comment, encoding="utf-8"
+    )
     return target_path
 
 

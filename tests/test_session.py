@@ -92,21 +92,25 @@ def test_session_set_agent_pilot_invalid_agent(tmp_path, monkeypatch):
 
 def test_session_get_runner_options_present():
     """get_runner_options returns the dict when set."""
-    sess = Session({
-        "agents": {
-            "codex": {"runner_options": {"memory": False}},
+    sess = Session(
+        {
+            "agents": {
+                "codex": {"runner_options": {"memory": False}},
+            }
         }
-    })
+    )
     assert sess.get_runner_options("codex") == {"memory": False}
 
 
 def test_session_get_runner_options_absent():
     """get_runner_options returns {} when not set."""
-    sess = Session({
-        "agents": {
-            "claude": {},
+    sess = Session(
+        {
+            "agents": {
+                "claude": {},
+            }
         }
-    })
+    )
     assert sess.get_runner_options("claude") == {}
 
 
@@ -136,12 +140,10 @@ def test_session_sync_agents_updates_runner_options(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     sess = Session.create(name="Test", agents=["codex"])
     # First sync with memory false
-    sess.sync_agents({
-        "codex": {"runner": "codex", "runner_options": {"memory": False}}
-    })
+    sess.sync_agents({"codex": {"runner": "codex", "runner_options": {"memory": False}}})
     # Second sync with memory true
-    added, updated, orphaned = sess.sync_agents({
-        "codex": {"runner": "codex", "runner_options": {"memory": True}}
-    })
+    added, updated, orphaned = sess.sync_agents(
+        {"codex": {"runner": "codex", "runner_options": {"memory": True}}}
+    )
     assert "codex" in updated
     assert sess.agents["codex"]["runner_options"] == {"memory": True}

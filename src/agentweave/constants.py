@@ -83,7 +83,16 @@ DEFAULT_AGENTS = ["claude", "kimi"]
 VALID_AGENTS = KNOWN_AGENTS
 
 # Valid agent configuration keys
-VALID_AGENT_CONFIG_KEYS = ["role", "since", "runner", "env_vars", "model", "yolo", "pilot", "runner_options"]
+VALID_AGENT_CONFIG_KEYS = [
+    "role",
+    "since",
+    "runner",
+    "env_vars",
+    "model",
+    "yolo",
+    "pilot",
+    "runner_options",
+]
 
 # Runtime roles directory and config file paths
 ROLES_DIR = AGENTWEAVE_DIR / "roles"

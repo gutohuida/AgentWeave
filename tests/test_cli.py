@@ -96,6 +96,7 @@ class TestMcpSetupCodex:
 
         # Mock subprocess to avoid actually running codex CLI
         import subprocess
+
         original_run = subprocess.run
 
         def mock_run(cmd, **kwargs):
@@ -103,6 +104,7 @@ class TestMcpSetupCodex:
                 returncode = 0
                 stdout = ""
                 stderr = ""
+
             # Simulate --version check
             if "--version" in cmd:
                 r = Result()

@@ -517,13 +517,15 @@ class TestGenerateAgentweaveYml:
         from agentweave.config import generate_agentweave_yml
         from agentweave.session import Session
 
-        session = Session(data={
-            "name": "Test Project",
-            "mode": "hierarchical",
-            "agents": {
-                "claude": {"runner": "claude", "yolo": False, "pilot": False},
-            },
-        })
+        session = Session(
+            data={
+                "name": "Test Project",
+                "mode": "hierarchical",
+                "agents": {
+                    "claude": {"runner": "claude", "yolo": False, "pilot": False},
+                },
+            }
+        )
 
         out_path = tmp_path / "agentweave.yml"
         generate_agentweave_yml(session, path=out_path)
@@ -534,7 +536,6 @@ class TestGenerateAgentweaveYml:
         assert "docs_threshold" in content
         assert "echo_chamber_guard" in content
         assert "dependency_check" in content
-
 
 
 class TestOpencodeConfig:
@@ -629,16 +630,18 @@ agents:
         from agentweave.config import generate_agentweave_yml
         from agentweave.session import Session
 
-        session = Session(data={
-            "name": "Test Project",
-            "mode": "hierarchical",
-            "agents": {
-                "opencode-dev": {
-                    "runner": "opencode",
-                    "model": "ollama/qwen2.5-coder:7b",
+        session = Session(
+            data={
+                "name": "Test Project",
+                "mode": "hierarchical",
+                "agents": {
+                    "opencode-dev": {
+                        "runner": "opencode",
+                        "model": "ollama/qwen2.5-coder:7b",
+                    },
                 },
-            },
-        })
+            }
+        )
 
         out_path = tmp_path / "agentweave.yml"
         generate_agentweave_yml(session, path=out_path)

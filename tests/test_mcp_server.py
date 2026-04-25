@@ -15,7 +15,9 @@ class TestRegisterAgent:
     @patch("agentweave.mcp.server.get_transport")
     @patch("agentweave.session.Session.load")
     @patch("urllib.request.urlopen")
-    def test_register_agent_success(self, mock_urlopen, mock_session_load, mock_get_transport, tmp_path, monkeypatch):
+    def test_register_agent_success(
+        self, mock_urlopen, mock_session_load, mock_get_transport, tmp_path, monkeypatch
+    ):
         from agentweave.mcp.server import register_agent
 
         mock_transport = MagicMock()
@@ -32,7 +34,9 @@ class TestRegisterAgent:
         )
 
         resp = MagicMock()
-        resp.read.return_value = json.dumps({"role": "backend_dev", "context": "# Backend Dev"}).encode()
+        resp.read.return_value = json.dumps(
+            {"role": "backend_dev", "context": "# Backend Dev"}
+        ).encode()
         resp.__enter__ = lambda s: s
         resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = resp
@@ -91,7 +95,9 @@ class TestRegisterAgent:
     @patch("agentweave.mcp.server.get_transport")
     @patch("agentweave.session.Session.load")
     @patch("urllib.request.urlopen")
-    def test_register_agent_re_registration(self, mock_urlopen, mock_session_load, mock_get_transport, tmp_path, monkeypatch):
+    def test_register_agent_re_registration(
+        self, mock_urlopen, mock_session_load, mock_get_transport, tmp_path, monkeypatch
+    ):
         from agentweave.mcp.server import register_agent
 
         mock_transport = MagicMock()
@@ -108,7 +114,9 @@ class TestRegisterAgent:
         )
 
         resp = MagicMock()
-        resp.read.return_value = json.dumps({"role": "collaborator", "context": "# Collaborator"}).encode()
+        resp.read.return_value = json.dumps(
+            {"role": "collaborator", "context": "# Collaborator"}
+        ).encode()
         resp.__enter__ = lambda s: s
         resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = resp
@@ -123,7 +131,9 @@ class TestRegisterAgent:
     @patch("agentweave.mcp.server.get_transport")
     @patch("agentweave.session.Session.load")
     @patch("urllib.request.urlopen")
-    def test_register_agent_with_config(self, mock_urlopen, mock_session_load, mock_get_transport, tmp_path, monkeypatch):
+    def test_register_agent_with_config(
+        self, mock_urlopen, mock_session_load, mock_get_transport, tmp_path, monkeypatch
+    ):
         from agentweave.mcp.server import register_agent
 
         mock_transport = MagicMock()
@@ -140,7 +150,9 @@ class TestRegisterAgent:
         )
 
         resp = MagicMock()
-        resp.read.return_value = json.dumps({"role": "backend_dev", "context": "# Backend Dev"}).encode()
+        resp.read.return_value = json.dumps(
+            {"role": "backend_dev", "context": "# Backend Dev"}
+        ).encode()
         resp.__enter__ = lambda s: s
         resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = resp
@@ -157,6 +169,7 @@ class TestRegisterAgent:
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         import urllib.request
+
         assert isinstance(request, urllib.request.Request)
         body = json.loads(request.data)
         assert body["config"]["runner"] == "kimi"
@@ -166,7 +179,9 @@ class TestRegisterAgent:
 class TestUpdateAgentConfig:
     @patch("agentweave.mcp.server.get_transport")
     @patch("urllib.request.urlopen")
-    def test_update_agent_config_success(self, mock_urlopen, mock_get_transport, tmp_path, monkeypatch):
+    def test_update_agent_config_success(
+        self, mock_urlopen, mock_get_transport, tmp_path, monkeypatch
+    ):
         from agentweave.mcp.server import update_agent_config
 
         mock_transport = MagicMock()
@@ -245,7 +260,9 @@ class TestGetContext:
 
     @patch("agentweave.mcp.server.get_transport")
     @patch("urllib.request.urlopen")
-    def test_get_context_unknown_role(self, mock_urlopen, mock_get_transport, tmp_path, monkeypatch):
+    def test_get_context_unknown_role(
+        self, mock_urlopen, mock_get_transport, tmp_path, monkeypatch
+    ):
         from agentweave.mcp.server import get_context
         import urllib.error
 
@@ -262,7 +279,9 @@ class TestGetContext:
         )
 
         err_resp = MagicMock()
-        err_resp.read.return_value = json.dumps({"detail": "Role template not found: unknown_role"}).encode()
+        err_resp.read.return_value = json.dumps(
+            {"detail": "Role template not found: unknown_role"}
+        ).encode()
         mock_urlopen.side_effect = urllib.error.HTTPError(
             url="", code=404, msg="Not Found", hdrs={}, fp=err_resp
         )

@@ -1719,7 +1719,9 @@ def _parse_codex_stream_line(line: str) -> tuple:
             tool = item.get("tool", "?")
             error = item.get("error")
             if error:
-                err_msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                err_msg = (
+                    error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                )
                 return ([f"❌ {tool}: {err_msg}"], None)
             return ([], None)
 
