@@ -1666,6 +1666,57 @@ def cmd_log(args: argparse.Namespace) -> int:
     return 0
 
 
+def _write_opencode_mcp_config(server_cmd: str) -> tuple:
+    """Write or merge AgentWeave MCP server into opencode.json.
+
+    Returns (success: bool, path: str, message: str).
+    On malformed JSON: prints error + manual snippet, returns (False, path, error_msg).
+    """
+    import json as _json
+
+    opencode_json_path = Path("opencode.json")
+    mcp_entry = {
+        "mcp": {
+            "agentweave": {
+                "type": "local",
+                "command": [server_cmd],
+            }
+        }
+    }
+
+    if opencode_json_path.exists():
+        try:
+            existing = _json.loads(opencode_json_path.read_text(encoding="utf-8"))
+        except _json.JSONDecodeError as exc:
+            print_error(f"Malformed opencode.json: {exc}")
+            print("Manual configuration snippet:")
+            print('  {')
+            print('    "mcp": {')
+            print('      "agentweave": {')
+            print('        "type": "local",')
+            print(f'        "command": ["{server_cmd}"]')
+            print("      }")
+            print("    }")
+            print("  }")
+            return False, str(opencode_json_path), f"malformed JSON: {exc}"
+
+        if not isinstance(existing, dict):
+            print_error("opencode.json exists but is not a JSON object")
+            return False, str(opencode_json_path), "not a JSON object"
+
+        # Merge: overwrite only mcp.agentweave, preserve everything else
+        existing.setdefault("mcp", {})
+        if not isinstance(existing["mcp"], dict):
+            existing["mcp"] = {}
+        existing["mcp"]["agentweave"] = mcp_entry["mcp"]["agentweave"]
+        opencode_json_path.write_text(_json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    else:
+        # Create from scratch
+        opencode_json_path.write_text(_json.dumps(mcp_entry, indent=2) + "\n", encoding="utf-8")
+
+    return True, str(opencode_json_path), "updated"
+
+
 def cmd_mcp_setup(args: argparse.Namespace) -> int:
     """Configure the AgentWeave MCP server for all session agents."""
     import os as _os
@@ -1698,6 +1749,17 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
         )
         _rc = RUNNER_CONFIGS.get(_runner_type, RUNNER_CONFIGS["native"])
         _cli = _rc.get("cli") or agent
+        mcp_add_cmd = _rc.get("mcp_add_cmd")
+
+        # File-based MCP registration for runners without an mcp add CLI command
+        if mcp_add_cmd is None:
+            ok, path, msg = _write_opencode_mcp_config(server_cmd)
+            if ok:
+                results[agent] = f"{path} updated"
+            else:
+                results[agent] = f"failed: {msg}"
+            continue
+
         mcp_args = _mcp_args(agent)
         try:
             check = _sp.run([_cli, "--version"], capture_output=True, shell=_shell)
@@ -1732,12 +1794,12 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
     print("AgentWeave MCP server setup")
     print("-" * 40)
     for agent, status in results.items():
-        icon = "[OK]" if status in ("ok", "already configured") else "[!!]"
+        icon = "[OK]" if status in ("ok", "already configured") or "updated" in status else "[!!]"
         print(f"  {icon} {agent}: {status}")
     print()
 
     # Print manual commands only for agents that couldn't be configured automatically
-    failed = [a for a, s in results.items() if s not in ("ok", "already configured")]
+    failed = [a for a, s in results.items() if s not in ("ok", "already configured") and "updated" not in s]
     if failed:
         print("Manual configuration for agents not found automatically:")
         print()
@@ -3510,9 +3572,28 @@ def cmd_switch(args: argparse.Namespace) -> int:
         return 1
 
     runner_config = session.get_runner_config(agent)
-    if runner_config.get("runner") != "claude_proxy":
+    runner = runner_config.get("runner", "native")
+
+    if runner == "opencode":
+        print_info(f"{agent} is an OpenCode agent")
+        print()
+        print("Launch command:")
+        model = runner_config.get("model")
+        model_flag = f" --model {model}" if model else ""
+        context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
+        file_flag = f" --file {context_file}" if context_file.exists() else ""
+        print(
+            f"  opencode run --session agentweave-{agent}{model_flag}{file_flag} "
+            f"--format json '<prompt>'"
+        )
+        print()
+        print("Or start a new session:")
+        print(f"  opencode run{model_flag}{file_flag} --format json '<prompt>'")
+        return 0
+
+    if runner != "claude_proxy":
         print_info(
-            f"{agent} uses runner '{runner_config.get('runner', 'native')}' — "
+            f"{agent} uses runner '{runner}' — "
             f"no env var switch needed"
         )
         return 0

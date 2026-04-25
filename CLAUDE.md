@@ -177,6 +177,25 @@ agentweave run --agent minimax "task"
 eval $(agentweave switch minimax)
 ```
 
+### OpenCode Agents
+
+Run OpenCode (terminal-based AI coding agent) with local Ollama or cloud models:
+
+```bash
+# Configure in agentweave.yml
+#   opencode-dev:
+#     runner: opencode
+#     model: ollama/qwen2.5-coder:7b
+
+# MCP setup writes opencode.json automatically
+agentweave mcp-setup
+
+# Launch
+agentweave switch opencode-dev
+```
+
+OpenCode uses stable session IDs (`agentweave-{agent}`) and file-based MCP registration via `opencode.json`.
+
 ### Transport Layer
 
 ```

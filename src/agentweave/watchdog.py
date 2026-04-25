@@ -1183,6 +1183,7 @@ def _agent_ping_cmd(
     Dispatches based on runner type from session config, not agent name.
     Kimi uses --print (plain Python-repr events) or --wire (JSON-RPC 2.0) with --session for resumption.
     Claude/claude_proxy use --output-format stream-json --verbose with --resume.
+    OpenCode uses `opencode run` with --session, --model, --file, and --format json.
     """
     from .session import Session
 
@@ -1194,6 +1195,35 @@ def _agent_ping_cmd(
         cmd = ["kimi", "--wire"]
         if session_id:
             cmd += ["--session", session_id]
+        return cmd
+
+    if runner_type == "opencode":
+        # OpenCode: stable session IDs, no output parsing needed
+        cli = rc.get("cli", "opencode")
+        subcommand = rc.get("subcommand", "run")
+        cmd = [cli, subcommand]
+
+        # Stable session ID: agentweave-{agent}
+        stable_session_id = f"agentweave-{agent}"
+        if session_id is None:
+            session_id = stable_session_id
+            # Pre-save so subsequent pings know the session ID
+            _save_agent_session(agent, stable_session_id)
+        cmd += ["--session", session_id]
+
+        # Model flag if configured
+        session = Session.load()
+        if session:
+            model = session.get_runner_config(agent).get("model")
+            if model:
+                cmd += ["--model", model]
+
+        # Context file injection via --file
+        context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
+        if context_file.exists():
+            cmd += ["--file", str(context_file)]
+
+        cmd += ["--format", "json", prompt]
         return cmd
 
     # claude, claude_proxy, native — all use stream-json JSONL output
@@ -1644,6 +1674,7 @@ def _do_run_agent_subprocess(
     """Internal: run agent, stream output to Hub, save session ID (must hold spawn lock)."""
     runner_type = _get_runner_type(agent)
     is_kimi = runner_type == "kimi"
+    is_opencode = runner_type == "opencode"
     # Detect wire mode: --wire flag in cmd indicates JSON-RPC bidirectional mode
     is_wire_mode = is_kimi and "--wire" in cmd
 
@@ -1830,6 +1861,10 @@ def _do_run_agent_subprocess(
                         session_id_ref[0] = session_id
                 # Parse Kimi's Python-repr events streamed in real-time
                 readable_lines = kimi_parser.feed(line) if kimi_parser is not None else []
+            elif is_opencode:
+                # OpenCode outputs JSON to stdout; we only monitor exit code.
+                # Do not parse or post stdout lines to avoid noise.
+                readable_lines = []
             else:
                 # Try to extract session_id from JSONL stream (Claude/claude_proxy)
                 if session_id is None:

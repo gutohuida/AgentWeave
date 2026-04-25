@@ -73,6 +73,7 @@ KNOWN_AGENTS = [
     "qwen",  # Qwen / Tongyi Qianwen (Alibaba)
     "minimax",  # MiniMax — no native CLI, runs via Claude proxy
     "glm",  # GLM (Zhipu AI) — no native CLI, runs via Claude proxy
+    "opencode",  # OpenCode (sst.dev) — model-neutral terminal coding agent
 ]
 
 # Default agents when none specified at init (backward-compatible)
@@ -100,7 +101,7 @@ AGENT_CONTEXT_FILES: dict = {
 AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
 
 # Agent runner types — how the agent CLI is invoked
-RUNNER_TYPES = ["claude", "native", "claude_proxy", "kimi", "manual"]
+RUNNER_TYPES = ["claude", "native", "claude_proxy", "kimi", "manual", "opencode"]
 
 # Runner configuration — CLI properties per runner type.
 # Used by watchdog and CLI to dispatch commands without hardcoding agent names.
@@ -145,6 +146,17 @@ RUNNER_CONFIGS: dict = {
             "{server_cmd}",
         ],
     },
+    "opencode": {
+        "cli": "opencode",
+        "subcommand": "run",
+        "session_flag": "--session",
+        "output_format": "json",
+        # Stable session IDs: agentweave-{agent} — no parsing needed
+        "session_source": "stable",
+        "context_flag": "--file",
+        "model_flag": "--model",
+        "mcp_add_cmd": None,  # File-based registration via opencode.json
+    },
     "manual": {
         "cli": None,
         "session_source": "none",
@@ -174,6 +186,7 @@ AGENT_RUNNER_DEFAULTS: dict = {
     "cursor": "manual",
     "windsurf": "manual",
     "copilot": "manual",
+    "opencode": "opencode",
 }
 
 # Valid session roles

@@ -34,6 +34,12 @@ agents:
       - MINIMAX_API_KEY
     yolo: true
 
+  opencode-dev:
+    runner: opencode
+    model: ollama/qwen2.5-coder:7b
+    roles:
+      - backend_dev
+
 jobs:
   daily-standup:
     schedule: "0 9 * * 1-5"

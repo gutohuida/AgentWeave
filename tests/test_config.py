@@ -534,3 +534,116 @@ class TestGenerateAgentweaveYml:
         assert "docs_threshold" in content
         assert "echo_chamber_guard" in content
         assert "dependency_check" in content
+
+
+
+class TestOpencodeConfig:
+    """Tests for opencode runner configuration."""
+
+    def test_load_opencode_with_local_model(self, tmp_path):
+        """agentweave.yml accepts runner: opencode with local model."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test Project
+  mode: hierarchical
+
+agents:
+  opencode-dev:
+    runner: opencode
+    model: ollama/qwen2.5-coder:7b
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.agents["opencode-dev"].runner == "opencode"
+        assert config.agents["opencode-dev"].model == "ollama/qwen2.5-coder:7b"
+
+    def test_load_opencode_with_cloud_model(self, tmp_path):
+        """agentweave.yml accepts runner: opencode with cloud model."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test Project
+  mode: hierarchical
+
+agents:
+  opencode-cloud:
+    runner: opencode
+    model: anthropic/claude-sonnet-4-5
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.agents["opencode-cloud"].runner == "opencode"
+        assert config.agents["opencode-cloud"].model == "anthropic/claude-sonnet-4-5"
+
+    def test_load_opencode_without_model(self, tmp_path):
+        """agentweave.yml accepts runner: opencode with no model field."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test Project
+  mode: hierarchical
+
+agents:
+  opencode-default:
+    runner: opencode
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.agents["opencode-default"].runner == "opencode"
+        assert config.agents["opencode-default"].model is None
+
+    def test_load_opencode_with_roles_and_env(self, tmp_path):
+        """opencode agents support roles and env like other runners."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test Project
+  mode: hierarchical
+
+agents:
+  opencode-dev:
+    runner: opencode
+    roles: [developer]
+    env: [SOME_VAR]
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.agents["opencode-dev"].roles == ["developer"]
+        assert config.agents["opencode-dev"].env == ["SOME_VAR"]
+
+    def test_load_opencode_with_pilot(self, tmp_path):
+        """opencode agents support pilot mode."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test Project
+  mode: hierarchical
+
+agents:
+  opencode-dev:
+    runner: opencode
+    pilot: true
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.agents["opencode-dev"].pilot is True
+
+    def test_generate_roundtrips_opencode(self, tmp_path):
+        """generate_agentweave_yml preserves opencode runner and model."""
+        from agentweave.config import generate_agentweave_yml
+        from agentweave.session import Session
+
+        session = Session(data={
+            "name": "Test Project",
+            "mode": "hierarchical",
+            "agents": {
+                "opencode-dev": {
+                    "runner": "opencode",
+                    "model": "ollama/qwen2.5-coder:7b",
+                },
+            },
+        })
+
+        out_path = tmp_path / "agentweave.yml"
+        generate_agentweave_yml(session, path=out_path)
+
+        # Reload and verify
+        config = load_agentweave_yml(out_path)
+        assert config.agents["opencode-dev"].runner == "opencode"
+        assert config.agents["opencode-dev"].model == "ollama/qwen2.5-coder:7b"

@@ -127,7 +127,7 @@ Map of agent name to agent configuration.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual` |
+| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode` |
 | `model` | string | (auto) | Model name for claude_proxy agents |
 | `roles` | list | `[]` | List of role IDs for this agent |
 | `env` | list | `[]` | List of environment variable names to pass to the agent |
@@ -150,6 +150,10 @@ agents:
     model: MiniMax-M2.7
     env: [MINIMAX_API_KEY]
     yolo: true
+
+  opencode-dev:
+    runner: opencode
+    model: ollama/qwen2.5-coder:7b
 ```
 
 #### Runners
@@ -161,6 +165,7 @@ agents:
 | `native` | Use the agent name as the CLI command |
 | `claude_proxy` | Claude CLI with custom API endpoint (for MiniMax, GLM, etc.) |
 | `manual` | No CLI integration (relay prompts only) |
+| `opencode` | OpenCode CLI (`opencode`) — supports local and cloud models |
 
 #### Environment Variables
 
@@ -253,7 +258,7 @@ The CLI validates `agentweave.yml` on load:
 
 - YAML syntax must be valid
 - `project.mode` must be one of: `hierarchical`, `peer`, `review`
-- `agents.<name>.runner` must be one of: `claude`, `kimi`, `native`, `claude_proxy`, `manual`
+- `agents.<name>.runner` must be one of: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`
 - `agents.<name>.env` must be a list of strings (not key-value pairs)
 - `jobs.<name>.schedule` must be a valid 5-field cron expression
 
