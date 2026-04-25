@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -611,16 +612,31 @@ class Watchdog:
         for msg in messages:
             msg_id = msg.get("id", "")
             if msg_id and msg_id not in self.known_messages:
+                # Intercept new_session_request for Codex agents — delete session file directly
+                # instead of sending an inbox message (Codex doesn't poll inbox between turns)
+                subject = msg.get("subject", "")
+                recipient = msg.get("to", "")
+                if subject == "new_session_request" and recipient:
+                    from .session import Session
+
+                    _sess = Session.load()
+                    if _sess and _sess.get_runner_config(recipient).get("runner") == "codex":
+                        self._handle_codex_new_session(recipient)
+                        self.known_messages.add(msg_id)
+                        try:
+                            self.transport.archive_message(msg_id)
+                        except Exception:
+                            pass
+                        continue
+
                 self.known_messages.add(msg_id)
                 self.callback("new_message", msg)
 
                 # Auto-trigger agent for messages from "user" (job triggers, direct triggers)
                 sender = msg.get("from", "")
-                recipient = msg.get("to", "")
                 if sender == "user" and recipient:
                     # Skip messages already handled by _make_direct_trigger_callback
                     # (those with "Direct message from Hub" in subject)
-                    subject = msg.get("subject", "")
                     if "Direct message from Hub" not in subject:
                         self._trigger_agent_from_message(recipient, msg)
 
@@ -630,6 +646,30 @@ class Watchdog:
             if task_id and task_id not in self.known_tasks:
                 self.known_tasks.add(task_id)
                 self.callback("new_task", task)
+
+    def _handle_codex_new_session(self, agent: str) -> None:
+        """Delete session file and reset context usage for a Codex agent."""
+        session_file = AGENTS_DIR / f"{agent}-session.json"
+        if session_file.exists():
+            try:
+                session_file.unlink()
+                logger.info(
+                    "codex_new_session_file_deleted",
+                    extra={
+                        "event": "codex_new_session_file_deleted",
+                        "data": {"agent": agent, "path": str(session_file)},
+                    },
+                )
+                print(f"[CTX] Deleted session file for {agent} (new session requested)")
+            except OSError as exc:
+                logger.warning(
+                    "codex_new_session_file_delete_failed",
+                    extra={
+                        "event": "codex_new_session_file_delete_failed",
+                        "data": {"agent": agent, "error": str(exc)},
+                    },
+                )
+        _reset_context_usage(agent)
 
     def _ensure_agent_context(self, agent: str) -> bool:
         """Ensure the per-agent context file exists, generating it if needed.
@@ -1226,6 +1266,44 @@ def _agent_ping_cmd(
         cmd += ["--format", "json", prompt]
         return cmd
 
+    if runner_type == "codex":
+        # Codex: headless exec with JSONL output, thread-based sessions
+        cli = rc.get("cli", "codex")
+        cmd = [cli, "exec"]
+
+        # Resume via positional subcommand: codex exec resume <thread_id>
+        if session_id:
+            cmd += ["resume", session_id]
+        cmd += ["--json", "--skip-git-repo-check"]
+
+        # Context file injection via -c model_instructions_file=<path>
+        # Use absolute path because Codex runs from a neutral cwd to avoid
+        # auto-discovering .agentweave/ and entering bootstrap mode.
+        context_file = AGENT_CONTEXT_DIR.resolve() / f"{agent}.md"
+        if context_file.exists():
+            cmd += ["-c", f"model_instructions_file={context_file}"]
+
+        # Model flag if configured
+        session = Session.load()
+        if session:
+            model = session.get_runner_config(agent).get("model")
+            if model:
+                cmd += ["--model", model]
+
+            # Runner options: memory disabled
+            runner_options = session.get_runner_options(agent)
+            if runner_options.get("memory") is False:
+                cmd += ["-c", "memory_mode=disabled"]
+
+            # yolo mode: bypass approval prompts so MCP tools and commands
+            # execute without user interaction (required for headless watchdog)
+            agent_cfg = session.agents.get(agent, {})
+            if agent_cfg.get("yolo"):
+                cmd += ["--dangerously-bypass-approvals-and-sandbox"]
+
+        cmd += [prompt]
+        return cmd
+
     # claude, claude_proxy, native — all use stream-json JSONL output
     cli = rc.get("cli") or agent  # native: use agent name as CLI
     model = None
@@ -1305,6 +1383,67 @@ def _write_context_usage(
             "context_usage_write_failed",
             extra={
                 "event": "context_usage_write_failed",
+                "data": {"agent": agent, "error": str(exc)},
+            },
+        )
+        return None
+
+
+def _write_codex_context_usage(
+    agent: str,
+    usage_data: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Write context usage data from Codex turn.completed event.
+
+    Computes percent based on CODEX_MODEL_CONTEXT_LIMITS, with warning at 70%
+    and critical at 90%. Returns the usage_data dict on success, None on error.
+    """
+    from .constants import CODEX_MODEL_CONTEXT_LIMITS
+
+    input_tokens = usage_data.get("input_tokens", 0) or 0
+    output_tokens = usage_data.get("output_tokens", 0) or 0
+    total_tokens = input_tokens + output_tokens
+
+    # Get model from session config
+    model = None
+    from .session import Session
+
+    _sess = Session.load()
+    if _sess:
+        runner_config = _sess.get_runner_config(agent)
+        model = runner_config.get("model")
+
+    context_limit = CODEX_MODEL_CONTEXT_LIMITS.get(model, 128000) if model else 128000
+    percent = min(100, int((total_tokens / context_limit) * 100)) if context_limit > 0 else 0
+    warning = percent >= 70
+    critical = percent >= 90
+
+    result: Dict[str, Any] = {
+        "agent": agent,
+        "percent": percent,
+        "model": model or "unknown",
+        "tokens_used": total_tokens,
+        "tokens_limit": context_limit,
+        "input_tokens": input_tokens,
+        "cached_input_tokens": usage_data.get("cached_input_tokens", 0),
+        "output_tokens": output_tokens,
+        "warning": warning,
+        "critical": critical,
+        "threshold_warning": 70,
+        "threshold_critical": 90,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
+        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
+        usage_file.write_text(json.dumps(result, indent=2))
+        return result
+    except OSError as exc:
+        logger.warning(
+            "codex_context_usage_write_failed",
+            extra={
+                "event": "codex_context_usage_write_failed",
                 "data": {"agent": agent, "error": str(exc)},
             },
         )
@@ -1514,6 +1653,116 @@ def _save_triggered_id(msg_id: str) -> None:
         )
 
 
+def _extract_jsonl_session_id(line: str, runner_type: str) -> Optional[str]:
+    """Parse a JSONL line and extract session ID using runner config fields.
+
+    Uses session_event_type and session_id_field from RUNNER_CONFIGS so the
+    parser stays data-driven and works for any JSONL-output runner.
+    """
+    rc = RUNNER_CONFIGS.get(runner_type, {})
+    if rc.get("session_source") != "jsonl":
+        return None
+    session_event_type = rc.get("session_event_type")
+    session_id_field = rc.get("session_id_field", "session_id")
+    try:
+        data = json.loads(line)
+        if session_event_type and data.get("type") != session_event_type:
+            return None
+        return data.get(session_id_field) or None
+    except Exception:
+        return None
+
+
+def _parse_codex_stream_line(line: str) -> tuple:
+    """Parse one JSONL line from `codex exec --json`.
+
+    Returns a tuple of (display_strings, usage_data) where:
+    - display_strings: list of human-readable strings to post as agent output
+    - usage_data: dict with usage info if this is a turn.completed message, else None
+
+    Codex emits `item.started` / `item.completed` events (not `assistant`).
+    Each item has a type like `agent_message`, `mcp_tool_call`, `command_execution`.
+    """
+    try:
+        data = json.loads(line)
+    except Exception:
+        stripped = line.strip()
+        return ([stripped] if stripped else [], None)
+
+    msg_type = data.get("type", "")
+
+    # --- item.started: show what Codex is about to do ---
+    if msg_type == "item.started":
+        item = data.get("item", {})
+        item_type = item.get("type", "")
+        if item_type == "mcp_tool_call":
+            server = item.get("server", "?")
+            tool = item.get("tool", "?")
+            args = item.get("arguments", {})
+            try:
+                args_str = json.dumps(args, ensure_ascii=False)
+                if len(args_str) > 200:
+                    args_str = args_str[:200] + "…"
+            except Exception:
+                args_str = str(args)
+            return ([f"🔧 MCP tool: {server}.{tool}({args_str})"], None)
+        if item_type == "command_execution":
+            command = item.get("command", "")
+            if command:
+                return ([f"⚙️  $ {command}"], None)
+        return ([], None)
+
+    # --- item.completed: show results and agent messages ---
+    if msg_type == "item.completed":
+        item = data.get("item", {})
+        item_type = item.get("type", "")
+
+        if item_type == "agent_message":
+            text = item.get("text", "").strip()
+            return ([text] if text else [], None)
+
+        if item_type == "mcp_tool_call":
+            tool = item.get("tool", "?")
+            error = item.get("error")
+            if error:
+                err_msg = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                return ([f"❌ {tool}: {err_msg}"], None)
+            return ([], None)
+
+        if item_type == "command_execution":
+            command = item.get("command", "")
+            exit_code = item.get("exit_code")
+            output = item.get("aggregated_output", "").strip()
+            lines = []
+            if command:
+                status = "✅" if exit_code == 0 else "❌"
+                lines.append(f"{status} $ {command}")
+            if output:
+                out_lines = output.splitlines()
+                for ol in out_lines[:20]:  # cap at 20 lines
+                    lines.append(f"   {ol}")
+                if len(out_lines) > 20:
+                    lines.append(f"   … ({len(out_lines) - 20} more lines)")
+            return (lines, None)
+
+        return ([], None)
+
+    # --- turn.completed: extract usage for context monitoring ---
+    if msg_type == "turn.completed":
+        usage = data.get("usage", {})
+        usage_data = None
+        if usage:
+            usage_data = {
+                "input_tokens": usage.get("input_tokens"),
+                "cached_input_tokens": usage.get("cached_input_tokens"),
+                "output_tokens": usage.get("output_tokens"),
+            }
+        return ([], usage_data)
+
+    # Ignore thread.started, turn.started, and other internal events
+    return ([], None)
+
+
 def _extract_claude_session_id(line: str) -> Optional[str]:
     """Parse a JSONL line from claude --output-format stream-json, return session_id if present."""
     try:
@@ -1675,6 +1924,7 @@ def _do_run_agent_subprocess(
     runner_type = _get_runner_type(agent)
     is_kimi = runner_type == "kimi"
     is_opencode = runner_type == "opencode"
+    is_codex = runner_type == "codex"
     # Detect wire mode: --wire flag in cmd indicates JSON-RPC bidirectional mode
     is_wire_mode = is_kimi and "--wire" in cmd
 
@@ -1716,6 +1966,10 @@ def _do_run_agent_subprocess(
                 err_line = raw.rstrip("\n")
                 if not err_line.strip():
                     continue
+                # Suppress known Codex stderr noise
+                if is_codex and "failed to record rollout items" in err_line:
+                    continue
+
                 # For Kimi: capture session ID from stderr resume line in real-time
                 if is_kimi and session_id_ref[0] is None:
                     m = _KIMI_RESUME_RE.search(err_line)
@@ -1778,6 +2032,17 @@ def _do_run_agent_subprocess(
         # Wire mode requires bidirectional stdin/stdout communication
         stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
 
+        # Codex auto-detects .agentweave/ in cwd and enters bootstrap mode
+        # (executing commands, reading protocol.md, etc.). Run from a neutral
+        # subdirectory of the project root so Codex doesn't bootstrap, but the
+        # MCP server can still walk up and find .agentweave/transport.json.
+        cwd = None
+        if is_codex:
+            project_root = AGENT_CONTEXT_DIR.resolve().parent
+            codex_cwd = project_root / ".codex-run"
+            codex_cwd.mkdir(exist_ok=True)
+            cwd = str(codex_cwd)
+
         proc = subprocess.Popen(
             run_cmd,
             stdout=subprocess.PIPE,
@@ -1786,6 +2051,7 @@ def _do_run_agent_subprocess(
             text=True,
             bufsize=1,
             env=proc_env,
+            cwd=cwd,
         )
         stderr_thread = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
         stderr_thread.start()
@@ -1866,13 +2132,16 @@ def _do_run_agent_subprocess(
                 # Do not parse or post stdout lines to avoid noise.
                 readable_lines = []
             else:
-                # Try to extract session_id from JSONL stream (Claude/claude_proxy)
+                # Try to extract session_id from JSONL stream (Claude/claude_proxy/codex)
                 if session_id is None:
-                    extracted = _extract_claude_session_id(line)
+                    extracted = _extract_jsonl_session_id(line, runner_type)
                     if extracted:
                         session_id = extracted
                         session_id_ref[0] = session_id
-                readable_lines, usage_data = _parse_claude_stream_line(line)
+                if is_codex:
+                    readable_lines, usage_data = _parse_codex_stream_line(line)
+                else:
+                    readable_lines, usage_data = _parse_claude_stream_line(line)
                 # Capture usage data from result messages for context monitoring
                 if usage_data:
                     usage_data_for_context = usage_data
@@ -1918,7 +2187,7 @@ def _do_run_agent_subprocess(
                 transport.post_agent_output(agent, summary, session_id=session_id_ref[0])
 
         # Write context usage if we captured usage data (Claude/claude_proxy or Kimi wire mode)
-        if not is_kimi and usage_data_for_context and proc.returncode == 0:
+        if not is_kimi and not is_codex and usage_data_for_context and proc.returncode == 0:
             input_tokens = usage_data_for_context.get("input_tokens")
             if input_tokens is not None:
                 # Get model from session config
@@ -1933,6 +2202,13 @@ def _do_run_agent_subprocess(
                 if is_http and ctx_data:
                     with contextlib.suppress(Exception):
                         transport.post_context_usage(agent, ctx_data)
+
+        # Write context usage for Codex (from turn.completed JSONL events)
+        if is_codex and usage_data_for_context and proc.returncode == 0:
+            ctx_data = _write_codex_context_usage(agent, usage_data_for_context)
+            if is_http and ctx_data:
+                with contextlib.suppress(Exception):
+                    transport.post_context_usage(agent, ctx_data)
 
         # Write context usage for Kimi wire mode (uses context_usage ratio instead of input_tokens)
         if is_wire_mode and usage_data_for_context and proc.returncode == 0:

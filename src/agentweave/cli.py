@@ -2565,6 +2565,7 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
             "pilot": agent.pilot,
             "env": agent.env,
             "base_url": agent.base_url,
+            "runner_options": agent.runner_options,
         }
         for name, agent in config.agents.items()
     }
@@ -2920,6 +2921,10 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
     model = args.model
 
     # Apply registry defaults for known claude_proxy providers when flags are omitted
+    if runner == "codex":
+        if not os.environ.get("CODEX_API_KEY"):
+            print_warning("CODEX_API_KEY not set — Codex will fail at runtime")
+
     if runner == "claude_proxy" and agent in CLAUDE_PROXY_PROVIDERS:
         defaults = CLAUDE_PROXY_PROVIDERS[agent]
         if not base_url:
@@ -3595,6 +3600,18 @@ def cmd_switch(args: argparse.Namespace) -> int:
         print(f"  opencode run{model_flag}{file_flag} --format json '<prompt>'")
         return 0
 
+    if runner == "codex":
+        print_info(f"{agent} is a Codex agent")
+        print()
+        print("Launch command:")
+        model = runner_config.get("model")
+        model_flag = f" --model {model}" if model else ""
+        context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
+        ctx_flag = f" -c model_instructions_file={context_file}" if context_file.exists() else ""
+        print(f'  codex exec --json{model_flag}{ctx_flag} "<prompt>"')
+        print()
+        return 0
+
     if runner != "claude_proxy":
         print_info(f"{agent} uses runner '{runner}' — " f"no env var switch needed")
         return 0
@@ -3642,6 +3659,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     if runner == "manual":
         print_warning(f"{agent} is configured as a manual agent — use relay and copy-paste instead")
         print(f"  agentweave relay --agent {agent}")
+        return 0
+
+    if runner == "codex":
+        print_warning(f"{agent} uses the Codex CLI. Run it directly or use relay.")
+        print(f'  codex exec --json "<prompt>"')
         return 0
 
     if runner != "claude_proxy":

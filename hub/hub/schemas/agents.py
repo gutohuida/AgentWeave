@@ -29,6 +29,7 @@ class AgentSummary(BaseModel):
     registered_session_id: Optional[str] = None  # Registered --resume session ID for pilot agents
     self_registered: bool = False  # True if agent joined via self-registration
     liveness: Optional[str] = None  # "online" | "offline" for self-registered agents
+    runner_options: Optional[Dict[str, Any]] = None  # Runner-specific options (e.g., memory for Codex)
 
     model_config = {"from_attributes": True}
 

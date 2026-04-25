@@ -30,6 +30,14 @@ const RUNNER_CONFIG: Record<string, { bg: string; color: string }> = {
     bg: 'color-mix(in srgb, #06b6d4 15%, transparent)',
     color: '#06b6d4',
   },
+  opencode: {
+    bg: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
+    color: '#8b5cf6',
+  },
+  codex: {
+    bg: 'color-mix(in srgb, #10b981 15%, transparent)',
+    color: '#10b981',
+  },
   manual: {
     bg: 'color-mix(in srgb, #6b7280 15%, transparent)',
     color: '#6b7280',

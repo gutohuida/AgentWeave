@@ -296,6 +296,8 @@ async def list_agents(
             "claude_proxy": agent_meta.get("model", "Claude Proxy"),
             "kimi": "Kimi",
             "manual": "Manual",
+            "opencode": "OpenCode",
+            "codex": agent_meta.get("model", "Codex"),
         }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
         _pilot = agent_row.pilot if agent_row else False
@@ -336,6 +338,7 @@ async def list_agents(
                 registered_session_id=_registered_session_id,
                 self_registered=_self_registered,
                 liveness=_liveness,
+                runner_options=agent_meta.get("runner_options"),
             )
         )
 
@@ -802,6 +805,7 @@ async def post_new_session_request(
     await session.commit()
     payload = {"agent": name, "action": "new_session", "message_id": msg.id}
     await sse_manager.broadcast(project_id, "message_created", {"id": msg.id, "recipient": name})
+    await sse_manager.broadcast(project_id, "new_session_request", payload)
     await persist_event(session, project_id, "new_session_request", payload, agent=name)
     return {"status": "ok", "message_id": msg.id}
 

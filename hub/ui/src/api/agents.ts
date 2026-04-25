@@ -25,6 +25,7 @@ export interface AgentSummary {
   registered_session_id?: string | null  // Registered --resume session ID for pilot agents
   self_registered?: boolean  // True if agent joined via self-registration
   liveness?: 'online' | 'offline' | null  // Liveness for self-registered agents
+  runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
 }
 
 export interface ContextUsage {

@@ -95,6 +95,10 @@ class Session:
 
         return {"runner": runner, "env_vars": env_vars, "model": model}
 
+    def get_runner_options(self, agent: str) -> dict:
+        """Return runner-specific options for an agent, defaulting to {}."""
+        return self.agents.get(agent, {}).get("runner_options", {}) or {}
+
     def set_runner_config(
         self, agent: str, runner: str, env_vars: dict, model: Optional[str] = None
     ) -> None:
@@ -288,6 +292,11 @@ class Session:
             if "model" in config and config["model"] and agent_data.get("model") != config["model"]:
                 agent_data["model"] = config["model"]
                 was_updated = True
+            if "runner_options" in config and config["runner_options"]:
+                new_opts = dict(config["runner_options"])
+                if agent_data.get("runner_options") != new_opts:
+                    agent_data["runner_options"] = new_opts
+                    was_updated = True
             if "yolo" in config:
                 new_yolo = bool(config["yolo"])
                 if agent_data.get("yolo") != new_yolo:

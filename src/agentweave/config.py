@@ -72,6 +72,7 @@ class AgentConfig:
     pilot: bool = False
     principal: bool = False
     base_url: Optional[str] = None
+    runner_options: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -90,6 +91,8 @@ class AgentConfig:
             result["principal"] = True
         if self.base_url:
             result["base_url"] = self.base_url
+        if self.runner_options is not None:
+            result["runner_options"] = self.runner_options
         return result
 
 
@@ -251,6 +254,7 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
         pilot=data.get("pilot", False),
         principal=bool(data.get("principal", False)),
         base_url=base_url,
+        runner_options=data.get("runner_options"),
     )
 
 
@@ -504,6 +508,15 @@ def generate_agentweave_yml(
 
 """
 
+    runner_options_comment = """# runner_options example (per-agent, optional):
+# agents:
+#   codex:
+#     runner: codex
+#     runner_options:
+#       memory: true   # false disables Codex cross-session memory
+
+"""
+
     quality_comment = """# quality:
 #   # Enable a human or agent review gate before tasks are marked done.
 #   review_required: false
@@ -533,7 +546,7 @@ def generate_agentweave_yml(
         allow_unicode=True,
     )
 
-    target_path.write_text(header + yaml_content + quality_comment, encoding="utf-8")
+    target_path.write_text(header + yaml_content + runner_options_comment + quality_comment, encoding="utf-8")
     return target_path
 
 

@@ -27,9 +27,17 @@
 
 ### When implementing
 - Implement one endpoint or module at a time; mark each `in_progress` in AgentWeave
-- Write tests alongside implementation, not after
+- **Write tests before implementation (TDD)** — tests are a spec, not an afterthought
 - Validate all input at the API boundary — never trust client data
 - Use parameterized queries — no string interpolation in SQL
+
+### Quality governance (when `quality:` is configured in agentweave.yml)
+- Check `docs_threshold` setting. If `all` or `non_trivial` (and this task qualifies), produce a decision doc **before** marking the task `completed`:
+  - Path: `<docs_path>/<task-id>.md` (or `.agentweave/code-docs/<task-id>.md` if `docs_path` is unset)
+  - Use the `code_decision.md` template
+  - Fill in `requirement` from the task description / prompt you were given
+  - List all files modified in `files_modified`; list fully AI-generated files in `ai_generated` (attribution)
+- Do NOT mark a task `completed` if `docs_threshold` applies and the doc does not exist
 
 ### When your work depends on frontend or another agent
 - Agree on the API contract first; implement with that contract locked

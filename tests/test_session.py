@@ -88,3 +88,60 @@ def test_session_set_agent_pilot_invalid_agent(tmp_path, monkeypatch):
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "unknown_agent" in str(e)
+
+
+def test_session_get_runner_options_present():
+    """get_runner_options returns the dict when set."""
+    sess = Session({
+        "agents": {
+            "codex": {"runner_options": {"memory": False}},
+        }
+    })
+    assert sess.get_runner_options("codex") == {"memory": False}
+
+
+def test_session_get_runner_options_absent():
+    """get_runner_options returns {} when not set."""
+    sess = Session({
+        "agents": {
+            "claude": {},
+        }
+    })
+    assert sess.get_runner_options("claude") == {}
+
+
+def test_session_get_runner_options_agent_missing():
+    """get_runner_options returns {} for unknown agents."""
+    sess = Session({"agents": {}})
+    assert sess.get_runner_options("unknown") == {}
+
+
+def test_session_sync_agents_preserves_runner_options(tmp_path, monkeypatch):
+    """sync_agents persists runner_options from declared config."""
+    monkeypatch.chdir(tmp_path)
+    sess = Session.create(name="Test", agents=["codex"])
+    declared = {
+        "codex": {
+            "runner": "codex",
+            "runner_options": {"memory": False},
+        }
+    }
+    added, updated, orphaned = sess.sync_agents(declared)
+    assert "runner_options" in sess.agents["codex"]
+    assert sess.agents["codex"]["runner_options"] == {"memory": False}
+
+
+def test_session_sync_agents_updates_runner_options(tmp_path, monkeypatch):
+    """sync_agents updates runner_options when changed."""
+    monkeypatch.chdir(tmp_path)
+    sess = Session.create(name="Test", agents=["codex"])
+    # First sync with memory false
+    sess.sync_agents({
+        "codex": {"runner": "codex", "runner_options": {"memory": False}}
+    })
+    # Second sync with memory true
+    added, updated, orphaned = sess.sync_agents({
+        "codex": {"runner": "codex", "runner_options": {"memory": True}}
+    })
+    assert "codex" in updated
+    assert sess.agents["codex"]["runner_options"] == {"memory": True}

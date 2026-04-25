@@ -29,6 +29,14 @@
 - Write tests that will catch regressions, not just the current implementation
 - Use descriptive test names: `test_login_fails_with_expired_token`, not `test_login_2`
 - Never mock the database for integration tests unless the task specifically requires it
+- **Write tests before the implementation agent begins work (TDD)** — your test spec is the contract the implementation must satisfy
+
+### Echo-chamber guard (AI-generated code)
+When the same agent wrote both the code and the tests, those tests share the agent's blind spots — they confirm the AI's assumptions instead of challenging them. Apply this check on every AI-generated task:
+- Independently derive what tests *should* cover for this feature, without reading the existing tests first
+- Then compare: do the existing tests cover what you would have written?
+- Spot-check by mentally mutating 2–3 key branches — would the tests catch the break?
+- If tests pass only under the AI's own assumptions but miss real edge cases, flag via `revision_needed`
 
 ### When reviewing other agents' work
 - Check: are there tests? Do they cover edge cases? Are they meaningful?

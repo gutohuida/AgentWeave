@@ -83,7 +83,7 @@ DEFAULT_AGENTS = ["claude", "kimi"]
 VALID_AGENTS = KNOWN_AGENTS
 
 # Valid agent configuration keys
-VALID_AGENT_CONFIG_KEYS = ["role", "since", "runner", "env_vars", "model", "yolo", "pilot"]
+VALID_AGENT_CONFIG_KEYS = ["role", "since", "runner", "env_vars", "model", "yolo", "pilot", "runner_options"]
 
 # Runtime roles directory and config file paths
 ROLES_DIR = AGENTWEAVE_DIR / "roles"
@@ -101,7 +101,7 @@ AGENT_CONTEXT_FILES: dict = {
 AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
 
 # Agent runner types — how the agent CLI is invoked
-RUNNER_TYPES = ["claude", "native", "claude_proxy", "kimi", "manual", "opencode"]
+RUNNER_TYPES = ["claude", "native", "claude_proxy", "kimi", "manual", "opencode", "codex"]
 
 # Runner configuration — CLI properties per runner type.
 # Used by watchdog and CLI to dispatch commands without hardcoding agent names.
@@ -157,6 +157,18 @@ RUNNER_CONFIGS: dict = {
         "model_flag": "--model",
         "mcp_add_cmd": None,  # File-based registration via opencode.json
     },
+    "codex": {
+        "cli": "codex",
+        "subcommand": "exec",
+        "session_flag": "resume",
+        "output_format": "json",
+        "session_source": "jsonl",
+        "session_id_field": "thread_id",
+        "session_event_type": "thread.started",
+        "model_flag": "--model",
+        "context_flag": ["-c", "model_instructions_file={path}"],
+        "mcp_add_cmd": ["codex", "mcp", "add", "{name}", "--", "{server_cmd}"],
+    },
     "manual": {
         "cli": None,
         "session_source": "none",
@@ -187,6 +199,7 @@ AGENT_RUNNER_DEFAULTS: dict = {
     "windsurf": "manual",
     "copilot": "manual",
     "opencode": "opencode",
+    "codex": "codex",
 }
 
 # Valid session roles
@@ -252,6 +265,12 @@ CLAUDE_CONTEXT_LIMITS: dict = {
 # Kimi wire mode: now always enabled by default for context tracking.
 # This constant is kept for backward compatibility but wire mode is always on.
 KIMI_WIRE_MODE = True
+
+# Codex model context window limits by model name
+CODEX_MODEL_CONTEXT_LIMITS: dict = {
+    "gpt-5.5": 272000,
+    "gpt-4o": 128000,
+}
 
 
 def _get_context_limit(model: str) -> int:

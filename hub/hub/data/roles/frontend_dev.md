@@ -29,7 +29,15 @@
 - Never hardcode API base URLs — use environment variables or config constants
 - Match the design system and existing patterns in the codebase
 - Keep component logic thin: data fetching and transformation belong in hooks or services
-- Write at least smoke tests for every new component
+- **Write tests before implementation (TDD)** — at least smoke tests for every new component
+
+### Quality governance (when `quality:` is configured in agentweave.yml)
+- Check `docs_threshold` setting. If `all` or `non_trivial` (and this task qualifies), produce a decision doc **before** marking the task `completed`:
+  - Path: `<docs_path>/<task-id>.md` (or `.agentweave/code-docs/<task-id>.md` if `docs_path` is unset)
+  - Use the `code_decision.md` template
+  - Fill in `requirement` from the task description / prompt you were given
+  - List all files modified in `files_modified`; list fully AI-generated files in `ai_generated` (attribution)
+- Do NOT mark a task `completed` if `docs_threshold` applies and the doc does not exist
 
 ### When the API contract changes mid-implementation
 - Stop and re-align with Backend Dev before continuing

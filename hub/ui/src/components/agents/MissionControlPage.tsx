@@ -257,20 +257,35 @@ function MissionCard({ agent }: MissionCardProps) {
 
       {/* Action buttons */}
       <div className="mt-2 flex gap-2">
-        <button
-          onClick={handleCompact}
-          disabled={compacting}
-          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg m3-label-medium transition-colors disabled:opacity-50"
-          style={{
-            background: 'color-mix(in srgb, var(--primary) 12%, transparent)',
-            color: 'var(--primary)',
-            border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)',
-          }}
-          title="Send compact request to agent"
-        >
-          <Icon name="compress" size={14} />
-          <span>Compact</span>
-        </button>
+        {agent.runner === 'codex' ? (
+          <div
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg m3-label-medium"
+            style={{
+              background: 'color-mix(in srgb, #10b981 12%, transparent)',
+              color: '#10b981',
+              border: '1px solid color-mix(in srgb, #10b981 25%, transparent)',
+            }}
+            title="Codex handles compaction automatically via OpenAI's servers."
+          >
+            <Icon name="auto_awesome" size={14} />
+            <span>Auto-managed</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleCompact}
+            disabled={compacting}
+            className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg m3-label-medium transition-colors disabled:opacity-50"
+            style={{
+              background: 'color-mix(in srgb, var(--primary) 12%, transparent)',
+              color: 'var(--primary)',
+              border: '1px solid color-mix(in srgb, var(--primary) 25%, transparent)',
+            }}
+            title="Send compact request to agent"
+          >
+            <Icon name="compress" size={14} />
+            <span>Compact</span>
+          </button>
+        )}
         {confirmReset ? (
           <div className="flex-1 flex gap-1">
             <button
