@@ -60,7 +60,7 @@ It provides:
 
 Open **http://localhost:8000** to see:
 
-- **Mission Control** — centralized overview of session status and activity
+- **Overview** — centralized landing page with agent health, task summary, and activity ticker
 - **Tasks board** — all tasks with status, priority, assignee, and deliverables
 - **Messages feed** — inter-agent messages with inline task linking
 - **Human questions** — answer agent questions directly in the UI

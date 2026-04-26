@@ -145,7 +145,7 @@ agentweave agent set-model minimax MiniMax-Text-01
 When using the Hub with HTTP transport:
 
 1. Open the dashboard at `http://localhost:8000`
-2. Navigate to **Mission Control**
+2. Navigate to **Agents** or **Overview**
 3. Pilot agents show:
    - **Pilot badge** - Indicates pilot mode is active
    - **Registered session ID** - The current session

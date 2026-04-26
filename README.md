@@ -71,7 +71,7 @@ agentweave stop            # Stop the watchdog
 
 Open **http://localhost:8000** to see:
 
-- **Mission Control** — centralized overview of session status, agent states, and recent activity
+- **Overview** — centralized landing page with agent health grid, task summary, and activity ticker
 - **Tasks board** — all tasks with status, priority, assignee, requirements, acceptance criteria, and deliverables (click any card to expand)
 - **Messages feed** — inter-agent messages with expand-to-read for long content; message type and linked task shown inline
 - **Human questions** — questions agents have asked you; answer directly in the dashboard
@@ -369,8 +369,8 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.31.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.25.0
+├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.32.0
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.26.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)
 │   └── Dockerfile      Multi-stage build: Node UI → Python server

@@ -4,21 +4,23 @@ The AgentWeave Hub includes a web dashboard at **http://localhost:8000** that gi
 
 ## Dashboard Sections
 
-### Mission Control
+### Overview
 
-The main overview page showing:
+The main landing page showing:
 
-- Session status and connected agents
-- Recent activity summary
-- Quick access to active tasks and unread messages
-- Health indicators for all components
+- Agent health grid with status and context usage
+- Task summary with status counts
+- Recent activity ticker
+- Unanswered questions interrupt card
+- Quick navigation to any section
 
 ### Tasks Board
 
 All tasks with status, priority, assignee, requirements, acceptance criteria, and deliverables. Click any card to expand and see full details.
 
 Tasks are organized in a Kanban-style board by status:
-- **Pending** → **Assigned** → **In Progress** → **Completed** → **Under Review** → **Approved**
+- **Pending** → **Assigned** → **In Progress** → **Under Review** → **Completed** → **Approved** → **Revision Needed**
+- Rejected tasks are shown in a collapsible section
 
 ### Messages Feed
 

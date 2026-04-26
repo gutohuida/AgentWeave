@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.32.0] - 2026-04-26
+
+### Added (CLI)
+- **Codex skills generation on init** — `agentweave init` now auto-generates Codex-specific skills in `.agents/skills/` for seamless Codex CLI integration
+
+### Added (Hub v0.26.0)
+- **Complete UI redesign** — Replaced Material Design 3 with Linear/shadcn-style design system
+  - New dark/light token system (`--bg`, `--surface`, `--surface-2`, `--border`, `--text`, etc.)
+  - Inter + JetBrains Mono fonts via Google Fonts CDN
+  - New 220px labeled sidebar with grouped sections (WORK, COMMUNICATION, OBSERVE)
+  - **Overview page** — New default landing page with agent health grid, task summary chips, and activity ticker
+  - **Agents page** — Two-panel layout replacing Agents + MissionControl with AgentDetailPanel (Output/Tasks/Messages/Info tabs)
+  - **QuestionInterruptCard** — Persistent amber interrupt card for unanswered questions
+  - **7-column kanban board** — Added `revision_needed` column; collapsible rejected section; agent filter chips
+  - **TaskCard expand/collapse** — Click to reveal full task details (description, requirements, acceptance criteria)
+  - Semantic badge color system with rgba tints
+  - Agent cards with status pulse dots and context usage bars
+  - Grid view toggle for agent cards
+  - Compact/Reset session buttons in agent detail header
+
+### Removed
+- **MissionControlPage** — Replaced by OverviewPage + unified AgentsPage
+
+---
 ## [0.31.0] - 2026-04-25
 
 ### Added (CLI)
