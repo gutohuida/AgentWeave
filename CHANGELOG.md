@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.33.0] - 2026-04-26
+
+### Added (CLI)
+- **Project-wide instructions** — `agentweave init` creates `.agentweave/project_instructions.md` placeholder for local transport
+- `_build_agent_context` now embeds project instructions (from Hub DB or local file) into per-agent context files `.agentweave/context/<agent>.md`
+- Updated `claude_context.md`, `kimi_context.md`, and `aw-collab-start` skill templates to guide agents toward `get_context` MCP tool on HTTP transport
+
+### Added (Hub v0.27.0)
+- **Project Instructions page** — New Hub UI screen with markdown textarea for editing per-project rules
+  - `GET /api/v1/project/instructions` — returns instructions content (empty string if none set)
+  - `PUT /api/v1/project/instructions` — upserts instructions in DB
+  - `_load_role_content` prepends Hub instructions before role guides with `---` separator
+- Instructions content auto-injected into per-agent context files at launch time
+
+### Fixed
+- Agents now reliably receive project-wide instructions regardless of transport mode
+
+---
 ## [0.32.0] - 2026-04-26
 
 ### Added (CLI)
