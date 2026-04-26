@@ -42,28 +42,41 @@ export function JobsPage() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="flex items-center gap-3">
-          <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--on-sv)' }} />
-          <span className="m3-body-large" style={{ color: 'var(--on-sv)' }}>Loading jobs…</span>
+          <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
+          <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading jobs…</span>
         </div>
       </div>
     )
   }
 
+  const btnBase = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    height: 40,
+    borderRadius: 'var(--radius)',
+    padding: '0 16px',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    border: 'none',
+  } as React.CSSProperties
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--outline-variant)' }}>
+      <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--border)' }}>
         <div>
-          <h1 className="m3-headline-small" style={{ color: 'var(--foreground)' }}>
+          <h1 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
             Scheduled Jobs
           </h1>
-          <p className="m3-body-small mt-0.5" style={{ color: 'var(--on-sv)' }}>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
             Recurring tasks that trigger agents automatically
           </p>
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="m3-btn m3-btn-primary flex items-center gap-2"
+          style={{ ...btnBase, background: 'var(--blue)', color: '#fff' }}
         >
           <Icon name="add" size={18} />
           New Job
@@ -71,15 +84,15 @@ export function JobsPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex items-center gap-1 px-4 py-2" style={{ borderBottom: '1px solid var(--outline-variant)' }}>
+      <div className="flex items-center gap-1 px-4 py-2" style={{ borderBottom: '1px solid var(--border)' }}>
         {(['all', 'active', 'paused'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className="px-3 py-1.5 rounded-full m3-label-small capitalize transition-colors"
+            className="px-3 py-1.5 rounded-full text-[11px] font-medium capitalize transition-colors"
             style={{
-              background: filter === f ? 'var(--p-cont)' : 'transparent',
-              color: filter === f ? 'var(--on-p-cont)' : 'var(--on-sv)',
+              background: filter === f ? 'var(--surface-3)' : 'transparent',
+              color: filter === f ? 'var(--text)' : 'var(--text-3)',
             }}
           >
             {f}
@@ -103,7 +116,7 @@ export function JobsPage() {
             />
             <button
               onClick={() => setShowForm(true)}
-              className="m3-btn m3-btn-primary flex items-center gap-2 mt-4"
+              style={{ ...btnBase, background: 'var(--blue)', color: '#fff', marginTop: 16 }}
             >
               <Icon name="add" size={18} />
               Create First Job
@@ -135,13 +148,13 @@ export function JobsPage() {
       {/* Stats footer */}
       {jobs && jobs.length > 0 && (
         <div
-          className="flex items-center justify-between px-4 py-2 m3-body-small"
-          style={{ color: 'var(--on-sv)', borderTop: '1px solid var(--outline-variant)' }}
+          className="flex items-center justify-between px-4 py-2 text-xs"
+          style={{ color: 'var(--text-3)', borderTop: '1px solid var(--border)' }}
         >
           <div className="flex items-center gap-4">
             <span>Total: {jobs.length}</span>
-            <span style={{ color: 'var(--success)' }}>Active: {jobs.filter(j => j.enabled).length}</span>
-            <span style={{ color: 'var(--on-sv)', opacity: 0.6 }}>Paused: {jobs.filter(j => !j.enabled).length}</span>
+            <span style={{ color: 'var(--green)' }}>Active: {jobs.filter(j => j.enabled).length}</span>
+            <span style={{ opacity: 0.6 }}>Paused: {jobs.filter(j => !j.enabled).length}</span>
           </div>
           <div className="flex items-center gap-1">
             <Icon name="info" size={14} />

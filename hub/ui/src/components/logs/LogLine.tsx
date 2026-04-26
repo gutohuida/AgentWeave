@@ -2,37 +2,43 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
-import { EventLogEntry } from '@/api/logs'
 import { summaryForEvent } from '@/lib/eventSummary'
 
 interface LogLineProps {
-  entry: EventLogEntry
+  entry: {
+    id: string
+    event_type: string
+    severity?: string
+    timestamp: string
+    agent?: string
+    data?: Record<string, unknown>
+  }
 }
 
 const SEVERITY_CHIP: Record<string, { bg: string; color: string }> = {
-  error: { bg: 'var(--error-cont)',      color: 'var(--on-error-cont)' },
-  warn:  { bg: 'var(--t-cont)',          color: 'var(--on-t-cont)' },
-  info:  { bg: 'var(--p-cont)',          color: 'var(--on-p-cont)' },
-  debug: { bg: 'var(--surface-highest)', color: 'var(--on-sv)' },
+  error: { bg: 'rgba(239,68,68,0.1)', color: 'var(--red)' },
+  warn:  { bg: 'rgba(245,158,11,0.1)', color: 'var(--amber)' },
+  info:  { bg: 'var(--surface-3)', color: 'var(--text-2)' },
+  debug: { bg: 'var(--surface-3)', color: 'var(--text-3)' },
 }
 
 const SEVERITY_BORDER_COLOR: Record<string, string> = {
-  error: 'var(--destructive)',
-  warn:  'var(--t-cont)',
+  error: 'var(--red)',
+  warn:  'var(--amber)',
 }
 
 const EVENT_TYPE_COLOR: Record<string, string> = {
-  message_created:       'var(--primary)',
-  message_read:          'var(--primary)',
-  task_created:          'var(--s-cont)',
-  task_updated:          'var(--s-cont)',
-  task_status:           'var(--s-cont)',
-  question_asked:        'var(--t-cont)',
-  question_answered:     'var(--t-cont)',
-  agent_heartbeat:       'var(--on-sv)',
-  transport_error:       'var(--destructive)',
-  watchdog_spawn_failed: 'var(--destructive)',
-  watchdog_agent_exit:   'var(--on-t-cont)',
+  message_created:       'var(--blue)',
+  message_read:          'var(--blue)',
+  task_created:          'var(--purple)',
+  task_updated:          'var(--purple)',
+  task_status:           'var(--purple)',
+  question_asked:        'var(--amber)',
+  question_answered:     'var(--amber)',
+  agent_heartbeat:       'var(--text-3)',
+  transport_error:       'var(--red)',
+  watchdog_spawn_failed: 'var(--red)',
+  watchdog_agent_exit:   'var(--amber)',
 }
 
 export function LogLine({ entry }: LogLineProps) {
@@ -55,49 +61,55 @@ export function LogLine({ entry }: LogLineProps) {
   return (
     <div
       className="group font-mono text-xs"
-      style={{ borderLeft: borderClr ? `2px solid ${borderClr}` : '2px solid transparent' }}
+      style={{
+        borderLeft: borderClr ? `2px solid ${borderClr}` : '2px solid transparent',
+        fontFamily: "'JetBrains Mono', monospace",
+      }}
     >
       <div
-        className="flex items-center gap-2 px-2 py-[3px] row-hover select-none transition-colors"
+        className="flex items-center gap-2 px-2 py-[3px] select-none transition-colors cursor-pointer"
+        style={{ color: 'var(--text)' }}
         onClick={() => hasData && setExpanded(!expanded)}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <span className="w-3 shrink-0" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+        <span className="w-3 shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           {hasData && (
             <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={12} />
           )}
         </span>
-        <span className="shrink-0 w-[156px]" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>{ts}</span>
+        <span className="shrink-0 w-[156px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>{ts}</span>
         <span
-          className="shrink-0 w-12 text-center rounded px-1 m3-label-small uppercase"
+          className="shrink-0 w-12 text-center rounded px-1 text-[10px] uppercase"
           style={{ background: chip.bg, color: chip.color }}
         >
           {severity}
         </span>
-        <span className="shrink-0 w-44 truncate" style={{ color: typeColor ?? 'var(--foreground)' }}>
+        <span className="shrink-0 w-44 truncate" style={{ color: typeColor ?? 'var(--text)' }}>
           {entry.event_type}
         </span>
-        <span className="shrink-0 w-20 truncate" style={{ color: 'var(--on-sv)' }}>
+        <span className="shrink-0 w-20 truncate" style={{ color: 'var(--text-3)' }}>
           {entry.agent ?? ''}
         </span>
-        <span className="flex-1 truncate" style={{ color: 'var(--foreground)' }}>
+        <span className="flex-1 truncate" style={{ color: 'var(--text)' }}>
           {summary}
         </span>
         <button
           onClick={handleCopy}
           className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-          style={{ color: 'var(--on-sv)' }}
+          style={{ color: 'var(--text-3)' }}
           title="Copy entry"
         >
-          <Icon name={copied ? 'check' : 'content_copy'} size={12} style={{ color: copied ? 'var(--primary)' : undefined }} />
+          <Icon name={copied ? 'check' : 'content_copy'} size={12} style={{ color: copied ? 'var(--blue)' : undefined }} />
         </button>
       </div>
 
       {expanded && hasData && (
         <div
-          className="ml-7 mr-2 mb-1 rounded-xl overflow-x-auto"
-          style={{ background: 'var(--surface-highest)', border: '1px solid var(--outline-variant)' }}
+          className="ml-7 mr-2 mb-1 rounded-lg overflow-x-auto"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
         >
-          <pre className="p-3 text-[11px] leading-relaxed whitespace-pre" style={{ color: 'var(--foreground)' }}>
+          <pre className="p-3 text-[11px] leading-relaxed whitespace-pre" style={{ color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace" }}>
             {JSON.stringify(entry.data, null, 2)}
           </pre>
         </div>

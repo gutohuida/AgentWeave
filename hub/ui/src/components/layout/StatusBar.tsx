@@ -27,47 +27,57 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
     document.documentElement.dataset.mode = next
   }
 
+  const chipBase = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    background: 'var(--surface-2)',
+    border: '1px solid var(--border)',
+    borderRadius: '4px',
+    fontSize: '12px',
+    padding: '3px 10px',
+    color: 'var(--text-2)',
+  } as React.CSSProperties
+
   return (
-    <div className="m3-top-bar flex items-center gap-3 px-4 shrink-0">
+    <div
+      className="flex items-center gap-3 px-4 shrink-0"
+      style={{ height: 44, background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}
+    >
       {/* Logo / title */}
       <button
         onClick={onOpenSetup}
-        className="m3-title-large shrink-0 transition-opacity hover:opacity-80"
-        style={{ color: 'var(--primary)' }}
+        className="shrink-0 transition-opacity hover:opacity-80"
+        style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}
       >
         AgentWeave
       </button>
 
-      <div className="h-5 w-px shrink-0" style={{ background: 'var(--outline-variant)' }} />
+      <div className="h-5 w-px shrink-0" style={{ background: 'var(--border)' }} />
 
       {/* Status chips */}
       <div className="flex items-center gap-2 flex-1 flex-wrap">
         {/* Messages */}
-        <div
-          className="m3-chip m3-label-medium flex items-center gap-1.5"
-          style={{ background: 'var(--surface-highest)', color: 'var(--on-sv)' }}
-        >
+        <div style={chipBase}>
           <Icon name="chat" size={14} />
-          <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{pendingMsgs}</span>
+          <span style={{ color: 'var(--text)', fontWeight: 500 }}>{pendingMsgs}</span>
           <span>msgs</span>
         </div>
 
         {/* Tasks */}
-        <div
-          className="m3-chip m3-label-medium flex items-center gap-1.5"
-          style={{ background: 'var(--surface-highest)', color: 'var(--on-sv)' }}
-        >
+        <div style={chipBase}>
           <Icon name="task_alt" size={14} />
-          <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{activeTasks}</span>
+          <span style={{ color: 'var(--text)', fontWeight: 500 }}>{activeTasks}</span>
           <span>tasks</span>
         </div>
 
         {/* Questions */}
         <div
-          className="m3-chip m3-label-medium flex items-center gap-1.5"
           style={{
-            background: unanswered > 0 ? 'var(--error-cont)' : 'var(--surface-highest)',
-            color:      unanswered > 0 ? 'var(--on-error-cont)' : 'var(--on-sv)',
+            ...chipBase,
+            background: unanswered > 0 ? 'rgba(245,158,11,0.06)' : 'var(--surface-2)',
+            borderColor: unanswered > 0 ? 'rgba(245,158,11,0.3)' : 'var(--border)',
+            color: unanswered > 0 ? 'var(--amber)' : 'var(--text-2)',
           }}
         >
           <Icon name="help" size={14} />
@@ -76,30 +86,31 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
         </div>
 
         {/* Agents */}
-        <div
-          className="m3-chip m3-label-medium flex items-center gap-1.5"
-          style={{ background: 'var(--surface-highest)', color: 'var(--on-sv)' }}
-        >
+        <div style={chipBase}>
           <Icon name="smart_toy" size={14} />
-          <span style={{ color: 'var(--foreground)', fontWeight: 500 }}>{agentCount}</span>
+          <span style={{ color: 'var(--text)', fontWeight: 500 }}>{agentCount}</span>
           <span>agent{agentCount !== 1 ? 's' : ''}</span>
         </div>
 
         {/* Context warning chip */}
         {contextWarningCount > 0 && (
           <div
-            className="m3-chip m3-label-medium flex items-center gap-1.5"
-            style={{ background: 'var(--error-cont)', color: 'var(--on-error-cont)' }}
+            style={{
+              ...chipBase,
+              background: 'rgba(239,68,68,0.08)',
+              borderColor: 'rgba(239,68,68,0.25)',
+              color: 'var(--red)',
+            }}
             title="One or more agents need context management"
           >
             <Icon name="memory" size={14} />
             <span style={{ fontWeight: 500 }}>{contextWarningCount}</span>
-            <span>ctx{contextWarningCount !== 1 ? '!' : '!'}</span>
+            <span>ctx!</span>
           </div>
         )}
 
         {data?.project_name && (
-          <span className="m3-label-medium" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
             {data.project_name}
           </span>
         )}
@@ -108,10 +119,11 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
       {/* Mode toggle icon button */}
       <button
         onClick={toggleMode}
-        className="m3-icon-btn"
+        className="shrink-0 flex items-center justify-center rounded transition-colors hover:bg-white/5"
+        style={{ width: 32, height: 32, color: 'var(--text-2)' }}
         title={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
       >
-        <Icon name={mode === 'light' ? 'dark_mode' : 'light_mode'} size={20} />
+        <Icon name={mode === 'light' ? 'dark_mode' : 'light_mode'} size={18} />
       </button>
     </div>
   )

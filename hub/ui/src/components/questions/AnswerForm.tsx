@@ -23,14 +23,35 @@ export function AnswerForm({ questionId, onAnswered }: AnswerFormProps) {
         onChange={(e) => setAnswer(e.target.value)}
         placeholder="Type your answer…"
         rows={3}
-        className="m3-input w-full resize-none m3-body-medium"
+        className="w-full resize-none text-sm"
         disabled={isPending}
+        style={{
+          background: 'var(--surface-3)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          color: 'var(--text)',
+          padding: '8px 12px',
+        }}
       />
       <button
         type="submit"
         disabled={isPending || !answer.trim()}
-        className="m3-btn-tonal disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ height: 36, padding: '0 20px', fontSize: 13 }}
+        className="disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          height: 36,
+          borderRadius: 'var(--radius-sm)',
+          padding: '0 20px',
+          background: 'var(--surface-3)',
+          color: 'var(--text-2)',
+          border: '1px solid var(--border)',
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: 'pointer',
+        }}
       >
         {isPending ? 'Submitting…' : 'Submit Answer'}
       </button>

@@ -8,22 +8,22 @@ export function EmptyState({ icon, title, description }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div
-        className="mb-4 m3-icon-container"
-        style={{ width: 64, height: 64, background: 'var(--surface-highest)' }}
+        className="mb-4 flex items-center justify-center rounded-full"
+        style={{ width: 64, height: 64, background: 'var(--surface-3)' }}
       >
         <span
           className="material-symbols-rounded select-none"
           style={{
             fontSize: 32,
             fontVariationSettings: `'FILL' 0, 'wght' 400`,
-            color: 'var(--primary)',
+            color: 'var(--text-3)',
           }}
         >
           {icon}
         </span>
       </div>
-      <p className="m3-headline-small text-foreground">{title}</p>
-      {description && <p className="mt-2 m3-body-medium" style={{ color: 'var(--on-sv)' }}>{description}</p>}
+      <p className="text-lg font-normal" style={{ color: 'var(--text)' }}>{title}</p>
+      {description && <p className="mt-2 text-sm" style={{ color: 'var(--text-3)' }}>{description}</p>}
     </div>
   )
 }

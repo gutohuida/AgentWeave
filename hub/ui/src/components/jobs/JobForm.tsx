@@ -58,24 +58,40 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
     })
   }
 
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--surface-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text)',
+    padding: '8px 12px',
+    width: '100%',
+    fontSize: 13,
+    outline: 'none',
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0, 0, 0, 0.5)' }}
+      style={{ background: 'var(--scrim)' }}
       onClick={onCancel}
     >
       <div
-        className="m3-dialog w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+        style={{
+          background: 'var(--surface)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="m3-headline-small" style={{ color: 'var(--foreground)' }}>
+          <h2 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
             Create New Job
           </h2>
           <button
             onClick={onCancel}
-            className="p-1 rounded-full transition-colors hover:bg-black/5"
-            style={{ color: 'var(--on-sv)' }}
+            className="p-1 rounded-full transition-colors"
+            style={{ color: 'var(--text-3)' }}
           >
             <Icon name="close" size={24} />
           </button>
@@ -84,7 +100,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Name */}
           <div>
-            <label className="m3-label-small block mb-1.5" style={{ color: 'var(--on-sv)' }}>
+            <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
               Job Name
             </label>
             <input
@@ -92,20 +108,20 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Daily Standup Report"
-              className="m3-input w-full"
+              style={inputStyle}
               disabled={isPending}
             />
           </div>
 
           {/* Agent */}
           <div>
-            <label className="m3-label-small block mb-1.5" style={{ color: 'var(--on-sv)' }}>
+            <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
               Target Agent
             </label>
             <select
               value={agent}
               onChange={(e) => setAgent(e.target.value)}
-              className="m3-input w-full"
+              style={inputStyle}
               disabled={isPending}
             >
               <option value="">Select an agent…</option>
@@ -119,21 +135,23 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
 
           {/* Message */}
           <div>
-            <label className="m3-label-small block mb-1.5" style={{ color: 'var(--on-sv)' }}>
+            <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
               Message / Task
             </label>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="The message to send to the agent when this job runs…"
-              className="m3-input w-full h-24 resize-none"
+              rows={3}
+              className="h-24 resize-none"
+              style={inputStyle}
               disabled={isPending}
             />
           </div>
 
           {/* Cron */}
           <div>
-            <label className="m3-label-small block mb-1.5" style={{ color: 'var(--on-sv)' }}>
+            <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
               Schedule (Cron Expression)
             </label>
             <input
@@ -141,7 +159,8 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
               value={cron}
               onChange={(e) => setCron(e.target.value)}
               placeholder="0 9 * * *"
-              className="m3-input w-full font-mono"
+              className="font-mono"
+              style={{ ...inputStyle, fontFamily: "'JetBrains Mono', monospace" }}
               disabled={isPending}
             />
             <div className="flex flex-wrap gap-2 mt-2">
@@ -150,10 +169,17 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   key={example.value}
                   type="button"
                   onClick={() => setCron(example.value)}
-                  className="m3-chip"
                   style={{
-                    background: cron === example.value ? 'var(--p-cont)' : 'var(--surface-high)',
-                    color: cron === example.value ? 'var(--on-p-cont)' : 'var(--foreground)'
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '3px 10px',
+                    fontSize: 11,
+                    fontWeight: 500,
+                    background: cron === example.value ? 'var(--surface-3)' : 'var(--surface-2)',
+                    color: cron === example.value ? 'var(--text)' : 'var(--text-2)',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer',
                   }}
                 >
                   {example.label}
@@ -164,7 +190,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
 
           {/* Session Mode */}
           <div>
-            <label className="m3-label-small block mb-1.5" style={{ color: 'var(--on-sv)' }}>
+            <label className="block mb-1.5 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
               Session Mode
             </label>
             <div className="flex gap-3">
@@ -175,9 +201,9 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   value="new"
                   checked={sessionMode === 'new'}
                   onChange={() => setSessionMode('new')}
-                  className="m3-radio"
+                  disabled={isPending}
                 />
-                <span className="m3-body-small" style={{ color: 'var(--foreground)' }}>
+                <span className="text-xs" style={{ color: 'var(--text)' }}>
                   New session each run
                 </span>
               </label>
@@ -188,9 +214,9 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   value="resume"
                   checked={sessionMode === 'resume'}
                   onChange={() => setSessionMode('resume')}
-                  className="m3-radio"
+                  disabled={isPending}
                 />
-                <span className="m3-body-small" style={{ color: 'var(--foreground)' }}>
+                <span className="text-xs" style={{ color: 'var(--text)' }}>
                   Resume last session
                 </span>
               </label>
@@ -199,26 +225,42 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'var(--error-cont)' }}>
-              <Icon name="error" size={18} style={{ color: 'var(--destructive)' }} />
-              <span className="m3-body-small" style={{ color: 'var(--destructive)' }}>{error}</span>
+            <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)' }}>
+              <Icon name="error" size={18} style={{ color: 'var(--red)' }} />
+              <span className="text-xs" style={{ color: 'var(--red)' }}>{error}</span>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4" style={{ borderTop: '1px solid var(--outline-variant)' }}>
+          <div className="flex items-center justify-end gap-3 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
             <button
               type="button"
               onClick={onCancel}
               disabled={isPending}
-              className="m3-btn m3-btn-secondary"
+              style={{
+                ...inputStyle,
+                width: 'auto',
+                padding: '0 16px',
+                height: 36,
+                cursor: 'pointer',
+              }}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="m3-btn m3-btn-primary flex items-center gap-2"
+              className="flex items-center gap-2"
+              style={{
+                ...inputStyle,
+                width: 'auto',
+                padding: '0 16px',
+                height: 36,
+                background: 'var(--blue)',
+                color: '#fff',
+                borderColor: 'transparent',
+                cursor: 'pointer',
+              }}
             >
               {isPending ? (
                 <>

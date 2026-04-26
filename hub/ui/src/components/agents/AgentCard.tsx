@@ -9,52 +9,10 @@ interface StatusConfig {
 }
 
 const STATUS_CONFIG: Record<string, StatusConfig> = {
-  running: { dotColor: '#22c55e', label: 'Running', pulse: true,  labelColor: 'var(--primary)' },
-  active:  { dotColor: '#22c55e', label: 'Active',  pulse: false, labelColor: 'var(--primary)' },
-  idle:    { dotColor: 'var(--border)', label: 'Idle', pulse: false, labelColor: 'var(--on-sv)' },
-  waiting: { dotColor: '#f59e0b', label: 'Waiting', pulse: false, labelColor: 'var(--on-t-cont)' },
-}
-
-const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
-  principal:    { bg: 'color-mix(in srgb, #3b82f6 15%, transparent)', color: '#3b82f6' },
-  delegate:     { bg: 'color-mix(in srgb, #22c55e 15%, transparent)', color: '#22c55e' },
-  collaborator: { bg: 'color-mix(in srgb, var(--on-sv) 12%, transparent)', color: 'var(--on-sv)' },
-}
-
-const RUNNER_CONFIG: Record<string, { bg: string; color: string }> = {
-  claude_proxy: {
-    bg: 'color-mix(in srgb, #f59e0b 15%, transparent)',
-    color: '#f59e0b',
-  },
-  kimi: {
-    bg: 'color-mix(in srgb, #06b6d4 15%, transparent)',
-    color: '#06b6d4',
-  },
-  opencode: {
-    bg: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
-    color: '#8b5cf6',
-  },
-  codex: {
-    bg: 'color-mix(in srgb, #10b981 15%, transparent)',
-    color: '#10b981',
-  },
-  manual: {
-    bg: 'color-mix(in srgb, #6b7280 15%, transparent)',
-    color: '#6b7280',
-  },
-}
-
-const LIVENESS_CONFIG: Record<string, { dot: string; bg: string; label: string }> = {
-  online: {
-    dot: '#22c55e',
-    bg: 'color-mix(in srgb, #22c55e 15%, transparent)',
-    label: 'Online',
-  },
-  offline: {
-    dot: '#ef4444',
-    bg: 'color-mix(in srgb, #ef4444 15%, transparent)',
-    label: 'Offline',
-  },
+  running: { dotColor: 'var(--green)', label: 'Running', pulse: true,  labelColor: 'var(--green)' },
+  active:  { dotColor: 'var(--green)', label: 'Active',  pulse: false, labelColor: 'var(--green)' },
+  idle:    { dotColor: 'var(--text-3)', label: 'Idle',   pulse: false, labelColor: 'var(--text-3)' },
+  waiting: { dotColor: 'var(--amber)',  label: 'Waiting', pulse: false, labelColor: 'var(--amber)' },
 }
 
 interface AgentCardProps {
@@ -65,25 +23,31 @@ interface AgentCardProps {
 
 export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
   const cfg = STATUS_CONFIG[agent.status] ?? {
-    dotColor: 'var(--border)', label: agent.status, pulse: false, labelColor: 'var(--on-sv)',
+    dotColor: 'var(--text-3)', label: agent.status, pulse: false, labelColor: 'var(--text-3)',
   }
-  const roleCfg = agent.role ? (ROLE_CONFIG[agent.role] ?? ROLE_CONFIG.collaborator) : null
 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left rounded-xl p-3 transition-all"
+      className="w-full text-left"
       style={{
-        background:   selected
-          ? 'color-mix(in srgb, var(--p-cont) 50%, var(--surface-highest))'
-          : 'var(--surface-highest)',
-        border:       `1px solid ${selected ? 'color-mix(in srgb, var(--primary) 35%, transparent)' : 'var(--outline-variant)'}`,
-        boxShadow:    selected ? 'var(--elev-1)' : 'none',
+        background: selected ? 'rgba(255,255,255,0.05)' : 'var(--surface-2)',
+        border: `1px solid ${selected ? 'var(--border-hi)' : 'var(--border)'}`,
+        borderRadius: 'var(--radius)',
+        padding: 10,
+        cursor: 'pointer',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}
+      onMouseEnter={(e) => {
+        if (!selected) e.currentTarget.style.borderColor = 'var(--border-hi)'
+      }}
+      onMouseLeave={(e) => {
+        if (!selected) e.currentTarget.style.borderColor = 'var(--border)'
       }}
     >
       <div className="flex items-center gap-2">
         {/* Status dot */}
-        <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="relative flex h-2 w-2 shrink-0">
           {cfg.pulse && (
             <span
               className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
@@ -91,134 +55,74 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
             />
           )}
           <span
-            className="relative inline-flex rounded-full h-2.5 w-2.5"
+            className="relative inline-flex rounded-full h-2 w-2"
             style={{ background: cfg.dotColor }}
           />
         </span>
         <span
-          className="m3-title-small flex-1 text-left"
-          style={{ color: 'var(--foreground)', fontWeight: cfg.pulse ? 600 : 500 }}
+          className="flex-1 text-left text-sm font-medium truncate"
+          style={{ color: 'var(--text)' }}
         >
           {agent.name}
         </span>
-        {/* Liveness indicator for self-registered agents */}
-        {agent.self_registered && agent.liveness && (
-          <span
-            className="m3-label-small px-1.5 py-0.5 rounded-full flex items-center gap-1"
-            style={{
-              background: LIVENESS_CONFIG[agent.liveness].bg,
-              color: LIVENESS_CONFIG[agent.liveness].dot,
-              fontSize: '0.65rem',
-              fontWeight: 600,
-            }}
-          >
-            <span
-              className="inline-flex rounded-full h-1.5 w-1.5"
-              style={{ background: LIVENESS_CONFIG[agent.liveness].dot }}
-            />
-            {LIVENESS_CONFIG[agent.liveness].label}
-          </span>
-        )}
         {/* Yolo indicator */}
         {agent.yolo && (
-          <span
-            title="Yolo mode — running without permission prompts"
-            className="material-symbols-rounded select-none"
-            style={{ fontSize: 16, color: '#f59e0b' }}
-          >
-            bolt
-          </span>
+          <span title="Yolo mode" style={{ fontSize: 12, color: 'var(--amber)' }}>⚡</span>
         )}
-        <span className="m3-label-small capitalize" style={{ color: cfg.labelColor }}>
+        <span className="text-xs capitalize shrink-0" style={{ color: cfg.labelColor }}>
           {cfg.label}
         </span>
       </div>
+
       {/* Role badges */}
-      {(roleCfg || agent.dev_roles?.length || agent.dev_role || agent.runner) && (
-        <div className="mt-1.5 flex gap-1.5 flex-wrap">
-          {roleCfg && (
-            <span
-              className="m3-label-small capitalize px-1.5 py-0.5 rounded-full"
-              style={{ background: roleCfg.bg, color: roleCfg.color, fontSize: '0.65rem' }}
-            >
-              {agent.role}
-            </span>
-          )}
-          {/* Multiple dev roles (new format) */}
+      {(agent.dev_roles?.length || agent.dev_role || agent.runner) && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
           {agent.dev_roles?.map((role, idx) => (
             <span
               key={role}
-              className="m3-label-small px-1.5 py-0.5 rounded-full"
-              title={`Dev role: ${role}`}
-              style={{
-                background: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
-                color: '#8b5cf6',
-                fontSize: '0.65rem',
-              }}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--purple)' }}
             >
               {agent.dev_role_labels?.[idx] ?? role}
             </span>
           ))}
-          {/* Single dev role (legacy format - fallback) */}
           {!agent.dev_roles?.length && agent.dev_role && (
             <span
-              className="m3-label-small px-1.5 py-0.5 rounded-full"
-              title={`Dev role: ${agent.dev_role}`}
-              style={{
-                background: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
-                color: '#8b5cf6',
-                fontSize: '0.65rem',
-              }}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--purple)' }}
             >
               {agent.dev_role_label ?? agent.dev_role}
             </span>
           )}
           {agent.display_model && (
             <span
-              className="m3-label-small px-1.5 py-0.5 rounded-full"
-              title={`Runner: ${agent.runner}`}
-              style={{
-                background: RUNNER_CONFIG[agent.runner ?? 'manual']?.bg || RUNNER_CONFIG.manual.bg,
-                color: RUNNER_CONFIG[agent.runner ?? 'manual']?.color || RUNNER_CONFIG.manual.color,
-                fontSize: '0.65rem'
-              }}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(161,161,170,0.1)', color: 'var(--text-2)' }}
             >
               {agent.display_model}
             </span>
           )}
-          {/* Self-registered badge */}
           {agent.self_registered && (
             <span
-              className="m3-label-small px-1.5 py-0.5 rounded-full"
-              title="Self-registered agent"
-              style={{
-                background: 'color-mix(in srgb, #10b981 15%, transparent)',
-                color: '#10b981',
-                fontSize: '0.65rem',
-                fontWeight: 600,
-              }}
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--green)' }}
             >
-              EXTERNAL
+              EXT
             </span>
           )}
-          {/* Pilot badge */}
           {agent.pilot && (
             <span
-              className="m3-label-small px-1.5 py-0.5 rounded-full"
-              title="Pilot mode — agent is manually controlled"
-              style={{
-                background: 'color-mix(in srgb, #ec4899 15%, transparent)',
-                color: '#ec4899',
-                fontSize: '0.65rem',
-                fontWeight: 600,
-              }}
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(236,72,153,0.1)', color: '#ec4899' }}
             >
               PILOT
             </span>
           )}
         </div>
       )}
-      <div className="mt-1.5 flex gap-3 m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+
+      {/* Stats row */}
+      <div className="mt-1.5 flex items-center gap-3 text-[11px]" style={{ color: 'var(--text-3)' }}>
         <span>{agent.message_count} msgs</span>
         <span>{agent.active_task_count} tasks</span>
         {agent.last_seen && (
@@ -227,8 +131,26 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
           </span>
         )}
       </div>
+
+      {/* Context bar */}
+      {agent.context_usage && agent.context_usage.percent != null && (
+        <div className="mt-1.5 w-full rounded-full overflow-hidden" style={{ height: 2, background: 'var(--surface-3)' }}>
+          <div
+            className="h-full rounded-full"
+            style={{
+              width: `${Math.min(100, Math.max(0, agent.context_usage.percent))}%`,
+              background: agent.context_usage.warning || agent.context_usage.critical
+                ? 'var(--red)'
+                : agent.context_usage.percent >= 40
+                  ? 'var(--amber)'
+                  : 'var(--green)',
+            }}
+          />
+        </div>
+      )}
+
       {agent.latest_status_msg && (
-        <p className="mt-1 m3-body-small truncate" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+        <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-3)' }}>
           {agent.latest_status_msg}
         </p>
       )}

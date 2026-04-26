@@ -23,7 +23,7 @@ function getStatusLabel(enabled: boolean): string {
 
 function RunHistory({ runs }: { runs?: JobRun[] }) {
   if (!runs || runs.length === 0) {
-    return <p className="m3-body-small" style={{ color: 'var(--on-sv)' }}>No runs yet</p>
+    return <p className="text-xs" style={{ color: 'var(--text-3)' }}>No runs yet</p>
   }
 
   return (
@@ -32,21 +32,21 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
         <div
           key={run.id}
           className="flex items-center justify-between p-2 rounded-lg"
-          style={{ background: 'var(--surface-high)' }}
+          style={{ background: 'var(--surface-2)' }}
         >
           <div className="flex items-center gap-2">
             <Icon
               name={run.status === 'completed' ? 'check_circle' : run.status === 'failed' ? 'error' : 'schedule'}
               size={16}
               style={{
-                color: run.status === 'completed' ? 'var(--success)' : run.status === 'failed' ? 'var(--destructive)' : 'var(--on-sv)'
+                color: run.status === 'completed' ? 'var(--green)' : run.status === 'failed' ? 'var(--red)' : 'var(--text-3)'
               }}
             />
-            <span className="m3-label-small" style={{ color: 'var(--foreground)' }}>
+            <span className="text-[11px]" style={{ color: 'var(--text)' }}>
               {run.trigger}
             </span>
           </div>
-          <span className="m3-label-small" style={{ color: 'var(--on-sv)' }}>
+          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
             {formatDistanceToNow(new Date(run.fired_at), { addSuffix: true })}
           </span>
         </div>
@@ -55,33 +55,57 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
   )
 }
 
+const btnSmall = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
+  height: 28,
+  borderRadius: 'var(--radius-sm)',
+  padding: '0 10px',
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: 'pointer',
+  border: '1px solid var(--border)',
+  background: 'var(--surface-2)',
+  color: 'var(--text-2)',
+  transition: 'opacity 0.15s',
+} as React.CSSProperties
+
 export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: JobCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   return (
-    <div className="m3-card-elevated overflow-hidden">
+    <div
+      style={{
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        overflow: 'hidden',
+      }}
+    >
       {/* Header */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <p className="m3-title-small" style={{ color: 'var(--foreground)' }}>
+              <p className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>
                 {job.name}
               </p>
               {job.source === 'local' && (
                 <Badge variant="secondary" className="text-[10px]">Local</Badge>
               )}
             </div>
-            
-            <p className="m3-body-small mt-1" style={{ color: 'var(--on-sv)' }}>
+
+            <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
               @{job.agent}
             </p>
 
             {/* Cron expression */}
             <div className="flex items-center gap-2 mt-2">
-              <Icon name="schedule" size={14} style={{ color: 'var(--on-sv)' }} />
-              <code className="m3-body-small px-2 py-0.5 rounded" style={{ background: 'var(--surface-high)', color: 'var(--foreground)' }}>
+              <Icon name="schedule" size={14} style={{ color: 'var(--text-3)' }} />
+              <code className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--surface-3)', color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace" }}>
                 {job.cron}
               </code>
             </div>
@@ -90,8 +114,8 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
           {/* Expand button */}
           <button
             onClick={() => setExpanded(!expanded)}
-            className="shrink-0 p-1 rounded-full transition-colors hover:bg-black/5"
-            style={{ color: 'var(--on-sv)' }}
+            className="shrink-0 p-1 rounded-full transition-colors"
+            style={{ color: 'var(--text-3)' }}
           >
             <Icon name={expanded ? 'expand_less' : 'expand_more'} size={20} />
           </button>
@@ -107,12 +131,12 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
         {/* Next/Last run */}
         <div className="mt-2 space-y-1">
           {job.next_run && job.enabled && (
-            <p className="m3-label-small" style={{ color: 'var(--primary)' }}>
+            <p className="text-[11px]" style={{ color: 'var(--blue)' }}>
               Next: {formatDistanceToNow(new Date(job.next_run), { addSuffix: true })}
             </p>
           )}
           {job.last_run && (
-            <p className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
               Last: {formatDistanceToNow(new Date(job.last_run), { addSuffix: true })}
             </p>
           )}
@@ -123,18 +147,18 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
           <button
             onClick={() => onRun(job.id)}
             disabled={isPending || !job.enabled}
-            className="m3-btn-small m3-btn-primary flex items-center gap-1"
+            style={{ ...btnSmall, opacity: (isPending || !job.enabled) ? 0.5 : 1 }}
             title="Run now"
           >
             <Icon name="play_arrow" size={16} />
             Run
           </button>
-          
+
           {job.enabled ? (
             <button
               onClick={() => onPause(job.id)}
               disabled={isPending}
-              className="m3-btn-small m3-btn-secondary flex items-center gap-1"
+              style={{ ...btnSmall, opacity: isPending ? 0.5 : 1 }}
               title="Pause"
             >
               <Icon name="pause" size={16} />
@@ -144,7 +168,7 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
             <button
               onClick={() => onResume(job.id)}
               disabled={isPending}
-              className="m3-btn-small m3-btn-secondary flex items-center gap-1"
+              style={{ ...btnSmall, opacity: isPending ? 0.5 : 1 }}
               title="Resume"
             >
               <Icon name="play_arrow" size={16} />
@@ -157,13 +181,13 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
               <button
                 onClick={() => onDelete(job.id)}
                 disabled={isPending}
-                className="m3-btn-small m3-btn-destructive"
+                style={{ ...btnSmall, background: 'var(--red)', color: '#fff', borderColor: 'transparent', opacity: isPending ? 0.5 : 1 }}
               >
                 Confirm
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="m3-btn-small m3-btn-secondary"
+                style={btnSmall}
               >
                 Cancel
               </button>
@@ -172,8 +196,7 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
             <button
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isPending}
-              className="m3-btn-small m3-btn-secondary flex items-center gap-1"
-              style={{ color: 'var(--destructive)' }}
+              style={{ ...btnSmall, color: 'var(--red)' }}
               title="Delete"
             >
               <Icon name="delete" size={16} />
@@ -186,17 +209,17 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
       {expanded && (
         <div
           className="px-4 pb-4 space-y-4"
-          style={{ borderTop: '1px solid var(--outline-variant)' }}
+          style={{ borderTop: '1px solid var(--border)' }}
         >
           <div className="pt-4 space-y-4">
             {/* Message */}
             <div>
-              <p className="m3-label-small mb-1" style={{ color: 'var(--on-sv)' }}>Message</p>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Message</p>
               <p
-                className="m3-body-small p-3 rounded-lg"
+                className="text-xs p-3 rounded-lg"
                 style={{
-                  color: 'var(--foreground)',
-                  background: 'var(--surface-high)',
+                  color: 'var(--text)',
+                  background: 'var(--surface-3)',
                   whiteSpace: 'pre-wrap'
                 }}
               >
@@ -206,21 +229,21 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
 
             {/* Run History */}
             <div>
-              <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)' }}>Recent Runs</p>
+              <p className="text-[11px] font-medium mb-2" style={{ color: 'var(--text-3)' }}>Recent Runs</p>
               <RunHistory runs={job.history} />
             </div>
 
             {/* IDs footer */}
-            <div className="pt-3 flex items-center gap-2" style={{ borderTop: '1px solid var(--outline-variant)' }}>
-              <Icon name="tag" size={14} style={{ color: 'var(--on-sv)' }} />
-              <span className="m3-label-small" style={{ color: 'var(--on-sv)' }}>
+            <div className="pt-3 flex items-center gap-2" style={{ borderTop: '1px solid var(--border)' }}>
+              <Icon name="tag" size={14} style={{ color: 'var(--text-3)' }} />
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                 {job.id}
               </span>
               {job.last_session_id && (
                 <>
-                  <span style={{ color: 'var(--outline-variant)' }}>|</span>
-                  <Icon name="chat" size={14} style={{ color: 'var(--on-sv)' }} />
-                  <span className="m3-label-small" style={{ color: 'var(--on-sv)' }}>
+                  <span style={{ color: 'var(--border)' }}>|</span>
+                  <Icon name="chat" size={14} style={{ color: 'var(--text-3)' }} />
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                     {job.last_session_id}
                   </span>
                 </>

@@ -8,11 +8,11 @@ const SEVERITIES = ['all', 'error', 'warn', 'info', 'debug'] as const
 type Severity = (typeof SEVERITIES)[number]
 
 const SEVERITY_ACTIVE_STYLE: Record<Severity, { bg: string; color: string }> = {
-  all:   { bg: 'var(--p-cont)',          color: 'var(--on-p-cont)' },
-  error: { bg: 'var(--error-cont)',      color: 'var(--on-error-cont)' },
-  warn:  { bg: 'var(--t-cont)',          color: 'var(--on-t-cont)' },
-  info:  { bg: 'var(--p-cont)',          color: 'var(--on-p-cont)' },
-  debug: { bg: 'var(--surface-highest)', color: 'var(--on-sv)' },
+  all:   { bg: 'var(--surface-3)', color: 'var(--text)' },
+  error: { bg: 'rgba(239,68,68,0.15)', color: 'var(--red)' },
+  warn:  { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)' },
+  info:  { bg: 'var(--surface-3)', color: 'var(--text)' },
+  debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }
 
 const KNOWN_AGENTS = ['', 'claude', 'kimi', 'system']
@@ -61,31 +61,50 @@ export function LogsView() {
 
   const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : '—'
 
+  const chipBase = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    height: '32px',
+    borderRadius: '8px',
+    padding: '0 12px',
+    fontSize: '12px',
+    fontWeight: 500,
+    letterSpacing: '0.5px',
+    border: '1px solid var(--border)',
+    background: 'transparent',
+    color: 'var(--text-3)',
+    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    textTransform: 'capitalize',
+  } as React.CSSProperties
+
   return (
-    <div className="flex flex-col h-full" style={{ color: 'var(--foreground)' }}>
+    <div className="flex flex-col h-full" style={{ color: 'var(--text)' }}>
       {/* Toolbar */}
       <div
         className="flex flex-col gap-2 px-3 py-2.5 shrink-0 border-b"
-        style={{ background: 'var(--surface-low)', borderColor: 'var(--outline-variant)' }}
+        style={{ background: 'var(--surface)', borderColor: 'var(--border)' }}
       >
         <div className="flex items-center gap-2">
           {/* Search */}
           <div
             className="relative flex-1 flex items-center"
             style={{
-              background: 'var(--surface-highest)',
+              background: 'var(--surface-2)',
               borderRadius: 4,
-              border: '1px solid var(--outline)',
+              border: '1px solid var(--border)',
             }}
           >
-            <Icon name="search" size={16} className="absolute left-2.5 pointer-events-none" style={{ color: 'var(--on-sv)' }} />
+            <Icon name="search" size={16} className="absolute left-2.5 pointer-events-none" style={{ color: 'var(--text-3)' }} />
             <input
               type="text"
               placeholder="Search event type, agent, data…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-8 pl-9 pr-3 m3-body-small focus:outline-none bg-transparent"
-              style={{ color: 'var(--foreground)' }}
+              className="w-full h-8 pl-9 pr-3 text-xs focus:outline-none bg-transparent"
+              style={{ color: 'var(--text)' }}
             />
           </div>
 
@@ -93,11 +112,11 @@ export function LogsView() {
           <select
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
-            className="h-8 px-2 m3-body-small focus:outline-none rounded"
+            className="h-8 px-2 text-xs focus:outline-none rounded"
             style={{
-              background: 'var(--surface-highest)',
-              border: '1px solid var(--outline)',
-              color: 'var(--foreground)',
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border-hi)',
+              color: 'var(--text)',
               borderRadius: 4,
             }}
           >
@@ -110,8 +129,8 @@ export function LogsView() {
           {/* Refresh */}
           <button
             onClick={refresh}
-            className="m3-icon-btn"
-            style={{ width: 32, height: 32, border: '1px solid var(--outline-variant)', borderRadius: 8 }}
+            className="flex items-center justify-center shrink-0"
+            style={{ width: 32, height: 32, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-3)', background: 'transparent', cursor: 'pointer' }}
             title="Refresh"
           >
             <Icon name="refresh" size={16} />
@@ -120,11 +139,11 @@ export function LogsView() {
           {/* Live toggle */}
           <button
             onClick={() => setLive(!live)}
-            className="flex items-center gap-1.5 h-8 rounded-lg px-3 m3-label-medium transition-colors border"
+            className="flex items-center gap-1.5 h-8 rounded-lg px-3 text-xs font-medium transition-colors border"
             style={{
-              background:   live ? 'var(--p-cont)' : 'transparent',
-              color:        live ? 'var(--on-p-cont)' : 'var(--on-sv)',
-              borderColor:  live ? 'transparent' : 'var(--outline-variant)',
+              background:   live ? 'var(--surface-3)' : 'transparent',
+              color:        live ? 'var(--text)' : 'var(--text-3)',
+              borderColor:  live ? 'transparent' : 'var(--border)',
             }}
           >
             {live && <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />}
@@ -141,14 +160,13 @@ export function LogsView() {
               <button
                 key={s}
                 onClick={() => setSeverity(s)}
-                className={`m3-chip-filter capitalize${active ? ' active' : ''}`}
-                style={active ? { background: style!.bg, color: style!.color, borderColor: 'transparent' } : undefined}
+                style={active ? { ...chipBase, background: style!.bg, color: style!.color, borderColor: 'transparent' } : chipBase}
               >
                 {s}
               </button>
             )
           })}
-          <span className="ml-auto m3-label-small tabular-nums font-mono" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+          <span className="ml-auto text-[11px] tabular-nums" style={{ color: 'var(--text-3)', opacity: 0.7, fontFamily: "'JetBrains Mono', monospace" }}>
             {filtered.length.toLocaleString()} entr{filtered.length === 1 ? 'y' : 'ies'}
             {search ? ' (filtered)' : ''}
             {live && <span className="ml-2">· {lastUpdate}</span>}
@@ -161,12 +179,12 @@ export function LogsView() {
         ref={bodyRef}
         className="flex-1 overflow-auto"
         onScroll={handleScroll}
-        style={{ background: 'var(--background)' }}
+        style={{ background: 'var(--bg)' }}
       >
         {isLoading ? (
-          <p className="font-mono m3-body-small p-4" style={{ color: 'var(--on-sv)' }}>Loading…</p>
+          <p className="font-mono text-xs p-4" style={{ color: 'var(--text-3)' }}>Loading…</p>
         ) : filtered.length === 0 ? (
-          <p className="font-mono m3-body-small p-4" style={{ color: 'var(--on-sv)' }}>
+          <p className="font-mono text-xs p-4" style={{ color: 'var(--text-3)' }}>
             {search || severity !== 'all' || agentFilter
               ? 'No entries match the current filters.'
               : 'No log entries yet. Trigger some activity to see entries here.'}
@@ -175,8 +193,8 @@ export function LogsView() {
           <>
             {/* Sticky column header */}
             <div
-              className="sticky top-0 z-10 flex items-center gap-2 px-2 py-1 font-mono m3-label-small select-none border-b"
-              style={{ background: 'var(--surface-high)', borderColor: 'var(--outline-variant)', color: 'var(--on-sv)' }}
+              className="sticky top-0 z-10 flex items-center gap-2 px-2 py-1 font-mono text-[11px] select-none border-b"
+              style={{ background: 'var(--surface-2)', borderColor: 'var(--border)', color: 'var(--text-3)' }}
             >
               <span className="w-3 shrink-0" />
               <span className="shrink-0 w-[156px]">TIMESTAMP</span>
@@ -197,12 +215,12 @@ export function LogsView() {
       {live && !autoScroll && (
         <div
           className="shrink-0 flex justify-center py-1.5 border-t"
-          style={{ borderColor: 'var(--outline-variant)' }}
+          style={{ borderColor: 'var(--border)' }}
         >
           <button
             onClick={() => { setAutoScroll(true); bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }}
-            className="m3-label-medium flex items-center gap-1"
-            style={{ color: 'var(--primary)' }}
+            className="text-xs font-medium flex items-center gap-1"
+            style={{ color: 'var(--blue)' }}
           >
             <Icon name="arrow_downward" size={14} />
             Jump to latest

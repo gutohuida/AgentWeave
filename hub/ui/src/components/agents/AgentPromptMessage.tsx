@@ -21,17 +21,17 @@ export function AgentPromptMessage({ message, agentName }: AgentPromptMessagePro
             : 'rounded-bl-md'
         }`}
         style={{
-          background: isUser ? 'var(--p-cont)' : 'var(--surface-high)',
-          color: isUser ? 'var(--on-p-cont)' : 'var(--on-sv)',
+          background: isUser ? 'var(--surface-3)' : 'var(--surface-2)',
+          color: isUser ? 'var(--text)' : 'var(--text-3)',
         }}
       >
         {/* Header */}
         <div className="flex items-center gap-2 mb-1">
-          <span className="m3-label-small font-medium">
+          <span className="text-[11px] font-medium">
             {isUser ? 'You' : (agentName || 'Agent')}
           </span>
           <span
-            className="m3-label-small"
+            className="text-[11px]"
             style={{ opacity: 0.6 }}
           >
             {format(timestamp, 'HH:mm')}
@@ -39,7 +39,7 @@ export function AgentPromptMessage({ message, agentName }: AgentPromptMessagePro
         </div>
 
         {/* Content */}
-        <div className="m3-body-medium whitespace-pre-wrap break-words">
+        <div className="text-sm whitespace-pre-wrap break-words">
           {message.content}
         </div>
       </div>

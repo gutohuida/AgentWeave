@@ -50,19 +50,37 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
   }
 
   const currentBg = selectedMode === 'dark'
-    ? (THEMES.find(t => t.id === selectedTheme)?.bgDark ?? '#1c1b1f')
-    : (THEMES.find(t => t.id === selectedTheme)?.bg ?? '#fffbfe')
+    ? (THEMES.find(t => t.id === selectedTheme)?.bgDark ?? '#09090b')
+    : (THEMES.find(t => t.id === selectedTheme)?.bg ?? '#ffffff')
+
+  const inputStyle: React.CSSProperties = {
+    background: 'var(--surface-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    color: 'var(--text)',
+    padding: '8px 12px',
+    width: '100%',
+    fontSize: 13,
+    outline: 'none',
+  }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
       style={{ background: 'var(--scrim)' }}
     >
-      <div className="m3-dialog w-full max-w-md p-6">
+      <div
+        className="w-full max-w-md p-6"
+        style={{
+          background: 'var(--surface)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border)',
+        }}
+      >
         {/* Header */}
         <div className="mb-5 flex items-center gap-3">
-          <Icon name="settings" size={22} style={{ color: 'var(--primary)' }} />
-          <h2 className="m3-headline-small" style={{ color: 'var(--foreground)' }}>
+          <Icon name="settings" size={22} style={{ color: 'var(--blue)' }} />
+          <h2 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
             Connect to AgentWeave Hub
           </h2>
         </div>
@@ -70,14 +88,14 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Hub URL */}
           <div>
-            <label className="mb-1.5 block m3-label-medium" style={{ color: 'var(--on-sv)' }}>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
               Hub URL
             </label>
             <input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="m3-input w-full"
+              style={inputStyle}
               placeholder="http://localhost:8000"
               required
             />
@@ -85,14 +103,14 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
 
           {/* API Key */}
           <div>
-            <label className="mb-1.5 block m3-label-medium" style={{ color: 'var(--on-sv)' }}>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
               API Key
             </label>
             <input
               type="password"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              className="m3-input w-full"
+              style={inputStyle}
               placeholder="aw_live_..."
               required
             />
@@ -100,39 +118,39 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
 
           {/* Project ID */}
           <div>
-            <label className="mb-1.5 block m3-label-medium" style={{ color: 'var(--on-sv)' }}>
+            <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
               Project ID
             </label>
             <input
               type="text"
               value={proj}
               onChange={(e) => setProj(e.target.value)}
-              className="m3-input w-full"
+              style={inputStyle}
               placeholder="proj-default"
             />
           </div>
 
           {/* Mode selector */}
           <div>
-            <label className="mb-2 block m3-label-medium" style={{ color: 'var(--on-sv)' }}>Mode</label>
+            <label className="mb-2 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>Mode</label>
             <div className="flex gap-2">
               {(['light', 'dark'] as ModeId[]).map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => handleModePreview(m)}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-3xl py-2.5 m3-label-large transition-all"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-medium transition-all"
                   style={{
-                    background: m === 'light' ? '#fffbfe' : '#1c1b1f',
-                    color:      m === 'light' ? '#1c1b1f' : '#e6e1e5',
-                    outline:    selectedMode === m ? '2px solid var(--primary)' : '1px solid var(--outline-variant)',
+                    background: m === 'light' ? '#ffffff' : '#09090b',
+                    color:      m === 'light' ? '#18181b' : '#fafafa',
+                    outline:    selectedMode === m ? '2px solid var(--blue)' : '1px solid var(--border)',
                     outlineOffset: '2px',
                   }}
                 >
                   <Icon
                     name={m === 'light' ? 'light_mode' : 'dark_mode'}
                     size={18}
-                    style={{ color: m === 'light' ? '#1c1b1f' : '#e6e1e5' }}
+                    style={{ color: m === 'light' ? '#18181b' : '#fafafa' }}
                   />
                   {m === 'light' ? 'Light' : 'Dark'}
                 </button>
@@ -142,7 +160,7 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
 
           {/* Theme palette picker */}
           <div>
-            <label className="mb-2 block m3-label-medium" style={{ color: 'var(--on-sv)' }}>Color Palette</label>
+            <label className="mb-2 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>Color Palette</label>
             <div className="flex gap-2">
               {THEMES.map((t) => (
                 <button
@@ -150,11 +168,11 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
                   type="button"
                   title={t.label}
                   onClick={() => handleThemePreview(t.id)}
-                  className="relative flex-1 rounded-3xl overflow-hidden transition-all"
+                  className="relative flex-1 rounded-xl overflow-hidden transition-all"
                   style={{
                     background:    currentBg,
                     height:        52,
-                    outline:       selectedTheme === t.id ? '2px solid var(--primary)' : '1px solid var(--outline-variant)',
+                    outline:       selectedTheme === t.id ? '2px solid var(--blue)' : '1px solid var(--border)',
                     outlineOffset: '2px',
                     transform:     selectedTheme === t.id ? 'scale(1.05)' : 'scale(1)',
                   }}
@@ -166,7 +184,7 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
                   />
                   {/* Label */}
                   <span
-                    className="absolute top-1.5 left-1/2 -translate-x-1/2 m3-label-small whitespace-nowrap"
+                    className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[11px] whitespace-nowrap"
                     style={{ color: selectedMode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)' }}
                   >
                     {t.label}
@@ -175,9 +193,9 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
                   {selectedTheme === t.id && (
                     <span
                       className="absolute top-1 right-1 w-4 h-4 rounded-full flex items-center justify-center"
-                      style={{ background: 'var(--primary)' }}
+                      style={{ background: 'var(--blue)' }}
                     >
-                      <Icon name="check" size={11} style={{ color: 'var(--primary-foreground)' }} />
+                      <Icon name="check" size={11} style={{ color: '#fff' }} />
                     </span>
                   )}
                 </button>
@@ -185,7 +203,25 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
             </div>
           </div>
 
-          <button type="submit" className="m3-btn-filled w-full">
+          <button
+            type="submit"
+            className="w-full"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              height: 40,
+              borderRadius: 'var(--radius)',
+              padding: '0 24px',
+              background: 'var(--blue)',
+              color: '#fff',
+              border: 'none',
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
             Connect
           </button>
         </form>

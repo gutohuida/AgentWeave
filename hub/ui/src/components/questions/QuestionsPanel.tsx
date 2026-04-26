@@ -10,7 +10,7 @@ export function QuestionsPanel() {
   const { data: answered } = useQuestions(true)
 
   if (isLoading) {
-    return <div className="p-6 m3-body-medium" style={{ color: 'var(--on-sv)' }}>Loading questions…</div>
+    return <div className="p-6 text-sm" style={{ color: 'var(--text-3)' }}>Loading questions…</div>
   }
 
   const blocking    = unanswered?.filter((q) => q.blocking)  ?? []
@@ -21,27 +21,27 @@ export function QuestionsPanel() {
       {/* Blocking questions */}
       {blocking.length > 0 && (
         <div
-          className="rounded-2xl p-4"
-          style={{ background: 'color-mix(in srgb, var(--error-cont) 35%, transparent)', border: '1px solid var(--error-cont)' }}
+          className="rounded-xl p-4"
+          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}
         >
-          <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--destructive)' }}>
+          <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--red)' }}>
             <Icon name="warning" size={18} fill={1} />
-            <span className="m3-title-small">Blocking — Agents are waiting for your answer</span>
+            <span className="text-[13px] font-medium">Blocking — Agents are waiting for your answer</span>
           </div>
           <div className="space-y-3">
             {blocking.map((q) => (
               <div
                 key={q.id}
-                className="m3-card-outlined rounded-xl p-4"
-                style={{ borderColor: 'var(--error-cont)' }}
+                className="rounded-lg p-4"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="m3-label-large" style={{ color: 'var(--destructive)' }}>{q.from_agent}</span>
-                  <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+                  <span className="text-[13px] font-medium" style={{ color: 'var(--red)' }}>{q.from_agent}</span>
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
                     {formatDistanceToNow(new Date(q.created_at), { addSuffix: true })}
                   </span>
                 </div>
-                <p className="m3-body-medium" style={{ color: 'var(--foreground)' }}>{q.question}</p>
+                <p className="text-sm" style={{ color: 'var(--text)' }}>{q.question}</p>
                 <AnswerForm questionId={q.id} />
               </div>
             ))}
@@ -52,17 +52,21 @@ export function QuestionsPanel() {
       {/* Non-blocking unanswered */}
       {nonBlocking.length > 0 && (
         <div>
-          <h3 className="m3-title-medium mb-3" style={{ color: 'var(--foreground)' }}>Unanswered</h3>
+          <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>Unanswered</h3>
           <div className="space-y-2.5">
             {nonBlocking.map((q) => (
-              <div key={q.id} className="m3-card-filled rounded-xl p-4">
+              <div
+                key={q.id}
+                className="rounded-lg p-4"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+              >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="m3-label-large" style={{ color: 'var(--foreground)' }}>{q.from_agent}</span>
-                  <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+                  <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{q.from_agent}</span>
+                  <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
                     {formatDistanceToNow(new Date(q.created_at), { addSuffix: true })}
                   </span>
                 </div>
-                <p className="m3-body-medium" style={{ color: 'var(--foreground)' }}>{q.question}</p>
+                <p className="text-sm" style={{ color: 'var(--text)' }}>{q.question}</p>
                 <AnswerForm questionId={q.id} />
               </div>
             ))}
@@ -78,22 +82,22 @@ export function QuestionsPanel() {
       {answered && answered.length > 0 && (
         <details className="mt-2">
           <summary
-            className="cursor-pointer m3-label-large select-none transition-colors"
-            style={{ color: 'var(--on-sv)' }}
+            className="cursor-pointer text-[13px] font-medium select-none transition-colors"
+            style={{ color: 'var(--text-3)' }}
           >
             <Icon name="expand_more" size={16} className="inline mr-1" />
             Answered ({answered.length})
           </summary>
           <div className="mt-3 space-y-2">
             {answered.map((q) => (
-              <div key={q.id} className="m3-card-filled rounded-xl p-3" style={{ opacity: 0.65 }}>
+              <div key={q.id} className="rounded-lg p-3" style={{ background: 'var(--surface-2)', opacity: 0.65 }}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="m3-label-large" style={{ color: 'var(--foreground)' }}>{q.from_agent}</span>
+                  <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{q.from_agent}</span>
                   <Badge variant="success">answered</Badge>
                 </div>
-                <p className="m3-body-small" style={{ color: 'var(--foreground)' }}>{q.question}</p>
+                <p className="text-xs" style={{ color: 'var(--text)' }}>{q.question}</p>
                 {q.answer && (
-                  <p className="m3-body-small mt-1" style={{ color: 'var(--on-sv)' }}>→ {q.answer}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>→ {q.answer}</p>
                 )}
               </div>
             ))}

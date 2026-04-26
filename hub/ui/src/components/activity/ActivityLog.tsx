@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
-import { SSEEvent, getBufferedEvents, useSSE } from '@/hooks/useSSE'
+import { getBufferedEvents, useSSE } from '@/hooks/useSSE'
 import { EventRow } from './EventRow'
 import { EmptyState } from '@/components/common/EmptyState'
 import { getJson } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
+
+interface SSEEvent {
+  type: string
+  data: unknown
+  timestamp: string
+  severity?: string
+}
 
 type StoredEvent = SSEEvent & { localId: number }
 
@@ -14,12 +21,31 @@ const SEVERITY_FILTERS = ['all', 'error', 'warn', 'info', 'debug'] as const
 type SeverityFilter = (typeof SEVERITY_FILTERS)[number]
 
 const FILTER_ACTIVE_STYLE: Record<SeverityFilter, { bg: string; color: string }> = {
-  all:   { bg: 'var(--p-cont)',          color: 'var(--on-p-cont)' },
-  error: { bg: 'var(--error-cont)',      color: 'var(--on-error-cont)' },
-  warn:  { bg: 'var(--t-cont)',          color: 'var(--on-t-cont)' },
-  info:  { bg: 'var(--p-cont)',          color: 'var(--on-p-cont)' },
-  debug: { bg: 'var(--surface-highest)', color: 'var(--on-sv)' },
+  all:   { bg: 'var(--surface-3)', color: 'var(--text)' },
+  error: { bg: 'rgba(239,68,68,0.15)', color: 'var(--red)' },
+  warn:  { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)' },
+  info:  { bg: 'var(--surface-3)', color: 'var(--text)' },
+  debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }
+
+const chipBase = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  height: '32px',
+  borderRadius: '8px',
+  padding: '0 12px',
+  fontSize: '12px',
+  fontWeight: 500,
+  letterSpacing: '0.5px',
+  border: '1px solid var(--border)',
+  background: 'transparent',
+  color: 'var(--text-3)',
+  transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  textTransform: 'capitalize',
+} as React.CSSProperties
 
 export function ActivityLog() {
   const counterRef = useRef(0)
@@ -66,10 +92,10 @@ export function ActivityLog() {
     <div className="flex flex-col h-full p-4 gap-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="m3-title-medium" style={{ color: 'var(--foreground)' }}>Live Activity</h2>
+        <h2 className="text-sm font-medium" style={{ color: 'var(--text)' }}>Live Activity</h2>
         <button
           onClick={() => setPaused((p) => !p)}
-          className="m3-chip-filter flex items-center gap-1.5"
+          style={chipBase}
         >
           <Icon name={paused ? 'play_arrow' : 'pause'} size={16} />
           {paused ? 'Resume' : 'Pause'}
@@ -85,8 +111,7 @@ export function ActivityLog() {
             <button
               key={s}
               onClick={() => setSeverityFilter(s)}
-              className={`m3-chip-filter capitalize${active ? ' active' : ''}`}
-              style={active ? { background: style!.bg, color: style!.color, borderColor: 'transparent' } : undefined}
+              style={active ? { ...chipBase, background: style!.bg, color: style!.color, borderColor: 'transparent' } : chipBase}
             >
               {active && <Icon name="check" size={14} />}
               {s}
@@ -97,8 +122,8 @@ export function ActivityLog() {
 
       {/* Event list */}
       <div
-        className="flex-1 overflow-y-auto rounded-2xl p-3"
-        style={{ background: 'var(--surface-low)', border: '1px solid var(--outline-variant)' }}
+        className="flex-1 overflow-y-auto rounded-xl p-3"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       >
         {visibleEvents.length === 0 ? (
           <EmptyState icon="monitoring" title="Waiting for events…" description="SSE events will stream here in real time." />

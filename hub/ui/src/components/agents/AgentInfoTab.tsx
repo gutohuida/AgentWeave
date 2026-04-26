@@ -9,26 +9,25 @@ interface AgentInfoTabProps {
 }
 
 const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
-  principal: { bg: 'color-mix(in srgb, #3b82f6 15%, transparent)', color: '#3b82f6' },
-  delegate: { bg: 'color-mix(in srgb, #22c55e 15%, transparent)', color: '#22c55e' },
-  collaborator: { bg: 'color-mix(in srgb, var(--on-sv) 12%, transparent)', color: 'var(--on-sv)' },
+  principal: { bg: 'rgba(59,130,246,0.1)', color: 'var(--blue)' },
+  delegate: { bg: 'rgba(34,197,94,0.1)', color: 'var(--green)' },
+  collaborator: { bg: 'rgba(161,161,170,0.1)', color: 'var(--text-3)' },
 }
 
 const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
-  claude_proxy: { bg: 'color-mix(in srgb, #f59e0b 15%, transparent)', color: '#f59e0b', label: 'proxy' },
-  manual: { bg: 'color-mix(in srgb, #6b7280 15%, transparent)', color: '#6b7280', label: 'manual' },
-  native: { bg: 'color-mix(in srgb, #22c55e 15%, transparent)', color: '#22c55e', label: 'native' },
+  claude_proxy: { bg: 'rgba(245,158,11,0.1)', color: 'var(--amber)', label: 'proxy' },
+  manual: { bg: 'rgba(161,161,170,0.1)', color: 'var(--text-3)', label: 'manual' },
+  native: { bg: 'rgba(34,197,94,0.1)', color: 'var(--green)', label: 'native' },
 }
 
 const STATUS_CONFIG: Record<string, { dotColor: string; label: string; pulse: boolean; labelColor: string }> = {
-  running: { dotColor: '#22c55e', label: 'Running', pulse: true, labelColor: 'var(--primary)' },
-  active: { dotColor: '#22c55e', label: 'Active', pulse: false, labelColor: 'var(--primary)' },
-  idle: { dotColor: 'var(--border)', label: 'Idle', pulse: false, labelColor: 'var(--on-sv)' },
-  waiting: { dotColor: '#f59e0b', label: 'Waiting', pulse: false, labelColor: 'var(--on-t-cont)' },
+  running: { dotColor: 'var(--green)', label: 'Running', pulse: true, labelColor: 'var(--green)' },
+  active: { dotColor: 'var(--green)', label: 'Active', pulse: false, labelColor: 'var(--green)' },
+  idle: { dotColor: 'var(--text-3)', label: 'Idle', pulse: false, labelColor: 'var(--text-3)' },
+  waiting: { dotColor: 'var(--amber)', label: 'Waiting', pulse: false, labelColor: 'var(--amber)' },
 }
 
 export function AgentInfoTab({ agent }: AgentInfoTabProps) {
-  // Fetch sessions using React Query hook
   const { data: sessionsData, isLoading: isLoadingSessions } = useAgentSessions(agent.name)
   const sessions = sessionsData?.sessions || []
   const registerSession = useRegisterSession()
@@ -36,7 +35,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
   const [sessionIdInput, setSessionIdInput] = useState('')
 
   const statusCfg = STATUS_CONFIG[agent.status] ?? {
-    dotColor: 'var(--border)', label: agent.status, pulse: false, labelColor: 'var(--on-sv)',
+    dotColor: 'var(--text-3)', label: agent.status, pulse: false, labelColor: 'var(--text-3)',
   }
   const roleCfg = agent.role ? (ROLE_CONFIG[agent.role] ?? ROLE_CONFIG.collaborator) : null
 
@@ -48,15 +47,22 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
     }
   }
 
+  const cardStyle: React.CSSProperties = {
+    background: 'var(--surface-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius)',
+    padding: 16,
+  }
+
   return (
     <div
       className="flex-1 overflow-y-auto p-6 space-y-6"
-      style={{ background: 'var(--surface-low)' }}
+      style={{ background: 'var(--surface)' }}
     >
       {/* Status Section */}
-      <section className="m3-card-elevated p-4 rounded-xl">
-        <h3 className="m3-title-small mb-4 flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-          <Icon name="info" size={18} style={{ color: 'var(--primary)' }} />
+      <section style={cardStyle}>
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+          <Icon name="info" size={18} style={{ color: 'var(--blue)' }} />
           Status
         </h3>
         <div className="flex items-center gap-3 mb-3">
@@ -73,34 +79,34 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
             />
           </span>
           <span
-            className="m3-body-large capitalize"
+            className="text-sm capitalize"
             style={{ color: statusCfg.labelColor, fontWeight: statusCfg.pulse ? 600 : 500 }}
           >
             {statusCfg.label}
           </span>
         </div>
         {agent.latest_status_msg && (
-          <p className="m3-body-medium mb-3" style={{ color: 'var(--on-sv)' }}>
+          <p className="text-sm mb-3" style={{ color: 'var(--text-3)' }}>
             {agent.latest_status_msg}
           </p>
         )}
         {agent.last_seen && (
-          <p className="m3-body-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+          <p className="text-xs" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
             Last seen {formatDistanceToNow(new Date(agent.last_seen), { addSuffix: true })}
           </p>
         )}
       </section>
 
       {/* Sessions Section */}
-      <section className="m3-card-elevated p-4 rounded-xl">
-        <h3 className="m3-title-small mb-4 flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-          <Icon name="folder_open" size={18} style={{ color: 'var(--primary)' }} />
+      <section style={cardStyle}>
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+          <Icon name="folder_open" size={18} style={{ color: 'var(--blue)' }} />
           Sessions
         </h3>
         {isLoadingSessions ? (
-          <p className="m3-body-medium" style={{ color: 'var(--on-sv)' }}>Loading sessions...</p>
+          <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading sessions...</p>
         ) : sessions.length === 0 ? (
-          <p className="m3-body-medium" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+          <p className="text-sm" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
             No sessions yet
           </p>
         ) : (
@@ -114,20 +120,20 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
 
       {/* Pilot Mode Section */}
       {agent.pilot ? (
-        <section className="m3-card-elevated p-4 rounded-xl">
+        <section style={cardStyle}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="m3-title-small flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+            <h3 className="flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
               <Icon name="flight" size={18} style={{ color: '#ec4899' }} />
               Pilot Mode
             </h3>
             <button
               onClick={() => setPilotMode.mutate({ agent: agent.name, enabled: false })}
               disabled={setPilotMode.isPending}
-              className="m3-label-small px-3 py-1 rounded-lg"
+              className="text-[11px] font-medium px-3 py-1 rounded transition-opacity"
               style={{
-                background: 'var(--surface)',
-                color: 'var(--on-sv)',
-                border: '1px solid var(--outline-variant)',
+                background: 'var(--surface-3)',
+                color: 'var(--text-3)',
+                border: '1px solid var(--border)',
                 opacity: setPilotMode.isPending ? 0.5 : 1,
               }}
               title="Disable pilot mode to allow auto-execution"
@@ -139,7 +145,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           {/* Registered Session ID */}
           {agent.registered_session_id && (
             <div className="mb-4">
-              <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+              <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
                 Active Session
               </p>
               <RegisteredSessionRow sessionId={agent.registered_session_id} />
@@ -148,7 +154,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
 
           {/* Register Session Form */}
           <form onSubmit={handleRegisterSession} className="space-y-2">
-            <p className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
               Register New Session
             </p>
             <div className="flex gap-2">
@@ -157,53 +163,58 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
                 value={sessionIdInput}
                 onChange={(e) => setSessionIdInput(e.target.value)}
                 placeholder="Enter session ID..."
-                className="flex-1 px-3 py-2 rounded-lg m3-body-small"
+                className="flex-1 px-3 py-2 rounded text-xs"
                 style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--outline-variant)',
-                  color: 'var(--foreground)',
+                  background: 'var(--surface-3)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text)',
+                  outline: 'none',
                 }}
               />
               <button
                 type="submit"
                 disabled={!sessionIdInput.trim() || registerSession.isPending}
-                className="px-4 py-2 rounded-lg m3-label-small"
+                className="px-4 py-2 rounded text-xs font-medium transition-opacity"
                 style={{
-                  background: 'var(--primary)',
-                  color: 'var(--on-p)',
+                  background: 'var(--blue)',
+                  color: '#fff',
                   opacity: !sessionIdInput.trim() || registerSession.isPending ? 0.5 : 1,
+                  border: 'none',
+                  cursor: 'pointer',
                 }}
               >
                 {registerSession.isPending ? 'Registering...' : 'Register'}
               </button>
             </div>
             {registerSession.isError && (
-              <p className="m3-body-small" style={{ color: '#ef4444' }}>
+              <p className="text-xs" style={{ color: 'var(--red)' }}>
                 Failed to register session
               </p>
             )}
           </form>
         </section>
       ) : (
-        <section className="m3-card-elevated p-4 rounded-xl">
+        <section style={cardStyle}>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="m3-title-small mb-1 flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-                <Icon name="flight" size={18} style={{ color: 'var(--on-sv)' }} />
+              <h3 className="mb-1 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+                <Icon name="flight" size={18} style={{ color: 'var(--text-3)' }} />
                 Pilot Mode
               </h3>
-              <p className="m3-body-small" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+              <p className="text-xs" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
                 Enable manual control and disable auto-execution
               </p>
             </div>
             <button
               onClick={() => setPilotMode.mutate({ agent: agent.name, enabled: true })}
               disabled={setPilotMode.isPending}
-              className="m3-label-small px-4 py-2 rounded-lg"
+              className="text-xs font-medium px-4 py-2 rounded transition-opacity"
               style={{
                 background: '#ec4899',
                 color: '#fff',
                 opacity: setPilotMode.isPending ? 0.5 : 1,
+                border: 'none',
+                cursor: 'pointer',
               }}
               title="Enable pilot mode for manual control"
             >
@@ -214,20 +225,20 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
       )}
 
       {/* Roles & Configuration Section */}
-      <section className="m3-card-elevated p-4 rounded-xl">
-        <h3 className="m3-title-small mb-4 flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-          <Icon name="badge" size={18} style={{ color: 'var(--primary)' }} />
+      <section style={cardStyle}>
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+          <Icon name="badge" size={18} style={{ color: 'var(--blue)' }} />
           Roles & Configuration
         </h3>
 
         {/* Collaboration Role */}
         {roleCfg && (
           <div className="mb-4">
-            <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+            <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
               Collaboration Role
             </p>
             <span
-              className="m3-label-small capitalize px-2 py-1 rounded-full inline-block"
+              className="text-[11px] font-medium capitalize px-2 py-1 rounded-full inline-block"
               style={{ background: roleCfg.bg, color: roleCfg.color }}
             >
               {agent.role}
@@ -238,17 +249,17 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
         {/* Dev Roles */}
         {(agent.dev_roles?.length || agent.dev_role) && (
           <div className="mb-4">
-            <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+            <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
               Development Roles
             </p>
             <div className="flex flex-wrap gap-1.5">
               {agent.dev_roles?.map((role, idx) => (
                 <span
                   key={role}
-                  className="m3-label-small px-2 py-1 rounded-full"
+                  className="text-[11px] px-2 py-1 rounded-full"
                   style={{
-                    background: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
-                    color: '#8b5cf6',
+                    background: 'rgba(168,85,247,0.1)',
+                    color: 'var(--purple)',
                   }}
                 >
                   {agent.dev_role_labels?.[idx] ?? role}
@@ -256,10 +267,10 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
               ))}
               {!agent.dev_roles?.length && agent.dev_role && (
                 <span
-                  className="m3-label-small px-2 py-1 rounded-full"
+                  className="text-[11px] px-2 py-1 rounded-full"
                   style={{
-                    background: 'color-mix(in srgb, #8b5cf6 15%, transparent)',
-                    color: '#8b5cf6',
+                    background: 'rgba(168,85,247,0.1)',
+                    color: 'var(--purple)',
                   }}
                 >
                   {agent.dev_role_label ?? agent.dev_role}
@@ -273,15 +284,15 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
         <div className="flex flex-wrap gap-3">
           {/* YOLO Badge */}
           <div>
-            <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+            <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
               YOLO Mode
             </p>
             {agent.yolo ? (
               <span
-                className="m3-label-small px-2 py-1 rounded-full flex items-center gap-1"
+                className="text-[11px] font-medium px-2 py-1 rounded-full flex items-center gap-1"
                 style={{
-                  background: 'color-mix(in srgb, #f59e0b 15%, transparent)',
-                  color: '#f59e0b',
+                  background: 'rgba(245,158,11,0.1)',
+                  color: 'var(--amber)',
                 }}
               >
                 <Icon name="bolt" size={14} />
@@ -289,10 +300,10 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
               </span>
             ) : (
               <span
-                className="m3-label-small px-2 py-1 rounded-full"
+                className="text-[11px] font-medium px-2 py-1 rounded-full"
                 style={{
-                  background: 'var(--surface-high)',
-                  color: 'var(--on-sv)',
+                  background: 'var(--surface-3)',
+                  color: 'var(--text-3)',
                 }}
               >
                 Disabled
@@ -303,11 +314,11 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           {/* Runner Type */}
           {agent.runner && (
             <div>
-              <p className="m3-label-small mb-2" style={{ color: 'var(--on-sv)', opacity: 0.7 }}>
+              <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
                 Runner
               </p>
               <span
-                className="m3-label-small capitalize px-2 py-1 rounded-full"
+                className="text-[11px] font-medium capitalize px-2 py-1 rounded-full"
                 style={{
                   background: RUNNER_CONFIG[agent.runner]?.bg || RUNNER_CONFIG.manual.bg,
                   color: RUNNER_CONFIG[agent.runner]?.color || RUNNER_CONFIG.manual.color,
@@ -321,31 +332,31 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
       </section>
 
       {/* Stats Section */}
-      <section className="m3-card-elevated p-4 rounded-xl">
-        <h3 className="m3-title-small mb-4 flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-          <Icon name="bar_chart" size={18} style={{ color: 'var(--primary)' }} />
+      <section style={cardStyle}>
+        <h3 className="mb-4 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+          <Icon name="bar_chart" size={18} style={{ color: 'var(--blue)' }} />
           Statistics
         </h3>
         <div className="grid grid-cols-2 gap-4">
           <div
             className="p-4 rounded-lg text-center"
-            style={{ background: 'var(--surface)' }}
+            style={{ background: 'var(--surface-3)' }}
           >
-            <p className="m3-display-small" style={{ color: 'var(--primary)' }}>
+            <p className="text-4xl font-normal" style={{ color: 'var(--blue)' }}>
               {agent.active_task_count}
             </p>
-            <p className="m3-label-small mt-1" style={{ color: 'var(--on-sv)' }}>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
               Active Tasks
             </p>
           </div>
           <div
             className="p-4 rounded-lg text-center"
-            style={{ background: 'var(--surface)' }}
+            style={{ background: 'var(--surface-3)' }}
           >
-            <p className="m3-display-small" style={{ color: 'var(--primary)' }}>
+            <p className="text-4xl font-normal" style={{ color: 'var(--blue)' }}>
               {agent.message_count}
             </p>
-            <p className="m3-label-small mt-1" style={{ color: 'var(--on-sv)' }}>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
               Messages
             </p>
           </div>
@@ -361,7 +372,7 @@ function SessionRow({ session }: { session: { id: string; type: string; path: st
   return (
     <div
       className="flex items-center gap-3 p-3 rounded-lg"
-      style={{ background: 'var(--surface)' }}
+      style={{ background: 'var(--surface-3)' }}
     >
       <button
         onClick={() => copy(session.id)}
@@ -369,30 +380,30 @@ function SessionRow({ session }: { session: { id: string; type: string; path: st
         title="Click to copy session ID"
       >
         <code
-          className="m3-body-small block truncate"
+          className="block truncate text-xs"
           style={{
-            background: copied ? 'color-mix(in srgb, #22c55e 15%, transparent)' : 'var(--surface-high)',
-            color: copied ? '#22c55e' : 'var(--on-sv)',
+            background: copied ? 'rgba(34,197,94,0.1)' : 'var(--surface-2)',
+            color: copied ? 'var(--green)' : 'var(--text-3)',
             padding: '4px 8px',
             borderRadius: '4px',
-            fontFamily: 'monospace',
+            fontFamily: "'JetBrains Mono', monospace",
           }}
         >
           {copied ? 'Copied!' : session.id}
         </code>
       </button>
       <span
-        className="m3-label-small px-2 py-1 rounded-full shrink-0"
+        className="text-[11px] px-2 py-1 rounded-full shrink-0"
         style={{
-          background: 'var(--surface-high)',
-          color: 'var(--on-sv)',
+          background: 'var(--surface-2)',
+          color: 'var(--text-3)',
           textTransform: 'capitalize',
         }}
       >
         {session.type}
       </span>
       {session.last_active && (
-        <span className="m3-label-small shrink-0" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+        <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
           {formatDistanceToNow(new Date(session.last_active), { addSuffix: true })}
         </span>
       )}
@@ -406,7 +417,7 @@ function RegisteredSessionRow({ sessionId }: { sessionId: string }) {
   return (
     <div
       className="flex items-center gap-3 p-3 rounded-lg"
-      style={{ background: 'var(--surface)' }}
+      style={{ background: 'var(--surface-3)' }}
     >
       <button
         onClick={() => copy(sessionId)}
@@ -414,13 +425,13 @@ function RegisteredSessionRow({ sessionId }: { sessionId: string }) {
         title="Click to copy session ID"
       >
         <code
-          className="m3-body-small block truncate"
+          className="block truncate text-xs"
           style={{
-            background: copied ? 'color-mix(in srgb, #22c55e 15%, transparent)' : 'var(--surface-high)',
-            color: copied ? '#22c55e' : 'var(--on-sv)',
+            background: copied ? 'rgba(34,197,94,0.1)' : 'var(--surface-2)',
+            color: copied ? 'var(--green)' : 'var(--text-3)',
             padding: '4px 8px',
             borderRadius: '4px',
-            fontFamily: 'monospace',
+            fontFamily: "'JetBrains Mono', monospace",
           }}
         >
           {copied ? 'Copied!' : sessionId}
@@ -429,7 +440,7 @@ function RegisteredSessionRow({ sessionId }: { sessionId: string }) {
       <Icon
         name={copied ? 'check' : 'content_copy'}
         size={16}
-        style={{ color: copied ? '#22c55e' : 'var(--on-sv)' }}
+        style={{ color: copied ? 'var(--green)' : 'var(--text-3)' }}
       />
     </div>
   )

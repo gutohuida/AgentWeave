@@ -4,7 +4,7 @@ import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
 import { useSessionSync } from '@/api/status'
 
-type Page = 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'mission-control' | 'jobs' | 'quality'
+type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality'
 
 interface SidebarProps {
   activePage: Page
@@ -12,17 +12,26 @@ interface SidebarProps {
   onOpenSetup: () => void
 }
 
-const NAV_ITEMS: { id: Page; label: string; icon: string }[] = [
-  { id: 'messages',        label: 'Messages',  icon: 'chat' },
-  { id: 'tasks',           label: 'Tasks',     icon: 'task_alt' },
-  { id: 'jobs',            label: 'Jobs',      icon: 'schedule' },
-  { id: 'questions',       label: 'Questions', icon: 'help' },
-  { id: 'activity',        label: 'Activity',  icon: 'monitoring' },
-  { id: 'logs',            label: 'Logs',      icon: 'terminal' },
-  { id: 'agents',          label: 'Agents',    icon: 'smart_toy' },
-  { id: 'mission-control', label: 'Control',   icon: 'dashboard' },
-  { id: 'quality',         label: 'Quality',   icon: 'verified_user' },
+interface NavItem {
+  id: Page
+  label: string
+  icon: string
+  section?: string
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'overview',  label: 'Overview',  icon: 'home' },
+  { id: 'agents',    label: 'Agents',    icon: 'smart_toy' },
+  { id: 'tasks',     label: 'Tasks',     icon: 'task_alt',     section: 'WORK' },
+  { id: 'jobs',      label: 'Jobs',      icon: 'schedule',     section: 'WORK' },
+  { id: 'messages',  label: 'Messages',  icon: 'chat',         section: 'COMMUNICATION' },
+  { id: 'questions', label: 'Questions', icon: 'help',         section: 'COMMUNICATION' },
+  { id: 'logs',      label: 'Logs',      icon: 'terminal',     section: 'OBSERVE' },
+  { id: 'activity',  label: 'Activity',  icon: 'monitoring',   section: 'OBSERVE' },
+  { id: 'quality',   label: 'Quality',   icon: 'verified_user', section: 'OBSERVE' },
 ]
+
+const SECTION_ORDER = ['WORK', 'COMMUNICATION', 'OBSERVE']
 
 export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
   const { data: questions }    = useQuestions(false)
@@ -43,79 +52,195 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
     return null
   }
 
+  const sectionLabelStyle: React.CSSProperties = {
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: 'var(--text-3)',
+    padding: '8px 8px 4px',
+    marginTop: 8,
+  }
+
+  const navItemStyle = (active: boolean): React.CSSProperties => ({
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+    padding: '6px 8px',
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 13,
+    fontWeight: 500,
+    color: active ? 'var(--text)' : 'var(--text-2)',
+    background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
+    transition: 'background 0.15s, color 0.15s',
+    cursor: 'pointer',
+    border: 'none',
+    textAlign: 'left',
+  })
+
+  const navItemBefore = (active: boolean): React.CSSProperties => ({
+    content: '""',
+    position: 'absolute',
+    left: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: 2,
+    height: active ? 16 : 0,
+    background: 'var(--text)',
+    borderRadius: '0 2px 2px 0',
+    transition: 'height 0.15s',
+  })
+
+  // Group nav items by section
+  const topItems = NAV_ITEMS.filter((i) => !i.section)
+  const sectionedItems = SECTION_ORDER.map((sec) => ({
+    section: sec,
+    items: NAV_ITEMS.filter((i) => i.section === sec),
+  }))
+
   return (
-    <div className="m3-nav-rail flex h-full w-20 flex-col items-center shrink-0 py-3 gap-1">
-      {/* Logo */}
+    <div
+      className="flex h-full flex-col shrink-0"
+      style={{
+        width: 220,
+        background: 'var(--surface)',
+        borderRight: '1px solid var(--border)',
+        padding: '12px 8px',
+      }}
+    >
+      {/* Logo mark */}
       <div
-        className="w-12 h-12 rounded-[18px] flex items-center justify-center text-[10px] font-black mb-3 shrink-0"
-        style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+        className="px-2 mb-2"
+        style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}
       >
         AW
       </div>
 
-      {/* Nav items */}
-      <nav className="flex flex-col items-center gap-0.5 flex-1 w-full px-2">
-        {NAV_ITEMS.map(({ id, label, icon }) => {
+      {/* Top-level nav items */}
+      <nav className="flex flex-col">
+        {topItems.map(({ id, label, icon }) => {
           const active = activePage === id
-          const badge  = getBadge(id)
+          const badge = getBadge(id)
           return (
             <button
               key={id}
               onClick={() => onNavigate(id)}
-              title={label}
-              className="relative flex flex-col items-center gap-1 w-full py-1.5 px-1 text-center transition-colors"
-              style={{ color: active ? 'var(--on-p-cont)' : 'var(--on-sv)' }}
+              className="group"
+              style={navItemStyle(active)}
+              onMouseEnter={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                  e.currentTarget.style.color = 'var(--text)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!active) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = 'var(--text-2)'
+                }
+              }}
             >
-              {/* Pill indicator */}
-              <div className="relative flex items-center justify-center w-14 h-8">
-                {active && (
-                  <div
-                    className="absolute inset-0 rounded-full"
-                    style={{ background: 'var(--p-cont)' }}
-                  />
-                )}
-                <Icon
-                  name={icon}
-                  size={22}
-                  fill={active ? 1 : 0}
-                  className="relative z-10"
-                  style={{ color: active ? 'var(--on-p-cont)' : 'var(--on-sv)' } as React.CSSProperties}
-                />
-                {badge && (
-                  <span
-                    className="absolute top-0 right-0 min-w-[16px] h-4 rounded-full px-1 text-[9px] font-bold flex items-center justify-center leading-none z-20"
-                    style={{
-                      background: badge.danger ? 'var(--destructive)' : 'var(--primary)',
-                      color:      badge.danger ? 'var(--destructive-fg)' : 'var(--primary-foreground)',
-                    }}
-                  >
-                    {badge.count}
-                  </span>
-                )}
-              </div>
-              <span
-                className="m3-label-small"
-                style={{ color: active ? 'var(--on-p-cont)' : 'var(--on-sv)', opacity: active ? 1 : 0.72 }}
-              >
-                {label}
-              </span>
+              <span style={navItemBefore(active)} />
+              <Icon name={icon} size={18} />
+              <span className="flex-1">{label}</span>
+              {badge && (
+                <span
+                  className="shrink-0"
+                  style={{
+                    fontSize: 10,
+                    borderRadius: 9999,
+                    padding: '1px 5px',
+                    background: badge.danger ? 'var(--red)' : 'var(--surface-3)',
+                    color: badge.danger ? '#fff' : 'var(--text-2)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {badge.count}
+                </span>
+              )}
             </button>
           )
         })}
       </nav>
 
-      {/* Setup */}
-      <button
-        onClick={onOpenSetup}
-        title="Setup"
-        className="flex flex-col items-center gap-1 w-full py-1.5 px-1"
-        style={{ color: 'var(--on-sv)' }}
-      >
-        <div className="flex items-center justify-center w-14 h-8">
-          <Icon name="settings" size={22} />
+      {/* Sectioned nav items */}
+      {sectionedItems.map(({ section, items }) => (
+        <div key={section}>
+          <div style={sectionLabelStyle}>{section}</div>
+          <nav className="flex flex-col">
+            {items.map(({ id, label, icon }) => {
+              const active = activePage === id
+              const badge = getBadge(id)
+              return (
+                <button
+                  key={id}
+                  onClick={() => onNavigate(id)}
+                  className="group"
+                  style={navItemStyle(active)}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                      e.currentTarget.style.color = 'var(--text)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = 'var(--text-2)'
+                    }
+                  }}
+                >
+                  <span style={navItemBefore(active)} />
+                  <Icon name={icon} size={18} />
+                  <span className="flex-1">{label}</span>
+                  {badge && (
+                    <span
+                      className="shrink-0"
+                      style={{
+                        fontSize: 10,
+                        borderRadius: 9999,
+                        padding: '1px 5px',
+                        background: badge.danger ? 'var(--red)' : 'var(--surface-3)',
+                        color: badge.danger ? '#fff' : 'var(--text-2)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {badge.count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
         </div>
-        <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.72 }}>Setup</span>
-      </button>
+      ))}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Settings — pinned bottom */}
+      <div
+        style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}
+      >
+        <button
+          onClick={onOpenSetup}
+          className="group"
+          style={navItemStyle(false)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+            e.currentTarget.style.color = 'var(--text)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = 'var(--text-2)'
+          }}
+        >
+          <Icon name="settings" size={18} />
+          <span>Settings</span>
+        </button>
+      </div>
     </div>
   )
 }

@@ -25,9 +25,7 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const shouldAutoScroll = useRef(true)
 
-  // Combine and sort activity items
   const activityItems: ActivityItem[] = useMemo(() => {
-    // Convert output lines to activity items (filter to system lines only)
     const logItems: ActivityItem[] = outputLines
       .filter(line => SYSTEM_PREFIXES.some(prefix => line.content.startsWith(prefix)))
       .map(line => ({
@@ -37,7 +35,6 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
         content: line.content,
       }))
 
-    // Convert timeline events to activity items
     const eventItems: ActivityItem[] = timelineEvents.map(event => ({
       id: event.id,
       timestamp: event.timestamp,
@@ -47,20 +44,17 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
       summary: event.summary,
     }))
 
-    // Combine and sort by timestamp
     const combined = [...logItems, ...eventItems]
     combined.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     return combined
   }, [outputLines, timelineEvents])
 
-  // Auto-scroll to bottom
   useEffect(() => {
     if (shouldAutoScroll.current && scrollRef.current && !isPaused) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [activityItems, isPaused])
 
-  // Track user scroll to pause auto-scroll
   const handleScroll = () => {
     if (!scrollRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
@@ -69,24 +63,24 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--surface-low)' }}>
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--surface)' }}>
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3 border-b shrink-0"
-        style={{ background: 'var(--surface-high)', borderColor: 'var(--outline-variant)' }}
+        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
         <div className="flex items-center gap-3">
-          <Icon name="list_alt" size={20} style={{ color: 'var(--primary)' }} />
-          <span className="m3-title-small" style={{ color: 'var(--foreground)' }}>
+          <Icon name="list_alt" size={20} style={{ color: 'var(--blue)' }} />
+          <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>
             Activity — {agent.name}
           </span>
           <span
-            className="m3-label-small px-2 py-0.5 rounded-full capitalize"
+            className="text-[11px] px-2 py-0.5 rounded-full capitalize"
             style={{
-              background: agent.status === 'running' 
-                ? 'color-mix(in srgb, #22c55e 15%, transparent)'
-                : 'color-mix(in srgb, var(--on-sv) 12%, transparent)',
-              color: agent.status === 'running' ? '#22c55e' : 'var(--on-sv)',
+              background: agent.status === 'running'
+                ? 'rgba(34,197,94,0.1)'
+                : 'rgba(161,161,170,0.1)',
+              color: agent.status === 'running' ? 'var(--green)' : 'var(--text-3)',
             }}
           >
             {agent.status}
@@ -94,10 +88,10 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
         </div>
         <button
           onClick={() => setIsPaused(!isPaused)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg m3-label-small transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors"
           style={{
-            background: isPaused ? 'var(--error-container)' : 'var(--surface)',
-            color: isPaused ? 'var(--on-error-container)' : 'var(--on-sv)',
+            background: isPaused ? 'rgba(239,68,68,0.1)' : 'var(--surface-3)',
+            color: isPaused ? 'var(--red)' : 'var(--text-3)',
           }}
         >
           <Icon name={isPaused ? 'play_arrow' : 'pause'} size={18} />
@@ -112,10 +106,10 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
         className="flex-1 overflow-y-auto px-4 py-4 space-y-2"
       >
         {activityItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--on-sv)' }}>
+          <div className="flex flex-col items-center justify-center h-full" style={{ color: 'var(--text-3)' }}>
             <Icon name="list_alt" size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
-            <p className="m3-body-large">No activity yet</p>
-            <p className="m3-body-small mt-2" style={{ opacity: 0.7 }}>
+            <p className="text-sm">No activity yet</p>
+            <p className="text-xs mt-2" style={{ opacity: 0.7 }}>
               Timeline events and system output will appear here
             </p>
           </div>
@@ -137,28 +131,27 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <div
         className="flex items-start gap-3 p-3 rounded-lg"
         style={{
-          background: 'var(--surface)',
-          borderLeft: '3px solid var(--primary)',
+          background: 'var(--surface-2)',
+          borderLeft: '3px solid var(--blue)',
         }}
       >
-        <Icon name="event_note" size={18} style={{ color: 'var(--primary)', marginTop: '2px' }} />
+        <Icon name="event_note" size={18} style={{ color: 'var(--blue)', marginTop: '2px' }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className="m3-label-small px-1.5 py-0.5 rounded uppercase"
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded uppercase"
               style={{
-                background: 'color-mix(in srgb, var(--primary) 15%, transparent)',
-                color: 'var(--primary)',
-                fontSize: '0.65rem',
+                background: 'rgba(59,130,246,0.1)',
+                color: 'var(--blue)',
               }}
             >
               {item.eventType}
             </span>
-            <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+            <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
               {timeAgo}
             </span>
           </div>
-          <p className="m3-body-medium mt-1" style={{ color: 'var(--on-sv)' }}>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
             {item.content}
           </p>
         </div>
@@ -166,28 +159,27 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     )
   }
 
-  // Log item - card style matching events
-  const logIcon = item.content.includes('✅') 
-    ? 'check_circle' 
-    : item.content.includes('❌') || item.content.includes('error') 
-    ? 'error' 
+  const logIcon = item.content.includes('✅')
+    ? 'check_circle'
+    : item.content.includes('❌') || item.content.includes('error')
+    ? 'error'
     : item.content.startsWith('[stderr]')
     ? 'terminal'
     : 'info'
 
   const logColor = item.content.includes('✅')
-    ? '#22c55e'
+    ? 'var(--green)'
     : item.content.includes('❌') || item.content.includes('error')
-    ? 'var(--error)'
+    ? 'var(--red)'
     : item.content.startsWith('[stderr]')
-    ? 'var(--tertiary)'
-    : 'var(--primary)'
+    ? 'var(--amber)'
+    : 'var(--blue)'
 
   return (
     <div
       className="flex items-start gap-3 p-3 rounded-lg"
       style={{
-        background: 'var(--surface)',
+        background: 'var(--surface-2)',
         borderLeft: `3px solid ${logColor}`,
       }}
     >
@@ -195,20 +187,19 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span
-            className="m3-label-small px-1.5 py-0.5 rounded uppercase"
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded uppercase"
             style={{
-              background: `color-mix(in srgb, ${logColor} 15%, transparent)`,
+              background: `${logColor}20`,
               color: logColor,
-              fontSize: '0.65rem',
             }}
           >
             System
           </span>
-          <span className="m3-label-small" style={{ color: 'var(--on-sv)', opacity: 0.6 }}>
+          <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
             {timeAgo}
           </span>
         </div>
-        <p className="m3-body-medium mt-1" style={{ color: 'var(--on-sv)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--text-3)' }}>
           {item.content}
         </p>
       </div>

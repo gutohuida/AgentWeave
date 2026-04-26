@@ -20,47 +20,46 @@ export function AgentTimeline({ agent }: AgentTimelineProps) {
       {/* Current activity banner */}
       {agent.latest_status_msg && (
         <div
-          className="m3-status-banner"
+          className="rounded-xl p-4"
           style={{
-            borderColor:     'color-mix(in srgb, var(--primary) 30%, transparent)',
-            backgroundColor: 'color-mix(in srgb, var(--primary) 5%, var(--surface-low))',
+            border: '1px solid var(--border-hi)',
+            background: 'var(--surface-2)',
           }}
         >
-          <div className="flex items-center gap-2 m3-label-medium mb-1" style={{ color: 'var(--on-sv)' }}>
-            <span className="h-2 w-2 rounded-full bg-current animate-pulse" style={{ color: '#22c55e' }} />
+          <div className="flex items-center gap-2 text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>
+            <span className="h-2 w-2 rounded-full bg-current animate-pulse" style={{ color: 'var(--green)' }} />
             Current activity
           </div>
-          <p className="m3-body-medium" style={{ color: 'var(--foreground)' }}>{agent.latest_status_msg}</p>
+          <p className="text-sm" style={{ color: 'var(--text)' }}>{agent.latest_status_msg}</p>
         </div>
       )}
 
       {/* Timeline header */}
-      <h3 className="m3-title-medium" style={{ color: 'var(--foreground)' }}>Timeline</h3>
+      <h3 className="text-sm font-medium" style={{ color: 'var(--text)' }}>Timeline</h3>
 
       {isLoading ? (
-        <p className="m3-body-medium" style={{ color: 'var(--on-sv)' }}>Loading…</p>
+        <p className="text-sm" style={{ color: 'var(--text-3)' }}>Loading…</p>
       ) : events.length === 0 ? (
-        <p className="m3-body-medium" style={{ color: 'var(--on-sv)' }}>No timeline events yet.</p>
+        <p className="text-sm" style={{ color: 'var(--text-3)' }}>No timeline events yet.</p>
       ) : (
         <div className="space-y-1">
           {events.map((event) => {
             const iconName = iconForType(event.event_type)
             return (
-              <div key={event.id} className="m3-list-item-2" style={{ gap: 12, padding: '8px 0' }}>
-                {/* Icon in tonal container */}
+              <div key={event.id} className="flex items-start gap-3" style={{ padding: '8px 0' }}>
                 <div
-                  className="m3-icon-container shrink-0"
-                  style={{ width: 36, height: 36, background: 'var(--p-cont)', color: 'var(--on-p-cont)' }}
+                  className="shrink-0 flex items-center justify-center rounded-full"
+                  style={{ width: 36, height: 36, background: 'var(--surface-3)', color: 'var(--text-2)' }}
                 >
                   <Icon name={iconName} size={18} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="m3-label-medium uppercase tracking-wide" style={{ color: 'var(--on-sv)' }}>
+                  <p className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-3)' }}>
                     {event.event_type}
                   </p>
-                  <p className="m3-body-medium truncate" style={{ color: 'var(--foreground)' }}>{event.summary}</p>
+                  <p className="text-sm truncate" style={{ color: 'var(--text)' }}>{event.summary}</p>
                 </div>
-                <span className="m3-label-small whitespace-nowrap shrink-0" style={{ color: 'var(--on-sv)' }}>
+                <span className="text-[11px] whitespace-nowrap shrink-0" style={{ color: 'var(--text-3)' }}>
                   {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
                 </span>
               </div>
