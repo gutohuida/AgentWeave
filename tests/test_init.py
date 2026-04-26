@@ -149,6 +149,120 @@ class TestInitCommand:
         assert "Secret values" in content
         assert "NOT be added here" in content
 
+    def test_init_creates_project_instructions(self, tmp_path, monkeypatch):
+        """Test that init creates .agentweave/project_instructions.md."""
+        monkeypatch.chdir(tmp_path)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "Test"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+        instructions_path = tmp_path / ".agentweave" / "project_instructions.md"
+        assert instructions_path.exists()
+        content = instructions_path.read_text()
+        assert "Project Instructions" in content
+        assert "project-wide rules" in content
+
+    def test_init_does_not_overwrite_project_instructions(self, tmp_path, monkeypatch):
+        """Test that re-init with --force does not overwrite project_instructions.md."""
+        monkeypatch.chdir(tmp_path)
+
+        # First init
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "Test"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+        instructions_path = tmp_path / ".agentweave" / "project_instructions.md"
+        instructions_path.write_text("Custom content")
+
+        # Re-init with --force
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "Test", "--force"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+
+        assert instructions_path.read_text() == "Custom content"
+
+
+    def test_build_agent_context_prepends_instructions(self, tmp_path, monkeypatch):
+        """Test that _build_agent_context prepends project instructions before role guides."""
+        monkeypatch.chdir(tmp_path)
+
+        import json as _json
+        from agentweave.session import Session
+        from agentweave.cli import _build_agent_context
+        from agentweave.constants import AGENTWEAVE_DIR, ROLES_DIR, ROLES_CONFIG_FILE
+
+        # Create a session with one agent
+        session = Session.create(
+            name="Test Project",
+            principal="claude",
+            mode="hierarchical",
+            agents=["claude"],
+        )
+        session.save()
+
+        # Assign a role to claude
+        AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
+        roles_config = {
+            "version": 1,
+            "agent_assignments": {"claude": "backend_dev"},
+            "agent_roles": {"claude": ["backend_dev"]},
+            "roles": {"backend_dev": {"label": "Backend Developer"}},
+        }
+        ROLES_CONFIG_FILE.write_text(_json.dumps(roles_config), encoding="utf-8")
+
+        # Create a project instructions file
+        instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
+        instructions_path.write_text("# Global Rules\n\nAlways write tests.")
+
+        # Create a role guide file
+        ROLES_DIR.mkdir(parents=True, exist_ok=True)
+        role_path = ROLES_DIR / "backend_dev.md"
+        role_path.write_text("# Backend Dev\n\nUse FastAPI.")
+
+        # Build context
+        content = _build_agent_context("claude", session, "v-test")
+
+        # Verify instructions are prepended before role guide
+        instructions_idx = content.find("# Global Rules")
+        role_idx = content.find("# Backend Dev")
+        assert instructions_idx != -1, "Instructions not found in context"
+        assert role_idx != -1, "Role guide not found in context"
+        assert instructions_idx < role_idx, "Instructions should appear before role guide"
+        assert "---" in content, "Separator should be present between instructions and role guide"
+
+    def test_get_project_instructions_local_file(self, tmp_path, monkeypatch):
+        """Test _get_project_instructions reads local file."""
+        monkeypatch.chdir(tmp_path)
+
+        from agentweave.cli import _get_project_instructions
+        from agentweave.constants import AGENTWEAVE_DIR
+
+        AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
+        instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
+        instructions_path.write_text("Local instructions")
+
+        result = _get_project_instructions()
+        assert result == "Local instructions"
+
+    def test_get_project_instructions_empty_when_no_file(self, tmp_path, monkeypatch):
+        """Test _get_project_instructions returns empty when no file exists."""
+        monkeypatch.chdir(tmp_path)
+
+        from agentweave.cli import _get_project_instructions
+
+        result = _get_project_instructions()
+        assert result == ""
+
 
 class TestInitUnit:
     """Unit tests for init-related functions."""

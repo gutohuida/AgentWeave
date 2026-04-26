@@ -32,11 +32,17 @@ Your role config is at `.agentweave/roles.json`.
 
 1. Read `.agentweave/roles.json` — find `agent_assignments.<your_name>` to get your role key,
    then note `roles.<role_key>.version`.
-2. **If you already know this role key + version** from this conversation: skip to step 4.
-3. **If new or version changed:** read the file at `roles.<role_key>.file`
-   (e.g. `.agentweave/roles/backend_dev.md`) in full.
+2. **Load your role guide.** Try calling the `get_context` MCP tool with your role key
+   (e.g. `get_context(role="backend_dev")`). If this succeeds, the returned content already
+   includes any project-wide instructions prepended to your role guide — use this as your
+   behavioral context. If `get_context` fails with a transport error, fall back to reading
+   `.agentweave/project_instructions.md` first (if it exists and is non-empty), then read
+   `.agentweave/roles/<role_key>.md`.
+3. **If you already know this role key + version** from this conversation: skip to step 5.
+4. **If new or version changed and `get_context` was unavailable:** read the file at
+   `roles.<role_key>.file` (e.g. `.agentweave/roles/backend_dev.md`) in full.
    Say to yourself: *"I am <your_name>, assigned <role_key> v<version>."*
-4. **Do NOT read other agents' role files** — only yours.
+5. **Do NOT read other agents' role files** — only yours.
 
 This is your ONLY responsibility this session. Your role file defines what you own and what you must not do.
 

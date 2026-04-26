@@ -222,6 +222,22 @@ class ProjectRolesConfig(Base):
     )
 
 
+class ProjectInstructions(Base):
+    """Stores per-project instruction content editable via Hub UI.
+
+    One row per project — upserted on PUT. No row = empty instructions.
+    Content is prepended to every agent's role guide at session start.
+    """
+
+    __tablename__ = "project_instructions"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class AgentOutput(Base):
     __tablename__ = "agent_outputs"
 

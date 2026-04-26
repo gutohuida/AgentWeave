@@ -1557,6 +1557,21 @@ def _build_agent_context(agent: str, session: Any) -> str:
         lines.append(f"- **{ag}** ({display_model}): {roles_str}{marker}")
     lines.append("")
 
+    # --- Project Instructions ---
+    try:
+        from .cli import _get_project_instructions
+
+        project_instructions = _get_project_instructions()
+    except Exception:
+        project_instructions = ""
+    if project_instructions:
+        lines.append("## Project Instructions")
+        lines.append("")
+        lines.append(project_instructions)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
     # --- Role Guide(s) ---
     if agent_roles:
         lines.append("## Your Responsibilities")

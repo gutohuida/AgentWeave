@@ -10,11 +10,12 @@ import { ActivityLog } from '@/components/activity/ActivityLog'
 import { LogsView } from '@/components/logs/LogsView'
 import { AgentsPage } from '@/components/agents/AgentsPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
+import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { OverviewPage } from '@/components/overview/OverviewPage'
 import { useSSE } from '@/hooks/useSSE'
 
-type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality'
+type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
 
 export default function App() {
   const { isConfigured, theme, mode } = useConfigStore()
@@ -47,8 +48,9 @@ export default function App() {
             {page === 'activity'  && <div className="h-full overflow-auto"><ActivityLog /></div>}
             {page === 'logs'      && <div className="h-full flex flex-col"><LogsView /></div>}
             {page === 'agents'    && <div className="h-full flex flex-col"><AgentsPage /></div>}
-            {page === 'jobs'      && <div className="h-full flex flex-col"><JobsPage /></div>}
-            {page === 'quality'   && <div className="h-full overflow-auto"><QualityHealthPanel /></div>}
+            {page === 'jobs'          && <div className="h-full flex flex-col"><JobsPage /></div>}
+            {page === 'quality'       && <div className="h-full overflow-auto"><QualityHealthPanel /></div>}
+            {page === 'instructions'  && <div className="h-full flex flex-col"><InstructionsPage /></div>}
           </main>
         </div>
       </div>

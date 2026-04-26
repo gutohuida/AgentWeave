@@ -4,7 +4,7 @@ import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
 import { useSessionSync } from '@/api/status'
 
-type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality'
+type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
 
 interface SidebarProps {
   activePage: Page
@@ -22,6 +22,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'overview',  label: 'Overview',  icon: 'home' },
   { id: 'agents',    label: 'Agents',    icon: 'smart_toy' },
+  { id: 'instructions', label: 'Instructions', icon: 'description' },
   { id: 'tasks',     label: 'Tasks',     icon: 'task_alt',     section: 'WORK' },
   { id: 'jobs',      label: 'Jobs',      icon: 'schedule',     section: 'WORK' },
   { id: 'messages',  label: 'Messages',  icon: 'chat',         section: 'COMMUNICATION' },

@@ -280,6 +280,15 @@ agentweave summary
             except FileNotFoundError:
                 pass  # Non-fatal
 
+        # Write .agentweave/project_instructions.md — project-wide rules for all agents.
+        project_instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
+        if not project_instructions_path.exists():
+            project_instructions_path.write_text(
+                "# Project Instructions\n\n"
+                "Add project-wide rules here. These instructions are prepended to every agent's role guide.\n",
+                encoding="utf-8",
+            )
+
         # Write agent-specific context files at project root (auto-read by each agent).
         # claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.
         version_comment = f"AgentWeave v{__version__}"
@@ -1394,10 +1403,58 @@ def cmd_sync_context(args: argparse.Namespace) -> int:
     return 0
 
 
+def _get_project_instructions() -> str:
+    """Fetch project-wide instructions.
+
+    For HTTP transport, queries the Hub API. For local transport (or if the Hub
+    is unreachable), reads `.agentweave/project_instructions.md`. Returns empty
+    string if no instructions are set.
+    """
+    # Try HTTP transport first
+    try:
+        from .transport import get_transport
+
+        transport = get_transport()
+        if transport.get_transport_type() == "http":
+            import json as _json
+            import urllib.error as _uerr
+            import urllib.request as _req
+
+            from .constants import TRANSPORT_CONFIG_FILE
+            from .utils import load_json as _load_json
+
+            config = _load_json(TRANSPORT_CONFIG_FILE)
+            if config:
+                url = config["url"].rstrip("/")
+                api_key = config.get("api_key", "")
+                request = _req.Request(f"{url}/api/v1/project/instructions")
+                request.add_header("Authorization", f"Bearer {api_key}")
+                request.add_header("Accept", "application/json")
+                try:
+                    with _req.urlopen(request, timeout=10) as resp:
+                        result = _json.loads(resp.read())
+                    return result.get("content", "")
+                except _uerr.HTTPError:
+                    pass  # fall through to local file
+    except Exception:
+        pass  # fall through to local file
+
+    # Local transport fallback
+    instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
+    if instructions_path.exists():
+        try:
+            content = instructions_path.read_text(encoding="utf-8").strip()
+            return content
+        except Exception:
+            pass
+    return ""
+
+
 def _build_agent_context(agent: str, session: "Session", version_comment: str) -> str:
     """Build the per-agent context file content for .agentweave/context/<agent>.md.
 
     Combines:
+    - Project-wide instructions (from Hub DB or local file)
     - AgentWeave protocol header (session start checklist, MCP tools)
     - Compact team directory (all agents: name, runner, roles)
     - Full role guide(s) for this agent (from .agentweave/roles/)
@@ -1462,6 +1519,16 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
         marker = " ← you" if ag == agent else ""
         lines.append(f"- **{ag}** ({display_model}) — {roles_str}{marker}")
     lines.append("")
+
+    # --- Project Instructions ---
+    project_instructions = _get_project_instructions()
+    if project_instructions:
+        lines.append("## Project Instructions")
+        lines.append("")
+        lines.append(project_instructions)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
 
     # --- Role Guide(s) ---
     agent_roles = get_agent_roles(agent)

@@ -465,6 +465,7 @@ Gitignored and must never be committed:
 - `.agentweave/transport.json` (may contain secrets)
 - `.agentweave/.git_seen/`
 - `.agentweave/logs/`
+- `.agentweave/project_instructions.md`
 - `kimichanges.md`, `kimiwork.md`
 
 Safe to commit:

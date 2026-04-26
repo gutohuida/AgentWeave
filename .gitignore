@@ -61,6 +61,7 @@ dmypy.json
 .agentweave/messages/*/
 .agentweave/agents/*.json
 .agentweave/session.json
+.agentweave/project_instructions.md
 
 # But keep the directory structure and docs
 !.agentweave/README.md

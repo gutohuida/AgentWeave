@@ -18,6 +18,7 @@ from ...db.models import (
     AgentOutput,
     EventLog,
     Message,
+    ProjectInstructions,
     ProjectRolesConfig,
     ProjectSession,
     Task,
@@ -460,44 +461,54 @@ async def agent_timeline(
     return events[:50]
 
 
-def _load_role_content(role: str) -> str:
-    """Load role guide markdown content.
+async def _load_role_content(role: str, project_id: str, db: AsyncSession) -> str:
+    """Load role guide markdown content, prepending project instructions if set.
 
     Tries, in order:
     1. .agentweave/roles/{role}.md (synced by CLI — may be customized)
     2. Bundled templates inside the Hub package (works in Docker)
     3. agentweave.templates package (when CLI is co-installed)
     4. Project-relative fallback for local dev
+
+    If ProjectInstructions row exists for the project, its content is prepended
+    with a '---' separator before the role guide.
     """
     role_file = Path(".agentweave/roles") / f"{role}.md"
     if role_file.exists():
-        return role_file.read_text(encoding="utf-8")
+        role_content = role_file.read_text(encoding="utf-8")
+    else:
+        # Bundled templates shipped with the Hub package
+        bundled = Path(__file__).parent.parent.parent / "data" / "roles" / f"{role}.md"
+        if bundled.exists():
+            role_content = bundled.read_text(encoding="utf-8")
+        else:
+            try:
+                from agentweave.templates import get_role_md
 
-    # Bundled templates shipped with the Hub package
-    bundled = Path(__file__).parent.parent.parent / "data" / "roles" / f"{role}.md"
-    if bundled.exists():
-        return bundled.read_text(encoding="utf-8")
+                role_content = get_role_md(role)
+            except Exception:
+                # Fallback for local dev when agentweave isn't installed as a package
+                pkg_file = (
+                    Path(__file__).parent.parent.parent.parent.parent.parent
+                    / "src"
+                    / "agentweave"
+                    / "templates"
+                    / "roles"
+                    / f"{role}.md"
+                )
+                if pkg_file.exists():
+                    role_content = pkg_file.read_text(encoding="utf-8")
+                else:
+                    raise FileNotFoundError(f"Role template not found: {role}")
 
-    try:
-        from agentweave.templates import get_role_md
-
-        return get_role_md(role)
-    except Exception:
-        pass
-
-    # Fallback for local dev when agentweave isn't installed as a package
-    pkg_file = (
-        Path(__file__).parent.parent.parent.parent.parent.parent
-        / "src"
-        / "agentweave"
-        / "templates"
-        / "roles"
-        / f"{role}.md"
+    # Fetch project instructions from DB
+    result = await db.execute(
+        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
     )
-    if pkg_file.exists():
-        return pkg_file.read_text(encoding="utf-8")
-
-    raise FileNotFoundError(f"Role template not found: {role}")
+    instr_row = result.scalars().first()
+    if instr_row and instr_row.content:
+        return instr_row.content + "\n\n---\n\n" + role_content
+    return role_content
 
 
 @router.post("/register")
@@ -571,7 +582,7 @@ async def register_agent(
     role = role_request or "collaborator"
 
     try:
-        context = _load_role_content(role)
+        context = await _load_role_content(role, project_id, session)
     except FileNotFoundError:
         context = ""
 
@@ -645,10 +656,12 @@ async def patch_agent(
 async def get_agent_context(
     role: str,
     project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
 ):
     """Get role guide content for an agent."""
+    project_id, _ = project
     try:
-        content = _load_role_content(role)
+        content = await _load_role_content(role, project_id, session)
         return {"content": content}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Role template not found: {role}")
