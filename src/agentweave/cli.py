@@ -407,6 +407,12 @@ agentweave summary
             print("    /aw-revise     accept and begin a revision")
             print("  (aw-collab-start runs automatically at session start)")
 
+        # Generate Codex skills in .agents/skills/
+        codex_skills_count = _generate_codex_skills(session, Path.cwd(), force=args.force)
+        if codex_skills_count > 0:
+            print(f"\n[SKILLS] Generated {codex_skills_count} Codex skills in .agents/skills/")
+            print("  Invoke via $skill-name or the /skills menu in Codex CLI")
+
         # Generate agentweave.yml configuration file
         try:
             from .config import generate_agentweave_yml
@@ -431,6 +437,51 @@ def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = Fa
     Returns the number of skill files written.
     """
     skills_dir = base_dir / ".claude" / "skills"
+    non_principal = [a for a in session.agent_names if a != session.principal]
+    reviewer = non_principal[0] if non_principal else session.principal
+    agents_list = ", ".join(session.agent_names)
+
+    substitutions = {
+        "project_name": session.name,
+        "principal": session.principal,
+        "agents_list": agents_list,
+        "mode": session.mode,
+        "reviewer": reviewer,
+    }
+
+    skill_names = list_skill_templates()
+    if not skill_names:
+        return 0
+
+    count = 0
+    for name in sorted(skill_names):
+        skill_dir = skills_dir / name
+        skill_file = skill_dir / "SKILL.md"
+        if skill_file.exists() and not force:
+            continue
+        try:
+            template = get_skill_template(name)
+        except FileNotFoundError:
+            continue
+        content = template
+        for key, value in substitutions.items():
+            content = content.replace("{" + key + "}", value)
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(content, encoding="utf-8")
+        count += 1
+
+    return count
+
+
+def _generate_codex_skills(session: "Session", base_dir: Path, force: bool = False) -> int:
+    """Generate .agents/skills/ from skill templates, personalized for this session.
+
+    Codex reads skills from .agents/skills/<name>/SKILL.md. The format is
+    identical to Claude Code skills (same YAML frontmatter + markdown body).
+
+    Returns the number of skill files written.
+    """
+    skills_dir = base_dir / ".agents" / "skills"
     non_principal = [a for a in session.agent_names if a != session.principal]
     reviewer = non_principal[0] if non_principal else session.principal
     agents_list = ", ".join(session.agent_names)
