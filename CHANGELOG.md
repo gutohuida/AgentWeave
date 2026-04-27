@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.34.0] - 2026-04-27
+
+### Added (CLI)
+- **Auto-managed `.gitignore`** — `agentweave init` creates or updates `.gitignore` with a managed AgentWeave runtime-state block (tasks, messages, agents, session, transport, logs, watchdog files)
+- **Auto-scaffold `.env`** — `agentweave init` creates a `.env` placeholder for provider API keys if one doesn't exist
+- **Per-agent model flag** — Runner invocations now pass the configured model via `--model` for runners that support it
+- Improved runner display labels in Hub agent list (shows configured model name)
+- Expanded test coverage for init, session, watchdog, constants, and CLI commands
+
+### Added (Hub v0.28.0)
+- `update_agent_config` MCP tool now supports clearing a model field when set to null
+- Hub agent list reflects per-agent runner type and model in display labels
+
+---
 ## [0.33.0] - 2026-04-26
 
 ### Added (CLI)
