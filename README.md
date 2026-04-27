@@ -145,6 +145,7 @@ Add to `agentweave.yml`:
 agents:
   claude:
     runner: claude
+    model: <claude-model>
   
   minimax:           # Built-in defaults for minimax/glm
     runner: claude_proxy
@@ -243,7 +244,9 @@ agentweave agent configure mymodel \                    # custom OpenAI-compatib
   --base-url https://api.example.com/v1 \
   --api-key-var MY_MODEL_API_KEY
 agentweave agent set-session minimax <session-id>       # register Claude resume ID manually
-agentweave agent set-model minimax <model-name>         # update model for proxy agent
+agentweave agent set-model claude <model-name>          # update model for a runner
+agentweave agent set-model codex <model-name>
+agentweave agent set-model kimi <model-name>
 
 agentweave switch minimax        # output eval-able export commands
 agentweave run --agent minimax   # set env vars + launch Claude with relay prompt

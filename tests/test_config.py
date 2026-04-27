@@ -115,6 +115,7 @@ hub:
 agents:
   claude:
     runner: claude
+    model: claude-test-model
     roles:
       - tech_lead
       - backend_dev
@@ -140,6 +141,7 @@ jobs:
         assert config.project.name == "Full Test"
         assert config.project.mode == "peer"
         assert config.agents["claude"].yolo is True
+        assert config.agents["claude"].model == "claude-test-model"
         assert config.agents["claude"].roles == ["tech_lead", "backend_dev"]
         assert config.agents["minimax"].runner == "claude_proxy"
         assert config.agents["minimax"].env == ["MINIMAX_API_KEY"]

@@ -345,10 +345,18 @@ def get_agent_config(agent: str) -> Dict[str, Any]:
             "runner": match.get("runner", "native"),
         }
 
-        # For proxy agents, include connection details from the full session blob
-        if result["runner"] == "claude_proxy":
+        agent_cfg: Dict[str, Any] = {}
+        try:
             session = _hub_request("GET", "/session/sync")
             agent_cfg = (session.get("data") or {}).get("agents", {}).get(agent, {})
+        except RuntimeError:
+            if result["runner"] == "claude_proxy":
+                raise
+        if agent_cfg.get("model"):
+            result["model"] = agent_cfg["model"]
+
+        # For proxy agents, include connection details from the full session blob
+        if result["runner"] == "claude_proxy":
             env_vars = agent_cfg.get("env_vars", {})
             result["base_url"] = env_vars.get("ANTHROPIC_BASE_URL", "")
             result["api_key_var"] = env_vars.get("ANTHROPIC_API_KEY_VAR", "")

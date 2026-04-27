@@ -3,10 +3,8 @@
 import json
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
-
 import yaml
 
 
@@ -54,6 +52,111 @@ class TestInitCommand:
         # Default agents: claude, kimi
         assert "claude" in content["agents"]
         assert "kimi" in content["agents"]
+
+    def test_init_creates_gitignore_with_agentweave_runtime_state(self, tmp_path, monkeypatch):
+        """Test that init creates .gitignore entries for local AgentWeave state."""
+        monkeypatch.chdir(tmp_path)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "TestProject"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Init failed: {result.stderr}"
+
+        gitignore_path = tmp_path / ".gitignore"
+        assert gitignore_path.exists()
+        content = gitignore_path.read_text()
+        assert "# AgentWeave runtime state" in content
+        assert ".agentweave/session.json" in content
+        assert ".agentweave/transport.json" in content
+        assert ".agentweave/tasks/*/" in content
+        assert ".agentweave/messages/*/" in content
+        assert ".agentweave/logs/" in content
+        assert ".agentweave/project_instructions.md" in content
+        assert ".env" in content
+        assert "kimichanges.md" in content
+        assert "kimiwork.md" in content
+
+    def test_init_creates_env_file(self, tmp_path, monkeypatch):
+        """Test that init creates a local .env scaffold for secrets."""
+        monkeypatch.chdir(tmp_path)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "TestProject"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Init failed: {result.stderr}"
+
+        env_path = tmp_path / ".env"
+        assert env_path.exists()
+        content = env_path.read_text()
+        assert "AgentWeave local environment variables" in content
+        assert "MINIMAX_API_KEY" in content
+        assert "OPENAI_API_KEY" in content
+        assert ".env" in (tmp_path / ".gitignore").read_text()
+
+    def test_init_does_not_overwrite_existing_env_file(self, tmp_path, monkeypatch):
+        """Test that init preserves an existing .env file."""
+        monkeypatch.chdir(tmp_path)
+        env_path = tmp_path / ".env"
+        env_path.write_text("CUSTOM_KEY=value\n", encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "TestProject"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Init failed: {result.stderr}"
+
+        assert env_path.read_text() == "CUSTOM_KEY=value\n"
+
+    def test_init_preserves_existing_gitignore_content(self, tmp_path, monkeypatch):
+        """Test that init appends the AgentWeave block without overwriting user entries."""
+        monkeypatch.chdir(tmp_path)
+        gitignore_path = tmp_path / ".gitignore"
+        gitignore_path.write_text("node_modules/\n.env\n", encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "TestProject"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Init failed: {result.stderr}"
+
+        content = gitignore_path.read_text()
+        assert "node_modules/" in content
+        assert ".env" in content
+        assert "# AgentWeave runtime state" in content
+        assert ".agentweave/session.json" in content
+
+    def test_init_refreshes_existing_agentweave_gitignore_block(self, tmp_path, monkeypatch):
+        """Test that init updates an existing managed block instead of duplicating it."""
+        monkeypatch.chdir(tmp_path)
+        gitignore_path = tmp_path / ".gitignore"
+        gitignore_path.write_text(
+            "dist/\n\n"
+            "# AgentWeave runtime state\n"
+            ".agentweave/session.json\n"
+            "# End AgentWeave runtime state\n"
+            "\ncoverage/\n",
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            [sys.executable, "-m", "agentweave", "init", "--project", "TestProject"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"Init failed: {result.stderr}"
+
+        content = gitignore_path.read_text()
+        assert content.count("# AgentWeave runtime state") == 1
+        assert "dist/" in content
+        assert "coverage/" in content
+        assert ".agentweave/transport.json" in content
+        assert ".agentweave/tasks/*/" in content
 
     def test_init_with_agents_flag_shows_deprecation(self, tmp_path, monkeypatch):
         """Test that using --agents flag shows deprecation warning."""
@@ -118,6 +221,9 @@ class TestInitCommand:
 
         # Check migration message
         assert "existing session" in result.stdout.lower() or "generated" in result.stdout.lower()
+        assert (tmp_path / ".gitignore").exists()
+        assert ".agentweave/session.json" in (tmp_path / ".gitignore").read_text()
+        assert (tmp_path / ".env").exists()
 
         # Verify agentweave.yml was created with existing session data
         yml_path = tmp_path / "agentweave.yml"
@@ -197,9 +303,10 @@ class TestInitCommand:
         monkeypatch.chdir(tmp_path)
 
         import json as _json
-        from agentweave.session import Session
+
         from agentweave.cli import _build_agent_context
-        from agentweave.constants import AGENTWEAVE_DIR, ROLES_DIR, ROLES_CONFIG_FILE
+        from agentweave.constants import AGENTWEAVE_DIR, ROLES_CONFIG_FILE, ROLES_DIR
+        from agentweave.session import Session
 
         # Create a session with one agent
         session = Session.create(
@@ -272,8 +379,8 @@ class TestInitUnit:
         monkeypatch.chdir(tmp_path)
 
         # Create a session
-        from agentweave.session import Session
         from agentweave.config import generate_agentweave_yml
+        from agentweave.session import Session
 
         session = Session.create(
             name="Unit Test Project",
@@ -299,8 +406,8 @@ class TestInitUnit:
         """Test that agentweave.yml has correct default values."""
         monkeypatch.chdir(tmp_path)
 
-        from agentweave.session import Session
         from agentweave.config import generate_agentweave_yml
+        from agentweave.session import Session
 
         session = Session.create(name="Defaults Test")
         yml_path = generate_agentweave_yml(session)

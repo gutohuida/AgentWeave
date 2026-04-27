@@ -85,7 +85,7 @@ def test_session_set_agent_pilot_invalid_agent(tmp_path, monkeypatch):
 
     try:
         sess.set_agent_pilot("unknown_agent", True)
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "unknown_agent" in str(e)
 
@@ -147,3 +147,23 @@ def test_session_sync_agents_updates_runner_options(tmp_path, monkeypatch):
     )
     assert "codex" in updated
     assert sess.agents["codex"]["runner_options"] == {"memory": True}
+
+
+def test_session_sync_agents_updates_model(tmp_path, monkeypatch):
+    """sync_agents persists model from declared config."""
+    monkeypatch.chdir(tmp_path)
+    sess = Session.create(name="Test", agents=["kimi"])
+    sess.sync_agents({"kimi": {"runner": "kimi", "model": "kimi-k2"}})
+    assert sess.agents["kimi"]["model"] == "kimi-k2"
+
+
+def test_session_sync_agents_clears_model_when_removed(tmp_path, monkeypatch):
+    """sync_agents clears an old model when agentweave.yml no longer declares it."""
+    monkeypatch.chdir(tmp_path)
+    sess = Session.create(name="Test", agents=["kimi"])
+    sess.sync_agents({"kimi": {"runner": "kimi", "model": "kimi-k2"}})
+
+    _added, updated, _orphaned = sess.sync_agents({"kimi": {"runner": "kimi", "model": None}})
+
+    assert "kimi" in updated
+    assert "model" not in sess.agents["kimi"]

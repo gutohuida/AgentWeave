@@ -264,6 +264,7 @@ async def test_patch_agent_config(app, auth_headers):
     hermes = next((a for a in resp.json() if a["name"] == "hermes-patch"), None)
     assert hermes is not None
     assert hermes["runner"] == "kimi"
+    assert hermes["display_model"] == "kimi-k3"
     assert hermes["yolo"] is True
 
 

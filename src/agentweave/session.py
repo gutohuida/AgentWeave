@@ -109,7 +109,7 @@ class Session:
             runner:   One of RUNNER_TYPES.
             env_vars: Dict with ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY_VAR for
                       claude_proxy runners; empty dict for native/manual.
-            model:    Optional model name for claude_proxy agents (e.g., "MiniMax-M2.5").
+            model:    Optional model name to pass to runners that support model selection.
         """
         if runner not in RUNNER_TYPES:
             raise ValueError(f"Invalid runner type: {runner!r}. Must be one of {RUNNER_TYPES}")
@@ -289,9 +289,15 @@ class Session:
             ):
                 agent_data["runner"] = config["runner"]
                 was_updated = True
-            if "model" in config and config["model"] and agent_data.get("model") != config["model"]:
-                agent_data["model"] = config["model"]
-                was_updated = True
+            if "model" in config:
+                new_model = config.get("model")
+                if new_model:
+                    if agent_data.get("model") != new_model:
+                        agent_data["model"] = new_model
+                        was_updated = True
+                elif "model" in agent_data:
+                    del agent_data["model"]
+                    was_updated = True
             if "runner_options" in config and config["runner_options"]:
                 new_opts = dict(config["runner_options"])
                 if agent_data.get("runner_options") != new_opts:

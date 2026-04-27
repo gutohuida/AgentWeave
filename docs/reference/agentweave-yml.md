@@ -40,6 +40,7 @@ hub:
 agents:
   claude:
     runner: claude
+    model: <claude-model>
     roles:
       - tech_lead
       - backend_dev
@@ -48,6 +49,7 @@ agents:
 
   kimi:
     runner: kimi
+    model: kimi-k2
     roles:
       - frontend_dev
     pilot: true
@@ -127,8 +129,8 @@ Map of agent name to agent configuration.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode` |
-| `model` | string | (auto) | Model name for claude_proxy agents |
+| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex` |
+| `model` | string | (runner default) | Model name to pass to the agent CLI when the runner supports model selection |
 | `roles` | list | `[]` | List of role IDs for this agent |
 | `env` | list | `[]` | List of environment variable names to pass to the agent |
 | `yolo` | boolean | `false` | Enable yolo mode (auto-execute without confirmations) |
@@ -139,10 +141,12 @@ Map of agent name to agent configuration.
 agents:
   claude:
     runner: claude
+    model: <claude-model>
     roles: [tech_lead, backend_dev]
 
   kimi:
     runner: kimi
+    model: kimi-k2
     pilot: true
 
   minimax:
@@ -154,6 +158,10 @@ agents:
   opencode-dev:
     runner: opencode
     model: ollama/qwen2.5-coder:7b
+
+  codex:
+    runner: codex
+    model: gpt-5.5
 ```
 
 #### Runners
@@ -166,6 +174,26 @@ agents:
 | `claude_proxy` | Claude CLI with custom API endpoint (for MiniMax, GLM, etc.) |
 | `manual` | No CLI integration (relay prompts only) |
 | `opencode` | OpenCode CLI (`opencode`) — supports local and cloud models |
+| `codex` | Codex CLI (`codex`) |
+
+#### Model Selection
+
+Set `model` to pass the runner's model flag at invocation time. AgentWeave currently applies it to `claude`, `claude_proxy`, `kimi`, `codex`, `opencode`, and compatible `native` runners.
+
+```yaml
+agents:
+  claude:
+    runner: claude
+    model: <claude-model>
+
+  codex:
+    runner: codex
+    model: gpt-5.5
+
+  kimi:
+    runner: kimi
+    model: kimi-k2
+```
 
 #### Environment Variables
 

@@ -1227,6 +1227,11 @@ def _agent_ping_cmd(
     if runner_type == "kimi":
         # Use wire mode for JSON-RPC streaming with context usage reporting
         cmd = ["kimi", "--wire"]
+        session = Session.load()
+        if session:
+            model = session.get_runner_config(agent).get("model")
+            if model:
+                cmd += [rc.get("model_flag", "--model"), model]
         if session_id:
             cmd += ["--session", session_id]
         return cmd
@@ -1543,13 +1548,16 @@ def _build_agent_context(agent: str, session: Any) -> str:
     lines.append("## Team")
     lines.append("")
     for ag in session.agent_names:
-        runner_type = session.get_runner_config(ag).get("runner", "native")
+        runner_config = session.get_runner_config(ag)
+        runner_type = runner_config.get("runner", "native")
         display_model = {
-            "claude": "Claude",
-            "claude_proxy": session.get_runner_config(ag).get("model", "Claude Proxy"),
-            "kimi": "Kimi",
+            "claude": runner_config.get("model", "Claude"),
+            "claude_proxy": runner_config.get("model", "Claude Proxy"),
+            "kimi": runner_config.get("model", "Kimi"),
+            "codex": runner_config.get("model", "Codex"),
+            "opencode": runner_config.get("model", "OpenCode"),
             "manual": "Manual",
-        }.get(runner_type, runner_type.title())
+        }.get(runner_type, runner_config.get("model", runner_type.title()))
 
         ag_roles = get_agent_roles(ag)
         roles_str = ", ".join(ag_roles) if ag_roles else "no role"

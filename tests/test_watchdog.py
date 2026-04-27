@@ -1,8 +1,7 @@
 """Tests for watchdog dispatch logic."""
 
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -12,6 +11,55 @@ from agentweave.watchdog import (
     _parse_codex_stream_line,
     _write_codex_context_usage,
 )
+
+
+class TestAgentPingCmdKimi:
+    """Tests for _agent_ping_cmd with kimi runner."""
+
+    @pytest.fixture(autouse=True)
+    def setup_session(self, tmp_path):
+        """Set up a temporary session with kimi agents."""
+        self.session_dir = tmp_path / ".agentweave"
+        self.session_dir.mkdir()
+        self.agents_dir = self.session_dir / "agents"
+        self.agents_dir.mkdir()
+        self.context_dir = self.session_dir / "context"
+        self.context_dir.mkdir()
+
+        session_data = {
+            "id": "test-session",
+            "name": "Test",
+            "mode": "hierarchical",
+            "principal": "claude",
+            "agents": {
+                "kimi-dev": {"runner": "kimi", "model": "kimi-k2"},
+                "kimi-qa": {"runner": "kimi"},
+            },
+        }
+
+        from agentweave.session import Session
+
+        self.session = Session(session_data)
+
+        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir), patch(
+            "agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir
+        ), patch("agentweave.session.Session.load", return_value=self.session):
+            yield
+
+    def test_kimi_with_model(self):
+        """Model flag is appended when agent config has a model."""
+        cmd = _agent_ping_cmd("kimi-dev", "do the task")
+        assert cmd == ["kimi", "--wire", "--model", "kimi-k2"]
+
+    def test_kimi_without_model(self):
+        """No --model flag when model is not configured."""
+        cmd = _agent_ping_cmd("kimi-qa", "do the task")
+        assert cmd == ["kimi", "--wire"]
+
+    def test_kimi_resume_with_model(self):
+        """Resume keeps the configured model flag."""
+        cmd = _agent_ping_cmd("kimi-dev", "do the task", session_id="sess-123")
+        assert cmd == ["kimi", "--wire", "--model", "kimi-k2", "--session", "sess-123"]
 
 
 class TestAgentPingCmdOpencode:
@@ -45,10 +93,10 @@ class TestAgentPingCmdOpencode:
 
         self.session = Session(session_data)
 
-        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir):
-            with patch("agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir):
-                with patch("agentweave.session.Session.load", return_value=self.session):
-                    yield
+        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir), patch(
+            "agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir
+        ), patch("agentweave.session.Session.load", return_value=self.session):
+            yield
 
     def test_opencode_basic_no_session_no_model(self):
         """Basic dispatch without session or model."""
@@ -135,11 +183,12 @@ class TestAgentPingCmdCodex:
 
         self.session = Session(session_data)
 
-        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir):
-            with patch("agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir):
-                with patch("agentweave.watchdog.CONTEXT_USAGE_DIR", self.context_usage_dir):
-                    with patch("agentweave.session.Session.load", return_value=self.session):
-                        yield
+        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir), patch(
+            "agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir
+        ), patch("agentweave.watchdog.CONTEXT_USAGE_DIR", self.context_usage_dir), patch(
+            "agentweave.session.Session.load", return_value=self.session
+        ):
+            yield
 
     def test_codex_first_ping_no_session(self):
         """First ping without session starts fresh."""
@@ -194,7 +243,6 @@ class TestAgentPingCmdCodex:
         """Memory disabled flag when runner_options.memory is false."""
         cmd = _agent_ping_cmd("codex-memory-off", "do the task")
         assert "-c" in cmd
-        flags = [c for c in cmd if c == "-c"]
         # Should have at least one -c for memory_mode
         memory_flags = [c for c in cmd if "memory_mode=disabled" in c]
         assert len(memory_flags) == 1

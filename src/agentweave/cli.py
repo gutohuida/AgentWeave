@@ -20,10 +20,14 @@ from .constants import (
     AGENT_CONTEXT_FILES,
     AGENT_CONTEXT_FILES_DEFAULT,
     AGENTWEAVE_DIR,
+    AGENTWEAVE_GITIGNORE_PATTERNS,
     DEFAULT_AGENTS,
+    GITIGNORE_BEGIN_MARKER,
+    GITIGNORE_END_MARKER,
     ROLES_CONFIG_FILE,
     ROLES_DIR,
     RUNNER_CONFIGS,
+    RUNNER_TYPES,
     SESSION_FILE,
     SHARED_DIR,
     TRANSPORT_CONFIG_FILE,
@@ -65,6 +69,56 @@ from .utils import (
 from .validator import validate_message, validate_task
 
 
+def _ensure_agentweave_gitignore(path: Optional[Path] = None) -> bool:
+    """Create or update .gitignore with AgentWeave runtime-state ignore entries."""
+    target = path or Path.cwd() / ".gitignore"
+    block_lines = [
+        GITIGNORE_BEGIN_MARKER,
+        *AGENTWEAVE_GITIGNORE_PATTERNS,
+        GITIGNORE_END_MARKER,
+    ]
+    block = "\n".join(block_lines)
+
+    if not target.exists():
+        target.write_text(block + "\n", encoding="utf-8")
+        return True
+
+    content = target.read_text(encoding="utf-8")
+    if GITIGNORE_BEGIN_MARKER in content and GITIGNORE_END_MARKER in content:
+        before, remainder = content.split(GITIGNORE_BEGIN_MARKER, 1)
+        _old_block, after = remainder.split(GITIGNORE_END_MARKER, 1)
+        prefix = before.rstrip("\n")
+        replacement = f"{prefix}\n\n{block}{after}" if prefix else f"{block}{after}"
+        target.write_text(replacement, encoding="utf-8")
+        return True
+
+    missing = [pattern for pattern in AGENTWEAVE_GITIGNORE_PATTERNS if pattern not in content]
+    if not missing:
+        return False
+
+    prefix = "" if not content else "\n" if content.endswith("\n") else "\n\n"
+    target.write_text(content + prefix + block + "\n", encoding="utf-8")
+    return True
+
+
+def _ensure_agentweave_env(path: Optional[Path] = None) -> bool:
+    """Create a local .env scaffold for AgentWeave secrets if it does not exist."""
+    target = path or Path.cwd() / ".env"
+    if target.exists():
+        return False
+
+    target.write_text(
+        "# AgentWeave local environment variables\n"
+        "# This file is gitignored. Put provider API keys and local overrides here.\n\n"
+        "# MINIMAX_API_KEY=\n"
+        "# ZHIPU_API_KEY=\n"
+        "# OPENAI_API_KEY=\n"
+        "# ANTHROPIC_API_KEY=\n",
+        encoding="utf-8",
+    )
+    return True
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     """Initialize a new session."""
     import json as _json
@@ -85,6 +139,10 @@ def cmd_init(args: argparse.Namespace) -> int:
                 from .config import generate_agentweave_yml
 
                 generate_agentweave_yml(existing_session)
+                if _ensure_agentweave_gitignore():
+                    print_success("Updated .gitignore with AgentWeave runtime state")
+                if _ensure_agentweave_env():
+                    print_success("Created .env for local AgentWeave secrets")
                 print_success("Generated agentweave.yml from existing session")
                 print_info("Run 'agentweave activate' to apply configuration")
                 return 0
@@ -364,6 +422,8 @@ agentweave summary
 
         # Build list of root files that were created
         root_files_created = sorted(written_root_files)
+        gitignore_updated = _ensure_agentweave_gitignore()
+        env_created = _ensure_agentweave_env()
 
         print_success(f"Initialized session: {session.name}")
         print(f"   ID:      {session.id}")
@@ -383,6 +443,10 @@ agentweave summary
             print("\n[FILES] Created at project root (auto-read by agents each session):")
             for fname in root_files_created:
                 print(f"     {fname}")
+        if gitignore_updated:
+            print("     .gitignore")
+        if env_created:
+            print("     .env")
         print("\nFile purposes:")
         print("  • .agentweave/ai_context.md  — Project DNA source (edit this)")
         for fname in root_files_created:
@@ -828,6 +892,25 @@ def cmd_session_register(args: argparse.Namespace) -> int:
             except Exception as exc:
                 print_warning(f"Could not generate agent YAML: {exc}")
         print(f"  kimi --agent-file .agentweave/agent-{agent}.yaml --session {session_id}")
+    elif runner == "codex":
+        print(
+            "  "
+            + _build_codex_launch_command(
+                agent,
+                model=runner_cfg.get("model"),
+                session_id=session_id,
+                yolo=session.get_agent_yolo(agent),
+            )
+        )
+    elif runner == "opencode":
+        print(
+            "  "
+            + _build_opencode_launch_command(
+                agent,
+                model=runner_cfg.get("model"),
+                session_id=session_id,
+            )
+        )
     else:
         print(f"  Agent runner: {runner}")
         print(f"  Session ID: {session_id}")
@@ -1506,13 +1589,16 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
     lines.append("## Team Directory")
     lines.append("")
     for ag in session.agent_names:
-        runner_type = session.get_runner_config(ag).get("runner", "native")
+        runner_config = session.get_runner_config(ag)
+        runner_type = runner_config.get("runner", "native")
         display_model = {
-            "claude": "Claude",
-            "claude_proxy": session.get_runner_config(ag).get("model", "Claude Proxy"),
-            "kimi": "Kimi",
+            "claude": runner_config.get("model", "Claude"),
+            "claude_proxy": runner_config.get("model", "Claude Proxy"),
+            "kimi": runner_config.get("model", "Kimi"),
+            "codex": runner_config.get("model", "Codex"),
+            "opencode": runner_config.get("model", "OpenCode"),
             "manual": "Manual",
-        }.get(runner_type, runner_type.title())
+        }.get(runner_type, runner_config.get("model", runner_type.title()))
 
         ag_roles = get_agent_roles(ag)
         roles_str = ", ".join(ag_roles) if ag_roles else "no role assigned"
@@ -2579,6 +2665,8 @@ def cmd_activate(_args: argparse.Namespace) -> int:
         print("[PILOT] Piloted agents — run commands:")
         for name, agent in pilot_agents:
             _runner = getattr(agent, "runner", "") or ""
+            _model = getattr(agent, "model", None)
+            _yolo = bool(getattr(agent, "yolo", False))
             if _runner == "claude_proxy":
                 print(f"  {name}:  eval $(agentweave switch {name})")
             elif not _runner or _runner in ("native", "claude"):
@@ -2588,6 +2676,10 @@ def cmd_activate(_args: argparse.Namespace) -> int:
                     print(f"  {name}:  claude --resume {_sid} --append-system-prompt-file {_ctx}")
                 else:
                     print(f"  {name}:  claude --append-system-prompt-file {_ctx}")
+            elif _runner == "codex":
+                print(f"  {name}:  {_build_codex_launch_command(name, model=_model, yolo=_yolo)}")
+            elif _runner == "opencode":
+                print(f"  {name}:  {_build_opencode_launch_command(name, model=_model)}")
             else:
                 # kimi and other runners
                 print(f'  {name}:  agentweave run --agent {name} "<task>"')
@@ -2601,6 +2693,48 @@ def cmd_activate(_args: argparse.Namespace) -> int:
     print("  agentweave relay --agent <name>  # Generate relay prompt for an agent")
 
     return 0
+
+
+def _build_codex_launch_command(
+    agent: str,
+    model: Optional[str] = None,
+    session_id: Optional[str] = None,
+    yolo: bool = False,
+    prompt: str = '"<prompt>"',
+) -> str:
+    """Build a human-run Codex command with AgentWeave context injected."""
+    parts = ["codex", "exec"]
+    if session_id:
+        parts += ["resume", session_id]
+    parts += ["--json", "--skip-git-repo-check"]
+    if model:
+        parts += ["--model", model]
+    context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
+    if context_file.exists():
+        parts += ["-c", f"model_instructions_file={context_file}"]
+    if yolo:
+        parts += ["--dangerously-bypass-approvals-and-sandbox"]
+    parts.append(prompt)
+    return " ".join(parts)
+
+
+def _build_opencode_launch_command(
+    agent: str,
+    model: Optional[str] = None,
+    session_id: Optional[str] = None,
+    prompt: str = "'<prompt>'",
+) -> str:
+    """Build a human-run OpenCode command with AgentWeave context injected."""
+    parts = ["opencode", "run"]
+    if session_id != "":
+        parts += ["--session", session_id or f"agentweave-{agent}"]
+    if model:
+        parts += ["--model", model]
+    context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
+    if context_file.exists():
+        parts += ["--file", str(context_file)]
+    parts += ["--format", "json", prompt]
+    return " ".join(parts)
 
 
 def _activate_transport(config: "AgentWeaveConfig") -> int:
@@ -3170,7 +3304,7 @@ def cmd_agent_set_session(args: argparse.Namespace) -> int:
 
 
 def cmd_agent_set_model(args: argparse.Namespace) -> int:
-    """Set the model for a claude_proxy agent.
+    """Set the model for an agent runner that supports model selection.
 
     Usage: agentweave agent set-model <agent_name> <model_name>
     """
@@ -3186,18 +3320,16 @@ def cmd_agent_set_model(args: argparse.Namespace) -> int:
         return 1
 
     runner_config = session.get_runner_config(agent)
-    if runner_config.get("runner") != "claude_proxy":
-        print_error(
-            f"{agent} is not configured as claude_proxy. "
-            f"Run 'agentweave agent configure {agent} --runner claude_proxy' first."
-        )
+    runner = runner_config.get("runner", "native")
+    if runner == "manual":
+        print_error(f"{agent} is configured as manual; no CLI model flag can be applied.")
         return 1
 
     # Get existing config
     env_vars = runner_config.get("env_vars", {})
 
     # Update model
-    session.set_runner_config(agent, "claude_proxy", env_vars, model=model)
+    session.set_runner_config(agent, runner, env_vars, model=model)
     if not session.save():
         print_error("Failed to save session")
         return 1
@@ -3705,27 +3837,24 @@ def cmd_switch(args: argparse.Namespace) -> int:
         print()
         print("Launch command:")
         model = runner_config.get("model")
-        model_flag = f" --model {model}" if model else ""
-        context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
-        file_flag = f" --file {context_file}" if context_file.exists() else ""
-        print(
-            f"  opencode run --session agentweave-{agent}{model_flag}{file_flag} "
-            f"--format json '<prompt>'"
-        )
+        print(f"  {_build_opencode_launch_command(agent, model=model)}")
         print()
         print("Or start a new session:")
-        print(f"  opencode run{model_flag}{file_flag} --format json '<prompt>'")
+        print(f"  {_build_opencode_launch_command(agent, model=model, session_id='')}")
         return 0
 
     if runner == "codex":
         print_info(f"{agent} is a Codex agent")
         print()
         print("Launch command:")
-        model = runner_config.get("model")
-        model_flag = f" --model {model}" if model else ""
-        context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
-        ctx_flag = f" -c model_instructions_file={context_file}" if context_file.exists() else ""
-        print(f'  codex exec --json{model_flag}{ctx_flag} "<prompt>"')
+        print(
+            "  "
+            + _build_codex_launch_command(
+                agent,
+                model=runner_config.get("model"),
+                yolo=session.get_agent_yolo(agent),
+            )
+        )
         print()
         return 0
 
@@ -3964,7 +4093,7 @@ For more help: https://github.com/gutohuida/AgentWeave
     agent_configure.add_argument("agent_name", help="Agent name (must be in current session)")
     agent_configure.add_argument(
         "--runner",
-        choices=["claude", "native", "claude_proxy", "kimi", "manual"],
+        choices=RUNNER_TYPES,
         help="Runner type (default: auto-detected from known providers)",
     )
     agent_configure.add_argument(
@@ -3981,7 +4110,7 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--model",
         type=str,
         default=None,
-        help="Model name for claude_proxy agents (e.g., MiniMax-M2.5, glm-4)",
+        help="Model name to pass to the agent CLI when supported",
     )
     agent_configure.add_argument(
         "--pilot",
@@ -4005,7 +4134,7 @@ For more help: https://github.com/gutohuida/AgentWeave
     agent_set_session.add_argument("session_id", help="Claude session ID (from claude --list)")
 
     agent_set_model = agent_subparsers.add_parser(
-        "set-model", help="Set the model for a claude_proxy agent"
+        "set-model", help="Set the model for an agent runner"
     )
     agent_set_model.add_argument("agent_name", help="Agent name (e.g., minimax)")
     agent_set_model.add_argument("model", help="Model name (e.g., MiniMax-M2.5)")

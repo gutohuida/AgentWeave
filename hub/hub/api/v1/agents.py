@@ -293,11 +293,11 @@ async def list_agents(
 
         _runner = agent_meta.get("runner", "native")
         _display_model = {
-            "claude": "Claude",
+            "claude": agent_meta.get("model", "Claude"),
             "claude_proxy": agent_meta.get("model", "Claude Proxy"),
-            "kimi": "Kimi",
+            "kimi": agent_meta.get("model", "Kimi"),
             "manual": "Manual",
-            "opencode": "OpenCode",
+            "opencode": agent_meta.get("model", "OpenCode"),
             "codex": agent_meta.get("model", "Codex"),
         }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 

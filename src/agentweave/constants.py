@@ -38,6 +38,28 @@ TRIGGERED_DIRECT_FILE = AGENTWEAVE_DIR / "triggered_direct.json"  # gitignored, 
 LOGS_DIR = AGENTWEAVE_DIR / "logs"
 EVENTS_LOG_FILE = LOGS_DIR / "events.jsonl"  # gitignored, machine-local
 
+# Git ignore entries for runtime/local AgentWeave state. Safe-to-commit files such as
+# .agentweave/roles.json, .agentweave/roles/*.md, and .agentweave/ai_context.md are omitted.
+GITIGNORE_BEGIN_MARKER = "# AgentWeave runtime state"
+GITIGNORE_END_MARKER = "# End AgentWeave runtime state"
+AGENTWEAVE_GITIGNORE_PATTERNS = [
+    ".agentweave/tasks/*/",
+    ".agentweave/messages/*/",
+    ".agentweave/agents/*.json",
+    ".agentweave/session.json",
+    ".agentweave/transport.json",
+    ".agentweave/.git_seen/",
+    ".agentweave/logs/",
+    ".agentweave/watchdog.pid",
+    ".agentweave/watchdog.log",
+    ".agentweave/watchdog.heartbeat",
+    ".agentweave/triggered_direct.json",
+    ".agentweave/project_instructions.md",
+    ".env",
+    "kimichanges.md",
+    "kimiwork.md",
+]
+
 
 # Transport types
 class TransportType(str, Enum):
@@ -144,6 +166,7 @@ RUNNER_CONFIGS: dict = {
         # Session ID is on the last stdout line: "To resume this session: kimi -r <ID>"
         "session_source": "stdout_resume_line",
         "context_flag": "--agent-file",
+        "model_flag": "--model",
         "mcp_add_cmd": [
             "kimi",
             "mcp",

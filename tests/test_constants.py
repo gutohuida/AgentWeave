@@ -35,3 +35,11 @@ class TestOpencodeConstants:
     def test_opencode_in_known_agents(self):
         """opencode must be in KNOWN_AGENTS."""
         assert "opencode" in KNOWN_AGENTS
+
+
+class TestKimiConstants:
+    """Tests that kimi exposes model selection metadata."""
+
+    def test_kimi_has_model_flag(self):
+        """Kimi supports the same model flag wiring as other model-selectable runners."""
+        assert RUNNER_CONFIGS["kimi"]["model_flag"] == "--model"
