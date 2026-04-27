@@ -2711,7 +2711,7 @@ def _build_codex_launch_command(
         parts += ["--model", model]
     context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
     if context_file.exists():
-        parts += ["-c", f"model_instructions_file={context_file}"]
+        parts += ["-c", f"model_instructions_file={context_file.as_posix()}"]
     if yolo:
         parts += ["--dangerously-bypass-approvals-and-sandbox"]
     parts.append(prompt)
@@ -2732,7 +2732,7 @@ def _build_opencode_launch_command(
         parts += ["--model", model]
     context_file = AGENTWEAVE_DIR / "context" / f"{agent}.md"
     if context_file.exists():
-        parts += ["--file", str(context_file)]
+        parts += ["--file", context_file.as_posix()]
     parts += ["--format", "json", prompt]
     return " ".join(parts)
 
