@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-These tools are available to agents in both **local MCP mode** and **Hub MCP mode**.
+These tools are available to agents in **local MCP mode** (`agentweave-mcp`) and **Hub MCP mode** (`python -m hub.mcp_server`). Some tools are transport-specific as noted below.
 
 ## Messaging
 
@@ -46,7 +46,7 @@ List all agents in the session with their roles and runners.
 
 **Returns:** Array of agents with `name`, `session_role`, `runner`, `dev_roles`, and `is_principal` fields.
 
-### `save_checkpoint(agent, session_intent, files_modified, decisions, next_steps, ...)` (CLI only)
+### `save_checkpoint(agent, session_intent, files_modified, decisions, next_steps, ...)` (local MCP only)
 
 Save a context checkpoint before handoffs or session end. Writes to `.agentweave/shared/checkpoints/<agent>-<timestamp>.md`.
 
@@ -88,9 +88,29 @@ Get configuration for a specific agent including runner type, base URL, and API 
 
 **Returns:** Object with `runner`, `base_url`, `api_key_var`, and `pilot` fields.
 
-## Jobs (Hub only)
+## Self-Registration
 
-AI Jobs allow scheduling recurring tasks for agents using cron expressions.
+Requires Hub/HTTP transport. In local MCP mode these tools return an error unless HTTP transport is active; in Hub MCP mode they call the Hub REST API directly.
+
+### `register_agent(name, contact_mode, ...)`
+
+Register or re-register an agent. `contact_mode` must be `poll`, `mcp-push`, or `watchdog-spawn`.
+
+### `update_agent_config(name, ...)`
+
+Partially update a self-registered agent's configuration, contact mode, MCP endpoint, or spawn command.
+
+### `get_context(role)`
+
+Return the markdown role guide for a role such as `backend_dev`.
+
+### `heartbeat(agent)`
+
+Send a liveness heartbeat for an agent.
+
+## Jobs
+
+AI Jobs allow scheduling recurring tasks for agents using cron expressions. Local transport stores jobs under `.agentweave/jobs/`; HTTP transport stores them in the Hub database and exposes them in the dashboard.
 
 ### `create_job(name, agent, message, cron, session_mode?)`
 

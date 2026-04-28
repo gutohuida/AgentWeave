@@ -43,3 +43,20 @@ class TestKimiConstants:
     def test_kimi_has_model_flag(self):
         """Kimi supports the same model flag wiring as other model-selectable runners."""
         assert RUNNER_CONFIGS["kimi"]["model_flag"] == "--model"
+
+
+class TestCodexMcpConstants:
+    """Tests that codex_mcp is registered as a runner."""
+
+    def test_codex_mcp_in_runner_types(self):
+        """codex_mcp must be in RUNNER_TYPES."""
+        assert "codex_mcp" in RUNNER_TYPES
+
+    def test_codex_mcp_in_runner_configs(self):
+        """codex_mcp must have a complete RUNNER_CONFIGS entry."""
+        assert "codex_mcp" in RUNNER_CONFIGS
+        cfg = RUNNER_CONFIGS["codex_mcp"]
+        assert cfg["cli"] == "codex"
+        assert cfg["subcommand"] == "mcp-server"
+        assert cfg["session_source"] == "mcp"
+        assert cfg["session_id_field"] == "threadId"

@@ -6,10 +6,12 @@ AgentWeave uses a layered context system to give agents the right information at
 
 ```
 Project Root/
-├── CLAUDE.md / KIMI.md / GEMINI.md / AGENTS.md   # Agent-specific context (auto-read)
-├── AI_CONTEXT.md                                 # Your project DNA (you edit this)
+├── CLAUDE.md / GEMINI.md / AGENTS.md             # Agent-specific context (auto-read)
 └── .agentweave/
-    ├── ai_context.md        # Template source (hidden, don't edit directly)
+    ├── ai_context.md        # Your project DNA source
+    ├── context/             # Per-agent context profiles injected by runners
+    │   ├── claude.md
+    │   └── kimi.md
     ├── protocol.md          # Collaboration protocol
     ├── roles.json           # Agent role assignments (auto-generated)
     ├── roles/               # Per-role behavioral guides
@@ -28,11 +30,12 @@ Each agent reads a specific file at the project root on session start:
 |-------|------|-------|
 | `claude` | `CLAUDE.md` | Claude Code specific |
 | `gemini` | `GEMINI.md` | Gemini CLI specific |
+| `claude_proxy` runners | `CLAUDE.md` | Proxy agents run through Claude Code |
 | All others | `AGENTS.md` | Generic context |
 
-These files are **auto-generated** from `AI_CONTEXT.md` via `agentweave sync-context`.
+These files are generated from `.agentweave/ai_context.md` via `agentweave sync-context`. The command also writes `.agentweave/context/<agent>.md`, which combines project instructions, the AgentWeave protocol, team directory, assigned role guides, and project context for runner-level context injection.
 
-## AI_CONTEXT.md — Project DNA
+## .agentweave/ai_context.md — Project DNA
 
 This is the **source of truth** for your project. Edit this file to define:
 
@@ -91,19 +94,21 @@ Generated on `init`. Describes:
 
 Auto-generated role configuration. Contains:
 
-- `agent_roles` — maps each agent to an array of role keys (e.g., `"claude": ["tech_lead", "backend_dev"]`)
-- `agent_assignments` — legacy single-role map (auto-converted to `agent_roles` for backward compatibility)
+- `agent_assignments` — maps each agent to a single default role in freshly initialized projects
+- `agent_roles` — optional multi-role map used by newer role-management flows
 - `roles` — role definitions with labels and responsibilities
 
 Example:
 
 ```json
 {
-  "version": 2,
+  "version": 1,
+  "agent_assignments": {
+    "claude": "tech_lead",
+    "kimi": "backend_dev"
+  },
   "agent_roles": {
-    "claude": ["tech_lead", "backend_dev"],
-    "kimi": ["backend_dev"],
-    "codex": ["frontend_dev", "ui_designer"]
+    "claude": ["tech_lead", "backend_dev"]
   },
   "roles": {
     "tech_lead": {
@@ -114,13 +119,9 @@ Example:
       "label": "Backend Developer",
       "responsibilities_short": "APIs, database, business logic, server-side"
     },
-    "frontend_dev": {
-      "label": "Frontend Developer", 
-      "responsibilities_short": "UI components, client-side state, styling"
-    },
-    "ui_designer": {
-      "label": "UI Designer",
-      "responsibilities_short": "Visual design, component styling, UX polish"
+    "code_reviewer": {
+      "label": "Code Reviewer",
+      "responsibilities_short": "Pull request reviews, style enforcement"
     }
   }
 }
@@ -166,14 +167,11 @@ Per-role behavioral guides. Available roles include:
 | `devops_engineer.md` | CI/CD, infrastructure | opendevin |
 | `qa_engineer.md` | Tests, quality assurance | — |
 | `security_engineer.md` | Security review, auth | — |
-| `docs_writer.md` | Documentation, guides, READMEs | — |
-| `product_manager.md` | Product requirements, prioritization | — |
+| `technical_writer.md` | Documentation, guides, READMEs | gpt |
+| `code_reviewer.md` | Pull request reviews, style enforcement | aider, copilot |
 | `project_manager.md` | Project planning, coordination | — |
-| `ui_designer.md` | Visual design, component styling | — |
-| `ux_researcher.md` | User research, usability analysis | — |
 | `data_engineer.md` | Data pipelines, ETL, warehousing | — |
-| `data_scientist.md` | Analytics, ML models, insights | — |
-| `mobile_dev.md` | iOS, Android, React Native | — |
+| `ml_engineer.md` | ML models, training pipelines, inference | — |
 
 Agents read all their assigned role files at session start.
 
@@ -204,8 +202,9 @@ Agents read all their assigned role files at session start.
 ## What to Commit
 
 **Safe to commit:**
-- `AI_CONTEXT.md`
-- `CLAUDE.md` / `KIMI.md` / `GEMINI.md` / `AGENTS.md`
+- `CLAUDE.md` / `GEMINI.md` / `AGENTS.md`
+- `.agentweave/ai_context.md`
+- `.agentweave/context/*.md`
 - `.agentweave/protocol.md`
 - `.agentweave/roles.json`
 - `.agentweave/roles/*.md`
@@ -232,7 +231,7 @@ When you run `agentweave init`, Claude Code skills are auto-generated in `.claud
 | `/aw-done` | Mark task complete and notify principal |
 | `/aw-review` | Request a code review |
 | `/aw-relay` | Generate relay prompt for manual handoff |
-| `/aw-sync` | Sync context files from `AI_CONTEXT.md` |
+| `/aw-sync` | Sync context files from `.agentweave/ai_context.md` |
 | `/aw-revise` | Accept a revision request and move task to in_progress |
 
 ### AW-Spec Workflow Skills

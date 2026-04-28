@@ -18,7 +18,7 @@ Yes (in local MCP mode or Hub mode). Run `agentweave start` once. If they stop, 
 
 ## Should I commit `.agentweave/`?
 
-Partially. Runtime state (tasks, messages, `session.json`, `transport.json`) is gitignored. `AGENTS.md`, `AI_CONTEXT.md`, `.agentweave/roles.json`, and `.agentweave/roles/*.md` are safe to commit.
+Partially. Runtime state (tasks, messages, `session.json`, `transport.json`, logs, watchdog files, and `.env`) is gitignored. `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.agentweave/ai_context.md`, `.agentweave/context/*.md`, `.agentweave/roles.json`, `.agentweave/roles/*.md`, `.agentweave/protocol.md`, and `.agentweave/shared/context.md` are safe to commit.
 
 See [Configuration](../getting-started/configuration.md) for the full commit guidance, and [Context Files](context-files.md) for details on the context file system.
 

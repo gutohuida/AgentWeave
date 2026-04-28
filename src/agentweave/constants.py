@@ -132,7 +132,16 @@ AGENT_CONTEXT_FILES: dict = {
 AGENT_CONTEXT_FILES_DEFAULT = "AGENTS.md"
 
 # Agent runner types — how the agent CLI is invoked
-RUNNER_TYPES = ["claude", "native", "claude_proxy", "kimi", "manual", "opencode", "codex"]
+RUNNER_TYPES = [
+    "claude",
+    "native",
+    "claude_proxy",
+    "kimi",
+    "manual",
+    "opencode",
+    "codex",
+    "codex_mcp",
+]
 
 # Runner configuration — CLI properties per runner type.
 # Used by watchdog and CLI to dispatch commands without hardcoding agent names.
@@ -199,6 +208,14 @@ RUNNER_CONFIGS: dict = {
         "session_event_type": "thread.started",
         "model_flag": "--model",
         "context_flag": ["-c", "model_instructions_file={path}"],
+        "mcp_add_cmd": ["codex", "mcp", "add", "{name}", "--", "{server_cmd}"],
+    },
+    "codex_mcp": {
+        "cli": "codex",
+        "subcommand": "mcp-server",
+        "session_source": "mcp",
+        "session_id_field": "threadId",
+        "model_flag": "--model",
         "mcp_add_cmd": ["codex", "mcp", "add", "{name}", "--", "{server_cmd}"],
     },
     "manual": {

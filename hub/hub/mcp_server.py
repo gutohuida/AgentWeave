@@ -215,7 +215,9 @@ def list_tasks(agent: Optional[str] = None) -> List[Dict[str, Any]]:
         agent: Filter by assignee name. Omit to list all tasks.
 
     Returns:
-        List of task dicts.
+        List of task dicts. Each assigned task includes the assignee runtime fields
+        'assignee_status', 'assignee_status_msg', and 'assignee_last_seen' so callers can
+        tell whether the worker is currently running or idle.
     """
     try:
         return _hub_request("GET", "/tasks", params={"agent": agent})
@@ -231,7 +233,7 @@ def get_task(task_id: str) -> Dict[str, Any]:
         task_id: Task ID (e.g. "task-abc123")
 
     Returns:
-        Task dict, or {'error': '...'} if not found.
+        Task dict, including assignee runtime fields, or {'error': '...'} if not found.
     """
     try:
         return _hub_request("GET", f"/tasks/{task_id}")

@@ -18,7 +18,7 @@ The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time vis
 
 ### Prerequisites
 
-- Python 3.8+ and pip
+- Python 3.10+ and pip for the recommended MCP/Hub workflow (the core CLI supports Python 3.8+)
 - Docker and Docker Compose
 
 ### Step 1 — Start the Hub
@@ -85,7 +85,7 @@ Open **http://localhost:8000** to see:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AW_BOOTSTRAP_API_KEY` | *(required)* | API key auto-created on first start (`aw_live_…`) |
+| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key auto-created on first start (`aw_live_…`) |
 | `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
 | `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
 | `AW_PORT` | `8000` | Port the Hub listens on |
@@ -329,9 +329,9 @@ Available to agents in both local MCP mode and via Hub MCP:
 | `get_status()` | Session-wide summary + task counts |
 | `ask_user(from_agent, question)` | Post a question to the human (Hub only) |
 | `get_answer(question_id)` | Check if the human answered (Hub only) |
-| `create_job(name, agent, message, cron)` | Create a scheduled recurring job (Hub only) |
-| `list_jobs(agent?)` | List scheduled jobs (Hub only) |
-| `run_job(job_id)` | Trigger a job immediately (Hub only) |
+| `create_job(name, agent, message, cron)` | Create a scheduled recurring job |
+| `list_jobs(agent?)` | List scheduled jobs |
+| `run_job(job_id)` | Trigger a job immediately |
 | `register_session(agent, session_id)` | Register a pilot agent session |
 
 ---
@@ -353,7 +353,7 @@ git clone https://github.com/gutohuida/AgentWeave.git
 cd AgentWeave/hub
 
 cp .env.example .env
-# Edit .env: set AW_BOOTSTRAP_API_KEY
+# Optional: edit .env to set AW_BOOTSTRAP_API_KEY
 
 docker compose up --build -d
 ```
@@ -372,7 +372,7 @@ npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at l
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps) — v0.34.0
+├── src/agentweave/     CLI package (Python 3.8+, zero core runtime deps) — v0.34.0
 ├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + Docker) — v0.28.0
 │   ├── hub/            Hub Python package
 │   ├── ui/             React dashboard (built into Docker image, no separate server)

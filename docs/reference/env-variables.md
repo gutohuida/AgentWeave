@@ -6,7 +6,7 @@ Set these in the Hub's `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AW_BOOTSTRAP_API_KEY` | *(required)* | API key for Hub authentication. Format: `aw_live_{random32}` |
+| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key for Hub authentication. Format: `aw_live_{32 hex chars}` |
 | `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
 | `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
 | `AW_PORT` | `8000` | Port the Hub listens on |

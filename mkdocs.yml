@@ -69,6 +69,7 @@ nav:
     - guides/aw-spec-workflow.md
     - guides/claude-proxy-agents.md
     - guides/pilot-mode.md
+    - guides/opencode-agents.md
     - guides/ai-jobs.md
     - guides/cross-machine-collab.md
     - guides/dashboard.md

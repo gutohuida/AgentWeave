@@ -18,7 +18,7 @@ pip install agentweave-ai
 pip install "agentweave-ai[mcp]"
 ```
 
-This includes the `fastmcp` dependency needed for the MCP server and watchdog.
+This includes `fastmcp` and `pyyaml` for the MCP server and declarative configuration. The core CLI supports Python 3.8+, but the `fastmcp` dependency is installed only on Python 3.10+, so use Python 3.10 or newer for MCP mode.
 
 ### Development Install
 

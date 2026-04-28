@@ -9,12 +9,42 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Task
+from ...db.models import AgentHeartbeat, Task
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+def _task_response(task: Task, heartbeat: Optional[AgentHeartbeat] = None) -> TaskResponse:
+    response = TaskResponse.model_validate(task)
+    response.assignee_status = heartbeat.status if heartbeat else ("idle" if task.assignee else None)
+    response.assignee_status_msg = heartbeat.message if heartbeat else None
+    response.assignee_last_seen = heartbeat.timestamp if heartbeat else None
+    return response
+
+
+async def _latest_heartbeats_by_agent(
+    session: AsyncSession,
+    project_id: str,
+    agent_names: set[str],
+) -> dict[str, AgentHeartbeat]:
+    if not agent_names:
+        return {}
+
+    result = await session.execute(
+        select(AgentHeartbeat)
+        .where(
+            AgentHeartbeat.project_id == project_id,
+            AgentHeartbeat.agent.in_(agent_names),
+        )
+        .order_by(AgentHeartbeat.agent, AgentHeartbeat.timestamp.desc())
+    )
+    heartbeats: dict[str, AgentHeartbeat] = {}
+    for heartbeat in result.scalars().all():
+        heartbeats.setdefault(heartbeat.agent, heartbeat)
+    return heartbeats
 
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
@@ -58,7 +88,13 @@ async def create_task(
         {"id": task_id, "title": body.title},
         agent=body.assignee,
     )
-    return task
+    await session.refresh(task)
+    heartbeats = await _latest_heartbeats_by_agent(
+        session,
+        project_id,
+        {task.assignee} if task.assignee else set(),
+    )
+    return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
 
 
 @router.get("", response_model=List[TaskResponse])
@@ -78,7 +114,16 @@ async def list_tasks(
         q = q.where(Task.status == task_status)
     q = q.order_by(Task.created_at).offset(offset).limit(limit)
     result = await session.execute(q)
-    return result.scalars().all()
+    tasks = result.scalars().all()
+    heartbeats = await _latest_heartbeats_by_agent(
+        session,
+        project_id,
+        {task.assignee for task in tasks if task.assignee},
+    )
+    return [
+        _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+        for task in tasks
+    ]
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -91,7 +136,12 @@ async def get_task(
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    heartbeats = await _latest_heartbeats_by_agent(
+        session,
+        project_id,
+        {task.assignee} if task.assignee else set(),
+    )
+    return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -126,4 +176,10 @@ async def update_task(
         {"id": task_id, "status": task.status},
         agent=task.assignee,
     )
-    return task
+    await session.refresh(task)
+    heartbeats = await _latest_heartbeats_by_agent(
+        session,
+        project_id,
+        {task.assignee} if task.assignee else set(),
+    )
+    return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)

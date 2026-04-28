@@ -110,7 +110,7 @@ Tasks can include role hints for automatic delegation:
 
 ```markdown
 - [ ] Create API endpoints <!-- role: backend_dev -->
-- [ ] Design login page <!-- role: ui_designer -->
+- [ ] Build login page UI <!-- role: frontend_dev -->
 ```
 
 When applying changes with role hints, tasks can be delegated to matching agents in your session.

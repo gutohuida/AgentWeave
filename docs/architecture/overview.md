@@ -43,8 +43,8 @@ See [Watchdog Architecture](watchdog.md) for details on triggering, auto-ping, a
 
 ```
 AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero runtime deps)
-├── hub/                AgentWeave Hub server (FastAPI + React + Docker)
+├── src/agentweave/     CLI package (Python 3.8+, zero core runtime deps)
+├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI + React + Docker)
 ├── docs/               Documentation
 ├── tests/              CLI unit tests
 └── Makefile            Convenience targets
@@ -52,7 +52,7 @@ AgentWeave/
 
 ## Design Principles
 
-1. **Zero runtime dependencies** for the CLI core
+1. **Zero core runtime dependencies** for the CLI; MCP, YAML config, jobs, and docs use optional extras
 2. **Pluggable transports** — swap local ↔ git ↔ HTTP without changing business logic
 3. **File-based locking** — prevents race conditions during concurrent writes
 4. **Schema validation** — all state files are validated before saving

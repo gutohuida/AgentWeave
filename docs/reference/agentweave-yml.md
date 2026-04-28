@@ -129,12 +129,15 @@ Map of agent name to agent configuration.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex` |
+| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex`, `codex_mcp` |
 | `model` | string | (runner default) | Model name to pass to the agent CLI when the runner supports model selection |
 | `roles` | list | `[]` | List of role IDs for this agent |
 | `env` | list | `[]` | List of environment variable names to pass to the agent |
 | `yolo` | boolean | `false` | Enable yolo mode (auto-execute without confirmations) |
 | `pilot` | boolean | `false` | Enable pilot mode (human controls execution) |
+| `principal` | boolean | `false` | Mark this agent as the principal agent; at most one agent may set this |
+| `base_url` | string | unset | Custom HTTP(S) endpoint for compatible proxy runner setup |
+| `runner_options` | mapping | unset | Runner-specific options, such as `memory: false` for Codex |
 
 **Example:**
 ```yaml
@@ -162,6 +165,11 @@ agents:
   codex:
     runner: codex
     model: gpt-5.5
+
+  codex-backend:
+    runner: codex_mcp
+    model: gpt-5.5
+    yolo: true
 ```
 
 #### Runners
@@ -174,11 +182,12 @@ agents:
 | `claude_proxy` | Claude CLI with custom API endpoint (for MiniMax, GLM, etc.) |
 | `manual` | No CLI integration (relay prompts only) |
 | `opencode` | OpenCode CLI (`opencode`) — supports local and cloud models |
-| `codex` | Codex CLI (`codex`) |
+| `codex` | Codex CLI (`codex exec`) |
+| `codex_mcp` | Codex MCP server (`codex mcp-server`) with persistent `threadId` sessions |
 
 #### Model Selection
 
-Set `model` to pass the runner's model flag at invocation time. AgentWeave currently applies it to `claude`, `claude_proxy`, `kimi`, `codex`, `opencode`, and compatible `native` runners.
+Set `model` to pass the runner's model flag at invocation time. AgentWeave currently applies it to `claude`, `claude_proxy`, `kimi`, `codex`, `codex_mcp`, `opencode`, and compatible `native` runners.
 
 ```yaml
 agents:
@@ -211,6 +220,18 @@ env:
 ```
 
 Actual values are read from your shell environment or a `.env` file at runtime.
+
+#### Runner Options
+
+`runner_options` is an optional mapping passed to runner-specific setup code. The current built-in use is Codex memory control:
+
+```yaml
+agents:
+  codex:
+    runner: codex
+    runner_options:
+      memory: false
+```
 
 ---
 
@@ -268,6 +289,32 @@ Special characters:
 
 ---
 
+### `quality`
+
+Optional quality governance settings.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `review_required` | boolean | `false` | Require a review gate before work is considered done |
+| `docs_path` | string | unset | Path for decision docs or ADR-lite notes |
+| `docs_threshold` | string | `never` | Which tasks require docs: `all`, `non_trivial`, or `never` |
+| `echo_chamber_guard` | string | `off` | Same-agent implement/review guard: `off`, `warn`, or `enforce` |
+| `attribution_tag` | boolean | `false` | Stamp completed work with agent/session attribution |
+| `dependency_check` | boolean | `false` | Flag unresolved or hallucinated dependencies during review |
+
+**Example:**
+```yaml
+quality:
+  review_required: true
+  docs_path: .agentweave/code-docs
+  docs_threshold: non_trivial
+  echo_chamber_guard: warn
+  attribution_tag: true
+  dependency_check: true
+```
+
+---
+
 ## Applying Changes
 
 After editing `agentweave.yml`, run:
@@ -286,9 +333,12 @@ The CLI validates `agentweave.yml` on load:
 
 - YAML syntax must be valid
 - `project.mode` must be one of: `hierarchical`, `peer`, `review`
-- `agents.<name>.runner` must be one of: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`
+- `agents.<name>.runner` must be one of: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex`, `codex_mcp`
 - `agents.<name>.env` must be a list of strings (not key-value pairs)
+- at most one agent can set `principal: true`
 - `jobs.<name>.schedule` must be a valid 5-field cron expression
+- `quality.docs_threshold` must be one of: `all`, `non_trivial`, `never`
+- `quality.echo_chamber_guard` must be one of: `off`, `warn`, `enforce`
 
 Validation errors are reported with line numbers:
 

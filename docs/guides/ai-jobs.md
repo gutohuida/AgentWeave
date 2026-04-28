@@ -282,5 +282,5 @@ Common mistakes:
 ## See Also
 
 - [CLI Commands Reference](../reference/cli-commands.md#jobs-scheduled-tasks)
-- [MCP Tools Reference](../reference/mcp-tools.md#jobs-hub-only)
+- [MCP Tools Reference](../reference/mcp-tools.md#jobs)
 - [Hub API Reference](../reference/hub-api.md#jobs)

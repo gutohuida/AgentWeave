@@ -72,7 +72,7 @@ agentweave activate
 OpenCode uses a file-based MCP configuration (`opencode.json`) rather than a CLI `mcp add` command. AgentWeave handles this automatically:
 
 ```bash
-agentweave mcp-setup
+agentweave mcp setup
 ```
 
 This creates or updates `opencode.json` in your project root:

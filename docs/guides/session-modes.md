@@ -74,17 +74,30 @@ Within a session, agents have specific roles:
 | `reviewer` | Reviews work but doesn't execute |
 | `collaborator` | General participant |
 
-Roles are assigned in `.agentweave/roles.json` via the `agent_roles` map (an array per agent). Each role has a corresponding guide in `.agentweave/roles/*.md`.
+Developer roles are assigned in `.agentweave/roles.json`. Current files may use `agent_assignments` for a single default role per agent or `agent_roles` for multiple roles; the CLI normalizes both forms when you manage roles with `agentweave roles`. Each assigned role has a corresponding guide in `.agentweave/roles/*.md`.
 
 ### Multi-Role Assignment
 
-Agents can have multiple roles simultaneously. For example, an agent might be both `tech_lead` and `backend_dev`, or `frontend_dev` and `ui_designer`. This provides flexibility for small teams and cross-functional work.
+Agents can have multiple roles simultaneously. For example, an agent might be both `tech_lead` and `backend_dev`, or `frontend_dev` and `qa_engineer`. This provides flexibility for small teams and cross-functional work.
 
 See [Context Files](context-files.md) for details on managing roles via CLI.
 
 ## Changing Modes
 
-To change the mode after initialization, edit `.agentweave/session.json`:
+To change the mode after initialization, edit `agentweave.yml`:
+
+```yaml
+project:
+  mode: peer
+```
+
+Then apply the configuration:
+
+```bash
+agentweave activate
+```
+
+For older sessions without `agentweave.yml`, edit `.agentweave/session.json`:
 
 ```json
 {

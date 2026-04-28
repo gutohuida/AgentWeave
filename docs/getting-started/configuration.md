@@ -29,7 +29,7 @@ agents:
 
   minimax:
     runner: claude_proxy
-    model: MiniMax-Text-01
+    model: MiniMax-M2.7
     env:
       - MINIMAX_API_KEY
     yolo: true
@@ -72,7 +72,7 @@ Configure the Hub via `.env` in the same directory as `docker-compose.yml`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AW_BOOTSTRAP_API_KEY` | *(required)* | API key created on first start (`aw_live_…`) |
+| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key created on first start (`aw_live_…`) |
 | `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
 | `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
 | `AW_PORT` | `8000` | Port the Hub listens on |
@@ -169,12 +169,13 @@ After `agentweave init`, you'll have:
 - `.agentweave/transport.json` — transport config (gitignored)
 - `.agentweave/roles.json` — agent role assignments
 - `.agentweave/roles/*.md` — per-role behavioral guides
-- `AI_CONTEXT.md` — project stack and architecture
-- `AGENTS.md` — agent-specific coding guidelines
+- `.agentweave/ai_context.md` — project stack and architecture source
+- `.agentweave/context/<agent>.md` — per-agent context profiles for runner injection
+- `CLAUDE.md` / `GEMINI.md` / `AGENTS.md` — root context files auto-read by supported agents
 
-**Safe to commit:** `agentweave.yml`, `AI_CONTEXT.md`, `AGENTS.md`, `.agentweave/roles.json`, `.agentweave/roles/*.md`, `.agentweave/README.md`, `.agentweave/protocol.md`
+**Safe to commit:** `agentweave.yml`, `CLAUDE.md`, `GEMINI.md`, `AGENTS.md`, `.agentweave/ai_context.md`, `.agentweave/context/*.md`, `.agentweave/roles.json`, `.agentweave/roles/*.md`, `.agentweave/README.md`, `.agentweave/protocol.md`, `.agentweave/shared/context.md`
 
-**Never commit:** `session.json`, `transport.json`, tasks, messages, logs
+**Never commit:** `.agentweave/session.json`, `.agentweave/transport.json`, tasks, messages, logs, watchdog files, `.env`
 
 ---
 

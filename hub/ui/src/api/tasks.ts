@@ -11,6 +11,9 @@ export interface Task {
   priority: string
   assignee?: string
   assigner?: string
+  assignee_status?: string | null
+  assignee_status_msg?: string | null
+  assignee_last_seen?: string | null
   requirements?: string[]
   acceptance_criteria?: string[]
   deliverables?: string[]

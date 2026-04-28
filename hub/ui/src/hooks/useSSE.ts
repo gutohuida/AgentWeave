@@ -121,6 +121,9 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['status'] })
           break
         case 'agent_heartbeat':
+          queryClient.invalidateQueries({ queryKey: ['tasks'] })
+          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          break
         case 'context_warning':
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break

@@ -652,3 +652,26 @@ agents:
         config = load_agentweave_yml(out_path)
         assert config.agents["opencode-dev"].runner == "opencode"
         assert config.agents["opencode-dev"].model == "ollama/qwen2.5-coder:7b"
+
+
+class TestCodexMcpConfig:
+    """Tests for codex_mcp runner configuration."""
+
+    def test_load_codex_mcp_with_model_and_yolo(self, tmp_path):
+        """agentweave.yml accepts runner: codex_mcp with model and yolo."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test Project
+  mode: hierarchical
+
+agents:
+  codex-backend:
+    runner: codex_mcp
+    model: gpt-5.5
+    yolo: true
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.agents["codex-backend"].runner == "codex_mcp"
+        assert config.agents["codex-backend"].model == "gpt-5.5"
+        assert config.agents["codex-backend"].yolo is True

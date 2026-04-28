@@ -87,6 +87,15 @@ agentweave transport disable
 agentweave hub-heartbeat         # publish agent status to Hub (HTTP transport only)
 ```
 
+## Hub
+
+```bash
+agentweave hub start             # start the local Hub container
+agentweave hub start --port 8001 # start on a custom port
+agentweave hub stop              # stop the local Hub container
+agentweave hub status            # show Hub container/API status
+```
+
 ## Context Management
 
 ```bash
@@ -131,7 +140,7 @@ agentweave roles set <agent> <role1,role2,...> # set multiple roles (replaces ex
 agentweave roles available                     # list available role types
 ```
 
-**Available roles:** `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `data_scientist`, `mobile_dev`, `docs_writer`, `product_manager`, `project_manager`, `ui_designer`, `ux_researcher`
+**Available roles:** `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
 
 ### Multi-Role Examples
 

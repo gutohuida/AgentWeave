@@ -7,8 +7,12 @@ import pytest
 
 from agentweave.watchdog import (
     _agent_ping_cmd,
+    _build_codex_mcp_tool_call,
+    _codex_working_dir,
+    _extract_codex_mcp_result,
     _extract_jsonl_session_id,
     _parse_codex_stream_line,
+    _run_codex_mcp_turn,
     _write_codex_context_usage,
 )
 
@@ -173,6 +177,7 @@ class TestAgentPingCmdCodex:
             "agents": {
                 "codex-dev": {"runner": "codex", "model": "gpt-5.5"},
                 "codex-qa": {"runner": "codex"},
+                "codex-mcp": {"runner": "codex_mcp", "model": "gpt-5.5", "yolo": True},
                 "codex-memory-off": {"runner": "codex", "runner_options": {"memory": False}},
             },
         }
@@ -197,6 +202,7 @@ class TestAgentPingCmdCodex:
         assert cmd[1] == "exec"
         assert cmd[2] == "--json"
         assert cmd[3] == "--skip-git-repo-check"
+        assert "--full-auto" in cmd
         assert cmd[-1] == "do the task"
         assert "resume" not in cmd
 
@@ -258,6 +264,7 @@ class TestAgentPingCmdCodex:
         # codex-dev has yolo=False by default in the fixture
         cmd = _agent_ping_cmd("codex-dev", "do the task")
         assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
+        assert "--full-auto" in cmd
 
         # Patch session to add yolo=True
         from agentweave.session import Session
@@ -276,6 +283,143 @@ class TestAgentPingCmdCodex:
         with patch("agentweave.session.Session.load", return_value=yolo_session):
             cmd = _agent_ping_cmd("codex-dev", "do the task")
             assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+            assert "--full-auto" not in cmd
+
+    def test_codex_working_dir_is_project_root_side_directory(self):
+        """Headless Codex should run from the repository root, not .agentweave."""
+        assert _codex_working_dir() == self.tmp_path
+        assert ".agentweave" not in _codex_working_dir().parts
+
+    def test_codex_mcp_ping_command_starts_server(self):
+        """codex_mcp runner starts the Codex MCP server."""
+        cmd = _agent_ping_cmd("codex-mcp", "do the task")
+        assert cmd == ["codex", "mcp-server"]
+
+    def test_codex_mcp_initial_tool_call_includes_context(self):
+        """Initial Codex MCP call includes developer instructions from context."""
+        context_file = self.context_dir / "codex-mcp.md"
+        context_file.write_text("AGENTWEAVE_CONTEXT_MARKER")
+
+        tool, args = _build_codex_mcp_tool_call("codex-mcp", "do the task")
+
+        assert tool == "codex"
+        assert args["prompt"] == "do the task"
+        assert args["cwd"] == str(self.tmp_path)
+        assert args["model"] == "gpt-5.5"
+        assert args["approval-policy"] == "never"
+        assert args["sandbox"] == "danger-full-access"
+        assert args["developer-instructions"] == "AGENTWEAVE_CONTEXT_MARKER"
+
+    def test_codex_mcp_reply_tool_call_uses_thread_id_only(self):
+        """Follow-up Codex MCP calls continue an existing thread."""
+        tool, args = _build_codex_mcp_tool_call(
+            "codex-mcp",
+            "continue",
+            thread_id="thread-123",
+        )
+
+        assert tool == "codex-reply"
+        assert args == {"threadId": "thread-123", "prompt": "continue"}
+
+    def test_extract_codex_mcp_structured_result(self):
+        """Extracts threadId and content from MCP structuredContent."""
+        thread_id, content = _extract_codex_mcp_result(
+            {"structuredContent": {"threadId": "thread-123", "content": "Done"}}
+        )
+
+        assert thread_id == "thread-123"
+        assert content == "Done"
+
+    def test_codex_mcp_stale_thread_retries_as_new_thread(self):
+        """A stale Codex MCP thread id should fall back to a fresh thread."""
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = []
+
+            def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "codex-reply":
+                    raise RuntimeError("Codex MCP error: Session not found for thread_id: old")
+                return {
+                    "structuredContent": {
+                        "threadId": "new-thread",
+                        "content": "Started fresh",
+                    }
+                }
+
+        class FakeTransport:
+            def __init__(self):
+                self.outputs = []
+
+            def post_agent_output(self, agent, content, session_id=None):
+                self.outputs.append((agent, content, session_id))
+
+        fake_client = FakeClient()
+        fake_transport = FakeTransport()
+
+        with patch("agentweave.watchdog._get_codex_mcp_client", return_value=fake_client):
+            thread_id, output_count = _run_codex_mcp_turn(
+                "codex-mcp",
+                "continue",
+                "old-thread",
+                fake_transport,
+                True,
+            )
+
+        assert thread_id == "new-thread"
+        assert output_count == 1
+        assert fake_client.calls[0][0] == "codex-reply"
+        assert fake_client.calls[1][0] == "codex"
+        assert fake_transport.outputs == [("codex-mcp", "Started fresh", "new-thread")]
+
+    def test_codex_mcp_stale_thread_content_retries_as_new_thread(self):
+        """A stale-thread response returned as normal content should also retry."""
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = []
+
+            def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                if name == "codex-reply":
+                    return {
+                        "structuredContent": {
+                            "threadId": None,
+                            "content": "Session not found for thread_id: old",
+                        }
+                    }
+                return {
+                    "structuredContent": {
+                        "threadId": "new-thread",
+                        "content": "Started fresh",
+                    }
+                }
+
+        class FakeTransport:
+            def __init__(self):
+                self.outputs = []
+
+            def post_agent_output(self, agent, content, session_id=None):
+                self.outputs.append((agent, content, session_id))
+
+        fake_client = FakeClient()
+        fake_transport = FakeTransport()
+
+        with patch("agentweave.watchdog._get_codex_mcp_client", return_value=fake_client):
+            thread_id, output_count = _run_codex_mcp_turn(
+                "codex-mcp",
+                "continue",
+                "old-thread",
+                fake_transport,
+                True,
+            )
+
+        assert thread_id == "new-thread"
+        assert output_count == 1
+        assert fake_client.calls[0][0] == "codex-reply"
+        assert fake_client.calls[1][0] == "codex"
+        assert fake_transport.outputs == [("codex-mcp", "Started fresh", "new-thread")]
 
 
 class TestExtractJsonlSessionId:

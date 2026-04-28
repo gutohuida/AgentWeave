@@ -137,7 +137,7 @@ agentweave session register --agent minimax --session <session-id>
 ### 3. Set Model (Optional)
 
 ```bash
-agentweave agent set-model minimax MiniMax-Text-01
+agentweave agent set-model minimax MiniMax-M2.7
 ```
 
 ## Viewing Pilot Agents in Dashboard

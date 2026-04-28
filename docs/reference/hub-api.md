@@ -41,15 +41,29 @@ http://localhost:8000/api/v1
 |--------|------|-------------|
 | `GET` | `/agents` | List all agents |
 | `GET` | `/agents/configured` | List configured agents for project |
-| `GET` | `/agents/{name}` | Get agent details |
 | `POST` | `/agents/{name}/heartbeat` | Post agent heartbeat |
 | `POST` | `/agents/{name}/output` | Post agent output log |
 | `GET` | `/agents/{name}/output` | Get agent output log |
+| `POST` | `/agents/{name}/context-usage` | Record context usage for an agent |
+| `POST` | `/agents/{name}/compact` | Record a compaction event for an agent |
+| `POST` | `/agents/{name}/new-session` | Record a new agent session event |
 | `GET` | `/agents/{name}/timeline` | Get agent timeline events |
-| `GET` | `/agents/{name}/chat` | Get agent chat history |
-| `GET` | `/agents/{name}/chat/{session_id}` | Get specific chat session |
 | `PUT` | `/agents/roles/config` | Update roles configuration |
 | `GET` | `/agents/roles/config` | Get roles configuration |
+| `POST` | `/agents/register` | Self-register or re-register an agent |
+| `PATCH` | `/agents/{name}` | Update self-registered agent metadata/config |
+| `GET` | `/agents/context?role=...` | Fetch a role guide |
+| `POST` | `/agents/{name}/register-session` | Register a pilot-mode session ID |
+| `POST` | `/agents/{name}/pilot` | Enable or disable pilot mode |
+
+### Agent Chat and Trigger
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/agent/trigger` | Trigger an agent to process a message |
+| `GET` | `/agent/sessions/{agent}` | Get known sessions for an agent |
+| `GET` | `/agent/{agent}/chat` | Get agent chat history |
+| `GET` | `/agent/{agent}/chat/{session_id}` | Get a specific chat session |
 
 ### Logs
 
@@ -85,8 +99,8 @@ AI Jobs endpoints for scheduled recurring agent tasks.
 | `GET` | `/jobs/{id}` | Get job details and history |
 | `PATCH` | `/jobs/{id}` | Update job (enable/disable, modify settings) |
 | `DELETE` | `/jobs/{id}` | Delete a job |
+| `GET` | `/jobs/{id}/history` | Get job run history |
 | `POST` | `/jobs/{id}/run` | Manually trigger a job |
-| `POST` | `/jobs/{id}/toggle` | Toggle job enabled state |
 
 **Job Object:**
 ```json
@@ -118,17 +132,18 @@ See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/setup/token` | Get bootstrap API key and project info |
-| `GET` | `/setup/health` | Check Hub setup status |
+| `GET` | `/setup/token` | Get the bootstrap API key from a local or Docker-internal client |
+
+The Hub health check is available outside the API prefix at `GET /health`.
 
 Used by `agentweave activate` to auto-configure HTTP transport without manual API key entry.
 
-### Agent Trigger
+### Project Instructions
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/trigger` | Trigger an agent to process messages |
-| `GET` | `/sessions/{agent}` | Get active sessions for an agent |
+| `GET` | `/project/instructions` | Get project-wide instructions |
+| `PUT` | `/project/instructions` | Update project-wide instructions |
 
 ## SSE Events
 
@@ -152,10 +167,10 @@ Query historical events with optional filters.
 
 ## MCP Server
 
-The Hub also exposes an MCP server endpoint at:
+The Hub MCP server lives in `hub/hub/mcp_server.py` and is normally run as a stdio process with `HUB_URL`, `HUB_API_KEY`, and `HUB_PROJECT_ID` in the environment:
 
-```
-POST /api/v1/mcp
+```bash
+python -m hub.mcp_server
 ```
 
-This provides the same tools as the local MCP server but via the Hub's HTTP transport.
+It can be mounted in FastAPI by an embedding application, but the default Hub app does not mount a `/api/v1/mcp` REST endpoint.

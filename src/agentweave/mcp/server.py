@@ -305,7 +305,7 @@ def list_agents() -> Dict[str, Any]:
         Dict with 'agents' list. Each entry has:
         - name: agent name
         - session_role: principal / delegate / collaborator / reviewer
-        - runner: native / claude_proxy / manual
+        - runner: native / claude_proxy / manual / kimi / opencode / codex / codex_mcp
         - dev_roles: list of role IDs from roles.json
         - is_principal: bool
     """

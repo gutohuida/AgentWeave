@@ -4,13 +4,15 @@ import contextlib
 import json
 import logging
 import os
+import queue
 import re
 import subprocess
 import sys
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Set
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .constants import (
     AGENT_CONTEXT_DIR,
@@ -619,7 +621,10 @@ class Watchdog:
                     from .session import Session
 
                     _sess = Session.load()
-                    if _sess and _sess.get_runner_config(recipient).get("runner") == "codex":
+                    if _sess and _sess.get_runner_config(recipient).get("runner") in (
+                        "codex",
+                        "codex_mcp",
+                    ):
                         self._handle_codex_new_session(recipient)
                         self.known_messages.add(msg_id)
                         with contextlib.suppress(Exception):
@@ -1299,9 +1304,14 @@ def _agent_ping_cmd(
             agent_cfg = session.agents.get(agent, {})
             if agent_cfg.get("yolo"):
                 cmd += ["--dangerously-bypass-approvals-and-sandbox"]
+            else:
+                cmd += ["--full-auto"]
 
         cmd += [prompt]
         return cmd
+
+    if runner_type == "codex_mcp":
+        return [rc.get("cli", "codex"), rc.get("subcommand", "mcp-server")]
 
     # claude, claude_proxy, native — all use stream-json JSONL output
     cli = rc.get("cli") or agent  # native: use agent name as CLI
@@ -1325,6 +1335,49 @@ def _agent_ping_cmd(
     return cmd
 
 
+def _codex_working_dir() -> Path:
+    """Return the project root workdir used for headless Codex runs."""
+    agentweave_dir = AGENT_CONTEXT_DIR.resolve().parent
+    return agentweave_dir.parent
+
+
+def _build_codex_mcp_tool_call(
+    agent: str,
+    prompt: str,
+    thread_id: Optional[str] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    """Build the Codex MCP tool call name and arguments for one turn."""
+    if thread_id:
+        return "codex-reply", {"threadId": thread_id, "prompt": prompt}
+
+    from .session import Session
+
+    session = Session.load()
+    runner_config = session.get_runner_config(agent) if session else {}
+    agent_cfg = session.agents.get(agent, {}) if session else {}
+
+    args: Dict[str, Any] = {
+        "prompt": prompt,
+        "cwd": str(_codex_working_dir()),
+        "approval-policy": "never",
+        "sandbox": "danger-full-access" if agent_cfg.get("yolo") else "workspace-write",
+    }
+
+    model = runner_config.get("model")
+    if model:
+        args["model"] = model
+
+    context_file = AGENT_CONTEXT_DIR.resolve() / f"{agent}.md"
+    if context_file.exists():
+        args["developer-instructions"] = context_file.read_text(encoding="utf-8")
+
+    runner_options = session.get_runner_options(agent) if session else {}
+    if runner_options.get("memory") is False:
+        args["config"] = {"memory_mode": "disabled"}
+
+    return "codex", args
+
+
 def _load_agent_session(agent: str) -> Optional[str]:
     """Load saved session ID for an agent from .agentweave/agents/<agent>-session.json."""
     session_file = AGENTS_DIR / f"{agent}-session.json"
@@ -1342,6 +1395,13 @@ def _save_agent_session(agent: str, session_id: str) -> None:
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     session_file = AGENTS_DIR / f"{agent}-session.json"
     session_file.write_text(json.dumps({"session_id": session_id}))
+
+
+def _clear_agent_session(agent: str) -> None:
+    """Remove a saved session ID for an agent if it exists."""
+    session_file = AGENTS_DIR / f"{agent}-session.json"
+    with contextlib.suppress(FileNotFoundError):
+        session_file.unlink()
 
 
 def _write_context_usage(
@@ -1447,6 +1507,224 @@ def _write_codex_context_usage(
             },
         )
         return None
+
+
+class _CodexMcpClient:
+    """Minimal JSON-RPC client for `codex mcp-server` over stdio."""
+
+    def __init__(self, cwd: Optional[str] = None):
+        self.cwd = cwd
+        self.proc: Optional[subprocess.Popen] = None
+        self._next_id = 1
+        self._stdout_queue: queue.Queue[str] = queue.Queue()
+
+    def start(self) -> None:
+        """Start and initialize the MCP server if it is not already running."""
+        if self.proc and self.proc.poll() is None:
+            return
+        self._stdout_queue = queue.Queue()
+        self.proc = subprocess.Popen(
+            ["codex", "mcp-server"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            cwd=self.cwd,
+        )
+        threading.Thread(target=self._read_stdout, daemon=True).start()
+        self.request(
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "agentweave-watchdog", "version": "0.1.0"},
+            },
+            timeout=30,
+        )
+        self.notify("notifications/initialized", {})
+
+    def _read_stdout(self) -> None:
+        """Read JSON-RPC stdout in the background so requests can time out."""
+        if not self.proc or not self.proc.stdout:
+            return
+        try:
+            for raw in self.proc.stdout:
+                self._stdout_queue.put(raw)
+        finally:
+            self._stdout_queue.put("")
+
+    def close(self) -> None:
+        """Stop the MCP server process."""
+        if not self.proc:
+            return
+        with contextlib.suppress(Exception):
+            if self.proc.stdin and not self.proc.stdin.closed:
+                self.proc.stdin.close()
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                self.proc.wait(timeout=5)
+        if self.proc.poll() is None:
+            self.proc.kill()
+        self.proc = None
+
+    def __enter__(self) -> "_CodexMcpClient":
+        self.start()
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _tb: Any) -> None:
+        self.close()
+
+    def notify(self, method: str, params: Dict[str, Any]) -> None:
+        if not self.proc or not self.proc.stdin:
+            raise RuntimeError("Codex MCP server is not running")
+        payload = {"jsonrpc": "2.0", "method": method, "params": params}
+        self.proc.stdin.write(json.dumps(payload) + "\n")
+        self.proc.stdin.flush()
+
+    def request(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        self.start()
+        if not self.proc or not self.proc.stdin or not self.proc.stdout:
+            raise RuntimeError("Codex MCP server is not running")
+        if timeout is None:
+            timeout = float(os.environ.get("AW_CODEX_MCP_TIMEOUT", "1800"))
+        request_id = self._next_id
+        self._next_id += 1
+        self.proc.stdin.write(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": method,
+                    "params": params,
+                }
+            )
+            + "\n"
+        )
+        self.proc.stdin.flush()
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError(
+                    f"Codex MCP request timed out after {timeout:.0f}s: {method}"
+                )
+            try:
+                raw = self._stdout_queue.get(timeout=min(1.0, remaining))
+            except queue.Empty:
+                if self.proc.poll() is not None:
+                    raise RuntimeError(
+                        f"Codex MCP server exited with code {self.proc.returncode}"
+                    ) from None
+                continue
+            if raw == "":
+                raise RuntimeError("Codex MCP server exited before returning a response")
+            if not raw.strip():
+                continue
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if message.get("id") != request_id:
+                continue
+            if "error" in message:
+                raise RuntimeError(f"Codex MCP error: {message['error']}")
+            result = message.get("result", {})
+            return result if isinstance(result, dict) else {"result": result}
+
+    def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        return self.request("tools/call", {"name": name, "arguments": arguments})
+
+
+_CODEX_MCP_CLIENTS: Dict[str, _CodexMcpClient] = {}
+_CODEX_MCP_CLIENTS_LOCK = threading.Lock()
+
+
+def _get_codex_mcp_client(agent: str) -> _CodexMcpClient:
+    """Return the long-lived Codex MCP client for this watchdog process."""
+    with _CODEX_MCP_CLIENTS_LOCK:
+        client = _CODEX_MCP_CLIENTS.get(agent)
+        if client is None:
+            client = _CodexMcpClient(cwd=str(_codex_working_dir()))
+            _CODEX_MCP_CLIENTS[agent] = client
+        return client
+
+
+def _reset_codex_mcp_client(agent: str) -> None:
+    """Close and remove a cached Codex MCP client."""
+    with _CODEX_MCP_CLIENTS_LOCK:
+        client = _CODEX_MCP_CLIENTS.pop(agent, None)
+    if client:
+        client.close()
+
+
+def _extract_codex_mcp_result(result: Dict[str, Any]) -> Tuple[Optional[str], str]:
+    """Extract thread id and display text from a Codex MCP tools/call result."""
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict):
+        thread_id = structured.get("threadId")
+        content = structured.get("content")
+        return (
+            thread_id if isinstance(thread_id, str) else None,
+            content if isinstance(content, str) else "",
+        )
+
+    thread_id = None
+    parts: List[str] = []
+    for item in result.get("content", []) if isinstance(result.get("content"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+            with contextlib.suppress(json.JSONDecodeError):
+                parsed = json.loads(text)
+                if isinstance(parsed, dict) and isinstance(parsed.get("threadId"), str):
+                    thread_id = parsed["threadId"]
+    return thread_id, "\n".join(parts)
+
+
+def _run_codex_mcp_turn(
+    agent: str,
+    prompt: str,
+    thread_id: Optional[str],
+    transport: Any,
+    is_http: bool,
+) -> Tuple[Optional[str], int]:
+    """Run one Codex MCP turn and stream the final content to AgentWeave."""
+    tool_name, arguments = _build_codex_mcp_tool_call(agent, prompt, thread_id)
+    client = _get_codex_mcp_client(agent)
+    try:
+        result = client.call_tool(tool_name, arguments)
+    except RuntimeError as exc:
+        message = str(exc)
+        if thread_id and "Session not found for thread_id" in message:
+            tool_name, arguments = _build_codex_mcp_tool_call(agent, prompt, thread_id=None)
+            result = client.call_tool(tool_name, arguments)
+        else:
+            _reset_codex_mcp_client(agent)
+            raise
+    next_thread_id, content = _extract_codex_mcp_result(result)
+    if thread_id and "Session not found for thread_id" in content:
+        tool_name, arguments = _build_codex_mcp_tool_call(agent, prompt, thread_id=None)
+        result = client.call_tool(tool_name, arguments)
+        next_thread_id, content = _extract_codex_mcp_result(result)
+    if next_thread_id is None:
+        next_thread_id = thread_id
+    output_count = 0
+    if content:
+        output_count = 1
+        if is_http:
+            transport.post_agent_output(agent, content, session_id=next_thread_id)
+        else:
+            print(f"[{agent}] {content}")
+    return next_thread_id, output_count
 
 
 def _reset_context_usage(agent: str) -> None:
@@ -1555,6 +1833,7 @@ def _build_agent_context(agent: str, session: Any) -> str:
             "claude_proxy": runner_config.get("model", "Claude Proxy"),
             "kimi": runner_config.get("model", "Kimi"),
             "codex": runner_config.get("model", "Codex"),
+            "codex_mcp": runner_config.get("model", "Codex MCP"),
             "opencode": runner_config.get("model", "OpenCode"),
             "manual": "Manual",
         }.get(runner_type, runner_config.get("model", runner_type.title()))
@@ -1944,6 +2223,7 @@ def _do_run_agent_subprocess(
     is_kimi = runner_type == "kimi"
     is_opencode = runner_type == "opencode"
     is_codex = runner_type == "codex"
+    is_codex_mcp = runner_type == "codex_mcp"
     # Detect wire mode: --wire flag in cmd indicates JSON-RPC bidirectional mode
     is_wire_mode = is_kimi and "--wire" in cmd
 
@@ -1967,6 +2247,7 @@ def _do_run_agent_subprocess(
     session_id: Optional[str] = known_session_id
     # Mutable container so the stderr thread can read the latest session_id
     session_id_ref: List[Optional[str]] = [known_session_id]
+    stale_codex_session: List[bool] = [False]
     # Collect all stdout lines for Kimi session ID extraction (print mode only)
     kimi_stdout_lines: List[str] = []
     # Select appropriate parser based on mode
@@ -1975,6 +2256,47 @@ def _do_run_agent_subprocess(
         kimi_parser = _KimiWireParser()
     elif is_kimi:
         kimi_parser = _KimiParser()
+
+    if is_codex_mcp:
+        output_line_count = 0
+        try:
+            session_id, output_line_count = _run_codex_mcp_turn(
+                agent,
+                prompt,
+                session_id,
+                transport,
+                is_http,
+            )
+        except Exception as exc:
+            logger.error(
+                "watchdog_codex_mcp_error",
+                extra={
+                    "event": "watchdog_codex_mcp_error",
+                    "data": {"agent": agent, "error": str(exc)},
+                },
+            )
+            print(f"[ERROR] Codex MCP turn failed for {agent}: {exc}", file=sys.stderr)
+
+        summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
+        print(summary, file=sys.stderr)
+        if is_http:
+            with contextlib.suppress(Exception):
+                transport.post_agent_output(agent, summary, session_id=session_id)
+        if session_id:
+            with contextlib.suppress(Exception):
+                _save_agent_session(agent, session_id)
+        if is_http:
+            try:
+                transport.push_heartbeat(agent, status="idle")
+            except Exception as exc:
+                logger.warning(
+                    "watchdog_heartbeat_failed",
+                    extra={
+                        "event": "watchdog_heartbeat_failed",
+                        "data": {"agent": agent, "error": str(exc)},
+                    },
+                )
+        return
 
     def _drain_stderr(proc: subprocess.Popen) -> None:
         """Read stderr in a background thread and post each line as agent output
@@ -1988,6 +2310,8 @@ def _do_run_agent_subprocess(
                 # Suppress known Codex stderr noise
                 if is_codex and "failed to record rollout items" in err_line:
                     continue
+                if is_codex and "Session not found for thread_id" in err_line:
+                    stale_codex_session[0] = True
 
                 # For Kimi: capture session ID from stderr resume line in real-time
                 if is_kimi and session_id_ref[0] is None:
@@ -2051,16 +2375,12 @@ def _do_run_agent_subprocess(
         # Wire mode requires bidirectional stdin/stdout communication
         stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
 
-        # Codex auto-detects .agentweave/ in cwd and enters bootstrap mode
-        # (executing commands, reading protocol.md, etc.). Run from a neutral
-        # subdirectory of the project root so Codex doesn't bootstrap, but the
-        # MCP server can still walk up and find .agentweave/transport.json.
+        # Codex exec is workspace-scoped to its current directory. Run from
+        # the project root so headless turns can inspect, edit, and verify the
+        # actual repository instead of the AgentWeave runtime directory.
         cwd = None
         if is_codex:
-            project_root = AGENT_CONTEXT_DIR.resolve().parent
-            codex_cwd = project_root / ".codex-run"
-            codex_cwd.mkdir(exist_ok=True)
-            cwd = str(codex_cwd)
+            cwd = str(_codex_working_dir())
 
         proc = subprocess.Popen(
             run_cmd,
@@ -2159,6 +2479,9 @@ def _do_run_agent_subprocess(
                         session_id_ref[0] = session_id
                 if is_codex:
                     readable_lines, usage_data = _parse_codex_stream_line(line)
+                    if any("Session not found for thread_id" in item for item in readable_lines):
+                        stale_codex_session[0] = True
+                        readable_lines = []
                 else:
                     readable_lines, usage_data = _parse_claude_stream_line(line)
                 # Capture usage data from result messages for context monitoring
@@ -2240,6 +2563,21 @@ def _do_run_agent_subprocess(
 
     try:
         returncode = _run_cmd(cmd, session_id)
+
+        if is_codex and session_id and stale_codex_session[0]:
+            logger.info(
+                "watchdog_codex_stale_session_retry",
+                extra={
+                    "event": "watchdog_codex_stale_session_retry",
+                    "data": {"agent": agent, "session_id": session_id},
+                },
+            )
+            _clear_agent_session(agent)
+            session_id = None
+            session_id_ref[0] = None
+            stale_codex_session[0] = False
+            fresh_cmd = _agent_ping_cmd(agent, prompt, session_id=None)
+            returncode = _run_cmd(fresh_cmd, None)
 
         if returncode != 0:
             logger.warning(
@@ -2415,10 +2753,31 @@ def _make_ping_callback(
             print(f"[PILOT] Skipping ping for pilot agent {recipient} (manual control)")
             return
 
-        prompt = (
-            f"You have a new AgentWeave message from {data.get('from', 'another agent')}. "
-            f"Call get_inbox('{recipient}') to retrieve it and respond."
-        )
+        sender = data.get("from", "another agent")
+        runner_config = _sess.get_runner_config(recipient) if _sess else {}
+        runner_type = runner_config.get("runner")
+        if runner_type in ("codex", "codex_mcp"):
+            content = data.get("content", "")
+            prompt = "\n".join(
+                [
+                    "AgentWeave message",
+                    "",
+                    f"From: {sender}",
+                    f"To: {recipient}",
+                    f"Subject: {data.get('subject', '(no subject)')}",
+                    "",
+                    "Message:",
+                    content.strip() or "Continue.",
+                ]
+            )
+            if transport is not None:
+                with contextlib.suppress(Exception):
+                    transport.archive_message(msg_id)
+        else:
+            prompt = (
+                f"You have a new AgentWeave message from {sender}. "
+                f"Call get_inbox('{recipient}') to retrieve it and respond."
+            )
         session_id = _load_agent_session(recipient)
         cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
         subject = data.get("subject", "(no subject)")
@@ -2525,12 +2884,11 @@ def _make_direct_trigger_callback(
             print(f"[PILOT] Skipping direct trigger for pilot agent {recipient} (manual control)")
             return
 
-        # Extract optional session ID from content tag, then discard raw content.
-        # We do NOT pass raw content directly as the prompt — agents need to go through
-        # their normal get_inbox flow so that output capture (MCP tool events, stream-json
-        # events) works correctly.  The message stays unread in the DB so the agent can
-        # retrieve it via get_inbox.  The seen-set above prevents re-triggering within
-        # this watchdog session.
+        # Extract optional session ID from content tags. Most runners keep the
+        # inbox-driven flow so they can retrieve the unread message themselves.
+        # Codex runners work better when the direct Hub message is the top-level
+        # prompt. Otherwise they can complete the turn after only retrieving and
+        # acknowledging the inbox message.
         content = data.get("content", "")
         session_id = None
         is_new_session = False
@@ -2571,21 +2929,40 @@ def _make_direct_trigger_callback(
             if watchdog_instance is not None:
                 watchdog_instance._last_context_posted.pop(recipient, None)
 
-        prompt = (
-            f"You have a new AgentWeave message from user. "
-            f"Call get_inbox('{recipient}') to retrieve it and respond."
-        )
+        runner_config = _sess.get_runner_config(recipient) if _sess else {}
+        runner_type = runner_config.get("runner")
+        if runner_type in ("codex", "codex_mcp"):
+            cleaned_content = re.sub(r"\[Session:\s*[^\]]+\]\n?\n?", "", content)
+            cleaned_content = re.sub(r"\[NewSession\]\n?\n?", "", cleaned_content).strip()
+            if not cleaned_content:
+                cleaned_content = "Continue."
+            prompt = "\n".join(
+                [
+                    "AgentWeave direct message",
+                    "",
+                    f"From: {sender}",
+                    f"To: {recipient}",
+                    f"Subject: {subject}",
+                    "",
+                    "Message:",
+                    cleaned_content,
+                ]
+            )
+            if transport is not None:
+                with contextlib.suppress(Exception):
+                    transport.archive_message(msg_id)
+        else:
+            prompt = (
+                f"You have a new AgentWeave message from user. "
+                f"Call get_inbox('{recipient}') to retrieve it and respond."
+            )
+
         cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
 
         # Load env_vars from session config for claude_proxy agents
         env_vars = None
-        from .session import Session
-
-        session = Session.load()
-        if session:
-            runner_config = session.get_runner_config(recipient)
-            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
-                env_vars = runner_config.get("env_vars")
+        if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+            env_vars = runner_config.get("env_vars")
 
         logger.info(
             "direct_trigger_executing",
@@ -2599,8 +2976,8 @@ def _make_direct_trigger_callback(
         if session_id:
             print(f"[TRIGGER] Resuming session: {session_id}")
 
-        # Execute in background thread.
-        # Message is intentionally left unread so the agent can read it via get_inbox.
+        # Execute in background thread. Non-Codex-MCP direct messages are
+        # intentionally left unread so the agent can read them via get_inbox.
         t = threading.Thread(
             target=_run_agent_subprocess,
             args=(

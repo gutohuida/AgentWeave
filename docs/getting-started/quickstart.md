@@ -4,7 +4,7 @@ Get started with AgentWeave in **3 commands**. No manual configuration needed.
 
 ## Prerequisites
 
-- Python 3.8+ installed
+- Python 3.10+ installed for the recommended MCP/Hub workflow (the core CLI supports Python 3.8+)
 - Docker and Docker Compose installed
 - The AgentWeave CLI installed:
 

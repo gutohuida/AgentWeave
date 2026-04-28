@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 _TASK_STATUSES = [
     "pending",
@@ -33,6 +33,16 @@ class TaskCreate(BaseModel):
     id: Optional[str] = None
     created_at: Optional[str] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_assignee_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("assignee") is None:
+            for key in ("assigned_to", "assigned_agent"):
+                if data.get(key):
+                    data = {**data, "assignee": data[key]}
+                    break
+        return data
+
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: str) -> str:
@@ -54,6 +64,16 @@ class TaskUpdate(BaseModel):
     assignee: Optional[str] = None
     description: Optional[str] = None
     notes: Optional[Any] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_assignee_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("assignee") is None:
+            for key in ("assigned_to", "assigned_agent"):
+                if data.get(key):
+                    data = {**data, "assignee": data[key]}
+                    break
+        return data
 
     @field_validator("status")
     @classmethod
@@ -85,5 +105,8 @@ class TaskResponse(BaseModel):
     acceptance_criteria: Optional[Any]
     deliverables: Optional[Any]
     notes: Optional[Any]
+    assignee_status: Optional[str] = None
+    assignee_status_msg: Optional[str] = None
+    assignee_last_seen: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

@@ -8,8 +8,47 @@ interface TaskCardProps {
   task: Task
 }
 
+const AGENT_STATUS_STYLES: Record<string, { color: string; bg: string; border: string }> = {
+  running: {
+    color: 'var(--green)',
+    bg: 'rgba(34,197,94,0.1)',
+    border: 'rgba(34,197,94,0.25)',
+  },
+  active: {
+    color: 'var(--blue)',
+    bg: 'rgba(59,130,246,0.1)',
+    border: 'rgba(59,130,246,0.25)',
+  },
+  waiting: {
+    color: 'var(--amber)',
+    bg: 'rgba(245,158,11,0.1)',
+    border: 'rgba(245,158,11,0.25)',
+  },
+  idle: {
+    color: 'var(--text-3)',
+    bg: 'var(--surface-3)',
+    border: 'var(--border)',
+  },
+}
+
+function agentStatusTitle(task: Task): string {
+  const status = task.assignee_status ?? 'idle'
+  const details = [`worker: ${status}`]
+  if (task.assignee_status_msg) details.push(task.assignee_status_msg)
+  if (task.assignee_last_seen) {
+    details.push(
+      `last seen ${formatDistanceToNow(new Date(task.assignee_last_seen), { addSuffix: true })}`,
+    )
+  }
+  return details.join(' · ')
+}
+
 export function TaskCard({ task }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const assigneeStatus = task.assignee_status ?? (task.assignee ? 'idle' : null)
+  const assigneeStatusStyle = assigneeStatus
+    ? AGENT_STATUS_STYLES[assigneeStatus] ?? AGENT_STATUS_STYLES.idle
+    : null
 
   const hasDetails = task.description ||
     (task.requirements && task.requirements.length > 0) ||
@@ -85,6 +124,34 @@ export function TaskCard({ task }: TaskCardProps) {
               }}
             >
               @{task.assignee}
+            </span>
+          )}
+          {assigneeStatus && assigneeStatusStyle && (
+            <span
+              title={agentStatusTitle(task)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                background: assigneeStatusStyle.bg,
+                border: `1px solid ${assigneeStatusStyle.border}`,
+                borderRadius: 9999,
+                padding: '1px 6px',
+                fontSize: 10,
+                fontWeight: 500,
+                color: assigneeStatusStyle.color,
+                textTransform: 'capitalize',
+              }}
+            >
+              <span
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: 9999,
+                  background: assigneeStatusStyle.color,
+                }}
+              />
+              {assigneeStatus.replace(/_/g, ' ')}
             </span>
           )}
           {task.assigner && task.assigner !== task.assignee && (

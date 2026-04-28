@@ -36,6 +36,7 @@ from ...utils import persist_event, short_id
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
+_ACTIVE_TASK_STATUSES = ("pending", "assigned", "in_progress", "under_review", "revision_needed")
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
@@ -150,12 +151,20 @@ async def list_agents(
                 AgentOutput.timestamp >= cutoff,
             )
         )
-        s_res, r_res, hb_res, out_res = await asyncio.gather(
-            session.execute(senders_q),
-            session.execute(recipients_q),
-            session.execute(hb_q),
-            session.execute(out_q),
+        task_assignees_q = (
+            select(Task.assignee)
+            .distinct()
+            .where(
+                Task.project_id == project_id,
+                Task.assignee.isnot(None),
+                Task.status.in_(_ACTIVE_TASK_STATUSES),
+            )
         )
+        s_res = await session.execute(senders_q)
+        r_res = await session.execute(recipients_q)
+        hb_res = await session.execute(hb_q)
+        out_res = await session.execute(out_q)
+        task_assignees_res = await session.execute(task_assignees_q)
         fallback_names: set[str] = set()
         for (name,) in s_res:
             fallback_names.add(name)
@@ -165,6 +174,9 @@ async def list_agents(
             fallback_names.add(name)
         for (name,) in out_res:
             fallback_names.add(name)
+        for (name,) in task_assignees_res:
+            if name:
+                fallback_names.add(name)
         session_agents_meta = {name: {} for name in fallback_names}
 
     # Also include agents from the Agent table (pilot mode and self-registered agents)
@@ -211,7 +223,7 @@ async def list_agents(
         task_q = select(Task).where(
             Task.project_id == project_id,
             Task.assignee == agent_name,
-            Task.status.in_(["pending", "assigned", "in_progress"]),
+            Task.status.in_(_ACTIVE_TASK_STATUSES),
         )
         task_res = await session.execute(task_q)
         task_count = len(task_res.scalars().all())
@@ -299,6 +311,7 @@ async def list_agents(
             "manual": "Manual",
             "opencode": agent_meta.get("model", "OpenCode"),
             "codex": agent_meta.get("model", "Codex"),
+            "codex_mcp": agent_meta.get("model", "Codex MCP"),
         }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
         _pilot = agent_row.pilot if agent_row else False

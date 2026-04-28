@@ -1596,6 +1596,7 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
             "claude_proxy": runner_config.get("model", "Claude Proxy"),
             "kimi": runner_config.get("model", "Kimi"),
             "codex": runner_config.get("model", "Codex"),
+            "codex_mcp": runner_config.get("model", "Codex MCP"),
             "opencode": runner_config.get("model", "OpenCode"),
             "manual": "Manual",
         }.get(runner_type, runner_config.get("model", runner_type.title()))

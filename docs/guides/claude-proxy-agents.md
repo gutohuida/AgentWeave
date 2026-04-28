@@ -88,8 +88,8 @@ agentweave agent set-session minimax <session-id>
 
 | Agent | Base URL | Env var |
 |-------|----------|---------|
-| `minimax` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` |
-| `glm` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` |
+| `minimax` | `https://api.minimax.io/anthropic` | `MINIMAX_API_KEY` |
+| `glm` | `https://open.bigmodel.cn/api/anthropic` | `ZHIPU_API_KEY` |
 
 ## Security Note
 
