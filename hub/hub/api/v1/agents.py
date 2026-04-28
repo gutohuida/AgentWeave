@@ -179,6 +179,22 @@ async def list_agents(
                 fallback_names.add(name)
         session_agents_meta = {name: {} for name in fallback_names}
 
+    # Task assignees are meaningful even when a synced session config exists:
+    # users can create tasks for an agent before it has heartbeats/messages.
+    task_assignees_q = (
+        select(Task.assignee)
+        .distinct()
+        .where(
+            Task.project_id == project_id,
+            Task.assignee.isnot(None),
+            Task.status.in_(_ACTIVE_TASK_STATUSES),
+        )
+    )
+    task_assignees_res = await session.execute(task_assignees_q)
+    for (name,) in task_assignees_res:
+        if name and name not in session_agents_meta:
+            session_agents_meta[name] = {}
+
     # Also include agents from the Agent table (pilot mode and self-registered agents)
     agent_q = select(Agent).where(Agent.project_id == project_id)
     agent_res = await session.execute(agent_q)

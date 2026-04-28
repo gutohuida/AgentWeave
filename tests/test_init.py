@@ -297,7 +297,6 @@ class TestInitCommand:
 
         assert instructions_path.read_text() == "Custom content"
 
-
     def test_build_agent_context_prepends_instructions(self, tmp_path, monkeypatch):
         """Test that _build_agent_context prepends project instructions before role guides."""
         monkeypatch.chdir(tmp_path)

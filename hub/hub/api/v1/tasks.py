@@ -19,7 +19,9 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 def _task_response(task: Task, heartbeat: Optional[AgentHeartbeat] = None) -> TaskResponse:
     response = TaskResponse.model_validate(task)
-    response.assignee_status = heartbeat.status if heartbeat else ("idle" if task.assignee else None)
+    response.assignee_status = (
+        heartbeat.status if heartbeat else ("idle" if task.assignee else None)
+    )
     response.assignee_status_msg = heartbeat.message if heartbeat else None
     response.assignee_last_seen = heartbeat.timestamp if heartbeat else None
     return response

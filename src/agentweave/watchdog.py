@@ -1612,9 +1612,7 @@ class _CodexMcpClient:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise RuntimeError(
-                    f"Codex MCP request timed out after {timeout:.0f}s: {method}"
-                )
+                raise RuntimeError(f"Codex MCP request timed out after {timeout:.0f}s: {method}")
             try:
                 raw = self._stdout_queue.get(timeout=min(1.0, remaining))
             except queue.Empty:
