@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.35.0] - 2026-04-28
+
+### Added (CLI)
+- Fixed context file paths to use `as_posix()` for codex/opencode launch commands
+- Synced documentation with latest implementation updates
+
+### Added (Hub v0.29.0)
+- Synced documentation with latest implementation updates
+
+---
 ## [0.34.0] - 2026-04-27
 
 ### Added (CLI)
