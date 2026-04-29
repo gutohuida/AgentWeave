@@ -109,6 +109,7 @@ hub/data/
 
 # Codex local skills and agent metadata
 .agents/
+.codex/
 
 # Test environment scripts and directory
 cleanup-test.sh

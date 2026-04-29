@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.36.0] - 2026-04-29
+
+### Added (CLI)
+- New `agentweave doctor` command — runs runtime readiness diagnostics covering session state, transport config, watchdog health, agent context files, and Hub connectivity
+- New `src/agentweave/diagnostics.py` module (stdlib-only, zero new dependencies) with secret-redacting checks and structured `DiagnosticResult` output
+- Watchdog agent prompts now prepend `shared/context.md` (session focus) and inject Hub/MCP mode guidance, explicitly forbidding CLI relay commands when Hub is active
+- Quality Governance settings surfaced in watchdog prompts when configured
+- HTTP transport: new `HubTransportError` exception class and structured error helpers
+
+### Added (Hub v0.30.0)
+- Job runs now capture and store redacted `error_summary` on failure (new DB column via migration 0007)
+- Scheduler fires `job_run_failed` event to the activity log with agent, job, and error context
+- New `GET /api/v1/logs/agents` endpoint and per-agent filter on the logs endpoint
+- LogsView UI gains an agent filter dropdown; JobCard shows error summaries inline
+- Agent trigger endpoint improvements with better diagnostics logging
+- Tests for runtime diagnostics (CLI and Hub)
+
+---
 ## [Hub 0.29.1] - 2026-04-28
 
 ### Fixed (Hub v0.29.1)

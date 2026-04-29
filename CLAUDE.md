@@ -9,7 +9,7 @@ You are working on the **AgentWeave Framework** — a multi-agent AI collaborati
 - **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard, self-hosted via Docker
 - **Documentation** (`docs/`) — MkDocs with Material theme, deployed to GitHub Pages
 
-Current version: **v0.15.0** (CLI + Hub v0.9.0)
+Current version: **v0.36.0** (CLI + Hub v0.30.0)
 
 ## Quick Commands
 
@@ -22,6 +22,9 @@ pip install -e ".[dev,mcp]"
 # Verify
 agentweave --help
 aw --help
+
+# Runtime readiness check
+agentweave doctor
 
 # Hub (Docker)
 cd hub && docker compose up -d

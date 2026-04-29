@@ -15,7 +15,7 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Iterable
 
 from .constants import (
     AGENT_CONTEXT_DIR,
@@ -41,11 +41,11 @@ class DiagnosticResult:
     status: str
     severity: str
     message: str
-    hint: Optional[str] = None
+    hint: str | None = None
     category: str = "runtime"
-    data: Optional[Dict[str, Any]] = None
+    data: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
         if result["hint"] is None:
             result.pop("hint")
@@ -62,7 +62,7 @@ def ok(
     message: str,
     *,
     category: str = "runtime",
-    data: Optional[Dict[str, Any]] = None,
+    data: dict[str, Any] | None = None,
 ) -> DiagnosticResult:
     return DiagnosticResult(check_id, target, "pass", "info", message, category=category, data=data)
 
@@ -72,9 +72,9 @@ def warn(
     target: str,
     message: str,
     *,
-    hint: Optional[str] = None,
+    hint: str | None = None,
     category: str = "runtime",
-    data: Optional[Dict[str, Any]] = None,
+    data: dict[str, Any] | None = None,
 ) -> DiagnosticResult:
     return DiagnosticResult(
         check_id, target, "warn", "warn", message, hint=hint, category=category, data=data
@@ -86,9 +86,9 @@ def fail(
     target: str,
     message: str,
     *,
-    hint: Optional[str] = None,
+    hint: str | None = None,
     category: str = "runtime",
-    data: Optional[Dict[str, Any]] = None,
+    data: dict[str, Any] | None = None,
 ) -> DiagnosticResult:
     return DiagnosticResult(
         check_id, target, "fail", "error", message, hint=hint, category=category, data=data
@@ -98,7 +98,7 @@ def fail(
 def redact_secrets(value: Any) -> Any:
     """Return a copy of value with obvious secret fields and values redacted."""
     if isinstance(value, dict):
-        redacted: Dict[str, Any] = {}
+        redacted: dict[str, Any] = {}
         for key, item in value.items():
             if SECRET_FIELD_RE.search(str(key)):
                 redacted[key] = "<redacted>"
@@ -114,7 +114,7 @@ def redact_secrets(value: Any) -> Any:
     return value
 
 
-def _load_json_raw(path: Path) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+def _load_json_raw(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not path.exists():
         return None, "missing"
     try:
@@ -127,7 +127,7 @@ def _load_json_raw(path: Path) -> tuple[Optional[Dict[str, Any]], Optional[str]]
         return None, str(exc)
 
 
-def check_session() -> List[DiagnosticResult]:
+def check_session() -> list[DiagnosticResult]:
     data, error = _load_json_raw(SESSION_FILE)
     if error == "missing":
         return [
@@ -161,7 +161,7 @@ def check_session() -> List[DiagnosticResult]:
     ]
 
 
-def check_project_config() -> List[DiagnosticResult]:
+def check_project_config() -> list[DiagnosticResult]:
     try:
         from .config import AGENTWEAVE_YML_PATH, ConfigValidationError, load_agentweave_yml
 
@@ -207,7 +207,7 @@ def check_project_config() -> List[DiagnosticResult]:
         ]
 
 
-def _http_status_check(config: Dict[str, Any]) -> DiagnosticResult:
+def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
     url = str(config.get("url", "")).rstrip("/")
     api_key = str(config.get("api_key", ""))
     project_id = str(config.get("project_id", ""))
@@ -292,7 +292,7 @@ def _http_status_check(config: Dict[str, Any]) -> DiagnosticResult:
         )
 
 
-def check_transport() -> List[DiagnosticResult]:
+def check_transport() -> list[DiagnosticResult]:
     config, error = _load_json_raw(TRANSPORT_CONFIG_FILE)
     if error == "missing":
         return [
@@ -355,8 +355,8 @@ def _process_exists(pid: int) -> bool:
         return False
 
 
-def check_watchdog(stale_after_seconds: int = 120) -> List[DiagnosticResult]:
-    results: List[DiagnosticResult] = []
+def check_watchdog(stale_after_seconds: int = 120) -> list[DiagnosticResult]:
+    results: list[DiagnosticResult] = []
     if not WATCHDOG_PID_FILE.exists():
         results.append(
             warn(
@@ -451,7 +451,7 @@ def check_watchdog(stale_after_seconds: int = 120) -> List[DiagnosticResult]:
     return results
 
 
-def _runner_cli(agent: str, runner: str) -> Optional[str]:
+def _runner_cli(agent: str, runner: str) -> str | None:
     if runner == "manual":
         return None
     config = RUNNER_CONFIGS.get(runner, RUNNER_CONFIGS["native"])
@@ -459,7 +459,7 @@ def _runner_cli(agent: str, runner: str) -> Optional[str]:
     return str(cli) if cli else None
 
 
-def check_agent_readiness(agent: str, session: Optional[Any] = None) -> List[DiagnosticResult]:
+def check_agent_readiness(agent: str, session: Any | None = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
 
@@ -484,7 +484,7 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> List[Dia
             )
         ]
 
-    results: List[DiagnosticResult] = []
+    results: list[DiagnosticResult] = []
     runner_config = session.get_runner_config(agent)
     runner = runner_config.get("runner", "native")
     model = runner_config.get("model")
@@ -611,20 +611,20 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> List[Dia
     return results
 
 
-def check_agents(session: Optional[Any] = None) -> List[DiagnosticResult]:
+def check_agents(session: Any | None = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
 
         session = Session.load()
     if session is None:
         return []
-    results: List[DiagnosticResult] = []
+    results: list[DiagnosticResult] = []
     for agent in session.agent_names:
         results.extend(check_agent_readiness(agent, session))
     return results
 
 
-def check_jobs() -> List[DiagnosticResult]:
+def check_jobs() -> list[DiagnosticResult]:
     try:
         from .config import AGENTWEAVE_YML_PATH, load_agentweave_yml
 
@@ -660,8 +660,8 @@ def check_jobs() -> List[DiagnosticResult]:
         ]
 
 
-def collect_diagnostics(*, include_network: bool = True) -> List[DiagnosticResult]:
-    results: List[DiagnosticResult] = []
+def collect_diagnostics(*, include_network: bool = True) -> list[DiagnosticResult]:
+    results: list[DiagnosticResult] = []
     results.extend(check_session())
     results.extend(check_project_config())
     if include_network:
@@ -705,7 +705,7 @@ def has_failures(results: Iterable[DiagnosticResult]) -> bool:
     return any(result.status == "fail" for result in results)
 
 
-def summarize(results: Iterable[DiagnosticResult]) -> Dict[str, int]:
+def summarize(results: Iterable[DiagnosticResult]) -> dict[str, int]:
     summary = {"pass": 0, "warn": 0, "fail": 0}
     for result in results:
         summary[result.status] = summary.get(result.status, 0) + 1
@@ -721,11 +721,11 @@ def worst_status(results: Iterable[DiagnosticResult]) -> str:
 
 
 def format_results(results: Iterable[DiagnosticResult]) -> str:
-    grouped: Dict[str, List[DiagnosticResult]] = {}
+    grouped: dict[str, list[DiagnosticResult]] = {}
     for result in results:
         grouped.setdefault(result.category, []).append(result)
 
-    lines: List[str] = []
+    lines: list[str] = []
     for category in sorted(grouped):
         lines.append(f"[{category.upper()}]")
         for result in grouped[category]:
@@ -739,7 +739,7 @@ def format_results(results: Iterable[DiagnosticResult]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def launch_blockers(agent: str, session: Optional[Any] = None) -> List[DiagnosticResult]:
+def launch_blockers(agent: str, session: Any | None = None) -> list[DiagnosticResult]:
     """Return deterministic failures that should block an automatic launch."""
     return [
         result
