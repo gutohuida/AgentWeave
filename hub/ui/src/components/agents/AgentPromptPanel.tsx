@@ -18,6 +18,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string>('')
   const [isSending, setIsSending] = useState(false)
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([])
+  const [sendNotice, setSendNotice] = useState<{ message: string; confidence?: string } | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -132,6 +133,7 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
 
     const trimmedMessage = message.trim()
     setIsSending(true)
+    setSendNotice(null)
 
     const tempMessage: ChatMessage = {
       id: `temp-${Date.now()}`,
@@ -165,6 +167,13 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
         console.error('Failed to send message:', error)
         setLocalMessages(prev => prev.filter(m => m.id !== tempMessage.id))
       } else {
+        const data = await response.json()
+        if (data.execution_confidence && data.execution_confidence !== 'queued_watchdog_healthy') {
+          setSendNotice({
+            message: data.message || 'Message queued, but automatic execution may need attention.',
+            confidence: data.execution_confidence,
+          })
+        }
         refetchHistory()
       }
     } catch (err) {
@@ -374,6 +383,10 @@ export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
         {isAgentRunning ? (
           <p className="mt-2 text-[11px]" style={{ color: 'var(--blue)' }}>
             Agent is responding…
+          </p>
+        ) : sendNotice ? (
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--amber)' }}>
+            {sendNotice.message}
           </p>
         ) : (
           <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>

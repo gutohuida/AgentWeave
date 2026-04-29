@@ -5,9 +5,8 @@ from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
@@ -17,6 +16,54 @@ from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _safe_error_summary(exc: Exception) -> str:
+    import re
+
+    return re.sub(
+        r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})",
+        "<redacted>",
+        str(exc),
+    )[:500]
+
+
+async def _record_job_run_failure(
+    session: AsyncSession,
+    job: AIJob,
+    trigger: str,
+    exc: Exception,
+) -> str:
+    error_summary = _safe_error_summary(exc)
+    run_id = f"run-{short_id()}"
+    run = JobRun(
+        id=run_id,
+        job_id=job.id,
+        project_id=job.project_id,
+        fired_at=datetime.now(timezone.utc),
+        status="failed",
+        trigger=trigger,
+        session_id=job.last_session_id if job.session_mode == "resume" else None,
+        error_summary=error_summary,
+    )
+    session.add(run)
+    await persist_event(
+        session,
+        job.project_id,
+        "job_run_failed",
+        {
+            "job_id": job.id,
+            "job_name": job.name,
+            "agent": job.agent,
+            "trigger": trigger,
+            "run_id": run_id,
+            "error_summary": error_summary,
+        },
+        agent=job.agent,
+        severity="error",
+    )
+    await session.commit()
+    return run_id
 
 
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
@@ -319,14 +366,27 @@ async def run_job(
 
         scheduler = get_scheduler()
         if not scheduler:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Job scheduler not available",
-            )
+            exc = RuntimeError("Job scheduler not available")
+            await _record_job_run_failure(session, job, "manual", exc)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
         # Pass the session to avoid duplicate work
         success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
         if not success:
+            await persist_event(
+                session,
+                project_id,
+                "job_run_failed",
+                {
+                    "job_id": job.id,
+                    "job_name": job.name,
+                    "agent": job.agent,
+                    "trigger": "manual",
+                    "error_summary": "Failed to fire job",
+                },
+                agent=job.agent,
+                severity="error",
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to fire job",
@@ -346,9 +406,10 @@ async def run_job(
     except HTTPException:
         raise
     except Exception as e:
+        await _record_job_run_failure(session, job, "manual", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fire job: {e}",
+            detail=f"Failed to fire job: {_safe_error_summary(e)}",
         )
 
     # Note: sse_manager.broadcast("job_fired") is already done by _fire_job_internal

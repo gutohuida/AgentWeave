@@ -52,3 +52,13 @@ export function useLogs(opts: LogsOpts = {}) {
 
   return query
 }
+
+export function useLogAgents() {
+  const { isConfigured } = useConfigStore()
+  return useQuery<string[]>({
+    queryKey: ['logs', 'agents'],
+    queryFn: () => getJson<string[]>('/api/v1/logs/agents'),
+    enabled: isConfigured,
+    staleTime: 10_000,
+  })
+}

@@ -10,6 +10,7 @@ export interface JobRun {
   trigger: string
   session_id?: string
   message_id?: string
+  error_summary?: string
 }
 
 export interface Job {

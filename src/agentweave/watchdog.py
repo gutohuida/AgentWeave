@@ -795,6 +795,19 @@ class Watchdog:
         prompt = re.sub(r"\[NewSession\]\n?\n?", "", prompt)
         prompt = prompt.strip()
 
+        # Prepend shared/context.md so agents know the current session focus
+        # without needing a separate file read
+        from .constants import SHARED_DIR
+
+        shared_context_file = SHARED_DIR / "context.md"
+        if shared_context_file.exists():
+            try:
+                shared_context = shared_context_file.read_text(encoding="utf-8").strip()
+                if shared_context:
+                    prompt = f"## Current Session Focus\n\n{shared_context}\n\n---\n\n{prompt}"
+            except Exception:
+                pass
+
         # Build command
         cmd = _agent_ping_cmd(agent, prompt, session_id=session_id)
 
@@ -1820,6 +1833,24 @@ def _build_agent_context(agent: str, session: Any) -> str:
         lines.append("(No specific role assigned)")
     lines.append("")
 
+    # --- Session ---
+    lines.append(f"Session mode: {session.mode} | Principal: {session.principal}")
+    lines.append("")
+
+    # --- Communication mode (Hub/MCP is always active when this file is generated) ---
+    lines.append("## Communication Mode")
+    lines.append("")
+    lines.append(
+        "You are in **Hub/MCP mode**. "
+        "The tools `send_message`, `get_inbox`, `update_task`, `ask_user`, `list_tasks`, "
+        "`get_task`, `create_task` are available — use them for all coordination."
+    )
+    lines.append(
+        "CLI relay commands (`agentweave relay`, `agentweave quick`) are **FORBIDDEN** "
+        "in this mode — they require manual human action and defeat Hub automation."
+    )
+    lines.append("")
+
     # --- Team Directory ---
     lines.append("## Team")
     lines.append("")
@@ -1841,6 +1872,27 @@ def _build_agent_context(agent: str, session: Any) -> str:
         marker = " **← YOU**" if ag == agent else ""
         lines.append(f"- **{ag}** ({display_model}): {roles_str}{marker}")
     lines.append("")
+
+    # --- Quality Governance ---
+    quality = session.to_dict().get("quality")
+    if quality:
+        lines.append("## Quality Governance")
+        lines.append("")
+        docs_threshold = quality.get("docs_threshold", "never")
+        docs_path = quality.get("docs_path") or ".agentweave/code-docs"
+        review_required = quality.get("review_required", False)
+        echo_chamber = quality.get("echo_chamber_guard", "off")
+        attribution = quality.get("attribution_tag", False)
+        dependency_check = quality.get("dependency_check", False)
+        lines.append(f"- `docs_threshold`: **{docs_threshold}**")
+        lines.append(f"- `docs_path`: `{docs_path}/<task-id>.md`")
+        lines.append(f"- `review_required`: **{str(review_required).lower()}**")
+        lines.append(f"- `echo_chamber_guard`: **{echo_chamber}**")
+        if attribution:
+            lines.append("- `attribution_tag`: **true** — list AI-generated files in decision docs")
+        if dependency_check:
+            lines.append("- `dependency_check`: **true** — flag new dependencies before adding")
+        lines.append("")
 
     # --- Project Instructions ---
     try:
@@ -1882,7 +1934,7 @@ def _build_agent_context(agent: str, session: Any) -> str:
     lines.append("")
     lines.append(f'1. Check inbox: `get_inbox("{agent}")`')
     lines.append("2. List tasks: `list_tasks()`")
-    lines.append("3. Read current focus: `.agentweave/shared/context.md`")
+    lines.append("3. Current session focus is prepended to every trigger message you receive.")
     lines.append("")
 
     return "\n".join(lines) + "\n"
@@ -2199,6 +2251,32 @@ def _run_agent_subprocess(
         return
 
     try:
+        from .diagnostics import launch_blockers
+        from .session import Session
+
+        blockers = launch_blockers(agent, Session.load())
+        if blockers:
+            for blocker in blockers:
+                event = (
+                    "proxy_api_key_missing"
+                    if blocker.id.startswith("proxy_api_key")
+                    else "agent_launch_skipped"
+                )
+                payload = blocker.to_dict()
+                logger.error(event, extra={"event": event, "data": payload})
+                msg = f"[watchdog] Launch skipped for {agent}: {blocker.message}"
+                if blocker.hint:
+                    msg = f"{msg} Hint: {blocker.hint}"
+                print(f"[SKIP] {msg}", file=sys.stderr)
+                if is_http:
+                    with contextlib.suppress(Exception):
+                        transport.post_agent_output(agent, msg, session_id=known_session_id)
+                    with contextlib.suppress(Exception):
+                        transport.push_log(event, agent, payload, "error")
+            if is_http:
+                with contextlib.suppress(Exception):
+                    transport.push_heartbeat(agent, status="idle", message="Launch skipped")
+            return
         _do_run_agent_subprocess(
             agent, cmd, subject, transport, is_http, env_vars, prompt, known_session_id
         )
@@ -2248,6 +2326,7 @@ def _do_run_agent_subprocess(
     stale_codex_session: List[bool] = [False]
     # Collect all stdout lines for Kimi session ID extraction (print mode only)
     kimi_stdout_lines: List[str] = []
+    recent_stderr: List[str] = []
     # Select appropriate parser based on mode
     kimi_parser: Optional[Any] = None
     if is_wire_mode:
@@ -2316,6 +2395,8 @@ def _do_run_agent_subprocess(
                     m = _KIMI_RESUME_RE.search(err_line)
                     if m:
                         session_id_ref[0] = m.group(1)
+                recent_stderr.append(err_line)
+                del recent_stderr[:-10]
                 msg = f"[stderr] {err_line}"
                 if is_http:
                     try:
@@ -2578,11 +2659,18 @@ def _do_run_agent_subprocess(
             returncode = _run_cmd(fresh_cmd, None)
 
         if returncode != 0:
+            from .diagnostics import redact_secrets
+
             logger.warning(
                 "watchdog_agent_exit",
                 extra={
                     "event": "watchdog_agent_exit",
-                    "data": {"agent": agent, "exit_code": returncode},
+                    "data": {
+                        "agent": agent,
+                        "runner": runner_type,
+                        "exit_code": returncode,
+                        "stderr_tail": redact_secrets(recent_stderr),
+                    },
                 },
             )
             print(f"[WARN] {agent} exited with code {returncode}", file=sys.stderr)

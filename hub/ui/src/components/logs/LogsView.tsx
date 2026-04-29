@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
-import { useLogs } from '@/api/logs'
+import { useLogAgents, useLogs } from '@/api/logs'
 import { LogLine } from './LogLine'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -15,12 +15,27 @@ const SEVERITY_ACTIVE_STYLE: Record<Severity, { bg: string; color: string }> = {
   debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }
 
-const KNOWN_AGENTS = ['', 'claude', 'kimi', 'system']
+const CATEGORIES = ['all', 'transport', 'watchdog', 'runner', 'proxy', 'setup', 'jobs', 'stderr'] as const
+type Category = (typeof CATEGORIES)[number]
+
+function eventCategory(eventType: string, data?: Record<string, unknown>): Category | 'other' {
+  const category = typeof data?.category === 'string' ? data.category : ''
+  const value = `${eventType} ${category}`.toLowerCase()
+  if (value.includes('transport') || value.includes('hub_')) return 'transport'
+  if (value.includes('watchdog')) return 'watchdog'
+  if (value.includes('runner') || value.includes('launch') || value.includes('cli')) return 'runner'
+  if (value.includes('proxy') || value.includes('api_key')) return 'proxy'
+  if (value.includes('setup') || value.includes('sync') || value.includes('registration')) return 'setup'
+  if (value.includes('job')) return 'jobs'
+  if (value.includes('stderr')) return 'stderr'
+  return 'other'
+}
 
 export function LogsView() {
   const [search,      setSearch]      = useState('')
   const [severity,    setSeverity]    = useState<Severity>('all')
   const [agentFilter, setAgentFilter] = useState('')
+  const [category,    setCategory]    = useState<Category>('all')
   const [live,        setLive]        = useState(true)
   const [autoScroll,  setAutoScroll]  = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -32,17 +47,21 @@ export function LogsView() {
     severity: severity !== 'all' ? severity : undefined,
     live,
   })
+  const { data: logAgents = [] } = useLogAgents()
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return entries
+    const byCategory = category === 'all'
+      ? entries
+      : entries.filter((e) => eventCategory(e.event_type, e.data) === category)
+    if (!search.trim()) return byCategory
     const q = search.toLowerCase()
-    return entries.filter((e) => {
+    return byCategory.filter((e) => {
       if (e.event_type.toLowerCase().includes(q)) return true
       if ((e.agent ?? '').toLowerCase().includes(q)) return true
       if (JSON.stringify(e.data ?? {}).toLowerCase().includes(q)) return true
       return false
     })
-  }, [entries, search])
+  }, [entries, search, category])
 
   useEffect(() => {
     if (live && autoScroll) bottomRef.current?.scrollIntoView({ behavior: 'instant' })
@@ -121,7 +140,7 @@ export function LogsView() {
             }}
           >
             <option value="">All agents</option>
-            {KNOWN_AGENTS.filter(Boolean).map((a) => (
+            {logAgents.map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
           </select>
@@ -171,6 +190,20 @@ export function LogsView() {
             {search ? ' (filtered)' : ''}
             {live && <span className="ml-2">· {lastUpdate}</span>}
           </span>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          {CATEGORIES.map((c) => {
+            const active = category === c
+            return (
+              <button
+                key={c}
+                onClick={() => setCategory(c)}
+                style={active ? { ...chipBase, background: 'var(--surface-3)', color: 'var(--text)', borderColor: 'transparent' } : chipBase}
+              >
+                {c}
+              </button>
+            )
+          })}
         </div>
       </div>
 

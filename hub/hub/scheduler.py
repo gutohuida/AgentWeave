@@ -4,8 +4,8 @@ Runs inside the FastAPI lifespan, loads enabled jobs from DB,
 and triggers agents when cron expressions match.
 """
 
-import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -18,6 +18,13 @@ from .sse import sse_manager
 from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
+
+_SECRET_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
+
+
+def _safe_error_summary(exc: Exception) -> str:
+    return _SECRET_RE.sub("<redacted>", str(exc))[:500]
+
 
 # Singleton scheduler instance
 _scheduler_instance: Optional["JobScheduler"] = None
@@ -45,7 +52,6 @@ class JobScheduler:
     async def start(self) -> None:
         """Start the scheduler and load all enabled jobs from DB."""
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.triggers.cron import CronTrigger
         from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 
         # Create job store using our database
@@ -201,8 +207,6 @@ class JobScheduler:
         This creates a message in the DB that the host-side watchdog will
         detect and execute using the agent's CLI.
         """
-        from .db.models import Message
-
         # If session provided, use it; otherwise create our own
         if session is not None:
             return await self._do_fire_job(job, trigger, session)
@@ -319,10 +323,27 @@ class JobScheduler:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to fire job {job.id}: {e}")
+            error_summary = _safe_error_summary(e)
+            logger.error(f"Failed to fire job {job.id}: {error_summary}")
             # Mark run as failed
             if "run" in locals():
                 run.status = "failed"
+                run.error_summary = error_summary
+                await persist_event(
+                    session,
+                    job.project_id,
+                    "job_run_failed",
+                    {
+                        "job_id": job.id,
+                        "job_name": job.name,
+                        "agent": job.agent,
+                        "trigger": trigger,
+                        "run_id": run.id,
+                        "error_summary": error_summary,
+                    },
+                    agent=job.agent,
+                    severity="error",
+                )
                 await session.commit()
             return False
 

@@ -10,12 +10,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import EventLog
+from ...db.models import Agent, EventLog
 from ...schemas.logs import EventLogResponse, LogEventCreate
 from ...sse import sse_manager
 from ...utils import persist_event
 
 router = APIRouter(prefix="/logs", tags=["logs"])
+
+
+@router.get("/agents", response_model=List[str])
+async def list_log_agents(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return actual agent names known to logs or project configuration."""
+    project_id, _ = project
+    agent_rows = await session.execute(
+        select(Agent.name).where(Agent.project_id == project_id).distinct()
+    )
+    log_rows = await session.execute(
+        select(EventLog.agent)
+        .where(EventLog.project_id == project_id, EventLog.agent.isnot(None))
+        .distinct()
+    )
+    names = {row[0] for row in agent_rows if row[0]}
+    names.update(row[0] for row in log_rows if row[0])
+    names.add("system")
+    return sorted(names)
 
 
 @router.get("", response_model=List[EventLogResponse])

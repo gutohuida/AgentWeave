@@ -49,6 +49,15 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
           <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
             {formatDistanceToNow(new Date(run.fired_at), { addSuffix: true })}
           </span>
+          {run.status === 'failed' && run.error_summary && (
+            <span
+              className="ml-2 flex-1 min-w-0 truncate text-[11px]"
+              style={{ color: 'var(--red)' }}
+              title={run.error_summary}
+            >
+              {run.error_summary}
+            </span>
+          )}
         </div>
       ))}
     </div>

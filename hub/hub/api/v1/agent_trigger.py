@@ -12,7 +12,7 @@ Flow:
 5. Output streams back to Hub via HTTP transport
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,8 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Agent, Message
-from ...schemas.common import SuccessResponse
+from ...db.models import Agent, AgentHeartbeat, Message
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
@@ -52,6 +51,8 @@ class TriggerAgentResponse(BaseModel):
     agent: str
     message_id: str
     session_id: Optional[str] = None
+    execution_confidence: str = "unknown"
+    watchdog_status: Optional[str] = None
 
 
 @router.post("/trigger", response_model=TriggerAgentResponse)
@@ -83,12 +84,42 @@ async def trigger_agent(
             detail="session_mode must be 'new' or 'resume'",
         )
 
-    # Check if agent is in pilot mode
+    # Check if agent is in pilot mode and inspect recent heartbeat state.
     agent_result = await session.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == body.agent)
     )
     agent_row = agent_result.scalars().first()
     is_pilot = agent_row.pilot if agent_row else False
+    agent_config = agent_row.config if agent_row and isinstance(agent_row.config, dict) else {}
+    is_manual = agent_config.get("runner") == "manual"
+
+    hb_result = await session.execute(
+        select(AgentHeartbeat)
+        .where(AgentHeartbeat.project_id == project_id, AgentHeartbeat.agent == body.agent)
+        .order_by(AgentHeartbeat.timestamp.desc())
+        .limit(1)
+    )
+    latest_hb = hb_result.scalars().first()
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(seconds=120)
+    if latest_hb is None:
+        execution_confidence = "queued_no_watchdog_heartbeat"
+        watchdog_status = "missing"
+    else:
+        hb_ts = latest_hb.timestamp
+        if hb_ts.tzinfo is None:
+            hb_ts = hb_ts.replace(tzinfo=timezone.utc)
+
+    if latest_hb is not None and hb_ts < stale_cutoff:
+        execution_confidence = "queued_watchdog_stale"
+        watchdog_status = "stale"
+    elif latest_hb is not None:
+        execution_confidence = "queued_watchdog_healthy"
+        watchdog_status = latest_hb.status
+
+    if is_pilot or is_manual:
+        execution_confidence = "queued_manual"
+        watchdog_status = "manual"
 
     # Build message content with session info.
     # The watchdog parses these tags to determine session handling:
@@ -109,7 +140,7 @@ async def trigger_agent(
         project_id=project_id,
         sender="user",  # Indicates this is from the human user via Hub
         recipient=body.agent,
-        subject=f"Direct message from Hub",
+        subject="Direct message from Hub",
         content="\n".join(content_parts),
         type="message",  # Use standard message type (direct_trigger caused validation issues)
         timestamp=datetime.now(timezone.utc),
@@ -144,25 +175,60 @@ async def trigger_agent(
             "session_mode": body.session_mode,
             "session_id": body.session_id,
             "message_id": msg_id,
+            "execution_confidence": execution_confidence,
+            "watchdog_status": watchdog_status,
         },
         agent=body.agent,
     )
+    await persist_event(
+        session,
+        project_id,
+        "agent_trigger_confidence",
+        {
+            "agent": body.agent,
+            "message_id": msg_id,
+            "execution_confidence": execution_confidence,
+            "watchdog_status": watchdog_status,
+        },
+        agent=body.agent,
+        severity="warn" if execution_confidence != "queued_watchdog_healthy" else "info",
+    )
 
-    if is_pilot:
+    if is_pilot or is_manual:
         return TriggerAgentResponse(
             success=True,
-            message=f"Message created for {body.agent}, but agent is in pilot mode (manual control). The message will appear in their inbox.",
+            message=f"Message created for {body.agent}, but the agent requires manual control. The message will appear in their inbox.",
             agent=body.agent,
             message_id=msg_id,
             session_id=body.session_id,
+            execution_confidence=execution_confidence,
+            watchdog_status=watchdog_status,
+        )
+
+    if execution_confidence == "queued_watchdog_stale":
+        message = (
+            f"Message queued for {body.agent}, but the latest watchdog heartbeat is stale. "
+            "Start or restart the host watchdog if it does not execute shortly."
+        )
+    elif execution_confidence == "queued_no_watchdog_heartbeat":
+        message = (
+            f"Message queued for {body.agent}, but no watchdog heartbeat has been seen. "
+            "Run agentweave start on the host to enable automatic execution."
+        )
+    else:
+        message = (
+            f"Message queued for {body.agent}. "
+            "The watchdog on your host will execute it shortly."
         )
 
     return TriggerAgentResponse(
         success=True,
-        message=f"Message queued for {body.agent}. The watchdog on your host will execute it shortly.",
+        message=message,
         agent=body.agent,
         message_id=msg_id,
         session_id=body.session_id,
+        execution_confidence=execution_confidence,
+        watchdog_status=watchdog_status,
     )
 
 

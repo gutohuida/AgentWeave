@@ -48,6 +48,7 @@ class JobRunResponse(BaseModel):
     status: str
     trigger: str
     session_id: Optional[str] = None
+    error_summary: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

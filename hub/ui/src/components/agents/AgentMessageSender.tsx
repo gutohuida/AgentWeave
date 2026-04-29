@@ -22,7 +22,7 @@ export function AgentMessageSender({ agent, existingSessionId, runner }: AgentMe
   const [sessions, setSessions] = useState<Session[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSending, setIsSending] = useState(false)
-  const [result, setResult] = useState<{success: boolean; message: string} | null>(null)
+  const [result, setResult] = useState<{success: boolean; message: string; confidence?: string} | null>(null)
 
   useEffect(() => {
     fetchSessions()
@@ -81,7 +81,11 @@ export function AgentMessageSender({ agent, existingSessionId, runner }: AgentMe
       const data = await response.json()
 
       if (response.ok) {
-        setResult({ success: true, message: data.message || 'Message queued for agent' })
+        setResult({
+          success: true,
+          message: data.message || 'Message queued for agent',
+          confidence: data.execution_confidence,
+        })
         setMessage('')
       } else {
         setResult({ success: false, message: data.detail || 'Failed to start agent' })
@@ -241,8 +245,16 @@ export function AgentMessageSender({ agent, existingSessionId, runner }: AgentMe
         <div
           className="p-3 rounded-lg text-sm"
           style={{
-            background: result.success ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-            color: result.success ? 'var(--green)' : 'var(--red)',
+            background: result.success && result.confidence === 'queued_watchdog_healthy'
+              ? 'rgba(34,197,94,0.08)'
+              : result.success
+                ? 'rgba(245,158,11,0.08)'
+                : 'rgba(239,68,68,0.08)',
+            color: result.success && result.confidence === 'queued_watchdog_healthy'
+              ? 'var(--green)'
+              : result.success
+                ? 'var(--amber)'
+                : 'var(--red)',
           }}
         >
           {result.message}

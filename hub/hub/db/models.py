@@ -8,10 +8,9 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    JSON,
     String,
     Text,
-    JSON,
-    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -311,6 +310,7 @@ class JobRun(Base):
         String(16), default="scheduled", nullable=False
     )  # "scheduled" or "manual"
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     job: Mapped["AIJob"] = relationship(back_populates="runs")
 

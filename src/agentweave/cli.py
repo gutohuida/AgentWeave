@@ -2,6 +2,7 @@
 """Command-line interface for AgentWeave."""
 
 import argparse
+import logging
 import os
 import shutil
 import subprocess
@@ -67,6 +68,54 @@ from .utils import (
     print_warning,
 )
 from .validator import validate_message, validate_task
+
+logger = logging.getLogger(__name__)
+
+
+def _emit_diagnostic_log(result: object) -> None:
+    """Emit one diagnostic result through the existing structured logging path."""
+    if not hasattr(result, "to_dict"):
+        return
+    data = result.to_dict()  # type: ignore[attr-defined]
+    event = "diagnostic_check_failed" if data.get("status") == "fail" else "diagnostic_check_warn"
+    if data.get("status") not in ("fail", "warn"):
+        return
+    log_fn = logger.error if data.get("status") == "fail" else logger.warning
+    log_fn(event, extra={"event": event, "data": data})
+
+
+def _emit_nonfatal_diagnostic(
+    step: str, message: str, *, hint: Optional[str] = None, severity: str = "warn"
+) -> None:
+    event = "diagnostic_check_failed" if severity == "error" else "diagnostic_check_warn"
+    log_fn = logger.error if severity == "error" else logger.warning
+    data = {
+        "id": f"{step}_failed",
+        "target": step,
+        "status": "fail" if severity == "error" else "warn",
+        "severity": severity,
+        "message": message,
+        "category": "setup",
+    }
+    if hint:
+        data["hint"] = hint
+    log_fn(event, extra={"event": event, "data": data})
+
+
+def _print_readiness_summary(results: List[object], *, title: str = "[READINESS]") -> None:
+    from .diagnostics import format_results, summarize
+
+    summary = summarize(results)
+    print()
+    print(title)
+    print(
+        f"  pass: {summary.get('pass', 0)}  warn: {summary.get('warn', 0)}  fail: {summary.get('fail', 0)}"
+    )
+    rendered = format_results([r for r in results if getattr(r, "status", "") != "pass"])
+    if rendered:
+        print(rendered)
+    else:
+        print("  [OK] No readiness problems detected.")
 
 
 def _ensure_agentweave_gitignore(path: Optional[Path] = None) -> bool:
@@ -672,6 +721,34 @@ def cmd_status(_args: argparse.Namespace) -> int:
     print(f"\n[TASKS] Active: {len(active_tasks)}  |  Completed: {len(completed_tasks)}")
 
     return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Run runtime readiness diagnostics."""
+    import json as _json
+
+    from .diagnostics import collect_diagnostics, format_results, has_failures, summarize
+
+    results = collect_diagnostics(include_network=not getattr(args, "no_network", False))
+    if getattr(args, "json", False):
+        payload = {
+            "summary": summarize(results),
+            "results": [result.to_dict() for result in results],
+        }
+        print(_json.dumps(payload, indent=2))
+    else:
+        summary = summarize(results)
+        print("[DOCTOR] AgentWeave runtime diagnostics")
+        print(
+            f"         pass: {summary.get('pass', 0)}  "
+            f"warn: {summary.get('warn', 0)}  fail: {summary.get('fail', 0)}"
+        )
+        print()
+        print(format_results(results))
+
+    for result in results:
+        _emit_diagnostic_log(result)
+    return 1 if has_failures(results) else 0
 
 
 def cmd_summary(_args: argparse.Namespace) -> int:
@@ -1749,6 +1826,19 @@ def cmd_start(args: argparse.Namespace) -> int:
     if WATCHDOG_PID_FILE.exists():
         WATCHDOG_PID_FILE.unlink(missing_ok=True)
 
+    try:
+        from .diagnostics import check_agents
+
+        readiness_results = [
+            result for result in check_agents() if result.status in ("warn", "fail")
+        ]
+        if readiness_results:
+            _print_readiness_summary(readiness_results, title="[READINESS] Before watchdog start")
+            for result in readiness_results:
+                _emit_diagnostic_log(result)
+    except Exception as exc:
+        print_warning(f"Could not run startup readiness diagnostics: {exc}")
+
     from .constants import WATCHDOG_LOG_FILE
 
     retry_after = getattr(args, "retry_after", None) or 600  # default 10 min
@@ -2653,6 +2743,11 @@ def cmd_activate(_args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"[WARNING] Context sync failed: {e}")
         print("          Run 'agentweave sync-context' manually after fixing the issue.")
+        _emit_nonfatal_diagnostic(
+            "context_sync",
+            f"Context sync failed: {e}",
+            hint="Run agentweave sync-context manually after fixing the issue.",
+        )
 
     # Print run instructions for piloted agents
     pilot_agents = [
@@ -2685,6 +2780,17 @@ def cmd_activate(_args: argparse.Namespace) -> int:
                 # kimi and other runners
                 print(f'  {name}:  agentweave run --agent {name} "<task>"')
         print()
+
+    try:
+        from .diagnostics import collect_diagnostics
+
+        readiness_results = collect_diagnostics(include_network=False)
+        _print_readiness_summary(readiness_results)
+        for result in readiness_results:
+            _emit_diagnostic_log(result)
+    except Exception as exc:
+        print_warning(f"Could not run readiness diagnostics: {exc}")
+        _emit_nonfatal_diagnostic("readiness", f"Could not run readiness diagnostics: {exc}")
 
     print_success("Activate complete!")
     print("Your project is ready for multi-agent collaboration.")
@@ -2788,6 +2894,11 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
     except Exception as exc:
         print_warning(f"Could not auto-configure transport: {exc}")
         print_info("You may need to run 'agentweave transport setup' manually")
+        _emit_nonfatal_diagnostic(
+            "transport_setup",
+            f"Could not auto-configure transport: {exc}",
+            hint="Run agentweave transport setup manually.",
+        )
         # Continue anyway - transport might be optional for some workflows
         return 0
 
@@ -2903,8 +3014,13 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
                 print("[HUB] Session synced")
             else:
                 print_warning("Hub session sync failed — agents may not appear in dashboard")
+                _emit_nonfatal_diagnostic(
+                    "hub_session_sync",
+                    "Hub session sync failed — agents may not appear in dashboard",
+                )
     except Exception as _exc:
         print_warning(f"Hub session sync failed: {_exc}")
+        _emit_nonfatal_diagnostic("hub_session_sync", f"Hub session sync failed: {_exc}")
 
     # Push roles.json to Hub
     from .roles import load_roles_config, sync_roles_to_hub
@@ -2948,6 +3064,11 @@ def _activate_mcp() -> int:
             print("[MCP] Already registered")
             return 0
     except Exception:
+        _emit_nonfatal_diagnostic(
+            "mcp_check",
+            f"Could not inspect MCP registration for {principal}",
+            severity="warn",
+        )
         pass  # Continue to registration attempt
 
     # Try to register
@@ -2958,6 +3079,7 @@ def _activate_mcp() -> int:
         return mcp_args_result
     except Exception as exc:
         print_warning(f"Could not register MCP: {exc}")
+        _emit_nonfatal_diagnostic("mcp_registration", f"Could not register MCP: {exc}")
         return 0  # Non-fatal
 
 
@@ -2986,6 +3108,7 @@ def _activate_watchdog() -> int:
         return result
     except Exception as exc:
         print_warning(f"Could not start watchdog: {exc}")
+        _emit_nonfatal_diagnostic("watchdog_start", f"Could not start watchdog: {exc}")
         return 0  # Non-fatal
 
 
@@ -2999,6 +3122,11 @@ def _activate_jobs(config: "AgentWeaveConfig") -> int:
     transport = get_transport()
     if transport.get_transport_type() != "http":
         print_warning("[JOBS] HTTP transport not configured, skipping job sync")
+        _emit_nonfatal_diagnostic(
+            "job_sync",
+            "HTTP transport not configured, skipping job sync",
+            hint="Configure HTTP transport if Hub job sync is expected.",
+        )
         return 0
 
     # Get existing jobs from Hub
@@ -3007,6 +3135,7 @@ def _activate_jobs(config: "AgentWeaveConfig") -> int:
         existing_by_name = {job.get("name", job.get("id")): job for job in existing_jobs}
     except Exception:
         existing_by_name = {}
+        _emit_nonfatal_diagnostic("job_sync", "Could not list existing Hub jobs.")
 
     for job_name, job_config in config.jobs.items():
         job_data = {
@@ -3026,6 +3155,7 @@ def _activate_jobs(config: "AgentWeaveConfig") -> int:
                 print(f"[JOBS] Updated: {job_name} ({status})")
             except Exception as exc:
                 print_warning(f"Could not update job {job_name}: {exc}")
+                _emit_nonfatal_diagnostic("job_sync", f"Could not update job {job_name}: {exc}")
         else:
             # Create new job
             try:
@@ -3037,6 +3167,7 @@ def _activate_jobs(config: "AgentWeaveConfig") -> int:
                         print(f"[JOBS] Paused: {job_name}")
             except Exception as exc:
                 print_warning(f"Could not create job {job_name}: {exc}")
+                _emit_nonfatal_diagnostic("job_sync", f"Could not create job {job_name}: {exc}")
 
     return 0
 
@@ -3213,6 +3344,16 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
         return 1
 
     session.set_runner_config(agent, runner, env_vars, model=model)
+
+    if runner == "claude_proxy":
+        from .diagnostics import check_agent_readiness
+
+        for result in check_agent_readiness(agent, session):
+            if result.id == "proxy_api_key_missing":
+                print_warning(result.message)
+                if result.hint:
+                    print_info(result.hint)
+                _emit_diagnostic_log(result)
 
     # Handle pilot flag if specified
     if args.pilot is not None:
@@ -4053,6 +4194,19 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Status
     subparsers.add_parser("status", help="Show session status")
 
+    # Doctor
+    doctor_parser = subparsers.add_parser("doctor", help="Run runtime readiness diagnostics")
+    doctor_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON diagnostics",
+    )
+    doctor_parser.add_argument(
+        "--no-network",
+        action="store_true",
+        help="Skip network reachability checks",
+    )
+
     # Summary (NEW)
     subparsers.add_parser("summary", help="Quick summary for relay decisions")
 
@@ -4696,6 +4850,8 @@ def main(args: Optional[List[str]] = None) -> int:
             return cmd_log(parsed_args)
         elif parsed_args.command == "status":
             return cmd_status(parsed_args)
+        elif parsed_args.command == "doctor":
+            return cmd_doctor(parsed_args)
         elif parsed_args.command == "summary":
             return cmd_summary(parsed_args)
         elif parsed_args.command == "relay":

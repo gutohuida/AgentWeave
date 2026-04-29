@@ -23,6 +23,31 @@ from .base import BaseTransport
 logger = logging.getLogger(__name__)
 
 
+class HubTransportError(RuntimeError):
+    """Classified Hub transport failure."""
+
+    def __init__(self, message: str, classification: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.classification = classification
+        self.status_code = status_code
+
+    def to_log_data(self, method: str) -> Dict[str, Any]:
+        data: Dict[str, Any] = {
+            "method": method,
+            "error": str(self),
+            "classification": self.classification,
+        }
+        if self.status_code is not None:
+            data["status_code"] = self.status_code
+        return data
+
+
+def _transport_error_data(method: str, exc: RuntimeError) -> Dict[str, Any]:
+    if isinstance(exc, HubTransportError):
+        return exc.to_log_data(method)
+    return {"method": method, "error": str(exc), "classification": "transport_error"}
+
+
 class HttpTransport(BaseTransport):
     """Transport that delegates to an AgentWeave Hub via HTTP REST API."""
 
@@ -74,11 +99,22 @@ class HttpTransport(BaseTransport):
                 raw = resp.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(
-                f"Hub API {exc.code}: {exc.read().decode(errors='replace')}"
+            body = exc.read().decode(errors="replace")
+            if exc.code in (401, 403):
+                classification = "hub_auth_failed"
+            elif exc.code == 404:
+                classification = "hub_project_missing"
+            elif exc.code == 408:
+                classification = "hub_timeout"
+            else:
+                classification = "hub_api_error"
+            raise HubTransportError(
+                f"Hub API {exc.code}: {body}", classification, status_code=exc.code
             ) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Hub connection error: {exc.reason}") from exc
+            reason = str(exc.reason)
+            classification = "hub_timeout" if "timed out" in reason.lower() else "hub_unreachable"
+            raise HubTransportError(f"Hub connection error: {exc.reason}", classification) from exc
 
     # ------------------------------------------------------------------
     # BaseTransport implementation
@@ -105,7 +141,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "send_message", "error": str(exc)},
+                    "data": _transport_error_data("send_message", exc),
                 },
             )
             return False
@@ -122,7 +158,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "get_pending_messages", "error": str(exc)},
+                    "data": _transport_error_data("get_pending_messages", exc),
                 },
             )
             return []
@@ -137,7 +173,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "archive_message", "error": str(exc)},
+                    "data": _transport_error_data("archive_message", exc),
                 },
             )
             return False
@@ -152,7 +188,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "send_task", "error": str(exc)},
+                    "data": _transport_error_data("send_task", exc),
                 },
             )
             return False
@@ -172,7 +208,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "get_active_tasks", "error": str(exc)},
+                    "data": _transport_error_data("get_active_tasks", exc),
                 },
             )
             return []
@@ -193,7 +229,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "get_task_by_id", "error": str(exc)},
+                    "data": _transport_error_data("get_task_by_id", exc),
                 },
             )
             return None
@@ -208,7 +244,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "update_task_status", "error": str(exc)},
+                    "data": _transport_error_data("update_task_status", exc),
                 },
             )
             return False
@@ -230,7 +266,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "ask_question", "error": str(exc)},
+                    "data": _transport_error_data("ask_question", exc),
                 },
             )
             return None
@@ -247,7 +283,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "get_answer", "error": str(exc)},
+                    "data": _transport_error_data("get_answer", exc),
                 },
             )
             return None
@@ -267,7 +303,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "push_heartbeat", "error": str(exc)},
+                    "data": _transport_error_data("push_heartbeat", exc),
                 },
             )
             return False
@@ -285,7 +321,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "post_agent_output", "error": str(exc)},
+                    "data": _transport_error_data("post_agent_output", exc),
                 },
             )
             return False
@@ -300,7 +336,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "post_context_usage", "error": str(exc)},
+                    "data": _transport_error_data("post_context_usage", exc),
                 },
             )
             return False
@@ -320,7 +356,7 @@ class HttpTransport(BaseTransport):
                 str(exc),
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "push_session", "error": str(exc)},
+                    "data": _transport_error_data("push_session", exc),
                 },
             )
             return False
@@ -338,7 +374,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "push_roles_config", "error": str(exc)},
+                    "data": _transport_error_data("push_roles_config", exc),
                 },
             )
             return False
@@ -355,7 +391,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "register_session", "agent": agent, "error": str(exc)},
+                    "data": {**_transport_error_data("register_session", exc), "agent": agent},
                 },
             )
             return None
@@ -372,7 +408,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "is_agent_registered", "agent": agent, "error": str(exc)},
+                    "data": {**_transport_error_data("is_agent_registered", exc), "agent": agent},
                 },
             )
             return False
@@ -399,7 +435,10 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "get_agent_registration", "agent": agent, "error": str(exc)},
+                    "data": {
+                        **_transport_error_data("get_agent_registration", exc),
+                        "agent": agent,
+                    },
                 },
             )
             return None
@@ -440,7 +479,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "create_job", "error": str(exc)},
+                    "data": _transport_error_data("create_job", exc),
                 },
             )
             return None
@@ -460,7 +499,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "list_jobs", "error": str(exc)},
+                    "data": _transport_error_data("list_jobs", exc),
                 },
             )
             return []
@@ -474,7 +513,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "get_job", "error": str(exc)},
+                    "data": _transport_error_data("get_job", exc),
                 },
             )
             return None
@@ -489,7 +528,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "update_job", "error": str(exc)},
+                    "data": _transport_error_data("update_job", exc),
                 },
             )
             return False
@@ -504,7 +543,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "delete_job", "error": str(exc)},
+                    "data": _transport_error_data("delete_job", exc),
                 },
             )
             return False
@@ -519,7 +558,7 @@ class HttpTransport(BaseTransport):
                 "transport_error",
                 extra={
                     "event": "transport_error",
-                    "data": {"method": "fire_job", "error": str(exc)},
+                    "data": _transport_error_data("fire_job", exc),
                 },
             )
             return False
