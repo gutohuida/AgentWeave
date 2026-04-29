@@ -195,9 +195,13 @@ async def trigger_agent(
     )
 
     if is_pilot or is_manual:
+        if is_pilot:
+            manual_reason = "the agent is in pilot mode and requires manual control"
+        else:
+            manual_reason = "the agent runner is set to manual"
         return TriggerAgentResponse(
             success=True,
-            message=f"Message created for {body.agent}, but the agent requires manual control. The message will appear in their inbox.",
+            message=f"Message created for {body.agent}, but {manual_reason}. The message will appear in their inbox.",
             agent=body.agent,
             message_id=msg_id,
             session_id=body.session_id,

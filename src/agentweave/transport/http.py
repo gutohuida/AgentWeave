@@ -99,7 +99,7 @@ class HttpTransport(BaseTransport):
                 raw = resp.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode(errors="replace")
+            body_text = exc.read().decode(errors="replace")
             if exc.code in (401, 403):
                 classification = "hub_auth_failed"
             elif exc.code == 404:
@@ -109,7 +109,7 @@ class HttpTransport(BaseTransport):
             else:
                 classification = "hub_api_error"
             raise HubTransportError(
-                f"Hub API {exc.code}: {body}", classification, status_code=exc.code
+                f"Hub API {exc.code}: {body_text}", classification, status_code=exc.code
             ) from exc
         except urllib.error.URLError as exc:
             reason = str(exc.reason)

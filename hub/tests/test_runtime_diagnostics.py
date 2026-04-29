@@ -7,7 +7,7 @@ import pytest
 async def test_agent_trigger_reports_missing_watchdog_heartbeat(app, auth_headers):
     resp = await app.post(
         "/api/v1/agent/trigger",
-        json={"agent": "claude", "message": "hello", "session_mode": "new"},
+        json={"agent": "diag-no-hb", "message": "hello", "session_mode": "new"},
         headers=auth_headers,
     )
 
@@ -20,7 +20,7 @@ async def test_agent_trigger_reports_missing_watchdog_heartbeat(app, auth_header
 @pytest.mark.asyncio
 async def test_agent_trigger_reports_healthy_watchdog_heartbeat(app, auth_headers):
     hb = await app.post(
-        "/api/v1/agents/claude/heartbeat",
+        "/api/v1/agents/diag-hb/heartbeat",
         json={"status": "idle", "message": "ready"},
         headers=auth_headers,
     )
@@ -28,7 +28,7 @@ async def test_agent_trigger_reports_healthy_watchdog_heartbeat(app, auth_header
 
     resp = await app.post(
         "/api/v1/agent/trigger",
-        json={"agent": "claude", "message": "hello", "session_mode": "new"},
+        json={"agent": "diag-hb", "message": "hello", "session_mode": "new"},
         headers=auth_headers,
     )
 

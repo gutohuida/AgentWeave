@@ -10,7 +10,7 @@ import sys
 import urllib.request
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from .config import AgentWeaveConfig
@@ -102,7 +102,7 @@ def _emit_nonfatal_diagnostic(
     log_fn(event, extra={"event": event, "data": data})
 
 
-def _print_readiness_summary(results: List[object], *, title: str = "[READINESS]") -> None:
+def _print_readiness_summary(results: List[Any], *, title: str = "[READINESS]") -> None:
     from .diagnostics import format_results, summarize
 
     summary = summarize(results)
