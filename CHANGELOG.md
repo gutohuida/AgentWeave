@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.37.0] - 2026-05-04
+
+### Added (CLI)
+- New `context_builder.py` module for centralized agent context rendering across CLI, watchdog, Hub, and MCP paths
+- Diagnostics v2: context source validation, injection method info, structured health checks for agents and roles
+- MCP server exposes `build_agent_context` tool for runtime context generation
+- Watchdog context injection with `shared/context.md` (session focus) and mode-aware guidance
+- New `aw-spec-technical-explore` skill template for technical deep-dives
+- Updated `aw-spec-explore`, `aw-spec-apply`, and `aw-spec-propose` skill templates
+- Quality Governance settings surfaced in watchdog prompts when configured
+
+### Added (Hub v0.31.0)
+- Agent self-registration endpoint with role resolution and project config support
+- Enhanced agent management API with bundled roles fallback and structured responses
+- Tests for self-registered agents and runtime diagnostics
+
+### Fixed
+- CI failures: pilot mode message separation, test isolation with unique agent names, mypy type errors, ruff lint
+
 ## [0.36.0] - 2026-04-29
 
 ### Added (CLI)
