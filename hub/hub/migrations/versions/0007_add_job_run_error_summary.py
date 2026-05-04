@@ -16,8 +16,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("job_runs", sa.Column("error_summary", sa.Text(), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if "job_runs" not in inspector.get_table_names():
+        return  # fresh install — create_all will add the column
+    existing_cols = {c["name"] for c in inspector.get_columns("job_runs")}
+    if "error_summary" not in existing_cols:
+        op.add_column("job_runs", sa.Column("error_summary", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column("job_runs", "error_summary")
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if "job_runs" not in inspector.get_table_names():
+        return
+    existing_cols = {c["name"] for c in inspector.get_columns("job_runs")}
+    if "error_summary" in existing_cols:
+        op.drop_column("job_runs", "error_summary")
