@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.31.1] - 2026-05-04
+
+### Fixed (Hub)
+- Migration `0007_add_job_run_error_summary` now checks if `job_runs` table exists before altering it. Fixes `sqlite3.OperationalError: no such table: job_runs` on existing databases that predate the `job_runs` table.
+
 ## [0.37.0] - 2026-05-04
 
 ### Added (CLI)
