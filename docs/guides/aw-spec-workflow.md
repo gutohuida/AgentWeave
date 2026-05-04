@@ -1,31 +1,33 @@
 # AW-Spec Workflow
 
-The AW-Spec workflow provides a structured approach to managing changes in your project through four stages: **explore**, **propose**, **apply**, and **archive**.
+The AW-Spec workflow provides a structured way to move from an unclear idea to coordinated implementation through five stages: **explore**, **technical explore**, **propose**, **apply**, and **archive**.
 
 ## Overview
 
-```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│ Explore  │───▶│ Propose  │───▶│  Apply   │───▶│ Archive  │
-│          │    │          │    │          │    │          │
-│  Think   │    │  Design  │    │  Build   │    │  Finish  │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘
+```text
+┌────────────┐    ┌────────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  Explore   │───▶│ Technical  │───▶│ Propose  │───▶│  Apply   │───▶│ Archive  │
+│   What     │    │ Explore How│    │ Formalize│    │  Build   │    │ Finish   │
+└────────────┘    └────────────┘    └──────────┘    └──────────┘    └──────────┘
 ```
 
 | Stage | Purpose | Skill | Output |
 |-------|---------|-------|--------|
-| **Explore** | Investigate ideas, clarify requirements | `/aw-spec-explore` | Understanding, findings |
-| **Propose** | Create structured plan with design and tasks | `/aw-spec-propose` | `proposal.md`, `design.md`, `tasks.md` |
+| **Explore** | Investigate the idea, problem, workflows, requirements, and risks | `/aw-spec-explore` | Understanding, optional `idea.md` |
+| **Technical Explore** | Investigate architecture, stack, deployment, testing, sequencing, and agent plan | `/aw-spec-technical-explore` | Technical direction, optional `technical.md` |
+| **Propose** | Create structured plan with design, tasks, and team ownership | `/aw-spec-propose` | `proposal.md`, `design.md`, `tasks.md`, `team.md` |
 | **Apply** | Implement the planned changes | `/aw-spec-apply` | Working code |
 | **Archive** | Finalize and store completed work | `/aw-spec-archive` | Archived change |
 
+Both exploration stages are optional, but they are useful when the scope is unclear, the implementation is complex, or multiple agents will work on the change.
+
 ## Prerequisites
 
-The AW-Spec workflow skills are available as Claude Code skills when you run `agentweave init`. They are located in `.claude/skills/`.
+The AW-Spec workflow skills are available as Claude Code and Codex skills when you run `agentweave init`. They are generated into `.claude/skills/` and `.agents/skills/`.
 
-## Stage 1: Explore
+## Stage 1: Explore What
 
-Use explore mode when you want to think through an idea, investigate a problem, or clarify requirements before committing to implementation.
+Use idea exploration when you want to think through what to build before planning how to build it.
 
 ```bash
 # Start exploring an idea
@@ -35,47 +37,92 @@ Use explore mode when you want to think through an idea, investigate a problem, 
 /aw-spec-explore "add-user-authentication"
 ```
 
-**What you can do in explore mode:**
+What explore mode focuses on:
 
-- Ask clarifying questions about the problem space
-- Investigate the existing codebase for relevant patterns
-- Compare multiple approaches with tradeoff analysis
-- Surface risks and unknowns
-- Visualize with ASCII diagrams
+- The problem or opportunity
+- Affected users and workflows
+- Requirements that are starting to emerge
+- Goals and non-goals
+- Product or behavior options
+- Risks and unknowns
+- Relevant codebase areas
 
-**Important:** Explore mode is for thinking, not implementing. You can create artifacts (proposals, designs) to capture insights, but don't write application code.
+Explore mode is for thinking, not implementation. It should not start by planning agents, roles, frameworks, deployment, or test ownership unless the user explicitly asks.
 
-## Stage 2: Propose
+When useful, capture notes at:
 
-Once you have a clear understanding, create a structured proposal with all the artifacts needed for implementation.
+```text
+spec/discovery/<name>/idea.md
+```
+
+## Stage 2: Explore How
+
+Use technical exploration after the idea is clear enough to discuss implementation strategy.
 
 ```bash
-# Create a proposal with a descriptive name
+/aw-spec-technical-explore "add-user-authentication"
+```
+
+Technical exploration focuses on:
+
+- Existing architecture and integration points
+- Current technologies and framework constraints
+- New technology or dependency decisions, if needed
+- Deployment and operational impact
+- Test strategy and test timing
+- Implementation sequencing
+- AgentWeave agent and role ownership
+- Review, documentation, and quality gates
+
+For existing projects, technical exploration should reuse the stack, framework, deployment model, and test patterns already present unless there is a strong reason to change them.
+
+For new projects or greenfield areas, technical exploration helps compare stack, persistence, deployment, CI, and test options.
+
+When useful, capture notes at:
+
+```text
+spec/discovery/<name>/technical.md
+```
+
+## Stage 3: Propose
+
+Once the idea and technical path are clear, create a structured proposal with the artifacts needed for implementation.
+
+```bash
 /aw-spec-propose "add-user-authentication"
 ```
 
-This creates a change directory at `awspec/changes/<name>/` containing:
+If discovery notes exist, `aw-spec-propose` uses them as source context:
+
+```text
+spec/discovery/<name>/idea.md
+spec/discovery/<name>/technical.md
+```
+
+If discovery notes do not exist, propose still works from the user's request.
+
+This creates a change directory at `spec/changes/<name>/` containing:
 
 | Artifact | Purpose |
 |----------|---------|
-| `proposal.md` | What and why — the business case and scope |
-| `design.md` | How — technical design decisions |
-| `tasks.md` | Implementation steps with checkboxes |
-
-The proposal stage generates all artifacts in dependency order. You can review and refine them before moving to implementation.
+| `proposal.md` | What and why: business case, scope, goals, non-goals |
+| `design.md` | How: technical approach, decisions, architecture, risks |
+| `tasks.md` | Implementation checklist with role or agent ownership |
+| `team.md` | Recommended team, current-session gaps, setup commands |
 
 ### Change Directory Structure
 
-```
-awspec/
+```text
+spec/
 └── changes/
     └── add-user-authentication/
-        ├── proposal.md         # Scope and rationale
-        ├── design.md           # Technical design
-        └── tasks.md            # Implementation checklist
+        ├── proposal.md
+        ├── design.md
+        ├── tasks.md
+        └── team.md
 ```
 
-## Stage 3: Apply
+## Stage 4: Apply
 
 Implement the tasks from your proposal.
 
@@ -89,33 +136,31 @@ Implement the tasks from your proposal.
 
 The apply stage:
 
-1. Reads the context files (`proposal.md`, `design.md`, `tasks.md`)
-2. Shows your progress ("3/7 tasks complete")
+1. Reads the formal spec artifacts (`proposal.md`, `design.md`, `tasks.md`)
+2. Shows progress, such as `3/7 tasks complete`
 3. Works through each pending task
-4. Marks tasks complete as you finish them (`- [ ]` → `- [x]`)
+4. Marks tasks complete as they finish (`- [ ]` to `- [x]`)
+5. Delegates work to matching agents when appropriate and confirmed by the user
 
-**Task format in `tasks.md`:**
-
-```markdown
-## Implementation Tasks
-
-- [x] Set up database schema
-- [ ] Create API endpoints
-- [ ] Add authentication middleware
-```
+Earlier discovery notes are supporting context. The formal proposal, design, and tasks are the source of truth during implementation.
 
 ### Agent Delegation
 
-Tasks can include role hints for automatic delegation:
+Tasks can include role or agent ownership:
 
 ```markdown
-- [ ] Create API endpoints <!-- role: backend_dev -->
-- [ ] Build login page UI <!-- role: frontend_dev -->
+## Backend Developer - claude
+
+- [ ] Create API endpoints
+
+## Frontend Developer - kimi
+
+- [ ] Build login page UI
 ```
 
-When applying changes with role hints, tasks can be delegated to matching agents in your session.
+When applying changes with role ownership, tasks can be delegated to matching agents in your session.
 
-## Stage 4: Archive
+## Stage 5: Archive
 
 When all tasks are complete, archive the change to keep your workspace clean.
 
@@ -131,71 +176,94 @@ Archiving:
 
 1. Checks that all artifacts are complete
 2. Verifies all tasks are marked done
-3. Optionally syncs delta specs to main specs
-4. Moves the change to `awspec/changes/archive/YYYY-MM-DD-<name>/`
+3. Optionally syncs delta specs to the main spec library
+4. Moves the change to `spec/changes/archive/YYYY-MM-DD-<name>/`
 
 ## Workflow Integration
 
 ### From Idea to Implementation
 
-```
+```text
 User: "I want to add user authentication"
 
-1. /aw-spec-explore
-   → "Let's think through the auth approach..."
-   → Discuss options: OAuth vs email/password vs magic links
-   → Decide on approach
+1. /aw-spec-explore "add-user-authentication"
+   -> Understand auth goals, user flows, non-goals, and risks
+   -> Optionally capture spec/discovery/add-user-authentication/idea.md
 
-2. /aw-spec-propose "add-user-auth"
-   → Creates proposal.md, design.md, tasks.md
-   → Review the plan
+2. /aw-spec-technical-explore "add-user-authentication"
+   -> Inspect current auth, API, UI, storage, tests, deployment, and agents
+   -> Optionally capture spec/discovery/add-user-authentication/technical.md
 
-3. /aw-spec-apply
-   → Implements tasks one by one
-   → Marks tasks complete
+3. /aw-spec-propose "add-user-authentication"
+   -> Creates proposal.md, design.md, tasks.md, and team.md
+   -> Uses discovery notes if present
 
-4. /aw-spec-archive
-   → Moves completed change to archive
+4. /aw-spec-apply
+   -> Implements tasks one by one or delegates them
+   -> Marks tasks complete
+
+5. /aw-spec-archive
+   -> Moves completed change to archive
 ```
+
+### Lightweight Path
+
+For small changes, you can skip exploration and propose directly:
+
+```bash
+/aw-spec-propose "fix-status-output"
+/aw-spec-apply
+/aw-spec-archive
+```
+
+The exploration stages are tools for reducing ambiguity, not mandatory gates.
 
 ### Fluid Workflow
 
 The AW-Spec workflow is not strictly linear. You can:
 
-- Return to explore mode if implementation reveals new complexity
+- Return to idea exploration if implementation reveals product ambiguity
+- Return to technical exploration if implementation reveals architectural complexity
 - Update artifacts mid-implementation if design changes
 - Pause apply and resume later
 - Work on multiple changes in parallel
 
 ## Best Practices
 
-### When to Explore
+### When to Explore What
 
 - The problem space is unclear
-- You're comparing multiple approaches
-- You need to investigate existing code
 - Requirements feel vague or conflicting
+- You need to understand current workflows
+- You are comparing product or behavior options
+
+### When to Explore How
+
+- The implementation touches multiple systems
+- You need to inspect existing architecture
+- You need to choose or validate technologies
+- Deployment, migrations, tests, or agent handoffs matter
 
 ### When to Propose
 
-- You have a clear understanding of what needs to be built
 - The scope is well-defined
-- You're ready to commit to an approach
+- The technical direction is clear enough
+- You are ready to formalize design, tasks, and ownership
 
 ### When to Apply
 
-- All stakeholders have reviewed the proposal
-- Design decisions are finalized
-- You're ready to implement
+- The proposal and design are reviewed enough to implement
+- Tasks are concrete
+- Ownership and sequencing are clear
 
 ### When to Archive
 
 - All tasks are complete
 - Code is tested and working
-- Changes are merged or deployed
+- Changes are merged or ready to preserve as completed work
 
 ## See Also
 
-- [Context Files](context-files.md) — Understanding the `.agentweave/` directory
-- [Session Modes](session-modes.md) — Hierarchical vs peer collaboration
-- [CLI Commands Reference](../reference/cli-commands.md) — All available commands
+- [Context Files](context-files.md) - Understanding the `.agentweave/` directory
+- [Session Modes](session-modes.md) - Hierarchical vs peer collaboration
+- [CLI Commands Reference](../reference/cli-commands.md) - All available commands

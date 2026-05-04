@@ -101,6 +101,7 @@ async def test_get_context_returns_role_content(app, auth_headers):
     assert resp.status_code == 200
     data = resp.json()
     assert "content" in data
+    assert "get_agent_context" in data["hint"]
 
 
 @pytest.mark.asyncio
@@ -111,6 +112,91 @@ async def test_get_context_unknown_role(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_agent_context_declared_agent(app, auth_headers):
+    resp = await app.put(
+        "/api/v1/agents/roles/config",
+        json={
+            "agent_roles": {"claude": ["tech_lead"]},
+            "roles": {"tech_lead": {"label": "Tech Lead", "file": "roles/tech_lead.md"}},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.post(
+        "/api/v1/session/sync",
+        json={
+            "data": {
+                "id": "sess-test",
+                "name": "Test Session",
+                "mode": "hierarchical",
+                "principal": "claude",
+                "quality": {
+                    "review_required": True,
+                    "docs_threshold": "non_trivial",
+                    "echo_chamber_guard": "enforce",
+                },
+                "agents": {
+                    "claude": {"runner": "claude", "model": "sonnet", "role": "principal"},
+                    "kimi": {"runner": "kimi"},
+                },
+            }
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.get("/api/v1/agents/agent-context?agent=claude", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["agent"] == "claude"
+    assert data["declared"] is True
+    assert data["registered"] is True
+    assert data["provisional"] is False
+    assert data["roles"] == ["tech_lead"]
+    assert "Project Operating Profile" in data["context"]
+    assert "review_required: `true`" in data["context"]
+
+
+@pytest.mark.asyncio
+async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/agents/register",
+        json={"name": "hermes-context", "contact_mode": "poll", "role_request": "backend_dev"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.get(
+        "/api/v1/agents/agent-context?agent=hermes-context",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["declared"] is False
+    assert data["registered"] is True
+    assert data["provisional"] is True
+    assert data["roles"] == ["backend_dev"]
+    assert "do not modify files" in data["context"]
+
+
+@pytest.mark.asyncio
+async def test_get_agent_context_unknown_agent(app, auth_headers):
+    resp = await app.get("/api/v1/agents/agent-context?agent=unknown-agent", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["known"] is False
+    assert data["registered"] is False
+    assert "register_agent" in data["context"]
+
+
+@pytest.mark.asyncio
+async def test_get_agent_context_invalid_agent_name(app, auth_headers):
+    resp = await app.get("/api/v1/agents/agent-context?agent=bad%20name", headers=auth_headers)
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio

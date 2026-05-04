@@ -1,9 +1,9 @@
 ---
 name: aw-spec-propose
-description: Propose a new change — creates a full spec (proposal, design, tasks, team) in one step. Tasks are annotated with the most suitable AgentWeave agent and role for each piece of work, ready for delegation.
+description: Propose a new change — creates a full spec (proposal, design, tasks, team) in one step. Synthesizes prior idea and technical discovery notes when present, then annotates tasks with suitable AgentWeave agents and roles.
 ---
 
-Propose a new change — generate all spec artifacts in one step, role-annotated and ready for the team.
+Propose a new change — generate all spec artifacts in one step, grounded in discovery notes when available and ready for the team.
 
 **Project:** {project_name}
 **Mode:** {mode}
@@ -15,6 +15,10 @@ Artifacts created:
 - `design.md` — how, with role ownership per subsystem
 - `tasks.md` — implementation tasks grouped and annotated by role
 - `team.md` — ideal team for this spec, gap vs. current session, setup commands
+
+Optional discovery inputs:
+- `spec/discovery/<name>/idea.md` — from `/aw-spec-explore`
+- `spec/discovery/<name>/technical.md` — from `/aw-spec-technical-explore`
 
 When ready to implement, run `/aw-spec-apply`.
 
@@ -31,7 +35,27 @@ If $ARGUMENTS is empty or unclear, use **AskUserQuestion** (open-ended):
 
 **Do not proceed without knowing what to build.**
 
-### 2. Load team context and quality config
+### 2. Read optional discovery context
+
+Before creating formal artifacts, look for prior exploration notes:
+
+```bash
+test -f spec/discovery/<name>/idea.md && cat spec/discovery/<name>/idea.md
+test -f spec/discovery/<name>/technical.md && cat spec/discovery/<name>/technical.md
+```
+
+If discovery notes exist:
+- Treat them as source context for `proposal.md`, `design.md`, `tasks.md`, and `team.md`
+- Preserve decisions and open questions unless the current codebase contradicts them
+- If the codebase contradicts a discovery note, surface the conflict clearly and either ask the user or record it in `design.md` Open Questions
+- Do not silently invent a different architecture, stack, deployment, testing, or agent plan
+
+If discovery notes do not exist:
+- Continue with the quick-propose path from the user's request
+- Make reasonable assumptions, but call out major assumptions in `design.md`
+- Do not require the user to run exploration first
+
+### 3. Load team context and quality config
 
 Read the team state and quality settings to use throughout artifact generation:
 
@@ -52,18 +76,18 @@ If no `quality:` section exists, show: `Quality: not configured (governance off)
 
 If `.agentweave/roles.json` doesn't exist or agents have no roles assigned, note this and continue — tasks will include role suggestions without agent names.
 
-### 3. Check for existing change
+### 4. Check for existing change
 
 If `spec/changes/<name>/` already exists, use **AskUserQuestion**:
 > "A change named `<name>` already exists. Continue it or create a new one?"
 
-### 4. Create the change directory
+### 5. Create the change directory
 
 ```bash
 mkdir -p spec/changes/<name>
 ```
 
-### 5. Create artifacts in order
+### 6. Create artifacts in order
 
 Use **TodoWrite** to track progress through the 4 artifacts.
 
@@ -71,7 +95,7 @@ Use **TodoWrite** to track progress through the 4 artifacts.
 
 #### 5a. `proposal.md`
 
-Create `spec/changes/<name>/proposal.md` using this structure:
+Create `spec/changes/<name>/proposal.md` using this structure. If `idea.md` exists, use it as the primary source for problem, goals, non-goals, requirements, and success criteria:
 
 ```markdown
 # Proposal: <Change Name>
@@ -105,7 +129,7 @@ Apply team context: populate the "Involved Agents" table using the role map from
 
 #### 5b. `design.md`
 
-Read `proposal.md` for context, then create `spec/changes/<name>/design.md`:
+Read `proposal.md` for context, then create `spec/changes/<name>/design.md`. If `technical.md` exists, use it as the primary source for architecture, integration points, technology decisions, testing strategy, deployment impact, and sequencing:
 
 ```markdown
 # Design: <Change Name>
@@ -128,6 +152,11 @@ Read `proposal.md` for context, then create `spec/changes/<name>/design.md`:
 - **[Decision 1]**: [Chosen approach and why]
 - **[Decision 2]**: [Chosen approach and why]
 
+## Discovery Inputs
+- `idea.md`: [used / not present]
+- `technical.md`: [used / not present]
+- Conflicts with current codebase: [none / describe]
+
 ## Security Considerations
 - [Permissions: any new IAM roles, CORS settings, or file permissions introduced?]
 - [Sensitive data flows: does this feature touch user data, credentials, or external APIs?]
@@ -147,7 +176,7 @@ Use the role map to fill in the "Role Ownership" table. For the sequencing secti
 
 #### 5c. `tasks.md`
 
-Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>/tasks.md`:
+Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>/tasks.md`. If discovery notes included a development flow or test timing, reflect that sequencing in the task order:
 
 ```markdown
 # Tasks: <Change Name>
@@ -203,7 +232,7 @@ This structure enforces echo-chamber separation at spec time: the review task is
 
 #### 5d. `team.md`
 
-Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>/team.md`.
+Read `proposal.md` and `design.md` for context, then create `spec/changes/<name>/team.md`. If `technical.md` includes an AgentWeave execution strategy, use it as the starting point and compare it against the current session state.
 
 **Team recommendation is spec-driven, not session-constrained.** Derive the ideal team from the project scope — what does this spec genuinely require? Then compare against the current session to surface gaps.
 
@@ -248,7 +277,7 @@ And add to Setup Commands: `agentweave roles add <agent> code_reviewer  ← requ
 
 ---
 
-### 6. Show final summary
+### 7. Show final summary
 
 ```
 ## Spec Ready: <change-name>
@@ -260,6 +289,11 @@ And add to Setup Commands: `agentweave roles add <agent> code_reviewer  ← requ
 - design.md — [key design decision]
 - tasks.md — N tasks across M agents
 - team.md — [N roles recommended, M missing from current session]
+
+**Discovery Inputs:**
+- idea.md: used / not present
+- technical.md: used / not present
+- conflicts: none / listed in design.md
 
 **Recommended Team:**
 - ✓ <agent-a> covers [role1, role2]
@@ -273,6 +307,9 @@ Ready to implement. Run `/aw-spec-apply` to start.
 ## Guardrails
 
 - Always read dependency artifacts before creating the next one
+- Read `spec/discovery/<name>/idea.md` and `spec/discovery/<name>/technical.md` when they exist
+- Proceed without discovery artifacts when they do not exist
+- Surface conflicts between discovery notes and current codebase facts instead of silently overriding either
 - Keep the "Involved Agents" table accurate — only include agents actually doing work
 - If roles are missing or ambiguous, make reasonable inferences based on task nature
 - If context is critically unclear, ask — but prefer reasonable decisions to keep momentum

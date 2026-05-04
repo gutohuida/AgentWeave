@@ -2,9 +2,10 @@
 
 import asyncio
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -37,6 +38,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 
 _24H = timedelta(hours=24)
 _ACTIVE_TASK_STATUSES = ("pending", "assigned", "in_progress", "under_review", "revision_needed")
+_AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
@@ -540,6 +542,195 @@ async def _load_role_content(role: str, project_id: str, db: AsyncSession) -> st
     return role_content
 
 
+async def _load_roles_data(project_id: str, db: AsyncSession) -> dict:
+    result = await db.execute(
+        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
+    )
+    row = result.scalars().first()
+    if row and row.data:
+        return row.data
+
+    bundled_roles = Path(__file__).parent.parent.parent / "data" / "roles" / "roles.json"
+    if bundled_roles.exists():
+        try:
+            return json.loads(bundled_roles.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def _roles_for_agent(agent: str, roles_data: dict, agent_meta: Optional[dict] = None) -> List[str]:
+    agent_roles = roles_data.get("agent_roles", {})
+    roles_entry = agent_roles.get(agent)
+    if isinstance(roles_entry, list):
+        return [str(role) for role in roles_entry]
+    if isinstance(roles_entry, str):
+        return [roles_entry]
+
+    legacy = roles_data.get("agent_assignments", {}).get(agent)
+    if isinstance(legacy, str):
+        return [legacy]
+    if isinstance(legacy, list):
+        return [str(role) for role in legacy]
+
+    if agent_meta:
+        meta_roles = agent_meta.get("roles")
+        if isinstance(meta_roles, list):
+            return [str(role) for role in meta_roles]
+        if isinstance(meta_roles, str):
+            return [meta_roles]
+    return []
+
+
+def _runner_summary(agent_meta: dict) -> str:
+    parts = [f"runner={agent_meta.get('runner') or 'native'}"]
+    if agent_meta.get("model"):
+        parts.append(f"model={agent_meta['model']}")
+    flags = []
+    if agent_meta.get("pilot"):
+        flags.append("pilot")
+    if agent_meta.get("yolo"):
+        flags.append("yolo")
+    if flags:
+        parts.append("flags=" + ",".join(flags))
+    env_vars = agent_meta.get("env_vars") or {}
+    env_names = []
+    if isinstance(env_vars, dict):
+        for key, value in env_vars.items():
+            if str(key).endswith("_VAR") and value:
+                env_names.append(str(value))
+            elif str(key).isupper():
+                env_names.append(str(key))
+    if env_names:
+        parts.append("env=" + ",".join(sorted(set(env_names))))
+    return "; ".join(parts)
+
+
+async def _render_hub_agent_context(
+    *,
+    agent: str,
+    project_id: str,
+    db: AsyncSession,
+    session_data: Optional[dict],
+    roles_data: dict,
+    agent_row: Optional[Agent],
+) -> Dict[str, Any]:
+    session_agents = (session_data or {}).get("agents", {})
+    declared = agent in session_agents
+    registered = agent_row is not None
+    agent_meta = session_agents.get(agent, {})
+    registered_config = agent_row.config if agent_row and isinstance(agent_row.config, dict) else {}
+    roles = _roles_for_agent(agent, roles_data, agent_meta if declared else registered_config)
+    missing: List[str] = []
+
+    lines = []
+    if declared:
+        lines.append(f"# {agent} - AgentWeave Runtime Context")
+    else:
+        lines.append(f"# {agent} - AgentWeave Onboarding Context")
+    lines.append("")
+    lines.append("## Project Operating Profile")
+    lines.append("")
+    if session_data:
+        lines.append(f"- Project: {session_data.get('name', 'Unnamed Project')}")
+        lines.append(f"- Mode: {session_data.get('mode', 'hierarchical')}")
+        lines.append(f"- Principal: `{session_data.get('principal', 'claude')}`")
+    else:
+        lines.append("- Project session has not been synced to Hub yet.")
+        missing.append("project session")
+    lines.append(f"- Canonical runtime context: `.agentweave/context/{agent}.md`")
+    lines.append("")
+
+    lines.append("### Team")
+    if session_agents:
+        for name, meta in sorted(session_agents.items()):
+            team_roles = _roles_for_agent(name, roles_data, meta)
+            details = [_runner_summary(meta)]
+            if team_roles:
+                details.append("roles=" + ",".join(team_roles))
+            if name == session_data.get("principal"):
+                details.append("principal")
+            marker = " <- you" if name == agent else ""
+            lines.append(f"- `{name}`: " + "; ".join(details) + marker)
+    else:
+        lines.append("- No declared agents are synced.")
+    lines.append("")
+
+    quality = (session_data or {}).get("quality") or {}
+    if quality:
+        docs_path = quality.get("docs_path") or ".agentweave/code-docs"
+        lines.append("### Quality Gates")
+        lines.append(f"- docs_threshold: `{quality.get('docs_threshold', 'never')}`")
+        lines.append(f"- docs_path: `{docs_path}/<task-id>.md`")
+        lines.append(f"- review_required: `{str(bool(quality.get('review_required'))).lower()}`")
+        lines.append(f"- echo_chamber_guard: `{quality.get('echo_chamber_guard', 'off')}`")
+        lines.append(f"- attribution_tag: `{str(bool(quality.get('attribution_tag'))).lower()}`")
+        lines.append(f"- dependency_check: `{str(bool(quality.get('dependency_check'))).lower()}`")
+        lines.append("")
+
+    if declared:
+        lines.append("## Communication Mode")
+        lines.append("")
+        lines.append(
+            "Use AgentWeave MCP tools for coordination. In Hub/MCP mode, do not use "
+            "`agentweave relay` or `agentweave quick` for delegation."
+        )
+        lines.append("")
+    elif registered:
+        lines.append("## External Agent Rules")
+        lines.append("")
+        lines.append("You are registered with AgentWeave but are not declared in `agentweave.yml`.")
+        lines.append("Until the principal assigns you work:")
+        lines.append("- do not modify files")
+        lines.append("- do not claim tasks")
+        lines.append("- read inbox and available tasks only")
+        lines.append("- send a short availability message to the principal")
+        lines.append("")
+    else:
+        lines.append("## External Agent Rules")
+        lines.append("")
+        lines.append("You are not registered with AgentWeave yet.")
+        lines.append("Call `register_agent(...)` before taking work.")
+        lines.append("")
+        missing.append("agent registration")
+
+    if roles:
+        lines.append("## Role Guidance")
+        lines.append("")
+        for role in roles:
+            try:
+                lines.append(await _load_role_content(role, project_id, db))
+                lines.append("")
+            except FileNotFoundError:
+                missing.append(f"role:{role}")
+    else:
+        missing.append("roles")
+
+    available_roles = sorted((roles_data.get("roles") or {}).keys())
+    if not declared and available_roles:
+        lines.append("## Available Roles")
+        lines.append("")
+        for role in available_roles:
+            lines.append(f"- `{role}`")
+        lines.append("")
+
+    context = "\n".join(lines).rstrip() + "\n"
+    return {
+        "agent": agent,
+        "known": declared or registered,
+        "declared": declared,
+        "registered": registered,
+        "provisional": not declared,
+        "roles": roles,
+        "missing": sorted(set(missing)),
+        "metadata": {
+            "context_path": f".agentweave/context/{agent}.md" if declared else None,
+            "source": "hub",
+        },
+        "context": context,
+    }
+
+
 @router.post("/register")
 async def register_agent(
     body: dict,
@@ -682,7 +873,7 @@ async def patch_agent(
 
 
 @router.get("/context")
-async def get_agent_context(
+async def get_role_context(
     role: str,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -691,9 +882,39 @@ async def get_agent_context(
     project_id, _ = project
     try:
         content = await _load_role_content(role, project_id, session)
-        return {"content": content}
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Role template not found: {role}")
+        return {
+            "content": content,
+            "hint": "Use get_agent_context(agent) for full project and onboarding context.",
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Role template not found: {role}") from exc
+
+
+@router.get("/agent-context")
+async def get_agent_runtime_context(
+    agent: str = Query(..., min_length=1, max_length=32),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get full runtime or onboarding context for an agent name."""
+    if not _AGENT_NAME_RE.match(agent):
+        raise HTTPException(status_code=400, detail="Invalid agent name")
+
+    project_id, _ = project
+    session_data = await _get_session_data(project_id, session)
+    roles_data = await _load_roles_data(project_id, session)
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    agent_row = result.scalars().first()
+    return await _render_hub_agent_context(
+        agent=agent,
+        project_id=project_id,
+        db=session,
+        session_data=session_data,
+        roles_data=roles_data,
+        agent_row=agent_row,
+    )
 
 
 @router.post("/{name}/heartbeat", status_code=status.HTTP_201_CREATED)

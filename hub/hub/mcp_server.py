@@ -553,6 +553,23 @@ def get_context(role: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
+def get_agent_context(agent: str) -> Dict[str, Any]:
+    """Get full runtime or onboarding context for an agent.
+
+    Args:
+        agent: Agent name
+
+    Returns:
+        Dict with structured status and markdown context.
+    """
+    try:
+        result = _hub_request("GET", "/agents/agent-context", params={"agent": agent})
+        return {"success": True, **result}
+    except RuntimeError as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
 def heartbeat(agent: str) -> Dict[str, Any]:
     """Send a heartbeat to the Hub to signal liveness.
 

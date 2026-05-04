@@ -102,7 +102,23 @@ Partially update a self-registered agent's configuration, contact mode, MCP endp
 
 ### `get_context(role)`
 
-Return the markdown role guide for a role such as `backend_dev`.
+Return the markdown role guide for a role such as `backend_dev`. This remains a
+role lookup tool for compatibility. When an agent knows its own agent name, use
+`get_agent_context(agent)` for full project and onboarding context.
+
+### `get_agent_context(agent)`
+
+Return full runtime or onboarding context for an agent name.
+
+Declared agents receive the same canonical context generated at
+`.agentweave/context/<agent>.md`. Registered but undeclared external agents
+receive provisional onboarding context with project summary, communication
+rules, requested role guidance, available roles, and explicit restrictions
+against modifying files or claiming tasks until assigned. Unknown agents receive
+registration guidance.
+
+**Returns:** Object with `agent`, `known`, `declared`, `registered`,
+`provisional`, `roles`, `missing`, `metadata`, and markdown `context`.
 
 ### `heartbeat(agent)`
 

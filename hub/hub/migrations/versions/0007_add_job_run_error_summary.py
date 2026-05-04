@@ -1,7 +1,7 @@
 """add job run error summary
 
-Revision ID: 0007_add_job_run_error_summary
-Revises: 0006_add_agent_config_column
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-04-29
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0007_add_job_run_error_summary"
-down_revision = "0006_add_agent_config_column"
+revision = "0007"
+down_revision = "0006"
 branch_labels = None
 depends_on = None
 

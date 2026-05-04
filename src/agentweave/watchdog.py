@@ -1813,6 +1813,22 @@ def _build_agent_context(agent: str, session: Any) -> str:
     Format uses HTML comments at the start (Kimi-compatible, no YAML frontmatter).
     """
     from . import __version__
+    from .context_builder import build_agent_context
+
+    try:
+        from .cli import _get_project_instructions
+
+        project_instructions = _get_project_instructions()
+    except Exception:
+        project_instructions = ""
+
+    return build_agent_context(
+        agent,
+        session,
+        version_comment=f"AgentWeave v{__version__}",
+        project_instructions=project_instructions,
+    ).context
+
     from .constants import ROLES_DIR
     from .roles import get_agent_roles
 

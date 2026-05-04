@@ -168,7 +168,7 @@ def test_http_transport_classifies_auth_failure():
 
     import pytest
 
-    from agentweave.transport.http import HubTransportError, HttpTransport
+    from agentweave.transport.http import HttpTransport, HubTransportError
 
     transport = HttpTransport("http://hub", "bad-key", "proj-test")
     err = urllib.error.HTTPError(
@@ -188,3 +188,48 @@ def test_http_transport_classifies_auth_failure():
             transport._request("GET", "/status")
 
     assert exc.value.classification == "hub_auth_failed"
+
+
+def test_diagnostics_warns_for_placeholder_ai_context(tmp_path, monkeypatch):
+    from agentweave.diagnostics import check_project_context
+
+    monkeypatch.chdir(tmp_path)
+    context_dir = tmp_path / ".agentweave"
+    context_dir.mkdir()
+    (context_dir / "ai_context.md").write_text(
+        "# AI Workflow Context\n\n[Replace with: what this project does]",
+        encoding="utf-8",
+    )
+
+    results = check_project_context()
+
+    assert results[0].id == "project_context_placeholder"
+    assert results[0].status == "warn"
+
+
+def test_agent_context_diagnostics_report_injection_and_staleness(tmp_path, monkeypatch):
+    import os
+    import time
+
+    from agentweave.diagnostics import check_agent_readiness
+    from agentweave.session import Session
+
+    monkeypatch.chdir(tmp_path)
+    session = Session.create(name="Test", agents=["claude"])
+    session.save()
+    context_dir = tmp_path / ".agentweave" / "context"
+    context_dir.mkdir(parents=True)
+    context_path = context_dir / "claude.md"
+    context_path.write_text("# old context\n", encoding="utf-8")
+    ai_context = tmp_path / ".agentweave" / "ai_context.md"
+    ai_context.write_text("# Project\n\nFresh context.", encoding="utf-8")
+    future = time.time() + 10
+    os.utime(ai_context, (future, future))
+    monkeypatch.setattr("agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/claude")
+
+    results = check_agent_readiness("claude")
+    by_id = {result.id: result for result in results}
+
+    assert by_id["agent_context_present"].data["injection"] == "--append-system-prompt-file"
+    assert "agent_context_stale" in by_id
+    assert "agent_context_incomplete" in by_id

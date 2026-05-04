@@ -315,6 +315,31 @@ quality:
 
 ---
 
+## Generated Project Operating Profile
+
+`agentweave activate` and `agentweave sync-context` use `agentweave.yml` plus
+runtime state to generate each agent's canonical context at
+`.agentweave/context/<agent>.md`.
+
+The generated project operating profile includes:
+
+- `project.name` and `project.mode`
+- the principal agent from synced session state
+- each declared agent's runner, model, roles, pilot/yolo flags, and safe
+  environment variable names
+- `quality` settings translated into concrete definition-of-done rules
+- a compact `jobs` summary with job name, target agent, schedule, and enabled state
+
+Secret values are never included. The `env` list contributes only variable
+names, not their values.
+
+External agents that connect through Hub/MCP can call `get_agent_context(agent)`
+to receive either this runtime context, if declared, or a provisional onboarding
+context if they are registered but not part of the committed `agentweave.yml`
+team.
+
+---
+
 ## Applying Changes
 
 After editing `agentweave.yml`, run:

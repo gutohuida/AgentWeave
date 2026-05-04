@@ -19,6 +19,10 @@ from typing import Any, Iterable
 
 from .constants import (
     AGENT_CONTEXT_DIR,
+    AGENT_CONTEXT_FILES,
+    AGENT_CONTEXT_FILES_DEFAULT,
+    AGENTWEAVE_DIR,
+    ROLES_CONFIG_FILE,
     RUNNER_CONFIGS,
     SESSION_FILE,
     TRANSPORT_CONFIG_FILE,
@@ -30,6 +34,12 @@ SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)
 SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
 
 STATUS_ORDER = {"pass": 0, "warn": 1, "fail": 2}
+
+REQUIRED_CONTEXT_SECTIONS = (
+    "## Project Operating Profile",
+    "## Communication Mode",
+    "## Your Role Contracts",
+)
 
 
 @dataclass
@@ -127,6 +137,66 @@ def _load_json_raw(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         return None, str(exc)
 
 
+def _context_source_paths() -> list[Path]:
+    return [
+        Path("agentweave.yml"),
+        SESSION_FILE,
+        ROLES_CONFIG_FILE,
+        AGENTWEAVE_DIR / "ai_context.md",
+        AGENTWEAVE_DIR / "project_instructions.md",
+    ]
+
+
+def _root_context_file_for(agent: str, runner: str) -> str:
+    if runner == "claude_proxy":
+        return "CLAUDE.md"
+    return AGENT_CONTEXT_FILES.get(agent, AGENT_CONTEXT_FILES_DEFAULT)
+
+
+def _context_injection_for(runner: str) -> str:
+    if runner in ("claude", "claude_proxy", "native"):
+        return "--append-system-prompt-file"
+    if runner == "codex":
+        return "-c model_instructions_file=<path>"
+    if runner == "codex_mcp":
+        return "developer-instructions"
+    if runner == "opencode":
+        return "--file"
+    if runner == "kimi":
+        return "pilot agent YAML system_prompt_path when pilot"
+    return "runner-specific"
+
+
+def _is_context_stale(context_path: Path) -> bool:
+    try:
+        context_mtime = context_path.stat().st_mtime
+    except OSError:
+        return False
+    for source in _context_source_paths():
+        try:
+            if source.exists() and source.stat().st_mtime > context_mtime:
+                return True
+        except OSError:
+            continue
+    role_dir = AGENTWEAVE_DIR / "roles"
+    if role_dir.exists():
+        for role_file in role_dir.glob("*.md"):
+            try:
+                if role_file.stat().st_mtime > context_mtime:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+def _context_missing_sections(context_path: Path) -> list[str]:
+    try:
+        content = context_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return [section for section in REQUIRED_CONTEXT_SECTIONS if section not in content]
+
+
 def check_session() -> list[DiagnosticResult]:
     data, error = _load_json_raw(SESSION_FILE)
     if error == "missing":
@@ -205,6 +275,54 @@ def check_project_config() -> list[DiagnosticResult]:
                 category="config",
             )
         ]
+
+
+def check_project_context() -> list[DiagnosticResult]:
+    ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
+    if not ai_context_path.exists():
+        return [
+            warn(
+                "project_context_missing",
+                ".agentweave/ai_context.md",
+                "Project context source is missing.",
+                hint="Run agentweave init or create .agentweave/ai_context.md.",
+                category="context",
+            )
+        ]
+    try:
+        content = ai_context_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [
+            warn(
+                "project_context_unreadable",
+                ".agentweave/ai_context.md",
+                f"Could not read project context: {exc}",
+                category="context",
+            )
+        ]
+    try:
+        from .context_builder import is_placeholder_ai_context
+
+        if is_placeholder_ai_context(content):
+            return [
+                warn(
+                    "project_context_placeholder",
+                    ".agentweave/ai_context.md",
+                    "Project context still contains template placeholders.",
+                    hint="Update .agentweave/ai_context.md and run agentweave sync-context.",
+                    category="context",
+                )
+            ]
+    except Exception:
+        pass
+    return [
+        ok(
+            "project_context_present",
+            ".agentweave/ai_context.md",
+            "Project context source is present.",
+            category="context",
+        )
+    ]
 
 
 def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
@@ -543,6 +661,8 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
             )
 
     context_path = AGENT_CONTEXT_DIR / f"{agent}.md"
+    root_context_file = _root_context_file_for(agent, runner)
+    injection = _context_injection_for(runner)
     if context_path.exists():
         results.append(
             ok(
@@ -550,8 +670,36 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
                 agent,
                 f"Agent context file exists at {context_path}.",
                 category="context",
+                data={
+                    "generated_context": str(context_path),
+                    "root_bootstrap": root_context_file,
+                    "injection": injection,
+                    "sources": [str(path) for path in _context_source_paths()],
+                },
             )
         )
+        if _is_context_stale(context_path):
+            results.append(
+                warn(
+                    "agent_context_stale",
+                    agent,
+                    f"Agent context file may be stale at {context_path}.",
+                    hint="Run agentweave sync-context or agentweave sync-context --force.",
+                    category="context",
+                )
+            )
+        missing_sections = _context_missing_sections(context_path)
+        if missing_sections:
+            results.append(
+                warn(
+                    "agent_context_incomplete",
+                    agent,
+                    f"Agent context file is missing required sections: {', '.join(missing_sections)}.",
+                    hint="Run agentweave sync-context --force.",
+                    category="context",
+                    data={"missing_sections": missing_sections},
+                )
+            )
     else:
         results.append(
             warn(
@@ -560,6 +708,11 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
                 f"Agent context file is missing at {context_path}.",
                 hint=f"Run agentweave sync-context --agent {agent}.",
                 category="context",
+                data={
+                    "generated_context": str(context_path),
+                    "root_bootstrap": root_context_file,
+                    "injection": injection,
+                },
             )
         )
 
@@ -664,6 +817,7 @@ def collect_diagnostics(*, include_network: bool = True) -> list[DiagnosticResul
     results: list[DiagnosticResult] = []
     results.extend(check_session())
     results.extend(check_project_config())
+    results.extend(check_project_context())
     if include_network:
         results.extend(check_transport())
     else:

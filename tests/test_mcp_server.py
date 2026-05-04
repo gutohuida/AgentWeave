@@ -77,7 +77,6 @@ class TestRegisterAgent:
     @patch("agentweave.session.Session.load")
     def test_register_agent_name_collision(self, mock_session_load, mock_get_transport):
         from agentweave.mcp.server import register_agent
-        from agentweave.session import Session
 
         session = MagicMock()
         session.agent_names = ["claude", "kimi"]
@@ -263,8 +262,9 @@ class TestGetContext:
     def test_get_context_unknown_role(
         self, mock_urlopen, mock_get_transport, tmp_path, monkeypatch
     ):
-        from agentweave.mcp.server import get_context
         import urllib.error
+
+        from agentweave.mcp.server import get_context
 
         mock_transport = MagicMock()
         mock_transport.get_transport_type.return_value = "http"
@@ -300,6 +300,65 @@ class TestGetContext:
         mock_get_transport.return_value = mock_transport
 
         result = get_context(role="backend_dev")
+
+        assert "error" in result
+        assert "HTTP transport" in result["error"]
+
+
+class TestGetAgentContext:
+    @patch("agentweave.mcp.server.get_transport")
+    @patch("urllib.request.urlopen")
+    def test_get_agent_context_success(
+        self, mock_urlopen, mock_get_transport, tmp_path, monkeypatch
+    ):
+        from agentweave.mcp.server import get_agent_context
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "http"
+        mock_get_transport.return_value = mock_transport
+
+        monkeypatch.chdir(tmp_path)
+        transport_config = tmp_path / ".agentweave" / "transport.json"
+        transport_config.parent.mkdir(parents=True, exist_ok=True)
+        transport_config.write_text(
+            json.dumps({"type": "http", "url": "http://localhost:8000", "api_key": "aw_live_test"}),
+            encoding="utf-8",
+        )
+
+        resp = MagicMock()
+        resp.read.return_value = json.dumps(
+            {
+                "agent": "hermes",
+                "known": True,
+                "declared": False,
+                "registered": True,
+                "provisional": True,
+                "roles": ["backend_dev"],
+                "missing": [],
+                "metadata": {"context_path": None},
+                "context": "# hermes - AgentWeave Onboarding Context",
+            }
+        ).encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = resp
+
+        result = get_agent_context(agent="hermes")
+
+        assert result["success"] is True
+        assert result["agent"] == "hermes"
+        assert result["registered"] is True
+        assert "Onboarding Context" in result["context"]
+
+    @patch("agentweave.mcp.server.get_transport")
+    def test_get_agent_context_non_http_transport(self, mock_get_transport):
+        from agentweave.mcp.server import get_agent_context
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "local"
+        mock_get_transport.return_value = mock_transport
+
+        result = get_agent_context(agent="hermes")
 
         assert "error" in result
         assert "HTTP transport" in result["error"]

@@ -1027,6 +1027,52 @@ def get_context(role: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
+def get_agent_context(agent: str) -> Dict[str, Any]:
+    """Get full runtime or onboarding context for an agent.
+
+    Args:
+        agent: Agent name (e.g. "claude" or an external agent like "hermes")
+
+    Returns:
+        Dict with structured status and markdown context, or 'error' on failure.
+    """
+    transport = get_transport()
+    if transport.get_transport_type() != TransportType.HTTP:
+        return {"error": "get_agent_context requires HTTP transport (AgentWeave Hub)"}
+
+    import json as _json
+    import urllib.error as _uerr
+    import urllib.parse as _uparse
+    import urllib.request as _req
+
+    from ..constants import TRANSPORT_CONFIG_FILE
+    from ..utils import load_json as _load_json
+
+    config = _load_json(TRANSPORT_CONFIG_FILE)
+    if not config:
+        return {"error": "No transport config found"}
+
+    url = config["url"].rstrip("/")
+    api_key = config["api_key"]
+    qs = _uparse.urlencode({"agent": agent})
+    request = _req.Request(f"{url}/api/v1/agents/agent-context?{qs}")
+    request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Accept", "application/json")
+    try:
+        with _req.urlopen(request, timeout=10) as resp:
+            result = _json.loads(resp.read())
+        return {"success": True, **result}
+    except _uerr.HTTPError as exc:
+        try:
+            detail = _json.loads(exc.read()).get("detail", str(exc))
+        except Exception:
+            detail = str(exc)
+        return {"error": detail}
+    except _uerr.URLError as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
 def heartbeat(agent: str) -> Dict[str, Any]:
     """Send a heartbeat to the Hub to signal liveness.
 

@@ -1620,6 +1620,16 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
     - Full role guide(s) for this agent (from .agentweave/roles/)
     - Project context (from ai_context.md if present)
     """
+    from .context_builder import build_agent_context
+
+    project_instructions = _get_project_instructions()
+    return build_agent_context(
+        agent,
+        session,
+        version_comment=version_comment,
+        project_instructions=project_instructions,
+    ).context
+
     from .roles import get_agent_roles
 
     lines = []

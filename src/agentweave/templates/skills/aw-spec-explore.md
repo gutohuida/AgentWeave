@@ -1,172 +1,188 @@
 ---
 name: aw-spec-explore
-description: Enter spec explore mode — a thinking partner for exploring ideas and problems with full awareness of the AgentWeave multi-agent session. Visualizes architecture, surfaces tradeoffs, and considers which agents/roles own each piece. Never implements. Optionally flows into a proposal.
+description: Explore an idea or problem before proposing a spec. Focuses on what to build, why it matters, affected workflows, requirements, risks, and relevant codebase context. Never implements.
 ---
 
-Enter explore mode. Think deeply. Visualize freely. Follow the conversation wherever it goes.
+Enter idea exploration mode. Think deeply, follow the conversation, and help the user understand the shape of the problem before turning it into a formal spec.
 
 **Project:** {project_name}
-**Mode:** {mode}
-**Principal:** {principal}
-**Agents:** {agents_list}
 
-**IMPORTANT: Explore mode is for thinking, not implementing.** Read files, investigate the codebase, but never write code or modify application files. Creating spec artifacts (proposal, design, tasks) is fine — that's capturing thinking, not implementing.
+**IMPORTANT: Explore mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must never write application code or implement features. Creating or updating spec/discovery notes is allowed when the user asks to capture the thinking.
 
----
+This skill answers: **what are we building, and why?**
 
-## Step 1 — Load AgentWeave Context
-
-Before exploring, build a picture of the team and quality settings:
-
-1. Read `.agentweave/session.json` to confirm agents and session mode.
-2. Read `.agentweave/roles.json` to get role assignments.
-3. Read `agentweave.yml` `quality:` section (if present).
-4. Display a quick team map with quality settings:
-
-```
-TEAM
-════════════════════════════════
-Agent       Roles
-────────────────────────────────
-<agent-a>   tech_lead, backend_dev
-<agent-b>   frontend_dev
-<agent-c>   qa_engineer
-────────────────────────────────
-Mode: {mode}  Principal: {principal}
-
-Quality: review_required=true | docs_threshold=non_trivial | echo_chamber=enforce
-```
-
-If `quality:` is not configured, show: `Quality: not configured`
-
-If `.agentweave/session.json` doesn't exist, skip this step silently.
-
-## Step 2 — Check for Active Spec Changes
-
-Scan `spec/changes/` for active changes (directories that are not in `archive/`):
-- If changes exist: list them briefly. If the user's topic relates to one, offer to read its artifacts for context.
-- If no changes exist: note this and explore freely.
+For technical delivery planning, use `/aw-spec-technical-explore`.
 
 ---
 
 ## The Stance
 
-- **Curious, not prescriptive** — ask questions that emerge naturally
-- **Visual** — use ASCII diagrams liberally when they'd help clarify thinking
-- **Multi-agent aware** — when mapping work, consider which agent/role is best suited for each piece
-- **Adaptive** — follow interesting threads, pivot when new information emerges
-- **Grounded** — explore the actual codebase, don't just theorize
-- **Patient** — let the shape of the problem emerge before rushing to conclusions
+- **Curious, not prescriptive** - Ask questions that emerge naturally.
+- **Problem-first** - Understand goals, users, workflows, constraints, and pain before choosing an implementation.
+- **Grounded** - Explore the actual codebase when relevant, but do not turn every discussion into technical planning.
+- **Open-threaded** - Surface multiple possible directions and let the user follow what resonates.
+- **Visual** - Use ASCII diagrams when they make workflows, states, or boundaries clearer.
+- **Patient** - Let the idea become clear before proposing structure.
 
 ---
 
-## What You Might Do
+## What To Explore
 
-**Explore the problem space**
-- Ask clarifying questions
-- Challenge assumptions, reframe the problem
-- Map out the codebase areas involved
+Depending on what the user brings, you might investigate:
 
-**Consider the ideal team**
-- What roles would this project ideally need? (reason from the scope, not from current agents)
-- Are there dependencies between roles? (e.g., backend_dev must deliver API before frontend_dev can wire it)
-- Visualize handoff points between agents
+**Problem and motivation**
+- What hurts today?
+- Who is affected?
+- Why is now the right time?
+- What would success look like?
 
-**Compare options**
-- Brainstorm multiple approaches
-- Build comparison tables with tradeoffs
-- Factor in team constraints (available roles, agent capabilities)
+**User and workflow impact**
+- Which workflows change?
+- What does the current flow look like?
+- Where does the new behavior enter or exit?
+- What edge cases matter to users?
 
-**Visualize**
-```
-Use ASCII diagrams for:
-- Architecture sketches
-- Data flows and state machines
-- Agent ownership maps
-- Dependency graphs
-- Comparison tables
-```
+**Requirements and boundaries**
+- What must the system do?
+- What should remain out of scope?
+- What assumptions need validation?
+- What constraints are non-negotiable?
 
-**Surface risks and unknowns**
-- What could go wrong?
-- Which role boundaries are fuzzy?
-- What needs investigation before committing to an approach?
+**Codebase reality**
+- Which existing modules, pages, commands, APIs, or docs are relevant?
+- What patterns already exist around this area?
+- What hidden complexity could change the scope?
+- Are there active spec changes that overlap with the idea?
+
+**Options and tradeoffs**
+- What are the plausible product or behavior options?
+- What does each option make easier or harder?
+- Which option best fits the user's goal?
 
 ---
 
-## Capturing Insights
+## What Not To Center Here
 
-When decisions crystallize, offer to capture them as spec artifacts:
+Keep this stage focused on the idea, not the delivery plan.
 
-| Insight Type | Where to Capture |
-|---|---|
-| Design decision | `spec/changes/<name>/design.md` |
-| New requirement | `spec/changes/<name>/specs/<area>/spec.md` |
-| Scope change | `spec/changes/<name>/proposal.md` |
-| New task | `spec/changes/<name>/tasks.md` |
+Do not start by loading AgentWeave session, team, roles, or quality settings. Those belong in `/aw-spec-technical-explore`, where implementation strategy and agent ownership are the topic.
 
-Always offer — never auto-capture. The user decides.
+If the user explicitly asks about team, roles, deployment, frameworks, test strategy, or implementation sequencing, answer briefly if useful, then suggest:
+
+> "That belongs in technical exploration. We can run `/aw-spec-technical-explore` next to plan how to build it."
+
+---
+
+## Checking Context
+
+If the idea touches existing work, inspect only what is useful:
+
+```bash
+find spec/changes -maxdepth 2 -type f 2>/dev/null
+find openspec/changes -maxdepth 2 -type f 2>/dev/null
+rg "<keyword>"
+```
+
+Use whichever spec directory exists in the project. If neither exists, continue without making spec state the focus.
+
+When an active change seems relevant, offer to read its artifacts for context. Do not force the conversation into that change unless the user wants it.
+
+---
+
+## Visualizing
+
+Use simple sketches when they help:
+
+```text
+CURRENT FLOW
+User action -> Existing behavior -> Pain point
+
+POSSIBLE FUTURE FLOW
+User action -> New decision point -> Improved outcome
+```
+
+Good diagrams for this stage:
+- User journeys
+- State transitions
+- Scope boundaries
+- Before/after workflows
+- Option comparison tables
+
+Avoid deep architecture diagrams unless the user is already asking technical questions.
+
+---
+
+## Capturing Idea Notes
+
+When the thinking becomes concrete, offer to capture it as discovery notes:
+
+```text
+spec/discovery/<slug>/idea.md
+```
+
+Use this structure:
+
+```markdown
+# Idea Discovery: <Topic>
+
+Generated: <date>
+
+## Problem
+[What hurts, what is missing, or what opportunity exists]
+
+## Users / Workflows
+[Who is affected and how the workflow changes]
+
+## Goals
+- [Goal]
+
+## Non-Goals
+- [Out of scope]
+
+## Requirements Emerging
+- [Requirement or behavior]
+
+## Codebase Context
+- [Relevant files, modules, commands, docs, or patterns]
+
+## Options Discussed
+- [Option]: [tradeoff]
+
+## Risks / Unknowns
+- [Risk or open question]
+
+## Ready For Technical Exploration
+- [What `/aw-spec-technical-explore` should investigate next]
+```
+
+Always offer before writing notes. If the user does not want artifacts, keep exploring conversationally.
 
 ---
 
 ## Ending Exploration
 
-Exploration might:
-- **Flow into a proposal**: "Ready to formalize this? I can run `/aw-spec-propose`."
-- **Result in artifact updates**: if an active change exists and decisions were made
-- **Just provide clarity**: user has what they need, moves on
+When the idea is clear enough, summarize:
 
-When things crystallize, offer a summary:
-
-```
+```markdown
 ## What We Figured Out
 
 **The problem**: [crystallized understanding]
-**The approach**: [if one emerged]
+**The users/workflows**: [affected flows]
+**The likely scope**: [what is in and out]
 **Open questions**: [if any remain]
 
-Next: run /aw-spec-propose to formalize, or keep exploring.
+Next: run `/aw-spec-technical-explore` to plan how to build it, or keep exploring the idea.
 ```
 
-When offering to propose, if quality settings are active, add:
-> "With your current quality settings, implementation tasks will require decision docs (`docs_threshold: <value>`). The spec will include review tasks assigned to a separate `code_reviewer` agent."
-
-### Team Recommendation at Closure
-
-When the conversation has converged enough that a proposal could be written, always offer both:
-
-> "This feels solid enough to propose. Want me to create a proposal — and also recommend a team for this project?"
-
-**If the user asks "what team would I need for this?"** at any point during exploration, generate an inline team recommendation immediately — no formal proposal required first:
-
-```
-## Team for This Project
-
-| Role | Why |
-|------|-----|
-| `backend_dev` | [reason from what we explored] |
-| `frontend_dev` | [reason from what we explored] |
-| ...  | ... |
-
-**You currently have:** [roles from session]
-**Missing:** [roles not yet in session]
-
-To add missing roles: `agentweave roles add <agent> <role_id>`
-```
-
-**Key rules for team recommendations:**
-- Derive roles from the project scope discussed — **not** from which agents are currently in the session
-- Always surface the gap explicitly: "You currently have X; this project also needs Y and Z"
-- Don't recommend roles the project doesn't warrant — fewer good reasons beats more generic ones
-- If `review_required: true` is set in quality config, always include `code_reviewer` in the recommended team with: *"required — review_required is enabled in quality config"*
+If the user wants to skip technical exploration, it is acceptable to move directly to `/aw-spec-propose`, but note that the proposal will need to make more technical assumptions.
 
 ---
 
 ## Guardrails
 
-- Never write application code or modify source files
-- Never auto-capture decisions — always offer first
-- Don't force conclusions — let patterns emerge
-- Do ground discussions in the actual codebase
-- Do visualize — diagrams beat paragraphs
-- Do think about what team the project warrants — unconstrained by the current session
+- Never write application code or implement features.
+- Do not force a fixed questionnaire.
+- Do not make team, role, framework, deployment, or test strategy the first topic.
+- Do inspect the codebase when it grounds the discussion.
+- Do challenge assumptions when they affect scope or user value.
+- Do offer to capture notes, but never auto-capture decisions without the user's consent.

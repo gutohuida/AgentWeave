@@ -3,7 +3,7 @@ name: aw-spec-apply
 description: Implement tasks from a spec change. Shows progress grouped by agent/role, works through tasks one by one, and optionally delegates remaining tasks to other agents via AgentWeave.
 ---
 
-Implement tasks from a spec change.
+Implement tasks from a spec change. The proposal and design may have been synthesized from `/aw-spec-explore` and `/aw-spec-technical-explore`; treat the formal spec artifacts as the source of truth during implementation.
 
 **Project:** {project_name}
 **Mode:** {mode}
@@ -29,6 +29,8 @@ Read all spec artifacts:
 1. `spec/changes/<name>/proposal.md` — understand the goal and involved agents
 2. `spec/changes/<name>/design.md` — understand the architecture and role ownership
 3. `spec/changes/<name>/tasks.md` — get the task list with role assignments
+
+If `design.md` references discovery inputs from `spec/discovery/<name>/`, use them only as supporting context. Do not implement from discovery notes when they conflict with the formal proposal, design, or tasks.
 
 Read quality settings from `agentweave.yml` `quality:` section (if present):
 - `review_required`, `docs_threshold`, `docs_path`, `echo_chamber_guard`
@@ -129,6 +131,7 @@ Run /aw-spec-archive when all tasks across all agents are done.
 ## Guardrails
 
 - Read all context files before starting implementation
+- Treat proposal, design, and tasks as authoritative over earlier discovery notes
 - Only implement tasks — do not change artifacts unless updating a task checkbox or fixing a design issue discovered during implementation
 - Keep code changes minimal and scoped to each task
 - Update the task checkbox immediately after completing each task
