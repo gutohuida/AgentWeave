@@ -18,17 +18,28 @@ import { useSSE } from '@/hooks/useSSE'
 type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
 
 export default function App() {
-  const { isConfigured, theme, mode } = useConfigStore()
+  const { isConfigured, theme, mode, bootstrapState } = useConfigStore()
   const [setupOpen, setSetupOpen] = useState(false)
   const [page, setPage] = useState<Page>('overview')
 
-  // Sync theme + mode to <html data-theme="..." data-mode="...">
+  useEffect(() => {
+    useConfigStore.getState().bootstrap()
+  }, [])
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.mode  = mode
   }, [theme, mode])
 
   useSSE()
+
+  if (bootstrapState === 'pending') {
+    return (
+      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
+        <div className="text-sm opacity-70">Connecting…</div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>

@@ -54,3 +54,41 @@ async def test_placeholder_detection():
 
     assert _PLACEHOLDER_API_KEY == "aw_live_a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
     assert _PLACEHOLDER_API_KEY.startswith("aw_live_")
+
+
+@pytest.mark.asyncio
+async def test_spa_does_not_leak_api_key_in_html(app) -> None:
+    """Regression test: GET / must not contain the API key in the response body.
+
+    The Hub serves the React dashboard at /. Previously, the SPA fallback
+    injected the live API key into a <script> tag in the HTML so the
+    dashboard could auto-connect. This leaked the key to any unauthenticated
+    request, including remote attackers (curl http://hub:8000/anything).
+    The key must now be fetched by the SPA from /api/v1/setup/token,
+    which is restricted to localhost + Docker bridge IPs.
+    """
+    from pathlib import Path
+
+    ui_dist = Path(__file__).parent.parent / "hub" / "static" / "ui"
+    if not (ui_dist / "index.html").exists():
+        pytest.skip("UI not built (no hub/static/ui/index.html)")
+
+    resp = await app.get("/")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "aw_live_testkey_abcdefgh" not in body, (
+        "API key leaked into SPA HTML response. "
+        "The serve_spa handler must not inject __AW_CONFIG__."
+    )
+    assert "aw_live_" not in body
+    assert "<html" in body.lower()
+
+
+@pytest.mark.asyncio
+async def test_setup_token_still_works_for_localhost(app) -> None:
+    """After the fix, /api/v1/setup/token must still be the bootstrap path."""
+    resp = await app.get("/api/v1/setup/token")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "api_key" in data
+    assert data["api_key"].startswith("aw_live_")
