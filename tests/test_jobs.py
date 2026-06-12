@@ -309,14 +309,12 @@ class TestJobShouldFire:
         # Mock datetime.now() to a known minute boundary (10:00:00)
         mock_now = dt(2024, 1, 15, 10, 0, 0)
 
-        class MockDateTime:
+        class MockDateTime(dt):
             @classmethod
             def now(cls, tz=None):
+                if tz is not None and mock_now.tzinfo is None:
+                    return mock_now.replace(tzinfo=tz)
                 return mock_now
-
-            @classmethod
-            def fromisoformat(cls, s):
-                return dt.fromisoformat(s)
 
         monkeypatch.setattr("agentweave.jobs.datetime", MockDateTime)
 
