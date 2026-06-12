@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-12 (PR 1 shipped)
+> **Last updated:** 2026-06-13 (PR 0.5 shipped)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,8 +19,9 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-12  ●  PR 1: SPA key leak (CRITICAL) shipped  →  1/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
+2026-06-13  ●  PR 0.5: test_jobs croniter 6.x mock fix shipped  →  1.5/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
           │  ↑ you are here
+          ●  PR 1: SPA key leak (CRITICAL) shipped
           ●  Audit created, branch + version bumps (PEP 440 alpha: 0.38.0a1 / 0.32.0a1)
           ○  PR 2: Transport data-loss bugs shipped               (target: 3-4 days)
           ○  PR 3: Transport error handling shipped               (target: 2 days)
@@ -106,10 +107,11 @@ the "Open questions / blockers" section of HANDOFF.md, and report.
 
 ## Current status
 
-**Last updated:** 2026-06-12 (PR 1 shipped)
+**Last updated:** 2026-06-13 (PR 0.5 shipped)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
+| 0.5 | test_jobs croniter 6.x mock fix | ✅ Merged (local) | `audit/2026-q2-hardening` | a8c77b0 | Prep PR before PR 2. 4-line diff in `tests/test_jobs.py`. Closed the open question from PR 1 — full CLI suite now green without deselects (326 passed). |
 | 1 | SPA key leak (CRITICAL) | ✅ Merged (local) | `audit/2026-q2-hardening` | 71106e5 | Committed locally. Spec: `pr1-spa-key-leak.md`. All tests + lint pass. |
 | 2 | Transport data-loss | ⬜ Not started | `audit/2026-q2-hardening` | — | Next up. Spec: `pr-roadmap.md` § PR 2 |
 | 3 | Transport error handling | ⬜ Not started | — | — | |
@@ -120,7 +122,7 @@ the "Open questions / blockers" section of HANDOFF.md, and report.
 | 8 | Dead code & dedup | ⬜ Not started | — | — | |
 | 9 | Hub UI security | ⬜ Not started | — | — | |
 | 10 | Hub UI perf & dedup | ⬜ Not started | — | — | |
-| 11 | CLI/watchdog code quality | ⬜ Not started | — | — | |
+| 11 | CLI/watchdog code quality | ⬜ Not started | — | — | Includes the test_jobs.py ruff import-sort nit (pre-existing) |
 | 12 | Test coverage sweep | ⬜ Not started | — | — | |
 | — | v0.38.0 / v0.32.0 release | ⬜ Not started | — | — | After all PRs |
 
@@ -141,8 +143,8 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: 71106e5  (PR 1: fix(hub): stop leaking live API key in SPA HTML response)
-Last test run: 2026-06-12 — Hub: 72 passed, 1 skipped. CLI: 325 passed (1 pre-existing failure deselected — see Open questions).
+Latest commit: a8c77b0  (PR 0.5: test(jobs): fix test_should_fire_old_last_run for croniter 6.x)
+Last test run: 2026-06-13 — Hub: 72 passed, 1 skipped. CLI: 326 passed, 0 deselects.
 ```
 
 ---
@@ -310,30 +312,17 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 
 <!-- Add new entries below this line. Keep them terse. -->
 
----
+### 2026-06-13 — PR 0.5 shipped (test_jobs croniter 6.x mock fix)
 
-## Open questions / blockers
-
-Track anything that needs a human decision or blocks work. Resolve before the next session if possible.
-
-<!-- Add new entries below this line. -->
-
-- **2026-06-12 — Pre-existing CLI test failure surfaced by PR 1's Hub install:**
-  `tests/test_jobs.py::TestJobShouldFire::test_should_fire_old_last_run` fails
-  with `TypeError: Invalid ret_type, only 'float' or 'datetime' is acceptable.`
-  Root cause: croniter 6.x's `croniter.get_prev()` does
-  `issubclass(ret_type, (float, datetime))`. The test monkeypatches
-  `agentweave.jobs.datetime` with a class that is **not** a `datetime.datetime`
-  subclass, so the issubclass check fails. Pre-fix the test was being skipped
-  (`CRONITER_AVAILABLE=False`); my Hub install pulled in croniter 6.x, exposing
-  the latent test brittleness. The production code (`src/agentweave/jobs.py:395`
-  `itr.get_prev(datetime)`) works correctly with croniter 6.x and a real
-  datetime class — verified by direct smoke test. **Fix is out of scope for PR
-  1** (discipline: keep PRs tightly scoped). Two options for a future PR:
-    - (a) Update the test mock to subclass `datetime.datetime` (preferred —
-      the test is what's brittle, not the production code).
-    - (b) Replace the mock with a real datetime, no patching needed.
-  Suggested location: PR 11 (CLI/watchdog code quality) or a new PR 0.5.
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** Resolved the pre-existing CLI test failure surfaced by PR 1. Fixed `tests/test_jobs.py:312-321`: `MockDateTime` now subclasses `datetime.datetime` (so croniter 6.x's `issubclass` check passes), and `MockDateTime.now(tz=...)` honors the `tz` argument so it returns a tz-aware datetime when the production code requests one (avoiding a naive/aware subtraction crash in `jobs.py:410`).
+- **Test-first verification:** confirmed RED via `pytest tests/test_jobs.py::TestJobShouldFire::test_should_fire_old_last_run -v` before edit (TypeError on `get_prev`); confirmed GREEN after first edit, then RED again with a different error (naive/aware mismatch), then GREEN after second edit. Two distinct root causes, both fixed in the same 4-line diff.
+- **Full suite:** Hub 72 passed / 1 skipped (unchanged). CLI 326 passed, 0 deselects (was 325 + 1 deselected = 326 total). The previously skipped test now runs and passes.
+- **Lint:** black clean on changed file. ruff reports 1 pre-existing import-sort nit on `tests/test_jobs.py:3-5` (unrelated to this PR; logged for PR 11). mypy not run on tests/test_jobs.py (out of mypy coverage). The active Python (`hermes-agent` venv) doesn't have ruff/black/mypy installed; ran them via `C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe -m`.
+- **Smoke test:** N/A — pure test-mock fix, no production behavior change. Verified the targeted test + full CLI suite.
+- **Local commit:** `a8c77b0` test(jobs): fix test_should_fire_old_last_run for croniter 6.x
+- **Open questions:** Closed the one open entry (pre-existing test_jobs failure). Section is now empty.
+- **Hand-off to:** next session — execute **PR 2 — Transport data-loss bugs**. Ready-to-copy prompt unchanged at top of this file.
 
 ---
 
