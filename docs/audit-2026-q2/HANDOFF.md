@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-13 (PR 0.5 shipped)
+> **Last updated:** 2026-06-13 (PR 2 shipped)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,8 +19,9 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-13  ●  PR 0.5: test_jobs croniter 6.x mock fix shipped  →  1.5/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
+2026-06-13  ●  PR 2: Transport data-loss bugs shipped  →  2.5/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
           │  ↑ you are here
+          ●  PR 0.5: test_jobs croniter 6.x mock fix shipped
           ●  PR 1: SPA key leak (CRITICAL) shipped
           ●  Audit created, branch + version bumps (PEP 440 alpha: 0.38.0a1 / 0.32.0a1)
           ○  PR 2: Transport data-loss bugs shipped               (target: 3-4 days)
@@ -49,72 +50,79 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 2 — Transport data-loss bugs
+**Next PR to execute:** PR 3 — Transport error handling & safety
 
 ```
-Execute PR 2 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 2 — Transport data-loss bugs"
+Execute PR 3 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 3 — Transport error handling & safety"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 2 section of pr-roadmap.md end-to-end.
+2. Read the PR 3 section of pr-roadmap.md end-to-end.
 
 Workflow (test-first, do not skip):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
 2. Verify you're on branch `audit/2026-q2-hardening`
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
-5. Write the failing test(s) FIRST per the spec — start with
-   tests/test_transport_git.py (new file) and additions to
-   tests/test_http_transport.py
-6. Run the relevant test command (e.g. `pytest tests/test_transport_git.py -v`)
-   and CONFIRM it fails
-7. Apply the fix per the spec (src/agentweave/transport/git.py,
-   src/agentweave/transport/http.py, hub/hub/mcp_server.py:70)
+5. Write the failing test(s) FIRST per the spec — additions to
+   tests/test_transport_local.py and tests/test_http_transport.py.
+   New test files may also be needed for atomic write semantics.
+6. Run the relevant test command and CONFIRM it fails
+7. Apply the fix per the spec (src/agentweave/transport/local.py,
+   src/agentweave/transport/http.py, src/agentweave/messaging.py,
+   src/agentweave/task.py, src/agentweave/cli.py)
 8. Run the relevant test command and CONFIRM it passes
 9. Run full test suites: `pytest tests/ -v` and `cd hub && pytest tests/ -v`
    — both must be green
 10. Run lint: `ruff check src/`, `black src/`, `mypy src/`
-11. Manual smoke test: pick the most data-loss-prone code path (e.g.
-    the new local outbox in GitTransport.send_task) and exercise it
-    end-to-end with a local repo
-12. Commit with the exact message in the spec
+11. Manual smoke test: exercise archive_message() and get_active_tasks()
+    end-to-end and verify atomic-write guarantees (no torn writes, no
+    duplicate messages on a concurrent archive)
+12. Commit with a structured message matching PR 2's style
 13. Push the branch
 14. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below)
 15. Report back
 
 Step 14 in detail (this is what makes the next session work):
-a. Mark PR 2 as ✅ in the "Current status" table.
+a. Mark PR 3 as ✅ in the "Current status" table.
 b. Update the "Branch state" block with current branch, latest commit hash,
    and last test run timestamp.
 c. Append a new entry to the "Session log" section.
 d. **REPLACE the "Next PR to execute" line and the code block in the
    "📋 Ready-to-copy prompt — next action" section above** so the prompt
-   is pre-filled for PR 3 (Transport error handling). The spec for PR 3
-   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 3 — Transport
-   error handling" heading. Adjust the workflow steps (5, 6, 8, 11) to
-   reference the right test files and smoke-test commands for that PR.
+   is pre-filled for PR 4 (CLI security & correctness). The spec for PR 4
+   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 4 — CLI
+   security & correctness" heading. Adjust the workflow steps (5, 6, 8,
+   11) to reference the right test files and smoke-test commands for
+   that PR.
 
-Time budget: 3-4 days for PR 2. This is the largest PR. If you go over
-by >50%, stop and ask. If you encounter a blocker, stop, document it in
-the "Open questions / blockers" section of HANDOFF.md, and report.
+Notes from PR 2 that affect PR 3:
+- S7 (body_text redaction + truncation) was already shipped as part of
+  PR 2's http.py error handling cleanup. **Skip S7** in PR 3 — it's done.
+- S10 (response body size cap, 10 MB) is still open. Add a custom
+  file-like wrapper or use a streaming handler.
+
+Time budget: 2 days for PR 3. If you go over by >50%, stop and ask.
+If you encounter a blocker, stop, document it in the
+"Open questions / blockers" section of HANDOFF.md, and report.
 ```
 
 ---
 
 ## Current status
 
-**Last updated:** 2026-06-13 (PR 0.5 shipped)
+**Last updated:** 2026-06-13 (PR 2 shipped)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
 | 0.5 | test_jobs croniter 6.x mock fix | ✅ Merged (local) | `audit/2026-q2-hardening` | a8c77b0 | Prep PR before PR 2. 4-line diff in `tests/test_jobs.py`. Closed the open question from PR 1 — full CLI suite now green without deselects (326 passed). |
 | 1 | SPA key leak (CRITICAL) | ✅ Merged (local) | `audit/2026-q2-hardening` | 71106e5 | Committed locally. Spec: `pr1-spa-key-leak.md`. All tests + lint pass. |
-| 2 | Transport data-loss | ⬜ Not started | `audit/2026-q2-hardening` | — | Next up. Spec: `pr-roadmap.md` § PR 2 |
-| 3 | Transport error handling | ⬜ Not started | — | — | |
+| 2 | Transport data-loss | ✅ Merged (local) | `audit/2026-q2-hardening` | cf91e52 | Closes H1, H2, H3, H6, M7, M11, M12, M13, M23 (9 fixes). New `tests/test_transport_git.py` (23 tests) + HTTP retry/invalid-response tests + new `hub/tests/test_mcp_server.py`. CLI 357 passed, Hub 74 + 1 skip. S7 (body redaction) was pre-shipped in PR 2's http.py error cleanup. |
+| 3 | Transport error handling | ⬜ Not started | `audit/2026-q2-hardening` | — | Next up. Spec: `pr-roadmap.md` § PR 3. S7 already done; S10 still open. |
 | 4 | CLI security & correctness | ⬜ Not started | — | — | |
 | 5 | Hub input validation | ⬜ Not started | — | — | |
 | 6 | Hub auth + BOLA + perf | ⬜ Not started | — | — | |
@@ -143,8 +151,8 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: a8c77b0  (PR 0.5: test(jobs): fix test_should_fire_old_last_run for croniter 6.x)
-Last test run: 2026-06-13 — Hub: 72 passed, 1 skipped. CLI: 326 passed, 0 deselects.
+Latest commit: cf91e52  (PR 2: fix(transport): harden data-loss paths in git and http transports)
+Last test run: 2026-06-13 — Hub: 74 passed, 1 skipped. CLI: 357 passed, 0 deselects.
 ```
 
 ---
@@ -323,6 +331,19 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Local commit:** `a8c77b0` test(jobs): fix test_should_fire_old_last_run for croniter 6.x
 - **Open questions:** Closed the one open entry (pre-existing test_jobs failure). Section is now empty.
 - **Hand-off to:** next session — execute **PR 2 — Transport data-loss bugs**. Ready-to-copy prompt unchanged at top of this file.
+
+### 2026-06-13 — PR 2 shipped (Transport data-loss bugs)
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** Closed 9 of the audit's HIGH/MEDIUM data-loss and hardening bugs in a single 6-file diff. GitTransport: abort push when ls-tree fails after ls-remote succeeded (H1), add local outbox for at-least-once delivery on push failure (H2), `subprocess.run(timeout=30)` on every git call (M7), wrap seen-set operations in `lock()` (M11), restructure status-update filename to `__status__{new}__{ts}.json` (M12), microsecond precision in `_iso_compact` + 8-hex UUID suffix (M13). HttpTransport: retry 5xx/408/425/429/URLError with exponential backoff + honor `Retry-After` (H3), catch `JSONDecodeError` → `HubTransportError(classification="hub_invalid_response")` (H6), truncate + redact `api_key=` in error body text (S7 — pre-shipped here, will be skipped in PR 3). mcp_server: `urlopen(req, timeout=10)` (M23).
+- **Test-first verification:** wrote 33 new tests across `tests/test_transport_git.py` (23 tests, new file), `tests/test_http_transport.py` (+8 tests), and `hub/tests/test_mcp_server.py` (2 tests, new file). All 33 were RED before fixes (with the right error messages for each bug). All 33 GREEN after the corresponding fix.
+- **Full suite:** CLI 357 passed (was 326; +31 from new tests). Hub 74 passed, 1 skipped (was 72 + 1 skipped; +2 from new mcp_server tests).
+- **Lint:** `ruff --fix` cleaned 11 issues. 2 remain in `hub/hub/mcp_server.py` (B904 raise-from, SIM105 contextlib.suppress) — both PRE-EXISTING, not in lines I touched; left for PR 3 / PR 11 per scope discipline. `black` reformatted 5 files. `mypy` clean on the 2 changed CLI source files (one missing type annotation on `_sleep_with_retry_after` was added; pre-existing Python 3.8 warning in pyproject.toml is unrelated).
+- **Smoke test:** Wrote a real-git smoke test (`/tmp/opencode/smoke_pr2.py`) that creates a bare "remote" + working repo, runs `send_message` and `send_task` through GitTransport, verifies the files land on the orphan branch, exercises `get_pending_messages` round-trip, and checks the outbox is empty on success. All checks passed end-to-end.
+- **Test design notes:** the `MockDateTime` for `test_jobs.py` (PR 0.5) pattern was the inspiration for the git transport mock helper. The M12 status-format test had to be revised when I realized the old parser handles the "obvious" cases fine — the value of the new `__status__` format is in the unambiguous delimiter, not in fixing a specific parser bug. The "empty body" test (TestHttpTransportInvalidResponse) was changed from "expect HubTransportError" to "expect empty dict" — empty body returning `{}` is a legitimate API contract (DELETE-style endpoints), not an error.
+- **Local commit:** `cf91e52` fix(transport): harden data-loss paths in git and http transports (1 commit, 6 files, 1054 insertions / 102 deletions).
+- **Open questions:** None new. (Section is empty.)
+- **Hand-off to:** next session — execute **PR 3 — Transport error handling & safety**. Ready-to-copy prompt at top of this file is pre-filled for PR 3, with a note that S7 is already done.
 
 ---
 
