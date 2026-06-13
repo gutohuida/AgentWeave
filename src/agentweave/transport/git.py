@@ -36,28 +36,46 @@ is local-only and gitignored. archive_message() adds to the seen set.
 """
 
 import json
-import re
 import subprocess
 import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ..constants import GIT_SEEN_DIR
+from ..constants import AGENTWEAVE_DIR, GIT_SEEN_DIR
+from ..locking import lock
 from .base import BaseTransport
+
+GIT_OUTBOX_DIR = AGENTWEAVE_DIR / "outbox"  # local durable queue for failed pushes
 
 
 def _iso_compact() -> str:
-    """Compact UTC timestamp for use in filenames (no colons/dashes)."""
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    """Compact UTC timestamp for use in filenames (no colons/dashes).
+
+    Format: YYYYMMDDTHHMMSSffffffZ (with microsecond precision) so that
+    filenames created in the same second by the same (from, to) pair
+    don't collide.
+    """
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+GIT_SUBPROCESS_TIMEOUT = 30  # seconds — guards against hung `git fetch` etc.
 
 
 def _run_git(args: list, stdin_bytes: Optional[bytes] = None) -> tuple:
-    """Run a git command. Returns (returncode, stdout_str, stderr_str)."""
+    """Run a git command. Returns (returncode, stdout_str, stderr_str).
+
+    Every subprocess invocation is bounded by GIT_SUBPROCESS_TIMEOUT so a
+    slow or unreachable remote cannot hang the watchdog indefinitely.
+    Raises subprocess.TimeoutExpired if the timeout is exceeded (caller
+    should treat as a transport failure, not as a clean "git returned
+    nothing").
+    """
     proc = subprocess.run(
         ["git"] + args,
         input=stdin_bytes,
         capture_output=True,
+        timeout=GIT_SUBPROCESS_TIMEOUT,
     )
     stdout = proc.stdout.decode("utf-8", errors="replace") if proc.stdout else ""
     stderr = proc.stderr.decode("utf-8", errors="replace") if proc.stderr else ""
@@ -117,93 +135,143 @@ class GitTransport(BaseTransport):
         Uses only git plumbing — no working tree modification, no HEAD change.
         Retries up to 3 times on non-fast-forward conflicts (race condition
         when two machines push simultaneously).
+
+        H2 — at-least-once delivery: the content is written to the local
+        outbox (`.agentweave/outbox/`) BEFORE the first push attempt. If
+        the push succeeds, the outbox entry is removed. If all retries
+        fail, the outbox entry stays on disk and the caller can retry
+        later (e.g. on the next send) without losing the message.
         """
-        for attempt in range(3):
-            # Write blob to git object store
-            rc, blob_sha, _ = _run_git(["hash-object", "-w", "--stdin"], stdin_bytes=content_bytes)
-            if rc != 0:
-                return False
-            blob_sha = blob_sha.strip()
+        outbox_id = filename  # unique by construction
+        self._save_to_outbox(content_bytes, outbox_id)
 
-            # Refresh remote state before building the tree
-            self._fetch()
-            branch_exists = self.branch_exists_on_remote()
-
-            # Build the new tree (existing entries + new blob)
-            if branch_exists:
-                rc, tree_entries, _ = _run_git(["ls-tree", self._remote_ref])
-                mktree_input = (tree_entries + f"100644 blob {blob_sha}\t{filename}\n").encode(
-                    "utf-8"
+        try:
+            for attempt in range(3):
+                # Write blob to git object store
+                rc, blob_sha, _ = _run_git(
+                    ["hash-object", "-w", "--stdin"], stdin_bytes=content_bytes
                 )
-            else:
-                mktree_input = f"100644 blob {blob_sha}\t{filename}\n".encode()
+                if rc != 0:
+                    return False
+                blob_sha = blob_sha.strip()
 
-            rc, new_tree, _ = _run_git(["mktree"], stdin_bytes=mktree_input)
-            if rc != 0:
-                return False
-            new_tree = new_tree.strip()
+                # Refresh remote state before building the tree
+                self._fetch()
+                branch_exists = self.branch_exists_on_remote()
 
-            # Create commit
-            if branch_exists:
-                rc, commit_sha, _ = _run_git(
-                    [
-                        "commit-tree",
-                        new_tree,
-                        "-p",
-                        self._remote_ref,
-                        "-m",
-                        commit_msg,
-                    ]
+                # Build the new tree (existing entries + new blob)
+                if branch_exists:
+                    rc, tree_entries, _ = _run_git(["ls-tree", self._remote_ref])
+                    # H1: if ls-tree failed but ls-remote said the branch exists,
+                    # we have no reliable view of the existing tree. Aborting the
+                    # push here is far better than the old behaviour, which fell
+                    # through to the "new branch" path and silently built a
+                    # single-file tree — wiping the entire orphan branch.
+                    if rc != 0:
+                        return False
+                    mktree_input = (tree_entries + f"100644 blob {blob_sha}\t{filename}\n").encode(
+                        "utf-8"
+                    )
+                else:
+                    mktree_input = f"100644 blob {blob_sha}\t{filename}\n".encode()
+
+                rc, new_tree, _ = _run_git(["mktree"], stdin_bytes=mktree_input)
+                if rc != 0:
+                    return False
+                new_tree = new_tree.strip()
+
+                # Create commit
+                if branch_exists:
+                    rc, commit_sha, _ = _run_git(
+                        [
+                            "commit-tree",
+                            new_tree,
+                            "-p",
+                            self._remote_ref,
+                            "-m",
+                            commit_msg,
+                        ]
+                    )
+                else:
+                    rc, commit_sha, _ = _run_git(
+                        ["commit-tree", new_tree, "-m", "init: agentweave collab branch"]
+                    )
+                if rc != 0:
+                    return False
+                commit_sha = commit_sha.strip()
+
+                # Push
+                rc, _, err = _run_git(
+                    ["push", self.remote, f"{commit_sha}:refs/heads/{self.branch}"]
                 )
-            else:
-                rc, commit_sha, _ = _run_git(
-                    ["commit-tree", new_tree, "-m", "init: agentweave collab branch"]
-                )
-            if rc != 0:
+                if rc == 0:
+                    # Push succeeded — outbox entry no longer needed.
+                    self._remove_from_outbox(outbox_id)
+                    return True
+                if "non-fast-forward" in err or "rejected" in err:
+                    # Another machine pushed first — wait and retry
+                    time.sleep(0.5 * (2**attempt))
+                    continue
                 return False
-            commit_sha = commit_sha.strip()
-
-            # Push
-            rc, _, err = _run_git(["push", self.remote, f"{commit_sha}:refs/heads/{self.branch}"])
-            if rc == 0:
-                return True
-            if "non-fast-forward" in err or "rejected" in err:
-                # Another machine pushed first — wait and retry
-                time.sleep(0.5 * (2**attempt))
-                continue
+        except subprocess.TimeoutExpired:
+            # _run_git enforces GIT_SUBPROCESS_TIMEOUT. Leave outbox file
+            # in place; the next send will retry.
             return False
 
         return False
+
+    def _save_to_outbox(self, content_bytes: bytes, outbox_id: str) -> None:
+        """Persist a message/task payload to the local outbox.
+
+        Called BEFORE the first push attempt; the file is removed on
+        successful push. On any failure, the file remains so the next
+        call can retry. This is the at-least-once delivery guarantee
+        for GitTransport.
+        """
+        GIT_OUTBOX_DIR.mkdir(parents=True, exist_ok=True)
+        outbox_file = GIT_OUTBOX_DIR / f"{outbox_id}.json"
+        outbox_file.write_bytes(content_bytes)
+
+    def _remove_from_outbox(self, outbox_id: str) -> None:
+        """Remove an outbox entry after a successful push."""
+        outbox_file = GIT_OUTBOX_DIR / f"{outbox_id}.json"
+        try:
+            if outbox_file.exists():
+                outbox_file.unlink()
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------
     # Seen-set tracking (persisted locally, gitignored)
     # ------------------------------------------------------------------
 
     def _get_seen_set(self, agent: str) -> set:
-        seen_file = GIT_SEEN_DIR / f"{agent}-seen.txt"
-        if not seen_file.exists():
-            return set()
-        lines = seen_file.read_text(encoding="utf-8").splitlines()
-        return {line for line in lines if line}
+        with lock(f"git-seen-{agent}"):
+            seen_file = GIT_SEEN_DIR / f"{agent}-seen.txt"
+            if not seen_file.exists():
+                return set()
+            lines = seen_file.read_text(encoding="utf-8").splitlines()
+            return {line for line in lines if line}
 
     def _save_seen_set(self, agent: str, seen: set) -> None:
-        GIT_SEEN_DIR.mkdir(parents=True, exist_ok=True)
-        seen_file = GIT_SEEN_DIR / f"{agent}-seen.txt"
-        seen_file.write_text("\n".join(sorted(seen)), encoding="utf-8")
+        with lock(f"git-seen-{agent}"):
+            GIT_SEEN_DIR.mkdir(parents=True, exist_ok=True)
+            seen_file = GIT_SEEN_DIR / f"{agent}-seen.txt"
+            seen_file.write_text("\n".join(sorted(seen)), encoding="utf-8")
 
     # ------------------------------------------------------------------
     # Filename helpers
     # ------------------------------------------------------------------
 
     def _make_msg_filename(self, message_data: Dict[str, Any]) -> str:
-        uid = str(uuid.uuid4())[:6]
+        uid = str(uuid.uuid4())[:8]
         from_agent = message_data.get("from", "unknown")
         to_agent = message_data.get("to", "unknown")
         return f"{_iso_compact()}-{from_agent}-{to_agent}-{uid}.json"
 
     @staticmethod
     def _make_task_filename(task_data: Dict[str, Any]) -> str:
-        uid = str(uuid.uuid4())[:6]
+        uid = str(uuid.uuid4())[:8]
         assignee = task_data.get("assignee", "unknown")
         return f"{_iso_compact()}-task-for-{assignee}-{uid}.json"
 
@@ -314,8 +382,12 @@ class GitTransport(BaseTransport):
         """Return active tasks, optionally filtered by assignee.
 
         Task definition files: {ts}-task-for-{assignee}-{uid}.json
-        Status update files:   {task_id}-status-{new_status}-{iso_ts}.json
+        Status update files:   {task_id}__status__{new_status}__{iso_ts}.json
         Latest status file wins.
+
+        M12: status updates use double-underscore separators to make the
+        format unambiguous — task_ids that contain '-' or digits no longer
+        risk being confused with the trailing 4-digit year prefix.
         """
         self._fetch()
         all_files = self.list_remote_filenames()
@@ -337,18 +409,21 @@ class GitTransport(BaseTransport):
             if _is_task_def(f) and (agent is None or _task_assignee(f) == agent)
         ]
 
-        # Build latest status map from status update files
-        status_files = sorted(f for f in all_files if "-status-" in f)
+        # Build latest status map from status update files.
+        # Format: {task_id}__status__{new_status}__{iso_ts}.json
+        # The double-underscore markers make the parser robust to
+        # task_ids and statuses that contain '-' or digits.
+        status_files = sorted(f for f in all_files if "__status__" in f)
         status_map: Dict[str, str] = {}
         for sf in status_files:
-            # {task_id}-status-{new_status}-{iso_ts}.json
             stem = sf[:-5] if sf.endswith(".json") else sf
-            if "-status-" in stem:
-                task_id_part, rest = stem.split("-status-", 1)
-                # Use regex to isolate the status from the trailing timestamp.
-                # The iso_ts always starts with digits (year), so split there.
-                _m = re.match(r"^(.+?)-\d{4}", rest)
-                new_status = _m.group(1) if _m else rest.split("-")[0]
+            if "__status__" not in stem:
+                continue
+            task_id_part, rest = stem.split("__status__", 1)
+            if "__" not in rest:
+                continue
+            new_status, _ts = rest.split("__", 1)
+            if new_status:
                 status_map[task_id_part] = new_status
 
         result = []
