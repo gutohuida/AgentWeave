@@ -1,5 +1,6 @@
 """Local filesystem transport — wraps the existing .agentweave/ behavior."""
 
+import os
 from typing import Any, Dict, List, Optional
 
 from ..constants import (
@@ -8,7 +9,9 @@ from ..constants import (
     TASKS_ACTIVE_DIR,
 )
 from ..jobs import Job, JobRun
-from ..utils import load_json, now_iso, save_json
+from ..locking import lock
+from ..messaging import _check_id_safe
+from ..utils import load_json, now_iso, save_json, write_json_atomic
 from .base import BaseTransport
 
 
@@ -22,6 +25,10 @@ class LocalTransport(BaseTransport):
 
     def send_message(self, message_data: Dict[str, Any]) -> bool:
         msg_id = message_data.get("id", "unknown")
+        try:
+            _check_id_safe(msg_id)
+        except ValueError:
+            return False
         filepath = MESSAGES_PENDING_DIR / f"{msg_id}.json"
         return save_json(filepath, message_data)
 
@@ -36,21 +43,20 @@ class LocalTransport(BaseTransport):
         return sorted(result, key=lambda d: d.get("timestamp", ""))
 
     def archive_message(self, message_id: str) -> bool:
-        pending_path = MESSAGES_PENDING_DIR / f"{message_id}.json"
-        archive_path = MESSAGES_ARCHIVE_DIR / f"{message_id}.json"
+        _check_id_safe(message_id)
+        with lock(f"msg-archive-{message_id}"):
+            pending_path = MESSAGES_PENDING_DIR / f"{message_id}.json"
+            archive_path = MESSAGES_ARCHIVE_DIR / f"{message_id}.json"
 
-        data = load_json(pending_path)
-        if not data:
-            return False
+            if not pending_path.exists():
+                return False
 
-        data["read"] = True
-        data["read_at"] = now_iso()
-        save_json(archive_path, data)
+            os.replace(pending_path, archive_path)
 
-        if pending_path.exists():
-            pending_path.unlink()
-            return True
-        return False
+            data = load_json(archive_path) or {}
+            data["read"] = True
+            data["read_at"] = now_iso()
+            return write_json_atomic(archive_path, data)
 
     def send_task(self, task_data: Dict[str, Any]) -> bool:
         task_id = task_data.get("id", "unknown")

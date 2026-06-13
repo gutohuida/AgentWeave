@@ -1867,8 +1867,10 @@ def cmd_start(args: argparse.Namespace) -> int:
     # but was created manually without proper subdirectories)
     AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
     WATCHDOG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115
-    proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)
+    # H8: do NOT pre-open the log fd in the parent. Popen.dupes() it into
+    # the child but never closes the parent's copy, leaking one fd on
+    # every `agentweave watch` invocation. The child opens its own log.
+    proc = _sp.Popen(cmd, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, stdin=_sp.DEVNULL, **spawn_kwargs)
 
     WATCHDOG_PID_FILE.write_text(str(proc.pid))
     print_success(f"Watchdog started in background (PID {proc.pid})")

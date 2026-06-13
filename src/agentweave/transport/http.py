@@ -29,6 +29,11 @@ HUB_INITIAL_BACKOFF = 0.5  # seconds; doubled on each retry
 HUB_MAX_BACKOFF = 8.0  # seconds; cap for exponential backoff
 HUB_RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
+# S10: cap Hub response body size to prevent OOM on a misbehaving Hub
+# (e.g. one compromised and now serving 10 GB). 10 MB is 10x the
+# legitimate worst case (a list of messages or a single task).
+HUB_MAX_RESPONSE_BODY = 10 * 1024 * 1024
+
 
 class HubTransportError(RuntimeError):
     """Classified Hub transport failure."""
@@ -70,9 +75,7 @@ def _redact_body(body_text: str, max_length: int = 200) -> str:
     return redacted
 
 
-def _sleep_with_retry_after(
-    http_error: urllib.error.HTTPError, default_backoff: float
-) -> None:
+def _sleep_with_retry_after(http_error: urllib.error.HTTPError, default_backoff: float) -> None:
     """Honor the Retry-After header on 429 (or any retryable status).
 
     Retry-After may be a delta-seconds int or an HTTP-date. We only
@@ -153,7 +156,15 @@ class HttpTransport(BaseTransport):
             attempt += 1
             try:
                 with urllib.request.urlopen(req, timeout=10) as resp:
-                    raw = resp.read()
+                    # S10: cap body size to prevent OOM. resp.read(n) reads
+                    # up to n bytes and returns fewer at EOF. The +1 lets us
+                    # detect overflow without reading the full body.
+                    raw = resp.read(HUB_MAX_RESPONSE_BODY + 1)
+                if len(raw) > HUB_MAX_RESPONSE_BODY:
+                    raise HubTransportError(
+                        f"Hub response exceeds {HUB_MAX_RESPONSE_BODY} bytes",
+                        classification="hub_response_too_large",
+                    )
                 # H6: 2xx with a non-JSON body (e.g. an HTML 502 page returned
                 # by a misconfigured reverse proxy) must not crash the agent.
                 # Classify it so callers can decide how to handle it.

@@ -5,7 +5,11 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from agentweave.transport.http import HttpTransport, HubTransportError
+from agentweave.transport.http import (
+    HUB_MAX_RESPONSE_BODY,
+    HttpTransport,
+    HubTransportError,
+)
 
 
 def _make_response(data, status=200):
@@ -251,6 +255,52 @@ class TestHttpTransportInvalidResponse(unittest.TestCase):
         with self.assertRaises(HubTransportError) as ctx:
             self.transport._request("GET", "/agents")
         self.assertEqual(ctx.exception.classification, "hub_invalid_response")
+
+
+class TestHttpTransportResponseSizeCap(unittest.TestCase):
+    """S10: HttpTransport must cap response body size to prevent OOM
+    on a misbehaving Hub. Responses over the cap raise
+    HubTransportError('hub_response_too_large'). The cap is 10 MB.
+    """
+
+    def setUp(self):
+        self.transport = HttpTransport(
+            url="http://localhost:8000",
+            api_key="aw_live_testkey",
+            project_id="proj-test",
+        )
+
+    @patch("urllib.request.urlopen")
+    def test_response_body_over_cap_raises(self, mock_urlopen):
+        """A response 1 byte over the cap must raise."""
+        # 1 byte over the cap
+        huge = b"x" * (HUB_MAX_RESPONSE_BODY + 1)
+        resp = MagicMock()
+        resp.read.return_value = huge
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = resp
+
+        with self.assertRaises(HubTransportError) as ctx:
+            self.transport._request("GET", "/messages")
+        self.assertEqual(ctx.exception.classification, "hub_response_too_large")
+
+    @patch("urllib.request.urlopen")
+    def test_response_body_at_cap_is_accepted(self, mock_urlopen):
+        """A response at exactly the cap is accepted (no overflow)."""
+        # A small but valid JSON, well under the cap
+        resp = MagicMock()
+        resp.read.return_value = json.dumps({"id": "msg-x"}).encode()
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = resp
+
+        result = self.transport._request("GET", "/messages")
+        self.assertEqual(result, {"id": "msg-x"})
+
+    def test_response_body_cap_constant_is_10mb(self):
+        """Sanity: the cap must be 10 MB (10 * 1024 * 1024 = 10485760)."""
+        self.assertEqual(HUB_MAX_RESPONSE_BODY, 10 * 1024 * 1024)
 
 
 if __name__ == "__main__":

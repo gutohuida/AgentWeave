@@ -1,6 +1,8 @@
 """Utility functions for AgentWeave."""
 
+import contextlib
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,13 +87,42 @@ def load_json(filepath: Path) -> Optional[Dict[str, Any]]:
 
 
 def save_json(filepath: Path, data: Dict[str, Any]) -> bool:
-    """Save data to JSON file."""
+    """Save data to JSON file (atomic write + 0600 on POSIX).
+
+    Thin wrapper around write_json_atomic — kept for backward compat
+    with the existing call sites.
+    """
+    return write_json_atomic(filepath, data)
+
+
+def write_json_atomic(filepath: Path, data: Dict[str, Any]) -> bool:
+    """Write data to a JSON file atomically via tmp + os.replace.
+
+    On POSIX, the resulting file is chmod 0600 so message/task files
+    are owner-only readable (S11). On Windows, file ACL inheritance
+    is preserved (we don't call chmod there).
+
+    A torn write cannot happen: the destination is updated via a
+    single os.replace() syscall, which is atomic on POSIX and on
+    Windows for files on the same volume.
+
+    Returns True on success, False on OSError. The .tmp file is
+    cleaned up automatically if the json.dump step fails.
+    """
+    tmp: Optional[Path] = None
     try:
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
+        tmp = filepath.with_suffix(filepath.suffix + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+        os.replace(tmp, filepath)
+        if os.name == "posix":
+            os.chmod(filepath, 0o600)
         return True
     except OSError:
+        if tmp is not None:
+            with contextlib.suppress(OSError):
+                tmp.unlink()
         return False
 
 

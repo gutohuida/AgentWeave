@@ -1,12 +1,14 @@
 """Task management for AgentWeave."""
 
 import logging
+import os
 import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from .constants import PRIORITIES, TASKS_ACTIVE_DIR, TASKS_COMPLETED_DIR
-from .utils import generate_id, load_json, now_iso, save_json
+from .locking import lock
+from .utils import generate_id, load_json, now_iso, save_json, write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -170,15 +172,30 @@ class Task:
             )
 
     def move_to_completed(self) -> bool:
-        """Move task from active to completed."""
-        active_path = TASKS_ACTIVE_DIR / f"{self.id}.json"
-        completed_path = TASKS_COMPLETED_DIR / f"{self.id}.json"
+        """Move task from active to completed.
 
-        if active_path.exists():
-            save_json(completed_path, self._data)
-            active_path.unlink()
+        Uses an atomic os.replace to move active → completed in one
+        syscall, then a tmp + os.replace in-place write of any
+        follow-up status flag. Closes the two-step tear (write
+        completed, unlink active) that could leave the task in both
+        directories on crash (M10). A per-task lock prevents a
+        watchdog-triggered completion from racing with a user-initiated
+        one.
+        """
+        with lock(f"task-complete-{self.id}"):
+            active_path = TASKS_ACTIVE_DIR / f"{self.id}.json"
+            completed_path = TASKS_COMPLETED_DIR / f"{self.id}.json"
+
+            if not active_path.exists():
+                return False
+
+            os.replace(active_path, completed_path)
+
+            data = load_json(completed_path) or {}
+            if data.get("status") != "completed":
+                data["status"] = "completed"
+                return write_json_atomic(completed_path, data)
             return True
-        return False
 
     @classmethod
     def create(
