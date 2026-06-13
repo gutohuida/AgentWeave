@@ -117,7 +117,7 @@ If you encounter a blocker, stop, document it in the
 | 0.5 | test_jobs croniter 6.x mock fix | ✅ Merged (local) | `audit/2026-q2-hardening` | a8c77b0 | Prep PR before PR 2. 4-line diff in `tests/test_jobs.py`. Closed the open question from PR 1 — full CLI suite now green without deselects (326 passed). |
 | 1 | SPA key leak (CRITICAL) | ✅ Merged (local) | `audit/2026-q2-hardening` | 71106e5 | Committed locally. Spec: `pr1-spa-key-leak.md`. All tests + lint pass. |
 | 2 | Transport data-loss | ✅ Merged (local) | `audit/2026-q2-hardening` | cf91e52 | Closes H1, H2, H3, H6, M7, M11, M12, M13, M23 (9 fixes). New `tests/test_transport_git.py` (23 tests) + HTTP retry/invalid-response tests + new `hub/tests/test_mcp_server.py`. CLI 357 passed, Hub 74 + 1 skip. S7 (body redaction) was pre-shipped in PR 2's http.py error cleanup. |
-| 3 | Transport error handling & safety | ✅ Merged (local) | `audit/2026-q2-hardening` | (see below) | Closes H8, M8, M9, M10, S2, S10, S11 (6 fixes — S7 already done in PR 2). New `write_json_atomic` in utils.py (atomic write + 0600 on POSIX); `_check_id_safe` defense-in-depth at message/task boundaries; `os.replace`+lock for archive_message/mark_read/move_to_completed; 10 MB Hub response body cap; cmd_start stops pre-opening the watchdog log fd. CLI 378 passed (+21), Hub 74 + 1 skip. |
+| 3 | Transport error handling & safety | ✅ Merged (local) | `audit/2026-q2-hardening` | 8bbd93d | Closes H8, M8, M9, M10, S2, S10, S11 (6 fixes — S7 already done in PR 2). New `write_json_atomic` in utils.py (atomic write + 0600 on POSIX); `_check_id_safe` defense-in-depth at message/task boundaries; `os.replace`+lock for archive_message/mark_read/move_to_completed; 10 MB Hub response body cap; cmd_start stops pre-opening the watchdog log fd. CLI 378 passed (+21), Hub 74 + 1 skip. |
 | 4 | CLI security & correctness | ⬜ Not started | — | — | Next up. Spec: `pr-roadmap.md` § PR 4. |
 | 5 | Hub input validation | ⬜ Not started | — | — | |
 | 6 | Hub auth + BOLA + perf | ⬜ Not started | — | — | |
@@ -146,7 +146,7 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: (see session log below for PR 3 hash)
+Latest commit: 4bba571  (PR 3: docs(audit): mark PR 3 shipped, update ready-to-copy prompt for PR 4)
 Last test run: 2026-06-13 — Hub: 74 passed, 1 skipped. CLI: 378 passed, 3 skipped (POSIX-only).
 ```
 
@@ -351,7 +351,7 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Lint:** ruff clean. black clean (reformatted `transport/http.py`). mypy clean on changed files (1 pre-existing PyYAML stub error in `config.py` is unrelated).
 - **Smoke test:** Wrote two scripts. (1) `archive_message` end-to-end in a temp dir: send → verify in pending → mark_read → verify in archive only, no pending copy, read flag set. PASS. (2) `HttpTransport._request` body cap: 10 MB + 1 byte body raises `hub_response_too_large`; small body returns the parsed dict. PASS.
 - **Test design notes:** the `_check_id_safe` raises ValueError (loud failure) rather than returning None (silent — would be indistinguishable from "no message by that id"). The pre-existing `Task.load` pattern returns None for invalid IDs and I did NOT change that — it's a separate style choice. For the `write_json_atomic` tmp-file-cleanup test, I monkeypatched `json.dump` to raise — the leftover .tmp file check then proves the cleanup path works. For the cmd_start DEVNULL test, the `_sp` import inside `cmd_start` is a function-local name, so I had to patch `subprocess.Popen` at the module level (initial attempt to patch `agentweave.cli._sp.Popen` failed with "is not a package"). I also added a source-level guard test (asserts the buggy substring is gone) as a portable complement to the POSIX-only /proc test.
-- **Local commit:** (hash will be filled after `git commit`)
+- **Local commit:** `8bbd93d` fix(transport): harden archive, file perms, body cap, and fd leak (1 commit, 11 files, 536 insertions / 54 deletions). HANDOFF update is a separate `4bba571` commit.
 - **Open questions:** None new.
 - **Hand-off to:** next session — execute **PR 4 — CLI security & correctness**. Ready-to-copy prompt at top of this file is pre-filled for PR 4.
 
