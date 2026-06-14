@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.37.1] - 2026-06-14
+
+### Added (CLI)
+- **Per-agent opencode CLI override.** New `AgentConfig.cli` field lets operators pin a specific opencode binary (e.g. an internal build) for a single agent without touching the global path. Falls back to PATH lookup when unset; validated at YAML load time (non-empty string only).
+- **Free-form `opencode:` block in `agentweave.yml`.** New top-level section lands verbatim in the generated `opencode.json` (provider, model, env, etc.). Mirrors how teams already share their opencode config.
+- **`agentweave.template.yml` and `docs/guides/opencode-models.md`** as documentation/scaffolding for operators.
+
+### Fixed (CLI)
+- `test_should_fire_old_last_run` now passes under croniter 6.x (subclasses `datetime.datetime` and honors `tz` in `now()`). The fix is the same change previously shipped on the audit branch as PR 0.5.
+- Addressed inherited ruff N806 and mypy no-untyped-def warnings introduced by the opencode commit.
+
+### Changed (Hub v0.31.2)
+- Version bumped to v0.31.2 for release parity with CLI v0.37.1. No Hub-specific functional changes in this release.
+
 ## [0.31.1] - 2026-05-04
 
 ### Fixed (Hub)
