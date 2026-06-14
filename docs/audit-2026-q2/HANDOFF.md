@@ -153,7 +153,7 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: f9fa1fb  (docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7)
+Latest commit: 597299c  (docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7)
 Last test run: 2026-06-14 — Hub: 96 passed, 3 skipped. CLI: 436 passed, 10 skipped.
 
 master:
