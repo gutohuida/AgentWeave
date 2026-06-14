@@ -2026,7 +2026,7 @@ def _write_opencode_mcp_config(server_cmd: str) -> tuple:
     return False, [str(p) for p in target_paths], last_error
 
 
-def _merge_mcp_into_opencode_file(path: Path, mcp_block: dict, _json) -> tuple:
+def _merge_mcp_into_opencode_file(path: Path, mcp_block: Dict[str, Any], _json: Any) -> tuple:
     """Merge an mcp.agentweave block into an opencode config file.
 
     Returns (True, "") on success or (False, error_msg) on failure.
@@ -3310,7 +3310,7 @@ def _activate_mcp() -> int:
         return 0  # Non-fatal
 
 
-def _activate_opencode_config(config) -> int:
+def _activate_opencode_config(config: "AgentWeaveConfig") -> int:
     """Auto-generate opencode.json from the yml's opencode: block (if any).
 
     If the yml has a top-level `opencode:` block, write/merge it into

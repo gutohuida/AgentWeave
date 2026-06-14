@@ -1300,8 +1300,8 @@ def _agent_ping_cmd(
         # to --title instead of feeding opencode an invalid --session.
         import re as _re
 
-        _OPENCODE_SID_RE = _re.compile(r"^ses_[A-Za-z0-9]{20,}$")
-        if session_id is not None and not _OPENCODE_SID_RE.match(session_id):
+        _opencode_sid_re = _re.compile(r"^ses_[A-Za-z0-9]{20,}$")
+        if session_id is not None and not _opencode_sid_re.match(session_id):
             session_id = None
 
         if session_id is None:
