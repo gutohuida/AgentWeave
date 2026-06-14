@@ -14,17 +14,22 @@ watchdog heartbeat helpers — none of those are affected by the logging migrati
 
 import contextlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .constants import EVENTS_LOG_FILE, WATCHDOG_HEARTBEAT_FILE
 
 
 def write_heartbeat() -> None:
-    """Write current timestamp to the watchdog heartbeat file."""
+    """Write current timestamp to the watchdog heartbeat file.
+
+    Emits a UTC-aware ISO timestamp (with +00:00 offset) so that
+    get_heartbeat_age can round-trip without mixing naive and aware
+    datetimes. (M3/M4 audit fix.)
+    """
     with contextlib.suppress(Exception):
         WATCHDOG_HEARTBEAT_FILE.write_text(
-            datetime.now().isoformat(timespec="seconds"), encoding="utf-8"
+            datetime.now(timezone.utc).isoformat(timespec="seconds"), encoding="utf-8"
         )
 
 
@@ -35,7 +40,7 @@ def get_heartbeat_age() -> Optional[float]:
             return None
         ts = WATCHDOG_HEARTBEAT_FILE.read_text(encoding="utf-8").strip()
         last = datetime.fromisoformat(ts)
-        return (datetime.now() - last).total_seconds()
+        return (datetime.now(timezone.utc) - last).total_seconds()
     except Exception:
         return None
 

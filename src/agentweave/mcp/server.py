@@ -15,7 +15,7 @@ Configure in Kimi Code:
 """
 
 import contextlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 try:
@@ -383,8 +383,9 @@ def save_checkpoint(
             or "| (none) | | |"
         )
 
-        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        now_utc = datetime.now(timezone.utc)
+        ts = now_utc.strftime("%Y%m%dT%H%M%SZ")
+        dt_display = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         filepath = checkpoints_dir / f"{agent}-{ts}.md"
 
         files_section = "\n".join(f"- `{f}`" for f in files_modified) or "- (none)"
@@ -770,7 +771,7 @@ def register_session(
 
         agent_session_data = {
             "session_id": session_id,
-            "registered_at": datetime.utcnow().isoformat(),
+            "registered_at": datetime.now(timezone.utc).isoformat(),
         }
         agent_session_file.write_text(json.dumps(agent_session_data, indent=2), encoding="utf-8")
     except Exception as exc:

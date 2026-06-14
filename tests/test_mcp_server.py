@@ -419,3 +419,40 @@ class TestHeartbeat:
 
         assert "error" in result
         assert "HTTP transport" in result["error"]
+
+
+class TestDatetimeIsTzAware:
+    """M3 — datetime.utcnow() is deprecated in Python 3.12+. Standardize
+    on datetime.now(timezone.utc) in mcp/server.py.
+
+    The two callsites are:
+    - save_checkpoint (filename and body display)
+    - register_session (registered_at field)
+    """
+
+    def test_mcp_server_does_not_use_datetime_utcnow(self):
+        from pathlib import Path
+
+        src = Path("src/agentweave/mcp/server.py").read_text(encoding="utf-8")
+        assert "datetime.utcnow()" not in src, (
+            "M3 regression: datetime.utcnow() is deprecated (Python 3.12+). "
+            "Use datetime.now(timezone.utc) instead."
+        )
+
+    def test_mcp_server_uses_timezone_aware_now(self):
+        from pathlib import Path
+
+        src = Path("src/agentweave/mcp/server.py").read_text(encoding="utf-8")
+        assert "datetime.now(timezone.utc)" in src, (
+            "Expected datetime.now(timezone.utc) somewhere in mcp/server.py"
+        )
+
+    def test_mcp_server_imports_timezone(self):
+        from pathlib import Path
+
+        src = Path("src/agentweave/mcp/server.py").read_text(encoding="utf-8")
+        # Need the timezone symbol to be imported
+        assert "from datetime import datetime, timezone" in src or (
+            "from datetime import" in src and "timezone" in src
+        ), "mcp/server.py must import timezone from datetime"
+

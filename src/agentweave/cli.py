@@ -2,13 +2,14 @@
 """Command-line interface for AgentWeave."""
 
 import argparse
+import contextlib
 import logging
 import os
 import shutil
 import subprocess
 import sys
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -941,7 +942,10 @@ def cmd_session_register(args: argparse.Namespace) -> int:
         agent_session_file.parent.mkdir(parents=True, exist_ok=True)
         import json
 
-        agent_session_data = {"session_id": session_id, "registered_at": datetime.now().isoformat()}
+        agent_session_data = {
+            "session_id": session_id,
+            "registered_at": datetime.now(timezone.utc).isoformat(),
+        }
         agent_session_file.write_text(json.dumps(agent_session_data, indent=2), encoding="utf-8")
     except Exception as exc:
         print_error(f"Failed to save local session file: {exc}")
@@ -1771,6 +1775,7 @@ def _kill_stale_watchdogs() -> list:
             ["tasklist", "/FI", "IMAGENAME eq agentweave-watch.exe", "/FO", "CSV", "/NH"],
             capture_output=True,
             text=True,
+            timeout=5,
         )
         for line in result.stdout.splitlines():
             parts = line.strip('"').split('","')
@@ -1778,7 +1783,9 @@ def _kill_stale_watchdogs() -> list:
                 try:
                     pid = int(parts[1])
                     if pid != my_pid:
-                        _sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+                        _sp.run(
+                            ["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=5
+                        )
                         killed.append(pid)
                 except (ValueError, OSError):
                     pass
@@ -2136,7 +2143,7 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
 
         mcp_args = _mcp_args(agent)
         try:
-            check = _sp.run([_cli, "--version"], capture_output=True, shell=_shell)
+            check = _sp.run([_cli, "--version"], capture_output=True, shell=_shell, timeout=10)
             if check.returncode != 0:
                 results[agent] = "not found"
                 continue
@@ -2151,6 +2158,7 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
                 encoding="utf-8",
                 errors="replace",
                 shell=_shell,
+                timeout=15,
             )
             if result.returncode == 0:
                 results[agent] = "ok"
@@ -2211,7 +2219,9 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
 
     if transport_type == "git":
         # Verify we're inside a git repository
-        result = _sp.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        result = _sp.run(
+            ["git", "rev-parse", "--git-dir"], capture_output=True, text=True, timeout=10
+        )
         if result.returncode != 0:
             print_error("Not a git repository. Run `git init` first.")
             return 1
@@ -2224,24 +2234,27 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
             ["git", "ls-remote", "--heads", remote, branch],
             capture_output=True,
             text=True,
+            timeout=15,
         )
         branch_exists = bool(result.stdout.strip())
 
         if not branch_exists:
             print_info(f"Creating orphan branch '{branch}' on {remote}...")
             # Build an empty tree and push an initial commit via git plumbing
-            proc_b = _sp.run(["git", "mktree"], input=b"", capture_output=True)
+            proc_b = _sp.run(["git", "mktree"], input=b"", capture_output=True, timeout=5)
             empty_tree = proc_b.stdout.decode().strip()
             proc_t = _sp.run(
                 ["git", "commit-tree", empty_tree, "-m", "init: agentweave collab branch"],
                 capture_output=True,
                 text=True,
+                timeout=5,
             )
             commit_sha = proc_t.stdout.strip()
             proc = _sp.run(
                 ["git", "push", remote, f"{commit_sha}:refs/heads/{branch}"],
                 capture_output=True,
                 text=True,
+                timeout=30,
             )
             if proc.returncode != 0:
                 print_error(f"Failed to push branch to {remote}: {proc.stderr.strip()}")
@@ -2382,13 +2395,15 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
             ["git", "ls-remote", "--heads", remote, branch],
             capture_output=True,
             text=True,
+            timeout=15,
         )
         if result.returncode == 0 and result.stdout.strip():
-            _sp.run(["git", "fetch", remote, branch, "--quiet"], capture_output=True)
+            _sp.run(["git", "fetch", remote, branch, "--quiet"], capture_output=True, timeout=30)
             result2 = _sp.run(
                 ["git", "ls-tree", f"{remote}/{branch}", "--name-only"],
                 capture_output=True,
                 text=True,
+                timeout=15,
             )
             files = [f for f in result2.stdout.splitlines() if f.strip()]
             msg_files = [f for f in files if "-task-for-" not in f]
@@ -2502,6 +2517,11 @@ HUB_COMPOSE_URL = (
     "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml"
 )
 HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example"
+# Optional SHA256 sidecar URLs. Operators may publish these alongside the
+# files in hub/ to enable integrity verification. When unset (None), the
+# download proceeds without verification and a WARN is logged. (S9.)
+HUB_COMPOSE_SHA256_URL: Optional[str] = None
+HUB_ENV_SHA256_URL: Optional[str] = None
 
 
 def _hub_url(port: int = 8000) -> str:
@@ -2524,7 +2544,7 @@ def _docker_available() -> bool:
     if not shutil.which("docker"):
         return False
     # Check for docker compose (v2) or docker-compose (v1)
-    result = subprocess.run(["docker", "compose", "version"], capture_output=True)
+    result = subprocess.run(["docker", "compose", "version"], capture_output=True, timeout=10)
     if result.returncode == 0:
         return True
     # Fallback to docker-compose
@@ -2558,6 +2578,79 @@ def _fetch_setup_token(port: int = 8000) -> Optional[str]:
             return data.get("api_key")
     except Exception:
         return None
+
+
+def _download_with_sha256(
+    url: str,
+    dest: Path,
+    sha256_url: Optional[str] = None,
+    expected_sha256: Optional[str] = None,
+) -> bool:
+    """Download a file with optional SHA256 verification (S9).
+
+    Behavior:
+    - If sha256_url is None (and expected_sha256 is None), the file is
+      downloaded without verification. This is the current default.
+    - If sha256_url is set, the sidecar is downloaded, the file's SHA256
+      is computed, and they are compared. A mismatch fails loud: the
+      file is removed and False is returned.
+    - If sha256_url is set but the sidecar fetch fails (network or
+      missing file), a WARN is logged and the download proceeds
+      unverified. This lets operators adopt sidecar files
+      incrementally.
+    - expected_sha256 may be passed as a constant fallback when the
+      sidecar is unavailable. If both are provided, the sidecar wins.
+
+    Returns True on success (verified or unverified). False on
+    verification failure.
+    """
+    import hashlib
+    import urllib.error as _uerr
+    import urllib.request as _req
+
+    try:
+        _req.urlretrieve(url, dest)
+    except Exception as exc:
+        print_error(f"Failed to download {url}: {exc}")
+        return False
+
+    actual_sha = hashlib.sha256(dest.read_bytes()).hexdigest()
+    expected: Optional[str] = None
+
+    if sha256_url:
+        try:
+            with _req.urlopen(sha256_url, timeout=10) as resp:
+                expected = resp.read().decode("utf-8", errors="replace").strip().split()[0]
+        except (_uerr.HTTPError, _uerr.URLError, OSError):
+            print_warning(
+                f"Could not fetch SHA256 sidecar {sha256_url}; " f"proceeding without verification."
+            )
+        except Exception as exc:
+            print_warning(f"Unexpected error fetching SHA256 sidecar: {exc}")
+
+    if expected is None and expected_sha256:
+        expected = expected_sha256
+
+    if expected is None:
+        # No verification possible — log and accept
+        print_warning(
+            f"No SHA256 sidecar available for {url}; "
+            f"downloaded file is not verified. (sha256={actual_sha})"
+        )
+        return True
+
+    if actual_sha != expected.lower():
+        print_error(
+            f"SHA256 mismatch for {url}:\n"
+            f"  expected: {expected}\n"
+            f"  actual:   {actual_sha}\n"
+            f"Removing untrusted file {dest}."
+        )
+        with contextlib.suppress(OSError):
+            dest.unlink()
+        return False
+
+    return True
 
 
 def cmd_hub_start(args: argparse.Namespace) -> int:
@@ -2603,6 +2696,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
             capture_output=True,
             text=True,
             env=env,
+            timeout=600,
         )
         if result.returncode != 0:
             print_error(f"Failed to start Hub: {result.stderr}")
@@ -2614,20 +2708,21 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         compose_file = HUB_DIR / "docker-compose.yml"
         if not compose_file.exists():
             print_info("Downloading Hub configuration...")
-            try:
-                _req.urlretrieve(HUB_COMPOSE_URL, compose_file)
-            except Exception as exc:
-                print_error(f"Failed to download docker-compose.yml: {exc}")
+            if not _download_with_sha256(
+                url=HUB_COMPOSE_URL,
+                dest=compose_file,
+                sha256_url=HUB_COMPOSE_SHA256_URL,
+            ):
                 return 1
 
         # Download .env if not present
         env_file = HUB_DIR / ".env"
-        if not env_file.exists():
-            try:
-                _req.urlretrieve(HUB_ENV_URL, env_file)
-            except Exception as exc:
-                print_error(f"Failed to download .env: {exc}")
-                return 1
+        if not env_file.exists() and not _download_with_sha256(
+            url=HUB_ENV_URL,
+            dest=env_file,
+            sha256_url=HUB_ENV_SHA256_URL,
+        ):
+            return 1
 
         # Update .env with custom port if needed
         if port != 8000:
@@ -2649,6 +2744,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
             cwd=HUB_DIR,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             print_error(f"Failed to start Hub: {result.stderr}")
@@ -2710,6 +2806,7 @@ def cmd_hub_stop(args: argparse.Namespace) -> int:
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,
     )
     if result.returncode != 0:
         print_error(f"Failed to stop Hub: {result.stderr}")
@@ -3657,8 +3754,9 @@ def cmd_checkpoint(args: argparse.Namespace) -> int:
         or "| (none) | | |"
     )
 
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_utc = datetime.now(timezone.utc)
+    ts = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    dt_display = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     filename = f"{agent}-{ts}.md"
     filepath = checkpoints_dir / filename
 
@@ -4268,7 +4366,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"Command: {' '.join(cmd)}")
     print()
 
-    result = _subprocess.run(cmd, env=proc_env)
+    result = _subprocess.run(cmd, env=proc_env, timeout=600)
     return result.returncode
 
 

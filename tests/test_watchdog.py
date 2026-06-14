@@ -930,3 +930,67 @@ class TestWriteCodexContextUsage:
             assert result is not None
             assert result["warning"] is True
             assert result["critical"] is True
+
+
+class TestPopenUsesUtf8Encoding:
+    """M5 — subprocess.Popen calls in watchdog.py that use text=True must
+    also pass encoding="utf-8" and errors="replace". Without it, a Kimi
+    agent emitting non-ASCII characters (Chinese, emoji) crashes
+    proc.stderr mid-thread on Windows (cp1252 codec).
+
+    The two affected sites are:
+    - _CodexMcpClient.start (line 1598)
+    - _do_run_agent_subprocess._run_cmd (line 2576)
+    """
+
+    def test_watchdog_does_not_call_popen_with_text_only(self):
+        """Source-level check: every Popen call in watchdog.py that
+        passes text=True must also pass encoding="utf-8".
+
+        This is a portable regression guard — works on every platform
+        and tells future contributors exactly which kwargs are
+        required.
+        """
+        from pathlib import Path
+        import re
+
+        src = Path("src/agentweave/watchdog.py").read_text(encoding="utf-8")
+        # Find every `subprocess.Popen(` call site and check the
+        # next 8 lines contain both `text=True` (or `text=`) and
+        # `encoding="utf-8"`. If a call site has text=True but no
+        # encoding, that's a bug.
+        issues = []
+        lines = src.splitlines()
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            if "subprocess.Popen(" in stripped:
+                look_ahead = "\n".join(lines[i : i + 12])
+                if "text=" in look_ahead and 'encoding="utf-8"' not in look_ahead:
+                    issues.append((i + 1, line.rstrip()))
+        assert not issues, (
+            "M5 regression: subprocess.Popen(text=True, ...) calls without "
+            "encoding='utf-8' in watchdog.py:\n"
+            + "\n".join(f"  watchdog.py:{ln}: {l}" for ln, l in issues)
+        )
+
+    def test_watchdog_popen_kwargs_include_errors_replace(self):
+        """Defense in depth: Popen calls that use text=True should also
+        pass errors='replace' so a decode error in the child doesn't
+        crash the parent thread."""
+        from pathlib import Path
+
+        src = Path("src/agentweave/watchdog.py").read_text(encoding="utf-8")
+        # If a Popen uses text=True, it should also use errors="replace"
+        lines = src.splitlines()
+        issues = []
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            if "subprocess.Popen(" in stripped:
+                look_ahead = "\n".join(lines[i : i + 12])
+                if "text=" in look_ahead and 'errors="replace"' not in look_ahead:
+                    issues.append((i + 1, line.rstrip()))
+        assert not issues, (
+            "M5 regression: subprocess.Popen(text=True, ...) calls without "
+            'errors="replace" in watchdog.py:\n'
+            + "\n".join(f"  watchdog.py:{ln}: {l}" for ln, l in issues)
+        )

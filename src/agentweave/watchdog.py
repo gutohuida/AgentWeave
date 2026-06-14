@@ -492,13 +492,13 @@ class Watchdog:
 
     def _write_compact_decision(self, usage_data: dict) -> None:
         """Write compact_decision.md so the user can choose compact/new-session/continue."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         agent = usage_data.get("agent", "unknown")
         model = usage_data.get("model", "?")
         percent = usage_data.get("percent", 0)
         threshold = usage_data.get("threshold_warning", "?")
-        dt = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        dt = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         next_threshold = min(int(percent) + 20, 90) if isinstance(percent, int) else 90
 
         content = (
@@ -1601,6 +1601,8 @@ class _CodexMcpClient:
             stderr=subprocess.DEVNULL,
             stdin=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
             cwd=self.cwd,
         )
@@ -2579,6 +2581,8 @@ def _do_run_agent_subprocess(
             stderr=subprocess.PIPE,
             stdin=stdin_config,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
             env=proc_env,
             cwd=cwd,

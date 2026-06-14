@@ -1,7 +1,13 @@
 """Tests for CLI helpers."""
 
+import argparse
 import json
+import platform
+import subprocess
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 from agentweave.cli import (
     _build_codex_launch_command,
@@ -442,3 +448,241 @@ class TestMcpSetupCodex:
         assert result == 0
         assert hasattr(self, "captured_cmd")
         assert self.captured_cmd == ["codex", "mcp", "add", "agentweave", "--", "agentweave-mcp"]
+
+
+class TestDatetimeIsTzAware:
+    """M3 — datetime.utcnow() is deprecated in Python 3.12+ and returns a
+    naive datetime that mixes badly with aware datetimes. The audit asks
+    us to standardize on datetime.now(timezone.utc) across the CLI.
+
+    This is a source-level regression guard: the buggy substring
+    `datetime.utcnow()` must not appear anywhere in cli.py. (The test
+    is portable, fast, and tells future contributors exactly which
+    pattern to avoid.)
+    """
+
+    def test_cli_does_not_use_datetime_utcnow(self):
+        from pathlib import Path
+
+        src = Path("src/agentweave/cli.py").read_text(encoding="utf-8")
+        assert "datetime.utcnow()" not in src, (
+            "M3 regression: datetime.utcnow() is deprecated (Python 3.12+). "
+            "Use datetime.now(timezone.utc) instead."
+        )
+
+    def test_cli_uses_timezone_aware_now(self):
+        from pathlib import Path
+
+        src = Path("src/agentweave/cli.py").read_text(encoding="utf-8")
+        assert "datetime.now(timezone.utc)" in src, (
+            "Expected datetime.now(timezone.utc) somewhere in cli.py"
+        )
+
+
+class TestTransportJsonAtomicWrite:
+    """S8 — transport.json must be written via write_json_atomic so the
+    0600 chmod and os.replace atomicity from PR 3 are inherited.
+
+    The two call sites (cmd_transport_setup for git, cmd_transport_setup
+    for http, and a third in the http cluster update path) all funnel
+    through utils.save_json. PR 3 turned save_json into a thin wrapper
+    around write_json_atomic, so the call sites are already correct.
+    This test is the regression guard: if anyone ever calls
+    Path.write_text() directly to write transport.json, it fails.
+    """
+
+    def test_transport_setup_git_writes_transport_json(self, tmp_path, monkeypatch):
+        """Run the git branch of cmd_transport_setup and verify
+        transport.json exists with the expected keys, and is chmod 0600
+        on POSIX (the write_json_atomic contract)."""
+        import platform
+
+        import agentweave.cli as cli_mod
+        from agentweave.cli import cmd_transport_setup
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(cli_mod, "AGENTWEAVE_DIR", tmp_path / ".agentweave")
+
+        # Stub out the git plumbing (it would need a real repo).
+        # Patch subprocess.run at the module level — cmd_transport_setup
+        # binds it via `import subprocess as _sp` inside the function, so
+        # patching the subprocess module itself is the correct target.
+        def fake_run(cmd, *args, **kwargs):
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            r = R()
+            if "ls-remote" in cmd:
+                # Pretend the branch already exists
+                r.stdout = "deadbeef\trefs/heads/agentweave/collab\n"
+            return r
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        ns = argparse.Namespace(
+            type="git",
+            remote="origin",
+            branch="agentweave/collab",
+            cluster="test-cluster",
+            api_key="",
+            url="",
+            project_id="",
+        )
+        result = cmd_transport_setup(ns)
+        assert result == 0
+
+        transport = tmp_path / ".agentweave" / "transport.json"
+        assert transport.exists()
+        data = json.loads(transport.read_text(encoding="utf-8"))
+        assert data["type"] == "git"
+        assert data["remote"] == "origin"
+        assert data["cluster"] == "test-cluster"
+
+        if platform.system() != "Windows":
+            mode = transport.stat().st_mode & 0o777
+            assert mode == 0o600, f"transport.json should be 0600, got {oct(mode)}"
+
+    def test_save_json_is_thin_wrapper_around_write_json_atomic(self):
+        """Regression guard: utils.save_json must remain a thin wrapper
+        around write_json_atomic so the 0600 + atomic semantics are
+        inherited by every call site (S8)."""
+        from agentweave import utils
+
+        # Inspect the source of save_json
+        import inspect
+
+        src = inspect.getsource(utils.save_json)
+        assert "write_json_atomic" in src, (
+            f"utils.save_json no longer delegates to write_json_atomic: {src!r}"
+        )
+
+
+class TestSubprocessRunHasTimeout:
+    """M12 — every subprocess.run call in cli.py must pass timeout= so a
+    hung child (e.g. git push, docker compose up, claude proxy) cannot
+    freeze the user's terminal.
+
+    This is a source-level regression guard. The PR 2 fix added
+    timeouts to the GitTransport git calls but not to the higher-level
+    CLI plumbing. After PR 4, no subprocess.run in cli.py may be
+    called without a timeout.
+    """
+
+    def _find_undefined_subprocess_runs(self):
+        import re
+        from pathlib import Path
+
+        src = Path("src/agentweave/cli.py").read_text(encoding="utf-8")
+        # Match all subprocess.run( ... ) calls. We can't perfectly
+        # parse Python, but we can find lines that have
+        # `subprocess.run(` or `._sp.run(` (the aliased form) but
+        # don't have `timeout=` on a reasonable near-by continuation.
+        # A simpler heuristic: any line that starts a
+        # subprocess.run call should have `timeout=` in the visible
+        # portion of that call (within 200 chars).
+        issues = []
+        for i, line in enumerate(src.splitlines(), 1):
+            stripped = line.lstrip()
+            if "subprocess.run(" in stripped or "._sp.run(" in stripped:
+                # Look ahead 200 chars (allow wrapped calls)
+                look_ahead = "\n".join(src.splitlines()[i - 1 : i + 8])
+                if "timeout=" not in look_ahead:
+                    issues.append((i, line.rstrip()))
+        return issues
+
+    def test_no_subprocess_run_without_timeout(self):
+        issues = self._find_undefined_subprocess_runs()
+        assert not issues, (
+            "M12 regression: subprocess.run calls in cli.py without timeout=:\n"
+            + "\n".join(f"  cli.py:{ln}: {l}" for ln, l in issues)
+        )
+
+
+class TestDownloadWithSha256:
+    """S9 — verify SHA256 of downloaded Hub docker-compose.yml and .env
+    via a new _download_with_sha256 helper.
+
+    The helper downloads the file, optionally fetches a sidecar
+    `<url>.sha256` and compares. If the sidecar is missing, it logs a
+    WARN and continues (the file is still saved). If the sidecar is
+    present but the checksum does not match, the file is deleted and
+    an error is returned.
+    """
+
+    def test_downloads_file_when_no_sha256_url(self, tmp_path, monkeypatch):
+        """No sha256 URL configured -> download proceeds, no verification."""
+        import urllib.request
+
+        from agentweave.cli import _download_with_sha256
+
+        dest = tmp_path / "out.txt"
+        # The helper will be called with a fake URL; we patch urlretrieve
+        # at the urllib.request module level (the helper imports urllib.request
+        # as _req inside the function, so the module attribute is the right
+        # target).
+        def fake_urlretrieve(url, path):
+            Path(path).write_text("hello world", encoding="utf-8")
+
+        monkeypatch.setattr(urllib.request, "urlretrieve", fake_urlretrieve)
+
+        result = _download_with_sha256(
+            url="https://example.com/file.txt",
+            dest=dest,
+            sha256_url=None,
+        )
+        assert result is True
+        assert dest.exists()
+        assert dest.read_text(encoding="utf-8") == "hello world"
+
+    def test_verifies_sha256_when_provided_and_matches(self, tmp_path, monkeypatch):
+        """sha256 URL configured and checksum matches -> success."""
+        import urllib.request
+
+        from agentweave.cli import _download_with_sha256
+
+        dest = tmp_path / "out.txt"
+        # SHA256 of "hello world"
+        expected = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+
+        def fake_urlretrieve(url, path):
+            Path(path).write_text("hello world", encoding="utf-8")
+
+        monkeypatch.setattr(urllib.request, "urlretrieve", fake_urlretrieve)
+
+        result = _download_with_sha256(
+            url="https://example.com/file.txt",
+            dest=dest,
+            sha256_url="https://example.com/file.txt.sha256",
+            expected_sha256=expected,
+        )
+        assert result is True
+        assert dest.exists()
+
+    def test_fails_loud_on_sha256_mismatch(self, tmp_path, monkeypatch, capsys):
+        """sha256 URL configured and checksum does NOT match -> error,
+        destination file is removed (no partial download left behind)."""
+        import urllib.request
+
+        from agentweave.cli import _download_with_sha256
+
+        dest = tmp_path / "out.txt"
+        # Wrong checksum
+        wrong = "0000000000000000000000000000000000000000000000000000000000000000"
+
+        def fake_urlretrieve(url, path):
+            Path(path).write_text("hello world", encoding="utf-8")
+
+        monkeypatch.setattr(urllib.request, "urlretrieve", fake_urlretrieve)
+
+        result = _download_with_sha256(
+            url="https://example.com/file.txt",
+            dest=dest,
+            sha256_url="https://example.com/file.txt.sha256",
+            expected_sha256=wrong,
+        )
+        assert result is False
+        # Destination should not exist — the corrupted file must be cleaned up
+        assert not dest.exists()
+
