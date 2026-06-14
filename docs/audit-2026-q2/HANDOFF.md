@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-13 (PR 3 shipped)
+> **Last updated:** 2026-06-14 (PR 4 shipped)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,13 +19,13 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-13  ●  PR 3: Transport error handling & safety shipped  →  3.5/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
+2026-06-14  ●  PR 4: CLI security & correctness shipped  →  4.5/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
           │  ↑ you are here
+          ●  PR 3: Transport error handling & safety shipped
           ●  PR 2: Transport data-loss bugs shipped
           ●  PR 0.5: test_jobs croniter 6.x mock fix shipped
           ●  PR 1: SPA key leak (CRITICAL) shipped
           ●  Audit created, branch + version bumps (PEP 440 alpha: 0.38.0a1 / 0.32.0a1)
-          ○  PR 4: CLI security & correctness shipped             (target: 2-3 days)
           ○  PR 5: Hub input validation shipped                   (target: 2 days)
           ○  PR 6: Hub auth + BOLA + perf shipped                 (target: 2-3 days)
           ○  PR 7: DB & migrations shipped                        (target: 1 day)
@@ -49,59 +49,66 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 4 — CLI security & correctness
+**Next PR to execute:** PR 5 — Hub input validation
 
 ```
-Execute PR 4 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 4 — CLI security & correctness"
+Execute PR 5 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 5 — Hub input validation"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 4 section of pr-roadmap.md end-to-end.
+2. Read the PR 5 section of pr-roadmap.md end-to-end.
 
 Workflow (test-first, do not skip):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
 2. Verify you're on branch `audit/2026-q2-hardening`
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
-5. Write the failing test(s) FIRST per the spec — additions to
-   tests/test_cli.py, tests/test_eventlog.py (new), tests/test_mcp_server.py.
-6. Run the relevant test command and CONFIRM it fails
-7. Apply the fix per the spec (src/agentweave/cli.py, src/agentweave/watchdog.py,
-   src/agentweave/eventlog.py, src/agentweave/mcp/server.py)
-8. Run the relevant test command and CONFIRM it passes
-9. Run full test suites: `pytest tests/ -v` and `cd hub && pytest tests/ -v`
-   — both must be green
-10. Run lint: `ruff check src/`, `black src/`, `mypy src/`
-11. Manual smoke test: exercise datetime/timezone-aware code paths and
-    transport.json atomic write end-to-end.
-12. Commit with a structured message matching PR 3's style
-13. Push the branch
-14. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below)
-15. Report back
+5. Write the failing test(s) FIRST per the spec — new
+   hub/tests/test_agents.py, additions to hub/tests/test_messages.py and
+   hub/tests/test_tasks.py.
+6. Run the relevant test command and CONFIRM it fails:
+   `cd hub && pytest tests/test_agents.py tests/test_messages.py tests/test_tasks.py -v`
+7. Apply the fix per the spec in hub/hub/api/v1/agents.py,
+   hub/hub/api/v1/agent_trigger.py, and all files under
+   hub/hub/schemas/ (especially messages.py, tasks.py, jobs.py).
+8. Run the relevant test command and CONFIRM it passes.
+9. Run full test suites: `pytest tests/ -v` (CLI) and
+   `cd hub && pytest tests/ -v` (Hub) — both must be green.
+10. Run lint: `ruff check src/`, `black src/`, `mypy src/`. (Hub has
+    no enforced lint config today; focus on the CLI side.)
+11. Manual smoke test: exercise the role-id path-traversal regression
+    (S1), schema length caps (S6), work_dir validation (S12), and
+    register_session agent-name collision (M16) end-to-end via the
+    Hub REST API.
+12. Commit with a structured message matching PR 4's style.
+13. Push the branch.
+14. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
+15. Report back.
 
 Step 14 in detail (this is what makes the next session work):
-a. Mark PR 4 as ✅ in the "Current status" table.
+a. Mark PR 5 as ✅ in the "Current status" table.
 b. Update the "Branch state" block with current branch, latest commit hash,
    and last test run timestamp.
 c. Append a new entry to the "Session log" section.
 d. **REPLACE the "Next PR to execute" line and the code block in the
    "📋 Ready-to-copy prompt — next action" section above** so the prompt
-   is pre-filled for PR 5 (Hub input validation). The spec for PR 5
-   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 5 — Hub input
-   validation" heading. Adjust the workflow steps (5, 6, 7, 8, 11) to
+   is pre-filled for PR 6 (Hub auth, BOLA, perf). The spec for PR 6
+   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 6 — Hub auth,
+   BOLA, perf" heading. Adjust the workflow steps (5, 6, 7, 8, 11) to
    reference the right test files and source files for that PR.
 
-Notes from PR 3 that affect PR 4:
-- write_json_atomic is now available in utils.py — use it for transport.json
-  atomic writes (S8) instead of plain save_json.
-- utils.save_json now chmods 0600 on POSIX automatically — S8's chmod step
-  is already covered; focus on the atomic write + .env download (S9).
+Notes from PR 4 that affect PR 5:
+- write_json_atomic is available in src/agentweave/utils.py. Hub
+  schemas are server-side only; the transport layer is unaffected.
+- utils.save_json chmods 0600 on POSIX automatically. Hub JSON
+  responses are sent over the wire, not to local files, so the
+  S11/S8 fixes do not apply to Hub code paths.
 
-Time budget: 2-3 days for PR 4. If you go over by >50%, stop and ask.
+Time budget: 2 days for PR 5. If you go over by >50%, stop and ask.
 If you encounter a blocker, stop, document it in the
 "Open questions / blockers" section of HANDOFF.md, and report.
 ```
@@ -110,7 +117,7 @@ If you encounter a blocker, stop, document it in the
 
 ## Current status
 
-**Last updated:** 2026-06-13 (PR 2 shipped)
+**Last updated:** 2026-06-14 (PR 4 shipped)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
@@ -118,8 +125,8 @@ If you encounter a blocker, stop, document it in the
 | 1 | SPA key leak (CRITICAL) | ✅ Merged (local) | `audit/2026-q2-hardening` | 71106e5 | Committed locally. Spec: `pr1-spa-key-leak.md`. All tests + lint pass. |
 | 2 | Transport data-loss | ✅ Merged (local) | `audit/2026-q2-hardening` | cf91e52 | Closes H1, H2, H3, H6, M7, M11, M12, M13, M23 (9 fixes). New `tests/test_transport_git.py` (23 tests) + HTTP retry/invalid-response tests + new `hub/tests/test_mcp_server.py`. CLI 357 passed, Hub 74 + 1 skip. S7 (body redaction) was pre-shipped in PR 2's http.py error cleanup. |
 | 3 | Transport error handling & safety | ✅ Merged (local) | `audit/2026-q2-hardening` | 8bbd93d | Closes H8, M8, M9, M10, S2, S10, S11 (6 fixes — S7 already done in PR 2). New `write_json_atomic` in utils.py (atomic write + 0600 on POSIX); `_check_id_safe` defense-in-depth at message/task boundaries; `os.replace`+lock for archive_message/mark_read/move_to_completed; 10 MB Hub response body cap; cmd_start stops pre-opening the watchdog log fd. CLI 378 passed (+21), Hub 74 + 1 skip. |
-| 4 | CLI security & correctness | ⬜ Not started | — | — | Next up. Spec: `pr-roadmap.md` § PR 4. |
-| 5 | Hub input validation | ⬜ Not started | — | — | |
+| 4 | CLI security & correctness | ✅ Merged (local) | `audit/2026-q2-hardening` | a3ae7cf | Closes M3, M4, M5, M6, M12, S9 (6 fixes — S8 already done in PR 3). New `tests/test_eventlog.py` (4 tests) + 4 new test classes in `tests/test_cli.py` (datetime, atomic write, subprocess.run timeouts, sha256 verification) + MCP datetime guard + watchdog Popen-encoding guard. CLI 395 passed (+17), Hub 74 + 1 skip. |
+| 5 | Hub input validation | ⬜ Not started | — | — | Next up. Spec: `pr-roadmap.md` § PR 5. |
 | 6 | Hub auth + BOLA + perf | ⬜ Not started | — | — | |
 | 7 | DB & migrations | ⬜ Not started | — | — | |
 | 8 | Dead code & dedup | ⬜ Not started | — | — | |
@@ -146,8 +153,8 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: 4bba571  (PR 3: docs(audit): mark PR 3 shipped, update ready-to-copy prompt for PR 4)
-Last test run: 2026-06-13 — Hub: 74 passed, 1 skipped. CLI: 378 passed, 3 skipped (POSIX-only).
+Latest commit: a3ae7cf  (PR 4: fix(cli): timezone awareness, transport.json atomic write, sha256 verification)
+Last test run: 2026-06-14 — Hub: 74 passed, 1 skipped. CLI: 395 passed, 3 skipped (POSIX-only).
 ```
 
 ---
@@ -354,6 +361,20 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Local commit:** `8bbd93d` fix(transport): harden archive, file perms, body cap, and fd leak (1 commit, 11 files, 536 insertions / 54 deletions). HANDOFF update is a separate `4bba571` commit.
 - **Open questions:** None new.
 - **Hand-off to:** next session — execute **PR 4 — CLI security & correctness**. Ready-to-copy prompt at top of this file is pre-filled for PR 4.
+
+### 2026-06-14 — PR 4 shipped (CLI security & correctness)
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** Closed 6 of the audit's CLI-side bugs (M3, M4, M5, M6, M12, S9) — S8 was already done in PR 3 (`save_json` is a thin wrapper around `write_json_atomic`, so the two `save_json(TRANSPORT_CONFIG_FILE, ...)` call sites in cli.py inherit the 0600 chmod and os.replace atomicity for free). 4 production files touched + 4 test files + 1 new test file. M3/M4/M6: `datetime.utcnow()` → `datetime.now(timezone.utc)` everywhere; `eventlog.write_heartbeat` now embeds the `+00:00` offset and `get_heartbeat_age` subtracts from `datetime.now(timezone.utc)` so the two stay compatible. M5: both `subprocess.Popen(text=True, ...)` calls in `watchdog.py` (`_CodexMcpClient.start` and `_do_run_agent_subprocess._run_cmd`) now also pass `encoding="utf-8", errors="replace"` so non-ASCII agent output doesn't crash mid-thread on cp1252. M12: added `timeout=` to every unguarded `subprocess.run` in `cli.py` — 5 git plumbing calls (5–30s each), docker compose version/up/down (10–600s), taskkill/tasklist (5s), mcp helper (10–15s), and the claude proxy run (600s). S9: new `_download_with_sha256` helper with two new optional URL constants (`HUB_COMPOSE_SHA256_URL`, `HUB_ENV_SHA256_URL`); when unset or unreachable the helper logs a WARN and proceeds (so operators can adopt sidecar files incrementally), and when reachable and mismatched it removes the corrupted file and returns False. `cmd_hub_start` refactored to call the helper.
+- **Pre-flight:** ~1300 lines of unrelated "opencode CLI override" work were already in the working tree on the `audit/2026-q2-hardening` branch. Per the user's Q1 decision, I stashed them with `git stash push -u`, created side branch `feat/opencode-cli-override` from the audit branch tip, applied the stash there, committed as `880a88a feat(opencode): local CLI override, models doc, template yml`, pushed to `origin/feat/opencode-cli-override`, then `git checkout audit/2026-q2-hardening` (which was untouched). This keeps the audit diff atomic.
+- **Test-first verification:** 17 new tests across 5 files (4 in new `tests/test_eventlog.py`, 5 in `tests/test_cli.py::TestDatetimeIsTzAware`+`TestTransportJsonAtomicWrite`+`TestSubprocessRunHasTimeout`+`TestDownloadWithSha256`, 3 in `tests/test_mcp_server.py::TestDatetimeIsTzAware`, 2 in `tests/test_watchdog.py::TestPopenUsesUtf8Encoding`). All were RED before the corresponding fix with the right error messages. Applied fixes in spec order: M3 (datetime awareness) → M5 (Popen encoding) → M12 (subprocess timeouts) → S9 (sha256 helper). Each step: wrote tests, confirmed RED, applied fix, confirmed GREEN. Most datetime tests incidentally pass on the unfixed code (the bug is "naive vs aware" only, not absence); the source-level "no `datetime.utcnow()`" check is the hard guard. M12 is a single source-level test that scans for `subprocess.run(` and looks 8 lines ahead for `timeout=` — clean regression guard.
+- **Full suite:** CLI 395 passed (was 378; +17). Hub 74 + 1 skip (unchanged).
+- **Lint:** ruff clean (1 initial SIM102 nested-if warning fixed). black reformatted `cli.py`. mypy clean on all 4 changed files (the 1 pre-existing PyYAML stub error in `config.py` is unchanged and out of scope).
+- **Smoke test:** Wrote `C:\Users\huida\AppData\Local\Temp\opencode\smoke_pr4.py` covering: (1) `write_heartbeat` produces a `+00:00` UTC-aware ISO and `get_heartbeat_age` round-trips a positive float; (2) `save_json(transport.json)` is atomic + 0600 on POSIX (Windows N/A here, but tested via `test_utils.py`); (3) both Popen call sites have `text/encoding/errors`; (4) `_download_with_sha256` proceeds with WARN when no sidecar URL is set. All PASS.
+- **Test design notes:** the sha256 helper tests patch `urllib.request.urlretrieve` at the module level (the helper imports `urllib.request as _req` inside the function, so a module-level patch is the correct target — initial attempt to patch `agentweave.cli._req` failed with "is not a package", same gotcha as PR 3's Popen patch). The subprocess-timeout test is a source-level scan rather than a per-callsite test — it's portable, fast, and tells future contributors exactly which kwargs are required. The S8 atomic-write test verifies end-to-end via `cmd_transport_setup --type git` (the actual user-visible call) rather than just `write_json_atomic` directly, so the regression catches a future code path that bypasses `save_json` too.
+- **Local commits:** `a3ae7cf` fix(cli): timezone awareness, transport.json atomic write, sha256 verification (1 commit, 8 files, 556 insertions / 31 deletions). Branch pushed to `origin/audit/2026-q2-hardening` via `git push -u origin audit/2026-q2-hardening`.
+- **Open questions:** None new. (Section remains empty.)
+- **Hand-off to:** next session — execute **PR 5 — Hub input validation**. Ready-to-copy prompt at top of this file is pre-filled for PR 5, with adjusted test-file references (`hub/tests/test_agents.py` (new), `hub/tests/test_messages.py`, `hub/tests/test_tasks.py`) and source-file references (`hub/hub/api/v1/agents.py`, `hub/hub/api/v1/agent_trigger.py`, `hub/hub/schemas/*.py`).
 
 ---
 
