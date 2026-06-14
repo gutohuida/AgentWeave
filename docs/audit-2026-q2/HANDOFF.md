@@ -152,7 +152,7 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: f9cea0c  (fix(hub): harden Hub input validation (PR 5))
+Latest commit: 8d5c6fd  (docs(audit): mark PR 5 shipped, update ready-to-copy prompt for PR 6)
 Last test run: 2026-06-14 — Hub: 87 passed, 3 skipped. CLI: 436 passed, 10 skipped.
 
 master:
@@ -176,7 +176,8 @@ Integration topology (linear, no merge commits):
   └─ a54dbec  fix(cli): timezone awareness, transport.json atomic write, sha256  (PR 4)
   └─ e0aeed2  docs(audit): mark PR 4 shipped, update ready-to-copy prompt for PR 5
   └─ 43abe10  fix(lint): address inherited N806 and no-untyped-def
-  └─ f9cea0c  fix(hub): harden Hub input validation (PR 5)                      ← HEAD
+  └─ f9cea0c  fix(hub): harden Hub input validation (PR 5)
+  └─ 8d5c6fd  docs(audit): mark PR 5 shipped, update ready-to-copy prompt for PR 6  ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
