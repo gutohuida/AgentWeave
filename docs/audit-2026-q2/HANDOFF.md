@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-14 (PR 4 shipped)
+> **Last updated:** 2026-06-14 (branch integration: opencode + croniter fix rebased onto master; audit branch rebased on top)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,8 +19,9 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-14  ●  PR 4: CLI security & correctness shipped  →  4.5/12 PRs  ·  branch: audit/2026-q2-hardening  ·  v0.38.0a1 / v0.32.0a1
+2026-06-14  ●  Branch integration: opencode onto master, audit rebased on top  →  master @ 016bc77, audit @ 43abe10  ·  v0.38.0a1 / v0.32.0a1
           │  ↑ you are here
+          ●  PR 4: CLI security & correctness shipped
           ●  PR 3: Transport error handling & safety shipped
           ●  PR 2: Transport data-loss bugs shipped
           ●  PR 0.5: test_jobs croniter 6.x mock fix shipped
@@ -153,9 +154,41 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: a3ae7cf  (PR 4: fix(cli): timezone awareness, transport.json atomic write, sha256 verification)
-Last test run: 2026-06-14 — Hub: 74 passed, 1 skipped. CLI: 395 passed, 3 skipped (POSIX-only).
+Latest commit: 43abe10  (fix(lint): address inherited N806 and no-untyped-def from opencode commit)
+Last test run: 2026-06-14 — Hub: 74 passed, 1 skipped. CLI: 443 passed, 3 skipped (POSIX-only).
+
+master:
+  Latest commit: 016bc77  (feat(opencode): local CLI override, models doc, template yml)
+  Parent: a3d3ba1  (test(jobs): fix test_should_fire_old_last_run for croniter 6.x)
+  Parent: 57c65ee  (Bump Hub to v0.31.1 — old master HEAD)
+
+Integration topology (linear, no merge commits):
+  master  → audit
+  57c65ee (Bump Hub v0.31.1)
+  └─ a3d3ba1  test(jobs): fix test_should_fire_old_last_run for croniter 6.x     ← croniter fix
+  └─ 016bc77  feat(opencode): local CLI override, models doc, template yml     ← OPENCODE
+  └─ d511fe2  docs(audit): add 2026-Q2 audit findings, 12-PR roadmap, PR 1 spec
+  └─ aad0b8b  fix(hub): stop leaking live API key in SPA HTML response         (PR 1)
+  └─ 4e9f7be  docs(audit): mark PR 1 shipped, update ready-to-copy prompt for PR 2
+  └─ 6661934  fix(transport): harden data-loss paths in git and http transports  (PR 2)
+  └─ 4b80590  docs(audit): mark PR 2 shipped, update ready-to-copy prompt for PR 3
+  └─ aa8d3f0  fix(transport): harden archive, file perms, body cap, fd leak      (PR 3)
+  └─ 6f97cd0  docs(audit): mark PR 3 shipped, update ready-to-copy prompt for PR 4
+  └─ 4cdb7ac  docs(audit): backfill PR 3 commit hash in status table and branch state
+  └─ a54dbec  fix(cli): timezone awareness, transport.json atomic write, sha256  (PR 4)
+  └─ e0aeed2  docs(audit): mark PR 4 shipped, update ready-to-copy prompt for PR 5
+  └─ 43abe10  fix(lint): address inherited N806 and no-untyped-def              ← HEAD
 ```
+
+All commit SHAs above the opencode commit were rewritten by the rebase (their
+parents changed), but their content and messages are preserved. The croniter fix
+(`a3d3ba1`) is identical to the original `a8c77b0` from the audit branch
+(cherry-picked, same patch-id detected by git rebase).
+
+The PR 4 fix and its handoff have new SHAs (`a54dbec`, `e0aeed2`) but the same
+content as the previously-pushed `a3ae7cf` / `eaf7bab`. The lint fix is a NEW
+commit (`43abe10`) that addresses two pre-existing opencode-inherited lint
+issues; details in the session log entry below.
 
 ---
 
@@ -375,6 +408,25 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Local commits:** `a3ae7cf` fix(cli): timezone awareness, transport.json atomic write, sha256 verification (1 commit, 8 files, 556 insertions / 31 deletions). Branch pushed to `origin/audit/2026-q2-hardening` via `git push -u origin audit/2026-q2-hardening`.
 - **Open questions:** None new. (Section remains empty.)
 - **Hand-off to:** next session — execute **PR 5 — Hub input validation**. Ready-to-copy prompt at top of this file is pre-filled for PR 5, with adjusted test-file references (`hub/tests/test_agents.py` (new), `hub/tests/test_messages.py`, `hub/tests/test_tasks.py`) and source-file references (`hub/hub/api/v1/agents.py`, `hub/hub/api/v1/agent_trigger.py`, `hub/hub/schemas/*.py`).
+
+### 2026-06-14 — Branch integration: opencode onto master, audit onto opencode
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** Integrated the previously-parked opencode CLI override work (commit `880a88a`, originally stashed from PR 4's pre-flight) into master, then rebased the entire audit branch on top. The user asked for "rebase style — opencode on master, all hardening commits on top" so the final state would be a single linear history with no merge commits in the middle. Approached this in three steps: (1) rebase the opencode side branch --onto master, dropping the 10 audit-history commits that were never actually on master; (2) fast-forward master to the rebased opencode commit; (3) rebase the audit branch on top of the new master. All three rebases were conflict-free — `git rebase` detected that the croniter fix (`a8c77b0`) was a duplicate of the new master's `a3d3ba1` and skipped it automatically (the `--reapply-cherry-picks` hint was logged but the default dedup is correct here).
+- **Blocker encountered & resolved:** the initial post-rebase test run surfaced `test_jobs.py::TestJobShouldFire::test_should_fire_old_last_run` failing on plain `master@57c65ee` with croniter 6.2.2 (`TypeError: Invalid ret_type, only 'float' or 'datetime' is acceptable`). This is a PRE-EXISTING master failure that was masked because the original opencode side branch was forked from `f8f34e1` (which already had the croniter fix in its ancestry). Confirmed the failure is reproducible on stock master HEAD, asked the user, cherry-picked `a8c77b0` onto master as `a3d3ba1`, re-tested, re-rebased opencode onto new master, then proceeded. Clean baseline restored.
+- **Lint issue surfaced & resolved:** after the rebase, ruff flagged `N806 _OPENCODE_SID_RE in function should be lowercase` at `watchdog.py:1303` and mypy flagged 2 `no-untyped-def` errors in `cli.py:2029` and `cli.py:3313`. All three are pre-existing on the opencode commit (would have appeared on master regardless of any audit work). Fixed them as a single follow-up commit `43abe10`: rename to `_opencode_sid_re`, annotate `_merge_mcp_into_opencode_file(path: Path, mcp_block: Dict[str, Any], _json: Any) -> tuple`, annotate `_activate_opencode_config(config: "AgentWeaveConfig") -> int`. After the fix: ruff clean, mypy 1 pre-existing error (PyYAML stub, unrelated), black clean. (Note for the future audit PRs: this PyYAML stub error is now present on master too — out of scope for the audit, but worth knowing.)
+- **Topological outcome:**
+  - `master`: `57c65ee` (Bump Hub v0.31.1) → `a3d3ba1` (croniter fix) → `016bc77` (opencode). Pushed to `origin/master`.
+  - `feat/opencode-cli-override`: rebased from 11 commits ahead of master to 1 commit ahead of master (`016bc77`). Force-pushed to `origin/feat/opencode-cli-override`.
+  - `audit/2026-q2-hardening`: 13 commits on top of master (12 from the rebase + 1 new lint fix). All commit SHAs above the opencode commit changed (parents moved) but content and messages are preserved. Force-pushed to `origin/audit/2026-q2-hardening` with `--force-with-lease`.
+- **Test runs:**
+  - After rebase (before lint fix): CLI 443 passed, 3 skipped. Hub 74 passed, 1 skipped. (The +48 vs. previous 395 is the entire opencode commit: new `tests/test_opencode_cli_override.py` + `tests/test_activate.py` extensions + `tests/test_config.py` extensions + extra `tests/test_cli.py` cases.)
+  - After lint fix: same — 443/74 unchanged. Targeted re-run of `tests/test_watchdog.py tests/test_cli.py tests/test_eventlog.py` (the files I touched) → 82 passed.
+  - On `master` after the croniter cherry-pick: 1 previously-failing test now passes; full CLI suite green.
+- **Why the croniter fix came along "for free" when rebasing audit → master:** the fix was already in the audit branch's history (as `a8c77b0`), and `git rebase` recognized it as a patch-id duplicate of the new master's `a3d3ba1` and skipped reapplying it. The resulting history shows it once, in the right place (between Bump Hub and opencode). This is exactly the behavior we wanted.
+- **For future PRs:** the audit branch is now a clean linear descendant of master. Every new PR's fix commit will land on top of `43abe10` (the lint fix), with a docs/handoff commit on top of that. Master stays at `016bc77` until the audit is done and merged.
+- **No new open questions.**
+- **Hand-off to:** next session — execute **PR 5 — Hub input validation**. Ready-to-copy prompt at top of this file is unchanged from the PR 4 handoff. New starting point: `git checkout audit/2026-q2-hardening && git pull --ff-only` (no force-pull needed since the local branch is already up to date with the force-pushed remote). The audit branch's new tip is `43abe10`.
 
 ---
 
