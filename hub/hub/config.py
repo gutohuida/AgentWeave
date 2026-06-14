@@ -14,5 +14,12 @@ class Settings(BaseSettings):
     aw_bootstrap_project_id: str = "proj-default"
     aw_bootstrap_project_name: str = "Default Project"
 
+    # SSE ticket signing
+    aw_ticket_secret: str = ""
+    aw_ticket_ttl: int = 300  # seconds
+
+    # Request body size cap
+    aw_max_body_size: int = 1_048_576  # 1 MB
+
 
 settings = Settings()

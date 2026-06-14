@@ -3,6 +3,7 @@
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,53 @@ from .db.engine import init_db
 from .scheduler import init_scheduler, shutdown_scheduler
 
 UI_DIST = Path(__file__).parent / "static" / "ui"
+
+
+class ContentSizeLimitMiddleware:
+    """ASGI middleware that rejects request bodies larger than a configured limit.
+
+    Defaults to 1 MB. Enforcing the cap at the middleware layer prevents giant
+    payloads from reaching FastAPI validation or route handlers.
+    """
+
+    def __init__(self, app, max_size: int = 1_048_576):
+        self.app = app
+        self.max_size = max_size
+
+    async def __call__(self, scope: Dict[str, Any], receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET")
+        if method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                length = int(content_length.decode())
+            except (ValueError, UnicodeDecodeError):
+                length = 0
+            if length > self.max_size:
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 413,
+                        "headers": [[b"content-type", b"application/json"]],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": b'{"detail":"Request body too large"}',
+                    }
+                )
+                return
+
+        await self.app(scope, receive, send)
 
 
 @asynccontextmanager
@@ -46,6 +94,11 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+    app.add_middleware(
+        ContentSizeLimitMiddleware,
+        max_size=settings.aw_max_body_size,
     )
 
     @app.get("/health", include_in_schema=False)

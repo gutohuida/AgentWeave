@@ -15,9 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`/agent/trigger` rejects unsafe `work_dir` values.** Paths containing `..`, `~`, or non-printable characters now return HTTP 400 (S12).
 - **`/agent/{agent}/chat` query `limit` is bounded.** Accepts values from 1 to 500 inclusive (M14).
 - **`/agents/{name}/register-session` rejects configured-agent name collisions**, matching the existing `register_agent` guard (M16).
+- **SSE no longer accepts raw API keys in `?token=`.** All non-SSE endpoints now require the API key in the `Authorization` header. The SSE stream accepts only short-lived signed tickets from the new `/api/v1/events/ticket` endpoint (S3).
+- **`list_agents` no longer issues per-agent queries.** Latest heartbeat, message count, active task count, context usage, and session start are now fetched in bulk, eliminating the N+1 query pattern (M15).
+- **`update_task` MCP tool no longer sends an unused `agent` parameter** to the REST API (M17).
+- **Request body size capped at 1 MB.** A middleware layer returns HTTP 413 for oversized POST bodies before they reach route handlers (bonus).
 
 ### Added (Hub v0.32.0a1)
 - New regression tests in `hub/tests/test_agents.py` and additions to `hub/tests/test_messages.py`, `hub/tests/test_tasks.py`, and `hub/tests/test_jobs.py` covering the PR 5 validation rules.
+- **New `hub/tests/test_bola.py`** multi-tenant isolation test: creates two projects with separate API keys and verifies Project B cannot read Project A's resources on every endpoint (T5).
+- **`hub/tests/test_auth.py` additions** for the SSE ticket flow, query-token rejection on REST endpoints, and the 1 MB body-size cap.
 
 ---
 ## [0.37.1] - 2026-06-14

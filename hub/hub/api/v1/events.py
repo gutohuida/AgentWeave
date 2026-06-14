@@ -1,6 +1,7 @@
 """GET /api/v1/events — SSE stream and history."""
 
 import asyncio
+from datetime import datetime, timezone
 from typing import AsyncGenerator, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -8,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from ...auth import get_project
+from ...auth import get_project, get_project_for_sse, _make_ticket
 from ...db.engine import get_session
 from ...db.models import EventLog
 from ...sse import sse_manager
@@ -43,10 +44,25 @@ async def event_history(
     ]
 
 
+@router.get("/ticket")
+async def get_event_ticket(project: Tuple[str, str] = Depends(get_project)):
+    """Issue a short-lived signed ticket for the SSE stream.
+
+    Clients using EventSource (which cannot send custom headers) should call this
+    first with their API key, then connect to /api/v1/events?token=<ticket>.
+    """
+    project_id, _ = project
+    token, expires = _make_ticket(project_id)
+    return {
+        "token": token,
+        "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).isoformat(),
+    }
+
+
 @router.get("")
 async def event_stream(
     request: Request,
-    project: Tuple[str, str] = Depends(get_project),
+    project: Tuple[str, str] = Depends(get_project_for_sse),
 ):
     project_id, _ = project
     queue = sse_manager.subscribe(project_id)

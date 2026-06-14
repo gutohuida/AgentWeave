@@ -60,3 +60,26 @@ def test_hub_request_passes_timeout_on_post(monkeypatch):
     _hub_request("POST", "/messages", body={"from": "a", "to": "b", "subject": "s", "content": "c"})
 
     assert captured.get("timeout") == 10
+
+
+def test_update_task_tool_does_not_send_dead_agent_param(monkeypatch):
+    """M17: update_task must not send the unused 'agent' field to the REST API."""
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["body"] = req.data
+        return _ok_response(b'{"id": "task-1", "status": "in_progress"}')
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv("HUB_URL", "http://localhost:8000")
+    monkeypatch.setenv("HUB_API_KEY", "test-key")
+    monkeypatch.setenv("HUB_PROJECT_ID", "proj-test")
+
+    from hub.mcp_server import update_task
+
+    result = update_task("task-1", "in_progress")
+    assert result.get("status") == "in_progress"
+    import json
+
+    body = json.loads(captured["body"])
+    assert "agent" not in body

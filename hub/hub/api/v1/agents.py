@@ -162,11 +162,13 @@ async def list_agents(
                 Task.status.in_(_ACTIVE_TASK_STATUSES),
             )
         )
-        s_res = await session.execute(senders_q)
-        r_res = await session.execute(recipients_q)
-        hb_res = await session.execute(hb_q)
-        out_res = await session.execute(out_q)
-        task_assignees_res = await session.execute(task_assignees_q)
+        s_res, r_res, hb_res, out_res, task_assignees_res = await asyncio.gather(
+            session.execute(senders_q),
+            session.execute(recipients_q),
+            session.execute(hb_q),
+            session.execute(out_q),
+            session.execute(task_assignees_q),
+        )
         fallback_names: set[str] = set()
         for (name,) in s_res:
             fallback_names.add(name)
@@ -206,6 +208,99 @@ async def list_agents(
         if agent_row.name not in session_agents_meta:
             session_agents_meta[agent_row.name] = {}
 
+    if not session_agents_meta:
+        return []
+
+    agent_names = list(session_agents_meta.keys())
+
+    # Bulk fetch latest heartbeat per agent (ordered by agent, then timestamp desc)
+    hb_q = (
+        select(AgentHeartbeat)
+        .where(
+            AgentHeartbeat.project_id == project_id,
+            AgentHeartbeat.agent.in_(agent_names),
+        )
+        .order_by(AgentHeartbeat.agent, AgentHeartbeat.timestamp.desc())
+    )
+    hb_res = await session.execute(hb_q)
+    latest_hbs: dict[str, AgentHeartbeat] = {}
+    for hb in hb_res.scalars().all():
+        latest_hbs.setdefault(hb.agent, hb)
+
+    # Bulk fetch message counts (last 24h) per agent
+    sender_counts_q = (
+        select(Message.sender, func.count())
+        .where(Message.project_id == project_id, Message.timestamp >= cutoff)
+        .group_by(Message.sender)
+    )
+    recipient_counts_q = (
+        select(Message.recipient, func.count())
+        .where(Message.project_id == project_id, Message.timestamp >= cutoff)
+        .group_by(Message.recipient)
+    )
+    sender_counts_res, recipient_counts_res = await asyncio.gather(
+        session.execute(sender_counts_q),
+        session.execute(recipient_counts_q),
+    )
+    msg_counts: dict[str, int] = {}
+    for name, cnt in sender_counts_res:
+        msg_counts[name] = msg_counts.get(name, 0) + cnt
+    for name, cnt in recipient_counts_res:
+        msg_counts[name] = msg_counts.get(name, 0) + cnt
+
+    # Bulk fetch active task counts per agent
+    active_task_counts_q = (
+        select(Task.assignee, func.count())
+        .where(
+            Task.project_id == project_id,
+            Task.assignee.in_(agent_names),
+            Task.status.in_(_ACTIVE_TASK_STATUSES),
+        )
+        .group_by(Task.assignee)
+    )
+    active_task_counts_res = await session.execute(active_task_counts_q)
+    active_task_counts = {name: cnt for name, cnt in active_task_counts_res}
+
+    # Bulk fetch latest context_warning event data per agent
+    ctx_q = (
+        select(EventLog)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == "context_warning",
+            EventLog.agent.in_(agent_names),
+        )
+        .order_by(EventLog.agent, EventLog.timestamp.desc())
+    )
+    ctx_res = await session.execute(ctx_q)
+    context_usage_map: dict[str, Any] = {}
+    for row in ctx_res.scalars().all():
+        context_usage_map.setdefault(row.agent, row.data)
+
+    # Bulk fetch session started_at: first output timestamp of the most recent
+    # session (by last output timestamp) per agent.
+    session_q = (
+        select(
+            AgentOutput.agent,
+            AgentOutput.session_id,
+            func.min(AgentOutput.timestamp).label("started_at"),
+            func.max(AgentOutput.timestamp).label("last_active"),
+        )
+        .where(
+            AgentOutput.project_id == project_id,
+            AgentOutput.agent.in_(agent_names),
+            AgentOutput.session_id.isnot(None),
+        )
+        .group_by(AgentOutput.agent, AgentOutput.session_id)
+    )
+    session_res = await session.execute(session_q)
+    session_started_map: dict[str, datetime] = {}
+    best_last_active: dict[str, datetime] = {}
+    for row in session_res.all():
+        agent, sess_id, started_at, last_active = row
+        if sess_id and (agent not in best_last_active or last_active > best_last_active[agent]):
+            best_last_active[agent] = last_active
+            session_started_map[agent] = started_at
+
     summaries = []
     for agent_name in sorted(session_agents_meta):
         agent_meta = session_agents_meta.get(agent_name, {})
@@ -215,36 +310,11 @@ async def list_agents(
         if agent_row and agent_row.config:
             agent_meta = {**(agent_row.config or {}), **agent_meta}
 
-        # Latest heartbeat
-        hb_q = (
-            select(AgentHeartbeat)
-            .where(
-                AgentHeartbeat.project_id == project_id,
-                AgentHeartbeat.agent == agent_name,
-            )
-            .order_by(AgentHeartbeat.timestamp.desc())
-            .limit(1)
-        )
-        hb_res = await session.execute(hb_q)
-        hb = hb_res.scalars().first()
-
-        # Message count (last 24h)
-        msg_q = select(Message).where(
-            Message.project_id == project_id,
-            Message.timestamp >= cutoff,
-            (Message.sender == agent_name) | (Message.recipient == agent_name),
-        )
-        msg_res = await session.execute(msg_q)
-        msg_count = len(msg_res.scalars().all())
-
-        # Active task count
-        task_q = select(Task).where(
-            Task.project_id == project_id,
-            Task.assignee == agent_name,
-            Task.status.in_(_ACTIVE_TASK_STATUSES),
-        )
-        task_res = await session.execute(task_q)
-        task_count = len(task_res.scalars().all())
+        hb = latest_hbs.get(agent_name)
+        msg_count = msg_counts.get(agent_name, 0)
+        task_count = active_task_counts.get(agent_name, 0)
+        context_usage = context_usage_map.get(agent_name)
+        session_started_at = session_started_map.get(agent_name)
 
         # Get dev roles - support both new 'agent_roles' (list) and legacy 'agent_assignments' (single)
         dev_role_keys: list[str] = []
@@ -284,42 +354,6 @@ async def list_agents(
                 dev_role_labels.append(role_def.get("label", role_key))
             else:
                 dev_role_labels.append(role_key)
-
-        # Latest context_warning event for this agent
-        ctx_q = (
-            select(EventLog)
-            .where(
-                EventLog.project_id == project_id,
-                EventLog.agent == agent_name,
-                EventLog.event_type == "context_warning",
-            )
-            .order_by(EventLog.timestamp.desc())
-            .limit(1)
-        )
-        ctx_res = await session.execute(ctx_q)
-        ctx_row = ctx_res.scalars().first()
-        context_usage = ctx_row.data if ctx_row else None
-
-        # Get session started_at from the most recent session with output
-        session_started_at = None
-        session_q = (
-            select(
-                AgentOutput.session_id,
-                func.min(AgentOutput.timestamp).label("started_at"),
-            )
-            .where(
-                AgentOutput.project_id == project_id,
-                AgentOutput.agent == agent_name,
-                AgentOutput.session_id.isnot(None),
-            )
-            .group_by(AgentOutput.session_id)
-            .order_by(func.max(AgentOutput.timestamp).desc())
-            .limit(1)
-        )
-        session_res = await session.execute(session_q)
-        session_row = session_res.first()
-        if session_row and session_row.started_at:
-            session_started_at = session_row.started_at
 
         _runner = agent_meta.get("runner", "native")
         _display_model = {

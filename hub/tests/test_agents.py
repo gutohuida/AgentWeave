@@ -112,3 +112,53 @@ async def test_recent_chat_limit_is_bounded(app, auth_headers):
         headers=auth_headers,
     )
     assert resp_ok.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_list_agents_avoids_n_plus_one(app, auth_headers):
+    """M15: list_agents must not issue per-agent queries inside a loop."""
+    agents = ["agent-a", "agent-b", "agent-c"]
+    sync_resp = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {name: {"runner": "native"} for name in agents}}},
+        headers=auth_headers,
+    )
+    assert sync_resp.status_code == 200
+
+    for name in agents:
+        hb_resp = await app.post(
+            f"/api/v1/agents/{name}/heartbeat",
+            json={"status": "active"},
+            headers=auth_headers,
+        )
+        assert hb_resp.status_code == 201
+        task_resp = await app.post(
+            "/api/v1/tasks",
+            json={"title": f"task {name}", "assignee": name},
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+
+    from sqlalchemy import event
+
+    from hub.db.engine import engine
+
+    statements: list = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", capture)
+    try:
+        resp = await app.get("/api/v1/agents", headers=auth_headers)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", capture)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == len(agents)
+    assert {a["name"] for a in data} == set(agents)
+    # With bulk queries the endpoint should stay well below one query per agent.
+    assert len(statements) <= 15, (
+        f"list_agents issued {len(statements)} SQL queries for {len(agents)} agents"
+    )

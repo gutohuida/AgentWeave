@@ -242,7 +242,7 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
+def update_task(task_id: str, status: str) -> Dict[str, Any]:
     """Update a task's status.
 
     Valid statuses: pending, assigned, in_progress, completed,
@@ -253,7 +253,6 @@ def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
                  create_task() (e.g. "task-abc123"). Do NOT use status names like
                  "pending" as task IDs.
         status: New status value
-        agent: Your agent name (for logging)
 
     Returns:
         Updated task dict, or {'error': '...'} on failure.
