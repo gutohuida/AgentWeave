@@ -19,9 +19,9 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-14  ●  PR 5: Hub input validation shipped  →  audit @ f9cea0c  ·  v0.38.0a1 / v0.32.0a1
+2026-06-14  ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
           │  ↑ you are here
-          ○  PR 6: Hub auth + BOLA + perf shipped                 (target: 2-3 days)
+          ○  PR 7: DB & migrations shipped                        (target: 1 day)
           ○  PR 7: DB & migrations shipped                        (target: 1 day)
           ○  PR 8: Dead code & dedup shipped                      (target: 0.5 day)
           ○  PR 9: Hub UI security shipped                        (target: 2 days)
@@ -50,18 +50,18 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 6 — Hub auth, BOLA, perf
+**Next PR to execute:** PR 7 — DB & migrations
 
 ```
-Execute PR 6 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 6 — Hub auth, BOLA, perf"
+Execute PR 7 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 7 — DB & migrations"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 6 section of pr-roadmap.md end-to-end.
+2. Read the PR 7 section of pr-roadmap.md end-to-end.
 
 Workflow (test-first, do not skip):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
@@ -69,45 +69,46 @@ Workflow (test-first, do not skip):
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
 5. Write the failing test(s) FIRST per the spec — new
-   hub/tests/test_bola.py, additions to hub/tests/test_auth.py.
+   hub/tests/test_migrations.py.
 6. Run the relevant test command and CONFIRM it fails:
-   `cd hub && pytest tests/test_bola.py tests/test_auth.py -v`
-7. Apply the fix per the spec in hub/hub/auth.py, hub/hub/main.py,
-   hub/hub/api/v1/agents.py, and hub/hub/mcp_server.py.
+   `cd hub && pytest tests/test_migrations.py -v`
+7. Apply the fix per the spec in hub/hub/db/engine.py, hub/hub/main.py,
+   and the migration file that manages the `job_runs.error_summary`
+   column (hub/hub/migrations/versions/0007_add_job_run_error_summary.py
+   and, if needed for existing deployments, a new 0008_… migration).
 8. Run the relevant test command and CONFIRM it passes.
 9. Run full test suites: `pytest tests/ -v` (CLI) and
    `cd hub && pytest tests/ -v` (Hub) — both must be green.
 10. Run lint: `ruff check src/`, `black src/`, `mypy src/`. (Hub has
     no enforced lint config today; focus on the CLI side.)
-11. Manual smoke test: exercise the token-fallback removal (S3),
-    BOLA isolation across projects (T5), the new /events/ticket SSE
-    flow, and the request body-size cap bonus end-to-end via the
-    Hub REST API.
-12. Commit with a structured message matching PR 5's style.
+11. Manual smoke test: exercise `init_db` running `alembic upgrade head`
+    on startup (H5) and the capped `error_summary` column (DB-4)
+    end-to-end via the Hub REST API or Alembic CLI.
+12. Commit with a structured message matching PR 5/PR 6's style.
 13. Push the branch.
 14. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
 15. Report back.
 
 Step 14 in detail (this is what makes the next session work):
-a. Mark PR 6 as ✅ in the "Current status" table.
+a. Mark PR 7 as ✅ in the "Current status" table.
 b. Update the "Branch state" block with current branch, latest commit hash,
    and last test run timestamp.
 c. Append a new entry to the "Session log" section.
 d. **REPLACE the "Next PR to execute" line and the code block in the
    "📋 Ready-to-copy prompt — next action" section above** so the prompt
-   is pre-filled for PR 7 (DB & migrations). The spec for PR 7
-   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 7 — DB & migrations"
+   is pre-filled for PR 8 (Dead code & dedup). The spec for PR 8
+   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 8 — Dead code & dedup"
    heading. Adjust the workflow steps (5, 6, 7, 8, 11) to reference
-   the right test files and source files for that PR.
+   the right files for that PR.
 
-Notes from PR 5 that affect PR 6:
-- Create schemas now reject client-supplied IDs (extra='forbid'), so any
-  new test fixtures that previously passed "id" to /messages, /tasks, or
-  /jobs will need to omit it.
-- Registering a session for a configured agent now returns 409; use unique
-  agent names in tests unless you are explicitly exercising the collision.
+Notes from PR 6 that affect PR 7:
+- The `job_runs.error_summary` model column is currently `sa.Text()` and the
+  existing migration `0007_add_job_run_error_summary.py` adds it as `sa.Text()`.
+  DB-4 requires capping it to `String(500)` (or `Text` with a length check).
+  For fresh installs you can change `0007`; for existing deployments you may
+  need a new `0008` migration that alters the column type.
 
-Time budget: 2-3 days for PR 6. If you go over by >50%, stop and ask.
+Time budget: 1 day for PR 7. If you go over by >50%, stop and ask.
 If you encounter a blocker, stop, document it in the
 "Open questions / blockers" section of HANDOFF.md, and report.
 ```
@@ -125,8 +126,8 @@ If you encounter a blocker, stop, document it in the
 | 2 | Transport data-loss | ✅ Merged (local) | `audit/2026-q2-hardening` | cf91e52 | Closes H1, H2, H3, H6, M7, M11, M12, M13, M23 (9 fixes). New `tests/test_transport_git.py` (23 tests) + HTTP retry/invalid-response tests + new `hub/tests/test_mcp_server.py`. CLI 357 passed, Hub 74 + 1 skip. S7 (body redaction) was pre-shipped in PR 2's http.py error cleanup. |
 | 3 | Transport error handling & safety | ✅ Merged (local) | `audit/2026-q2-hardening` | 8bbd93d | Closes H8, M8, M9, M10, S2, S10, S11 (6 fixes — S7 already done in PR 2). New `write_json_atomic` in utils.py (atomic write + 0600 on POSIX); `_check_id_safe` defense-in-depth at message/task boundaries; `os.replace`+lock for archive_message/mark_read/move_to_completed; 10 MB Hub response body cap; cmd_start stops pre-opening the watchdog log fd. CLI 378 passed (+21), Hub 74 + 1 skip. |
 | 4 | CLI security & correctness | ✅ Merged (local) | `audit/2026-q2-hardening` | a3ae7cf | Closes M3, M4, M5, M6, M12, S9 (6 fixes — S8 already done in PR 3). New `tests/test_eventlog.py` (4 tests) + 4 new test classes in `tests/test_cli.py` (datetime, atomic write, subprocess.run timeouts, sha256 verification) + MCP datetime guard + watchdog Popen-encoding guard. CLI 395 passed (+17), Hub 74 + 1 skip. |
-| 5 | Hub input validation | ✅ Local (push pending) | `audit/2026-q2-hardening` | f9cea0c | Closes S1, S5, S6, S12, M14, M16. New `hub/tests/test_agents.py` + additions to `test_messages.py`/`test_tasks.py`; updated `test_jobs.py`/`test_pilot_mode.py` for new Create-schema behavior. Hub 87 passed, 3 skipped; CLI 436 passed, 10 skipped. Push blocked: HTTPS auth unavailable in this shell. |
-| 6 | Hub auth + BOLA + perf | ⬜ Not started | — | — | |
+| 5 | Hub input validation | ✅ Merged (local) | `audit/2026-q2-hardening` | f9cea0c | Closes S1, S5, S6, S12, M14, M16. New `hub/tests/test_agents.py` + additions to `test_messages.py`/`test_tasks.py`; updated `test_jobs.py`/`test_pilot_mode.py` for new Create-schema behavior. Hub 87 passed, 3 skipped; CLI 436 passed, 10 skipped. Push blocked: HTTPS auth unavailable in this shell. |
+| 6 | Hub auth + BOLA + perf | ✅ Local (push pending) | `audit/2026-q2-hardening` | 90d4e4c | Closes S3 (server half), M15, M17, T5 + body-size bonus. Removes `?token=` fallback on non-SSE endpoints; adds `/events/ticket` signed-ticket flow. Rewrites `list_agents` with bulk queries. Removes dead `agent` param from `update_task` MCP tool. Adds 1 MB body cap middleware. New `hub/tests/test_bola.py`; enhanced `test_auth.py`, `test_agents.py`, `test_mcp_server.py`. Hub 96 passed, 3 skipped; CLI 436 passed, 10 skipped. Push blocked: HTTPS auth unavailable in this shell. |
 | 7 | DB & migrations | ⬜ Not started | — | — | |
 | 8 | Dead code & dedup | ⬜ Not started | — | — | |
 | 9 | Hub UI security | ⬜ Not started | — | — | |
@@ -152,8 +153,8 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: 8d5c6fd  (docs(audit): mark PR 5 shipped, update ready-to-copy prompt for PR 6)
-Last test run: 2026-06-14 — Hub: 87 passed, 3 skipped. CLI: 436 passed, 10 skipped.
+Latest commit: f9fa1fb  (docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7)
+Last test run: 2026-06-14 — Hub: 96 passed, 3 skipped. CLI: 436 passed, 10 skipped.
 
 master:
   Latest commit: 016bc77  (feat(opencode): local CLI override, models doc, template yml)
@@ -352,16 +353,28 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Open questions:** Push to `origin/audit/2026-q2-hardening` failed because this shell has no HTTPS git credentials (`GIT_TERMINAL_PROMPT=0`). See "Open questions / blockers" below.
 - **Hand-off to:** next session — execute **PR 6 — Hub auth, BOLA, perf**. Ready-to-copy prompt at top of this file is pre-filled for PR 6.
 
+### 2026-06-14 — PR 6 shipped (Hub auth, BOLA, perf)
+
+- **By:** kimi (Kimi Code CLI) on behalf of gutohuida
+- **What:** Closed S3 (server half), M15, M17, T5, plus the body-size bonus. Removed `?token=` fallback from all non-SSE endpoints and added `/api/v1/events/ticket` to issue short-lived HMAC-signed SSE tickets (S3). Rewrote `list_agents` to fetch heartbeat, message count, active task count, context usage, and session start in bulk, eliminating the N+1 query pattern (M15). Removed the unused `agent` parameter from the `update_task` MCP tool (M17). Added `ContentSizeLimitMiddleware` with a 1 MB default request body cap (bonus). Added multi-tenant BOLA regression test (`hub/tests/test_bola.py`) covering every Hub endpoint (T5).
+- **Test-first verification:** `hub/tests/test_auth.py` additions, `hub/tests/test_bola.py`, `hub/tests/test_agents.py` query-count test, and `hub/tests/test_mcp_server.py` update_task test were RED before fixes and GREEN after.
+- **Full suite:** Hub 96 passed, 3 skipped (was 87 passed, 3 skipped; +9 from new/updated tests). CLI 436 passed, 10 skipped (unchanged).
+- **Lint:** ruff + black clean on changed files. mypy reports the same 1 pre-existing PyYAML stub error in `src/agentweave/config.py` (out of scope).
+- **Smoke test:** End-to-end ASGI smoke script verified S3 token-fallback removal, `/events/ticket` SSE flow, T5 BOLA isolation, and the 1 MB body cap; all checks PASS.
+- **Local commit:** `90d4e4c` fix(hub): harden Hub auth, BOLA isolation, and list_agents performance (PR 6) (11 files changed, 777 insertions, 152 deletions).
+- **Open questions:** Push to `origin/audit/2026-q2-hardening` still blocked because this shell has no HTTPS git credentials (`GIT_TERMINAL_PROMPT=0`). The PR 5 and PR 6 commits plus this HANDOFF update are local only; the user needs to push from a credentialed shell.
+- **Hand-off to:** next session — execute **PR 7 — DB & migrations**. Ready-to-copy prompt at top of this file is pre-filled for PR 7.
+
 ## Open questions / blockers
 
-1. **Push blocked for PR 5.** `git push origin audit/2026-q2-hardening` failed with:
+1. **Push blocked for PR 5 and PR 6.** `git push origin audit/2026-q2-hardening` failed with:
    ```
    fatal: could not read Username for 'https://github.com': terminal prompts disabled
    ```
    This shell has no HTTPS git credentials configured (`GIT_TERMINAL_PROMPT=0`).
-   The fix commit `f9cea0c` and this HANDOFF update are local only. The user
-   needs to push manually from a shell that has GitHub credentials, or provide
-   a token/credential helper so the next agent can push.
+   The fix commits `f9cea0c` (PR 5), `90d4e4c` (PR 6), and this HANDOFF update
+   are local only. The user needs to push manually from a shell that has GitHub
+   credentials, or provide a token/credential helper so the next agent can push.
 
 ---
 
