@@ -125,3 +125,43 @@ async def test_create_task_accepts_assigned_to_alias(app, auth_headers):
     )
     assert resp.status_code == 201
     assert resp.json()["assignee"] == "kimi"
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_client_supplied_id(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/tasks",
+        json={"title": "Bad id", "id": "task-custom-id"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_client_supplied_created_at(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/tasks",
+        json={"title": "Bad date", "created_at": "2026-01-01T00:00:00+00:00"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_overlong_title(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/tasks",
+        json={"title": "x" * 257},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_overlong_description(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/tasks",
+        json={"title": "Big description", "description": "x" * 10001},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422

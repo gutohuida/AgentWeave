@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.38.0a1] / [Hub 0.32.0a1] - 2026-06-14
+
+### Fixed (Hub v0.32.0a1)
+- **Input validation hardening (PR 5).** Role IDs in `/agents/context` are now validated against `^[a-zA-Z0-9_-]{1,64}$` to block path-traversal reads of arbitrary files (S1).
+- **Create schemas no longer accept client-supplied IDs or timestamps.** Removed `id`/`timestamp` from `MessageCreate`, `id`/`created_at` from `TaskCreate`, and `id` from `JobCreate`; extra fields are rejected (S5).
+- **String length caps added to all Hub schemas.** Agent names, IDs, subjects, titles, and content now enforce `max_length` limits (256 for names/subjects, 10,000 for content, 128 for IDs, etc.) (S6).
+- **`/agent/trigger` rejects unsafe `work_dir` values.** Paths containing `..`, `~`, or non-printable characters now return HTTP 400 (S12).
+- **`/agent/{agent}/chat` query `limit` is bounded.** Accepts values from 1 to 500 inclusive (M14).
+- **`/agents/{name}/register-session` rejects configured-agent name collisions**, matching the existing `register_agent` guard (M16).
+
+### Added (Hub v0.32.0a1)
+- New regression tests in `hub/tests/test_agents.py` and additions to `hub/tests/test_messages.py`, `hub/tests/test_tasks.py`, and `hub/tests/test_jobs.py` covering the PR 5 validation rules.
+
+---
 ## [0.37.1] - 2026-06-14
 
 ### Added (CLI)

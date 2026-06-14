@@ -3,22 +3,22 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AgentSummary(BaseModel):
-    name: str
-    status: str
-    latest_status_msg: Optional[str]
-    last_seen: Optional[datetime]
+    name: str = Field(max_length=64)
+    status: str = Field(max_length=64)
+    latest_status_msg: Optional[str] = Field(default=None, max_length=10000)
+    last_seen: Optional[datetime] = None
     message_count: int
     active_task_count: int
-    role: Optional[str] = None  # "principal" | "delegate" | "collaborator"
+    role: Optional[str] = Field(default=None, max_length=64)  # "principal" | "delegate" | "collaborator"
     yolo: bool = False
-    runner: str = "native"  # "native" | "claude_proxy" | "kimi" | "manual"
-    display_model: Optional[str] = None  # e.g. "Claude", "Kimi", "Minimax" — derived from runner
-    dev_role: Optional[str] = None  # e.g. "tech_lead", "backend_dev" (primary role)
-    dev_role_label: Optional[str] = None  # e.g. "Tech Lead", "Backend Developer"
+    runner: str = Field(default="native", max_length=64)  # "native" | "claude_proxy" | "kimi" | "manual"
+    display_model: Optional[str] = Field(default=None, max_length=128)  # e.g. "Claude", "Kimi", "Minimax" — derived from runner
+    dev_role: Optional[str] = Field(default=None, max_length=64)  # e.g. "tech_lead", "backend_dev" (primary role)
+    dev_role_label: Optional[str] = Field(default=None, max_length=128)  # e.g. "Tech Lead", "Backend Developer"
     dev_roles: Optional[List[str]] = None  # All role IDs (new multi-role support)
     dev_role_labels: Optional[List[str]] = None  # Labels for all roles
     context_usage: Optional[Dict[str, Any]] = (
@@ -26,9 +26,9 @@ class AgentSummary(BaseModel):
     )
     session_started_at: Optional[datetime] = None  # When the current session started
     pilot: bool = False  # Pilot mode: manual control, disables auto-execution
-    registered_session_id: Optional[str] = None  # Registered --resume session ID for pilot agents
+    registered_session_id: Optional[str] = Field(default=None, max_length=128)  # Registered --resume session ID for pilot agents
     self_registered: bool = False  # True if agent joined via self-registration
-    liveness: Optional[str] = None  # "online" | "offline" for self-registered agents
+    liveness: Optional[str] = Field(default=None, max_length=64)  # "online" | "offline" for self-registered agents
     runner_options: Optional[Dict[str, Any]] = (
         None  # Runner-specific options (e.g., memory for Codex)
     )
@@ -37,30 +37,30 @@ class AgentSummary(BaseModel):
 
 
 class AgentTimelineEvent(BaseModel):
-    id: str
-    event_type: str
+    id: str = Field(max_length=128)
+    event_type: str = Field(max_length=64)
     timestamp: datetime
-    summary: str
+    summary: str = Field(max_length=10000)
     data: Dict[str, Any]
 
     model_config = {"from_attributes": True}
 
 
 class AgentHeartbeatCreate(BaseModel):
-    status: str = "active"
-    message: Optional[str] = None
+    status: str = Field(default="active", max_length=64)
+    message: Optional[str] = Field(default=None, max_length=10000)
 
 
 class AgentOutputCreate(BaseModel):
-    content: str
-    session_id: Optional[str] = None
+    content: str = Field(max_length=10000)
+    session_id: Optional[str] = Field(default=None, max_length=128)
 
 
 class AgentOutputResponse(BaseModel):
-    id: str
-    agent: str
-    session_id: Optional[str]
-    content: str
+    id: str = Field(max_length=128)
+    agent: str = Field(max_length=64)
+    session_id: Optional[str] = Field(default=None, max_length=128)
+    content: str = Field(max_length=10000)
     timestamp: datetime
 
     model_config = {"from_attributes": True}

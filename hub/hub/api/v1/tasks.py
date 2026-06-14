@@ -56,15 +56,8 @@ async def create_task(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
-    task_id = body.id or f"task-{short_id()}"
-    created_at = None
-    if body.created_at:
-        try:
-            created_at = datetime.fromisoformat(body.created_at)
-        except ValueError:
-            pass
     task = Task(
-        id=task_id,
+        id=f"task-{short_id()}",
         project_id=project_id,
         title=body.title,
         description=body.description,
@@ -77,17 +70,15 @@ async def create_task(
         deliverables=body.deliverables,
         notes=body.notes,
     )
-    if created_at:
-        task.created_at = created_at
     session.add(task)
     await session.commit()
     await session.refresh(task)
-    await sse_manager.broadcast(project_id, "task_created", {"id": task_id, "title": body.title})
+    await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
     await persist_event(
         session,
         project_id,
         "task_created",
-        {"id": task_id, "title": body.title},
+        {"id": task.id, "title": body.title},
         agent=body.assignee,
     )
     await session.refresh(task)

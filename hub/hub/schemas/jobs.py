@@ -3,20 +3,20 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class JobCreate(BaseModel):
-    name: str
-    agent: str
-    message: str
-    cron: str
-    session_mode: str = "new"
+    name: str = Field(max_length=256)
+    agent: str = Field(max_length=64)
+    message: str = Field(max_length=10000)
+    cron: str = Field(max_length=128)
+    session_mode: str = Field(default="new", max_length=64)
     enabled: bool = True
-    # Allow id to be passed from CLI format
-    id: Optional[str] = None
     # Source tracking for sync logic
-    source: str = "hub"
+    source: str = Field(default="hub", max_length=64)
+
+    model_config = {"extra": "forbid"}
 
     @field_validator("session_mode")
     @classmethod
@@ -27,11 +27,13 @@ class JobCreate(BaseModel):
 
 
 class JobUpdate(BaseModel):
-    name: Optional[str] = None
-    message: Optional[str] = None
-    cron: Optional[str] = None
-    session_mode: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=256)
+    message: Optional[str] = Field(default=None, max_length=10000)
+    cron: Optional[str] = Field(default=None, max_length=128)
+    session_mode: Optional[str] = Field(default=None, max_length=64)
     enabled: Optional[bool] = None
+
+    model_config = {"extra": "forbid"}
 
     @field_validator("session_mode")
     @classmethod
@@ -42,32 +44,32 @@ class JobUpdate(BaseModel):
 
 
 class JobRunResponse(BaseModel):
-    id: str
-    job_id: str
+    id: str = Field(max_length=128)
+    job_id: str = Field(max_length=128)
     fired_at: datetime
-    status: str
-    trigger: str
-    session_id: Optional[str] = None
-    error_summary: Optional[str] = None
+    status: str = Field(max_length=64)
+    trigger: str = Field(max_length=64)
+    session_id: Optional[str] = Field(default=None, max_length=128)
+    error_summary: Optional[str] = Field(default=None, max_length=500)
 
     model_config = {"from_attributes": True}
 
 
 class JobResponse(BaseModel):
-    id: str
-    project_id: str
-    name: str
-    agent: str
-    message: str
-    cron: str
-    session_mode: str
+    id: str = Field(max_length=128)
+    project_id: str = Field(max_length=128)
+    name: str = Field(max_length=256)
+    agent: str = Field(max_length=64)
+    message: str = Field(max_length=10000)
+    cron: str = Field(max_length=128)
+    session_mode: str = Field(max_length=64)
     enabled: bool
     created_at: datetime
     last_run: Optional[datetime] = None
     next_run: Optional[datetime] = None
     run_count: int
-    last_session_id: Optional[str] = None
-    source: str = "hub"  # "local" or "hub"
+    last_session_id: Optional[str] = Field(default=None, max_length=128)
+    source: str = Field(default="hub", max_length=64)  # "local" or "hub"
     history: Optional[List[Dict[str, Any]]] = None  # Included in get_job only
 
     model_config = {"from_attributes": True}

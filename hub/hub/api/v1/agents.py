@@ -504,6 +504,9 @@ async def _load_role_content(role: str, project_id: str, db: AsyncSession) -> st
     If ProjectInstructions row exists for the project, its content is prepended
     with a '---' separator before the role guide.
     """
+    if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", role):
+        raise FileNotFoundError(f"Invalid role ID: {role}")
+
     role_file = Path(".agentweave/roles") / f"{role}.md"
     if role_file.exists():
         role_content = role_file.read_text(encoding="utf-8")
@@ -874,7 +877,7 @@ async def patch_agent(
 
 @router.get("/context")
 async def get_role_context(
-    role: str,
+    role: str = Query(..., min_length=1, max_length=64),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1112,6 +1115,13 @@ async def register_session(
     session_id = body.get("session_id")
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
+
+    # Reject collision with configured agents
+    session_data = await _get_session_data(project_id, session)
+    if session_data and name in session_data.get("agents", {}):
+        raise HTTPException(
+            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
+        )
 
     # Check if agent exists
     result = await session.execute(

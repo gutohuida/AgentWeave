@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _TASK_STATUSES = [
     "pending",
@@ -19,19 +19,18 @@ _PRIORITIES = ["low", "medium", "high", "critical"]
 
 
 class TaskCreate(BaseModel):
-    title: str
-    description: str = ""
-    status: str = "pending"
-    priority: str = "medium"
-    assignee: Optional[str] = None
-    assigner: Optional[str] = None
+    title: str = Field(max_length=256)
+    description: str = Field(default="", max_length=10000)
+    status: str = Field(default="pending", max_length=64)
+    priority: str = Field(default="medium", max_length=64)
+    assignee: Optional[str] = Field(default=None, max_length=64)
+    assigner: Optional[str] = Field(default=None, max_length=64)
     requirements: Optional[List[Any]] = None
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None
-    # Allow id/created_at to be passed from CLI format
-    id: Optional[str] = None
-    created_at: Optional[str] = None
+
+    model_config = {"extra": "forbid"}
 
     @model_validator(mode="before")
     @classmethod
@@ -41,6 +40,8 @@ class TaskCreate(BaseModel):
                 if data.get(key):
                     data = {**data, "assignee": data[key]}
                     break
+            # Remove legacy alias keys so extra='forbid' does not reject them
+            data = {k: v for k, v in data.items() if k not in ("assigned_to", "assigned_agent")}
         return data
 
     @field_validator("status")
@@ -59,11 +60,13 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    assignee: Optional[str] = None
-    description: Optional[str] = None
+    status: Optional[str] = Field(default=None, max_length=64)
+    priority: Optional[str] = Field(default=None, max_length=64)
+    assignee: Optional[str] = Field(default=None, max_length=64)
+    description: Optional[str] = Field(default=None, max_length=10000)
     notes: Optional[Any] = None
+
+    model_config = {"extra": "forbid"}
 
     @model_validator(mode="before")
     @classmethod
@@ -91,22 +94,22 @@ class TaskUpdate(BaseModel):
 
 
 class TaskResponse(BaseModel):
-    id: str
-    project_id: str
-    title: str
-    description: str
-    status: str
-    priority: str
-    assignee: Optional[str]
-    assigner: Optional[str]
+    id: str = Field(max_length=128)
+    project_id: str = Field(max_length=128)
+    title: str = Field(max_length=256)
+    description: str = Field(max_length=10000)
+    status: str = Field(max_length=64)
+    priority: str = Field(max_length=64)
+    assignee: Optional[str] = Field(default=None, max_length=64)
+    assigner: Optional[str] = Field(default=None, max_length=64)
     created_at: datetime
     updated: datetime
-    requirements: Optional[Any]
-    acceptance_criteria: Optional[Any]
-    deliverables: Optional[Any]
-    notes: Optional[Any]
-    assignee_status: Optional[str] = None
-    assignee_status_msg: Optional[str] = None
+    requirements: Optional[Any] = None
+    acceptance_criteria: Optional[Any] = None
+    deliverables: Optional[Any] = None
+    notes: Optional[Any] = None
+    assignee_status: Optional[str] = Field(default=None, max_length=64)
+    assignee_status_msg: Optional[str] = Field(default=None, max_length=10000)
     assignee_last_seen: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

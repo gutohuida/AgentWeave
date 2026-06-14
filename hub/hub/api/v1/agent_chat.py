@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -167,7 +167,7 @@ async def get_chat_history(
 @router.get("/{agent}/chat", response_model=List[ChatMessage])
 async def get_recent_chat(
     agent: str,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):

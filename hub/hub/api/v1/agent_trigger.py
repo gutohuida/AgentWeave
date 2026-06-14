@@ -29,18 +29,25 @@ router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 
 
 class TriggerAgentRequest(BaseModel):
-    agent: str = Field(..., description="Target agent name (e.g., 'claude', 'kimi')")
-    message: str = Field(..., description="Message/prompt to send to the agent")
+    agent: str = Field(
+        ..., max_length=64, description="Target agent name (e.g., 'claude', 'kimi')"
+    )
+    message: str = Field(
+        ..., max_length=10000, description="Message/prompt to send to the agent"
+    )
     session_mode: str = Field(
         default="new",
+        max_length=64,
         description="Session mode: 'new' for new session, 'resume' for existing session",
     )
     session_id: Optional[str] = Field(
         default=None,
+        max_length=128,
         description="Session ID to resume (required when session_mode='resume')",
     )
     work_dir: Optional[str] = Field(
         default=None,
+        max_length=4096,
         description="Working directory for the agent (defaults to project root)",
     )
 
@@ -83,6 +90,16 @@ async def trigger_agent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_mode must be 'new' or 'resume'",
         )
+
+    # Validate work_dir
+    if body.work_dir:
+        if ".." in body.work_dir or "~" in body.work_dir or any(
+            ord(c) < 32 for c in body.work_dir
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid work_dir",
+            )
 
     # Check if agent is in pilot mode and inspect recent heartbeat state.
     agent_result = await session.execute(
