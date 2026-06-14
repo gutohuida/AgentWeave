@@ -10,7 +10,7 @@ import sys
 import urllib.request
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
     from .config import AgentWeaveConfig
@@ -986,6 +986,7 @@ def cmd_session_register(args: argparse.Namespace) -> int:
                 agent,
                 model=runner_cfg.get("model"),
                 session_id=session_id,
+                cli=runner_cfg.get("cli"),
             )
         )
     else:
@@ -1972,52 +1973,118 @@ def cmd_log(args: argparse.Namespace) -> int:
 
 
 def _write_opencode_mcp_config(server_cmd: str) -> tuple:
-    """Write or merge AgentWeave MCP server into opencode.json.
+    """Write or merge AgentWeave MCP server into opencode config.
+
+    Writes to TWO locations so the MCP server is loaded regardless of
+    whether the watchdog's cwd resolves cleanly:
+
+    1. The project-root opencode.json (preferred for per-project config).
+    2. The user-global opencode.jsonc at ~/.config/opencode/opencode.jsonc
+       (fallback that always loads, even when opencode's --dir is a UNC
+       path the CLI cannot chdir into and the session is created in the
+       global "Windows" project).
+
+    Both files are merged additively: existing keys are preserved, the
+    `mcp.agentweave` block is (re)written with the current server_cmd.
+
+    Returns (success: bool, paths: list[str], message: str). The first
+    successful write determines success; if both fail, returns
+    (False, paths, error_msg).
+    """
+    import json as _json
+    import os as _os
+
+    mcp_block = {
+        "type": "local",
+        "command": [server_cmd],
+    }
+
+    project_path = Path("opencode.json")
+    global_path = Path(_os.path.expanduser("~")) / ".config" / "opencode" / "opencode.jsonc"
+    target_paths = [project_path, global_path]
+
+    written: list[str] = []
+    last_error: str = ""
+    for path in target_paths:
+        ok, msg = _merge_mcp_into_opencode_file(path, mcp_block, _json)
+        if ok:
+            written.append(str(path))
+        else:
+            last_error = msg
+
+    if written:
+        return True, written, f"updated {len(written)} file(s)"
+    return False, [str(p) for p in target_paths], last_error
+
+
+def _merge_mcp_into_opencode_file(path: Path, mcp_block: dict, _json) -> tuple:
+    """Merge an mcp.agentweave block into an opencode config file.
+
+    Returns (True, "") on success or (False, error_msg) on failure.
+    Preserves all existing keys; only the mcp.agentweave entry is overwritten.
+    """
+    if path.exists():
+        try:
+            existing = _json.loads(path.read_text(encoding="utf-8"))
+        except _json.JSONDecodeError as exc:
+            print_error(f"Malformed {path.name}: {exc}")
+            return False, f"malformed JSON in {path}: {exc}"
+        if not isinstance(existing, dict):
+            print_error(f"{path.name} exists but is not a JSON object")
+            return False, f"{path.name} is not a JSON object"
+        # Merge: overwrite only mcp.agentweave, preserve everything else
+        existing.setdefault("mcp", {})
+        if not isinstance(existing["mcp"], dict):
+            existing["mcp"] = {}
+        existing["mcp"]["agentweave"] = mcp_block
+    else:
+        # Create from scratch — start with a minimal valid opencode config
+        existing = {"$schema": "https://opencode.ai/config.json", "mcp": {"agentweave": mcp_block}}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        return False, f"failed to write {path}: {exc}"
+    return True, ""
+
+
+def _write_opencode_config_from_yml(yml_opencode_block: Dict[str, Any]) -> tuple:
+    """Write or merge the yml's opencode: block into opencode.json.
+
+    Add-or-replace semantics: for each top-level key in yml_opencode_block,
+    overwrite (or add) that key in opencode.json. Preserves all other
+    top-level keys the user has set manually (e.g., experimental, theme,
+    instructions, mcp). Same pattern as _write_opencode_mcp_config but
+    covers the full opencode.json schema, not just the mcp block.
 
     Returns (success: bool, path: str, message: str).
-    On malformed JSON: prints error + manual snippet, returns (False, path, error_msg).
+    On malformed JSON: prints error, returns (False, path, error_msg).
     """
     import json as _json
 
     opencode_json_path = Path("opencode.json")
-    mcp_entry = {
-        "mcp": {
-            "agentweave": {
-                "type": "local",
-                "command": [server_cmd],
-            }
-        }
-    }
 
     if opencode_json_path.exists():
         try:
             existing = _json.loads(opencode_json_path.read_text(encoding="utf-8"))
         except _json.JSONDecodeError as exc:
             print_error(f"Malformed opencode.json: {exc}")
-            print("Manual configuration snippet:")
-            print("  {")
-            print('    "mcp": {')
-            print('      "agentweave": {')
-            print('        "type": "local",')
-            print(f'        "command": ["{server_cmd}"]')
-            print("      }")
-            print("    }")
-            print("  }")
             return False, str(opencode_json_path), f"malformed JSON: {exc}"
 
         if not isinstance(existing, dict):
             print_error("opencode.json exists but is not a JSON object")
             return False, str(opencode_json_path), "not a JSON object"
 
-        # Merge: overwrite only mcp.agentweave, preserve everything else
-        existing.setdefault("mcp", {})
-        if not isinstance(existing["mcp"], dict):
-            existing["mcp"] = {}
-        existing["mcp"]["agentweave"] = mcp_entry["mcp"]["agentweave"]
+        # Add-or-replace: for each key in the yml block, overwrite or add it
+        for key, value in yml_opencode_block.items():
+            existing[key] = value
+
         opencode_json_path.write_text(_json.dumps(existing, indent=2) + "\n", encoding="utf-8")
     else:
         # Create from scratch
-        opencode_json_path.write_text(_json.dumps(mcp_entry, indent=2) + "\n", encoding="utf-8")
+        opencode_json_path.write_text(
+            _json.dumps(yml_opencode_block, indent=2) + "\n", encoding="utf-8"
+        )
 
     return True, str(opencode_json_path), "updated"
 
@@ -2058,9 +2125,9 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
 
         # File-based MCP registration for runners without an mcp add CLI command
         if mcp_add_cmd is None:
-            ok, path, msg = _write_opencode_mcp_config(server_cmd)
+            ok, paths, msg = _write_opencode_mcp_config(server_cmd)
             if ok:
-                results[agent] = f"{path} updated"
+                results[agent] = f"{', '.join(paths)} updated"
             else:
                 results[agent] = f"failed: {msg}"
             continue
@@ -2686,9 +2753,10 @@ def cmd_activate(_args: argparse.Namespace) -> int:
     This idempotent command:
     1. Configures transport (fetches API key from Hub if needed)
     2. Syncs agents from agentweave.yml to session.json
-    3. Registers MCP server if not already registered
-    4. Starts watchdog if not running
-    5. Syncs jobs from agentweave.yml to Hub
+    3. Auto-generates opencode.json from the yml's opencode: block (if any)
+    4. Registers MCP server if not already registered
+    5. Starts watchdog if not running
+    6. Syncs jobs from agentweave.yml to Hub
     """
     from .config import (
         AGENTWEAVE_YML_PATH,
@@ -2725,7 +2793,12 @@ def cmd_activate(_args: argparse.Namespace) -> int:
     if agents_result != 0:
         return agents_result
 
-    # Step 3: MCP setup
+    # Step 3: Auto-generate opencode.json from the yml's opencode: block (if any)
+    opencode_result = _activate_opencode_config(config)
+    if opencode_result != 0:
+        return opencode_result
+
+    # Step 4: MCP setup
     mcp_result = _activate_mcp()
     if mcp_result != 0:
         return mcp_result
@@ -2785,7 +2858,11 @@ def cmd_activate(_args: argparse.Namespace) -> int:
             elif _runner == "codex":
                 print(f"  {name}:  {_build_codex_launch_command(name, model=_model, yolo=_yolo)}")
             elif _runner == "opencode":
-                print(f"  {name}:  {_build_opencode_launch_command(name, model=_model)}")
+                _agent_cfg = config.agents.get(name)
+                _cli_override = _agent_cfg.cli if _agent_cfg is not None else None
+                print(
+                    f"  {name}:  {_build_opencode_launch_command(name, model=_model, cli=_cli_override)}"
+                )
             else:
                 # kimi and other runners
                 print(f'  {name}:  agentweave run --agent {name} "<task>"')
@@ -2840,9 +2917,17 @@ def _build_opencode_launch_command(
     model: Optional[str] = None,
     session_id: Optional[str] = None,
     prompt: str = "'<prompt>'",
+    cli: Optional[str] = None,
 ) -> str:
-    """Build a human-run OpenCode command with AgentWeave context injected."""
-    parts = ["opencode", "run"]
+    """Build a human-run OpenCode command with AgentWeave context injected.
+
+    The optional `cli` argument is the per-agent `cli:` override from
+    agentweave.yml. When provided, the printed command uses that exact
+    binary path instead of the bare `opencode` name. This is what
+    `agentweave switch <opencode-agent>` and `agentweave activate` show
+    so the human-run command matches what the watchdog will execute.
+    """
+    parts = [cli or "opencode", "run"]
     if session_id != "":
         parts += ["--session", session_id or f"agentweave-{agent}"]
     if model:
@@ -2940,6 +3025,7 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
             "env": agent.env,
             "base_url": agent.base_url,
             "runner_options": agent.runner_options,
+            "cli": agent.cli,
         }
         for name, agent in config.agents.items()
     }
@@ -3043,45 +3129,77 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
 
 
 def _activate_mcp() -> int:
-    """Register MCP server if not already registered."""
+    """Register MCP server if not already registered.
+
+    Checks MCP registration for every session agent (not just the
+    principal), because the principal's CLI check cannot see file-based
+    registrations like opencode's mcp.agentweave block in opencode.json.
+    If any agent is missing MCP, runs cmd_mcp_setup to register it for
+    all agents (idempotent: re-registration is a no-op or reports
+    'already configured').
+    """
+    import json as _json
     import subprocess as _sp
 
-    # Check if MCP is already registered by testing with a dummy call
-    # This is a heuristic - we try to check if the mcp command works
     session = Session.load()
     if not session:
         return 0  # No session, skip MCP
 
-    # Try to check if MCP is configured for the principal agent
-    principal = session.principal
-    runner_cfg = session.get_runner_config(principal)
-    runner = runner_cfg.get("runner", "native")
-
     from .constants import RUNNER_CONFIGS
 
-    rc = RUNNER_CONFIGS.get(runner, RUNNER_CONFIGS["native"])
-    cli = rc.get("cli") or principal
+    # Check MCP registration status for each session agent using the
+    # registration method appropriate to its runner (CLI list vs file).
+    all_registered = True
+    for agent_name in session.agent_names:
+        runner_cfg = session.get_runner_config(agent_name)
+        runner = runner_cfg.get("runner", "native")
+        rc = RUNNER_CONFIGS.get(runner, RUNNER_CONFIGS["native"])
 
-    # Check if agentweave-mcp is already in the MCP list
-    try:
-        check_result = _sp.run(
-            [cli, "mcp", "list"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if "agentweave" in check_result.stdout:
-            print("[MCP] Already registered")
-            return 0
-    except Exception:
-        _emit_nonfatal_diagnostic(
-            "mcp_check",
-            f"Could not inspect MCP registration for {principal}",
-            severity="warn",
-        )
-        pass  # Continue to registration attempt
+        if rc.get("mcp_add_cmd") is None:
+            # File-based registration (e.g. opencode uses opencode.json).
+            # The principal's CLI check can't see this — must inspect the
+            # file directly.
+            opencode_json_path = Path("opencode.json")
+            if not opencode_json_path.exists():
+                all_registered = False
+                break
+            try:
+                data = _json.loads(opencode_json_path.read_text(encoding="utf-8"))
+            except (OSError, _json.JSONDecodeError):
+                all_registered = False
+                break
+            if not isinstance(data, dict) or "agentweave" not in (data.get("mcp") or {}):
+                all_registered = False
+                break
+        else:
+            # CLI-based registration: ask the runner's CLI to list MCPs.
+            cli = rc.get("cli") or agent_name
+            try:
+                check = _sp.run(
+                    [cli, "mcp", "list"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            except (FileNotFoundError, _sp.TimeoutExpired, OSError):
+                _emit_nonfatal_diagnostic(
+                    "mcp_check",
+                    f"Could not inspect MCP registration for {agent_name} (runner={runner})",
+                    severity="warn",
+                )
+                all_registered = False
+                break
+            if "agentweave" not in check.stdout:
+                all_registered = False
+                break
 
-    # Try to register
+    if all_registered:
+        print("[MCP] Already registered")
+        return 0
+
+    # At least one agent is missing MCP — register for the whole session.
+    # cmd_mcp_setup is idempotent: it will report 'already configured'
+    # for agents that already have MCP, and add the missing ones.
     try:
         mcp_args_result = cmd_mcp_setup(argparse.Namespace())
         if mcp_args_result == 0:
@@ -3090,6 +3208,32 @@ def _activate_mcp() -> int:
     except Exception as exc:
         print_warning(f"Could not register MCP: {exc}")
         _emit_nonfatal_diagnostic("mcp_registration", f"Could not register MCP: {exc}")
+        return 0  # Non-fatal
+
+
+def _activate_opencode_config(config) -> int:
+    """Auto-generate opencode.json from the yml's opencode: block (if any).
+
+    If the yml has a top-level `opencode:` block, write/merge it into
+    opencode.json at the project root. Add-or-replace semantics preserve
+    any other top-level keys the user has set manually.
+    """
+    if config.opencode is None:
+        return 0
+
+    try:
+        ok, path, msg = _write_opencode_config_from_yml(config.opencode)
+        if ok:
+            print(f"[OPENCODE] {path} updated from agentweave.yml")
+            return 0
+        else:
+            print_warning(f"Could not auto-generate opencode.json: {msg}")
+            return 0  # Non-fatal: opencode.json generation is best-effort
+    except Exception as exc:
+        print_warning(f"opencode.json auto-generation skipped: {exc}")
+        _emit_nonfatal_diagnostic(
+            "opencode_json_generation", f"Could not auto-generate opencode.json: {exc}"
+        )
         return 0  # Non-fatal
 
 
@@ -3989,10 +4133,13 @@ def cmd_switch(args: argparse.Namespace) -> int:
         print()
         print("Launch command:")
         model = runner_config.get("model")
-        print(f"  {_build_opencode_launch_command(agent, model=model)}")
+        cli_override = runner_config.get("cli")
+        print(f"  {_build_opencode_launch_command(agent, model=model, cli=cli_override)}")
         print()
         print("Or start a new session:")
-        print(f"  {_build_opencode_launch_command(agent, model=model, session_id='')}")
+        print(
+            f"  {_build_opencode_launch_command(agent, model=model, session_id='', cli=cli_override)}"
+        )
         return 0
 
     if runner == "codex":

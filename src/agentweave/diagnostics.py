@@ -577,6 +577,23 @@ def _runner_cli(agent: str, runner: str) -> str | None:
     return str(cli) if cli else None
 
 
+def _runner_cli_override(agent: str, session: Any) -> str | None:
+    """Return the per-agent `cli:` override from session, if any.
+
+    Surfaced separately from _runner_cli so callers can detect an explicit
+    pin and adjust the "available" check accordingly (absolute path vs.
+    PATH lookup).
+    """
+    if session is None:
+        return None
+    try:
+        cfg = session.get_runner_config(agent)
+    except Exception:
+        return None
+    value = cfg.get("cli")
+    return str(value) if value else None
+
+
 def check_agent_readiness(agent: str, session: Any | None = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
@@ -637,15 +654,44 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
             )
         )
     cli = _runner_cli(agent, runner)
+    cli_override = _runner_cli_override(agent, session)
     if cli:
-        if shutil.which(cli):
+        if cli_override:
+            # User explicitly pinned the binary in agentweave.yml / session.
+            # An absolute path bypasses PATH entirely — only check the file.
+            if os.path.isfile(cli_override) and os.access(cli_override, os.X_OK):
+                results.append(
+                    ok(
+                        "agent_cli_available",
+                        agent,
+                        f"Runner CLI {cli_override!r} is available (pinned via cli:).",
+                        category="runner",
+                        data={"cli": cli_override, "cli_pinned": True},
+                    )
+                )
+            else:
+                results.append(
+                    fail(
+                        "agent_cli_missing",
+                        agent,
+                        f"Pinned runner CLI {cli_override!r} is not an executable file.",
+                        hint=(
+                            f"Check that the path in agents.{agent}.cli exists and "
+                            f"is executable, or remove the override to fall back "
+                            f"to PATH lookup for {cli!r}."
+                        ),
+                        category="runner",
+                        data={"cli": cli_override, "cli_pinned": True},
+                    )
+                )
+        elif shutil.which(cli):
             results.append(
                 ok(
                     "agent_cli_available",
                     agent,
                     f"Runner CLI {cli!r} is available.",
                     category="runner",
-                    data={"cli": cli},
+                    data={"cli": cli, "cli_pinned": False},
                 )
             )
         else:
@@ -654,9 +700,12 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
                     "agent_cli_missing",
                     agent,
                     f"Runner CLI {cli!r} was not found in PATH.",
-                    hint=f"Install {cli} or update the runner for {agent}.",
+                    hint=(
+                        f"Install {cli}, update the runner for {agent}, or pin the "
+                        f"binary with `cli: /absolute/path/to/{cli}` in agentweave.yml."
+                    ),
                     category="runner",
-                    data={"cli": cli},
+                    data={"cli": cli, "cli_pinned": False},
                 )
             )
 

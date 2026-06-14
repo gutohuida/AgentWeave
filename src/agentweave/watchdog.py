@@ -6,6 +6,7 @@ import logging
 import os
 import queue
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -428,7 +429,12 @@ class Watchdog:
         session = Session.load()
         if session:
             runner_config = session.get_runner_config(agent)
-            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+            # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
+            # the minimax provider). Other runners (kimi, codex, claude, native)
+            # are NOT yet enabled — see TODO at the env-resolution block.
+            if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+                "env_vars"
+            ):
                 env_vars = runner_config.get("env_vars")
 
         # Fire in background thread
@@ -832,7 +838,12 @@ class Watchdog:
         session = Session.load()
         if session:
             runner_config = session.get_runner_config(agent)
-            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+            # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
+            # the minimax provider). Other runners (kimi, codex, claude, native)
+            # are NOT yet enabled — see TODO at the env-resolution block.
+            if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+                "env_vars"
+            ):
                 env_vars = runner_config.get("env_vars")
 
         # Fire in background thread
@@ -1255,30 +1266,78 @@ def _agent_ping_cmd(
         return cmd
 
     if runner_type == "opencode":
-        # OpenCode: stable session IDs, no output parsing needed
-        cli = rc.get("cli", "opencode")
+        # OpenCode: --session <id> continues an EXISTING session; opencode
+        # errors out with "Session not found" if the ID does not exist in
+        # its DB. So we use --title for new sessions and let opencode
+        # create them on first run. For continuity, _run_cmd parses the
+        # JSON output to capture the real opencode sessionID (e.g.
+        # "ses_13e16807bffe1TAS5GVCeHxZ0z") and saves it for the next run;
+        # the next invocation will see it in known_session_id and pass it
+        # via --session to actually continue the previous conversation.
+        #
+        # Per-agent `cli:` override (in agentweave.yml / session.json) lets the
+        # user pin the opencode binary to an absolute path. This matters on
+        # hosts with multiple opencode installs on PATH (e.g. a stale Linux
+        # 1.14.28 shadowing a working Windows 1.17.x from npm under WSL) —
+        # without it, `shutil.which` would resolve the wrong one and the
+        # model lookup would fail with `ProviderModelNotFoundError` even
+        # though the yml and auth.json are correct.
+        session = Session.load()
+        cli_override: Optional[str] = None
+        if session:
+            cli_override = session.get_runner_config(agent).get("cli")
+        cli = cli_override or rc.get("cli", "opencode")
         subcommand = rc.get("subcommand", "run")
         cmd = [cli, subcommand]
 
-        # Stable session ID: agentweave-{agent}
-        stable_session_id = f"agentweave-{agent}"
+        # Stable friendly name: agentweave-{agent}
+        stable_title = f"agentweave-{agent}"
+
+        # Opencode session IDs are auto-generated as "ses_<alnum>" (~30
+        # chars). If the saved value does not match that shape (e.g. a
+        # legacy stable name like "agentweave-opencode" from before we
+        # captured real sessionIDs), treat it as missing so we fall back
+        # to --title instead of feeding opencode an invalid --session.
+        import re as _re
+
+        _OPENCODE_SID_RE = _re.compile(r"^ses_[A-Za-z0-9]{20,}$")
+        if session_id is not None and not _OPENCODE_SID_RE.match(session_id):
+            session_id = None
+
         if session_id is None:
-            session_id = stable_session_id
-            # Pre-save so subsequent pings know the session ID
-            _save_agent_session(agent, stable_session_id)
-        cmd += ["--session", session_id]
+            # First run for this agent — no real opencode sessionID yet.
+            # Use --title to create a new session named after the agent.
+            # The real sessionID will be captured from the JSON output and
+            # saved by _run_cmd at exit, so subsequent runs can continue.
+            cmd += ["--title", stable_title]
+        else:
+            # Resuming a known opencode session (e.g. ses_...)
+            cmd += ["--session", session_id]
 
         # Model flag if configured
-        session = Session.load()
         if session:
             model = session.get_runner_config(agent).get("model")
             if model:
                 cmd += ["--model", model]
 
-        # Context file injection via --file
-        context_file = AGENT_CONTEXT_DIR / f"{agent}.md"
+        # Context file injection via --file.
+        # Use absolute path (matches the codex branch) so opencode can find
+        # the file even when the watchdog is launched from a UNC path
+        # (e.g. \\wsl.localhost\...) where Windows CMD cannot resolve
+        # relative paths. Mirrors codex's rationale at line ~1305.
+        context_file = AGENT_CONTEXT_DIR.resolve() / f"{agent}.md"
         if context_file.exists():
             cmd += ["--file", str(context_file)]
+
+        # Pin the opencode working directory to the project root so it
+        # resolves "opencode.json" (which holds the mcp.agentweave block)
+        # from the right place. Without this, when the watchdog runs from
+        # a UNC cwd that opencode cannot chdir into (Windows CMD falls
+        # back to C:\Windows), opencode creates a session in the global
+        # "Windows" project and never finds the project-root opencode.json
+        # — leaving AgentWeave MCP tools unavailable to the agent.
+        project_root = AGENT_CONTEXT_DIR.resolve().parent.parent
+        cmd += ["--dir", str(project_root)]
 
         cmd += ["--format", "json", prompt]
         return cmd
@@ -2467,6 +2526,31 @@ def _do_run_agent_subprocess(
                         file=sys.stderr,
                     )
 
+            # Generic {name: name} resolution: replace placeholder values with
+            # the actual env-var values read from the parent process environment.
+            # This is what makes `env: [MINIMAX_API_KEY]` on an opencode agent
+            # actually reach the opencode subprocess.
+            # TODO(env-forwarding): when extending to other runners (kimi/codex/
+            # claude/native), make sure their subprocess invocation also picks
+            # up proc_env; some paths (transport/local.py, transport/git.py)
+            # call subprocess.Popen without env= and won't get this benefit.
+            for var_name in list(env_vars.keys()):
+                if var_name in ("ANTHROPIC_API_KEY_VAR", "ANTHROPIC_BASE_URL"):
+                    # Already handled above (claude_proxy-specific)
+                    continue
+                if env_vars[var_name] == var_name:
+                    # name->name mapping: resolve via os.environ
+                    value = os.environ.get(var_name)
+                    if value:
+                        proc_env[var_name] = value
+                    else:
+                        proc_env.pop(var_name, None)
+                        print(
+                            f"[WARN] {var_name} is not set in the environment. "
+                            f"Export it before starting the watchdog.",
+                            file=sys.stderr,
+                        )
+
         # Wire mode requires bidirectional stdin/stdout communication
         stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
 
@@ -2476,6 +2560,18 @@ def _do_run_agent_subprocess(
         cwd = None
         if is_codex:
             cwd = str(_codex_working_dir())
+
+        # Resolve the CLI binary to an absolute path so subprocess.Popen
+        # does not depend on the inherited cwd's ability to look up PATH
+        # entries. Without this, when the watchdog is launched from a UNC
+        # cwd (e.g. \\wsl.localhost\... under WSL), Windows can fail to
+        # find `.cmd` shims like `opencode.cmd` and raise WinError 2.
+        # shutil.which respects PATHEXT, so a bare "opencode" resolves
+        # to "opencode.cmd" — the file subprocess.Popen can actually exec.
+        if run_cmd and not os.path.isabs(run_cmd[0]):
+            resolved = shutil.which(run_cmd[0])
+            if resolved:
+                run_cmd = [resolved, *run_cmd[1:]]
 
         proc = subprocess.Popen(
             run_cmd,
@@ -2562,9 +2658,49 @@ def _do_run_agent_subprocess(
                 # Parse Kimi's Python-repr events streamed in real-time
                 readable_lines = kimi_parser.feed(line) if kimi_parser is not None else []
             elif is_opencode:
-                # OpenCode outputs JSON to stdout; we only monitor exit code.
-                # Do not parse or post stdout lines to avoid noise.
+                # OpenCode --format json emits one event per line:
+                #   {"type": "step_start", "sessionID": "ses_...", "part": {...}}
+                #   {"type": "text",       "sessionID": "ses_...", "part": {"text": "..."}}
+                #   {"type": "step_finish","sessionID": "ses_...", "part": {...}}
+                #   {"type": "error",      "sessionID": "ses_...", "error": {...}}
+                # Parse to (a) capture the real sessionID for continuity on
+                # the next run, and (b) forward text/error events to the Hub
+                # so the response is actually visible (previously everything
+                # was discarded, which made silent upstream failures look
+                # like successes — see the "0 output line(s)" bug).
                 readable_lines = []
+                try:
+                    evt = json.loads(line)
+                except (ValueError, TypeError):
+                    continue
+
+                evt_type = evt.get("type")
+
+                # Always update the session ID — even on a "resume" run
+                # opencode may have rotated to a new ses_ ID. The real ID
+                # is what the Hub and _save_agent_session need.
+                evt_sid = evt.get("sessionID")
+                if evt_sid:
+                    session_id = evt_sid
+                    session_id_ref[0] = evt_sid
+
+                if evt_type == "text":
+                    text = (evt.get("part") or {}).get("text", "")
+                    if text:
+                        readable_lines.append(text)
+                elif evt_type == "error":
+                    err = evt.get("error") or {}
+                    err_name = err.get("name", "Error")
+                    err_data = err.get("data") or {}
+                    err_msg = err_data.get("message", "opencode error")
+                    err_ref = err_data.get("ref", "")
+                    prefix = f"[opencode error] {err_name}: {err_msg}"
+                    if err_ref:
+                        prefix += f" (ref: {err_ref})"
+                    readable_lines.append(prefix)
+                # Other event types (step_start, step_finish, tool_call, etc.)
+                # are intentionally not posted to the Hub to keep the output
+                # stream focused on the assistant's response.
             else:
                 # Try to extract session_id from JSONL stream (Claude/claude_proxy/codex)
                 if session_id is None:
@@ -2763,13 +2899,26 @@ def _do_run_agent_subprocess(
 
 
 def _check_cli_available(agent: str) -> bool:
-    """Check if an agent's CLI is available in PATH."""
-    import shutil
+    """Check if an agent's CLI is available in PATH.
+
+    An absolute path in `session.agents[agent].cli` short-circuits the
+    PATH lookup — we only need `os.path.isfile` on the explicit value.
+    """
+    from .session import Session
 
     runner_type = _get_runner_type(agent)
     rc = RUNNER_CONFIGS.get(runner_type, RUNNER_CONFIGS["native"])
+    cli_override: Optional[str] = None
+    try:
+        session = Session.load()
+        if session and agent in session.agent_names:
+            cli_override = session.get_runner_config(agent).get("cli")
+    except Exception:
+        cli_override = None
+    if cli_override:
+        return os.path.isfile(cli_override) and os.access(cli_override, os.X_OK)
     cli = rc.get("cli") or agent  # native: use agent name as CLI
-    return shutil.which(cli) is not None
+    return shutil.which(cli) is not None  # shutil: module-level import
 
 
 def _make_ping_callback(
@@ -2892,7 +3041,12 @@ def _make_ping_callback(
         env_vars = None
         if _sess:
             runner_config = _sess.get_runner_config(recipient)
-            if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+            # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
+            # the minimax provider). Other runners (kimi, codex, claude, native)
+            # are NOT yet enabled — see TODO at the env-resolution block.
+            if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+                "env_vars"
+            ):
                 env_vars = runner_config.get("env_vars")
 
         import time as _t
@@ -3063,7 +3217,12 @@ def _make_direct_trigger_callback(
 
         # Load env_vars from session config for claude_proxy agents
         env_vars = None
-        if runner_config.get("runner") == "claude_proxy" and runner_config.get("env_vars"):
+        # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
+        # the minimax provider). Other runners (kimi, codex, claude, native)
+        # are NOT yet enabled — see TODO at the env-resolution block.
+        if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+            "env_vars"
+        ):
             env_vars = runner_config.get("env_vars")
 
         logger.info(

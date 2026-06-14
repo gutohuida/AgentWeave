@@ -1,7 +1,8 @@
 """Tests for watchdog dispatch logic."""
 
 import json
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -12,6 +13,7 @@ from agentweave.watchdog import (
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
     _parse_codex_stream_line,
+    _run_agent_subprocess,
     _run_codex_mcp_turn,
     _write_codex_context_usage,
 )
@@ -103,15 +105,24 @@ class TestAgentPingCmdOpencode:
             yield
 
     def test_opencode_basic_no_session_no_model(self):
-        """Basic dispatch without session or model."""
+        """Basic dispatch without session or model.
+
+        On first run (no captured real sessionID yet), opencode is invoked
+        with --title so it creates a new session. The real sessionID
+        (ses_...) is then captured from the JSON output and persisted for
+        the next run, which will use --session instead. --dir pins the
+        working directory to the project root so opencode finds the
+        mcp.agentweave block in opencode.json.
+        """
         cmd = _agent_ping_cmd("opencode-qa", "do the task")
         assert cmd[0] == "opencode"
         assert cmd[1] == "run"
-        assert cmd[2] == "--session"
+        assert cmd[2] == "--title"
         assert cmd[3] == "agentweave-opencode-qa"
-        assert cmd[4] == "--format"
-        assert cmd[5] == "json"
-        assert cmd[6] == "do the task"
+        assert cmd[4] == "--dir"
+        assert cmd[6] == "--format"
+        assert cmd[7] == "json"
+        assert cmd[8] == "do the task"
 
     def test_opencode_with_model(self):
         """Dispatch with model flag when agent config has a model."""
@@ -121,34 +132,272 @@ class TestAgentPingCmdOpencode:
         assert cmd[idx + 1] == "ollama/qwen2.5-coder:7b"
 
     def test_opencode_with_context_file(self):
-        """Role file injected when present."""
+        """Role file injected when present, with absolute path so opencode
+        can find it from any cwd (including UNC paths like \\wsl.localhost\...)."""
         context_file = self.context_dir / "opencode-dev.md"
         context_file.write_text("# Context")
         cmd = _agent_ping_cmd("opencode-dev", "do the task")
         assert "--file" in cmd
         idx = cmd.index("--file")
-        assert cmd[idx + 1] == str(context_file)
+        file_arg = Path(cmd[idx + 1])
+        # Path must be absolute so it resolves from any cwd the opencode
+        # subprocess inherits (notably UNC paths under WSL where Windows
+        # CMD cannot chdir).
+        assert file_arg.is_absolute()
+        assert file_arg.name == "opencode-dev.md"
+        # The resolved file must actually point at the context file we wrote.
+        assert file_arg.resolve() == context_file.resolve()
+
+    def test_opencode_context_path_works_under_unc_cwd(self, tmp_path, monkeypatch):
+        r"""Regression: when the watchdog is launched from a UNC path
+        (e.g. \\wsl.localhost\Ubuntu\... under WSL), Windows CMD cannot
+        chdir there, so the opencode subprocess inherits a bad cwd and
+        cannot resolve relative paths. The --file arg must therefore be
+        absolute, not relative to AGENT_CONTEXT_DIR."""
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        # Simulate a UNC cwd
+        monkeypatch.chdir(tmp_path)
+
+        # Build a separate test project on disk; resolve the context dir
+        # against a real absolute path.
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        ctx_dir = project_root / ".agentweave" / "context"
+        ctx_dir.mkdir(parents=True)
+        (ctx_dir / "opencode-unc.md").write_text("# Context")
+
+        session_data = {
+            "id": "test-session",
+            "name": "Test",
+            "mode": "hierarchical",
+            "principal": "claude",
+            "agents": {
+                "opencode-unc": {"runner": "opencode", "model": "minimax/M3"},
+            },
+        }
+        session = Session(session_data)
+        with patch("agentweave.watchdog.AGENTS_DIR", project_root / ".agentweave" / "agents"), patch(
+            "agentweave.watchdog.AGENT_CONTEXT_DIR", ctx_dir
+        ), patch("agentweave.session.Session.load", return_value=session):
+            cmd = wd._agent_ping_cmd("opencode-unc", "do the task")
+
+        idx = cmd.index("--file")
+        file_arg = Path(cmd[idx + 1])
+        assert file_arg.is_absolute(), (
+            f"opencode --file must be absolute, got relative: {file_arg}"
+        )
+        # Must point to the actual file regardless of cwd
+        assert file_arg.exists()
 
     def test_opencode_without_context_file(self):
         """No --file flag when context file does not exist."""
         cmd = _agent_ping_cmd("opencode-qa", "do the task")
         assert "--file" not in cmd
 
-    def test_opencode_preserves_provided_session_id(self):
-        """When a session_id is provided, it is used instead of computing stable id."""
-        cmd = _agent_ping_cmd("opencode-dev", "do the task", session_id="custom-session-123")
+    def test_opencode_uses_session_flag_for_real_session_id(self):
+        """A real opencode sessionID (ses_...) is passed via --session to
+        continue the previous conversation."""
+        real_sid = "ses_13e16807bffe1TAS5GVCeHxZ0z"
+        cmd = _agent_ping_cmd("opencode-dev", "do the task", session_id=real_sid)
         assert "--session" in cmd
+        assert "--title" not in cmd
         idx = cmd.index("--session")
-        assert cmd[idx + 1] == "custom-session-123"
+        assert cmd[idx + 1] == real_sid
 
-    def test_opencode_saves_stable_session_id(self):
-        """Stable session ID is saved to agent session file."""
+    def test_opencode_rejects_legacy_stable_id_as_session(self):
+        """Legacy stable IDs like 'agentweave-opencode' (saved before we
+        captured real sessionIDs) must NOT be passed to --session — that
+        would cause 'Session not found'. They should be silently ignored
+        and replaced with --title instead."""
+        cmd = _agent_ping_cmd("opencode-dev", "do the task", session_id="agentweave-opencode")
+        assert "--title" in cmd
+        assert "--session" not in cmd
+        idx = cmd.index("--title")
+        assert cmd[idx + 1] == "agentweave-opencode-dev"
+
+    def test_opencode_does_not_pre_save_title_as_session_id(self):
+        """First run uses --title; the real sessionID will be saved by
+        _run_cmd at exit from the JSON output. We must NOT pre-save the
+        title into the agent session file because that's not a valid
+        opencode sessionID and would cause the next run to fail."""
         session_file = self.agents_dir / "opencode-qa-session.json"
         assert not session_file.exists()
         _agent_ping_cmd("opencode-qa", "do the task")
-        assert session_file.exists()
-        data = json.loads(session_file.read_text())
-        assert data["session_id"] == "agentweave-opencode-qa"
+        # The pre-save from _agent_ping_cmd has been removed; the real
+        # sessionID write happens in _run_cmd after the opencode process
+        # has emitted at least one JSON event with the real ses_ ID.
+        assert not session_file.exists()
+
+    def test_opencode_pins_dir_to_project_root(self):
+        """opencode must be invoked with --dir pointing at the project
+        root so it can find opencode.json (which holds the mcp.agentweave
+        block). Without this, when the watchdog runs from a UNC cwd,
+        opencode falls back to C:\\Windows and never loads the project
+        config, leaving MCP tools unavailable to the agent."""
+        from pathlib import Path as _Path
+        cmd = _agent_ping_cmd("opencode-qa", "do the task")
+        assert "--dir" in cmd
+        idx = cmd.index("--dir")
+        dir_arg = _Path(cmd[idx + 1])
+        assert dir_arg.is_absolute()
+        # The dir must be the parent of .agentweave/context
+        # (i.e. the project root that contains opencode.json)
+        expected_root = self.context_dir.resolve().parent.parent
+        assert dir_arg == expected_root
+
+
+class TestOpencodeEnvForwarding:
+    """Tests for env-var forwarding from session.json to the opencode subprocess.
+
+    Mirrors the proxy test at tests/test_diagnostics.py:90-127, but for the
+    opencode runner. Verifies the generic {name: name} resolution pass added
+    to _run_cmd in watchdog.py.
+    """
+
+    def test_opencode_resolves_name_to_name_env_var(self, tmp_path, monkeypatch):
+        """MINIMAX_API_KEY declared in env_vars resolves to its os.environ value."""
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("MINIMAX_API_KEY", "test-key-value")
+        session = Session.create(name="Test", agents=["opencode-dev"])
+        session.set_runner_config(
+            "opencode-dev",
+            "opencode",
+            {
+                "model": "minimax/M3",
+                "env_vars": {"MINIMAX_API_KEY": "MINIMAX_API_KEY"},
+            },
+        )
+        session.save()
+        monkeypatch.setattr(
+            "agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode"
+        )
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        popen = MagicMock()
+        # Popen returns an object with .communicate() / .wait() that doesn't hang
+        popen.return_value.communicate.return_value = ("", "")
+        popen.return_value.wait.return_value = 0
+        popen.return_value.stdout = iter([])
+        popen.return_value.stderr = iter([])
+        popen.return_value.returncode = 0
+        monkeypatch.setattr(wd.subprocess, "Popen", popen)
+        transport = MagicMock()
+
+        _run_agent_subprocess(
+            "opencode-dev",
+            ["opencode", "run", "do the task"],
+            "subject",
+            transport,
+            False,
+            {"MINIMAX_API_KEY": "MINIMAX_API_KEY"},
+        )
+
+        popen.assert_called()
+        _, kwargs = popen.call_args
+        env = kwargs.get("env")
+        assert env is not None
+        assert env["MINIMAX_API_KEY"] == "test-key-value"
+
+    def test_opencode_warns_and_launches_when_env_var_unset(self, tmp_path, monkeypatch, capsys):
+        """Missing env var is a warning, not a blocker, for opencode agents."""
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        session = Session.create(name="Test", agents=["opencode-dev"])
+        session.set_runner_config(
+            "opencode-dev",
+            "opencode",
+            {
+                "model": "minimax/M3",
+                "env_vars": {"MINIMAX_API_KEY": "MINIMAX_API_KEY"},
+            },
+        )
+        session.save()
+        monkeypatch.setattr(
+            "agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode"
+        )
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        popen = MagicMock()
+        popen.return_value.communicate.return_value = ("", "")
+        popen.return_value.wait.return_value = 0
+        popen.return_value.stdout = iter([])
+        popen.return_value.stderr = iter([])
+        popen.return_value.returncode = 0
+        monkeypatch.setattr(wd.subprocess, "Popen", popen)
+        transport = MagicMock()
+
+        _run_agent_subprocess(
+            "opencode-dev",
+            ["opencode", "run", "do the task"],
+            "subject",
+            transport,
+            False,
+            {"MINIMAX_API_KEY": "MINIMAX_API_KEY"},
+        )
+
+        # opencode does NOT block on missing keys (unlike claude_proxy)
+        popen.assert_called()
+        # a [WARN] was emitted
+        captured = capsys.readouterr()
+        assert "MINIMAX_API_KEY" in captured.err
+        assert "not set" in captured.err
+
+    def test_opencode_env_vars_entry_skips_name_to_name_resolution_for_literal_values(self, tmp_path, monkeypatch):
+        """Literal-value entries (key != value) are passed through unchanged."""
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("LITERAL_VAR", "should-not-be-overridden")
+        session = Session.create(name="Test", agents=["opencode-dev"])
+        # claude_proxy-style: a literal value mapping (key != value) should
+        # NOT be touched by the generic resolution pass.
+        session.set_runner_config(
+            "opencode-dev",
+            "opencode",
+            {
+                "model": "minimax/M3",
+                "env_vars": {"LITERAL_VAR": "literal-value"},
+            },
+        )
+        session.save()
+        monkeypatch.setattr(
+            "agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode"
+        )
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        popen = MagicMock()
+        popen.return_value.communicate.return_value = ("", "")
+        popen.return_value.wait.return_value = 0
+        popen.return_value.stdout = iter([])
+        popen.return_value.stderr = iter([])
+        popen.return_value.returncode = 0
+        monkeypatch.setattr(wd.subprocess, "Popen", popen)
+        transport = MagicMock()
+
+        _run_agent_subprocess(
+            "opencode-dev",
+            ["opencode", "run", "do the task"],
+            "subject",
+            transport,
+            False,
+            {"LITERAL_VAR": "literal-value"},
+        )
+
+        popen.assert_called()
+        _, kwargs = popen.call_args
+        env = kwargs.get("env")
+        assert env is not None
+        # Literal value passes through; not replaced by os.environ value
+        assert env["LITERAL_VAR"] == "literal-value"
 
 
 class TestAgentPingCmdCodex:

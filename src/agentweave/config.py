@@ -73,6 +73,7 @@ class AgentConfig:
     principal: bool = False
     base_url: Optional[str] = None
     runner_options: Optional[Dict[str, Any]] = None
+    cli: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -93,6 +94,8 @@ class AgentConfig:
             result["base_url"] = self.base_url
         if self.runner_options is not None:
             result["runner_options"] = self.runner_options
+        if self.cli:
+            result["cli"] = self.cli
         return result
 
 
@@ -149,6 +152,7 @@ class AgentWeaveConfig:
     agents: Dict[str, AgentConfig] = field(default_factory=dict)
     jobs: Optional[Dict[str, JobConfig]] = None
     quality: Optional[QualityConfig] = None
+    opencode: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -161,6 +165,8 @@ class AgentWeaveConfig:
             result["jobs"] = {name: cfg.to_dict() for name, cfg in self.jobs.items()}
         if self.quality is not None:
             result["quality"] = self.quality.to_dict()
+        if self.opencode is not None:
+            result["opencode"] = self.opencode
         return result
 
 
@@ -245,6 +251,24 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
                 line_map.get(f"agents.{name}.base_url"),
             )
 
+    # Validate cli override (optional, runner-relative). When set, it should be
+    # a non-empty string — the watchdog trusts it as the literal CLI to invoke.
+    # We don't validate that the file exists here; the user may be on a host
+    # where the binary is only present at runtime, and a missing path is caught
+    # at launch time with a clearer error than a YAML parse failure.
+    cli = data.get("cli")
+    if cli is not None:
+        if not isinstance(cli, str):
+            raise ConfigValidationError(
+                f"agents.{name}.cli: must be a string, got {type(cli).__name__}",
+                line_map.get(f"agents.{name}.cli"),
+            )
+        if not cli:
+            raise ConfigValidationError(
+                f"agents.{name}.cli: must be a non-empty string",
+                line_map.get(f"agents.{name}.cli"),
+            )
+
     return AgentConfig(
         runner=runner,
         model=data.get("model"),
@@ -255,6 +279,7 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
         principal=bool(data.get("principal", False)),
         base_url=base_url,
         runner_options=data.get("runner_options"),
+        cli=cli,
     )
 
 
@@ -437,12 +462,22 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
             dependency_check=bool(quality_data.get("dependency_check", False)),
         )
 
+    # Parse opencode section (optional) — opaque nested config for opencode.json
+    # auto-generation. Lenient validation: just check it's a mapping if present.
+    opencode_data = data.get("opencode")
+    opencode: Optional[Dict[str, Any]] = None
+    if opencode_data is not None:
+        if not isinstance(opencode_data, dict):
+            raise ConfigValidationError("opencode: must be a mapping", line_map.get("opencode"))
+        opencode = opencode_data
+
     return AgentWeaveConfig(
         project=project,
         hub=hub,
         agents=agents,
         jobs=jobs,
         quality=quality,
+        opencode=opencode,
     )
 
 
@@ -490,6 +525,7 @@ def generate_agentweave_yml(
             env=env_vars,
             yolo=session.get_agent_yolo(agent_name),
             pilot=session.get_agent_pilot(agent_name),
+            cli=runner_cfg.get("cli"),
         )
 
     config = AgentWeaveConfig(

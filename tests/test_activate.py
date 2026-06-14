@@ -209,6 +209,205 @@ class TestActivateUnit:
         assert result == 0
 
 
+class TestActivateMcp:
+    """Unit tests for _activate_mcp() — verifies MCP registration status
+    is checked per-agent (not just the principal) so file-based runners
+    like opencode don't get silently skipped when the principal is
+    already registered via CLI.
+    """
+
+    @pytest.fixture
+    def session_with_opencode(self, tmp_path, monkeypatch):
+        """Create a session with one CLI-based agent (kimi, principal)
+        and one file-based agent (opencode)."""
+        monkeypatch.chdir(tmp_path)
+        from agentweave.session import Session
+        from agentweave.utils import save_json
+
+        agentweave_dir = tmp_path / ".agentweave"
+        agentweave_dir.mkdir()
+        session = Session.create(
+            name="Test",
+            principal="kimi",
+            agents=["kimi", "opencode"],
+        )
+        # Tag the agents with their runners
+        session._data["agents"]["kimi"]["runner"] = "kimi"
+        session._data["agents"]["opencode"]["runner"] = "opencode"
+        save_json(agentweave_dir / "session.json", session.to_dict())
+        return session
+
+    def test_opencode_mcp_check_via_file_when_principal_already_registered(
+        self, session_with_opencode, monkeypatch
+    ):
+        """Regression: principal (kimi) has MCP via CLI, but opencode's
+        file-based MCP is missing. _activate_mcp must NOT report
+        'Already registered' — it must run cmd_mcp_setup so opencode.json
+        gets the mcp.agentweave block."""
+        from agentweave.cli import _activate_mcp
+
+        calls = {"cmd_mcp_setup": 0}
+
+        def _fake_setup(args):
+            calls["cmd_mcp_setup"] += 1
+            # Simulate the file-based registration by writing opencode.json
+            import json as _json
+            (Path(".").resolve() / "opencode.json").write_text(
+                _json.dumps({"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}})
+            )
+            return 0
+
+        # Simulate: kimi mcp list → contains 'agentweave' (principal registered)
+        fake_kimi_mcp_list = subprocess.CompletedProcess(
+            args=["kimi", "mcp", "list"],
+            returncode=0,
+            stdout="agentweave  stdio  agentweave-mcp",
+            stderr="",
+        )
+        with patch("agentweave.cli.cmd_mcp_setup", _fake_setup), patch(
+            "subprocess.run", return_value=fake_kimi_mcp_list
+        ):
+            result = _activate_mcp()
+
+        # The fix: cmd_mcp_setup MUST be called even though the principal
+        # is already registered, because opencode's file-based MCP is missing.
+        assert calls["cmd_mcp_setup"] == 1
+        assert result == 0
+        # And the opencode.json should now have the MCP block
+        data = json.loads(Path("opencode.json").read_text(encoding="utf-8"))
+        assert "agentweave" in data["mcp"]
+
+    def test_principal_only_session_skips_when_registered(self, tmp_path, monkeypatch):
+        """When the only agent is the principal and it is already
+        registered, _activate_mcp should report 'Already registered'
+        without calling cmd_mcp_setup."""
+        monkeypatch.chdir(tmp_path)
+        from agentweave.cli import _activate_mcp
+        from agentweave.session import Session
+        from agentweave.utils import save_json
+
+        agentweave_dir = tmp_path / ".agentweave"
+        agentweave_dir.mkdir()
+        session = Session.create(name="Test", principal="kimi", agents=["kimi"])
+        session._data["agents"]["kimi"]["runner"] = "kimi"
+        save_json(agentweave_dir / "session.json", session.to_dict())
+
+        calls = {"cmd_mcp_setup": 0}
+
+        def _fake_setup(args):
+            calls["cmd_mcp_setup"] += 1
+            return 0
+
+        fake_kimi_mcp_list = subprocess.CompletedProcess(
+            args=["kimi", "mcp", "list"],
+            returncode=0,
+            stdout="agentweave  stdio  agentweave-mcp",
+            stderr="",
+        )
+        with patch("agentweave.cli.cmd_mcp_setup", _fake_setup), patch(
+            "subprocess.run", return_value=fake_kimi_mcp_list
+        ):
+            result = _activate_mcp()
+
+        assert calls["cmd_mcp_setup"] == 0
+        assert result == 0
+
+    def test_opencode_file_missing_triggers_registration(
+        self, session_with_opencode, monkeypatch
+    ):
+        """When opencode.json is missing (or has no agentweave entry)
+        and kimi is registered, _activate_mcp must still call
+        cmd_mcp_setup to write the opencode MCP block."""
+        from agentweave.cli import _activate_mcp
+
+        calls = {"cmd_mcp_setup": 0}
+
+        def _fake_setup(args):
+            calls["cmd_mcp_setup"] += 1
+            import json as _json
+            (Path(".").resolve() / "opencode.json").write_text(
+                _json.dumps({"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}})
+            )
+            return 0
+
+        fake_kimi_mcp_list = subprocess.CompletedProcess(
+            args=["kimi", "mcp", "list"],
+            returncode=0,
+            stdout="agentweave  stdio  agentweave-mcp",
+            stderr="",
+        )
+        # Pre-condition: opencode.json does NOT exist
+        assert not Path("opencode.json").exists()
+        with patch("agentweave.cli.cmd_mcp_setup", _fake_setup), patch(
+            "subprocess.run", return_value=fake_kimi_mcp_list
+        ):
+            result = _activate_mcp()
+
+        assert calls["cmd_mcp_setup"] == 1
+        assert result == 0
+        assert Path("opencode.json").exists()
+
+    def test_all_agents_file_based_all_registered(self, tmp_path, monkeypatch):
+        """All agents are opencode (file-based) and opencode.json has
+        the MCP block. _activate_mcp reports 'Already registered'
+        without calling cmd_mcp_setup."""
+        monkeypatch.chdir(tmp_path)
+        from agentweave.cli import _activate_mcp
+        from agentweave.session import Session
+        from agentweave.utils import save_json
+
+        agentweave_dir = tmp_path / ".agentweave"
+        agentweave_dir.mkdir()
+        session = Session.create(name="Test", principal="opencode", agents=["opencode"])
+        session._data["agents"]["opencode"]["runner"] = "opencode"
+        save_json(agentweave_dir / "session.json", session.to_dict())
+
+        # Write opencode.json with the agentweave block
+        Path("opencode.json").write_text(
+            json.dumps({"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}})
+        )
+
+        calls = {"cmd_mcp_setup": 0}
+
+        def _fake_setup(args):
+            calls["cmd_mcp_setup"] += 1
+            return 0
+
+        with patch("agentweave.cli.cmd_mcp_setup", _fake_setup):
+            result = _activate_mcp()
+
+        assert calls["cmd_mcp_setup"] == 0
+        assert result == 0
+
+    def test_malformed_opencode_json_triggers_registration(
+        self, session_with_opencode, monkeypatch
+    ):
+        """A malformed opencode.json must not be treated as 'registered';
+        the activate should fall through to cmd_mcp_setup which will
+        surface the error to the user."""
+        from agentweave.cli import _activate_mcp
+
+        calls = {"cmd_mcp_setup": 0}
+
+        def _fake_setup(args):
+            calls["cmd_mcp_setup"] += 1
+            return 0
+
+        fake_kimi_mcp_list = subprocess.CompletedProcess(
+            args=["kimi", "mcp", "list"],
+            returncode=0,
+            stdout="agentweave  stdio  agentweave-mcp",
+            stderr="",
+        )
+        Path("opencode.json").write_text("{ this is not json")
+        with patch("agentweave.cli.cmd_mcp_setup", _fake_setup), patch(
+            "subprocess.run", return_value=fake_kimi_mcp_list
+        ):
+            result = _activate_mcp()
+
+        assert calls["cmd_mcp_setup"] == 1
+
+
 class TestActivateValidation:
     """Tests for activate input validation."""
 

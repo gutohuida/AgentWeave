@@ -62,6 +62,15 @@ After editing `agentweave.yml`, run `agentweave activate` to apply changes. This
 
 See [agentweave.yml Reference](../reference/agentweave-yml.md) and [Migration Guide](../getting-started/migration.md) for details.
 
+## Why does opencode return `ProviderModelNotFoundError` even though my yml and auth.json are correct?
+
+The yml and `auth.json` are almost always right — the opencode binary that
+actually got invoked doesn't list that model. Three common causes (typo,
+old binary, wrong binary on `PATH`) and how to fix each are covered in
+the [catalog-mismatch decision tree](opencode-models.md#7-catalog-mismatch-troubleshooting)
+in the opencode models guide. The quick WSL fix is the
+[`cli:` override](opencode-agents.md#pinning-the-opencode-binary-wsl-multi-install-hosts).
+
 ## Can I run the Hub without Docker?
 
 The Hub is designed to run via Docker Compose for ease of deployment. You can also run it from source by installing the Hub package and starting the FastAPI server manually, but Docker is the supported path.

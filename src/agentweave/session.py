@@ -80,7 +80,7 @@ class Session:
         """Return runner config for an agent.
 
         Falls back to AGENT_RUNNER_DEFAULTS if not explicitly configured.
-        Returns dict with 'runner', 'env_vars', and 'model' keys.
+        Returns dict with 'runner', 'env_vars', 'model', and 'cli' keys.
         """
         from .constants import CLAUDE_PROXY_PROVIDERS
 
@@ -88,12 +88,13 @@ class Session:
         runner = agent_cfg.get("runner") or AGENT_RUNNER_DEFAULTS.get(agent, "native")
         env_vars = agent_cfg.get("env_vars", {})
         model = agent_cfg.get("model")
+        cli = agent_cfg.get("cli")
 
         # If no model specified, use provider default
         if not model and runner == "claude_proxy" and agent in CLAUDE_PROXY_PROVIDERS:
             model = CLAUDE_PROXY_PROVIDERS[agent].get("model")
 
-        return {"runner": runner, "env_vars": env_vars, "model": model}
+        return {"runner": runner, "env_vars": env_vars, "model": model, "cli": cli}
 
     def get_runner_options(self, agent: str) -> dict:
         """Return runner-specific options for an agent, defaulting to {}."""
@@ -303,6 +304,16 @@ class Session:
                 if agent_data.get("runner_options") != new_opts:
                     agent_data["runner_options"] = new_opts
                     was_updated = True
+            if "cli" in config and config["cli"]:
+                new_cli = str(config["cli"])
+                if agent_data.get("cli") != new_cli:
+                    agent_data["cli"] = new_cli
+                    was_updated = True
+            elif "cli" in agent_data:
+                # Field removed from yml — drop it from session too so an old
+                # override doesn't outlive its declaration.
+                del agent_data["cli"]
+                was_updated = True
             if "yolo" in config:
                 new_yolo = bool(config["yolo"])
                 if agent_data.get("yolo") != new_yolo:

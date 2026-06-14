@@ -654,6 +654,113 @@ agents:
         assert config.agents["opencode-dev"].model == "ollama/qwen2.5-coder:7b"
 
 
+class TestOpencodeConfigBlock:
+    """Tests for the top-level opencode: block in agentweave.yml.
+
+    The opencode: block is opaque (lenient validation) and is used by
+    'agentweave activate' to auto-generate opencode.json at the project root.
+    """
+
+    def test_load_yml_with_opencode_block(self, tmp_path):
+        """agentweave.yml parses an opencode: top-level block."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+  mode: hierarchical
+
+opencode:
+  provider:
+    minimax:
+      npm: "@ai-sdk/anthropic"
+      options:
+        baseURL: "https://api.minimax.io/anthropic"
+        apiKey: "{env:MINIMAX_API_KEY}"
+      models:
+        M3:
+          name: "MiniMax M3"
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.opencode is not None
+        assert "provider" in config.opencode
+        assert "minimax" in config.opencode["provider"]
+        assert config.opencode["provider"]["minimax"]["options"]["baseURL"] == (
+            "https://api.minimax.io/anthropic"
+        )
+
+    def test_load_yml_without_opencode_block(self, tmp_path):
+        """agentweave.yml without an opencode: block has opencode=None."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+  mode: hierarchical
+
+agents:
+  claude:
+    runner: claude
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.opencode is None
+
+    def test_to_dict_round_trips_opencode(self, tmp_path):
+        """to_dict preserves the opencode: block in the output."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+  mode: hierarchical
+
+opencode:
+  provider:
+    minimax:
+      npm: "@ai-sdk/anthropic"
+      options:
+        baseURL: "https://api.minimax.io/anthropic"
+""")
+        config = load_agentweave_yml(config_file)
+        out = config.to_dict()
+        assert "opencode" in out
+        assert out["opencode"]["provider"]["minimax"]["npm"] == "@ai-sdk/anthropic"
+
+    def test_opencode_block_accepts_arbitrary_nested_structure(self, tmp_path):
+        """Lenient validation: arbitrary nested dicts pass through unchanged."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+  mode: hierarchical
+
+opencode:
+  model: "minimax/M3"
+  small_model: "minimax/M3-mini"
+  instructions: ["CONTRIBUTING.md"]
+  future_field_we_dont_know_about:
+    nested:
+      deep:
+        value: 42
+""")
+        config = load_agentweave_yml(config_file)
+        assert config.opencode["future_field_we_dont_know_about"]["nested"]["deep"]["value"] == 42
+        assert config.opencode["model"] == "minimax/M3"
+        assert config.opencode["instructions"] == ["CONTRIBUTING.md"]
+
+    def test_opencode_block_must_be_mapping(self, tmp_path):
+        """opencode: must be a mapping, not a scalar or list."""
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+  mode: hierarchical
+
+opencode: "not a mapping"
+""")
+        with pytest.raises(Exception) as exc_info:
+            load_agentweave_yml(config_file)
+        assert "opencode" in str(exc_info.value).lower()
+        assert "mapping" in str(exc_info.value).lower()
+
+
 class TestCodexMcpConfig:
     """Tests for codex_mcp runner configuration."""
 

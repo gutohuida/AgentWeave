@@ -1,0 +1,102 @@
+# AgentWeave Test Template
+#
+# Models chosen (June 2026):
+#   kimi     -> kimi-code/kimi-for-coding       (real default in ~/.kimi/config.toml; 256K context)
+#   codex    -> gpt-5.5                         (matches AgentWeave docs + CODEX_MODEL_CONTEXT_LIMITS)
+#   opencode -> minimax-coding-plan/MiniMax-M3  (matches user's auth.json provider)
+#
+# Copy this file to agentweave.yml in a test project, then run:
+#   agentweave activate
+#
+# ---------------------------------------------------------------------------
+# opencode runner notes
+# ---------------------------------------------------------------------------
+# 1. opencode's --model flag REQUIRES 'provider/model' form. Bare model
+#    names (e.g. 'minimax-m3') will be rejected. Note that opencode's
+#    auth.json provider IDs and model IDs are CASE-SENSITIVE — the working
+#    combination in this template is 'minimax-coding-plan/MiniMax-M3'.
+#
+# 2. Recommended setup: register the provider globally with
+#      opencode auth login
+#    This writes the API key to ~/.local/share/opencode/auth.json and
+#    the project's opencode.json can stay empty (or not exist).
+#    agentweave will then just use whatever provider is registered there.
+#
+# 3. ALTERNATIVE setup (if you don't want a global auth.json): add a
+#    top-level `opencode:` block in this yml. 'agentweave activate' will
+#    auto-generate opencode.json with the provider config, using the
+#    'env: [MINIMAX_API_KEY]' agent field to resolve the key at runtime.
+#    Add-or-replace semantics: declared keys overwrite, other top-level
+#    keys in opencode.json are preserved.
+#    Make sure the provider name here matches a real provider ID
+#    (run `opencode auth list` to see what's registered).
+#
+# 4. The 'env: [MINIMAX_API_KEY]' field on the opencode agent is parsed
+#    and stored in session.json. The watchdog then resolves the env var
+#    name to its actual value and forwards it to the opencode subprocess.
+#    (Works for the opencode runner only; kimi/codex/claude still inherit
+#    from parent env.)
+#
+# 5. To authenticate the provider, do ONE of the following BEFORE starting
+#    the watchdog:
+#      a) Run `opencode auth login` and select the provider
+#         (writes to ~/.local/share/opencode/auth.json — recommended)
+#      b) Export MINIMAX_API_KEY in your shell before starting the watchdog
+#      c) Add MINIMAX_API_KEY=<key> to a project-root .env (gitignored;
+#         the watchdog loads .env automatically)
+#    Run `opencode auth list` to see which providers and keys are
+#    currently registered.
+#
+# 6. WSL / multi-install gotcha: when more than one `opencode` is on
+#    PATH (very common on WSL — e.g. a stale Linux 1.14.28 install
+#    shadowing a working Windows 1.17.x from npm), the watchdog picks
+#    whichever `shutil.which` resolves first. Older binaries don't
+#    know about newer providers/models and will return
+#    `ProviderModelNotFoundError` even though your yml and auth.json
+#    are correct. Two ways out:
+#      - Pin the binary explicitly with `cli: /abs/path/to/opencode`
+#        on the agent (recommended — see the opencode: block below).
+#      - Or reorder PATH so the working opencode comes first.
+#    Verify with: `which opencode && opencode --version`.
+
+project:
+  name: "AgentWeave Multi-Model Test"
+  mode: peer
+
+hub:
+  url: http://localhost:8000
+
+agents:
+  kimi:
+    runner: kimi
+    model: kimi-code/kimi-for-coding
+    roles: [backend_dev]
+    yolo: false
+    pilot: false
+
+  codex:
+    runner: codex
+    model: gpt-5.5
+    roles: [frontend_dev]
+    yolo: false
+    pilot: false
+
+  # opencode: requires 'provider/model' form. The combination
+  # 'minimax-coding-plan/MiniMax-M3' matches the user's auth.json
+  # (provider ID = 'minimax-coding-plan', model ID = 'MiniMax-M3').
+  # If your auth.json uses a different provider name, swap it in here.
+  # The env: field tells the watchdog to forward MINIMAX_API_KEY to
+  # the opencode subprocess (only needed if not using auth.json).
+  #
+  # Optional `cli:` override: pin the opencode binary to an absolute
+  # path. Useful on WSL/Windows hosts with multiple opencode installs
+  # (see section 6 above). When omitted, the watchdog uses the first
+  # `opencode` on PATH.
+  opencode:
+    runner: opencode
+    model: minimax-coding-plan/MiniMax-M2.7
+    cli: /mnt/c/Users/huida/AppData/Roaming/npm/opencode
+    roles: [tech_lead]
+    env: [MINIMAX_API_KEY]
+    yolo: false
+    pilot: false

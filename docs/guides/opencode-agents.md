@@ -59,6 +59,50 @@ The `model` field accepts any OpenCode-supported provider/model string:
 - Cloud: `anthropic/claude-sonnet-4-5`, `openai/gpt-4o`, etc.
 - Omit `model` entirely to use OpenCode's default
 
+See [Switching opencode Models](opencode-models.md) for how to change the model, set up auth with a new provider, or troubleshoot `ProviderModelNotFoundError` errors.
+
+### Pinning the `opencode` binary (WSL / multi-install hosts)
+
+When more than one `opencode` is on `PATH` — very common on WSL hosts that
+have both a Linux install (e.g. `~/.opencode/bin/opencode`) and a Windows
+install on the npm global path (e.g.
+`/mnt/c/Users/<you>/AppData/Roaming/npm/opencode`) — the watchdog picks
+whichever `shutil.which` resolves first. Older binaries don't know about
+newer providers or models, so a perfectly valid `model:` value can return
+`ProviderModelNotFoundError` from opencode.
+
+Pin the binary explicitly per agent with `cli:`:
+
+```yaml
+agents:
+  opencode:
+    runner: opencode
+    model: minimax-coding-plan/MiniMax-M3
+    cli: /mnt/c/Users/you/AppData/Roaming/npm/opencode
+```
+
+When `cli:` is set, the watchdog:
+
+- Skips `shutil.which` and invokes that exact path.
+- Verifies the file is executable at launch time and surfaces a clear
+  `agent_cli_missing` diagnostic if it isn't.
+- Renders the same pinned path in `agentweave switch` and
+  `agentweave activate` so the human-run command matches the watchdog.
+
+When `cli:` is omitted, the watchdog falls back to `shutil.which("opencode")`
+as before — fully backwards compatible.
+
+Verify what the watchdog will pick up with:
+
+```bash
+which opencode
+opencode --version
+```
+
+If the first `opencode` on PATH is older than the binary that
+actually has your provider, either reorder PATH or use the `cli:`
+override.
+
 Apply changes:
 
 ```bash

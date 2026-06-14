@@ -70,6 +70,7 @@ nav:
     - guides/claude-proxy-agents.md
     - guides/pilot-mode.md
     - guides/opencode-agents.md
+    - guides/opencode-models.md
     - guides/ai-jobs.md
     - guides/cross-machine-collab.md
     - guides/dashboard.md
