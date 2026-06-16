@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { NEW_SESSION_ID } from '@/lib/constants'
 
 export interface ChatMessage {
   id: string
@@ -20,7 +21,7 @@ export function useAgentChatHistory(agent: string | null, sessionId: string | nu
   return useQuery<ChatHistoryResponse>({
     queryKey: ['agent', agent, 'chat', sessionId],
     queryFn: () => getJson<ChatHistoryResponse>(`/api/v1/agent/${agent}/chat/${sessionId}`),
-    enabled: isConfigured && !!agent && !!sessionId && sessionId !== 'new',
+    enabled: isConfigured && !!agent && !!sessionId && sessionId !== NEW_SESSION_ID,
     refetchInterval: 3000, // Refetch every 3 seconds for new messages
   })
 }
