@@ -19,11 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`list_agents` no longer issues per-agent queries.** Latest heartbeat, message count, active task count, context usage, and session start are now fetched in bulk, eliminating the N+1 query pattern (M15).
 - **`update_task` MCP tool no longer sends an unused `agent` parameter** to the REST API (M17).
 - **Request body size capped at 1 MB.** A middleware layer returns HTTP 413 for oversized POST bodies before they reach route handlers (bonus).
+- **DB migrations run automatically on startup (PR 7 / H5).** `init_db` now invokes `alembic upgrade head` after `Base.metadata.create_all`, wrapped in try/except so dev mode (in-memory SQLite, missing alembic.ini) still works. Closes H5: a deployment that only runs `init_db` no longer misses schema changes that live in Alembic migrations. The alembic command is run in a worker thread so its internal `asyncio.run()` doesn't conflict with the FastAPI lifespan's event loop.
+- **`job_runs.error_summary` capped to `String(500)` (PR 7 / DB-4).** Was unbounded `Text` — could grow without limit if a job captured a full agent stack trace. Migration 0007 was edited to use `String(500)` for fresh installs, and a new migration 0008 uses `batch_alter_table` to alter existing deployments where 0007 already added the column as `Text`. Closes DB-4.
 
 ### Added (Hub v0.32.0a1)
 - New regression tests in `hub/tests/test_agents.py` and additions to `hub/tests/test_messages.py`, `hub/tests/test_tasks.py`, and `hub/tests/test_jobs.py` covering the PR 5 validation rules.
 - **New `hub/tests/test_bola.py`** multi-tenant isolation test: creates two projects with separate API keys and verifies Project B cannot read Project A's resources on every endpoint (T5).
 - **`hub/tests/test_auth.py` additions** for the SSE ticket flow, query-token rejection on REST endpoints, and the 1 MB body-size cap.
+- **New `hub/tests/test_migrations.py`** covering the PR 7 changes: model type checks (`error_summary` is `String(500)`, not `Text`), value-length boundary (500 chars accepted, 501 chars rejected on strict databases), fresh-DB `alembic upgrade head` round-trip, migration 0008 alters an existing `Text` column to `String(500)`, `init_db` runs alembic for file-based DBs, `init_db` skips alembic for `:memory:` (so the existing test suite still works), and alembic failures don't crash `init_db`.
 
 ---
 ## [0.37.1] - 2026-06-14

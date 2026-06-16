@@ -4,6 +4,7 @@ import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -36,6 +37,62 @@ def _generate_api_key() -> str:
     return f"aw_live_{secrets.token_hex(16)}"
 
 
+async def _run_alembic_upgrade() -> None:
+    """Run `alembic upgrade head` programmatically (PR 7 / H5).
+
+    Closes H5: a deployment that only invokes `init_db` (e.g. for tests or
+    for a one-shot setup) used to miss schema changes that lived in
+    Alembic migrations. We now run `alembic upgrade head` after
+    `create_all`, wrapped in try/except so dev mode (in-memory SQLite,
+    missing alembic.ini, schema drift, etc.) doesn't crash startup.
+
+    - Skipped for in-memory SQLite — alembic creates its own async engine
+      in `env.py`, and an in-memory SQLite database is per-connection, so
+      alembic would see an empty database and fail with `no such table`.
+    - Wrapped in try/except — any failure is logged at WARNING level and
+      swallowed, so `init_db` always completes the create_all + bootstrap
+      path. A deployment can still re-run `alembic upgrade head` manually
+      to recover.
+    - Run in a worker thread — `command.upgrade` is synchronous but
+      `env.py` uses `asyncio.run` internally to drive the async engine.
+      Calling it directly from within a running event loop (e.g. an async
+      test) raises "asyncio.run() cannot be called from a running event
+      loop", so we delegate to a thread.
+    """
+    if ":memory:" in settings.database_url:
+        logger.debug("Skipping alembic upgrade for in-memory database")
+        return
+
+    try:
+        import asyncio
+        from functools import partial
+
+        from alembic import command
+        from alembic.config import Config
+
+        # hub/hub/db/engine.py → hub/hub/db/ → hub/hub/ → hub/
+        # The alembic.ini lives at the hub/ root.
+        alembic_cfg_path = Path(__file__).parent.parent.parent / "alembic.ini"
+        if not alembic_cfg_path.exists():
+            logger.warning("alembic.ini not found at %s; skipping migrations", alembic_cfg_path)
+            return
+
+        cfg = Config(str(alembic_cfg_path))
+        cfg.set_main_option("sqlalchemy.url", settings.database_url)
+
+        # Run alembic in a thread so its internal `asyncio.run` call
+        # doesn't conflict with a parent event loop (e.g. async tests,
+        # FastAPI lifespan).
+        def _do_upgrade() -> None:
+            command.upgrade(cfg, "head")
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _do_upgrade)
+        logger.info("Alembic migrations applied to %s", settings.database_url)
+    except Exception as exc:
+        logger.warning("Alembic upgrade failed (continuing startup): %s", exc)
+
+
 async def init_db() -> None:
     """Create tables and bootstrap API key if none exist."""
     if settings.database_url.startswith("sqlite"):
@@ -46,6 +103,8 @@ async def init_db() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    await _run_alembic_upgrade()
 
     async with async_session_factory() as session:
         from sqlalchemy import select, func

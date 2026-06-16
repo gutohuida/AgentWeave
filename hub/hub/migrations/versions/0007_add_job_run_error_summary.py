@@ -3,6 +3,9 @@
 Revision ID: 0007
 Revises: 0006
 Create Date: 2026-04-29
+
+Updated 2026-06-15 (PR 7 / DB-4): cap `error_summary` at 500 characters to
+prevent unbounded growth from agent output logs being persisted here.
 """
 
 from alembic import op
@@ -22,7 +25,10 @@ def upgrade() -> None:
         return  # fresh install — create_all will add the column
     existing_cols = {c["name"] for c in inspector.get_columns("job_runs")}
     if "error_summary" not in existing_cols:
-        op.add_column("job_runs", sa.Column("error_summary", sa.Text(), nullable=True))
+        op.add_column(
+            "job_runs",
+            sa.Column("error_summary", sa.String(500), nullable=True),
+        )
 
 
 def downgrade() -> None:

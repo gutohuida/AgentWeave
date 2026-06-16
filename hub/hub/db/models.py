@@ -310,8 +310,8 @@ class JobRun(Base):
         String(16), default="scheduled", nullable=False
     )  # "scheduled" or "manual"
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    error_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    job: Mapped["AIJob"] = relationship(back_populates="runs")
+    error_summary: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)
+
+    job: Mapped["AIJob"] = relationship(back_populates="runs")
