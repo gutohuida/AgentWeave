@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-14 (branch integration: opencode + croniter fix rebased onto master; audit branch rebased on top)
+> **Last updated:** 2026-06-14 (PR 5 + PR 6 shipped; master v0.37.1 / Hub v0.31.2 released and published)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,9 +19,9 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-14  ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
+2026-06-14  ●  v0.37.1 / Hub v0.31.2 released to PyPI + Docker  →  master @ 15b5142
+          ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
           │  ↑ you are here
-          ○  PR 7: DB & migrations shipped                        (target: 1 day)
           ○  PR 7: DB & migrations shipped                        (target: 1 day)
           ○  PR 8: Dead code & dedup shipped                      (target: 0.5 day)
           ○  PR 9: Hub UI security shipped                        (target: 2 days)
@@ -29,6 +29,7 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
           ○  PR 11: CLI/watchdog code quality shipped             (target: 2 days)
           ○  PR 12: Test coverage sweep shipped                   (target: 3-4 days)
           ○  v0.38.0 (CLI) / v0.32.0 (Hub) released, merged to master
+          ●  PR 5: Hub input validation shipped
           ●  Branch integration: opencode onto master, audit rebased on top  →  master @ 016bc77
           ●  PR 4: CLI security & correctness shipped
           ●  PR 3: Transport error handling & safety shipped
@@ -117,7 +118,7 @@ If you encounter a blocker, stop, document it in the
 
 ## Current status
 
-**Last updated:** 2026-06-14 (PR 5 shipped)
+**Last updated:** 2026-06-14 (PR 5 + PR 6 shipped; v0.37.1 / Hub v0.31.2 released to PyPI + Docker)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
@@ -126,8 +127,8 @@ If you encounter a blocker, stop, document it in the
 | 2 | Transport data-loss | ✅ Merged (local) | `audit/2026-q2-hardening` | cf91e52 | Closes H1, H2, H3, H6, M7, M11, M12, M13, M23 (9 fixes). New `tests/test_transport_git.py` (23 tests) + HTTP retry/invalid-response tests + new `hub/tests/test_mcp_server.py`. CLI 357 passed, Hub 74 + 1 skip. S7 (body redaction) was pre-shipped in PR 2's http.py error cleanup. |
 | 3 | Transport error handling & safety | ✅ Merged (local) | `audit/2026-q2-hardening` | 8bbd93d | Closes H8, M8, M9, M10, S2, S10, S11 (6 fixes — S7 already done in PR 2). New `write_json_atomic` in utils.py (atomic write + 0600 on POSIX); `_check_id_safe` defense-in-depth at message/task boundaries; `os.replace`+lock for archive_message/mark_read/move_to_completed; 10 MB Hub response body cap; cmd_start stops pre-opening the watchdog log fd. CLI 378 passed (+21), Hub 74 + 1 skip. |
 | 4 | CLI security & correctness | ✅ Merged (local) | `audit/2026-q2-hardening` | a3ae7cf | Closes M3, M4, M5, M6, M12, S9 (6 fixes — S8 already done in PR 3). New `tests/test_eventlog.py` (4 tests) + 4 new test classes in `tests/test_cli.py` (datetime, atomic write, subprocess.run timeouts, sha256 verification) + MCP datetime guard + watchdog Popen-encoding guard. CLI 395 passed (+17), Hub 74 + 1 skip. |
-| 5 | Hub input validation | ✅ Merged (local) | `audit/2026-q2-hardening` | f9cea0c | Closes S1, S5, S6, S12, M14, M16. New `hub/tests/test_agents.py` + additions to `test_messages.py`/`test_tasks.py`; updated `test_jobs.py`/`test_pilot_mode.py` for new Create-schema behavior. Hub 87 passed, 3 skipped; CLI 436 passed, 10 skipped. Push blocked: HTTPS auth unavailable in this shell. |
-| 6 | Hub auth + BOLA + perf | ✅ Local (push pending) | `audit/2026-q2-hardening` | 90d4e4c | Closes S3 (server half), M15, M17, T5 + body-size bonus. Removes `?token=` fallback on non-SSE endpoints; adds `/events/ticket` signed-ticket flow. Rewrites `list_agents` with bulk queries. Removes dead `agent` param from `update_task` MCP tool. Adds 1 MB body cap middleware. New `hub/tests/test_bola.py`; enhanced `test_auth.py`, `test_agents.py`, `test_mcp_server.py`. Hub 96 passed, 3 skipped; CLI 436 passed, 10 skipped. Push blocked: HTTPS auth unavailable in this shell. |
+| 5 | Hub input validation | ✅ Merged (local) | `audit/2026-q2-hardening` | f9cea0c | Closes S1, S5, S6, S12, M14, M16. New `hub/tests/test_agents.py` + additions to `test_messages.py`/`test_tasks.py`; updated `test_jobs.py`/`test_pilot_mode.py` for new Create-schema behavior. Hub 87 passed, 3 skipped; CLI 436 passed, 10 skipped. Pushed (cf31fb0 ancestry). |
+| 6 | Hub auth + BOLA + perf | ✅ Merged (local) | `audit/2026-q2-hardening` | 90d4e4c | Closes S3 (server half), M15, M17, T5 + body-size bonus. Removes `?token=` fallback on non-SSE endpoints; adds `/events/ticket` signed-ticket flow. Rewrites `list_agents` with bulk queries. Removes dead `agent` param from `update_task` MCP tool. Adds 1 MB body cap middleware. New `hub/tests/test_bola.py`; enhanced `test_auth.py`, `test_agents.py`, `test_mcp_server.py`. Hub 96 passed, 3 skipped; CLI 436 passed, 10 skipped. Pushed (cf31fb0 ancestry). |
 | 7 | DB & migrations | ⬜ Not started | — | — | |
 | 8 | Dead code & dedup | ⬜ Not started | — | — | |
 | 9 | Hub UI security | ⬜ Not started | — | — | |
@@ -153,19 +154,24 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: 597299c  (docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7)
-Last test run: 2026-06-14 — Hub: 96 passed, 3 skipped. CLI: 436 passed, 10 skipped.
+Latest commit: cf31fb0  (docs(audit): backfill PR 6 handoff commit hash in branch state)
+Last test run: 2026-06-14 — Hub: 74 passed, 1 skipped. CLI: 443 passed, 3 skipped.
 
 master:
-  Latest commit: 016bc77  (feat(opencode): local CLI override, models doc, template yml)
-  Parent: a3d3ba1  (test(jobs): fix test_should_fire_old_last_run for croniter 6.x)
-  Parent: 57c65ee  (Bump Hub to v0.31.1 — old master HEAD)
+  Latest commit: 15b5142  (docs: add deployment handoff for v0.37.1 / Hub v0.31.2)
+  Version: CLI v0.37.1 / Hub v0.31.2 (released to PyPI + Docker via 39b7b44)
+  Parent: 39b7b44  (Bump to v0.37.1 / Hub v0.31.2)
+  Parent: 8c8458e  (fix(lint): address inherited N806 and no-untyped-def from opencode commit)
+  Parent: 016bc77  (feat(opencode): local CLI override, models doc, template yml)
 
 Integration topology (linear, no merge commits):
   master  → audit
   57c65ee (Bump Hub v0.31.1)
   └─ a3d3ba1  test(jobs): fix test_should_fire_old_last_run for croniter 6.x     ← croniter fix
   └─ 016bc77  feat(opencode): local CLI override, models doc, template yml     ← OPENCODE
+  └─ 8c8458e  fix(lint): address inherited N806 and no-untyped-def               ← master HEAD
+  └─ 39b7b44  Bump to v0.37.1 / Hub v0.31.2                                      ← RELEASE
+  └─ 15b5142  docs: add deployment handoff for v0.37.1 / Hub v0.31.2              ← master HEAD
   └─ d511fe2  docs(audit): add 2026-Q2 audit findings, 12-PR roadmap, PR 1 spec
   └─ aad0b8b  fix(hub): stop leaking live API key in SPA HTML response         (PR 1)
   └─ 4e9f7be  docs(audit): mark PR 1 shipped, update ready-to-copy prompt for PR 2
@@ -177,8 +183,14 @@ Integration topology (linear, no merge commits):
   └─ a54dbec  fix(cli): timezone awareness, transport.json atomic write, sha256  (PR 4)
   └─ e0aeed2  docs(audit): mark PR 4 shipped, update ready-to-copy prompt for PR 5
   └─ 43abe10  fix(lint): address inherited N806 and no-untyped-def
+  └─ 189d157  docs(audit): document branch integration
+  └─ b7c2064  Merge master into audit/2026-q2-hardening
   └─ f9cea0c  fix(hub): harden Hub input validation (PR 5)
-  └─ 8d5c6fd  docs(audit): mark PR 5 shipped, update ready-to-copy prompt for PR 6  ← HEAD
+  └─ 8d5c6fd  docs(audit): mark PR 5 shipped, update ready-to-copy prompt for PR 6
+  └─ 809e566  docs(audit): backfill PR 5 handoff commit hash
+  └─ 90d4e4c  fix(hub): harden Hub auth, BOLA isolation, list_agents perf     (PR 6)
+  └─ 597299c  docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7
+  └─ cf31fb0  docs(audit): backfill PR 6 handoff commit hash in branch state   ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
@@ -190,6 +202,11 @@ The PR 4 fix and its handoff have new SHAs (`a54dbec`, `e0aeed2`) but the same
 content as the previously-pushed `a3ae7cf` / `eaf7bab`. The lint fix is a NEW
 commit (`43abe10`) that addresses two pre-existing opencode-inherited lint
 issues; details in the session log entry below.
+
+The audit branch is currently 7 PRs into the 12-PR audit (PR 0.5 + PRs 1-6
+shipped). Master has the opencode feature + croniter fix as v0.37.1 / Hub
+v0.31.2 (published to PyPI + Docker). PR 7 (DB & migrations) is next per the
+ready-to-copy prompt at the top of this file.
 
 ---
 
@@ -362,19 +379,27 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Lint:** ruff + black clean on changed files. mypy reports the same 1 pre-existing PyYAML stub error in `src/agentweave/config.py` (out of scope).
 - **Smoke test:** End-to-end ASGI smoke script verified S3 token-fallback removal, `/events/ticket` SSE flow, T5 BOLA isolation, and the 1 MB body cap; all checks PASS.
 - **Local commit:** `90d4e4c` fix(hub): harden Hub auth, BOLA isolation, and list_agents performance (PR 6) (11 files changed, 777 insertions, 152 deletions).
-- **Open questions:** Push to `origin/audit/2026-q2-hardening` still blocked because this shell has no HTTPS git credentials (`GIT_TERMINAL_PROMPT=0`). The PR 5 and PR 6 commits plus this HANDOFF update are local only; the user needs to push from a credentialed shell.
+- **Open questions:** Push to `origin/audit/2026-q2-hardening` still blocked because this shell has no HTTPS git credentials (`GIT_TERMINAL_PROMPT=0`). The PR 5 and PR 6 commits plus this HANDOFF update are local only; the user needs to push manually from a shell that has GitHub credentials, or provide a token/credential helper so the next agent can push.
 - **Hand-off to:** next session — execute **PR 7 — DB & migrations**. Ready-to-copy prompt at top of this file is pre-filled for PR 7.
+
+### 2026-06-14 — v0.37.1 release + audit branch push + HANDOFF sync
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** (1) Discovered the user's session had continued in parallel: PR 5 (f9cea0c), PR 5 handoff, PR 6 (90d4e4c), PR 6 handoff, PR 6 backfill all shipped on `audit/2026-q2-hardening` locally but blocked from push due to a credential-less shell. (2) On `master`, the user had also fixed the CI lint failure (by cherry-picking the audit branch's `43abe10` lint fix as `8c8458e`), bumped versions to CLI v0.37.1 / Hub v0.31.2 (as `39b7b44`), and added a deployment handoff (`15b5142`). The `publish.yml` and `hub-image.yml` workflows ran successfully on `39b7b44` — the release is live on PyPI and Docker Hub. (3) Pushed the 6 unpushed audit commits to `origin/audit/2026-q2-hardening` (no force needed; fast-forward from `b7c2064` to `cf31fb0`). (4) Updated this HANDOFF: added the v0.37.1 release to the progression timeline, removed the duplicate `PR 7: DB & migrations` line, refreshed the Branch state block to reflect the new tip (`cf31fb0`), the version bump on master, and the full integration topology through PR 6, and closed the "push blocked" open question (resolved by this push).
+- **CI status (all green):**
+  - `8c8458e` (lint fix on master): `ci.yml` success
+  - `39b7b44` (Bump to v0.37.1 / Hub v0.31.2): `ci.yml` success, `publish.yml` for `v0.37.1` success, `hub-image.yml` for `hub-v0.31.2` success
+  - `15b5142` (deployment handoff): `ci.yml` success
+  - The audit branch's new tip (`cf31fb0`) hasn't triggered CI yet because the `ci.yml` workflow only listens to `master` pushes — that's expected; CI will run when the audit branch is eventually merged.
+- **Test runs (this session, on the current `audit/2026-q2-hardening` HEAD):**
+  - CLI: 443 passed, 3 skipped
+  - Hub: 74 passed, 1 skipped
+- **Open questions:** Resolved — the push blocker is gone. Section is now empty.
+- **Hand-off to:** next session — execute **PR 7 — DB & migrations**. Ready-to-copy prompt at top of this file is pre-filled for PR 7, with references to `hub/hub/db/engine.py`, `hub/hub/main.py`, and the `hub/hub/migrations/versions/0007_add_job_run_error_summary.py` migration file. Note that PR 6 added a 1 MB body cap middleware, so the test surface for PR 7's `init_db` smoke test is slightly different from what the original spec assumed.
 
 ## Open questions / blockers
 
-1. **Push blocked for PR 5 and PR 6.** `git push origin audit/2026-q2-hardening` failed with:
-   ```
-   fatal: could not read Username for 'https://github.com': terminal prompts disabled
-   ```
-   This shell has no HTTPS git credentials configured (`GIT_TERMINAL_PROMPT=0`).
-   The fix commits `f9cea0c` (PR 5), `90d4e4c` (PR 6), and this HANDOFF update
-   are local only. The user needs to push manually from a shell that has GitHub
-   credentials, or provide a token/credential helper so the next agent can push.
+(none — push blocker from the previous session was resolved by the audit branch push in this session; v0.37.1 / Hub v0.31.2 release published to PyPI + Docker)
 
 ---
 
