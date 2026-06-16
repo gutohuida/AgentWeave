@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-16 (PR 7 shipped; init_db runs alembic on startup; error_summary capped to 500 chars)
+> **Last updated:** 2026-06-16 (PR 8 shipped; 277 lines of dead code removed; ready-to-copy prompt pre-filled for PR 9)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,12 +19,12 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-16  ●  PR 7: DB & migrations shipped  →  audit @ 7c0c667
+2026-06-16  ●  PR 8: Dead code & dedup shipped  →  audit @ eb647db
           │  ↑ you are here
-          ○  PR 8: Dead code & dedup shipped                      (target: 0.5 day)
+          ○  PR 9: Hub UI security shipped                        (target: 2 days)
+2026-06-16  ●  PR 7: DB & migrations shipped  →  audit @ 7c0c667
 2026-06-14  ●  v0.37.1 / Hub v0.31.2 released to PyPI + Docker  →  master @ 15b5142
           ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
-          ○  PR 9: Hub UI security shipped                        (target: 2 days)
           ○  PR 10: Hub UI perf & dedup shipped                   (target: 2 days)
           ○  PR 11: CLI/watchdog code quality shipped             (target: 2 days)
           ○  PR 12: Test coverage sweep shipped                   (target: 3-4 days)
@@ -51,72 +51,102 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 8 — Dead code & dedup
+**Next PR to execute:** PR 9 — Hub UI security
 
 ```
-Execute PR 8 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 8 — Dead code & dedup"
+Execute PR 9 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 9 — Hub UI security"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 8 section of pr-roadmap.md end-to-end.
+2. Read the PR 9 section of pr-roadmap.md end-to-end.
+3. Read AGENTS.md § "Hub UI Components" and the recent AgentPromptPanel
+   session-routing entry — the UI has accumulated a lot of subtle
+   state, and PR 9 is the first PR that introduces UI tests.
 
-Workflow (PR 8 is pure deletion; no new test-first step):
+Workflow (PR 9 sets up the first UI test infra — install vitest+jsdom
+and a minimal test file first; then implement each fix test-first):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
 2. Verify you're on branch `audit/2026-q2-hardening`
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
-5. Identify the dead code per the spec:
-   - H7: `_build_agent_context` in src/agentweave/cli.py:1631-1749
-     and src/agentweave/watchdog.py:1830-1956 (240 lines of duplicated
-     dead code). Both callers must import `context_builder.build_agent_context`
-     directly instead.
-   - Q5: duplicate `_load_dotenv` in src/agentweave/watchdog.py:3102-3132
-     — should import from src/agentweave/utils.py.
-6. Grep for any other callers of `_build_agent_context` and the watchdog
-   `_load_dotenv` before deleting, to confirm no remaining usages.
-7. Apply the deletions per the spec in
-   src/agentweave/cli.py and src/agentweave/watchdog.py. Also remove the
-   now-unused imports.
-8. Run full test suites: `pytest tests/ -v` (CLI) and
-   `cd hub && pytest tests/ -v` (Hub) — both must stay green. PR 8 has
-   no new tests; the existing suite is the safety net that proves
-   nothing broke.
-9. Run lint: `ruff check src/`, `black src/`, `mypy src/`. (Hub has
-   no enforced lint config today; focus on the CLI side.)
-10. Manual smoke test: exercise one CLI command that uses agent context
-    (e.g. `agentweave run --agent claude "echo hello"`) and confirm
-    it still works end-to-end after the dead-code removal.
-11. Commit with a structured message matching PR 5/6/7's style.
+5. Identify the UI security fixes per the spec (the spec's line numbers
+   are likely stale; grep before editing):
+   - S3 (client): hub/ui/src/hooks/useSSE.ts — replace `?token=` in the
+     EventSource URL with `fetch()` + `Authorization` header streamed
+     via `ReadableStream`. The server-side `/events/ticket` endpoint
+     was added in PR 6.
+   - S4: hub/ui/src/store/configStore.ts — move `apiKey` to
+     `sessionStorage`; persist only `theme` + `mode` to `localStorage`.
+   - M19: hub/ui/src/components/agents/ActivityLog.tsx — fix the
+     `paused` stale closure using the ref pattern documented in
+     AGENTS.md (see the "Stale closure" pattern in the March 31 entry).
+   - M20: hub/ui/src/api/agentChat.ts — replace literal `'new'` with the
+     `NEW_SESSION_ID` constant.
+   - M22: hub/ui/src/hooks/useSSE.ts — clear `reconnectTimer` on
+     `clearConfig`; cancel reconnect on unmount.
+   - ErrorBoundary: hub/ui/src/main.tsx — wrap the App root with an
+     <ErrorBoundary>.
+6. Set up the UI test infrastructure (PR 9 creates the first UI tests
+   in the project, so the infra is part of the deliverable):
+   - cd hub/ui && npm install --save-dev vitest jsdom
+     @testing-library/react @testing-library/jest-dom
+   - Add `test: "vitest run"` to package.json scripts
+   - Create vitest.config.ts with jsdom environment
+   - Add hub/ui/src/__tests__/ directory
+7. For each fix, write a failing test FIRST (the new vitest infra must
+   be in place), confirm RED, then apply the fix and confirm GREEN.
+8. Run UI tests: cd hub/ui && npm test. Also run full CLI + Hub test
+   suites to confirm no backend regressions: pytest tests/ -v and
+   cd hub && pytest tests/ -v.
+9. Run lint: cd hub/ui && npm run lint. (Backend lint unchanged from
+   PR 8 baseline; Hub has no enforced lint config today.)
+10. Manual smoke test: cd hub/ui && npm run dev, open the dashboard
+    at http://localhost:5173, log in with the API key (DevTools →
+    Application → confirm `apiKey` is in `sessionStorage` not
+    `localStorage`), trigger an SSE disconnect (toggle network
+    throttling) and confirm the reconnect timer is cleared on
+    `clearConfig`, and confirm a thrown error in a child component
+    is caught by the ErrorBoundary instead of blanking the page.
+11. Commit with a structured message matching PR 5/6/7/8's style.
+    Likely 2-3 commits: (a) test infra, (b) the actual fixes.
 12. Push the branch.
 13. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
 14. Report back.
 
 Step 13 in detail (this is what makes the next session work):
-a. Mark PR 8 as ✅ in the "Current status" table.
-b. Update the "Branch state" block with current branch, latest commit hash,
-   and last test run timestamp.
+a. Mark PR 9 as ✅ in the "Current status" table.
+b. Update the "Branch state" block with current branch, latest commit
+   hash, and last test run timestamp.
 c. Append a new entry to the "Session log" section.
 d. **REPLACE the "Next PR to execute" line and the code block in the
-   "📋 Ready-to-copy prompt — next action" section above** so the prompt
-   is pre-filled for PR 9 (Hub UI security). The spec for PR 9
-   lives in docs/audit-2026-q2/pr-roadmap.md under the "PR 9 — Hub UI security"
-   heading. Adjust the workflow steps (5, 6, 7, 8, 10) to reference
-   the right files for that PR (UI side, vitest+jsdom tests, etc.).
+   "📋 Ready-to-copy prompt — next action" section above** so the
+   prompt is pre-filled for PR 10 (Hub UI performance & dedup). The
+   spec lives in docs/audit-2026-q2/pr-roadmap.md under the
+   "PR 10 — Hub UI performance & dedup" heading. Adjust the workflow
+   steps to reference the right files for that PR (UI side, manual +
+   Lighthouse, no new test infra — just extend the vitest setup from
+   PR 9).
 
-Notes from PR 7 that may affect PR 8:
-- The CLI utils.py may need to export `_load_dotenv` (or a renamed public
-  version) before watchdog.py can import from it. If `utils.py` already
-  has a `load_dotenv`-style function, just re-export it under the same
-  name; otherwise add one and have both callers (and any new ones) use it.
-- The watchdog module is large (~3k lines); deletions are best done with
-  targeted `read` calls to the line ranges in the spec to confirm the
-  block boundaries before editing.
+Notes from PR 8 that may affect PR 9:
+- The CLI's `_build_agent_context` wrappers are now thin 8-line shims
+  in both `cli.py` and `watchdog.py` that delegate to
+  `context_builder.build_agent_context`. If you need to render a
+  context from a UI test, use `context_builder.build_agent_context`
+  directly — do NOT re-introduce dead code in the wrappers.
+- The watchdog's `_load_dotenv` was removed; `utils.load_dotenv` is
+  now the only `load_dotenv` in the codebase. If you write a CLI-level
+  test that loads .env, import from `agentweave.utils`.
+- The spec line numbers in pr-roadmap.md for PR 9 are from
+  2026-06-12 and likely drifted; grep for the function/constant names
+  (e.g. `paused`, `NEW_SESSION_ID`, `reconnectTimer`) before editing.
+- The UI has no existing test infrastructure. PR 9 introduces vitest
+  + jsdom. If npm install fails, document it as a blocker in HANDOFF.
 
-Time budget: 0.5 day for PR 8. If you go over by >50%, stop and ask.
+Time budget: 2 days for PR 9. If you go over by >50%, stop and ask.
 If you encounter a blocker, stop, document it in the
 "Open questions / blockers" section of HANDOFF.md, and report.
 ```
@@ -125,7 +155,7 @@ If you encounter a blocker, stop, document it in the
 
 ## Current status
 
-**Last updated:** 2026-06-16 (PR 7 shipped; H5 + DB-4 closed; init_db runs alembic on startup; error_summary capped to 500 chars)
+**Last updated:** 2026-06-16 (PR 8 shipped; H7 + Q5 closed; 277 lines of dead code removed)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
@@ -137,7 +167,7 @@ If you encounter a blocker, stop, document it in the
 | 5 | Hub input validation | ✅ Merged (local) | `audit/2026-q2-hardening` | f9cea0c | Closes S1, S5, S6, S12, M14, M16. New `hub/tests/test_agents.py` + additions to `test_messages.py`/`test_tasks.py`; updated `test_jobs.py`/`test_pilot_mode.py` for new Create-schema behavior. Hub 87 passed, 3 skipped; CLI 436 passed, 10 skipped. Pushed (cf31fb0 ancestry). |
 | 6 | Hub auth + BOLA + perf | ✅ Merged (local) | `audit/2026-q2-hardening` | 90d4e4c | Closes S3 (server half), M15, M17, T5 + body-size bonus. Removes `?token=` fallback on non-SSE endpoints; adds `/events/ticket` signed-ticket flow. Rewrites `list_agents` with bulk queries. Removes dead `agent` param from `update_task` MCP tool. Adds 1 MB body cap middleware. New `hub/tests/test_bola.py`; enhanced `test_auth.py`, `test_agents.py`, `test_mcp_server.py`. Hub 96 passed, 3 skipped; CLI 436 passed, 10 skipped. Pushed (cf31fb0 ancestry). |
 | 7 | DB & migrations | ✅ Merged (local) | `audit/2026-q2-hardening` | 7c0c667 | Closes H5, DB-4. `init_db` now invokes `alembic upgrade head` after `create_all` (in a worker thread so its internal `asyncio.run()` doesn't conflict with the FastAPI lifespan's event loop), wrapped in try/except so dev mode (in-memory SQLite, missing `alembic.ini`) still works. `job_runs.error_summary` changed from unbounded `Text` to `String(500)` — migration 0007 was edited to use `String(500)` for fresh installs, and new migration 0008 uses `batch_alter_table` to alter existing deployments where 0007 already added the column as `Text`. New `hub/tests/test_migrations.py` with 9 tests covering model type, value length boundary, fresh-DB alembic round-trip, 0008 alters an existing `Text` column, `init_db` runs alembic for file DBs, `init_db` skips alembic for `:memory:`, and alembic failures don't crash `init_db`. Pushed (cf31fb0 ancestry). |
-| 8 | Dead code & dedup | ⬜ Not started | — | — | |
+| 8 | Dead code & dedup | ✅ Merged (local) | `audit/2026-q2-hardening` | eb647db | Closes H7, Q5. 277 lines of dead code removed (118 in cli.py, 159 in watchdog.py). Deleted the unreachable `lines.append`-based implementation in `cli._build_agent_context` (117 lines after the early return) and the equivalent dead block in `watchdog._build_agent_context` (125 lines). Both wrappers remain as clean 8-line shims that delegate to `context_builder.build_agent_context`. Deleted the duplicate `_load_dotenv` in watchdog.py (30 lines, zero callers — `utils.load_dotenv` was already imported and used at main()). No call-site changes. Pushed. |
 | 9 | Hub UI security | ⬜ Not started | — | — | |
 | 10 | Hub UI perf & dedup | ⬜ Not started | — | — | |
 | 11 | CLI/watchdog code quality | ⬜ Not started | — | — | |
@@ -161,7 +191,7 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: 7c0c667  (fix(hub): run alembic upgrade on startup, cap error_summary to 500 chars (PR 7))
+Latest commit: eb647db  (fix(cli): delete dead code in _build_agent_context wrappers (PR 8))
 Last test run: 2026-06-16 — Hub: 106 passed, 2 skipped. CLI: 443 passed, 3 skipped.
 
 master:
@@ -198,7 +228,8 @@ Integration topology (linear, no merge commits):
   └─ 90d4e4c  fix(hub): harden Hub auth, BOLA isolation, list_agents perf     (PR 6)
   └─ 597299c  docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7
   └─ cf31fb0  docs(audit): backfill PR 6 handoff commit hash in branch state
-  └─ 7c0c667  fix(hub): run alembic upgrade on startup, cap error_summary     (PR 7)  ← HEAD
+  └─ 7c0c667  fix(hub): run alembic upgrade on startup, cap error_summary     (PR 7)
+  └─ eb647db  fix(cli): delete dead code in _build_agent_context wrappers    (PR 8)  ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
@@ -417,6 +448,17 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Push:** succeeded; remote is now at `7c0c667` (`9a4bf06..7c0c667`).
 - **Open questions:** None.
 - **Hand-off to:** next session — execute **PR 8 — Dead code & dedup**. Ready-to-copy prompt at top of this file is pre-filled for PR 8, with the adjusted workflow (no test-first step — pure deletion; existing tests are the safety net).
+
+### 2026-06-16 — PR 8 shipped (Dead code & dedup)
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** Closes H7 and Q5. Deleted 277 lines of dead code in pure-deletion mode: 117 lines in `cli._build_agent_context` (the unreachable `lines.append`-based implementation that was replaced by `context_builder.build_agent_context` but never removed) and 125 lines in `watchdog._build_agent_context` for the same reason, plus 30 lines of duplicate `_load_dotenv` in watchdog.py (zero callers — `utils.load_dotenv` was already imported at line 29 and used at main()). Both wrappers remain as clean 8-line shims that delegate to `context_builder.build_agent_context`. No call-site changes were needed.
+- **Spec line numbers were stale** (the spec's `1631-1749` mapped to `1637-1754`; `1830-1956` to `1892-2017`; `3102-3132` to `3265-3295`). Verified the actual block boundaries with targeted `read` calls before each edit. The user's "Surgical: delete dead code only" decision meant keeping the wrapper function headers (which add `_get_project_instructions()` + version_comment + `.context` extraction) instead of refactoring all 5 call sites.
+- **Verification:** CLI 443 passed, 3 skipped (unchanged). Hub 106 passed, 2 skipped (unchanged). ruff clean. black no-op. mypy shows the same 1 pre-existing PyYAML stub error in `src/agentweave/config.py` (out of scope, unchanged). Smoke test exercised both wrappers + `utils.load_dotenv` — all return correct values.
+- **Local commit:** `eb647db` fix(cli): delete dead code in _build_agent_context wrappers (PR 8) (2 files changed, 277 deletions, 0 additions).
+- **Push:** succeeded; remote is now at `eb647db` (`7c0c667..eb647db`).
+- **Open questions:** None.
+- **Hand-off to:** next session — execute **PR 9 — Hub UI security**. Ready-to-copy prompt at top of this file is pre-filled for PR 9, with the adjusted workflow (test-first on each fix, vitest+jsdom infra setup is the first deliverable since the UI has no existing tests).
 
 ## Open questions / blockers
 
