@@ -2183,18 +2183,24 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         api_key = getattr(args, "api_key", None)
         project_id = getattr(args, "project_id", None)
 
-        if not url or not api_key or not project_id:
+        if not url or not api_key:
             print_error(
-                "HTTP transport requires --url, --api-key, and --project-id.\n"
+                "HTTP transport requires --url and --api-key.\n"
                 "Example:\n"
                 "  agentweave transport setup --type http \\\n"
                 "    --url http://localhost:8000 \\\n"
-                "    --api-key aw_live_... \\\n"
-                "    --project-id proj-default"
+                "    --api-key aw_live_..."
             )
             return 1
 
-        # Connectivity check
+        # Connectivity check + project_id discovery.
+        # We always hit /api/v1/status with the user's API key to (a) verify
+        # the key works and (b) read the Hub's actual project_id. This prevents
+        # the silent failure mode where the user types `proj-default` but the
+        # Hub was bootstrapped with a different project_id (e.g. `Agentweave`)
+        # — every subsequent MCP tool call would then 404/BOLA on the Hub and
+        # the agent would silently fall back to local-fs + curl.
+        import json as _json
         import urllib.error as _urllib_err
         import urllib.request as _urllib_req
 
@@ -2204,7 +2210,12 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         req.add_header("Accept", "application/json")
         try:
             with _urllib_req.urlopen(req, timeout=10) as resp:
-                resp.read()
+                hub_project_id = None
+                try:
+                    payload = _json.loads(resp.read().decode())
+                    hub_project_id = payload.get("project_id")
+                except (ValueError, _json.JSONDecodeError):
+                    pass
         except _urllib_err.HTTPError as exc:
             if exc.code == 401:
                 print_error("Hub rejected the API key (401 Unauthorized). Check --api-key.")
@@ -2214,6 +2225,30 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         except _urllib_err.URLError as exc:
             print_error(f"Cannot reach Hub at {url}: {exc.reason}")
             return 1
+
+        if hub_project_id is None:
+            print_warning(
+                "Could not read project_id from the Hub's /api/v1/status response. "
+                "Falling back to --project-id."
+            )
+        elif not project_id:
+            # Auto-fill from the Hub — the most common setup case (the user
+            # doesn't know or doesn't care about the project_id; the Hub is
+            # the source of truth).
+            project_id = hub_project_id
+            print_info(f"Auto-detected Hub project_id: {project_id!r}")
+        elif project_id != hub_project_id:
+            # Mismatch — surface it loudly. Many Hub endpoints (tasks, messages,
+            # agents) filter by project_id, so a wrong value here will silently
+            # return empty results and the watchdog / MCP tools will appear
+            # broken.
+            print_warning(
+                f"--project-id={project_id!r} does not match the Hub's "
+                f"project_id ({hub_project_id!r}). The Hub will return empty "
+                "results for every query and the watchdog will never see any "
+                "messages or tasks. Using the Hub's value instead."
+            )
+            project_id = hub_project_id
 
         # Write transport.json
         AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
