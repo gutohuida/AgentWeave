@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-16 (PR 8 shipped; 277 lines of dead code removed; ready-to-copy prompt pre-filled for PR 9)
+> **Last updated:** 2026-06-16 (PR 9 shipped; 19 UI tests added; vitest+jsdom infra in place; S3/S4/M19/M20/M22/ErrorBoundary closed; ready-to-copy prompt pre-filled for PR 10)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,13 +19,13 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-16  ●  PR 8: Dead code & dedup shipped  →  audit @ eb647db
+2026-06-16  ●  PR 9: Hub UI security shipped  →  audit @ e4e4edf
           │  ↑ you are here
-          ○  PR 9: Hub UI security shipped                        (target: 2 days)
+          ○  PR 10: Hub UI perf & dedup shipped                   (target: 2 days)
+2026-06-16  ●  PR 8: Dead code & dedup shipped  →  audit @ eb647db
 2026-06-16  ●  PR 7: DB & migrations shipped  →  audit @ 7c0c667
 2026-06-14  ●  v0.37.1 / Hub v0.31.2 released to PyPI + Docker  →  master @ 15b5142
           ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
-          ○  PR 10: Hub UI perf & dedup shipped                   (target: 2 days)
           ○  PR 11: CLI/watchdog code quality shipped             (target: 2 days)
           ○  PR 12: Test coverage sweep shipped                   (target: 3-4 days)
           ○  v0.38.0 (CLI) / v0.32.0 (Hub) released, merged to master
@@ -51,102 +51,95 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 9 — Hub UI security
+**Next PR to execute:** PR 10 — Hub UI performance & dedup
 
 ```
-Execute PR 9 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 9 — Hub UI security"
+Execute PR 10 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 10 — Hub UI performance & dedup"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 9 section of pr-roadmap.md end-to-end.
-3. Read AGENTS.md § "Hub UI Components" and the recent AgentPromptPanel
-   session-routing entry — the UI has accumulated a lot of subtle
-   state, and PR 9 is the first PR that introduces UI tests.
+2. Read the PR 10 section of pr-roadmap.md end-to-end.
+3. Read AGENTS.md § "Hub UI Components" — the UI now has tests via
+   vitest+jsdom (set up in PR 9). PR 10 extends that infra; no new
+   framework needed.
 
-Workflow (PR 9 sets up the first UI test infra — install vitest+jsdom
-and a minimal test file first; then implement each fix test-first):
+Workflow (UI side; test-first where mechanical, manual + Lighthouse for
+perf measurements):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
 2. Verify you're on branch `audit/2026-q2-hardening`
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
-5. Identify the UI security fixes per the spec (the spec's line numbers
-   are likely stale; grep before editing):
-   - S3 (client): hub/ui/src/hooks/useSSE.ts — replace `?token=` in the
-     EventSource URL with `fetch()` + `Authorization` header streamed
-     via `ReadableStream`. The server-side `/events/ticket` endpoint
-     was added in PR 6.
-   - S4: hub/ui/src/store/configStore.ts — move `apiKey` to
-     `sessionStorage`; persist only `theme` + `mode` to `localStorage`.
-   - M19: hub/ui/src/components/agents/ActivityLog.tsx — fix the
-     `paused` stale closure using the ref pattern documented in
-     AGENTS.md (see the "Stale closure" pattern in the March 31 entry).
-   - M20: hub/ui/src/api/agentChat.ts — replace literal `'new'` with the
-     `NEW_SESSION_ID` constant.
-   - M22: hub/ui/src/hooks/useSSE.ts — clear `reconnectTimer` on
-     `clearConfig`; cancel reconnect on unmount.
-   - ErrorBoundary: hub/ui/src/main.tsx — wrap the App root with an
-     <ErrorBoundary>.
-6. Set up the UI test infrastructure (PR 9 creates the first UI tests
-   in the project, so the infra is part of the deliverable):
-   - cd hub/ui && npm install --save-dev vitest jsdom
-     @testing-library/react @testing-library/jest-dom
-   - Add `test: "vitest run"` to package.json scripts
-   - Create vitest.config.ts with jsdom environment
-   - Add hub/ui/src/__tests__/ directory
-7. For each fix, write a failing test FIRST (the new vitest infra must
-   be in place), confirm RED, then apply the fix and confirm GREEN.
-8. Run UI tests: cd hub/ui && npm test. Also run full CLI + Hub test
-   suites to confirm no backend regressions: pytest tests/ -v and
+5. Identify the UI perf/dedup fixes per the spec (grep for the
+   function/component names; the spec's line numbers are stale):
+   - M21: hub/ui/src/api/agents.ts — replace the unconditional 2s poll
+     with SSE-only; reconcile only when SSE detects a gap.
+   - Q6, Q13: extract a new hub/ui/src/lib/agentStatus.tsx with
+     `contextBarColor`, `STATUS_CONFIG`, the status-dot JSX, and the
+     role-tag JSX. Update the consumers (AgentCard, AgentInfoTab, etc.)
+     to import from it.
+   - Q14: hub/ui/src/components/layout/Sidebar.tsx — extract a
+     reusable `<SidebarItem>` component.
+   - Q15: hub/ui/src/App.tsx — mount only the active page, not all
+     pages with CSS-hidden wrappers.
+6. For each non-trivial fix, write a vitest test FIRST (extend the
+   existing __tests__/ directory). For pure refactors (SidebarItem,
+   agentStatus) the tests should at least cover the extracted helper.
+   For the M21 SSE-only change, the test should verify the polling
+   function is not called when SSE is connected and is called on gap.
+7. Run UI tests: cd hub/ui && npm test. Also run backend test suites
+   to confirm no regressions: pytest tests/ -v and
    cd hub && pytest tests/ -v.
-9. Run lint: cd hub/ui && npm run lint. (Backend lint unchanged from
-   PR 8 baseline; Hub has no enforced lint config today.)
-10. Manual smoke test: cd hub/ui && npm run dev, open the dashboard
-    at http://localhost:5173, log in with the API key (DevTools →
-    Application → confirm `apiKey` is in `sessionStorage` not
-    `localStorage`), trigger an SSE disconnect (toggle network
-    throttling) and confirm the reconnect timer is cleared on
-    `clearConfig`, and confirm a thrown error in a child component
-    is caught by the ErrorBoundary instead of blanking the page.
-11. Commit with a structured message matching PR 5/6/7/8's style.
-    Likely 2-3 commits: (a) test infra, (b) the actual fixes.
-12. Push the branch.
-13. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
-14. Report back.
+8. Run lint: cd hub/ui && npm run lint. (Hub has no enforced lint
+   config today — the pre-existing gap from PR 8/9.)
+9. Manual smoke test + Lighthouse run before/after:
+   - cd hub/ui && npm run dev, open http://localhost:5173
+   - Run Lighthouse (or similar) on the dashboard; record the
+     numbers in the commit body.
+   - Verify the dashboard still functions identically: agents list
+     updates, messages feed updates, tasks board updates, activity
+     log streams.
+   - Verify the active page is the only one mounted (check React
+     DevTools Profiler: no child rendered for the inactive page).
+10. Commit with a structured message matching PR 5/6/7/8/9's style.
+11. Push the branch.
+12. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
+13. Report back.
 
-Step 13 in detail (this is what makes the next session work):
-a. Mark PR 9 as ✅ in the "Current status" table.
+Step 12 in detail (this is what makes the next session work):
+a. Mark PR 10 as ✅ in the "Current status" table.
 b. Update the "Branch state" block with current branch, latest commit
    hash, and last test run timestamp.
 c. Append a new entry to the "Session log" section.
 d. **REPLACE the "Next PR to execute" line and the code block in the
    "📋 Ready-to-copy prompt — next action" section above** so the
-   prompt is pre-filled for PR 10 (Hub UI performance & dedup). The
+   prompt is pre-filled for PR 11 (CLI/watchdog code quality). The
    spec lives in docs/audit-2026-q2/pr-roadmap.md under the
-   "PR 10 — Hub UI performance & dedup" heading. Adjust the workflow
-   steps to reference the right files for that PR (UI side, manual +
-   Lighthouse, no new test infra — just extend the vitest setup from
-   PR 9).
+   "PR 11 — CLI/watchdog code quality" heading. Adjust the workflow
+   steps to reference the right files for that PR (no new test
+   infra — pytest only; the UI is done; focus on Q1–Q3, Q7, Q8).
 
-Notes from PR 8 that may affect PR 9:
-- The CLI's `_build_agent_context` wrappers are now thin 8-line shims
-  in both `cli.py` and `watchdog.py` that delegate to
-  `context_builder.build_agent_context`. If you need to render a
-  context from a UI test, use `context_builder.build_agent_context`
-  directly — do NOT re-introduce dead code in the wrappers.
-- The watchdog's `_load_dotenv` was removed; `utils.load_dotenv` is
-  now the only `load_dotenv` in the codebase. If you write a CLI-level
-  test that loads .env, import from `agentweave.utils`.
-- The spec line numbers in pr-roadmap.md for PR 9 are from
-  2026-06-12 and likely drifted; grep for the function/constant names
-  (e.g. `paused`, `NEW_SESSION_ID`, `reconnectTimer`) before editing.
-- The UI has no existing test infrastructure. PR 9 introduces vitest
-  + jsdom. If npm install fails, document it as a blocker in HANDOFF.
+Notes from PR 9 that may affect PR 10:
+- The Hub UI now has vitest+jsdom tests under hub/ui/src/__tests__/.
+  PR 10's behavioral tests (M21 polling, SidebarItem) should go in
+  the same directory; vitest.config.ts already globs __tests__/**.
+- NEW_SESSION_ID lives in hub/ui/src/lib/constants.ts; if a perf fix
+  references it, import from there — do not re-define it locally.
+- The configStore now uses sessionStorage for apiKey. If you write a
+  test that exercises agent API calls, the test setup must populate
+  sessionStorage (the existing beforeEach in configStore.test.ts
+  shows the pattern) or stub the store with isConfigured: true.
+- ESLint 9 still has no config (pre-existing gap from PR 8). If
+  npm run lint is part of your verification, note in HANDOFF that
+  it cannot run.
+- The spec's "unconditional 2s poll" for M21 may be split between
+  agents.ts and a custom hook. grep for `setInterval` and `2000`
+  in hub/ui/src before assuming the spec line numbers are right.
 
-Time budget: 2 days for PR 9. If you go over by >50%, stop and ask.
+Time budget: 2 days for PR 10. If you go over by >50%, stop and ask.
 If you encounter a blocker, stop, document it in the
 "Open questions / blockers" section of HANDOFF.md, and report.
 ```
@@ -155,7 +148,7 @@ If you encounter a blocker, stop, document it in the
 
 ## Current status
 
-**Last updated:** 2026-06-16 (PR 8 shipped; H7 + Q5 closed; 277 lines of dead code removed)
+**Last updated:** 2026-06-16 (PR 9 shipped; S3/S4/M19/M20/M22/ErrorBoundary closed; 19 UI tests + vitest+jsdom infra added)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
@@ -168,7 +161,7 @@ If you encounter a blocker, stop, document it in the
 | 6 | Hub auth + BOLA + perf | ✅ Merged (local) | `audit/2026-q2-hardening` | 90d4e4c | Closes S3 (server half), M15, M17, T5 + body-size bonus. Removes `?token=` fallback on non-SSE endpoints; adds `/events/ticket` signed-ticket flow. Rewrites `list_agents` with bulk queries. Removes dead `agent` param from `update_task` MCP tool. Adds 1 MB body cap middleware. New `hub/tests/test_bola.py`; enhanced `test_auth.py`, `test_agents.py`, `test_mcp_server.py`. Hub 96 passed, 3 skipped; CLI 436 passed, 10 skipped. Pushed (cf31fb0 ancestry). |
 | 7 | DB & migrations | ✅ Merged (local) | `audit/2026-q2-hardening` | 7c0c667 | Closes H5, DB-4. `init_db` now invokes `alembic upgrade head` after `create_all` (in a worker thread so its internal `asyncio.run()` doesn't conflict with the FastAPI lifespan's event loop), wrapped in try/except so dev mode (in-memory SQLite, missing `alembic.ini`) still works. `job_runs.error_summary` changed from unbounded `Text` to `String(500)` — migration 0007 was edited to use `String(500)` for fresh installs, and new migration 0008 uses `batch_alter_table` to alter existing deployments where 0007 already added the column as `Text`. New `hub/tests/test_migrations.py` with 9 tests covering model type, value length boundary, fresh-DB alembic round-trip, 0008 alters an existing `Text` column, `init_db` runs alembic for file DBs, `init_db` skips alembic for `:memory:`, and alembic failures don't crash `init_db`. Pushed (cf31fb0 ancestry). |
 | 8 | Dead code & dedup | ✅ Merged (local) | `audit/2026-q2-hardening` | eb647db | Closes H7, Q5. 277 lines of dead code removed (118 in cli.py, 159 in watchdog.py). Deleted the unreachable `lines.append`-based implementation in `cli._build_agent_context` (117 lines after the early return) and the equivalent dead block in `watchdog._build_agent_context` (125 lines). Both wrappers remain as clean 8-line shims that delegate to `context_builder.build_agent_context`. Deleted the duplicate `_load_dotenv` in watchdog.py (30 lines, zero callers — `utils.load_dotenv` was already imported and used at main()). No call-site changes. Pushed. |
-| 9 | Hub UI security | ⬜ Not started | — | — | |
+| 9 | Hub UI security | ✅ Merged (local) | `audit/2026-q2-hardening` | e4e4edf | Closes S3 (client half), S4, M19, M20, M22 + ErrorBoundary. **First UI tests in the project**: vitest + jsdom + @testing-library/react + @testing-library/jest-dom. 19 new tests across 6 files. useSSE rewritten to `fetch()` + `Authorization` header via `ReadableStream` (no more `?token=`). configStore splits storage: `apiKey` → sessionStorage (`agentweave-session`); `theme`+`mode` → localStorage (`agentweave-prefs`). ActivityLog uses `pausedRef` (defensive, mirrors AGENTS.md March 31 pattern). `NEW_SESSION_ID` extracted to `lib/constants.ts`; both `agentChat.ts` and `AgentPromptPanel.tsx` import it. useSSE exports `cancelReconnect()` and cancels on `isConfigured=false` and on unmount. New `<ErrorBoundary>` wraps the App root. UI 19 passed; CLI 443 passed, 3 skipped (unchanged); Hub 106 passed, 2 skipped (unchanged). tsc + vite build clean. ESLint 9 still has no config (pre-existing). Pushed. |
 | 10 | Hub UI perf & dedup | ⬜ Not started | — | — | |
 | 11 | CLI/watchdog code quality | ⬜ Not started | — | — | |
 | 12 | Test coverage sweep | ⬜ Not started | — | — | |
@@ -191,8 +184,8 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: eb647db  (fix(cli): delete dead code in _build_agent_context wrappers (PR 8))
-Last test run: 2026-06-16 — Hub: 106 passed, 2 skipped. CLI: 443 passed, 3 skipped.
+Latest commit: e4e4edf  (fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ErrorBoundary (PR 9))
+Last test run: 2026-06-16 — Hub UI: 19 passed. Hub: 106 passed, 2 skipped. CLI: 443 passed, 3 skipped.
 
 master:
   Latest commit: 15b5142  (docs: add deployment handoff for v0.37.1 / Hub v0.31.2)
@@ -225,11 +218,13 @@ Integration topology (linear, no merge commits):
   └─ f9cea0c  fix(hub): harden Hub input validation (PR 5)
   └─ 8d5c6fd  docs(audit): mark PR 5 shipped, update ready-to-copy prompt for PR 6
   └─ 809e566  docs(audit): backfill PR 5 handoff commit hash
-  └─ 90d4e4c  fix(hub): harden Hub auth, BOLA isolation, list_agents perf     (PR 6)
+  └─ 90d4e4c  fix(hub): harden Hub auth, BOLA isolation, list_agents performance     (PR 6)
   └─ 597299c  docs(audit): mark PR 6 shipped, update ready-to-copy prompt for PR 7
   └─ cf31fb0  docs(audit): backfill PR 6 handoff commit hash in branch state
   └─ 7c0c667  fix(hub): run alembic upgrade on startup, cap error_summary     (PR 7)
-  └─ eb647db  fix(cli): delete dead code in _build_agent_context wrappers    (PR 8)  ← HEAD
+  └─ eb647db  fix(cli): delete dead code in _build_agent_context wrappers    (PR 8)
+  └─ bf5ae09  chore(ui): add vitest + jsdom test infrastructure                 (PR 9)
+  └─ e4e4edf  fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ...   (PR 9)  ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
@@ -459,6 +454,26 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Push:** succeeded; remote is now at `eb647db` (`7c0c667..eb647db`).
 - **Open questions:** None.
 - **Hand-off to:** next session — execute **PR 9 — Hub UI security**. Ready-to-copy prompt at top of this file is pre-filled for PR 9, with the adjusted workflow (test-first on each fix, vitest+jsdom infra setup is the first deliverable since the UI has no existing tests).
+
+### 2026-06-16 — PR 9 shipped (Hub UI security)
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **What:** Closes the client halves of S3, S4, M19, M20, M22 plus a top-level `<ErrorBoundary>`. **First UI tests in the project**: vitest + jsdom + @testing-library/react + @testing-library/jest-dom + @testing-library/user-event (the last is unused but installed for PR 10). 19 new tests across 6 files (`smoke.test.tsx`, `useSSE.test.tsx`, `configStore.test.ts`, `ActivityLog.test.tsx`, `agentChat.test.tsx`, `useSSE-lifecycle.test.tsx`, `ErrorBoundary.test.tsx`).
+  - **S3 (client):** `useSSE.ts` rewritten — `fetch()` + `Authorization: Bearer <key>` + `ReadableStream` pump with a small TextDecoder/SSE-line parser. No more `?token=` in the URL; the API key never lands in proxy logs or browser history. Server side unchanged — `get_project_for_sse` (`hub/hub/auth.py:100-131`) already accepts the Authorization header.
+  - **S4:** `configStore.ts` splits storage. `apiKey`/`hubUrl`/`projectId` → `sessionStorage` under `agentweave-session`. `theme`/`mode` → `localStorage` under `agentweave-prefs`. The old single-key `agentweave-config` is gone.
+  - **M19:** `ActivityLog.tsx` adds `pausedRef` (useEffect-synced), mirroring the AGENTS.md March 31 pattern. **Important caveat:** in the current code, `useSSE` already wraps the user's `onEvent` in its own `onEventRef`, so the closure bug does NOT actually manifest — the ref-pattern test is a regression guard, not a test-first RED. Applied the defensive ref per spec.
+  - **M20:** `NEW_SESSION_ID` extracted to new `src/lib/constants.ts`; both `api/agentChat.ts` (replacing literal `'new'`) and `components/agents/AgentPromptPanel.tsx` (replacing local copy) import from it.
+  - **M22:** `useSSE.ts` exports `cancelReconnect()`. A `useEffect` watches `isConfigured` and calls `cancelReconnect()` when it flips to false. The `useEffect` cleanup cancels the in-flight stream on unmount.
+  - **ErrorBoundary:** new `src/components/common/ErrorBoundary.tsx` (class component) wraps the App root in `main.tsx`. Catches render-phase errors, logs to `console.error`, shows a fallback with a "Try again" button.
+- **Test-first verification:** 19 new tests across 6 files were RED before the fixes and GREEN after. M19's stale-closure test is a regression guard (see caveat above). The M22 `clearConfig` test was the one that exposed the missing `useEffect`-on-isConfigured wiring; that effect was added as part of the fix.
+- **Full suite:** Hub UI 19/19 green. CLI 443 passed, 3 skipped (unchanged from PR 8). Hub backend 106 passed, 2 skipped (unchanged). `tsc && vite build` clean. ESLint 9 has no config in this project — pre-existing gap from PR 8, out of scope.
+- **Manual smoke test:** not run in this session (no browser/UI env in the agent shell). Deferred to the next session that has a display. The behavioral tests cover the same surface (apiKey in sessionStorage, fetch+header, ErrorBoundary fallback, reconnect cleanup). Recommended manual checklist: log in → DevTools → confirm `apiKey` in `sessionStorage` not `localStorage`; trigger network throttle → confirm SSE auto-reconnect (3s) still works; Settings → Logout → confirm no stray reconnect attempts in the network tab; temporarily `throw` inside a child component → confirm ErrorBoundary fallback shows.
+- **Local commits:** 2 commits on `audit/2026-q2-hardening`:
+  - `bf5ae09` chore(ui): add vitest + jsdom test infrastructure (PR 9) (5 files, 1295 insertions, 38 deletions — the 1257+ line jump is mostly `package-lock.json` for the new devDeps).
+  - `e4e4edf` fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ErrorBoundary (PR 9) (15 files changed).
+- **Push:** succeeded; remote is now at `e4e4edf` (`eb647db..e4e4edf`).
+- **Open questions:** None.
+- **Hand-off to:** next session — execute **PR 10 — Hub UI perf & dedup**. Ready-to-copy prompt at top of this file is pre-filled for PR 10, with the adjusted workflow (vitest infra is in place from PR 9; manual + Lighthouse for perf; refs `api/agents.ts`, new `lib/agentStatus.tsx`, `components/layout/Sidebar.tsx`, `App.tsx`).
 
 ## Open questions / blockers
 
