@@ -643,6 +643,29 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
                 category="agent",
             )
         )
+    if runner in ("codex", "codex_mcp") and not session.get_agent_yolo(agent):
+        # Without yolo, codex runs in `--sandbox workspace-write` mode
+        # which still prompts for MCP tool calls. The watchdog is
+        # non-interactive and cannot answer, so MCP calls fail with
+        # "user cancelled". Enable yolo so codex uses
+        # `--dangerously-bypass-approvals-and-sandbox`.
+        results.append(
+            warn(
+                "codex_yolo_recommended",
+                agent,
+                (
+                    f"Agent {agent!r} uses the codex runner without yolo mode. "
+                    "The watchdog will spawn it with --sandbox workspace-write, "
+                    "which still prompts for MCP tool calls (the watchdog cannot "
+                    "answer). MCP tools will fail with 'user cancelled'."
+                ),
+                hint=(
+                    f"Enable yolo for {agent}: `agentweave yolo --agent {agent} --enable`. "
+                    "This switches the codex flag to --dangerously-bypass-approvals-and-sandbox."
+                ),
+                category="agent",
+            )
+        )
     if runner == "manual":
         results.append(
             warn(

@@ -451,7 +451,12 @@ class TestAgentPingCmdCodex:
         assert cmd[1] == "exec"
         assert cmd[2] == "--json"
         assert cmd[3] == "--skip-git-repo-check"
-        assert "--full-auto" in cmd
+        # Default (no yolo): use the modern --sandbox workspace-write flag.
+        # The deprecated --full-auto flag is no longer used.
+        assert "--sandbox" in cmd
+        idx = cmd.index("--sandbox")
+        assert cmd[idx + 1] == "workspace-write"
+        assert "--full-auto" not in cmd
         assert cmd[-1] == "do the task"
         assert "resume" not in cmd
 
@@ -513,7 +518,10 @@ class TestAgentPingCmdCodex:
         # codex-dev has yolo=False by default in the fixture
         cmd = _agent_ping_cmd("codex-dev", "do the task")
         assert "--dangerously-bypass-approvals-and-sandbox" not in cmd
-        assert "--full-auto" in cmd
+        assert "--full-auto" not in cmd
+        # Default: modern --sandbox workspace-write
+        idx = cmd.index("--sandbox")
+        assert cmd[idx + 1] == "workspace-write"
 
         # Patch session to add yolo=True
         from agentweave.session import Session

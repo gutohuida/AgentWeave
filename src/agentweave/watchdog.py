@@ -1377,7 +1377,14 @@ def _agent_ping_cmd(
             if agent_cfg.get("yolo"):
                 cmd += ["--dangerously-bypass-approvals-and-sandbox"]
             else:
-                cmd += ["--full-auto"]
+                # `--full-auto` is deprecated by newer codex and was
+                # removed in recent versions. `--sandbox workspace-write`
+                # is the documented replacement. It auto-approves file
+                # edits in the workspace but still prompts for MCP tool
+                # calls — which the watchdog cannot answer. So a headless
+                # codex agent that needs MCP tools MUST enable yolo, and
+                # the diagnostics surface a warning when it doesn't.
+                cmd += ["--sandbox", "workspace-write"]
 
         cmd += [prompt]
         return cmd
