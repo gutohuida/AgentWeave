@@ -2956,7 +2956,15 @@ def _build_opencode_launch_command(
 
 
 def _activate_transport(config: "AgentWeaveConfig") -> int:
-    """Configure transport by fetching API key from Hub if needed."""
+    """Configure transport by fetching API key from Hub if needed.
+
+    Always reads the Hub's actual project_id from `/api/v1/status` (after
+    fetching the bootstrap API key) so multi-project setups don't end up
+    with a hardcoded `proj-default` in transport.json. The Hub uses the
+    API key for project filtering, so a wrong project_id here is silently
+    masked on reads but causes the local-vs-Hub ID mismatch on writes
+    that drove the codex MCP-fallback bug.
+    """
     import json as _json
 
     from .utils import load_json, save_json
@@ -2966,7 +2974,9 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
     # Check if transport is already configured with same URL
     existing = load_json(TRANSPORT_CONFIG_FILE)
     if existing and existing.get("type") == "http" and existing.get("url") == hub_url:
-        # Re-fetch setup token to detect if Hub was restarted with a new API key
+        # Re-fetch setup token to detect if Hub was restarted with a new API key.
+        # If the project_id drifts (Hub re-bootstrapped with a different
+        # AW_BOOTSTRAP_PROJECT_ID), refresh it from the live status response.
         setup_token_url = f"{hub_url.rstrip('/')}/api/v1/setup/token"
         try:
             with urllib.request.urlopen(setup_token_url, timeout=5) as resp:
@@ -2974,10 +2984,18 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
                 fresh_key = data.get("api_key")
                 if fresh_key and fresh_key != existing.get("api_key"):
                     existing["api_key"] = fresh_key
-                    save_json(TRANSPORT_CONFIG_FILE, existing)
                     print("[TRANSPORT] API key refreshed (Hub restarted)")
                 else:
                     print("[TRANSPORT] Already configured")
+                # Re-read the Hub's project_id in case it changed.
+                hub_project_id = _fetch_hub_project_id(hub_url, fresh_key or existing.get("api_key", ""))
+                if hub_project_id and hub_project_id != existing.get("project_id"):
+                    existing["project_id"] = hub_project_id
+                    print(
+                        f"[TRANSPORT] project_id refreshed to {hub_project_id!r} "
+                        "(Hub re-bootstrapped)"
+                    )
+                save_json(TRANSPORT_CONFIG_FILE, existing)
         except Exception:
             print("[TRANSPORT] Already configured")
         return 0
@@ -2989,6 +3007,18 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
             data = _json.loads(resp.read())
             api_key = data.get("api_key")
             if api_key:
+                # Discover the Hub's actual project_id so multi-project
+                # setups (one Hub, many CLI projects, one per env) don't
+                # accidentally pin every activate flow to "proj-default".
+                hub_project_id = _fetch_hub_project_id(hub_url, api_key)
+                if not hub_project_id:
+                    print_warning(
+                        "Could not read project_id from the Hub's "
+                        "/api/v1/status response. Falling back to "
+                        "'proj-default' — multi-project setups may break."
+                    )
+                    hub_project_id = "proj-default"
+
                 # Save transport config
                 TRANSPORT_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
                 save_json(
@@ -2997,10 +3027,10 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
                         "type": "http",
                         "url": hub_url,
                         "api_key": api_key,
-                        "project_id": "proj-default",
+                        "project_id": hub_project_id,
                     },
                 )
-                print(f"[TRANSPORT] Connected to Hub at {hub_url}")
+                print(f"[TRANSPORT] Connected to Hub at {hub_url} (project {hub_project_id!r})")
                 return 0
     except Exception as exc:
         print_warning(f"Could not auto-configure transport: {exc}")
@@ -3014,6 +3044,30 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
         return 0
 
     return 0
+
+
+def _fetch_hub_project_id(hub_url: str, api_key: str) -> Optional[str]:
+    """Return the Hub's bootstrapped project_id, or None on failure.
+
+    Used by `agentweave activate` (and re-used by `cmd_transport_setup`)
+    to keep the local `transport.json` in sync with the Hub. The Hub
+    itself is the source of truth — multi-project deployments create
+    one project per env, and the bootstrap name lives only on the Hub.
+    """
+    import json as _json
+    import urllib.request
+
+    status_url = f"{hub_url.rstrip('/')}/api/v1/status"
+    req = urllib.request.Request(status_url)
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            payload = _json.loads(resp.read().decode())
+            pid = payload.get("project_id")
+            return str(pid) if pid else None
+    except Exception:
+        return None
 
 
 def _activate_agents(config: "AgentWeaveConfig") -> int:
