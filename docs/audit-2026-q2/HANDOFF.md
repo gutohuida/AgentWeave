@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-16 (PR 9 shipped; 19 UI tests added; vitest+jsdom infra in place; S3/S4/M19/M20/M22/ErrorBoundary closed; ready-to-copy prompt pre-filled for PR 10)
+> **Last updated:** 2026-06-17 (PR 10 shipped; M21 SSE-only polling + Q6/Q13 dedup of `contextBarColor`/`STATUS_CONFIG`/status-dot/dev-role-pill into `lib/agentStatus.tsx`; Q14 extracted `<SidebarItem>`; Q15 data-driven PAGES map in `App.tsx`; 41 new vitest tests added — UI now 60 passed; CLI 477+3 skipped; Hub 111+2 skipped; bundle -3.1 kB raw; ready-to-copy prompt pre-filled for PR 11)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -19,24 +19,24 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-16  ●  PR 9: Hub UI security shipped  →  audit @ e4e4edf
+2026-06-17  ●  PR 10: Hub UI perf & dedup shipped  →  audit @ c195ab1
           │  ↑ you are here
-          ○  PR 10: Hub UI perf & dedup shipped                   (target: 2 days)
+          ○  PR 11: CLI/watchdog code quality shipped             (target: 2 days)
+2026-06-16  ●  PR 9: Hub UI security shipped  →  audit @ e4e4edf
 2026-06-16  ●  PR 8: Dead code & dedup shipped  →  audit @ eb647db
 2026-06-16  ●  PR 7: DB & migrations shipped  →  audit @ 7c0c667
 2026-06-14  ●  v0.37.1 / Hub v0.31.2 released to PyPI + Docker  →  master @ 15b5142
-          ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
-          ○  PR 11: CLI/watchdog code quality shipped             (target: 2 days)
-          ○  PR 12: Test coverage sweep shipped                   (target: 3-4 days)
-          ○  v0.38.0 (CLI) / v0.32.0 (Hub) released, merged to master
-          ●  PR 5: Hub input validation shipped
-          ●  Branch integration: opencode onto master, audit rebased on top  →  master @ 016bc77
-          ●  PR 4: CLI security & correctness shipped
-          ●  PR 3: Transport error handling & safety shipped
-          ●  PR 2: Transport data-loss bugs shipped
-          ●  PR 0.5: test_jobs croniter 6.x mock fix shipped
-          ●  PR 1: SPA key leak (CRITICAL) shipped
-          ●  Audit created, branch + version bumps (PEP 440 alpha: 0.38.0a1 / 0.32.0a1)
+           ●  PR 6: Hub auth + BOLA + perf shipped  →  audit @ 90d4e4c  ·  v0.38.0a1 / v0.32.0a1
+           ○  PR 12: Test coverage sweep shipped                   (target: 3-4 days)
+           ○  v0.38.0 (CLI) / v0.32.0 (Hub) released, merged to master
+           ●  PR 5: Hub input validation shipped
+           ●  Branch integration: opencode onto master, audit rebased on top  →  master @ 016bc77
+           ●  PR 4: CLI security & correctness shipped
+           ●  PR 3: Transport error handling & safety shipped
+           ●  PR 2: Transport data-loss bugs shipped
+           ●  PR 0.5: test_jobs croniter 6.x mock fix shipped
+           ●  PR 1: SPA key leak (CRITICAL) shipped
+           ●  Audit created, branch + version bumps (PEP 440 alpha: 0.38.0a1 / 0.32.0a1)
 ```
 
 **How to update:** when a milestone completes, change the `○` to `●` and fill in any version/branch changes. The "you are here" marker moves down. To indicate work in progress, use `◐` (e.g. `◐ PR 1: ... (in progress)`).
@@ -51,95 +51,115 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 10 — Hub UI performance & dedup
+**Next PR to execute:** PR 11 — CLI/watchdog code quality
 
 ```
-Execute PR 10 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 10 — Hub UI performance & dedup"
+Execute PR 11 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 11 — CLI/watchdog code quality"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 10 section of pr-roadmap.md end-to-end.
-3. Read AGENTS.md § "Hub UI Components" — the UI now has tests via
-   vitest+jsdom (set up in PR 9). PR 10 extends that infra; no new
-   framework needed.
+2. Read the PR 11 section of pr-roadmap.md end-to-end.
+3. Read AGENTS.md § "Working environment" + the CLI test commands.
+   The UI tests are done (60 passed via vitest+jsdom) — PR 11 is
+   CLI/watchdog only. No new test infra needed; pytest only.
 
-Workflow (UI side; test-first where mechanical, manual + Lighthouse for
-perf measurements):
+Workflow (Python side; mechanical refactors, existing tests are the
+safety net):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
 2. Verify you're on branch `audit/2026-q2-hardening`
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
-5. Identify the UI perf/dedup fixes per the spec (grep for the
-   function/component names; the spec's line numbers are stale):
-   - M21: hub/ui/src/api/agents.ts — replace the unconditional 2s poll
-     with SSE-only; reconcile only when SSE detects a gap.
-   - Q6, Q13: extract a new hub/ui/src/lib/agentStatus.tsx with
-     `contextBarColor`, `STATUS_CONFIG`, the status-dot JSX, and the
-     role-tag JSX. Update the consumers (AgentCard, AgentInfoTab, etc.)
-     to import from it.
-   - Q14: hub/ui/src/components/layout/Sidebar.tsx — extract a
-     reusable `<SidebarItem>` component.
-   - Q15: hub/ui/src/App.tsx — mount only the active page, not all
-     pages with CSS-hidden wrappers.
-6. For each non-trivial fix, write a vitest test FIRST (extend the
-   existing __tests__/ directory). For pure refactors (SidebarItem,
-   agentStatus) the tests should at least cover the extracted helper.
-   For the M21 SSE-only change, the test should verify the polling
-   function is not called when SSE is connected and is called on gap.
-7. Run UI tests: cd hub/ui && npm test. Also run backend test suites
-   to confirm no regressions: pytest tests/ -v and
-   cd hub && pytest tests/ -v.
-8. Run lint: cd hub/ui && npm run lint. (Hub has no enforced lint
-   config today — the pre-existing gap from PR 8/9.)
-9. Manual smoke test + Lighthouse run before/after:
-   - cd hub/ui && npm run dev, open http://localhost:5173
-   - Run Lighthouse (or similar) on the dashboard; record the
-     numbers in the commit body.
-   - Verify the dashboard still functions identically: agents list
-     updates, messages feed updates, tasks board updates, activity
-     log streams.
-   - Verify the active page is the only one mounted (check React
-     DevTools Profiler: no child rendered for the inactive page).
-10. Commit with a structured message matching PR 5/6/7/8/9's style.
+5. Identify the CLI/watchdog code-quality fixes per the spec (grep for
+   the function names; the spec's line numbers are stale — PR 8's
+   session log explicitly noted "spec line numbers were stale"):
+   - Q1: src/agentweave/cli.py and src/agentweave/watchdog.py —
+        replace ~100 `print()` calls with `logger.info(..., extra={"event": ...})`;
+        use the existing `print_info / print_warning / print_error`
+        helpers consistently. Look for top-level `print(` calls and
+        `def print_*` helpers to find the right pattern.
+   - Q2: src/agentweave/diagnostics.py and
+        src/agentweave/context_builder.py — standardize on `Optional[X]`
+        (the majority style in the codebase). Change every `X | None`
+        annotation in those two files to `Optional[X]`.
+   - Q3: src/agentweave/cli.py:cmd_init (379 lines in the spec) —
+        split into `_init_session`, `_write_role_files`,
+        `_write_root_contexts`, `_write_ai_context`, `_generate_skills`,
+        `_write_yaml`. Each helper ≤ 50 lines. Verify the actual
+        function definition with `grep -n "def cmd_init" cli.py`
+        first; the line numbers are stale.
+   - Q3: src/agentweave/watchdog.py:_do_run_agent_subprocess (405 lines
+        in the spec) — split per-runner. Verify with
+        `grep -n "def _do_run_agent_subprocess" watchdog.py` first.
+   - Q7: src/agentweave/utils.py (~line 66-68) — stop truncating UUID4;
+        use the full 32 chars, or make the length a parameter with a
+        clearly named default.
+6. For each fix, prefer behavior-preserving changes:
+   - Q1, Q2, Q7: pure code-style / non-functional changes. The
+     existing test suite (pytest tests/ -v, currently 477 + 3
+     skipped) is the safety net. No new tests required unless the
+     refactor exposes a behavior change.
+   - Q3: the cmd_init / _do_run_agent_subprocess splits. Existing
+     tests in tests/test_cli.py and tests/test_watchdog.py cover
+     the surface. If the splits introduce new internal functions,
+     add a smoke test that exercises `agentweave init` end-to-end
+     to confirm the split didn't break the wiring.
+7. Run the full test suite after each commit to confirm no regressions:
+   pytest tests/ -v (CLI, 477 + 3 skipped expected) and
+   cd hub && pytest tests/ -v (Hub, 111 + 2 skipped expected).
+8. Run lint: ruff check src/, black src/, mypy src/ on the changed
+   files. The Hub has no enforced lint config today (pre-existing
+   gap from PR 8/9).
+9. Manual smoke test per the spec:
+   - Run `agentweave init` in a temp project; verify all the role
+     files, ai_context, and YAML are produced identically.
+   - Run the watchdog with a kimi-code v0.x agent (now supported
+     per PR 10's prior session) and verify the kimi v1.x path
+     still works.
+10. Commit with a structured message matching PR 5/6/7/8/9/10's
+    style. Split into logical commits per Q-id if it makes the
+    history cleaner (Q1+Q2 in one commit, Q3 in one, Q7 in one)
+    OR one big commit — your call. Mention the line numbers that
+    actually changed in the body.
 11. Push the branch.
 12. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
 13. Report back.
 
 Step 12 in detail (this is what makes the next session work):
-a. Mark PR 10 as ✅ in the "Current status" table.
-b. Update the "Branch state" block with current branch, latest commit
-   hash, and last test run timestamp.
+a. Mark PR 11 as ✅ in the "Current status" table.
+b. Update the "Branch state" block with current branch, latest
+   commit hash, and last test run timestamp.
 c. Append a new entry to the "Session log" section.
-d. **REPLACE the "Next PR to execute" line and the code block in the
-   "📋 Ready-to-copy prompt — next action" section above** so the
-   prompt is pre-filled for PR 11 (CLI/watchdog code quality). The
+d. **REPLACE the "Next PR to execute" line and the code block in
+   the "📋 Ready-to-copy prompt — next action" section above** so
+   the prompt is pre-filled for PR 12 (test coverage sweep). The
    spec lives in docs/audit-2026-q2/pr-roadmap.md under the
-   "PR 11 — CLI/watchdog code quality" heading. Adjust the workflow
+   "PR 12 — Test coverage sweep" heading. Adjust the workflow
    steps to reference the right files for that PR (no new test
-   infra — pytest only; the UI is done; focus on Q1–Q3, Q7, Q8).
+   infra; pytest only; focus on T1–T10; long-running — 3-4 days).
 
-Notes from PR 9 that may affect PR 10:
-- The Hub UI now has vitest+jsdom tests under hub/ui/src/__tests__/.
-  PR 10's behavioral tests (M21 polling, SidebarItem) should go in
-  the same directory; vitest.config.ts already globs __tests__/**.
-- NEW_SESSION_ID lives in hub/ui/src/lib/constants.ts; if a perf fix
-  references it, import from there — do not re-define it locally.
-- The configStore now uses sessionStorage for apiKey. If you write a
-  test that exercises agent API calls, the test setup must populate
-  sessionStorage (the existing beforeEach in configStore.test.ts
-  shows the pattern) or stub the store with isConfigured: true.
-- ESLint 9 still has no config (pre-existing gap from PR 8). If
-  npm run lint is part of your verification, note in HANDOFF that
-  it cannot run.
-- The spec's "unconditional 2s poll" for M21 may be split between
-  agents.ts and a custom hook. grep for `setInterval` and `2000`
-  in hub/ui/src before assuming the spec line numbers are right.
+Notes from PR 10 that may affect PR 11:
+- The watchdog's kimi detection now distinguishes v0.x (kimi-code)
+  from v1.x (kimi-cli) — the spec's `kimi --wire` line numbers in
+  pr-roadmap.md are stale. If you refactor `_do_run_agent_subprocess`
+  per Q3, do NOT collapse the v0/v1 dispatch — keep them separate.
+- The watchdog now has `_KimiCodeParser` and `_KimiWireParser` —
+  both should be preserved when splitting per-runner.
+- `save_json` / `Task.save` now accept an optional `error: List[str]`
+  parameter to surface filesystem errors. Don't break this in any
+  utils.py refactor.
+- `BaseTransport.send_task` has the same `error` param. Don't break
+  the HttpTransport strip of `created_at`/`updated` while keeping
+  the client-generated `id` (Hub accepts it per the PR 5/6 client
+  + server work).
+- The `__init__.py` files are dev fallbacks; the source of truth
+  for versions is `pyproject.toml` and `hub/pyproject.toml` (both
+  currently at 0.38.0a1 / 0.32.0a1 — do not bump).
 
-Time budget: 2 days for PR 10. If you go over by >50%, stop and ask.
+Time budget: 2 days for PR 11. If you go over by >50%, stop and ask.
 If you encounter a blocker, stop, document it in the
 "Open questions / blockers" section of HANDOFF.md, and report.
 ```
@@ -148,7 +168,7 @@ If you encounter a blocker, stop, document it in the
 
 ## Current status
 
-**Last updated:** 2026-06-16 (PR 9 shipped; S3/S4/M19/M20/M22/ErrorBoundary closed; 19 UI tests + vitest+jsdom infra added)
+**Last updated:** 2026-06-17 (PR 10 shipped; M21 SSE-only polling + Q6/Q13 dedup into `lib/agentStatus.tsx` + Q14 `<SidebarItem>` + Q15 data-driven App routing; 41 new vitest tests — UI 60 passed total)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
@@ -162,7 +182,7 @@ If you encounter a blocker, stop, document it in the
 | 7 | DB & migrations | ✅ Merged (local) | `audit/2026-q2-hardening` | 7c0c667 | Closes H5, DB-4. `init_db` now invokes `alembic upgrade head` after `create_all` (in a worker thread so its internal `asyncio.run()` doesn't conflict with the FastAPI lifespan's event loop), wrapped in try/except so dev mode (in-memory SQLite, missing `alembic.ini`) still works. `job_runs.error_summary` changed from unbounded `Text` to `String(500)` — migration 0007 was edited to use `String(500)` for fresh installs, and new migration 0008 uses `batch_alter_table` to alter existing deployments where 0007 already added the column as `Text`. New `hub/tests/test_migrations.py` with 9 tests covering model type, value length boundary, fresh-DB alembic round-trip, 0008 alters an existing `Text` column, `init_db` runs alembic for file DBs, `init_db` skips alembic for `:memory:`, and alembic failures don't crash `init_db`. Pushed (cf31fb0 ancestry). |
 | 8 | Dead code & dedup | ✅ Merged (local) | `audit/2026-q2-hardening` | eb647db | Closes H7, Q5. 277 lines of dead code removed (118 in cli.py, 159 in watchdog.py). Deleted the unreachable `lines.append`-based implementation in `cli._build_agent_context` (117 lines after the early return) and the equivalent dead block in `watchdog._build_agent_context` (125 lines). Both wrappers remain as clean 8-line shims that delegate to `context_builder.build_agent_context`. Deleted the duplicate `_load_dotenv` in watchdog.py (30 lines, zero callers — `utils.load_dotenv` was already imported and used at main()). No call-site changes. Pushed. |
 | 9 | Hub UI security | ✅ Merged (local) | `audit/2026-q2-hardening` | e4e4edf | Closes S3 (client half), S4, M19, M20, M22 + ErrorBoundary. **First UI tests in the project**: vitest + jsdom + @testing-library/react + @testing-library/jest-dom. 19 new tests across 6 files. useSSE rewritten to `fetch()` + `Authorization` header via `ReadableStream` (no more `?token=`). configStore splits storage: `apiKey` → sessionStorage (`agentweave-session`); `theme`+`mode` → localStorage (`agentweave-prefs`). ActivityLog uses `pausedRef` (defensive, mirrors AGENTS.md March 31 pattern). `NEW_SESSION_ID` extracted to `lib/constants.ts`; both `agentChat.ts` and `AgentPromptPanel.tsx` import it. useSSE exports `cancelReconnect()` and cancels on `isConfigured=false` and on unmount. New `<ErrorBoundary>` wraps the App root. UI 19 passed; CLI 443 passed, 3 skipped (unchanged); Hub 106 passed, 2 skipped (unchanged). tsc + vite build clean. ESLint 9 still has no config (pre-existing). Pushed. |
-| 10 | Hub UI perf & dedup | ⬜ Not started | — | — | |
+| 10 | Hub UI perf & dedup | ✅ Merged (local) | `audit/2026-q2-hardening` | c195ab1 | Closes M21, Q6, Q13, Q14, Q15. New `lib/agentStatus.tsx` is the single source of truth for `contextBarColor` (was duplicated in 3 files), `STATUS_CONFIG` (2 files), status-dot JSX (4 files), and dev-role-pill JSX (5 files). New `<SidebarItem>` component owns its own hover state; Sidebar's nav-item JSX (was duplicated 3x) now has 3 `<SidebarItem>` calls. `App.tsx` routing is now a `PAGES: Record<Page, PageMeta>` map; the active page is the only one mounted. **M21**: `useAgentOutput` no longer sets an unconditional `setInterval(poll, 2000)` — polling is now a one-shot 5s gap timer reset on every SSE `agent_output` event, plus a poll fired on SSE reconnect (via new `useSSE.onSseReconnect(cb)` API). 41 new vitest tests in 4 files (agentStatus 20, SidebarItem 12, App-mount 5, agentOutput-polling 4). UI 60 passed (was 19); CLI 477 + 3 skipped (unchanged); Hub 111 + 2 skipped (unchanged). `tsc && vite build` clean. Bundle: 333,229 B → 329,521 B raw (-3.1 kB); gzipped 92.22 → 92.31 kB (flat — dedup compresses well). ESLint still unconfigured (pre-existing). Pushed. |
 | 11 | CLI/watchdog code quality | ⬜ Not started | — | — | |
 | 12 | Test coverage sweep | ⬜ Not started | — | — | |
 | — | v0.38.0 / v0.32.0 release | ⬜ Not started | — | — | After all PRs |
@@ -184,8 +204,8 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: e4e4edf  (fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ErrorBoundary (PR 9))
-Last test run: 2026-06-16 — Hub UI: 19 passed. Hub: 106 passed, 2 skipped. CLI: 443 passed, 3 skipped.
+Latest commit: c195ab1  (fix(ui): dedup + SSE-only polling (PR 10))
+Last test run: 2026-06-17 — Hub UI: 60 passed. Hub: 111 passed, 2 skipped. CLI: 477 passed, 3 skipped.
 
 master:
   Latest commit: 15b5142  (docs: add deployment handoff for v0.37.1 / Hub v0.31.2)
@@ -224,7 +244,8 @@ Integration topology (linear, no merge commits):
   └─ 7c0c667  fix(hub): run alembic upgrade on startup, cap error_summary     (PR 7)
   └─ eb647db  fix(cli): delete dead code in _build_agent_context wrappers    (PR 8)
   └─ bf5ae09  chore(ui): add vitest + jsdom test infrastructure                 (PR 9)
-  └─ e4e4edf  fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ...   (PR 9)  ← HEAD
+  └─ e4e4edf  fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ...   (PR 9)
+  └─ c195ab1  fix(ui): dedup + SSE-only polling (PR 10)                        ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
@@ -475,24 +496,30 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Open questions:** None.
 - **Hand-off to:** next session — execute **PR 10 — Hub UI perf & dedup**. Ready-to-copy prompt at top of this file is pre-filled for PR 10, with the adjusted workflow (vitest infra is in place from PR 9; manual + Lighthouse for perf; refs `api/agents.ts`, new `lib/agentStatus.tsx`, `components/layout/Sidebar.tsx`, `App.tsx`).
 
-## Open questions / blockers
-
-(none — push blocker from the previous session was resolved by the audit branch push in this session; v0.37.1 / Hub v0.31.2 release published to PyPI + Docker)
-
-### 2026-06-16 — Hub unreachable on localhost:8000 (diagnosed + fixed in PR 9 verification)
+### 2026-06-17 — PR 10 shipped (Hub UI perf & dedup)
 
 - **By:** opencode (MiniMax-M3) on behalf of gutohuida
-- **Symptom:** `make hub-full-build` + `make hub-up` → container stuck in `Restarting (3)` loop, `localhost:8000` not reachable. Logs showed repeated "Context impl SQLiteImpl." + "Can't locate revision identified by '0008'" between uvicorn restarts.
-- **Root cause:** the user had a stale `hub-data` volume from a previous run with the audit branch's locally-built image (which has migration 0008 from PR 7). The published `ghcr.io/gutohuida/agentweave-hub:latest` v0.31.2 image only ships migrations 0001-0007, so when the CMD `alembic upgrade head` ran against a DB that was already at version 0008, alembic couldn't find migration 0008 in the image and the upgrade failed. The hub was stuck because the CMD uses `alembic upgrade head && uvicorn`, so a failed upgrade short-circuited the server start. The docker healthcheck then restarted the container every few seconds.
-- **Secondary issue:** `make hub-up` always pulled the published image from ghcr.io because `docker-compose.yml` hard-coded `image: ghcr.io/...`. The local build from `make hub-full-build` was tagged as `hub-hub:latest` and never used. So even on a fresh volume, the audit branch's code (with migration 0008) wouldn't run via `make hub-up`.
-- **Fix applied (uncommitted at the time):**
-  1. `docker compose down -v` — wiped the stale `hub-data` volume.
-  2. `cd hub && docker build . -t agentweave-hub:audit` — built a local image with the audit branch code (includes migration 0008).
-  3. Edited `hub/docker-compose.yml` to use `image: ${AW_HUB_IMAGE:-agentweave-hub:audit}` (env-overridable; defaults to the local build).
-  4. Edited `Makefile` so `make hub-full-build` also tags the local build as `agentweave-hub:audit` (was previously tagged only as `hub-hub:latest`).
-  5. `docker compose up -d` — container now `(healthy)`, `/health` returns 200, authenticated `/api/v1/status` returns 200 with the expected payload.
-- **Status:** uncommitted. The next session should commit `hub/docker-compose.yml` + `Makefile` as a fix to the audit branch (or as a separate small PR), and reference the new `agentweave-hub:audit` tag. This is **out of scope for PR 9** (which is UI hardening) but blocks any user trying to run the audit branch end-to-end.
-- **Lesson learned:** when running the audit branch, always build a local image. The published ghcr.io image lags behind the audit branch (last published: v0.31.2 = pre-PR 5 code; missing PR 5/6/7 fixes). The `make hub-full-build` target should now produce a usable `agentweave-hub:audit` tag.
+- **What:** Closes M21, Q6, Q13, Q14, Q15. **41 new vitest tests** in 4 new files (60 UI tests total, up from 19). 15 files changed, +1053 / -354.
+  - **Q6 / Q13 (dedup):** New `hub/ui/src/lib/agentStatus.tsx` is the single source of truth for `contextBarColor` (was duplicated verbatim in 3 files), `STATUS_CONFIG` (2 files), the status-dot JSX (4 files), and the dev-role-pill JSX (5 files). Exports `contextBarColor(percent, warning)`, `STATUS_CONFIG`, `getStatusConfig(status)`, `<StatusDot status size?>`, and `<DevRoleTagList agent maxItems? size?>`. The 5 consumers (AgentCard, AgentInfoTab, AgentDetailPanel, OverviewPage, AgentsPage) now import these helpers. As a small intentional consistency fix, the context-bar threshold is now uniform across all 4 sites: 70-99% is red (was amber in AgentCard).
+  - **Q14:** New `hub/ui/src/components/layout/SidebarItem.tsx` owns its hover state via `useState`, applies the active indicator, and renders an optional badge. Sidebar's three duplicated nav-item `<button>` blocks (top-level, sectioned, Settings) are now 3 `<SidebarItem>` calls each.
+  - **Q15:** `App.tsx` routing is now a `PAGES: Record<Page, PageMeta>` map. Each entry is `{ Component, wrapper }` where `wrapper` is `'scroll'` or `'flex-col'`; the active page is rendered once with the matching wrapper class. Adding a page is now a one-line map entry. The active page is the only one mounted (confirmed by `App-mount.test.tsx`).
+  - **M21:** `useAgentOutput` no longer sets an unconditional `setInterval(poll, 2000)`. Polling is now a one-shot 5s gap timer reset on every SSE `agent_output` event, plus a poll fired on SSE reconnect (via the new `useSSE.onSseReconnect(cb)` API). Exposed `onSseReconnect` in `useSSE.ts` with a module-level listener set, fired by `connect()` after the first successful connection. The previous 2s-interval behavior wasted work even when SSE was actively delivering events.
+- **Test-first verification:** M21 RED test was written first, confirmed RED (2 of 4 sub-tests failed: setInterval spy caught the 2s interval; reconnect listener didn't exist), then the fix was applied and all 4 sub-tests went GREEN. Dedup tests (agentStatus, SidebarItem) and App-mount tests were written alongside the refactor and confirmed GREEN on first run after the changes.
+- **Full suite:** Hub UI **60 passed** (was 19; +41). CLI 477 + 3 skipped (unchanged from the prior kimi-code work). Hub backend 111 + 2 skipped (unchanged). `tsc && vite build` clean — 1 chunk, 428 modules (was 426).
+- **Bundle size (proxy for perf since no browser in this shell):**
+  - before: `dist/assets/index-*.js` 333,229 B raw / 92.22 kB gz / total 351,202 B
+  - after:  `dist/assets/index-*.js` 329,521 B raw / 92.31 kB gz / total 348,351 B
+  - Raw: **-3,708 B** from dedup. Gzipped: +0.09 kB (negligible; the dedup net is small after gzip's compression of repeated strings). The big user-visible perf win is M21 (no more 2s poll on the agent output tab).
+- **Lint:** `npm run lint` FAILS with "ESLint couldn't find an eslint.config" — **pre-existing gap from PR 8/9**, out of scope for PR 10. Documented here so the next session that runs the prompt doesn't waste time debugging.
+- **Manual smoke test:** deferred (no browser in this shell). The behavioral tests cover the same surface. Recommended checklist for the next session with a display: (1) open agent detail panel → SSE events stream in real time; (2) open DevTools Network → confirm no recurring 2s `/api/v1/agents/{name}/output` request when SSE is active; (3) navigate Overview → Agents → Tasks → only the active page renders (React DevTools Profiler → no children for inactive pages); (4) pause/resume on activity log → events resume correctly.
+- **Local commit:** `c195ab1` fix(ui): dedup + SSE-only polling (PR 10) (15 files changed, 1053 insertions, 354 deletions).
+- **Push:** succeeded; remote is now at `c195ab1` (`e4e4edf..c195ab1`).
+- **Open questions:** None.
+- **Hand-off to:** next session — execute **PR 11 — CLI/watchdog code quality**. Ready-to-copy prompt at top of this file is pre-filled for PR 11, with the adjusted workflow (no UI tests, no Lighthouse; pytest only; Q1-Q3, Q7, Q8; spec line numbers in pr-roadmap.md are stale — grep for the actual `def` lines first; preserve the watchdog's v0/v1 kimi dispatch and the new `onSseReconnect` / transport `error` / Task.save `error` plumbing introduced in PR 10).
+
+## Open questions / blockers
+
+(none — push blocker from the previous session was resolved by the audit branch push in that session; v0.37.1 / Hub v0.31.2 release published to PyPI + Docker; the 2026-06-16 "Hub unreachable on localhost:8000" diagnosis was committed as part of the prior session's logical-commits split in the most recent session — commit `0bb8480` "fix(hub): build and use locally-built image in dev workflow".)
 
 ---
 
