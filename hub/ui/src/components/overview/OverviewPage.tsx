@@ -6,15 +6,10 @@ import { useTasks } from '@/api/tasks'
 import { useStatus } from '@/api/status'
 import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
+import { contextBarColor, DevRoleTagList } from '@/lib/agentStatus'
 
 interface OverviewPageProps {
   onNavigate: (page: string) => void
-}
-
-function contextBarColor(percent: number, warning: boolean): string {
-  if (warning || percent >= 70) return 'var(--red)'
-  if (percent >= 40) return 'var(--amber)'
-  return 'var(--green)'
 }
 
 function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
@@ -55,35 +50,7 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
       {/* Role tags */}
       {(agent.dev_roles?.length || agent.dev_role) && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {agent.dev_roles?.slice(0, 2).map((role, idx) => (
-            <span
-              key={role}
-              style={{
-                fontSize: 10,
-                fontWeight: 500,
-                padding: '1px 5px',
-                borderRadius: 9999,
-                background: 'rgba(168,85,247,0.1)',
-                color: 'var(--purple)',
-              }}
-            >
-              {agent.dev_role_labels?.[idx] ?? role}
-            </span>
-          ))}
-          {!agent.dev_roles?.length && agent.dev_role && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 500,
-                padding: '1px 5px',
-                borderRadius: 9999,
-                background: 'rgba(168,85,247,0.1)',
-                color: 'var(--purple)',
-              }}
-            >
-              {agent.dev_role_label ?? agent.dev_role}
-            </span>
-          )}
+          <DevRoleTagList agent={agent} maxItems={2} />
         </div>
       )}
 

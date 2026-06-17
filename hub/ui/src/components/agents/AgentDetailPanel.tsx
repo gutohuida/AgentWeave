@@ -8,18 +8,13 @@ import { AgentActivityTab } from './AgentActivityTab'
 import { AgentInfoTab } from './AgentInfoTab'
 import { EmptyState } from '@/components/common/EmptyState'
 import { StatusBadge } from '@/components/common/Badge'
+import { contextBarColor, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
 
 interface AgentDetailPanelProps {
   agent: AgentSummary
 }
 
 type DetailTab = 'output' | 'tasks' | 'messages' | 'info'
-
-function contextBarColor(percent: number, warning: boolean): string {
-  if (warning || percent >= 70) return 'var(--red)'
-  if (percent >= 40) return 'var(--amber)'
-  return 'var(--green)'
-}
 
 export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('output')
@@ -32,7 +27,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
   const ctx = agent.context_usage
   const ctxPct = ctx?.percent ?? 0
   const ctxColor = ctx ? contextBarColor(ctxPct, !!ctx.warning) : 'var(--text-3)'
-  const statusColor = agent.status === 'running' ? 'var(--green)' : agent.status === 'waiting' ? 'var(--amber)' : 'var(--text-3)'
 
   async function handleCompact() {
     setCompacting(true)
@@ -76,50 +70,14 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
       >
         <div className="flex items-center gap-3">
           {/* Status dot + name */}
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
-            {agent.status === 'running' && (
-              <span
-                className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                style={{ background: statusColor }}
-              />
-            )}
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: statusColor }} />
-          </span>
+          <StatusDot status={agent.status} size="md" />
           <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
             {agent.name}
           </span>
 
           {/* Role tags */}
           <div className="flex flex-wrap gap-1">
-            {agent.dev_roles?.map((role, idx) => (
-              <span
-                key={role}
-                style={{
-                  fontSize: 10,
-                  fontWeight: 500,
-                  padding: '1px 5px',
-                  borderRadius: 9999,
-                  background: 'rgba(168,85,247,0.1)',
-                  color: 'var(--purple)',
-                }}
-              >
-                {agent.dev_role_labels?.[idx] ?? role}
-              </span>
-            ))}
-            {!agent.dev_roles?.length && agent.dev_role && (
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 500,
-                  padding: '1px 5px',
-                  borderRadius: 9999,
-                  background: 'rgba(168,85,247,0.1)',
-                  color: 'var(--purple)',
-                }}
-              >
-                {agent.dev_role_label ?? agent.dev_role}
-              </span>
-            )}
+            <DevRoleTagList agent={agent} />
           </div>
 
           <div className="flex-1" />

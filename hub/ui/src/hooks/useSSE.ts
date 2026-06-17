@@ -28,14 +28,40 @@ const SSE_EVENT_TYPES = [
 const MAX_BUFFERED = 200
 
 const listeners = new Set<SSEListener>()
+/** Subscribers notified when the SSE stream reconnects after a previous
+ * connection ended. The first connect (initial mount) does NOT fire this —
+ * only subsequent reconnects do. Used by useAgentOutput to schedule a
+ * one-shot reconciliation poll after the stream was down (M21). */
+const reconnectListeners = new Set<() => void>()
 let activeStream: { cancel: () => void } | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectedUrl = ''
 let connectedKey = ''
+let hasEverConnected = false
 const eventBuffer: SSEEvent[] = []
 
 export function getBufferedEvents(): SSEEvent[] {
   return eventBuffer.slice()
+}
+
+/** Subscribe to SSE stream reconnect events. The callback fires every time
+ * the underlying stream reconnects (NOT on the initial connect). Returns
+ * an unsubscribe function. */
+export function onSseReconnect(cb: () => void): () => void {
+  reconnectListeners.add(cb)
+  return () => {
+    reconnectListeners.delete(cb)
+  }
+}
+
+function fireReconnect(): void {
+  reconnectListeners.forEach((cb) => {
+    try {
+      cb()
+    } catch {
+      // Swallow listener errors so one bad subscriber doesn't break the chain.
+    }
+  })
 }
 
 export function cancelReconnect(): void {
@@ -58,6 +84,8 @@ export function cancelReconnect(): void {
 export function __resetSSEStateForTest(): void {
   cancelReconnect()
   listeners.clear()
+  reconnectListeners.clear()
+  hasEverConnected = false
   eventBuffer.length = 0
 }
 
@@ -146,6 +174,15 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
     reader.cancel().catch(() => {})
   }
   activeStream = { cancel }
+
+  // Fire the reconnect hook for any connect after the first one. The first
+  // connect is NOT a reconnect — it's the initial subscription. Subscribers
+  // (e.g. useAgentOutput) use this to schedule a one-shot reconciliation
+  // poll to catch up on events that arrived while the stream was down.
+  if (hasEverConnected) {
+    fireReconnect()
+  }
+  hasEverConnected = true
 
   ;(async () => {
     try {

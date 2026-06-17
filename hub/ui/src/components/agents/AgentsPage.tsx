@@ -6,17 +6,11 @@ import { AgentCard } from './AgentCard'
 import { AgentDetailPanel } from './AgentDetailPanel'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { EmptyState } from '@/components/common/EmptyState'
+import { contextBarColor, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
 
 type AgentFilter = 'all' | 'active' | 'idle'
 
-function contextBarColor(percent: number, warning: boolean): string {
-  if (warning || percent >= 70) return 'var(--red)'
-  if (percent >= 40) return 'var(--amber)'
-  return 'var(--green)'
-}
-
 function GridCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
-  const statusColor = agent.status === 'running' ? 'var(--green)' : agent.status === 'waiting' ? 'var(--amber)' : 'var(--text-3)'
   const ctx = agent.context_usage
   const ctxColor = ctx ? contextBarColor(ctx.percent ?? 0, !!ctx.warning) : 'var(--text-3)'
 
@@ -36,26 +30,12 @@ function GridCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
     >
       <div className="flex items-center gap-2 mb-2">
-        <span className="relative flex h-2 w-2 shrink-0">
-          {agent.status === 'running' && (
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: statusColor }} />
-          )}
-          <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: statusColor }} />
-        </span>
+        <StatusDot status={agent.status} size="sm" />
         <span className="font-medium text-sm truncate" style={{ color: 'var(--text)' }}>{agent.name}</span>
       </div>
       {(agent.dev_roles?.length || agent.dev_role) && (
         <div className="flex flex-wrap gap-1 mb-2">
-          {agent.dev_roles?.slice(0, 2).map((role, idx) => (
-            <span key={role} style={{ fontSize: 10, fontWeight: 500, padding: '1px 5px', borderRadius: 9999, background: 'rgba(168,85,247,0.1)', color: 'var(--purple)' }}>
-              {agent.dev_role_labels?.[idx] ?? role}
-            </span>
-          ))}
-          {!agent.dev_roles?.length && agent.dev_role && (
-            <span style={{ fontSize: 10, fontWeight: 500, padding: '1px 5px', borderRadius: 9999, background: 'rgba(168,85,247,0.1)', color: 'var(--purple)' }}>
-              {agent.dev_role_label ?? agent.dev_role}
-            </span>
-          )}
+          <DevRoleTagList agent={agent} maxItems={2} />
         </div>
       )}
       <div className="flex items-center gap-3 mb-2" style={{ fontSize: 11, color: 'var(--text-3)' }}>

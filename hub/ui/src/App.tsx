@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ComponentType } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import { SetupModal } from '@/components/layout/SetupModal'
 import { StatusBar } from '@/components/layout/StatusBar'
@@ -15,7 +15,32 @@ import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { OverviewPage } from '@/components/overview/OverviewPage'
 import { useSSE } from '@/hooks/useSSE'
 
-type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
+export type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
+
+type PageWrapper = 'scroll' | 'flex-col'
+
+interface PageMeta {
+  Component: ComponentType<{ onNavigate?: (page: string) => void }>
+  wrapper: PageWrapper
+}
+
+const PAGES: Record<Page, PageMeta> = {
+  overview:     { Component: OverviewPage as ComponentType<{ onNavigate?: (page: string) => void }>,     wrapper: 'scroll' },
+  messages:     { Component: MessagesFeed as ComponentType<{ onNavigate?: (page: string) => void }>,     wrapper: 'scroll' },
+  tasks:        { Component: TasksBoard as ComponentType<{ onNavigate?: (page: string) => void }>,       wrapper: 'scroll' },
+  questions:    { Component: QuestionsPanel as ComponentType<{ onNavigate?: (page: string) => void }>,   wrapper: 'scroll' },
+  activity:     { Component: ActivityLog as ComponentType<{ onNavigate?: (page: string) => void }>,     wrapper: 'scroll' },
+  quality:      { Component: QualityHealthPanel as ComponentType<{ onNavigate?: (page: string) => void }>, wrapper: 'scroll' },
+  logs:         { Component: LogsView as ComponentType<{ onNavigate?: (page: string) => void }>,         wrapper: 'flex-col' },
+  agents:       { Component: AgentsPage as ComponentType<{ onNavigate?: (page: string) => void }>,       wrapper: 'flex-col' },
+  jobs:         { Component: JobsPage as ComponentType<{ onNavigate?: (page: string) => void }>,         wrapper: 'flex-col' },
+  instructions: { Component: InstructionsPage as ComponentType<{ onNavigate?: (page: string) => void }>,  wrapper: 'flex-col' },
+}
+
+const WRAPPER_CLASS: Record<PageWrapper, string> = {
+  'scroll':   'h-full overflow-auto',
+  'flex-col': 'h-full flex flex-col',
+}
 
 export default function App() {
   const { isConfigured, theme, mode, bootstrapState } = useConfigStore()
@@ -41,6 +66,9 @@ export default function App() {
     )
   }
 
+  const active = PAGES[page]
+  const ActivePage = active.Component
+
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div className="flex flex-col h-full">
@@ -52,16 +80,9 @@ export default function App() {
             onOpenSetup={() => setSetupOpen(true)}
           />
           <main className="flex-1 overflow-hidden" style={{ background: 'var(--bg)' }}>
-            {page === 'overview'  && <div className="h-full overflow-auto"><OverviewPage onNavigate={(p: string) => setPage(p as Page)} /></div>}
-            {page === 'messages'  && <div className="h-full overflow-auto"><MessagesFeed /></div>}
-            {page === 'tasks'     && <div className="h-full overflow-auto"><TasksBoard /></div>}
-            {page === 'questions' && <div className="h-full overflow-auto"><QuestionsPanel /></div>}
-            {page === 'activity'  && <div className="h-full overflow-auto"><ActivityLog /></div>}
-            {page === 'logs'      && <div className="h-full flex flex-col"><LogsView /></div>}
-            {page === 'agents'    && <div className="h-full flex flex-col"><AgentsPage /></div>}
-            {page === 'jobs'          && <div className="h-full flex flex-col"><JobsPage /></div>}
-            {page === 'quality'       && <div className="h-full overflow-auto"><QualityHealthPanel /></div>}
-            {page === 'instructions'  && <div className="h-full flex flex-col"><InstructionsPage /></div>}
+            <div className={WRAPPER_CLASS[active.wrapper]} data-testid="active-page-wrapper">
+              <ActivePage onNavigate={(p) => setPage(p as Page)} />
+            </div>
           </main>
         </div>
       </div>

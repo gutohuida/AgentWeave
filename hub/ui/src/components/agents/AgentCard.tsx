@@ -1,19 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { AgentSummary } from '@/api/agents'
-
-interface StatusConfig {
-  dotColor: string
-  label: string
-  pulse: boolean
-  labelColor: string
-}
-
-const STATUS_CONFIG: Record<string, StatusConfig> = {
-  running: { dotColor: 'var(--green)', label: 'Running', pulse: true,  labelColor: 'var(--green)' },
-  active:  { dotColor: 'var(--green)', label: 'Active',  pulse: false, labelColor: 'var(--green)' },
-  idle:    { dotColor: 'var(--text-3)', label: 'Idle',   pulse: false, labelColor: 'var(--text-3)' },
-  waiting: { dotColor: 'var(--amber)',  label: 'Waiting', pulse: false, labelColor: 'var(--amber)' },
-}
+import { contextBarColor, getStatusConfig, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
 
 interface AgentCardProps {
   agent: AgentSummary
@@ -22,9 +9,8 @@ interface AgentCardProps {
 }
 
 export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
-  const cfg = STATUS_CONFIG[agent.status] ?? {
-    dotColor: 'var(--text-3)', label: agent.status, pulse: false, labelColor: 'var(--text-3)',
-  }
+  const cfg = getStatusConfig(agent.status)
+  const ctx = agent.context_usage
 
   return (
     <button
@@ -47,18 +33,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
     >
       <div className="flex items-center gap-2">
         {/* Status dot */}
-        <span className="relative flex h-2 w-2 shrink-0">
-          {cfg.pulse && (
-            <span
-              className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-              style={{ background: cfg.dotColor }}
-            />
-          )}
-          <span
-            className="relative inline-flex rounded-full h-2 w-2"
-            style={{ background: cfg.dotColor }}
-          />
-        </span>
+        <StatusDot status={agent.status} size="sm" />
         <span
           className="flex-1 text-left text-sm font-medium truncate"
           style={{ color: 'var(--text)' }}
@@ -77,23 +52,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
       {/* Role badges */}
       {(agent.dev_roles?.length || agent.dev_role || agent.runner) && (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {agent.dev_roles?.map((role, idx) => (
-            <span
-              key={role}
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--purple)' }}
-            >
-              {agent.dev_role_labels?.[idx] ?? role}
-            </span>
-          ))}
-          {!agent.dev_roles?.length && agent.dev_role && (
-            <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--purple)' }}
-            >
-              {agent.dev_role_label ?? agent.dev_role}
-            </span>
-          )}
+          <DevRoleTagList agent={agent} />
           {agent.display_model && (
             <span
               className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
@@ -133,17 +92,13 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
       </div>
 
       {/* Context bar */}
-      {agent.context_usage && agent.context_usage.percent != null && (
+      {ctx && ctx.percent != null && (
         <div className="mt-1.5 w-full rounded-full overflow-hidden" style={{ height: 2, background: 'var(--surface-3)' }}>
           <div
             className="h-full rounded-full"
             style={{
-              width: `${Math.min(100, Math.max(0, agent.context_usage.percent))}%`,
-              background: agent.context_usage.warning || agent.context_usage.critical
-                ? 'var(--red)'
-                : agent.context_usage.percent >= 40
-                  ? 'var(--amber)'
-                  : 'var(--green)',
+              width: `${Math.min(100, Math.max(0, ctx.percent))}%`,
+              background: contextBarColor(ctx.percent, !!(ctx.warning || ctx.critical)),
             }}
           />
         </div>
