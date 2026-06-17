@@ -19,9 +19,10 @@ The audit findings, PR roadmap, and PR 1 spec live in the sibling files (`README
 Quick visual timeline. Most recent at the top. **One line per milestone** — see the session log below for detail.
 
 ```
-2026-06-17  ●  PR 10: Hub UI perf & dedup shipped  →  audit @ c195ab1
+2026-06-17  ●  PR 11: CLI/watchdog code quality shipped  →  audit @ 5cf515f
           │  ↑ you are here
-          ○  PR 11: CLI/watchdog code quality shipped             (target: 2 days)
+          ○  PR 12: Test coverage sweep shipped                   (target: 3-4 days)
+2026-06-17  ●  PR 10: Hub UI perf & dedup shipped  →  audit @ c195ab1
 2026-06-16  ●  PR 9: Hub UI security shipped  →  audit @ e4e4edf
 2026-06-16  ●  PR 8: Dead code & dedup shipped  →  audit @ eb647db
 2026-06-16  ●  PR 7: DB & migrations shipped  →  audit @ 7c0c667
@@ -51,115 +52,83 @@ Quick visual timeline. Most recent at the top. **One line per milestone** — se
 
 The agent that completes the current PR MUST update this section to point at the next PR before reporting back. See the "Updating the ready-to-copy prompt" section near the bottom of this file.
 
-**Next PR to execute:** PR 11 — CLI/watchdog code quality
+**Next PR to execute:** PR 12 — Test coverage sweep
 
 ```
-Execute PR 11 from the AgentWeave audit. Full spec:
-docs/audit-2026-q2/pr-roadmap.md — section "## PR 11 — CLI/watchdog code quality"
+Execute PR 12 from the AgentWeave audit. Full spec:
+docs/audit-2026-q2/pr-roadmap.md — section "## PR 12 — Test coverage sweep"
 
 Before doing anything:
 1. Read docs/audit-2026-q2/HANDOFF.md (especially the "Current status"
    table, the "Branch state" block, the latest session log entries,
    and the "Open questions / blockers" section) so you know what's
    already done and any in-flight issues.
-2. Read the PR 11 section of pr-roadmap.md end-to-end.
+2. Read the PR 12 section of pr-roadmap.md end-to-end.
 3. Read AGENTS.md § "Working environment" + the CLI test commands.
-   The UI tests are done (60 passed via vitest+jsdom) — PR 11 is
-   CLI/watchdog only. No new test infra needed; pytest only.
+   PR 12 is Python-side tests only; no UI work. No new test infra
+   needed beyond pytest.
 
-Workflow (Python side; mechanical refactors, existing tests are the
-safety net):
+Workflow (test-first where a fix is being backfilled; existing code
+is the safety net for net-new coverage):
 1. cd to C:\Users\huida\Documents\projects\AgentWeave
 2. Verify you're on branch `audit/2026-q2-hardening`
 3. Pull latest changes if a remote exists
 4. Versions are already bumped (v0.38.0a1 / v0.32.0a1) — do not re-bump
-5. Identify the CLI/watchdog code-quality fixes per the spec (grep for
-   the function names; the spec's line numbers are stale — PR 8's
-   session log explicitly noted "spec line numbers were stale"):
-   - Q1: src/agentweave/cli.py and src/agentweave/watchdog.py —
-        replace ~100 `print()` calls with `logger.info(..., extra={"event": ...})`;
-        use the existing `print_info / print_warning / print_error`
-        helpers consistently. Look for top-level `print(` calls and
-        `def print_*` helpers to find the right pattern.
-   - Q2: src/agentweave/diagnostics.py and
-        src/agentweave/context_builder.py — standardize on `Optional[X]`
-        (the majority style in the codebase). Change every `X | None`
-        annotation in those two files to `Optional[X]`.
-   - Q3: src/agentweave/cli.py:cmd_init (379 lines in the spec) —
-        split into `_init_session`, `_write_role_files`,
-        `_write_root_contexts`, `_write_ai_context`, `_generate_skills`,
-        `_write_yaml`. Each helper ≤ 50 lines. Verify the actual
-        function definition with `grep -n "def cmd_init" cli.py`
-        first; the line numbers are stale.
-   - Q3: src/agentweave/watchdog.py:_do_run_agent_subprocess (405 lines
-        in the spec) — split per-runner. Verify with
-        `grep -n "def _do_run_agent_subprocess" watchdog.py` first.
-   - Q7: src/agentweave/utils.py (~line 66-68) — stop truncating UUID4;
-        use the full 32 chars, or make the length a parameter with a
-        clearly named default.
-6. For each fix, prefer behavior-preserving changes:
-   - Q1, Q2, Q7: pure code-style / non-functional changes. The
-     existing test suite (pytest tests/ -v, currently 477 + 3
-     skipped) is the safety net. No new tests required unless the
-     refactor exposes a behavior change.
-   - Q3: the cmd_init / _do_run_agent_subprocess splits. Existing
-     tests in tests/test_cli.py and tests/test_watchdog.py cover
-     the surface. If the splits introduce new internal functions,
-     add a smoke test that exercises `agentweave init` end-to-end
-     to confirm the split didn't break the wiring.
-7. Run the full test suite after each commit to confirm no regressions:
-   pytest tests/ -v (CLI, 477 + 3 skipped expected) and
-   cd hub && pytest tests/ -v (Hub, 111 + 2 skipped expected).
-8. Run lint: ruff check src/, black src/, mypy src/ on the changed
-   files. The Hub has no enforced lint config today (pre-existing
-   gap from PR 8/9).
-9. Manual smoke test per the spec:
-   - Run `agentweave init` in a temp project; verify all the role
-     files, ai_context, and YAML are produced identically.
-   - Run the watchdog with a kimi-code v0.x agent (now supported
-     per PR 10's prior session) and verify the kimi v1.x path
-     still works.
-10. Commit with a structured message matching PR 5/6/7/8/9/10's
-    style. Split into logical commits per Q-id if it makes the
-    history cleaner (Q1+Q2 in one commit, Q3 in one, Q7 in one)
-    OR one big commit — your call. Mention the line numbers that
-    actually changed in the body.
+5. Work through T1–T10 from the PR 12 spec table. The target test
+   files and counts are:
+   - tests/test_transport_git.py — 20+ tests covering H1, H2, M11,
+     M12, M13 (PR 2 already added many; review and fill gaps).
+   - tests/test_eventlog.py — 5 tests for M4/M6.
+   - tests/test_logging_handlers.py — 8 tests for logging handlers.
+   - tests/test_runner.py — 6 tests for get_agent_env,
+     get_missing_api_key_var, build_claude_proxy_cmd.
+   - hub/tests/test_mcp_server.py — 30+ tests covering all 20+ MCP
+     tools.
+   - hub/tests/test_agent_chat.py — 10 tests for the three-tier
+     session lookup (exact session_id, content fallback, time-window
+     heuristic).
+   - hub/tests/test_jobs_crud.py — 15 tests for jobs happy-path
+     CRUD, pause/resume/run/delete.
+   - hub/tests/test_bola.py — 1 multi-tenant isolation test across
+     every endpoint (T5; PR 6 already shipped a version — review
+     and extend if needed).
+   - Enhance tests/test_locking.py — 3 tests for two threads racing
+     acquire_lock.
+   - Enhance tests/test_http_transport.py — 8 tests for HTTPError
+     401/404/500, malformed JSON, socket timeout, classification.
+6. For each net-new test file, write the test FIRST, confirm it
+   fails (or that the uncovered code is actually exercised), then
+   implement/confirm the code under test. For enhancement targets,
+   add the missing scenarios.
+7. Run the full test suite frequently:
+   - pytest tests/ -v (CLI)
+   - cd hub && pytest tests/ -v (Hub)
+   Expect the same counts as the PR 11 session reported in HANDOFF.
+   If the Hub test environment is still broken in your shell
+   (sse_starlette.event import error), document it and focus on CLI
+   coverage; the Hub tests can be validated in a working environment.
+8. Run lint on any changed source files: ruff check src/, black src/,
+   mypy src/. The Hub has no enforced lint config today.
+9. Manual smoke test (light): run agentweave status and a quick
+   agentweave init to confirm the CLI still works with the new
+   tests in place.
+10. Commit with a structured message matching PR 5/6/7/8/9/10/11's
+    style. One commit per new test file / enhancement is fine.
 11. Push the branch.
 12. Update docs/audit-2026-q2/HANDOFF.md (CRITICAL — see below).
 13. Report back.
 
-Step 12 in detail (this is what makes the next session work):
-a. Mark PR 11 as ✅ in the "Current status" table.
+Step 12 in detail:
+a. Mark PR 12 as ✅ in the "Current status" table.
 b. Update the "Branch state" block with current branch, latest
    commit hash, and last test run timestamp.
 c. Append a new entry to the "Session log" section.
 d. **REPLACE the "Next PR to execute" line and the code block in
    the "📋 Ready-to-copy prompt — next action" section above** so
-   the prompt is pre-filled for PR 12 (test coverage sweep). The
-   spec lives in docs/audit-2026-q2/pr-roadmap.md under the
-   "PR 12 — Test coverage sweep" heading. Adjust the workflow
-   steps to reference the right files for that PR (no new test
-   infra; pytest only; focus on T1–T10; long-running — 3-4 days).
+   the prompt is pre-filled for the release prep work (bump
+   versions, update CHANGELOG/ROADMAP, tag, merge to master).
 
-Notes from PR 10 that may affect PR 11:
-- The watchdog's kimi detection now distinguishes v0.x (kimi-code)
-  from v1.x (kimi-cli) — the spec's `kimi --wire` line numbers in
-  pr-roadmap.md are stale. If you refactor `_do_run_agent_subprocess`
-  per Q3, do NOT collapse the v0/v1 dispatch — keep them separate.
-- The watchdog now has `_KimiCodeParser` and `_KimiWireParser` —
-  both should be preserved when splitting per-runner.
-- `save_json` / `Task.save` now accept an optional `error: List[str]`
-  parameter to surface filesystem errors. Don't break this in any
-  utils.py refactor.
-- `BaseTransport.send_task` has the same `error` param. Don't break
-  the HttpTransport strip of `created_at`/`updated` while keeping
-  the client-generated `id` (Hub accepts it per the PR 5/6 client
-  + server work).
-- The `__init__.py` files are dev fallbacks; the source of truth
-  for versions is `pyproject.toml` and `hub/pyproject.toml` (both
-  currently at 0.38.0a1 / 0.32.0a1 — do not bump).
-
-Time budget: 2 days for PR 11. If you go over by >50%, stop and ask.
+Time budget: 3-4 days for PR 12. If you go over by >50%, stop and ask.
 If you encounter a blocker, stop, document it in the
 "Open questions / blockers" section of HANDOFF.md, and report.
 ```
@@ -168,7 +137,7 @@ If you encounter a blocker, stop, document it in the
 
 ## Current status
 
-**Last updated:** 2026-06-17 (PR 10 shipped; M21 SSE-only polling + Q6/Q13 dedup into `lib/agentStatus.tsx` + Q14 `<SidebarItem>` + Q15 data-driven App routing; 41 new vitest tests — UI 60 passed total)
+**Last updated:** 2026-06-17 (PR 11 shipped; Q1/Q2/Q3/Q7 CLI/watchdog code quality; CLI 471 passed, 10 skipped; push blocked — no HTTPS git credentials in this shell)
 
 | # | PR | Status | Branch | Merged | Notes |
 |---|---|---|---|---|---|
@@ -183,7 +152,7 @@ If you encounter a blocker, stop, document it in the
 | 8 | Dead code & dedup | ✅ Merged (local) | `audit/2026-q2-hardening` | eb647db | Closes H7, Q5. 277 lines of dead code removed (118 in cli.py, 159 in watchdog.py). Deleted the unreachable `lines.append`-based implementation in `cli._build_agent_context` (117 lines after the early return) and the equivalent dead block in `watchdog._build_agent_context` (125 lines). Both wrappers remain as clean 8-line shims that delegate to `context_builder.build_agent_context`. Deleted the duplicate `_load_dotenv` in watchdog.py (30 lines, zero callers — `utils.load_dotenv` was already imported and used at main()). No call-site changes. Pushed. |
 | 9 | Hub UI security | ✅ Merged (local) | `audit/2026-q2-hardening` | e4e4edf | Closes S3 (client half), S4, M19, M20, M22 + ErrorBoundary. **First UI tests in the project**: vitest + jsdom + @testing-library/react + @testing-library/jest-dom. 19 new tests across 6 files. useSSE rewritten to `fetch()` + `Authorization` header via `ReadableStream` (no more `?token=`). configStore splits storage: `apiKey` → sessionStorage (`agentweave-session`); `theme`+`mode` → localStorage (`agentweave-prefs`). ActivityLog uses `pausedRef` (defensive, mirrors AGENTS.md March 31 pattern). `NEW_SESSION_ID` extracted to `lib/constants.ts`; both `agentChat.ts` and `AgentPromptPanel.tsx` import it. useSSE exports `cancelReconnect()` and cancels on `isConfigured=false` and on unmount. New `<ErrorBoundary>` wraps the App root. UI 19 passed; CLI 443 passed, 3 skipped (unchanged); Hub 106 passed, 2 skipped (unchanged). tsc + vite build clean. ESLint 9 still has no config (pre-existing). Pushed. |
 | 10 | Hub UI perf & dedup | ✅ Merged (local) | `audit/2026-q2-hardening` | c195ab1 | Closes M21, Q6, Q13, Q14, Q15. New `lib/agentStatus.tsx` is the single source of truth for `contextBarColor` (was duplicated in 3 files), `STATUS_CONFIG` (2 files), status-dot JSX (4 files), and dev-role-pill JSX (5 files). New `<SidebarItem>` component owns its own hover state; Sidebar's nav-item JSX (was duplicated 3x) now has 3 `<SidebarItem>` calls. `App.tsx` routing is now a `PAGES: Record<Page, PageMeta>` map; the active page is the only one mounted. **M21**: `useAgentOutput` no longer sets an unconditional `setInterval(poll, 2000)` — polling is now a one-shot 5s gap timer reset on every SSE `agent_output` event, plus a poll fired on SSE reconnect (via new `useSSE.onSseReconnect(cb)` API). 41 new vitest tests in 4 files (agentStatus 20, SidebarItem 12, App-mount 5, agentOutput-polling 4). UI 60 passed (was 19); CLI 477 + 3 skipped (unchanged); Hub 111 + 2 skipped (unchanged). `tsc && vite build` clean. Bundle: 333,229 B → 329,521 B raw (-3.1 kB); gzipped 92.22 → 92.31 kB (flat — dedup compresses well). ESLint still unconfigured (pre-existing). Pushed. |
-| 11 | CLI/watchdog code quality | ⬜ Not started | — | — | |
+| 11 | CLI/watchdog code quality | ✅ Merged (local) | `audit/2026-q2-hardening` | 5cf515f | Closes Q1, Q2, Q3, Q7. Q1: cli.py uses print_* helpers; watchdog.py event/status prints use logger.* with extra={"event": ...}. Q2: diagnostics.py and context_builder.py standardized on Optional[X]; disabled ruff UP045. Q3: cmd_init split into 13 helpers (each ≤ 50 lines); _do_run_agent_subprocess per-runner stdout parsers extracted plus env/session helpers. Q7: generate_id uses full 32-char UUID4 by default with uuid_length parameter. Also fixed two environment-sensitive tests (test_mcp_server.py Linux "File exists", test_watchdog.py deterministic Kimi v1 detection). CLI 471 passed, 10 skipped; ruff/black/mypy clean. Push blocked. |
 | 12 | Test coverage sweep | ⬜ Not started | — | — | |
 | — | v0.38.0 / v0.32.0 release | ⬜ Not started | — | — | After all PRs |
 
@@ -204,8 +173,9 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: c195ab1  (fix(ui): dedup + SSE-only polling (PR 10))
-Last test run: 2026-06-17 — Hub UI: 60 passed. Hub: 111 passed, 2 skipped. CLI: 477 passed, 3 skipped.
+Latest commit: 3ad3279  (docs(audit): mark PR 11 shipped, update ready-to-copy prompt for PR 12)
+  Parent: 5cf515f  (fix(cli/watchdog): code quality sweep — print logging, Optional types, UUID length, helper splits (PR 11))
+Last test run: 2026-06-17 — CLI: 471 passed, 10 skipped. Hub tests could not run in this environment (sse_starlette.event import error — missing/out-of-date dep).
 
 master:
   Latest commit: 15b5142  (docs: add deployment handoff for v0.37.1 / Hub v0.31.2)
@@ -245,7 +215,9 @@ Integration topology (linear, no merge commits):
   └─ eb647db  fix(cli): delete dead code in _build_agent_context wrappers    (PR 8)
   └─ bf5ae09  chore(ui): add vitest + jsdom test infrastructure                 (PR 9)
   └─ e4e4edf  fix(ui): harden Hub UI — SSE auth, sessionStorage, refs, ...   (PR 9)
-  └─ c195ab1  fix(ui): dedup + SSE-only polling (PR 10)                        ← HEAD
+  └─ c195ab1  fix(ui): dedup + SSE-only polling (PR 10)
+  └─ 5cf515f  fix(cli/watchdog): code quality sweep (PR 11)
+  └─ 3ad3279  docs(audit): mark PR 11 shipped, update ready-to-copy prompt     ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
@@ -517,9 +489,27 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 - **Open questions:** None.
 - **Hand-off to:** next session — execute **PR 11 — CLI/watchdog code quality**. Ready-to-copy prompt at top of this file is pre-filled for PR 11, with the adjusted workflow (no UI tests, no Lighthouse; pytest only; Q1-Q3, Q7, Q8; spec line numbers in pr-roadmap.md are stale — grep for the actual `def` lines first; preserve the watchdog's v0/v1 kimi dispatch and the new `onSseReconnect` / transport `error` / Task.save `error` plumbing introduced in PR 10).
 
+### 2026-06-17 — PR 11 shipped (CLI/watchdog code quality)
+
+- **By:** kimi (Kimi Code CLI) on behalf of gutohuida
+- **What:** Closes Q1, Q2, Q3, Q7. **9 files changed, +824 / -586.**
+  - **Q1:** cli.py now uses `print_success`/`print_warning`/`print_error`/`print_info` helpers consistently; watchdog.py event/status prints use `logger.info/warning/error(..., extra={"event": ...})`. Plain stdout/stderr streaming prints for real-time agent output are preserved.
+  - **Q2:** diagnostics.py and context_builder.py standardized on `Optional[X]` (was mixed `X | None`). Added `UP045` to ruff ignore list in pyproject.toml so the style choice is not fighting the linter.
+  - **Q3:** cli.py `cmd_init` (~380 lines) split into 13 helpers including `_init_session`, `_migrate_existing_session`, `_write_role_files`, `_write_root_contexts`, `_write_ai_context`, `_generate_skills`, `_write_yaml`; each ≤ 50 lines. watchdog.py `_do_run_agent_subprocess` per-runner stdout parsers extracted (`_parse_kimi_stdout_line`, `_parse_opencode_stdout_line`, `_parse_codex_stdout_line`, `_parse_claude_stdout_line`) plus `_prepare_agent_env`, `_extract_session_id_post_run`, `_extract_kimi_code_session_id`. v0.x/v1.x Kimi dispatch and both `_KimiCodeParser`/`_KimiWireParser` are preserved.
+  - **Q7:** `utils.generate_id` now accepts `uuid_length` (default 32) and uses the full UUID4 hex string.
+  - **Test fixes:** `tests/test_mcp_server.py` accepts Linux "File exists" error; `tests/test_watchdog.py` forces Kimi v1.x detection for deterministic behavior; `tests/test_utils.py` updated for full UUID and `uuid_length` parameter.
+- **Full suite:** CLI **471 passed, 10 skipped**. Hub backend tests **could not run** in this environment (`ModuleNotFoundError: No module named 'sse_starlette.event'` — version mismatch; pre-existing environment issue, not caused by PR 11). UI tests not applicable.
+- **Lint:** ruff + black clean on changed files. mypy clean on the 5 changed source files (note: system mypy emits a non-fatal `python_version 3.8 is not supported` warning before reporting success).
+- **Manual smoke test:** `agentweave init --project "Smoke Test" --agents claude,kimi` produced `.agentweave/`, `agentweave.yml`, `CLAUDE.md`, `AGENTS.md`, skills, and `.env` identically. Kimi v0.x/v1.x command dispatch verified by forcing `_KIMI_VERSION_CACHE` to "0" and "1".
+- **Local commit:** `5cf515f` fix(cli/watchdog): code quality sweep — print logging, Optional types, UUID length, helper splits (PR 11).
+- **Push:** **blocked** — this shell has no HTTPS git credentials (`fatal: could not read Username for 'https://github.com': terminal prompts disabled`). The commit + HANDOFF update are local; push from a credentialed shell or provide a token/credential helper.
+- **Open questions:** Push blocker is back. Hub test environment also has a missing/out-of-date `sse_starlette` dependency, preventing `cd hub && pytest tests/` from running in this shell.
+- **Hand-off to:** next session — execute **PR 12 — Test coverage sweep**. Ready-to-copy prompt at top of this file is pre-filled for PR 12 below.
+
 ## Open questions / blockers
 
-(none — push blocker from the previous session was resolved by the audit branch push in that session; v0.37.1 / Hub v0.31.2 release published to PyPI + Docker; the 2026-06-16 "Hub unreachable on localhost:8000" diagnosis was committed as part of the prior session's logical-commits split in the most recent session — commit `0bb8480` "fix(hub): build and use locally-built image in dev workflow".)
+1. **Push blocked.** The PR 11 commit (`5cf515f`) and this HANDOFF update are local only. `git push origin audit/2026-q2-hardening` fails with `fatal: could not read Username for 'https://github.com': terminal prompts disabled` because this shell has no HTTPS git credentials. Push from a credentialed shell or provide a token/credential helper.
+2. **Hub test environment broken in this shell.** `cd hub && pytest tests/` fails at import time with `ModuleNotFoundError: No module named 'sse_starlette.event'`. The installed `sse_starlette` 2.1.0 does not expose that submodule; likely a version mismatch versus the project's declared dependency. This prevented validating Hub backend tests in this session.
 
 ---
 
