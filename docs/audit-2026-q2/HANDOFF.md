@@ -479,6 +479,21 @@ test-first. Update HANDOFF.md as you go so the next session can pick up.
 
 (none — push blocker from the previous session was resolved by the audit branch push in this session; v0.37.1 / Hub v0.31.2 release published to PyPI + Docker)
 
+### 2026-06-16 — Hub unreachable on localhost:8000 (diagnosed + fixed in PR 9 verification)
+
+- **By:** opencode (MiniMax-M3) on behalf of gutohuida
+- **Symptom:** `make hub-full-build` + `make hub-up` → container stuck in `Restarting (3)` loop, `localhost:8000` not reachable. Logs showed repeated "Context impl SQLiteImpl." + "Can't locate revision identified by '0008'" between uvicorn restarts.
+- **Root cause:** the user had a stale `hub-data` volume from a previous run with the audit branch's locally-built image (which has migration 0008 from PR 7). The published `ghcr.io/gutohuida/agentweave-hub:latest` v0.31.2 image only ships migrations 0001-0007, so when the CMD `alembic upgrade head` ran against a DB that was already at version 0008, alembic couldn't find migration 0008 in the image and the upgrade failed. The hub was stuck because the CMD uses `alembic upgrade head && uvicorn`, so a failed upgrade short-circuited the server start. The docker healthcheck then restarted the container every few seconds.
+- **Secondary issue:** `make hub-up` always pulled the published image from ghcr.io because `docker-compose.yml` hard-coded `image: ghcr.io/...`. The local build from `make hub-full-build` was tagged as `hub-hub:latest` and never used. So even on a fresh volume, the audit branch's code (with migration 0008) wouldn't run via `make hub-up`.
+- **Fix applied (uncommitted at the time):**
+  1. `docker compose down -v` — wiped the stale `hub-data` volume.
+  2. `cd hub && docker build . -t agentweave-hub:audit` — built a local image with the audit branch code (includes migration 0008).
+  3. Edited `hub/docker-compose.yml` to use `image: ${AW_HUB_IMAGE:-agentweave-hub:audit}` (env-overridable; defaults to the local build).
+  4. Edited `Makefile` so `make hub-full-build` also tags the local build as `agentweave-hub:audit` (was previously tagged only as `hub-hub:latest`).
+  5. `docker compose up -d` — container now `(healthy)`, `/health` returns 200, authenticated `/api/v1/status` returns 200 with the expected payload.
+- **Status:** uncommitted. The next session should commit `hub/docker-compose.yml` + `Makefile` as a fix to the audit branch (or as a separate small PR), and reference the new `agentweave-hub:audit` tag. This is **out of scope for PR 9** (which is UI hardening) but blocks any user trying to run the audit branch end-to-end.
+- **Lesson learned:** when running the audit branch, always build a local image. The published ghcr.io image lags behind the audit branch (last published: v0.31.2 = pre-PR 5 code; missing PR 5/6/7 fixes). The `make hub-full-build` target should now produce a usable `agentweave-hub:audit` tag.
+
 ---
 
 ## How to update this file
