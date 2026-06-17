@@ -1,9 +1,16 @@
 """Task schemas."""
 
+import re
 from datetime import datetime
 from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Matches the agentweave CLI's generate_id() output: "{prefix}-{8hex}",
+# where the prefix is a short word (e.g. "task", "msg"). Used to validate
+# client-supplied ids so we only accept well-formed ones and reject anything
+# that could be used for path traversal or to impersonate other entity types.
+_TASK_ID_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
 _TASK_STATUSES = [
     "pending",
@@ -29,8 +36,26 @@ class TaskCreate(BaseModel):
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None
+    # Optional client-supplied id. When present, the Hub uses it instead of
+    # generating one — this lets the MCP `create_task` tool return the same
+    # id that the Hub stored, so subsequent get_task / update_task calls by
+    # the agent find the task. Validated to the same shape as the CLI's
+    # generate_id() output and the local Task model.
+    id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("id")
+    @classmethod
+    def _validate_id_shape(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        if not _TASK_ID_RE.match(v):
+            raise ValueError(
+                "id must start with a letter and contain only letters, "
+                "digits, underscores, or hyphens (max 64 chars)"
+            )
+        return v
 
     @model_validator(mode="before")
     @classmethod
