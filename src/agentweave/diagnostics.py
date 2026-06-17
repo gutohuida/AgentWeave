@@ -15,7 +15,7 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 from .constants import (
     AGENT_CONTEXT_DIR,
@@ -51,9 +51,9 @@ class DiagnosticResult:
     status: str
     severity: str
     message: str
-    hint: str | None = None
+    hint: Optional[str] = None
     category: str = "runtime"
-    data: dict[str, Any] | None = None
+    data: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -72,7 +72,7 @@ def ok(
     message: str,
     *,
     category: str = "runtime",
-    data: dict[str, Any] | None = None,
+    data: Optional[dict[str, Any]] = None,
 ) -> DiagnosticResult:
     return DiagnosticResult(check_id, target, "pass", "info", message, category=category, data=data)
 
@@ -82,9 +82,9 @@ def warn(
     target: str,
     message: str,
     *,
-    hint: str | None = None,
+    hint: Optional[str] = None,
     category: str = "runtime",
-    data: dict[str, Any] | None = None,
+    data: Optional[dict[str, Any]] = None,
 ) -> DiagnosticResult:
     return DiagnosticResult(
         check_id, target, "warn", "warn", message, hint=hint, category=category, data=data
@@ -96,9 +96,9 @@ def fail(
     target: str,
     message: str,
     *,
-    hint: str | None = None,
+    hint: Optional[str] = None,
     category: str = "runtime",
-    data: dict[str, Any] | None = None,
+    data: Optional[dict[str, Any]] = None,
 ) -> DiagnosticResult:
     return DiagnosticResult(
         check_id, target, "fail", "error", message, hint=hint, category=category, data=data
@@ -124,7 +124,7 @@ def redact_secrets(value: Any) -> Any:
     return value
 
 
-def _load_json_raw(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+def _load_json_raw(path: Path) -> tuple[Optional[dict[str, Any]], Optional[str]]:
     if not path.exists():
         return None, "missing"
     try:
@@ -569,7 +569,7 @@ def check_watchdog(stale_after_seconds: int = 120) -> list[DiagnosticResult]:
     return results
 
 
-def _runner_cli(agent: str, runner: str) -> str | None:
+def _runner_cli(agent: str, runner: str) -> Optional[str]:
     if runner == "manual":
         return None
     config = RUNNER_CONFIGS.get(runner, RUNNER_CONFIGS["native"])
@@ -577,7 +577,7 @@ def _runner_cli(agent: str, runner: str) -> str | None:
     return str(cli) if cli else None
 
 
-def _runner_cli_override(agent: str, session: Any) -> str | None:
+def _runner_cli_override(agent: str, session: Any) -> Optional[str]:
     """Return the per-agent `cli:` override from session, if any.
 
     Surfaced separately from _runner_cli so callers can detect an explicit
@@ -594,7 +594,7 @@ def _runner_cli_override(agent: str, session: Any) -> str | None:
     return str(value) if value else None
 
 
-def check_agent_readiness(agent: str, session: Any | None = None) -> list[DiagnosticResult]:
+def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
 
@@ -836,7 +836,7 @@ def check_agent_readiness(agent: str, session: Any | None = None) -> list[Diagno
     return results
 
 
-def check_agents(session: Any | None = None) -> list[DiagnosticResult]:
+def check_agents(session: Optional[Any] = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
 
@@ -965,7 +965,7 @@ def format_results(results: Iterable[DiagnosticResult]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def launch_blockers(agent: str, session: Any | None = None) -> list[DiagnosticResult]:
+def launch_blockers(agent: str, session: Optional[Any] = None) -> list[DiagnosticResult]:
     """Return deterministic failures that should block an automatic launch."""
     return [
         result

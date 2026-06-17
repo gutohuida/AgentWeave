@@ -11,7 +11,7 @@ def test_generate_id_format():
     id_ = generate_id("task")
     assert id_.startswith("task-")
     suffix = id_[len("task-") :]
-    assert len(suffix) == 8
+    assert len(suffix) == 32  # full UUID4, no truncation
 
 
 def test_generate_id_default_prefix():
@@ -22,6 +22,15 @@ def test_generate_id_default_prefix():
 def test_generate_id_uniqueness():
     ids = {generate_id("x") for _ in range(50)}
     assert len(ids) == 50  # all unique
+
+
+def test_generate_id_uuid_length():
+    id_ = generate_id("task", uuid_length=8)
+    assert id_.startswith("task-")
+    assert len(id_) == len("task-") + 8
+    # out-of-range lengths are clamped
+    assert len(generate_id("task", uuid_length=0)) == len("task-") + 1
+    assert len(generate_id("task", uuid_length=64)) == len("task-") + 32
 
 
 def test_now_iso_format():

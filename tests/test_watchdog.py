@@ -53,9 +53,13 @@ class TestAgentPingCmdKimi:
 
         self.session = Session(session_data)
 
+        # Force v1.x detection so these tests are deterministic regardless of
+        # which kimi binary is installed in the runtime environment.
         with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir), patch(
             "agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir
-        ), patch("agentweave.session.Session.load", return_value=self.session):
+        ), patch("agentweave.session.Session.load", return_value=self.session), patch(
+            "agentweave.watchdog._KIMI_VERSION_CACHE", "1"
+        ):
             yield
 
     def test_kimi_with_model(self):
@@ -764,7 +768,7 @@ class TestOpencodeEnvForwarding:
         assert env is not None
         assert env["MINIMAX_API_KEY"] == "test-key-value"
 
-    def test_opencode_warns_and_launches_when_env_var_unset(self, tmp_path, monkeypatch, capsys):
+    def test_opencode_warns_and_launches_when_env_var_unset(self, tmp_path, monkeypatch, caplog):
         """Missing env var is a warning, not a blocker, for opencode agents."""
         from agentweave import watchdog as wd
         from agentweave.session import Session
@@ -795,21 +799,20 @@ class TestOpencodeEnvForwarding:
         monkeypatch.setattr(wd.subprocess, "Popen", popen)
         transport = MagicMock()
 
-        _run_agent_subprocess(
-            "opencode-dev",
-            ["opencode", "run", "do the task"],
-            "subject",
-            transport,
-            False,
-            {"MINIMAX_API_KEY": "MINIMAX_API_KEY"},
-        )
+        with caplog.at_level("WARNING", logger="agentweave.watchdog"):
+            _run_agent_subprocess(
+                "opencode-dev",
+                ["opencode", "run", "do the task"],
+                "subject",
+                transport,
+                False,
+                {"MINIMAX_API_KEY": "MINIMAX_API_KEY"},
+            )
 
         # opencode does NOT block on missing keys (unlike claude_proxy)
         popen.assert_called()
-        # a [WARN] was emitted
-        captured = capsys.readouterr()
-        assert "MINIMAX_API_KEY" in captured.err
-        assert "not set" in captured.err
+        # a [WARN] was emitted via logger.warning (Q1: print -> logger migration)
+        assert any("MINIMAX_API_KEY" in rec.getMessage() and "not set" in rec.getMessage() for rec in caplog.records)
 
     def test_opencode_env_vars_entry_skips_name_to_name_resolution_for_literal_values(self, tmp_path, monkeypatch):
         """Literal-value entries (key != value) are passed through unchanged."""

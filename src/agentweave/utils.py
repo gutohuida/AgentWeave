@@ -65,9 +65,16 @@ def ensure_dirs() -> None:
         d.mkdir(parents=True, exist_ok=True)
 
 
-def generate_id(prefix: str = "id") -> str:
-    """Generate a unique ID with prefix."""
-    return f"{prefix}-{str(uuid.uuid4())[:8]}"
+def generate_id(prefix: str = "id", *, uuid_length: int = 32) -> str:
+    """Generate a unique ID with prefix.
+
+    ``uuid_length`` controls how many characters of the UUID4 suffix are
+    kept.  The full UUID4 hex string is 32 characters; the default keeps
+    all of them so IDs are no longer truncated.
+    """
+    suffix = str(uuid.uuid4()).replace("-", "")
+    length = max(1, min(uuid_length, len(suffix)))
+    return f"{prefix}-{suffix[:length]}"
 
 
 def now_iso() -> str:

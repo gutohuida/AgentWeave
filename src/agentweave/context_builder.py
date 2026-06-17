@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 from .constants import AGENT_CONTEXT_DIR, AGENTWEAVE_DIR, ROLES_DIR
 
@@ -62,7 +62,7 @@ def _hash_text(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
 
 
-def _read_optional(path: Path) -> tuple[str, str | None]:
+def _read_optional(path: Path) -> tuple[str, Optional[str]]:
     if not path.exists():
         return "", "missing"
     try:
@@ -127,7 +127,7 @@ def _env_names(env_vars: dict[str, Any]) -> list[str]:
     return sorted(names)
 
 
-def _load_agentweave_config() -> Any | None:
+def _load_agentweave_config() -> Optional[Any]:
     try:
         from .config import AGENTWEAVE_YML_PATH, load_agentweave_yml
 
@@ -147,7 +147,7 @@ def _load_roles_config() -> dict[str, Any]:
         return {}
 
 
-def _get_agent_roles(agent: str, roles_config: dict[str, Any] | None = None) -> list[str]:
+def _get_agent_roles(agent: str, roles_config: Optional[dict[str, Any]] = None) -> list[str]:
     try:
         from .roles import get_agent_roles
 
@@ -161,7 +161,7 @@ def _available_roles(roles_config: dict[str, Any]) -> list[str]:
     return sorted(role for role in roles if not str(role).startswith("_"))
 
 
-def _job_summaries(config: Any | None, agent: str | None = None) -> list[str]:
+def _job_summaries(config: Optional[Any], agent: Optional[str] = None) -> list[str]:
     if not config or not getattr(config, "jobs", None):
         return []
     lines = []
@@ -178,9 +178,9 @@ def _job_summaries(config: Any | None, agent: str | None = None) -> list[str]:
 def render_project_operating_profile(
     session: Any,
     *,
-    roles_config: dict[str, Any] | None = None,
-    config: Any | None = None,
-    target_agent: str | None = None,
+    roles_config: Optional[dict[str, Any]] = None,
+    config: Optional[Any] = None,
+    target_agent: Optional[str] = None,
 ) -> str:
     """Render concise project/team/quality facts for model context."""
     data = _session_dict(session)
@@ -284,8 +284,8 @@ def build_agent_context(
     *,
     version_comment: str = "AgentWeave",
     project_instructions: str = "",
-    roles_config: dict[str, Any] | None = None,
-    config: Any | None = None,
+    roles_config: Optional[dict[str, Any]] = None,
+    config: Optional[Any] = None,
 ) -> ContextBuildResult:
     """Build canonical context for a declared agent."""
     roles_config = roles_config if roles_config is not None else _load_roles_config()
@@ -397,10 +397,10 @@ def build_external_agent_context(
     agent: str,
     *,
     session: Any = None,
-    roles_config: dict[str, Any] | None = None,
+    roles_config: Optional[dict[str, Any]] = None,
     registered: bool = False,
-    requested_roles: list[str] | None = None,
-    config: Any | None = None,
+    requested_roles: Optional[list[str]] = None,
+    config: Optional[Any] = None,
 ) -> ContextBuildResult:
     """Build onboarding context for registered or unknown external agents."""
     roles_config = roles_config if roles_config is not None else _load_roles_config()

@@ -75,36 +75,59 @@ class Watchdog:
     def _default_callback(self, event_type: str, data: dict) -> None:
         """Default callback that prints to stdout."""
         if event_type == "new_message":
-            print(f"\n[MSG] New message for {data['to']} from {data['from']}")
-            print(f"   Subject: {data.get('subject', '(no subject)')}")
-            print(f"   Run: agentweave inbox --agent {data['to']}")
-            print()
+            logger.info(
+                f"\n[MSG] New message for {data['to']} from {data['from']}",
+                extra={"event": "new_message", "data": {}},
+            )
+            logger.info(
+                f"   Subject: {data.get('subject', '(no subject)')}",
+                extra={"event": "new_message", "data": {}},
+            )
+            logger.info(
+                f"   Run: agentweave inbox --agent {data['to']}",
+                extra={"event": "new_message", "data": {}},
+            )
         elif event_type == "new_task":
-            print(f"\n[TASK] New task assigned to {data.get('assignee', 'unknown')}")
-            print(f"   Title: {data.get('title', 'Untitled')}")
-            print(f"   Run: agentweave task show {data['id']}")
-            print()
+            logger.info(
+                f"\n[TASK] New task assigned to {data.get('assignee', 'unknown')}",
+                extra={"event": "new_task", "data": {}},
+            )
+            logger.info(
+                f"   Title: {data.get('title', 'Untitled')}",
+                extra={"event": "new_task", "data": {}},
+            )
+            logger.info(
+                f"   Run: agentweave task show {data['id']}",
+                extra={"event": "new_task", "data": {}},
+            )
         elif event_type == "task_completed":
-            print(f"\n[OK] Task completed: {data.get('title', 'Untitled')}")
-            print("   Ready for review!")
-            print()
+            logger.info(
+                f"\n[OK] Task completed: {data.get('title', 'Untitled')}",
+                extra={"event": "task_completed", "data": {}},
+            )
+            logger.info("   Ready for review!", extra={"event": "task_completed", "data": {}})
         elif event_type == "context_warning":
             agent = data.get("agent", "unknown")
             percent = data.get("percent", 0)
             model = data.get("model", "?")
             threshold = data.get("threshold_warning", "?")
-            print(
-                f"\n[CTX] Context warning: {agent} ({model}) at {percent}% (threshold: {threshold}%)"
+            logger.info(
+                f"\n[CTX] Context warning: {agent} ({model}) at {percent}% (threshold: {threshold}%)",
+                extra={"event": "context_event", "data": {}},
             )
-            print(f"   Run /aw-checkpoint in {agent}'s session, then choose an action.")
+            logger.info(
+                f"   Run /aw-checkpoint in {agent}'s session, then choose an action.",
+                extra={"event": "context_event", "data": {}},
+            )
             self._write_compact_decision(data)
-            print()
         elif event_type == "compact_decision":
             agent = data.get("agent", "unknown")
             choice = data.get("choice", "unknown")
-            print(f"\n[CTX] Compact decision received for {agent}: {choice}")
+            logger.info(
+                f"\n[CTX] Compact decision received for {agent}: {choice}",
+                extra={"event": "context_event", "data": {}},
+            )
             self._handle_compact_decision(data)
-            print()
 
     def _scan_messages(self) -> Set[str]:
         """Scan for local message files."""
@@ -137,21 +160,45 @@ class Watchdog:
         from .eventlog import write_heartbeat
 
         transport_type = self.transport.get_transport_type()
-        print(f"[WATCH] AgentWeave Watchdog started (transport: {transport_type})")
+        logger.info(
+            f"[WATCH] AgentWeave Watchdog started (transport: {transport_type})",
+            extra={"event": "watchdog_started", "data": {}},
+        )
         if transport_type == "local":
-            print(f"   Watching: {MESSAGES_PENDING_DIR}")
-            print(f"   Watching: {TASKS_ACTIVE_DIR}")
+            logger.info(
+                f"   Watching: {MESSAGES_PENDING_DIR}",
+                extra={"event": "watchdog_started", "data": {}},
+            )
+            logger.info(
+                f"   Watching: {TASKS_ACTIVE_DIR}",
+                extra={"event": "watchdog_started", "data": {}},
+            )
         elif transport_type == "http":
             hub_url = getattr(self.transport, "url", "?")
             agent_label = self.agent or "all agents"
-            print(f"   Watching: {hub_url} (polling every {self.poll_interval}s)")
-            print(f"   Agent: {agent_label}")
+            logger.info(
+                f"   Watching: {hub_url} (polling every {self.poll_interval}s)",
+                extra={"event": "watchdog_started", "data": {}},
+            )
+            logger.info(
+                f"   Agent: {agent_label}",
+                extra={"event": "watchdog_started", "data": {}},
+            )
         else:
             remote = getattr(self.transport, "remote", "?")
             branch = getattr(self.transport, "branch", "?")
-            print(f"   Watching: {remote}/{branch} (fetching every {self.poll_interval}s)")
-        print(f"   Poll interval: {self.poll_interval}s")
-        print("   Press Ctrl+C to stop\n")
+            logger.info(
+                f"   Watching: {remote}/{branch} (fetching every {self.poll_interval}s)",
+                extra={"event": "watchdog_started", "data": {}},
+            )
+        logger.info(
+            f"   Poll interval: {self.poll_interval}s",
+            extra={"event": "watchdog_started", "data": {}},
+        )
+        logger.info(
+            "   Press Ctrl+C to stop",
+            extra={"event": "watchdog_started", "data": {}},
+        )
 
         logger.info(
             "watchdog_started",
@@ -177,9 +224,9 @@ class Watchdog:
                     self._check_once()
                 except Exception as exc:
                     # Log transient errors (e.g. Hub restart / network blip) but keep running
-                    print(
+                    logger.warning(
                         f"[WARN] Poll error (will retry in {self.poll_interval}s): {exc}",
-                        file=sys.stderr,
+                        extra={"event": "watchdog_warn", "data": {}},
                     )
                     logger.warning(
                         "watchdog_poll_error",
@@ -189,7 +236,9 @@ class Watchdog:
                 time.sleep(self.poll_interval)
         except KeyboardInterrupt:
             logger.info("watchdog_stopped", extra={"event": "watchdog_stopped", "data": {}})
-            print("\n\n[STOP] Watchdog stopped")
+            logger.info(
+                "\n\n[STOP] Watchdog stopped", extra={"event": "watchdog_stopped", "data": {}}
+            )
 
     def _check_once(self) -> None:
         """Check for changes once."""
@@ -247,9 +296,10 @@ class Watchdog:
                             },
                         },
                     )
-                    print(
+                    logger.info(
                         f"[STALE] {msg_id} unread for {elapsed_min}m — re-pinging "
-                        f"{msg_data.get('to', '?')}"
+                        f"{msg_data.get('to', '?')}",
+                        extra={"event": "watchdog_stale", "data": {}},
                     )
                     del self.pinged_at[msg_id]  # reset so retry_after resets
                     self.callback("new_message", msg_data)
@@ -420,7 +470,10 @@ class Watchdog:
                 },
             },
         )
-        print(f"[JOB] Firing {job.name} → {agent} (trigger: {trigger})")
+        logger.info(
+            f"[JOB] Firing {job.name} → {agent} (trigger: {trigger})",
+            extra={"event": "job_fired", "data": {}},
+        )
 
         # Load env_vars from session config for claude_proxy agents
         env_vars = None
@@ -515,10 +568,19 @@ class Watchdog:
         try:
             COMPACT_DECISION_FILE.parent.mkdir(parents=True, exist_ok=True)
             COMPACT_DECISION_FILE.write_text(content, encoding="utf-8")
-            print(f"   Decision file: {COMPACT_DECISION_FILE}")
-            print("   Edit that file: mark [x] your choice, then save.")
+            logger.info(
+                f"   Decision file: {COMPACT_DECISION_FILE}",
+                extra={"event": "compact_decision_written", "data": {}},
+            )
+            logger.info(
+                "   Edit that file: mark [x] your choice, then save.",
+                extra={"event": "compact_decision_written", "data": {}},
+            )
         except OSError as exc:
-            print(f"   [WARN] Could not write decision file: {exc}", file=sys.stderr)
+            logger.warning(
+                f"   [WARN] Could not write decision file: {exc}",
+                extra={"event": "watchdog_warn", "data": {}},
+            )
 
     def _handle_compact_decision(self, data: dict) -> None:
         """Send the user's compact decision to the agent's inbox."""
@@ -567,9 +629,15 @@ class Watchdog:
         )
         ok = MessageBus.send(msg)
         if ok:
-            print(f"   Message sent to {agent}: {subject}")
+            logger.info(
+                f"   Message sent to {agent}: {subject}",
+                extra={"event": "message_sent", "data": {}},
+            )
         else:
-            print(f"   [WARN] Could not send message to {agent}", file=sys.stderr)
+            logger.warning(
+                f"   [WARN] Could not send message to {agent}",
+                extra={"event": "watchdog_warn", "data": {}},
+            )
 
     def _post_context_usage_to_hub(self, agent: str, data: dict) -> None:
         """POST context usage data to the Hub so Mission Control can display it."""
@@ -595,7 +663,10 @@ class Watchdog:
             with _req.urlopen(request, timeout=5):
                 pass
         except (_uerr.HTTPError, _uerr.URLError) as exc:
-            print(f"   [WARN] Could not post context usage to Hub: {exc}", file=sys.stderr)
+            logger.warning(
+                f"   [WARN] Could not post context usage to Hub: {exc}",
+                extra={"event": "watchdog_warn", "data": {}},
+            )
 
     def _init_http_state(self) -> None:
         """Seed known message/task IDs from Hub so we don't re-fire on startup."""
@@ -665,7 +736,10 @@ class Watchdog:
                         "data": {"agent": agent, "path": str(session_file)},
                     },
                 )
-                print(f"[CTX] Deleted session file for {agent} (new session requested)")
+                logger.info(
+                    f"[CTX] Deleted session file for {agent} (new session requested)",
+                    extra={"event": "context_event", "data": {}},
+                )
             except OSError as exc:
                 logger.warning(
                     "codex_new_session_file_delete_failed",
@@ -745,7 +819,10 @@ class Watchdog:
                     },
                 },
             )
-            print(f"[SKIP] Self-registered poll agent {agent} handles its own polling")
+            logger.warning(
+                f"[SKIP] Self-registered poll agent {agent} handles its own polling",
+                extra={"event": "watchdog_skip", "data": {}},
+            )
             return
 
         # Check if agent is in pilot mode - skip auto-execution
@@ -760,7 +837,10 @@ class Watchdog:
                     "data": {"agent": agent, "msg_id": msg_id, "reason": "pilot mode"},
                 },
             )
-            print(f"[PILOT] Skipping execution for pilot agent {agent} (manual control)")
+            logger.info(
+                f"[PILOT] Skipping execution for pilot agent {agent} (manual control)",
+                extra={"event": "watchdog_pilot", "data": {}},
+            )
             return
 
         # Ensure agent context file exists (so agent knows its identity/roles)
@@ -775,7 +855,10 @@ class Watchdog:
                     "data": {"agent": agent, "msg_id": msg_id, "reason": "CLI not found"},
                 },
             )
-            print(f"[SKIP] Cannot trigger {agent}: CLI not found", file=sys.stderr)
+            logger.warning(
+                f"[SKIP] Cannot trigger {agent}: CLI not found",
+                extra={"event": "watchdog_skip", "data": {}},
+            )
             return
 
         # Parse session info from content tags
@@ -829,7 +912,10 @@ class Watchdog:
                 },
             },
         )
-        print(f"[TRIGGER] Firing {agent} from Hub message (session: {session_id or 'new'})")
+        logger.info(
+            f"[TRIGGER] Firing {agent} from Hub message (session: {session_id or 'new'})",
+            extra={"event": "trigger_event", "data": {}},
+        )
 
         # Load env_vars from session config for claude_proxy agents
         env_vars = None
@@ -1399,9 +1485,7 @@ def _detect_kimi_major_version() -> str:
     if _KIMI_VERSION_CACHE is not None:
         return _KIMI_VERSION_CACHE
     try:
-        result = subprocess.run(
-            ["kimi", "--version"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["kimi", "--version"], capture_output=True, text=True, timeout=5)
         out = (result.stdout or result.stderr or "").strip()
         # Strip "kimi, version " prefix if present
         lowered = out.lower()
@@ -2473,7 +2557,10 @@ def _run_agent_subprocess(
                 "data": {"agent": agent, "reason": "another_instance_is_running"},
             },
         )
-        print(f"[SKIP] {agent} is already running, skipping spawn", file=sys.stderr)
+        logger.warning(
+            f"[SKIP] {agent} is already running, skipping spawn",
+            extra={"event": "watchdog_skip", "data": {}},
+        )
         return
 
     try:
@@ -2493,7 +2580,7 @@ def _run_agent_subprocess(
                 msg = f"[watchdog] Launch skipped for {agent}: {blocker.message}"
                 if blocker.hint:
                     msg = f"{msg} Hint: {blocker.hint}"
-                print(f"[SKIP] {msg}", file=sys.stderr)
+                logger.warning(f"[SKIP] {msg}", extra={"event": "watchdog_skip", "data": {}})
                 if is_http:
                     with contextlib.suppress(Exception):
                         transport.post_agent_output(agent, msg, session_id=known_session_id)
@@ -2547,7 +2634,10 @@ def _do_run_agent_subprocess(
         try:
             transport.post_agent_output(agent, f"[watchdog] 🚀 Starting {agent}…", session_id=None)
         except Exception as exc:
-            print(f"[ERROR] Could not post start marker to Hub: {exc}", file=sys.stderr)
+            logger.error(
+                f"[ERROR] Could not post start marker to Hub: {exc}",
+                extra={"event": "watchdog_error", "data": {}},
+            )
 
     session_id: Optional[str] = known_session_id
     # Mutable container so the stderr thread can read the latest session_id
@@ -2583,10 +2673,13 @@ def _do_run_agent_subprocess(
                     "data": {"agent": agent, "error": str(exc)},
                 },
             )
-            print(f"[ERROR] Codex MCP turn failed for {agent}: {exc}", file=sys.stderr)
+            logger.error(
+                f"[ERROR] Codex MCP turn failed for {agent}: {exc}",
+                extra={"event": "watchdog_error", "data": {}},
+            )
 
         summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
-        print(summary, file=sys.stderr)
+        logger.info(summary, extra={"event": "watchdog_agent_done", "data": {}})
         if is_http:
             with contextlib.suppress(Exception):
                 transport.post_agent_output(agent, summary, session_id=session_id)
@@ -2658,54 +2751,7 @@ def _do_run_agent_subprocess(
         """Run agent command, stream output. Returns process returncode."""
         nonlocal session_id, session_id_ref
 
-        # Prepare environment: merge env_vars with current environment
-        proc_env = None
-        if env_vars:
-            proc_env = os.environ.copy()
-            proc_env.update(env_vars)
-            # If ANTHROPIC_API_KEY_VAR is set, resolve it and set ANTHROPIC_API_KEY.
-            # (Claude CLI needs ANTHROPIC_API_KEY, not ANTHROPIC_API_KEY_VAR)
-            # Always overwrite ANTHROPIC_API_KEY so the parent shell's Claude key
-            # is never accidentally forwarded to a proxy provider.
-            api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR")
-            if api_key_var:
-                resolved = os.environ.get(api_key_var, "")
-                if resolved:
-                    proc_env["ANTHROPIC_API_KEY"] = resolved
-                else:
-                    # Key var declared but not exported — clear inherited Claude key
-                    # so the failure is an explicit 401 rather than a silent wrong-key error.
-                    proc_env.pop("ANTHROPIC_API_KEY", None)
-                    print(
-                        f"[WARN] {api_key_var} is not set in the environment. "
-                        f"Export it before starting the watchdog.",
-                        file=sys.stderr,
-                    )
-
-            # Generic {name: name} resolution: replace placeholder values with
-            # the actual env-var values read from the parent process environment.
-            # This is what makes `env: [MINIMAX_API_KEY]` on an opencode agent
-            # actually reach the opencode subprocess.
-            # TODO(env-forwarding): when extending to other runners (kimi/codex/
-            # claude/native), make sure their subprocess invocation also picks
-            # up proc_env; some paths (transport/local.py, transport/git.py)
-            # call subprocess.Popen without env= and won't get this benefit.
-            for var_name in list(env_vars.keys()):
-                if var_name in ("ANTHROPIC_API_KEY_VAR", "ANTHROPIC_BASE_URL"):
-                    # Already handled above (claude_proxy-specific)
-                    continue
-                if env_vars[var_name] == var_name:
-                    # name->name mapping: resolve via os.environ
-                    value = os.environ.get(var_name)
-                    if value:
-                        proc_env[var_name] = value
-                    else:
-                        proc_env.pop(var_name, None)
-                        print(
-                            f"[WARN] {var_name} is not set in the environment. "
-                            f"Export it before starting the watchdog.",
-                            file=sys.stderr,
-                        )
+        proc_env = _prepare_agent_env(env_vars)
 
         # Wire mode requires bidirectional stdin/stdout communication
         stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
@@ -2782,106 +2828,39 @@ def _do_run_agent_subprocess(
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
 
-            if is_wire_mode and kimi_parser is not None:
-                # Parse Kimi's JSON-RPC wire mode events
-                readable_lines = kimi_parser.feed(line)
-                # Close stdin on TurnEnd — clean signal that kimi finished this turn
-                if kimi_parser.is_turn_ended() and proc.stdin and not proc.stdin.closed:
-                    with contextlib.suppress(OSError):
-                        proc.stdin.close()  # type: ignore[union-attr]
-                # Extract context usage from StatusUpdate events
-                wire_context_usage = kimi_parser.get_context_usage()
-                if wire_context_usage is not None:
-                    usage_data_for_context = wire_context_usage
-                # Check for compaction events - only reset on transition into compaction
-                is_in_compaction = kimi_parser.is_in_compaction()
-                if is_in_compaction and not was_in_compaction:
-                    _reset_context_usage(agent)
-                was_in_compaction = is_in_compaction
-                # Capture session ID from TurnEnd events
-                # Always update — Kimi may create a new session even when resuming with --session
-                wire_session_id = kimi_parser.get_session_id()
-                if wire_session_id:
-                    session_id = wire_session_id
-                    session_id_ref[0] = wire_session_id
-            elif is_kimi_code:
-                # kimi-code v0.x: parse context.append_message events as they
-                # arrive. Session ID is discovered from disk after exit (see
-                # post-run block) — it's not in the stream-json output.
-                kimi_stdout_lines.append(line)
-                readable_lines = kimi_parser.feed(line) if kimi_parser is not None else []
-            elif is_kimi:
-                # Collect all lines for post-exit session ID extraction
-                kimi_stdout_lines.append(line)
-                # Extract session ID in real-time if seen on stdout
-                if session_id is None:
-                    m = _KIMI_RESUME_RE.search(line)
-                    if m:
-                        session_id = m.group(1)
-                        session_id_ref[0] = session_id
-                # Parse Kimi's Python-repr events streamed in real-time
-                readable_lines = kimi_parser.feed(line) if kimi_parser is not None else []
+            if is_kimi:
+                (
+                    readable_lines,
+                    usage_data,
+                    was_in_compaction,
+                    _,
+                ) = _parse_kimi_stdout_line(
+                    line,
+                    kimi_parser,
+                    proc,
+                    agent=agent,
+                    is_wire_mode=is_wire_mode,
+                    is_kimi_code=is_kimi_code,
+                    session_id_ref=session_id_ref,
+                    was_in_compaction=was_in_compaction,
+                    kimi_stdout_lines=kimi_stdout_lines,
+                )
             elif is_opencode:
-                # OpenCode --format json emits one event per line:
-                #   {"type": "step_start", "sessionID": "ses_...", "part": {...}}
-                #   {"type": "text",       "sessionID": "ses_...", "part": {"text": "..."}}
-                #   {"type": "step_finish","sessionID": "ses_...", "part": {...}}
-                #   {"type": "error",      "sessionID": "ses_...", "error": {...}}
-                # Parse to (a) capture the real sessionID for continuity on
-                # the next run, and (b) forward text/error events to the Hub
-                # so the response is actually visible (previously everything
-                # was discarded, which made silent upstream failures look
-                # like successes — see the "0 output line(s)" bug).
-                readable_lines = []
-                try:
-                    evt = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-
-                evt_type = evt.get("type")
-
-                # Always update the session ID — even on a "resume" run
-                # opencode may have rotated to a new ses_ ID. The real ID
-                # is what the Hub and _save_agent_session need.
-                evt_sid = evt.get("sessionID")
-                if evt_sid:
-                    session_id = evt_sid
-                    session_id_ref[0] = evt_sid
-
-                if evt_type == "text":
-                    text = (evt.get("part") or {}).get("text", "")
-                    if text:
-                        readable_lines.append(text)
-                elif evt_type == "error":
-                    err = evt.get("error") or {}
-                    err_name = err.get("name", "Error")
-                    err_data = err.get("data") or {}
-                    err_msg = err_data.get("message", "opencode error")
-                    err_ref = err_data.get("ref", "")
-                    prefix = f"[opencode error] {err_name}: {err_msg}"
-                    if err_ref:
-                        prefix += f" (ref: {err_ref})"
-                    readable_lines.append(prefix)
-                # Other event types (step_start, step_finish, tool_call, etc.)
-                # are intentionally not posted to the Hub to keep the output
-                # stream focused on the assistant's response.
+                readable_lines, usage_data = _parse_opencode_stdout_line(line, session_id_ref)
+            elif is_codex:
+                readable_lines, usage_data, stale = _parse_codex_stdout_line(
+                    line, runner_type, session_id_ref
+                )
+                if stale:
+                    stale_codex_session[0] = True
             else:
-                # Try to extract session_id from JSONL stream (Claude/claude_proxy/codex)
-                if session_id is None:
-                    extracted = _extract_jsonl_session_id(line, runner_type)
-                    if extracted:
-                        session_id = extracted
-                        session_id_ref[0] = session_id
-                if is_codex:
-                    readable_lines, usage_data = _parse_codex_stream_line(line)
-                    if any("Session not found for thread_id" in item for item in readable_lines):
-                        stale_codex_session[0] = True
-                        readable_lines = []
-                else:
-                    readable_lines, usage_data = _parse_claude_stream_line(line)
-                # Capture usage data from result messages for context monitoring
-                if usage_data:
-                    usage_data_for_context = usage_data
+                readable_lines, usage_data = _parse_claude_stdout_line(
+                    line, runner_type, session_id_ref
+                )
+
+            session_id = session_id_ref[0]
+            if usage_data is not None:
+                usage_data_for_context = usage_data
 
             # Stream to Hub or local stdout
             if is_http:
@@ -2892,9 +2871,9 @@ def _do_run_agent_subprocess(
                             agent, readable, session_id=session_id_ref[0]
                         )
                         if not ok:
-                            print(
+                            logger.warning(
                                 f"[WARN] post_agent_output returned False for {agent}",
-                                file=sys.stderr,
+                                extra={"event": "watchdog_warn", "data": {}},
                             )
                     except Exception as exc:
                         logger.warning(
@@ -2904,9 +2883,9 @@ def _do_run_agent_subprocess(
                                 "data": {"agent": agent, "error": str(exc)},
                             },
                         )
-                        print(
+                        logger.error(
                             f"[ERROR] post_agent_output failed for {agent}: {exc}",
-                            file=sys.stderr,
+                            extra={"event": "watchdog_error", "data": {}},
                         )
             else:
                 for readable in readable_lines:
@@ -2918,7 +2897,7 @@ def _do_run_agent_subprocess(
 
         # Post a completion summary so we can confirm the pipeline is alive
         summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
-        print(summary, file=sys.stderr)
+        logger.info(summary, extra={"event": "watchdog_agent_done", "data": {}})
         if is_http:
             with contextlib.suppress(Exception):
                 transport.post_agent_output(agent, summary, session_id=session_id_ref[0])
@@ -2989,13 +2968,19 @@ def _do_run_agent_subprocess(
                     },
                 },
             )
-            print(f"[WARN] {agent} exited with code {returncode}", file=sys.stderr)
+            logger.warning(
+                f"[WARN] {agent} exited with code {returncode}",
+                extra={"event": "watchdog_warn", "data": {}},
+            )
     except FileNotFoundError as exc:
         logger.error(
             "watchdog_spawn_failed",
             extra={"event": "watchdog_spawn_failed", "data": {"agent": agent, "error": str(exc)}},
         )
-        print(f"[ERROR] Failed to launch {agent}: {exc}", file=sys.stderr)
+        logger.error(
+            f"[ERROR] Failed to launch {agent}: {exc}",
+            extra={"event": "watchdog_error", "data": {}},
+        )
     except Exception as exc:
         logger.error(
             "watchdog_subprocess_error",
@@ -3004,64 +2989,21 @@ def _do_run_agent_subprocess(
                 "data": {"agent": agent, "error": str(exc)},
             },
         )
-        print(f"[ERROR] Unexpected error running {agent}: {exc}", file=sys.stderr)
-
-    # Sync session_id from cross-thread reference — the stderr drain thread may
-    # have captured the ID from Kimi's "To resume this session: kimi -r <uuid>"
-    # line even when the wire-mode TurnEnd event did not include a session_id.
-    if session_id is None and session_id_ref[0] is not None:
-        session_id = session_id_ref[0]
-
-    # Extract Kimi session ID from collected stdout lines (post-exit) for print mode
-    # Wire mode captures session ID from TurnEnd events in real-time
-    if is_kimi and not is_wire_mode and not is_kimi_code and session_id is None and kimi_stdout_lines:
-        found = _extract_kimi_session_from_stdout(kimi_stdout_lines)
-        if found:
-            session_id = found
-            session_id_ref[0] = found
-            logger.info(
-                "watchdog_kimi_session_found",
-                extra={
-                    "event": "watchdog_kimi_session_found",
-                    "data": {"session_id": found, "method": "stdout_resume_line"},
-                },
-            )
-
-    # kimi-code v0.x does NOT emit the session ID in stream-json output; we
-    # discover it post-run by scanning ~/.kimi-code/session_index.jsonl for
-    # the most recently created session whose workDir matches the watchdog's
-    # cwd. Only meaningful when the run succeeded.
-    if is_kimi_code and session_id is None and returncode == 0:
-        workdir = Path.cwd()
-        found = _extract_kimi_code_session(workdir)
-        if found:
-            session_id = found
-            session_id_ref[0] = found
-            logger.info(
-                "watchdog_kimi_code_session_found",
-                extra={
-                    "event": "watchdog_kimi_code_session_found",
-                    "data": {"session_id": found, "method": "session_index_scan", "workdir": str(workdir)},
-                },
-            )
-        else:
-            logger.warning(
-                "watchdog_kimi_code_session_not_found",
-                extra={
-                    "event": "watchdog_kimi_code_session_not_found",
-                    "data": {"workdir": str(workdir)},
-                },
-            )
-
-    # Wire mode: log if we captured session ID from TurnEnd event
-    if is_wire_mode and session_id:
-        logger.info(
-            "watchdog_kimi_wire_session_found",
-            extra={
-                "event": "watchdog_kimi_wire_session_found",
-                "data": {"session_id": session_id, "method": "TurnEnd_event"},
-            },
+        logger.error(
+            f"[ERROR] Unexpected error running {agent}: {exc}",
+            extra={"event": "watchdog_error", "data": {}},
         )
+
+    session_id = _extract_session_id_post_run(
+        agent,
+        session_id,
+        session_id_ref,
+        is_kimi=is_kimi,
+        is_kimi_code=is_kimi_code,
+        is_wire_mode=is_wire_mode,
+        kimi_stdout_lines=kimi_stdout_lines,
+        returncode=returncode,
+    )
 
     # Persist session ID for next run
     if session_id:
@@ -3086,6 +3028,224 @@ def _do_run_agent_subprocess(
                     "data": {"agent": agent, "error": str(exc)},
                 },
             )
+
+
+def _extract_kimi_code_session_id(
+    session_id: Optional[str],
+    session_id_ref: List[Optional[str]],
+    returncode: int,
+) -> Optional[str]:
+    """Discover a kimi-code v0.x session ID from the global session index."""
+    if session_id is not None or returncode != 0:
+        return session_id
+    workdir = Path.cwd()
+    found = _extract_kimi_code_session(workdir)
+    if found:
+        session_id_ref[0] = found
+        logger.info(
+            "watchdog_kimi_code_session_found",
+            extra={
+                "event": "watchdog_kimi_code_session_found",
+                "data": {
+                    "session_id": found,
+                    "method": "session_index_scan",
+                    "workdir": str(workdir),
+                },
+            },
+        )
+    else:
+        logger.warning(
+            "watchdog_kimi_code_session_not_found",
+            extra={
+                "event": "watchdog_kimi_code_session_not_found",
+                "data": {"workdir": str(workdir)},
+            },
+        )
+    return found or session_id
+
+
+def _extract_session_id_post_run(
+    agent: str,
+    session_id: Optional[str],
+    session_id_ref: List[Optional[str]],
+    *,
+    is_kimi: bool,
+    is_kimi_code: bool,
+    is_wire_mode: bool,
+    kimi_stdout_lines: List[str],
+    returncode: int,
+) -> Optional[str]:
+    """Discover and return the agent session ID after the subprocess exits."""
+    if session_id is None and session_id_ref[0] is not None:
+        session_id = session_id_ref[0]
+    if (
+        is_kimi
+        and not is_wire_mode
+        and not is_kimi_code
+        and session_id is None
+        and kimi_stdout_lines
+    ):
+        found = _extract_kimi_session_from_stdout(kimi_stdout_lines)
+        if found:
+            session_id = found
+            session_id_ref[0] = found
+            logger.info(
+                "watchdog_kimi_session_found",
+                extra={
+                    "event": "watchdog_kimi_session_found",
+                    "data": {"session_id": found, "method": "stdout_resume_line"},
+                },
+            )
+    session_id = _extract_kimi_code_session_id(session_id, session_id_ref, returncode)
+    if is_wire_mode and session_id:
+        logger.info(
+            "watchdog_kimi_wire_session_found",
+            extra={
+                "event": "watchdog_kimi_wire_session_found",
+                "data": {"session_id": session_id, "method": "TurnEnd_event"},
+            },
+        )
+    return session_id
+
+
+def _prepare_agent_env(env_vars: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+    """Merge env_vars with the current environment and resolve placeholder vars."""
+    if not env_vars:
+        return None
+    proc_env = os.environ.copy()
+    proc_env.update(env_vars)
+    api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR")
+    if api_key_var:
+        resolved = os.environ.get(api_key_var, "")
+        if resolved:
+            proc_env["ANTHROPIC_API_KEY"] = resolved
+        else:
+            # Key var declared but not exported — clear inherited Claude key
+            # so the failure is an explicit 401 rather than a silent wrong-key error.
+            proc_env.pop("ANTHROPIC_API_KEY", None)
+            logger.warning(
+                f"[WARN] {api_key_var} is not set in the environment. "
+                f"Export it before starting the watchdog.",
+                extra={"event": "watchdog_warn", "data": {}},
+            )
+    for var_name in list(env_vars.keys()):
+        if var_name in ("ANTHROPIC_API_KEY_VAR", "ANTHROPIC_BASE_URL"):
+            continue
+        if env_vars[var_name] == var_name:
+            value = os.environ.get(var_name)
+            if value:
+                proc_env[var_name] = value
+            else:
+                proc_env.pop(var_name, None)
+                logger.warning(
+                    f"[WARN] {var_name} is not set in the environment. "
+                    f"Export it before starting the watchdog.",
+                    extra={"event": "watchdog_warn", "data": {}},
+                )
+    return proc_env
+
+
+def _parse_kimi_stdout_line(
+    line: str,
+    parser: Any,
+    proc: subprocess.Popen,
+    *,
+    agent: str,
+    is_wire_mode: bool,
+    is_kimi_code: bool,
+    session_id_ref: List[Optional[str]],
+    was_in_compaction: bool,
+    kimi_stdout_lines: List[str],
+) -> tuple[list[str], Optional[Dict[str, Any]], bool, List[str]]:
+    """Parse one line of Kimi stdout (wire, v1.x print, or v0.x stream-json)."""
+    readable_lines: list[str] = []
+    usage_data: Optional[Dict[str, Any]] = None
+
+    if is_wire_mode:
+        readable_lines = parser.feed(line)
+        if parser.is_turn_ended() and proc.stdin and not proc.stdin.closed:
+            with contextlib.suppress(OSError):
+                proc.stdin.close()  # type: ignore[union-attr]
+        wire_context_usage = parser.get_context_usage()
+        if wire_context_usage is not None:
+            usage_data = wire_context_usage
+        is_in_compaction = parser.is_in_compaction()
+        if is_in_compaction and not was_in_compaction:
+            _reset_context_usage(agent)
+        was_in_compaction = is_in_compaction
+        wire_session_id = parser.get_session_id()
+        if wire_session_id:
+            session_id_ref[0] = wire_session_id
+    else:
+        # v1.x print mode or v0.x stream-json
+        kimi_stdout_lines.append(line)
+        if not is_kimi_code and session_id_ref[0] is None:
+            m = _KIMI_RESUME_RE.search(line)
+            if m:
+                session_id_ref[0] = m.group(1)
+        readable_lines = parser.feed(line) if parser is not None else []
+
+    return readable_lines, usage_data, was_in_compaction, kimi_stdout_lines
+
+
+def _parse_opencode_stdout_line(
+    line: str, session_id_ref: List[Optional[str]]
+) -> tuple[list[str], Optional[Dict[str, Any]]]:
+    """Parse one line of OpenCode JSON output."""
+    readable_lines: list[str] = []
+    try:
+        evt = json.loads(line)
+    except (ValueError, TypeError):
+        return readable_lines, None
+
+    evt_sid = evt.get("sessionID")
+    if evt_sid:
+        session_id_ref[0] = evt_sid
+
+    evt_type = evt.get("type")
+    if evt_type == "text":
+        text = (evt.get("part") or {}).get("text", "")
+        if text:
+            readable_lines.append(text)
+    elif evt_type == "error":
+        err = evt.get("error") or {}
+        err_name = err.get("name", "Error")
+        err_data = err.get("data") or {}
+        err_msg = err_data.get("message", "opencode error")
+        err_ref = err_data.get("ref", "")
+        prefix = f"[opencode error] {err_name}: {err_msg}"
+        if err_ref:
+            prefix += f" (ref: {err_ref})"
+        readable_lines.append(prefix)
+    return readable_lines, None
+
+
+def _parse_codex_stdout_line(
+    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+) -> tuple[list[str], Optional[Dict[str, Any]], bool]:
+    """Parse one line of Codex JSONL output."""
+    stale = False
+    if session_id_ref[0] is None:
+        extracted = _extract_jsonl_session_id(line, runner_type)
+        if extracted:
+            session_id_ref[0] = extracted
+    readable_lines, usage_data = _parse_codex_stream_line(line)
+    if any("Session not found for thread_id" in item for item in readable_lines):
+        stale = True
+        readable_lines = []
+    return readable_lines, usage_data, stale
+
+
+def _parse_claude_stdout_line(
+    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+) -> tuple[list[str], Optional[Dict[str, Any]]]:
+    """Parse one line of Claude / claude_proxy JSONL output."""
+    if session_id_ref[0] is None:
+        extracted = _extract_jsonl_session_id(line, runner_type)
+        if extracted:
+            session_id_ref[0] = extracted
+    readable_lines, usage_data = _parse_claude_stream_line(line)
+    return readable_lines, usage_data
 
 
 def _check_cli_available(agent: str) -> bool:
@@ -3131,9 +3291,9 @@ def _make_ping_callback(
     # Validate CLIs at startup and warn about missing ones
     for agent in agents:
         if not _check_cli_available(agent):
-            print(
+            logger.warning(
                 f"[WARN] {agent} CLI not found in PATH. " f"Auto-ping for {agent} will not work.",
-                file=sys.stderr,
+                extra={"event": "watchdog_warn", "data": {}},
             )
 
     def callback(event_type: str, data: Dict[str, Any]) -> None:
@@ -3159,15 +3319,18 @@ def _make_ping_callback(
             return
 
         if recipient not in initial_agent_set:
-            print(f"[PING] Detected new agent since startup: {recipient}")
+            logger.info(
+                f"[PING] Detected new agent since startup: {recipient}",
+                extra={"event": "ping_event", "data": {}},
+            )
 
         seen.add(msg_id)
 
         # Skip if CLI is not available
         if not _check_cli_available(recipient):
-            print(
+            logger.warning(
                 f"[SKIP] Cannot notify {recipient}: CLI not found in PATH",
-                file=sys.stderr,
+                extra={"event": "watchdog_skip", "data": {}},
             )
             logger.warning(
                 "ping_skipped",
@@ -3191,7 +3354,10 @@ def _make_ping_callback(
                     "data": {"agent": recipient, "msg_id": msg_id, "reason": "pilot mode"},
                 },
             )
-            print(f"[PILOT] Skipping ping for pilot agent {recipient} (manual control)")
+            logger.info(
+                f"[PILOT] Skipping ping for pilot agent {recipient} (manual control)",
+                extra={"event": "watchdog_pilot", "data": {}},
+            )
             return
 
         sender = data.get("from", "another agent")
@@ -3222,10 +3388,14 @@ def _make_ping_callback(
         session_id = _load_agent_session(recipient)
         cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
         subject = data.get("subject", "(no subject)")
-        print(f"[PING] Notifying {recipient}: {subject}")
-        print(f"[PING] Command: {' '.join(cmd)}")
+        logger.info(
+            f"[PING] Notifying {recipient}: {subject}", extra={"event": "ping_event", "data": {}}
+        )
+        logger.info(f"[PING] Command: {' '.join(cmd)}", extra={"event": "ping_event", "data": {}})
         if session_id:
-            print(f"[PING] Resuming session: {session_id}")
+            logger.info(
+                f"[PING] Resuming session: {session_id}", extra={"event": "ping_event", "data": {}}
+            )
 
         # Load env_vars from session config for claude_proxy agents
         env_vars = None
@@ -3327,7 +3497,10 @@ def _make_direct_trigger_callback(
                     "data": {"agent": recipient, "reason": "pilot mode (manual control)"},
                 },
             )
-            print(f"[PILOT] Skipping direct trigger for pilot agent {recipient} (manual control)")
+            logger.info(
+                f"[PILOT] Skipping direct trigger for pilot agent {recipient} (manual control)",
+                extra={"event": "watchdog_pilot", "data": {}},
+            )
             return
 
         # Extract optional session ID from content tags. Most runners keep the
@@ -3422,10 +3595,18 @@ def _make_direct_trigger_callback(
                 "data": {"agent": recipient, "msg_id": msg_id, "session_id": session_id},
             },
         )
-        print(f"[TRIGGER] Executing direct trigger for {recipient}")
-        print(f"[TRIGGER] Command: {' '.join(cmd)}")
+        logger.info(
+            f"[TRIGGER] Executing direct trigger for {recipient}",
+            extra={"event": "trigger_event", "data": {}},
+        )
+        logger.info(
+            f"[TRIGGER] Command: {' '.join(cmd)}", extra={"event": "trigger_event", "data": {}}
+        )
         if session_id:
-            print(f"[TRIGGER] Resuming session: {session_id}")
+            logger.info(
+                f"[TRIGGER] Resuming session: {session_id}",
+                extra={"event": "trigger_event", "data": {}},
+            )
 
         # Execute in background thread. Non-Codex-MCP direct messages are
         # intentionally left unread so the agent can read them via get_inbox.
@@ -3505,10 +3686,10 @@ def main() -> None:
 
             session = Session.load()
             if not session:
-                print(
+                logger.error(
                     "Error: --auto-ping without --agent requires an active session. "
                     "Run: agentweave init",
-                    file=sys.stderr,
+                    extra={"event": "watchdog_error", "data": {}},
                 )
                 sys.exit(1)
             agents_to_ping = session.agent_names
@@ -3520,16 +3701,25 @@ def main() -> None:
                 transport=watchdog.transport,
             )
         )
-        print(f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}")
+        logger.info(
+            f"[PING] Auto-ping enabled for: {', '.join(agents_to_ping)}",
+            extra={"event": "ping_event", "data": {}},
+        )
         if args.retry_after:
-            print(f"[PING] Retry after: {int(args.retry_after)}s")
+            logger.info(
+                f"[PING] Retry after: {int(args.retry_after)}s",
+                extra={"event": "ping_event", "data": {}},
+            )
 
     # Always enable direct trigger callback for HTTP transport
     # This allows Hub UI "Send Message" to work
     callbacks.append(
         _make_direct_trigger_callback(transport=watchdog.transport, watchdog_instance=watchdog)
     )
-    print("[TRIGGER] Direct trigger handler enabled (for Hub UI messages)")
+    logger.info(
+        "[TRIGGER] Direct trigger handler enabled (for Hub UI messages)",
+        extra={"event": "trigger_event", "data": {}},
+    )
 
     # On HTTP transport: push session config to the Hub so it knows the full
     # agent configuration (names, roles, yolo flags) without filesystem access.
@@ -3540,9 +3730,15 @@ def main() -> None:
         if _sess:
             try:
                 watchdog.transport.push_session(_sess.to_dict())
-                print(f"[HUB] Session synced: {', '.join(_sess.agent_names)}")
+                logger.info(
+                    f"[HUB] Session synced: {', '.join(_sess.agent_names)}",
+                    extra={"event": "hub_event", "data": {}},
+                )
             except Exception as _exc:
-                print(f"[WARN] Could not sync session with hub: {_exc}", file=sys.stderr)
+                logger.warning(
+                    f"[WARN] Could not sync session with hub: {_exc}",
+                    extra={"event": "watchdog_warn", "data": {}},
+                )
 
         # Push roles config so Hub knows dev roles even after a restart
         try:
@@ -3553,9 +3749,12 @@ def main() -> None:
             if ROLES_CONFIG_FILE.exists():
                 _roles = _json.loads(ROLES_CONFIG_FILE.read_text(encoding="utf-8"))
                 watchdog.transport.push_roles_config(_roles)
-                print("[HUB] Roles config synced")
+                logger.info("[HUB] Roles config synced", extra={"event": "hub_event", "data": {}})
         except Exception as _exc:
-            print(f"[WARN] Could not sync roles config with hub: {_exc}", file=sys.stderr)
+            logger.warning(
+                f"[WARN] Could not sync roles config with hub: {_exc}",
+                extra={"event": "watchdog_warn", "data": {}},
+            )
 
     # Combine all callbacks into one
     if callbacks:

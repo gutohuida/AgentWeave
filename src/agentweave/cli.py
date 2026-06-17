@@ -3,6 +3,7 @@
 
 import argparse
 import contextlib
+import json
 import logging
 import os
 import shutil
@@ -116,7 +117,7 @@ def _print_readiness_summary(results: List[Any], *, title: str = "[READINESS]") 
     if rendered:
         print(rendered)
     else:
-        print("  [OK] No readiness problems detected.")
+        print_success("No readiness problems detected.")
 
 
 def _ensure_agentweave_gitignore(path: Optional[Path] = None) -> bool:
@@ -171,91 +172,108 @@ def _ensure_agentweave_env(path: Optional[Path] = None) -> bool:
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Initialize a new session."""
-    import json as _json
+    session, code = _init_session(args)
+    if session is None:
+        return code
 
-    # Check for existing session (migration path)
-    existing_session = None
+    _write_readme(session)
+    _write_protocol(session)
+    _write_role_files(session)
+    _write_ai_context()
+    root_files_created = _write_root_contexts(session)
+    _write_shared_context(session)
+    skills_count, codex_skills_count = _generate_skills(session, args.force)
+    yml_path = _write_yaml(session)
+
+    _print_init_summary(
+        session,
+        root_files_created,
+        skills_count,
+        codex_skills_count,
+        yml_path,
+    )
+    return 0
+
+
+def _migrate_existing_session(args: argparse.Namespace) -> Optional[int]:
+    """Migrate from an existing session to agentweave.yml. Returns code if handled."""
+    try:
+        data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+        existing = Session(data)
+    except Exception:
+        return None
+    if not existing or args.force:
+        return None
+    print_info("Existing session detected.")
+    print_info("Generating agentweave.yml from current configuration...")
+    try:
+        from .config import generate_agentweave_yml
+
+        generate_agentweave_yml(existing)
+        if _ensure_agentweave_gitignore():
+            print_success("Updated .gitignore with AgentWeave runtime state")
+        if _ensure_agentweave_env():
+            print_success("Created .env for local AgentWeave secrets")
+        print_success("Generated agentweave.yml from existing session")
+        print_info("Run 'agentweave activate' to apply configuration")
+        return 0
+    except Exception as exc:
+        print_error(f"Failed to generate agentweave.yml: {exc}")
+        return 1
+
+
+def _init_session(args: argparse.Namespace) -> tuple[Optional[Session], int]:
+    """Create or migrate the session for init. Returns (session, return_code)."""
     if SESSION_FILE.exists():
-        try:
-            existing_session_data = _json.loads(SESSION_FILE.read_text(encoding="utf-8"))
-            existing_session = Session(existing_session_data)
-        except Exception:
-            pass
-
-        if existing_session and not args.force:
-            print_info("Existing session detected.")
-            print_info("Generating agentweave.yml from current configuration...")
-            try:
-                from .config import generate_agentweave_yml
-
-                generate_agentweave_yml(existing_session)
-                if _ensure_agentweave_gitignore():
-                    print_success("Updated .gitignore with AgentWeave runtime state")
-                if _ensure_agentweave_env():
-                    print_success("Created .env for local AgentWeave secrets")
-                print_success("Generated agentweave.yml from existing session")
-                print_info("Run 'agentweave activate' to apply configuration")
-                return 0
-            except Exception as e:
-                print_error(f"Failed to generate agentweave.yml: {e}")
-                return 1
+        code = _migrate_existing_session(args)
+        if code is not None:
+            return None, code
 
     if AGENTWEAVE_DIR.exists() and not args.force:
         if AGENTWEAVE_DIR.is_file():
             print_error(".agentweave exists as a file, not a directory.")
             print_info("Remove it with: rm .agentweave")
-            return 1
-        # Directory exists - check if it has meaningful content (not just logs)
-        # The logs directory is created automatically by logging setup
+            return None, 1
         has_session = SESSION_FILE.exists()
-        has_agents_dir = (AGENTWEAVE_DIR / "agents").exists()
-        has_tasks_dir = (AGENTWEAVE_DIR / "tasks").exists()
-        if has_session or has_agents_dir or has_tasks_dir:
+        has_agents = (AGENTWEAVE_DIR / "agents").exists()
+        has_tasks = (AGENTWEAVE_DIR / "tasks").exists()
+        if has_session or has_agents or has_tasks:
             print_warning(".agentweave/ already exists. Use --force to overwrite.")
-            return 1
-        # Directory only contains logs/other non-essential files - allow init
+            return None, 1
 
-    # Handle case where .agentweave exists as a file with --force
     if AGENTWEAVE_DIR.exists() and args.force and AGENTWEAVE_DIR.is_file():
         try:
             AGENTWEAVE_DIR.unlink()
             print_info("Removed existing .agentweave file.")
-        except OSError as e:
-            print_error(f"Cannot remove .agentweave file: {e}")
-            return 1
+        except OSError as exc:
+            print_error(f"Cannot remove .agentweave file: {exc}")
+            return None, 1
 
-    # Handle deprecation warning for --agents
     agents_arg = getattr(args, "agents", None)
     if agents_arg:
         print_warning("--agents is deprecated. Define agents in agentweave.yml instead.")
 
     ensure_dirs()
 
-    try:
-        # Parse agent list: --agents claude,kimi,gemini  OR fall back to default
-        agent_list = None
-        if agents_arg:
-            agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()]
+    agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()] if agents_arg else None
+    principal = args.principal or (agent_list[0] if agent_list else DEFAULT_AGENTS[0])
+    effective_agents = agent_list if agent_list else DEFAULT_AGENTS
 
-        principal = args.principal or (agent_list[0] if agent_list else DEFAULT_AGENTS[0])
+    session = Session.create(
+        name=args.project or "Unnamed Project",
+        principal=principal,
+        mode=args.mode or "hierarchical",
+        agents=effective_agents,
+    )
+    session.save()
+    return session, 0
 
-        # In the declarative workflow, only create the principal at init time.
-        # Additional agents are declared in agentweave.yml and synced by activate.
-        effective_agents = agent_list if agent_list else DEFAULT_AGENTS
 
-        session = Session.create(
-            name=args.project or "Unnamed Project",
-            principal=principal,
-            mode=args.mode or "hierarchical",
-            agents=effective_agents,
-        )
-        session.save()
-
-        # Create README
-        agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
-        readme_path = AGENTWEAVE_DIR / "README.md"
-        with open(readme_path, "w", encoding="utf-8") as f:
-            f.write(f"""# AgentWeave Session: {session.name}
+def _write_readme(session: Session) -> None:
+    agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
+    readme_path = AGENTWEAVE_DIR / "README.md"
+    readme_path.write_text(
+        f"""# AgentWeave Session: {session.name}
 
 **ID:** {session.id}
 **Mode:** {session.mode}
@@ -300,132 +318,118 @@ agentweave summary
 - `messages/pending/` — Unread messages
 - `messages/archive/` — Message history
 - `shared/` — Shared context and decisions
-""")
+""",
+        encoding="utf-8",
+    )
 
-        # Write protocol.md — collaboration guide inside .agentweave/
-        non_principal = [a for a in session.agent_names if a != session.principal]
-        agents_list = ", ".join(non_principal) if non_principal else "kimi"
-        try:
-            collab_protocol = (
-                get_template("collab_protocol")
-                .replace("{principal}", session.principal)
-                .replace("{agents_list}", agents_list)
-                .replace("{mode}", session.mode)
-            )
-            protocol_path = AGENTWEAVE_DIR / "protocol.md"
-            with open(protocol_path, "w", encoding="utf-8") as f:
-                f.write(collab_protocol)
-        except FileNotFoundError:
-            pass  # Non-fatal
 
-        # Write roles.json and copy active role MD files to .agentweave/roles/
-        try:
-            import json as _json
+def _write_protocol(session: Session) -> None:
+    non_principal = [a for a in session.agent_names if a != session.principal]
+    agents_list = ", ".join(non_principal) if non_principal else "kimi"
+    try:
+        content = (
+            get_template("collab_protocol")
+            .replace("{principal}", session.principal)
+            .replace("{agents_list}", agents_list)
+            .replace("{mode}", session.mode)
+        )
+        (AGENTWEAVE_DIR / "protocol.md").write_text(content, encoding="utf-8")
+    except FileNotFoundError:
+        pass
 
-            roles_template_data = load_roles_template()
-            all_role_defs = roles_template_data["roles"]
 
-            # Build default-for map from _default_for metadata in the template
-            default_for_map: dict = {}
-            for role_id, role_def in all_role_defs.items():
-                for ag_name in role_def.get("_default_for", []):
-                    default_for_map[ag_name] = role_id
+def _write_role_files(session: Session) -> None:
+    try:
+        template_data = load_roles_template()
+        all_roles = template_data["roles"]
+        default_for_map: dict[str, str] = {}
+        for role_id, role_def in all_roles.items():
+            for ag in role_def.get("_default_for", []):
+                default_for_map[ag] = role_id
 
-            # Assign roles to this session's agents
-            agent_assignments: dict = {}
-            active_role_keys: set = set()
-            for ag in session.agent_names:
-                role_key = default_for_map.get(ag)
-                if role_key:
-                    agent_assignments[ag] = role_key
-                    active_role_keys.add(role_key)
-                # Agents not in _default_for start with no role.
-                # Use agentweave.yml + `agentweave activate` to assign roles.
-
-            # Build the project roles.json (strip internal _* fields)
-            roles_config = {
-                "version": 1,
-                "agent_assignments": agent_assignments,
-                "roles": {
-                    k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")}
-                    for k, v in all_role_defs.items()
-                    if k in active_role_keys
-                },
-            }
-            ROLES_CONFIG_FILE.write_text(
-                _json.dumps(roles_config, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-
-            # Push roles config to Hub if HTTP transport is active
-            try:
-                from .transport import get_transport
-
-                _t = get_transport()
-                if _t.get_transport_type() == "http":
-                    _t.push_roles_config(roles_config)
-            except Exception:
-                pass  # Non-fatal
-
-            # Copy active role MD files
-            import contextlib
-
-            ROLES_DIR.mkdir(exist_ok=True)
-            for role_key in active_role_keys:
-                with contextlib.suppress(FileNotFoundError):
-                    (ROLES_DIR / f"{role_key}.md").write_text(
-                        get_role_md(role_key), encoding="utf-8"
-                    )
-        except Exception:
-            pass  # Non-fatal
-
-        # Write .agentweave/ai_context.md — hidden source template (agents don't read this directly).
-        ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
-        if not ai_context_path.exists():
-            try:
-                ai_context = get_template("ai_context")
-                with open(ai_context_path, "w", encoding="utf-8") as f:
-                    f.write(ai_context)
-            except FileNotFoundError:
-                pass  # Non-fatal
-
-        # Write .agentweave/project_instructions.md — project-wide rules for all agents.
-        project_instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
-        if not project_instructions_path.exists():
-            project_instructions_path.write_text(
-                "# Project Instructions\n\n"
-                "Add project-wide rules here. These instructions are prepended to every agent's role guide.\n",
-                encoding="utf-8",
-            )
-
-        # Write agent-specific context files at project root (auto-read by each agent).
-        # claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.
-        version_comment = f"AgentWeave v{__version__}"
-        written_root_files: set = set()
+        assignments: dict[str, str] = {}
+        active_roles: set[str] = set()
         for ag in session.agent_names:
-            _runner = session.get_runner_config(ag).get("runner", "native")
-            if _runner == "claude_proxy":
-                root_filename = "CLAUDE.md"
-            else:
-                root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
-            if root_filename in written_root_files:
-                continue  # multiple agents may share AGENTS.md — only write once
-            root_path = Path.cwd() / root_filename
-            if root_path.exists():
-                written_root_files.add(root_filename)
-                continue  # never overwrite an existing file
-            template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
-            try:
-                context_content = get_template(template_name).replace("{version}", version_comment)
-                with open(root_path, "w", encoding="utf-8") as f:
-                    f.write(context_content)
-                written_root_files.add(root_filename)
-            except FileNotFoundError:
-                pass  # Non-fatal
+            role_key = default_for_map.get(ag)
+            if role_key:
+                assignments[ag] = role_key
+                active_roles.add(role_key)
 
-        # Write shared/context.md — current project state (dynamic, changes daily)
-        context_md_path = SHARED_DIR / "context.md"
-        if not context_md_path.exists():
-            context_md_content = f"""# Current Project State
+        config = {
+            "version": 1,
+            "agent_assignments": assignments,
+            "roles": {
+                k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")}
+                for k, v in all_roles.items()
+                if k in active_roles
+            },
+        }
+        ROLES_CONFIG_FILE.write_text(
+            json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+        try:
+            from .transport import get_transport
+
+            t = get_transport()
+            if t.get_transport_type() == "http":
+                t.push_roles_config(config)
+        except Exception:
+            pass
+
+        ROLES_DIR.mkdir(exist_ok=True)
+        for role_key in active_roles:
+            with contextlib.suppress(FileNotFoundError):
+                (ROLES_DIR / f"{role_key}.md").write_text(get_role_md(role_key), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _write_ai_context() -> None:
+    ai_path = AGENTWEAVE_DIR / "ai_context.md"
+    if not ai_path.exists():
+        with contextlib.suppress(FileNotFoundError):
+            ai_path.write_text(get_template("ai_context"), encoding="utf-8")
+
+    instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
+    if not instructions_path.exists():
+        instructions_path.write_text(
+            "# Project Instructions\n\n"
+            "Add project-wide rules here. These instructions are prepended to every agent's role guide.\n",
+            encoding="utf-8",
+        )
+
+
+def _write_root_contexts(session: Session) -> set[str]:
+    version_comment = f"AgentWeave v{__version__}"
+    written: set[str] = set()
+    for ag in session.agent_names:
+        runner = session.get_runner_config(ag).get("runner", "native")
+        if runner == "claude_proxy":
+            root_filename = "CLAUDE.md"
+        else:
+            root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+        if root_filename in written:
+            continue
+        root_path = Path.cwd() / root_filename
+        if root_path.exists():
+            written.add(root_filename)
+            continue
+        template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
+        try:
+            content = get_template(template_name).replace("{version}", version_comment)
+            root_path.write_text(content, encoding="utf-8")
+            written.add(root_filename)
+        except FileNotFoundError:
+            pass
+    return written
+
+
+def _write_shared_context(session: Session) -> None:
+    context_md_path = SHARED_DIR / "context.md"
+    if not context_md_path.exists():
+        context_md_path.write_text(
+            f"""# Current Project State
 
 > **Purpose:** What's being worked on right now — today's focus, recent decisions, blockers.
 >
@@ -467,91 +471,100 @@ agentweave summary
 
 *Last updated: [date]*
 *Session: {session.name} ({session.id})*
-"""
-            context_md_path.write_text(context_md_content, encoding="utf-8")
-
-        # Build list of root files that were created
-        root_files_created = sorted(written_root_files)
-        gitignore_updated = _ensure_agentweave_gitignore()
-        env_created = _ensure_agentweave_env()
-
-        print_success(f"Initialized session: {session.name}")
-        print(f"   ID:      {session.id}")
-        print(f"   Mode:    {session.mode}")
-        print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
-        print("\n[DIR] Created .agentweave/")
-        print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
-        print("     roles.json           <- agent role assignments and role registry (edit freely)")
-        print(
-            "     roles/               <- per-role behavioral guides (read yours at session start)"
-        )
-        print(
-            "     ai_context.md        <- project DNA source — fill this in, then update agent files"
-        )
-        print("     shared/context.md    <- current focus, recent decisions (update daily)")
-        if root_files_created:
-            print("\n[FILES] Created at project root (auto-read by agents each session):")
-            for fname in root_files_created:
-                print(f"     {fname}")
-        if gitignore_updated:
-            print("     .gitignore")
-        if env_created:
-            print("     .env")
-        print("\nFile purposes:")
-        print("  • .agentweave/ai_context.md  — Project DNA source (edit this)")
-        for fname in root_files_created:
-            print(f"  • {fname:<22} — Auto-loaded by agent; contains full project context")
-        print("  • .agentweave/ROLES.md       — Who does what? (per-session)")
-        print("  • .agentweave/shared/context.md — What are we doing today? (changes daily)")
-        print("\nNext steps:")
-        print("1. Fill in the [Replace with...] sections in .agentweave/ai_context.md")
-        print("2. Run `agentweave sync-context` to regenerate agent files from ai_context.md")
-        print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
-        print("4. Update .agentweave/shared/context.md with today's focus")
-        print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
-        print()
-        print("Zero-relay MCP mode (optional):")
-        print("  agentweave mcp setup   # configure MCP server in both agents (once)")
-        print(
-            "  agentweave start       # launch background watchdog — agents notify each other automatically"
+""",
+            encoding="utf-8",
         )
 
-        # Generate Claude Code skills in .claude/skills/
-        skills_count = _generate_claude_skills(session, Path.cwd(), force=args.force)
-        if skills_count > 0:
-            print(f"\n[SKILLS] Generated {skills_count} Claude Code skills in .claude/skills/")
-            print("  Available slash commands:")
-            print("    /aw-delegate   delegate a task to another agent")
-            print("    /aw-status     full collaboration status overview")
-            print("    /aw-done       mark a task complete and notify principal")
-            print("    /aw-review     request a code review")
-            print("    /aw-relay      generate relay prompt for an agent")
-            print("    /aw-sync       sync context files from ai_context.md")
-            print("    /aw-revise     accept and begin a revision")
-            print("  (aw-collab-start runs automatically at session start)")
 
-        # Generate Codex skills in .agents/skills/
-        codex_skills_count = _generate_codex_skills(session, Path.cwd(), force=args.force)
-        if codex_skills_count > 0:
-            print(f"\n[SKILLS] Generated {codex_skills_count} Codex skills in .agents/skills/")
-            print("  Invoke via $skill-name or the /skills menu in Codex CLI")
+def _generate_skills(session: Session, force: bool) -> tuple[int, int]:
+    claude_count = _generate_claude_skills(session, Path.cwd(), force=force)
+    codex_count = _generate_codex_skills(session, Path.cwd(), force=force)
+    return claude_count, codex_count
 
-        # Generate agentweave.yml configuration file
-        try:
-            from .config import generate_agentweave_yml
 
-            yml_path = generate_agentweave_yml(session)
-            print(f"\n[CONFIG] Created {yml_path}")
-            print("  This file defines your project agents and settings.")
-            print("  Edit it to add/remove agents, then run 'agentweave activate'")
-        except Exception as exc:
-            print_warning(f"Could not create agentweave.yml: {exc}")
+def _write_yaml(session: Session) -> Optional[Path]:
+    try:
+        from .config import generate_agentweave_yml
 
-        return 0
+        return generate_agentweave_yml(session)
+    except Exception as exc:
+        print_warning(f"Could not create agentweave.yml: {exc}")
+        return None
 
-    except ValueError as e:
-        print_error(str(e))
-        return 1
+
+def _print_init_next_steps(session: Session) -> None:
+    print("\nNext steps:")
+    print("1. Fill in the [Replace with...] sections in .agentweave/ai_context.md")
+    print("2. Run `agentweave sync-context` to regenerate agent files from ai_context.md")
+    print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
+    print("4. Update .agentweave/shared/context.md with today's focus")
+    print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
+    print()
+    print("Zero-relay MCP mode (optional):")
+    print("  agentweave mcp setup   # configure MCP server in both agents (once)")
+    print(
+        "  agentweave start       # launch background watchdog — agents notify each other automatically"
+    )
+
+
+def _print_init_skills(claude_count: int, codex_count: int) -> None:
+    if claude_count > 0:
+        print(f"\n[SKILLS] Generated {claude_count} Claude Code skills in .claude/skills/")
+        print("  Available slash commands:")
+        print("    /aw-delegate   delegate a task to another agent")
+        print("    /aw-status     full collaboration status overview")
+        print("    /aw-done       mark a task complete and notify principal")
+        print("    /aw-review     request a code review")
+        print("    /aw-relay      generate relay prompt for an agent")
+        print("    /aw-sync       sync context files from ai_context.md")
+        print("    /aw-revise     accept and begin a revision")
+        print("  (aw-collab-start runs automatically at session start)")
+
+    if codex_count > 0:
+        print(f"\n[SKILLS] Generated {codex_count} Codex skills in .agents/skills/")
+        print("  Invoke via $skill-name or the /skills menu in Codex CLI")
+
+
+def _print_init_summary(
+    session: Session,
+    root_files: set[str],
+    skills_count: int,
+    codex_skills_count: int,
+    yml_path: Optional[Path],
+) -> None:
+    print_success(f"Initialized session: {session.name}")
+    print(f"   ID:      {session.id}")
+    print(f"   Mode:    {session.mode}")
+    print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
+    print("\n[DIR] Created .agentweave/")
+    print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
+    print("     roles.json           <- agent role assignments and role registry (edit freely)")
+    print("     roles/               <- per-role behavioral guides (read yours at session start)")
+    print("     ai_context.md        <- project DNA source — fill this in, then update agent files")
+    print("     shared/context.md    <- current focus, recent decisions (update daily)")
+    if root_files:
+        print("\n[FILES] Created at project root (auto-read by agents each session):")
+        for fname in root_files:
+            print(f"     {fname}")
+    gitignore_updated = _ensure_agentweave_gitignore()
+    env_created = _ensure_agentweave_env()
+    if gitignore_updated:
+        print("     .gitignore")
+    if env_created:
+        print("     .env")
+    print("\nFile purposes:")
+    print("  • .agentweave/ai_context.md  — Project DNA source (edit this)")
+    for fname in root_files:
+        print(f"  • {fname:<22} — Auto-loaded by agent; contains full project context")
+    print("  • .agentweave/ROLES.md       — Who does what? (per-session)")
+    print("  • .agentweave/shared/context.md — What are we doing today? (changes daily)")
+    _print_init_next_steps(session)
+    _print_init_skills(skills_count, codex_skills_count)
+
+    if yml_path:
+        print(f"\n[CONFIG] Created {yml_path}")
+        print("  This file defines your project agents and settings.")
+        print("  Edit it to add/remove agents, then run 'agentweave activate'")
 
 
 def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = False) -> int:
@@ -799,7 +812,7 @@ def cmd_summary(_args: argparse.Namespace) -> int:
     if ready_for_review:
         print(f"  [REVIEW] {len(ready_for_review)} task(s) ready for review")
     if approved:
-        print(f"  [OK] {len(approved)} task(s) approved")
+        print_success(f"{len(approved)} task(s) approved")
 
     any_tasks = (
         any(pending_by_agent[ag] or in_progress_by_agent[ag] for ag in all_agents)
@@ -2840,7 +2853,7 @@ def cmd_activate(_args: argparse.Namespace) -> int:
         sync_args = argparse.Namespace(force=False)
         cmd_sync_context(sync_args)
     except Exception as e:
-        print(f"[WARNING] Context sync failed: {e}")
+        print_warning(f"Context sync failed: {e}")
         print("          Run 'agentweave sync-context' manually after fixing the issue.")
         _emit_nonfatal_diagnostic(
             "context_sync",
@@ -2988,7 +3001,9 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
                 else:
                     print("[TRANSPORT] Already configured")
                 # Re-read the Hub's project_id in case it changed.
-                hub_project_id = _fetch_hub_project_id(hub_url, fresh_key or existing.get("api_key", ""))
+                hub_project_id = _fetch_hub_project_id(
+                    hub_url, fresh_key or existing.get("api_key", "")
+                )
                 if hub_project_id and hub_project_id != existing.get("project_id"):
                     existing["project_id"] = hub_project_id
                     print(
