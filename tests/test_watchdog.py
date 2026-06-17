@@ -20,7 +20,13 @@ from agentweave.watchdog import (
 
 
 class TestAgentPingCmdKimi:
-    """Tests for _agent_ping_cmd with kimi runner."""
+    """Tests for _agent_ping_cmd with kimi v1.x (kimi-cli, e.g. 1.47.0).
+
+    kimi-cli v1.x uses: --print -p <prompt> --output-format stream-json
+    and emits chat events with no top-level "type" field. kimi 1.47.0
+    rejects --wire as a modifier of --print ("Cannot combine --print, --wire.")
+    so the watchdog uses --print --output-format stream-json -p instead.
+    """
 
     @pytest.fixture(autouse=True)
     def setup_session(self, tmp_path):
@@ -55,17 +61,472 @@ class TestAgentPingCmdKimi:
     def test_kimi_with_model(self):
         """Model flag is appended when agent config has a model."""
         cmd = _agent_ping_cmd("kimi-dev", "do the task")
-        assert cmd == ["kimi", "--wire", "--model", "kimi-k2"]
+        assert cmd == [
+            "kimi", "--print", "--output-format", "stream-json",
+            "--model", "kimi-k2", "-p", "do the task",
+        ]
+        assert "--wire" not in cmd
 
     def test_kimi_without_model(self):
         """No --model flag when model is not configured."""
         cmd = _agent_ping_cmd("kimi-qa", "do the task")
-        assert cmd == ["kimi", "--wire"]
+        assert cmd == [
+            "kimi", "--print", "--output-format", "stream-json", "-p", "do the task",
+        ]
+        assert "--wire" not in cmd
 
     def test_kimi_resume_with_model(self):
-        """Resume keeps the configured model flag."""
+        """Resume keeps the configured model flag and uses -S."""
         cmd = _agent_ping_cmd("kimi-dev", "do the task", session_id="sess-123")
-        assert cmd == ["kimi", "--wire", "--model", "kimi-k2", "--session", "sess-123"]
+        assert cmd == [
+            "kimi", "--print", "--output-format", "stream-json",
+            "--model", "kimi-k2", "-S", "sess-123", "-p", "do the task",
+        ]
+        assert "--wire" not in cmd
+
+
+class TestAgentPingCmdKimiCode:
+    """Tests for _agent_ping_cmd with kimi-code v0.x standalone (e.g. 0.16.0).
+
+    kimi-code v0.x uses a different CLI surface than kimi v1.x:
+      -p "<prompt>" + --output-format stream-json
+    and emits chat-history persistence events (no real-time streaming).
+    Detection is by parsing the major version of `kimi --version`.
+
+    -y (--yolo) is only appended when the agent's session config has
+    yolo: True — kimi v0.x rejects -y combined with -p.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup_session(self, tmp_path):
+        """Set up a temporary session with kimi agents and force v0.x detection."""
+        self.session_dir = tmp_path / ".agentweave"
+        self.session_dir.mkdir()
+        self.agents_dir = self.session_dir / "agents"
+        self.agents_dir.mkdir()
+        self.context_dir = self.session_dir / "context"
+        self.context_dir.mkdir()
+
+        session_data = {
+            "id": "test-session",
+            "name": "Test",
+            "mode": "hierarchical",
+            "principal": "claude",
+            "agents": {
+                "kimi-dev": {"runner": "kimi", "model": "kimi-k2"},
+                "kimi-qa": {"runner": "kimi"},
+                "kimi-yolo": {"runner": "kimi", "yolo": True},
+            },
+        }
+
+        from agentweave.session import Session
+
+        self.session = Session(session_data)
+
+        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir), patch(
+            "agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir
+        ), patch("agentweave.session.Session.load", return_value=self.session), patch(
+            "agentweave.watchdog._KIMI_VERSION_CACHE", "0"
+        ):
+            yield
+
+    def test_kimi_code_with_model(self):
+        """kimi-code v0: --output-format stream-json + -m <model> + -p (no -y unless enabled)."""
+        cmd = _agent_ping_cmd("kimi-dev", "do the task")
+        assert cmd == [
+            "kimi", "--output-format", "stream-json",
+            "-m", "kimi-k2", "-p", "do the task",
+        ]
+        assert "-y" not in cmd
+
+    def test_kimi_code_without_model(self):
+        """kimi-code v0: no -m flag when model is not configured; no -y unless enabled."""
+        cmd = _agent_ping_cmd("kimi-qa", "do the task")
+        assert cmd == [
+            "kimi", "--output-format", "stream-json", "-p", "do the task",
+        ]
+        assert "-y" not in cmd
+
+    def test_kimi_code_resume(self):
+        """kimi-code v0: -S <id> placed before -p for session resume; no -y unless enabled."""
+        cmd = _agent_ping_cmd("kimi-dev", "do the task", session_id="ses-uuid-here")
+        assert cmd == [
+            "kimi", "--output-format", "stream-json",
+            "-m", "kimi-k2", "-S", "ses-uuid-here", "-p", "do the task",
+        ]
+        assert "-y" not in cmd
+
+    def test_kimi_code_with_yolo_appends_dash_y(self):
+        """kimi-code v0: -y is appended when the agent's session config has yolo=True."""
+        cmd = _agent_ping_cmd("kimi-yolo", "do the task")
+        assert "-y" in cmd
+        assert cmd == [
+            "kimi", "--output-format", "stream-json", "-y", "-p", "do the task",
+        ]
+
+    def test_kimi_code_with_yolo_and_resume(self):
+        """kimi-code v0: -y + -S <id> + -p when both yolo and session_id are set."""
+        cmd = _agent_ping_cmd("kimi-yolo", "do the task", session_id="ses-uuid-here")
+        assert cmd == [
+            "kimi", "--output-format", "stream-json", "-y",
+            "-S", "ses-uuid-here", "-p", "do the task",
+        ]
+
+
+class TestKimiCodeParser:
+    """Tests for _KimiCodeParser (kimi-code v0.x stream-json events)."""
+
+    def test_metadata_event_is_skipped(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed('{"type":"metadata","protocol_version":"1.0","created_at":12345}')
+        assert out == []
+
+    def test_user_message_is_skipped(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"type":"context.append_message","message":{"role":"user",'
+            '"content":[{"type":"text","text":"hi"}]}}'
+        )
+        assert out == []
+
+    def test_assistant_text_renders_chat_line(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"type":"context.append_message","message":{"role":"assistant",'
+            '"content":[{"type":"text","text":"Hello there"}]}}'
+        )
+        assert out == ["  💬 Hello there"]
+
+    def test_assistant_think_renders_emoji(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"type":"context.append_message","message":{"role":"assistant",'
+            '"content":[{"type":"think","think":"pondering..."}]}}'
+        )
+        assert out == ["  💭 pondering..."]
+
+    def test_assistant_tool_call_renders_args(self):
+        import json as _json
+
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        args = _json.dumps({"agent": "kimi"})
+        evt = _json.dumps(
+            {
+                "type": "context.append_message",
+                "message": {
+                    "role": "assistant",
+                    "content": [],
+                    "toolCalls": [
+                        {
+                            "type": "function",
+                            "id": "call-1",
+                            "function": {"name": "get_inbox", "arguments": args},
+                        }
+                    ],
+                },
+            }
+        )
+        out = parser.feed(evt)
+        assert out == ['  🔧 get_inbox(agent="kimi")']
+
+    def test_tool_result_renders_check(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"type":"context.append_message","message":{"role":"tool",'
+            '"content":[{"type":"text","text":"done"}],"toolCallId":"call-1"}}'
+        )
+        assert out == ["     ✓ done"]
+
+    def test_malformed_json_is_skipped(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        assert parser.feed("not-json") == []
+        assert parser.feed("") == []
+
+    # ── kimi-cli v1.x (e.g. 1.47.0) format ────────────────────────────────
+    # v1.x emits bare {role, content, toolCalls, toolCallId} events with no
+    # top-level "type" field. _KimiCodeParser must accept these in addition
+    # to the v0.x wrapped format above.
+
+    def test_v1_assistant_text_renders_chat_line(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}'
+        )
+        assert out == ["  💬 Hi there"]
+
+    def test_v1_assistant_think_renders_emoji(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"assistant","content":[{"type":"think","think":"pondering..."}]}'
+        )
+        assert out == ["  💭 pondering..."]
+
+    def test_v1_assistant_text_and_think_render_in_order(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"assistant","content":['
+            '{"type":"think","think":"hmm"},'
+            '{"type":"text","text":"answer"}]}'
+        )
+        assert out == ["  💭 hmm", "  💬 answer"]
+
+    def test_v1_assistant_tool_calls_snake_case_renders_args(self):
+        """kimi 1.47.0 emits tool calls with snake_case key 'tool_calls'."""
+        import json as _json
+
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        args = _json.dumps({"agent": "kimi"})
+        evt = _json.dumps(
+            {
+                "role": "assistant",
+                "content": [],
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "tool_pelW6gHcdtL5l8MURuDTqmVZ",
+                        "function": {"name": "get_inbox", "arguments": args},
+                    }
+                ],
+            }
+        )
+        out = parser.feed(evt)
+        assert out == ['  🔧 get_inbox(agent="kimi")']
+
+    def test_v1_assistant_think_plus_tool_calls_renders_both(self):
+        """v1.x assistant message with only think + tool call (no text)."""
+        import json as _json
+
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        args = _json.dumps({"agent": "kimi"})
+        evt = _json.dumps(
+            {
+                "role": "assistant",
+                "content": [{"type": "think", "think": "calling inbox"}],
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "id": "call-1",
+                        "function": {"name": "get_inbox", "arguments": args},
+                    }
+                ],
+            }
+        )
+        out = parser.feed(evt)
+        assert out == ["  💭 calling inbox", '  🔧 get_inbox(agent="kimi")']
+
+    def test_v1_tool_result_renders_check(self):
+        """v0.x-style list content still works for tool results (legacy compat)."""
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"tool","content":[{"type":"text","text":"done"}],"toolCallId":"call-1"}'
+        )
+        assert out == ["     ✓ done"]
+
+    def test_v1_user_message_is_skipped(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"user","content":[{"type":"text","text":"hello"}]}'
+        )
+        assert out == []
+
+    def test_v1_tool_result_string_content_renders_text(self):
+        """kimi 1.47.0 emits tool content as a plain string, not a list."""
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"tool","content":"<system>Tool output is empty.</system>",'
+            '"tool_call_id":"tool_pelW6gHcdtL5l8MURuDTqmVZ"}'
+        )
+        assert out == ["     ✓ <system>Tool output is empty.</system>"]
+
+    def test_v1_tool_result_empty_string_falls_back_to_ok(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"tool","content":"","tool_call_id":"call-1"}'
+        )
+        assert out == ["     ✓ ok"]
+
+    def test_v1_event_with_unknown_role_is_skipped(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed('{"role":"system","content":[{"type":"text","text":"sys"}]}')
+        assert out == []
+
+    def test_v1_full_inbox_flow_emits_think_call_result_and_final_text(self):
+        """End-to-end check: simulate kimi 1.47.0 get_inbox round-trip.
+
+        Three events arrive in order:
+          1. assistant with think + tool_calls (caller)
+          2. tool with string content (result)
+          3. assistant with think + text (final summary)
+
+        Parser must render five readable lines so the Hub shows the
+        full chain of reasoning rather than just the tool result.
+        """
+        import json as _json
+
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        args = _json.dumps({"agent": "kimi"})
+        events = [
+            _json.dumps(
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "I need to check inbox"}
+                    ],
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "id": "call-1",
+                            "function": {"name": "get_inbox", "arguments": args},
+                        }
+                    ],
+                }
+            ),
+            _json.dumps(
+                {
+                    "role": "tool",
+                    "content": "<system>Tool output is empty.</system>",
+                    "tool_call_id": "call-1",
+                }
+            ),
+            _json.dumps(
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "think", "think": "inbox is empty"},
+                        {"type": "text", "text": "No new messages."},
+                    ],
+                }
+            ),
+        ]
+        all_out = []
+        for e in events:
+            all_out.extend(parser.feed(e))
+        assert all_out == [
+            "  💭 I need to check inbox",
+            '  🔧 get_inbox(agent="kimi")',
+            "     ✓ <system>Tool output is empty.</system>",
+            "  💭 inbox is empty",
+            "  💬 No new messages.",
+        ]
+
+    def test_v1_assistant_string_content_renders_text(self):
+        """kimi 1.47.0 --no-thinking emits the final summary as a plain string
+        in `content` (not a list of typed parts). Parser must render it."""
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"assistant","content":"Done! I wrote helloworld.py."}'
+        )
+        assert out == ["  💬 Done! I wrote helloworld.py."]
+
+    def test_v1_assistant_empty_string_content_emits_nothing(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed('{"role":"assistant","content":""}')
+        assert out == []
+
+    def test_v1_assistant_string_content_with_tool_call_renders_both(self):
+        """Final assistant message with a plain-string content + tool_call
+        (shouldn't normally happen, but be safe)."""
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"assistant","content":"short answer",'
+            '"tool_calls":[{"type":"function","id":"x",'
+            '"function":{"name":"noop","arguments":"{}"}}]}'
+        )
+        assert out == ["  💬 short answer", "  🔧 noop()"]
+
+    def test_v1_tool_result_multi_part_content_renders_all_text_parts(self):
+        """Tool results with multiple text parts (e.g. <system>...</system>
+        + actual stdout) must render all parts, not just the first."""
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            '{"role":"tool","content":['
+            '{"type":"text","text":"<system>Command executed successfully.</system>"},'
+            '{"type":"text","text":"Hello, World!\\r\\n"}'
+            '],"tool_call_id":"call-2"}'
+        )
+        assert out == [
+            "     ✓ <system>Command executed successfully.</system>",
+            "     ✓ Hello, World!",
+        ]
+
+    def test_v1_tool_result_empty_list_falls_back_to_ok(self):
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed('{"role":"tool","content":[],"tool_call_id":"x"}')
+        assert out == ["     ✓ ok"]
+
+    def test_v1_no_thinking_assistant_emits_tool_calls_only(self):
+        """kimi 1.47.0 --no-thinking emits assistant events with empty content
+        + tool_calls. Parser should render the tool call, no think/text lines."""
+        import json as _json
+
+        from agentweave.watchdog import _KimiCodeParser
+
+        parser = _KimiCodeParser()
+        out = parser.feed(
+            _json.dumps(
+                {
+                    "role": "assistant",
+                    "content": [],
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "id": "x",
+                            "function": {
+                                "name": "WriteFile",
+                                "arguments": '{"path": "helloworld.py"}',
+                            },
+                        }
+                    ],
+                }
+            )
+        )
+        assert out == ['  🔧 WriteFile(path="helloworld.py")']
 
 
 class TestAgentPingCmdOpencode:

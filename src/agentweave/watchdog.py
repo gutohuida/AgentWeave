@@ -1227,6 +1227,241 @@ class _KimiWireParser:
         return self._in_compaction
 
 
+class _KimiCodeParser:
+    """Parser for kimi `--print --output-format stream-json` events.
+
+    Two kimi versions emit stream-json with slightly different shapes; both
+    are handled here so the watchdog works against either install:
+
+    1. kimi-code v0.x (legacy standalone, e.g. 0.16.0) — chat-history
+       persistence events with a top-level "type" field:
+
+         {"type":"metadata","protocol_version":"1.0","created_at":<unix_ms>}
+         {"type":"context.append_message","message":{
+           "role": "user" | "assistant" | "tool",
+           "content": [{"type":"text","text":"…"} | {"type":"think","think":"…"}],
+           "toolCalls": [{"type":"function","id":"…","function":{"name":"…","arguments":"…"}}],
+           "toolCallId": "…"   // only for role="tool"
+         }}
+
+    2. kimi-cli v1.x (e.g. 1.47.0) — bare chat events with no top-level
+       "type" field; role/content/tool_calls live at the event root.
+       v1.x uses snake_case keys (tool_calls, tool_call_id) and emits tool
+       `content` as a plain string instead of a list of typed parts:
+
+         {"role":"assistant","content":[{"type":"think","think":"…"},
+                                         {"type":"text","text":"…"}],
+          "tool_calls":[{"type":"function","id":"…",
+                        "function":{"name":"get_inbox","arguments":"…"}}]}
+         {"role":"user","content":[{"type":"text","text":"…"}]}
+         {"role":"tool","content":"<raw text>",
+          "tool_call_id":"…"}
+
+    Both shapes are normalized into (role, content, tool_calls) so the same
+    rendering helpers work. Skipped on purpose:
+      - "metadata" event (v0.x only — no useful display content)
+      - role="user" (don't re-display the prompt)
+      - events missing a recognized role or with neither top-level nor
+        wrapped "message" (forward-compat safety)
+    """
+
+    def __init__(self) -> None:
+        self._assistant_count = 0
+
+    def feed(self, line: str) -> List[str]:
+        stripped = line.strip()
+        if not stripped:
+            return []
+        try:
+            evt = json.loads(stripped)
+        except json.JSONDecodeError:
+            return []
+
+        evt_type = evt.get("type")
+        if evt_type == "metadata":
+            return []
+
+        # v0.x format: message fields live under evt["message"].
+        if evt_type == "context.append_message":
+            msg = evt.get("message") or {}
+            role = msg.get("role", "")
+            content = msg.get("content") or []
+            tool_calls = msg.get("toolCalls") or msg.get("tool_calls") or []
+        # v1.x format (kimi-cli ≥ 1.0): message fields live at the event root.
+        elif "role" in evt and evt_type is None:
+            role = evt.get("role", "")
+            content = evt.get("content") or []
+            tool_calls = evt.get("toolCalls") or evt.get("tool_calls") or []
+        else:
+            return []
+
+        if role == "assistant":
+            self._assistant_count += 1
+            return self._render_assistant(content, tool_calls)
+        if role == "tool":
+            return self._render_tool_result(content)
+        return []
+
+    @staticmethod
+    def _render_assistant(content: Any, tool_calls: List[Any]) -> List[str]:
+        """Render an assistant message.
+
+        ``content`` may be:
+        - a list of typed parts (kimi thinking-mode + kimi-code v0.x), e.g.
+          ``[{"type":"think","think":"…"}, {"type":"text","text":"…"}]``
+        - a plain string (kimi-cli v1.x with --no-thinking final message), e.g.
+          ``"Done! I wrote the file."``
+        - ``[]`` (kimi-cli v1.x mid-task while thinking is enabled but the
+          think part was rendered separately, or --no-thinking step events)
+
+        Tool calls are appended after the text/think lines.
+        """
+        out: List[str] = []
+        if isinstance(content, str):
+            text = content.strip()
+            if text:
+                out.append(f"  💬 {text[:500]}")
+        else:
+            for part in content or []:
+                if not isinstance(part, dict):
+                    continue
+                ptype = part.get("type")
+                if ptype == "think":
+                    thinking = (part.get("think") or "").strip()
+                    if not thinking:
+                        continue
+                    thinking = re.sub(r"\s+", " ", thinking.replace("\n", " "))[:200]
+                    out.append(f"  💭 {thinking}")
+                elif ptype == "text":
+                    text = (part.get("text") or "").strip()
+                    if text:
+                        out.append(f"  💬 {text[:500]}")
+        for tc in tool_calls or []:
+            if not isinstance(tc, dict):
+                continue
+            func = tc.get("function") or {}
+            name = func.get("name") or "unknown"
+            args_str = func.get("arguments") or "{}"
+            try:
+                args = json.loads(args_str) if args_str else {}
+            except (json.JSONDecodeError, ValueError):
+                args = {}
+            display = {k: v for k, v in args.items() if k not in {"content", "body", "text"}}
+            parts = []
+            for k, v in list(display.items())[:4]:
+                v_str = str(v)
+                if len(v_str) > 60:
+                    v_str = v_str[:60] + "…"
+                parts.append(f'{k}="{v_str}"')
+            out.append(f"  🔧 {name}({', '.join(parts)})")
+        return out
+
+    @staticmethod
+    def _render_tool_result(content: Any) -> List[str]:
+        """Render a tool result.
+
+        ``content`` may be either:
+        - a list of typed parts (v0.x / kimi-code / kimi-cli v1.x), e.g.
+          ``[{"type":"text","text":"…"}, {"type":"text","text":"…"}]`` —
+          multi-part lists (e.g. ``<system>…</system>`` + actual stdout)
+          render as multiple ``✓`` lines so neither part is hidden.
+        - a plain string (kimi-cli v1.x), e.g. ``"<system>…</system>"``
+
+        Falls back to ``"✓ ok"`` when the input is empty or unparseable.
+        """
+        if isinstance(content, str):
+            text = content.strip()
+            return [f"     ✓ {text[:200]}"] if text else ["     ✓ ok"]
+        out: List[str] = []
+        for part in content or []:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = (part.get("text") or "").strip()
+                if text:
+                    out.append(f"     ✓ {text[:200]}")
+        if not out:
+            out.append("     ✓ ok")
+        return out
+
+
+_KIMI_VERSION_CACHE: Optional[str] = None
+
+
+def _detect_kimi_major_version() -> str:
+    """Return "1" for kimi v1.x (kimi-cli), "0" for kimi-code v0.x standalone,
+    or "1" as a safe fallback when detection fails.
+
+    Result is cached at module scope so we only run `kimi --version` once per
+    process. Detected by parsing the first numeric segment of `kimi --version`:
+        v1.x prints "kimi, version 1.x.y"
+        v0.x (standalone Moonshot binary) prints "0.x.y"
+    """
+    global _KIMI_VERSION_CACHE
+    if _KIMI_VERSION_CACHE is not None:
+        return _KIMI_VERSION_CACHE
+    try:
+        result = subprocess.run(
+            ["kimi", "--version"], capture_output=True, text=True, timeout=5
+        )
+        out = (result.stdout or result.stderr or "").strip()
+        # Strip "kimi, version " prefix if present
+        lowered = out.lower()
+        if "version" in lowered:
+            out = out.split("version", 1)[1].strip()
+        major = out.split(".")[0].strip() or "1"
+        # Sanity-check it's actually a digit
+        _KIMI_VERSION_CACHE = major if major.isdigit() else "1"
+    except Exception:
+        _KIMI_VERSION_CACHE = "1"
+    return _KIMI_VERSION_CACHE
+
+
+def _extract_kimi_code_session(workdir: Path) -> Optional[str]:
+    """Find the most recently updated kimi-code session for the given workdir.
+
+    kimi-code keeps a global index at ``~/.kimi-code/session_index.jsonl`` —
+    one JSONL record per session with ``sessionId``, ``sessionDir`` and
+    ``workDir`` fields. We filter by ``workDir`` (the cwd kimi-code was
+    invoked from) and return the session with the newest mtime. The
+    per-session ``state.json`` does NOT carry ``workDir`` for native
+    kimi-code sessions, so the index is the only reliable source.
+    """
+    index_file = Path.home() / ".kimi-code" / "session_index.jsonl"
+    if not index_file.is_file():
+        return None
+    try:
+        target = str(workdir.resolve())
+    except OSError:
+        return None
+    best_mtime = -1.0
+    best_sid: Optional[str] = None
+    try:
+        with index_file.open(encoding="utf-8") as fh:
+            for ln in fh:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    rec = json.loads(ln)
+                except json.JSONDecodeError:
+                    continue
+                if rec.get("workDir") != target:
+                    continue
+                sd = rec.get("sessionDir") or ""
+                sid = rec.get("sessionId") or ""
+                if not sid or not sd:
+                    continue
+                try:
+                    mtime = Path(sd).stat().st_mtime
+                except OSError:
+                    continue
+                if mtime > best_mtime:
+                    best_mtime = mtime
+                    best_sid = sid
+    except OSError:
+        return best_sid
+    return best_sid
+
+
 def _get_runner_type(agent: str) -> str:
     """Return the runner type for an agent, loading from session config."""
     from .constants import AGENT_RUNNER_DEFAULTS
@@ -1244,7 +1479,9 @@ def _agent_ping_cmd(
     """Return the CLI command to ping an agent with a prompt.
 
     Dispatches based on runner type from session config, not agent name.
-    Kimi uses --print (plain Python-repr events) or --wire (JSON-RPC 2.0) with --session for resumption.
+    Kimi uses --print for plain Python-repr events, or --print --wire for JSON-RPC 2.0
+    streaming with context usage reporting. --wire alone is rejected by the kimi CLI;
+    it is a modifier of --print. --session resumes an existing session.
     Claude/claude_proxy use --output-format stream-json --verbose with --resume.
     OpenCode uses `opencode run` with --session, --model, --file, and --format json.
     """
@@ -1254,15 +1491,46 @@ def _agent_ping_cmd(
     rc = RUNNER_CONFIGS.get(runner_type, RUNNER_CONFIGS["native"])
 
     if runner_type == "kimi":
-        # Use wire mode for JSON-RPC streaming with context usage reporting
-        cmd = ["kimi", "--wire"]
+        # Two kimi families exist on PATH; the framework supports both:
+        #   - kimi v1.x (kimi-cli): --print [--wire] for streaming events
+        #   - kimi-code v0.x (standalone Moonshot binary): -p + --output-format
+        #     stream-json; chat-history persistence events, no real-time streaming.
+        # Detect once per process via `kimi --version`; major version 0 → v0 mode.
+        kimi_major = _detect_kimi_major_version()
+        if kimi_major == "0":
+            # kimi-code v0.x: -p "<prompt>" with --output-format stream-json.
+            # Note: -p takes a string arg (subject to ARG_MAX). Long prompts
+            # are an existing limitation of kimi-code v0.x itself; not fixed here.
+            # -y (--yolo) is incompatible with -p (--prompt) in kimi v0.x — the
+            # CLI rejects the combination with "Cannot combine --prompt with
+            # --yolo." — so only pass -y when the agent actually has yolo on.
+            cmd = ["kimi", "--output-format", "stream-json"]
+            session = Session.load()
+            if session:
+                model = session.get_runner_config(agent).get("model")
+                if model:
+                    cmd += ["-m", model]
+                if session.agents.get(agent, {}).get("yolo"):
+                    cmd += ["-y"]
+            if session_id:
+                cmd += ["-S", session_id]
+            cmd += ["-p", prompt]
+            return cmd
+        # kimi v1.x (kimi-cli, e.g. 1.47.0): non-interactive print mode with
+        # stream-json output and -p <prompt>. kimi 1.47.0 rejects --wire as a
+        # modifier of --print ("Cannot combine --print, --wire."), so we use
+        # the documented --print -p --output-format stream-json combination
+        # instead. Each stdout line is a JSON event with role/content fields
+        # (no top-level "type"), parsed by _KimiCodeParser.
+        cmd = ["kimi", "--print", "--output-format", "stream-json"]
         session = Session.load()
         if session:
             model = session.get_runner_config(agent).get("model")
             if model:
                 cmd += [rc.get("model_flag", "--model"), model]
         if session_id:
-            cmd += ["--session", session_id]
+            cmd += ["-S", session_id]
+        cmd += ["-p", prompt]
         return cmd
 
     if runner_type == "opencode":
@@ -2260,6 +2528,9 @@ def _do_run_agent_subprocess(
     is_codex_mcp = runner_type == "codex_mcp"
     # Detect wire mode: --wire flag in cmd indicates JSON-RPC bidirectional mode
     is_wire_mode = is_kimi and "--wire" in cmd
+    # Detect kimi-code v0.x standalone: uses -p + --output-format stream-json
+    # (no --print/--wire). Distinguished by the "--output-format" flag in cmd.
+    is_kimi_code = is_kimi and "--output-format" in cmd
 
     # Send "running" heartbeat + diagnostic start marker
     if is_http:
@@ -2289,6 +2560,8 @@ def _do_run_agent_subprocess(
     kimi_parser: Optional[Any] = None
     if is_wire_mode:
         kimi_parser = _KimiWireParser()
+    elif is_kimi_code:
+        kimi_parser = _KimiCodeParser()
     elif is_kimi:
         kimi_parser = _KimiParser()
 
@@ -2531,6 +2804,12 @@ def _do_run_agent_subprocess(
                 if wire_session_id:
                     session_id = wire_session_id
                     session_id_ref[0] = wire_session_id
+            elif is_kimi_code:
+                # kimi-code v0.x: parse context.append_message events as they
+                # arrive. Session ID is discovered from disk after exit (see
+                # post-run block) — it's not in the stream-json output.
+                kimi_stdout_lines.append(line)
+                readable_lines = kimi_parser.feed(line) if kimi_parser is not None else []
             elif is_kimi:
                 # Collect all lines for post-exit session ID extraction
                 kimi_stdout_lines.append(line)
@@ -2735,7 +3014,7 @@ def _do_run_agent_subprocess(
 
     # Extract Kimi session ID from collected stdout lines (post-exit) for print mode
     # Wire mode captures session ID from TurnEnd events in real-time
-    if is_kimi and not is_wire_mode and session_id is None and kimi_stdout_lines:
+    if is_kimi and not is_wire_mode and not is_kimi_code and session_id is None and kimi_stdout_lines:
         found = _extract_kimi_session_from_stdout(kimi_stdout_lines)
         if found:
             session_id = found
@@ -2745,6 +3024,32 @@ def _do_run_agent_subprocess(
                 extra={
                     "event": "watchdog_kimi_session_found",
                     "data": {"session_id": found, "method": "stdout_resume_line"},
+                },
+            )
+
+    # kimi-code v0.x does NOT emit the session ID in stream-json output; we
+    # discover it post-run by scanning ~/.kimi-code/session_index.jsonl for
+    # the most recently created session whose workDir matches the watchdog's
+    # cwd. Only meaningful when the run succeeded.
+    if is_kimi_code and session_id is None and returncode == 0:
+        workdir = Path.cwd()
+        found = _extract_kimi_code_session(workdir)
+        if found:
+            session_id = found
+            session_id_ref[0] = found
+            logger.info(
+                "watchdog_kimi_code_session_found",
+                extra={
+                    "event": "watchdog_kimi_code_session_found",
+                    "data": {"session_id": found, "method": "session_index_scan", "workdir": str(workdir)},
+                },
+            )
+        else:
+            logger.warning(
+                "watchdog_kimi_code_session_not_found",
+                extra={
+                    "event": "watchdog_kimi_code_session_not_found",
+                    "data": {"workdir": str(workdir)},
                 },
             )
 
