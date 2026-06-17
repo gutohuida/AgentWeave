@@ -22,8 +22,10 @@ try:
     from fastmcp import FastMCP  # type: ignore[import-not-found]
 except ImportError as e:
     raise ImportError(
-        "fastmcp is required for the MCP server. "
-        "Install it with: pip install 'agentweave-ai[mcp]'"
+        "fastmcp>=2.0 is required for the MCP server. "
+        "If fastmcp is already installed, it may be an incompatible 1.x version. "
+        "Install or upgrade with: pip install --upgrade 'fastmcp>=2.0' "
+        "or reinstall AgentWeave with: pip install --force-reinstall -e '.[mcp]'"
     ) from e
 
 from ..constants import CONTACT_MODES, MESSAGE_TYPES, PRIORITIES, TASK_STATUSES, TransportType
@@ -31,6 +33,7 @@ from ..locking import LockError, lock
 from ..messaging import Message, MessageBus
 from ..task import Task
 from ..transport import get_transport
+from ..validator import validate_task
 
 mcp = FastMCP(
     name="agentweave",
@@ -246,11 +249,40 @@ def create_task(
         acceptance_criteria=acceptance_criteria or [],
     )
 
-    with lock(f"task-{task.id}"):
-        ok = get_transport().send_task(task.to_dict())
+    is_valid, errors = validate_task(task.to_dict())
+    if not is_valid:
+        return {"error": f"Task validation failed: {'; '.join(errors)}"}
 
-    if not ok:
-        return {"error": "Failed to save task via active transport"}
+    transport = get_transport()
+    transport_type = transport.get_transport_type()
+
+    try:
+        with lock(f"task-{task.id}"):
+            if transport_type == "local":
+                # Direct local save gives us the exact OSError on failure.
+                save_errors: List[str] = []
+                ok = task.save(error=save_errors)
+                if not ok:
+                    detail = save_errors[0] if save_errors else "unknown filesystem error"
+                    return {"error": f"Failed to save task locally: {detail}"}
+            else:
+                send_errors: List[str] = []
+                ok = transport.send_task(task.to_dict(), error=send_errors)
+                if not ok:
+                    detail = send_errors[0] if send_errors else "no details available"
+                    return {
+                        "error": (f"Failed to save task via {transport_type} transport: {detail}")
+                    }
+    except LockError:
+        return {
+            "error": (
+                f"Could not acquire lock for task {task.id}; "
+                "another operation may be in progress"
+            )
+        }
+    except Exception as exc:
+        return {"error": f"Failed to save task via {transport_type} transport: {exc}"}
+
     return task.to_dict()
 
 

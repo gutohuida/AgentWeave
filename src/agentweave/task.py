@@ -123,11 +123,15 @@ class Task:
             return cls(data)
         return None
 
-    def save(self) -> bool:
-        """Save task to file."""
+    def save(self, error: Optional[List[str]] = None) -> bool:
+        """Save task to file.
+
+        Args:
+            error: Optional list to capture the OSError message on failure.
+        """
         filepath = TASKS_ACTIVE_DIR / f"{self.id}.json"
         is_new = not filepath.exists()
-        result = save_json(filepath, self._data)
+        result = save_json(filepath, self._data, error=error)
         if result and is_new:
             logger.info(
                 "task_created",

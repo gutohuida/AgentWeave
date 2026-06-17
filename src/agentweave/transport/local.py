@@ -58,10 +58,10 @@ class LocalTransport(BaseTransport):
             data["read_at"] = now_iso()
             return write_json_atomic(archive_path, data)
 
-    def send_task(self, task_data: Dict[str, Any]) -> bool:
+    def send_task(self, task_data: Dict[str, Any], error: Optional[List[str]] = None) -> bool:
         task_id = task_data.get("id", "unknown")
         filepath = TASKS_ACTIVE_DIR / f"{task_id}.json"
-        return save_json(filepath, task_data)
+        return save_json(filepath, task_data, error=error)
 
     def get_active_tasks(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:
         result: List[Dict[str, Any]] = []

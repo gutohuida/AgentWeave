@@ -443,9 +443,9 @@ class TestDatetimeIsTzAware:
         from pathlib import Path
 
         src = Path("src/agentweave/mcp/server.py").read_text(encoding="utf-8")
-        assert "datetime.now(timezone.utc)" in src, (
-            "Expected datetime.now(timezone.utc) somewhere in mcp/server.py"
-        )
+        assert (
+            "datetime.now(timezone.utc)" in src
+        ), "Expected datetime.now(timezone.utc) somewhere in mcp/server.py"
 
     def test_mcp_server_imports_timezone(self):
         from pathlib import Path
@@ -456,3 +456,108 @@ class TestDatetimeIsTzAware:
             "from datetime import" in src and "timezone" in src
         ), "mcp/server.py must import timezone from datetime"
 
+
+class TestCreateTask:
+    @patch("agentweave.mcp.server.get_transport")
+    def test_create_task_local_success(self, mock_get_transport, tmp_path, monkeypatch):
+        from agentweave.mcp.server import create_task
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "local"
+        mock_get_transport.return_value = mock_transport
+
+        monkeypatch.chdir(tmp_path)
+
+        result = create_task(
+            title="Sample MCP task",
+            description="A test task created via MCP.",
+            priority="low",
+            assigner="codex",
+            assignee=None,
+        )
+
+        assert "error" not in result
+        assert result["title"] == "Sample MCP task"
+        assert result["status"] == "pending"
+        assert result["priority"] == "low"
+        assert result["assigner"] == "codex"
+        assert result["id"].startswith("task-")
+        # Task file should exist locally
+        task_file = tmp_path / ".agentweave" / "tasks" / "active" / f"{result['id']}.json"
+        assert task_file.exists()
+
+    @patch("agentweave.mcp.server.get_transport")
+    def test_create_task_http_success(self, mock_get_transport):
+        from agentweave.mcp.server import create_task
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "http"
+        mock_transport.send_task.return_value = True
+        mock_get_transport.return_value = mock_transport
+
+        result = create_task(
+            title="Hub task",
+            description="A test task created via MCP on HTTP transport.",
+            priority="medium",
+            assigner="claude",
+            assignee="kimi",
+        )
+
+        assert "error" not in result
+        assert result["title"] == "Hub task"
+        assert result["assignee"] == "kimi"
+        mock_transport.send_task.assert_called_once()
+        sent = mock_transport.send_task.call_args[0][0]
+        assert sent["title"] == "Hub task"
+        assert "id" in sent
+
+    @patch("agentweave.mcp.server.get_transport")
+    def test_create_task_http_failure(self, mock_get_transport):
+        from agentweave.mcp.server import create_task
+
+        def _send_task(data, error=None):
+            if error is not None:
+                error.append("Hub API 422: Invalid field 'id'")
+            return False
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "http"
+        mock_transport.send_task.side_effect = _send_task
+        mock_get_transport.return_value = mock_transport
+
+        result = create_task(title="Failing task", priority="high")
+
+        assert "error" in result
+        assert "http" in result["error"].lower()
+        assert "422" in result["error"]
+        assert "Invalid field 'id'" in result["error"]
+
+    def test_create_task_invalid_priority_normalized(self, tmp_path, monkeypatch):
+        from agentweave.mcp.server import create_task
+
+        monkeypatch.chdir(tmp_path)
+
+        result = create_task(title="Bad priority task", priority="super-high")
+
+        assert "error" not in result
+        assert result["priority"] == "medium"
+
+    @patch("agentweave.mcp.server.get_transport")
+    def test_create_task_local_save_error_detail(self, mock_get_transport, tmp_path, monkeypatch):
+        from agentweave.mcp.server import create_task
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "local"
+        mock_get_transport.return_value = mock_transport
+
+        monkeypatch.chdir(tmp_path)
+        # Create a file where the tasks/active directory should be so mkdir fails
+        tasks_active = tmp_path / ".agentweave" / "tasks" / "active"
+        tasks_active.parent.mkdir(parents=True, exist_ok=True)
+        tasks_active.write_text("not a directory", encoding="utf-8")
+
+        result = create_task(title="Blocked task")
+
+        assert "error" in result
+        assert "Failed to save task locally" in result["error"]
+        assert "not a directory" in result["error"].lower() or "cannot" in result["error"].lower()

@@ -25,8 +25,13 @@ class BaseTransport(ABC):
         """Mark a message as read / archived."""
 
     @abstractmethod
-    def send_task(self, task_data: Dict[str, Any]) -> bool:
-        """Publish a task so the assignee's agent can receive it."""
+    def send_task(self, task_data: Dict[str, Any], error: Optional[List[str]] = None) -> bool:
+        """Publish a task so the assignee's agent can receive it.
+
+        Args:
+            task_data: Task dictionary to publish.
+            error: Optional list to capture a human-readable error message on failure.
+        """
 
     @abstractmethod
     def get_active_tasks(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:

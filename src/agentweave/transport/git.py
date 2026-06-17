@@ -372,11 +372,14 @@ class GitTransport(BaseTransport):
 
         return False
 
-    def send_task(self, task_data: Dict[str, Any]) -> bool:
+    def send_task(self, task_data: Dict[str, Any], error: Optional[List[str]] = None) -> bool:
         filename = self._make_task_filename(task_data)
         content_bytes = json.dumps(task_data, indent=2).encode("utf-8")
         assignee = task_data.get("assignee", "?")
-        return self._push_file(filename, content_bytes, f"task: for {assignee}")
+        ok = self._push_file(filename, content_bytes, f"task: for {assignee}")
+        if not ok and error is not None:
+            error.append(f"Git push failed for task file {filename}")
+        return ok
 
     def get_active_tasks(self, agent: Optional[str] = None) -> List[Dict[str, Any]]:
         """Return active tasks, optionally filtered by assignee.

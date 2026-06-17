@@ -6,7 +6,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .constants import (
     AGENTS_DIR,
@@ -86,16 +86,23 @@ def load_json(filepath: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
-def save_json(filepath: Path, data: Dict[str, Any]) -> bool:
+def save_json(filepath: Path, data: Dict[str, Any], error: Optional[List[str]] = None) -> bool:
     """Save data to JSON file (atomic write + 0600 on POSIX).
 
     Thin wrapper around write_json_atomic — kept for backward compat
     with the existing call sites.
+
+    Args:
+        filepath: Destination path.
+        data: Data to serialize.
+        error: Optional list to capture the OSError message on failure.
     """
-    return write_json_atomic(filepath, data)
+    return write_json_atomic(filepath, data, error=error)
 
 
-def write_json_atomic(filepath: Path, data: Dict[str, Any]) -> bool:
+def write_json_atomic(
+    filepath: Path, data: Dict[str, Any], error: Optional[List[str]] = None
+) -> bool:
     """Write data to a JSON file atomically via tmp + os.replace.
 
     On POSIX, the resulting file is chmod 0600 so message/task files
@@ -108,6 +115,11 @@ def write_json_atomic(filepath: Path, data: Dict[str, Any]) -> bool:
 
     Returns True on success, False on OSError. The .tmp file is
     cleaned up automatically if the json.dump step fails.
+
+    Args:
+        filepath: Destination path.
+        data: Data to serialize.
+        error: Optional list to capture the OSError message on failure.
     """
     tmp: Optional[Path] = None
     try:
@@ -119,7 +131,9 @@ def write_json_atomic(filepath: Path, data: Dict[str, Any]) -> bool:
         if os.name == "posix":
             os.chmod(filepath, 0o600)
         return True
-    except OSError:
+    except OSError as exc:
+        if error is not None:
+            error.append(str(exc))
         if tmp is not None:
             with contextlib.suppress(OSError):
                 tmp.unlink()

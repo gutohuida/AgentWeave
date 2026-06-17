@@ -125,7 +125,9 @@ class HttpTransport(BaseTransport):
     ) -> Any:
         """Make an authenticated request to the Hub.
 
-        Injects project_id into every POST body and every GET query string.
+        Injects project_id into every GET query string. POST bodies are sent as-is
+        because the Hub's get_project auth dependency already extracts project_id
+        from the API key, and most writeable schemas use extra="forbid".
         Retries on 5xx, 408, 425, 429, and URLError with exponential backoff
         (honors Retry-After header on 429). Raises HubTransportError on
         non-2xx, non-retryable errors or after exhausting retries.
@@ -141,8 +143,11 @@ class HttpTransport(BaseTransport):
 
         payload: Optional[bytes] = None
         if body is not None:
-            if "project_id" not in body:
-                body = {"project_id": self.project_id, **body}
+            # NOTE: do NOT inject project_id into the body. The Hub's
+            # get_project auth dependency extracts project_id from the API
+            # key (see hub/hub/auth.py), and most writeable schemas use
+            # extra="forbid" — injecting here triggers 422 on POST /tasks,
+            # /messages, /jobs and PATCH /tasks/{id}, /jobs/{id}.
             payload = json.dumps(body).encode()
 
         req = urllib.request.Request(url, data=payload, method=method)
@@ -218,7 +223,12 @@ class HttpTransport(BaseTransport):
     def send_message(self, message_data: Dict[str, Any]) -> bool:
         """POST /api/v1/messages — persist a message."""
         try:
-            # Map from/to keys to sender/recipient aliases expected by the Hub
+            # Map from/to keys to sender/recipient aliases expected by the Hub.
+            # The Hub's MessageCreate schema has `extra: "forbid"`, so we
+            # MUST NOT include `id` or `timestamp` (server-assigned) — including
+            # them produces a 422 and the MCP `send_message` tool returns
+            # `{"error": "Failed to send message via active transport"}` to
+            # the calling agent.
             body = {
                 "from": message_data.get("from", message_data.get("sender", "")),
                 "to": message_data.get("to", message_data.get("recipient", "")),
@@ -226,8 +236,6 @@ class HttpTransport(BaseTransport):
                 "content": message_data.get("content", ""),
                 "type": message_data.get("type", "message"),
                 "task_id": message_data.get("task_id"),
-                "id": message_data.get("id"),
-                "timestamp": message_data.get("timestamp"),
             }
             self._request("POST", "/messages", body)
             return True
@@ -273,12 +281,25 @@ class HttpTransport(BaseTransport):
             )
             return False
 
-    def send_task(self, task_data: Dict[str, Any]) -> bool:
+    def send_task(self, task_data: Dict[str, Any], error: Optional[List[str]] = None) -> bool:
         """POST /api/v1/tasks."""
         try:
-            self._request("POST", "/tasks", task_data)
+            # The Hub's TaskCreate schema has `extra: "forbid"`, so we MUST
+            # NOT pass server-managed `created_at` / `updated` — the Hub
+            # assigns those. The client-generated `id` IS accepted by the Hub
+            # (see TaskCreate.id) so we keep it through: this lets the MCP
+            # `create_task` tool return the same id the Hub stored, so
+            # subsequent get_task / update_task calls by the agent find the
+            # task. Stripping it produced a misleading id mismatch where the
+            # Hub silently generated a different id and subsequent calls by
+            # id failed with "not found".
+            body = {k: v for k, v in task_data.items() if k not in ("created_at", "updated")}
+            self._request("POST", "/tasks", body)
             return True
         except RuntimeError as exc:
+            message = str(exc)
+            if error is not None:
+                error.append(message)
             logger.error(
                 "transport_error",
                 extra={
