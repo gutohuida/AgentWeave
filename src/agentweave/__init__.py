@@ -14,7 +14,7 @@ try:
     except _PackageNotFoundError:
         __version__ = _pkg_version("agentweave")
 except _PackageNotFoundError:
-    __version__ = "0.34.0"  # fallback during development / editable installs
+    __version__ = "0.38.0"  # fallback during development / editable installs
 __author__ = "AgentWeave Team"
 
 from .cli import main

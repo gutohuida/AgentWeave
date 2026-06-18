@@ -27,6 +27,7 @@ venv/
 ENV/
 env/
 .venv/
+.venv-linux/
 
 # IDE
 .vscode/

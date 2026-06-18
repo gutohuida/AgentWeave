@@ -220,7 +220,7 @@ Phase 10 (DONE):  AI Jobs — scheduled recurring tasks
 Phase 11 (DONE):  Pilot Mode — manual session management
 Phase 12 (DONE):  Declarative configuration (agentweave.yml + activate)
 
-Phase 13 (next):  Official hosted Hub at hub.agentweave.dev
+Phase 13 (planned):  Official hosted Hub at hub.agentweave.dev
                    Supabase (PostgreSQL + Auth + Realtime) + Vercel + Railway
                    Community-hosted option for teams without infra
 ```
