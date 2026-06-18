@@ -575,3 +575,150 @@ def test_archive_message_returns_false_when_id_not_found(tmp_path, monkeypatch):
     monkeypatch.setattr(t, "list_remote_filenames", lambda: [])
     monkeypatch.setattr(t, "read_remote_file", lambda f: None)
     assert t.archive_message("nonexistent") is False
+
+
+# ---------------------------------------------------------------------------
+# PR 12 — gap coverage
+#
+# The earlier 23 tests focused on the data-loss paths (H1/H2/M11/M12/M13)
+# and the filename plumbing. These fill the remaining branch surface so
+# the test-first discipline is end-to-end, not concentrated on the audit
+# findings.
+# ---------------------------------------------------------------------------
+
+
+def test_get_transport_type_returns_git():
+    """The transport-type string is 'git' — BaseTransport contract."""
+    t = GitTransport()
+    assert t.get_transport_type() == "git"
+
+
+def test_branch_exists_on_remote_true_when_ls_remote_finds_branch(monkeypatch):
+    """branch_exists_on_remote must return True when ls-remote finds the ref."""
+    t = GitTransport(remote="origin", branch="agentweave/collab")
+    responses = {
+        "ls-remote": (0, "deadbeef\trefs/heads/agentweave/collab\n", ""),
+    }
+    monkeypatch.setattr(
+        "agentweave.transport.git._run_git", _make_git_runner(responses)
+    )
+    assert t.branch_exists_on_remote() is True
+
+
+def test_branch_exists_on_remote_false_when_ls_remote_empty(monkeypatch):
+    """branch_exists_on_remote must return False when ls-remote returns nothing."""
+    t = GitTransport(remote="origin", branch="agentweave/collab")
+    responses = {"ls-remote": (0, "", "")}
+    monkeypatch.setattr(
+        "agentweave.transport.git._run_git", _make_git_runner(responses)
+    )
+    assert t.branch_exists_on_remote() is False
+
+
+def test_save_to_outbox_writes_to_outbox_dir(tmp_path, monkeypatch):
+    """_save_to_outbox must create .agentweave/outbox/ if missing and write
+    the content under <id>.json."""
+    monkeypatch.chdir(tmp_path)
+    t = GitTransport()
+    t._save_to_outbox(b'{"foo": 1}', "outbox-1")
+    outbox = tmp_path / ".agentweave" / "outbox"
+    assert outbox.exists()
+    files = list(outbox.glob("*.json"))
+    assert len(files) == 1
+    assert files[0].read_bytes() == b'{"foo": 1}'
+
+
+def test_remove_from_outbox_clears_file(tmp_path, monkeypatch):
+    """_remove_from_outbox must delete the outbox file for the given id."""
+    monkeypatch.chdir(tmp_path)
+    t = GitTransport()
+    t._save_to_outbox(b"hello", "outbox-2")
+    outbox = tmp_path / ".agentweave" / "outbox"
+    assert any(outbox.glob("*.json"))
+    t._remove_from_outbox("outbox-2")
+    # File for outbox-2 should be gone.
+    leftovers = [p for p in outbox.glob("*.json") if "outbox-2" in p.name]
+    assert leftovers == []
+
+
+def test_matches_agent_plain_name():
+    """_matches_agent must treat a plain 'kimi' recipient as matching
+    the 'kimi' agent (no cluster prefix)."""
+    t = GitTransport()
+    assert t._matches_agent("kimi", "kimi") is True
+    assert t._matches_agent("kimi", "claude") is False
+
+
+def test_matches_agent_with_cluster_prefix():
+    """_matches_agent must match '<our_cluster>.<our_agent>' recipient when
+    self.cluster is set. Without a cluster, the function only matches plain
+    agent names (backward-compat for single-workspace deployments)."""
+    # No cluster: only plain names match.
+    t = GitTransport()
+    assert t._matches_agent("kimi", "kimi") is True
+    assert t._matches_agent("bob.kimi", "kimi") is False
+
+    # With a cluster: '<cluster>.<agent>' recipient matches for this agent.
+    t_clustered = GitTransport(cluster="bob")
+    assert t_clustered._matches_agent("bob.kimi", "kimi") is True
+    assert t_clustered._matches_agent("bob.kimi", "bob") is False
+    assert t_clustered._matches_agent("alice.kimi", "kimi") is False
+    # Plain name still matches (backward compat).
+    assert t_clustered._matches_agent("kimi", "kimi") is True
+
+
+def test_get_pending_messages_filters_by_recipient(tmp_path, monkeypatch):
+    """get_pending_messages must return only messages whose recipient matches
+    the agent and whose id is NOT in the seen set."""
+    monkeypatch.chdir(tmp_path)
+    t = GitTransport()
+
+    msg_to_kimi = {
+        "id": "m-kimi-1",
+        "from": "claude",
+        "to": "kimi",
+        "content": "for kimi",
+    }
+    msg_to_claude = {
+        "id": "m-claude-1",
+        "from": "kimi",
+        "to": "claude",
+        "content": "for claude",
+    }
+    seen_id = "m-seen-1"
+    msg_to_kimi_seen = {
+        "id": seen_id,
+        "from": "claude",
+        "to": "kimi",
+        "content": "already seen",
+    }
+    monkeypatch.setattr(t, "_fetch", lambda: True)
+    monkeypatch.setattr(
+        t,
+        "list_remote_filenames",
+        lambda: [
+            "20260309T142301Z-claude-kimi-aaaaaaaa.json",
+            "20260309T142301Z-kimi-claude-bbbbbbbb.json",
+            "20260309T142301Z-claude-kimi-cccccccc.json",
+        ],
+    )
+    monkeypatch.setattr(
+        t,
+        "read_remote_file",
+        lambda f: (
+            msg_to_kimi
+            if "aaaaaaaa" in f
+            else msg_to_claude
+            if "bbbbbbbb" in f
+            else msg_to_kimi_seen
+        ),
+    )
+    # Pre-seed the seen set with m-seen-1.
+    GIT_SEEN_DIR.mkdir(parents=True, exist_ok=True)
+    (GIT_SEEN_DIR / "kimi-seen.txt").write_text(seen_id + "\n", encoding="utf-8")
+
+    result = t.get_pending_messages("kimi")
+    ids = [m["id"] for m in result]
+    assert "m-kimi-1" in ids
+    assert "m-seen-1" not in ids, "seen id must be filtered out"
+    assert "m-claude-1" not in ids, "wrong recipient must be filtered out"
