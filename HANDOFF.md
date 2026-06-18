@@ -46,6 +46,10 @@
 - `pytest tests/` passes (523 passed).
 - `pytest hub/tests/` passes (177 passed, 4 skipped).
 - `python -m build` succeeds for `agentweave-ai==0.38.1`.
+- GitHub Actions `CI` workflow passes on the `v0.38.1` patch commit across all matrix jobs (Python 3.8–3.12 on Ubuntu, macOS, Windows).
+
+### Note on the `Publish to PyPI` workflow
+The `Publish to PyPI` workflow for `v0.38.1` shows as **failed** because the release was uploaded to PyPI manually before the workflow ran; the subsequent automated upload received HTTP 400 from PyPI since the files already exist. The package is live on PyPI (see below), so the failure is cosmetic for this release.
 
 ## Releases
 
