@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Command-line interface for AgentWeave."""
 
+from __future__ import annotations
+
 import argparse
 import contextlib
 import json

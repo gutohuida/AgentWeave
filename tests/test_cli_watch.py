@@ -12,7 +12,7 @@ import pytest
 import agentweave.constants as const
 
 
-@pytest.mark.skipif(platform.system() == "Windows", reason="POSIX-only /proc-based test")
+@pytest.mark.skipif(platform.system() != "Linux", reason="Linux-only /proc-based fd leak test")
 def test_cmd_start_does_not_leak_fd_on_posix(tmp_path, monkeypatch):
     """H8 regression: cmd_start (the watchdog launcher) must not open
     WATCHDOG_LOG_FILE in the parent process. Each invocation previously

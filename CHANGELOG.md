@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.38.1] - 2026-06-18
+
+### Fixed (CLI)
+- **Python 3.8 compatibility.** Added `from __future__ import annotations` to `src/agentweave/cli.py` and `src/agentweave/watchdog.py` so PEP 585 generic type syntax (`list[...]`, `dict[...]`, `tuple[...]`, `set[...]`) does not fail at runtime on Python 3.8.
+- **macOS CI failure.** Changed `tests/test_cli_watch.py::test_cmd_start_does_not_leak_fd_on_posix` to Linux-only; it relies on `/proc/<pid>/fd`, which is not available on macOS.
+- **Lint configuration.** Added `UP006` and `UP037` to the ruff ignore list so the new `__future__` annotations do not force a wholesale typing-style rewrite.
+
+---
 ## [0.38.0] / [Hub 0.32.0] - 2026-06-18
 
 ### Fixed (CLI v0.38.0)
