@@ -1,6 +1,9 @@
 services:
   hub:
-    image: ghcr.io/gutohuida/agentweave-hub:latest
+    # Prefer the locally-built `agentweave-hub:audit` image (built by
+    # `make hub-full-build`) so audit-branch code is in use. Falls back
+    # to the published v0.31.2 image if no local build exists.
+    image: ${AW_HUB_IMAGE:-agentweave-hub:audit}
     ports:
       - "${AW_PORT:-8000}:8000"
     volumes:

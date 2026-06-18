@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
-import { useSSE, SSEEvent } from '@/hooks/useSSE'
+import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 
 export interface AgentSummary {
   name: string
@@ -166,6 +166,14 @@ export function useAgentOutput(name: string | null) {
   const queryClient = useQueryClient()
   const nameRef = useRef(name)
   const isInitialMount = useRef(true)
+  // M21 gap-timer + poll refs. The polling effect arms the timer and
+  // publishes the current `poll` function into `pollRef.current`. The SSE
+  // handler (registered at module/listener level, no closure over the
+  // effect) reads `pollRef.current` and re-arms the gap timer so a
+  // continuous stream of events keeps the timer from firing, while a
+  // quiet stream lets the timer fire a single reconciliation poll.
+  const gapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollRef = useRef<(() => void) | null>(null)
   nameRef.current = name
 
   const cacheKey = name || 'null'
@@ -187,7 +195,7 @@ export function useAgentOutput(name: string | null) {
     if (isInitialMount.current) {
       const existingIds = new Set((linesCache.get(cacheKey) || []).map(l => l.id))
       const newFromServer = initialData.filter(l => !existingIds.has(l.id))
-      
+
       if (newFromServer.length > 0 || !linesCache.has(cacheKey)) {
         const merged = [...(linesCache.get(cacheKey) || []), ...newFromServer]
         // Sort by timestamp to ensure correct order
@@ -216,7 +224,12 @@ export function useAgentOutput(name: string | null) {
 
   const isLoading = isLoadingInitial && lines.length === 0
 
-  // Poll for new lines every 2 seconds (fallback when SSE misses events)
+  // Reconcile on SSE gap or reconnect (M21). Replaces the previous
+  // unconditional `setInterval(poll, 2000)` with a one-shot gap timer
+  // that's reset every time an SSE event arrives for this agent. If the
+  // stream goes quiet for >5 s the timer fires a single reconciliation
+  // poll; any subsequent SSE event resets it again. SSE reconnects also
+  // fire a poll since events may have arrived while the stream was down.
   useEffect(() => {
     if (!isConfigured || !name) return
 
@@ -248,13 +261,38 @@ export function useAgentOutput(name: string | null) {
       }
     }
 
-    // Poll immediately on mount
+    // Publish poll to the ref so the SSE handler (handleSSE.current) can
+    // re-arm the gap timer around a fresh `poll()` invocation.
+    pollRef.current = () => { void poll() }
+
+    const armGapTimer = () => {
+      if (gapTimerRef.current) clearTimeout(gapTimerRef.current)
+      gapTimerRef.current = setTimeout(() => {
+        gapTimerRef.current = null
+        pollRef.current?.()
+      }, 5000)
+    }
+    armGapTimer()
+
+    // Initial poll on mount to seed from REST.
     poll()
-    const interval = setInterval(poll, 2000)
-    return () => clearInterval(interval)
+
+    // Reconnect handler: SSE just re-established after being down.
+    // Poll once to catch up on any events the stream missed.
+    const unsubscribe = onSseReconnect(poll)
+
+    return () => {
+      if (gapTimerRef.current) {
+        clearTimeout(gapTimerRef.current)
+        gapTimerRef.current = null
+      }
+      pollRef.current = null
+      unsubscribe()
+    }
   }, [isConfigured, name, cacheKey, apiKey, queryClient])
 
-  // Append new lines from SSE
+  // Append new lines from SSE and reset the gap timer on each event so the
+  // poll only fires when the stream is actually quiet.
   const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
   handleSSE.current = (event: SSEEvent) => {
     if (event.type !== 'agent_output') return
@@ -274,6 +312,16 @@ export function useAgentOutput(name: string | null) {
     if (current.some(l => l.id === newLine.id)) return
     linesCache.set(agentKey, [...current, newLine])
     queryClient.invalidateQueries({ queryKey: ['agents', d.agent, 'lines'] })
+
+    // Reset the gap timer — a fresh event means the stream is alive.
+    // pollRef is non-null while the polling useEffect is mounted.
+    if (pollRef.current) {
+      if (gapTimerRef.current) clearTimeout(gapTimerRef.current)
+      gapTimerRef.current = setTimeout(() => {
+        gapTimerRef.current = null
+        pollRef.current?.()
+      }, 5000)
+    }
   }
 
   useSSE((event) => handleSSE.current(event))

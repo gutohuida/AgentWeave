@@ -13,6 +13,7 @@ Expected transport.json:
 
 import json
 import logging
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +22,17 @@ from typing import Any, Dict, List, Optional
 from .base import BaseTransport
 
 logger = logging.getLogger(__name__)
+
+# H3: retry tunables for Hub requests
+HUB_MAX_ATTEMPTS = 3
+HUB_INITIAL_BACKOFF = 0.5  # seconds; doubled on each retry
+HUB_MAX_BACKOFF = 8.0  # seconds; cap for exponential backoff
+HUB_RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
+
+# S10: cap Hub response body size to prevent OOM on a misbehaving Hub
+# (e.g. one compromised and now serving 10 GB). 10 MB is 10x the
+# legitimate worst case (a list of messages or a single task).
+HUB_MAX_RESPONSE_BODY = 10 * 1024 * 1024
 
 
 class HubTransportError(RuntimeError):
@@ -48,15 +60,57 @@ def _transport_error_data(method: str, exc: RuntimeError) -> Dict[str, Any]:
     return {"method": method, "error": str(exc), "classification": "transport_error"}
 
 
+def _redact_body(body_text: str, max_length: int = 200) -> str:
+    """S7 (PR 3): strip api_key= query strings and truncate body text.
+
+    Avoids leaking the API key into the structured log file when a
+    misconfigured Hub (or reverse proxy) echoes the request URL inside
+    its error response body.
+    """
+    import re as _re
+
+    redacted = _re.sub(r"(api_key=)[^&\s]+", r"\1<redacted>", body_text)
+    if len(redacted) > max_length:
+        redacted = redacted[:max_length] + "..."
+    return redacted
+
+
+def _sleep_with_retry_after(http_error: urllib.error.HTTPError, default_backoff: float) -> None:
+    """Honor the Retry-After header on 429 (or any retryable status).
+
+    Retry-After may be a delta-seconds int or an HTTP-date. We only
+    support the delta-seconds form (the common case); otherwise fall
+    back to the default exponential backoff.
+    """
+    retry_after = http_error.headers.get("Retry-After") if http_error.headers else None
+    if retry_after is not None:
+        try:
+            seconds = float(retry_after)
+            time.sleep(max(0.0, min(seconds, HUB_MAX_BACKOFF)))
+            return
+        except (TypeError, ValueError):
+            pass
+    time.sleep(default_backoff)
+
+
 class HttpTransport(BaseTransport):
     """Transport that delegates to an AgentWeave Hub via HTTP REST API."""
 
     poll_interval: float = 5.0
 
-    def __init__(self, url: str, api_key: str, project_id: str):
+    def __init__(
+        self,
+        url: str,
+        api_key: str,
+        project_id: str,
+        max_attempts: int = HUB_MAX_ATTEMPTS,
+        initial_backoff: float = HUB_INITIAL_BACKOFF,
+    ):
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.project_id = project_id
+        self.max_attempts = max_attempts
+        self.initial_backoff = initial_backoff
 
     # ------------------------------------------------------------------
     # Internal helper
@@ -71,8 +125,12 @@ class HttpTransport(BaseTransport):
     ) -> Any:
         """Make an authenticated request to the Hub.
 
-        Injects project_id into every POST body and every GET query string.
-        Raises RuntimeError on non-2xx responses.
+        Injects project_id into every GET query string. POST bodies are sent as-is
+        because the Hub's get_project auth dependency already extracts project_id
+        from the API key, and most writeable schemas use extra="forbid".
+        Retries on 5xx, 408, 425, 429, and URLError with exponential backoff
+        (honors Retry-After header on 429). Raises HubTransportError on
+        non-2xx, non-retryable errors or after exhausting retries.
         """
         url = f"{self.url}/api/v1{path}"
 
@@ -85,8 +143,11 @@ class HttpTransport(BaseTransport):
 
         payload: Optional[bytes] = None
         if body is not None:
-            if "project_id" not in body:
-                body = {"project_id": self.project_id, **body}
+            # NOTE: do NOT inject project_id into the body. The Hub's
+            # get_project auth dependency extracts project_id from the API
+            # key (see hub/hub/auth.py), and most writeable schemas use
+            # extra="forbid" — injecting here triggers 422 on POST /tasks,
+            # /messages, /jobs and PATCH /tasks/{id}, /jobs/{id}.
             payload = json.dumps(body).encode()
 
         req = urllib.request.Request(url, data=payload, method=method)
@@ -94,27 +155,66 @@ class HttpTransport(BaseTransport):
         req.add_header("Content-Type", "application/json")
         req.add_header("Accept", "application/json")
 
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                raw = resp.read()
-                return json.loads(raw) if raw else {}
-        except urllib.error.HTTPError as exc:
-            body_text = exc.read().decode(errors="replace")
-            if exc.code in (401, 403):
-                classification = "hub_auth_failed"
-            elif exc.code == 404:
-                classification = "hub_project_missing"
-            elif exc.code == 408:
-                classification = "hub_timeout"
-            else:
-                classification = "hub_api_error"
-            raise HubTransportError(
-                f"Hub API {exc.code}: {body_text}", classification, status_code=exc.code
-            ) from exc
-        except urllib.error.URLError as exc:
-            reason = str(exc.reason)
-            classification = "hub_timeout" if "timed out" in reason.lower() else "hub_unreachable"
-            raise HubTransportError(f"Hub connection error: {exc.reason}", classification) from exc
+        attempt = 0
+        backoff = self.initial_backoff
+        while True:
+            attempt += 1
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    # S10: cap body size to prevent OOM. resp.read(n) reads
+                    # up to n bytes and returns fewer at EOF. The +1 lets us
+                    # detect overflow without reading the full body.
+                    raw = resp.read(HUB_MAX_RESPONSE_BODY + 1)
+                if len(raw) > HUB_MAX_RESPONSE_BODY:
+                    raise HubTransportError(
+                        f"Hub response exceeds {HUB_MAX_RESPONSE_BODY} bytes",
+                        classification="hub_response_too_large",
+                    )
+                # H6: 2xx with a non-JSON body (e.g. an HTML 502 page returned
+                # by a misconfigured reverse proxy) must not crash the agent.
+                # Classify it so callers can decide how to handle it.
+                if not raw:
+                    return {}
+                try:
+                    return json.loads(raw)
+                except (ValueError, json.JSONDecodeError) as decode_exc:
+                    raise HubTransportError(
+                        "Hub returned a non-JSON body",
+                        classification="hub_invalid_response",
+                    ) from decode_exc
+            except urllib.error.HTTPError as exc:
+                body_text = exc.read().decode(errors="replace")
+                # S7 (PR 3): redact api_key= in body text and truncate.
+                redacted = _redact_body(body_text)
+                if exc.code in (401, 403):
+                    classification = "hub_auth_failed"
+                elif exc.code == 404:
+                    classification = "hub_project_missing"
+                elif exc.code == 408:
+                    classification = "hub_timeout"
+                else:
+                    classification = "hub_api_error"
+                err = HubTransportError(
+                    f"Hub API {exc.code}: {redacted}",
+                    classification,
+                    status_code=exc.code,
+                )
+                if exc.code in HUB_RETRY_STATUSES and attempt < self.max_attempts:
+                    _sleep_with_retry_after(exc, backoff)
+                    backoff = min(backoff * 2, HUB_MAX_BACKOFF)
+                    continue
+                raise err from exc
+            except urllib.error.URLError as exc:
+                reason = str(exc.reason)
+                classification = (
+                    "hub_timeout" if "timed out" in reason.lower() else "hub_unreachable"
+                )
+                err = HubTransportError(f"Hub connection error: {exc.reason}", classification)
+                if attempt < self.max_attempts:
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, HUB_MAX_BACKOFF)
+                    continue
+                raise err from exc
 
     # ------------------------------------------------------------------
     # BaseTransport implementation
@@ -123,7 +223,12 @@ class HttpTransport(BaseTransport):
     def send_message(self, message_data: Dict[str, Any]) -> bool:
         """POST /api/v1/messages — persist a message."""
         try:
-            # Map from/to keys to sender/recipient aliases expected by the Hub
+            # Map from/to keys to sender/recipient aliases expected by the Hub.
+            # The Hub's MessageCreate schema has `extra: "forbid"`, so we
+            # MUST NOT include `id` or `timestamp` (server-assigned) — including
+            # them produces a 422 and the MCP `send_message` tool returns
+            # `{"error": "Failed to send message via active transport"}` to
+            # the calling agent.
             body = {
                 "from": message_data.get("from", message_data.get("sender", "")),
                 "to": message_data.get("to", message_data.get("recipient", "")),
@@ -131,8 +236,6 @@ class HttpTransport(BaseTransport):
                 "content": message_data.get("content", ""),
                 "type": message_data.get("type", "message"),
                 "task_id": message_data.get("task_id"),
-                "id": message_data.get("id"),
-                "timestamp": message_data.get("timestamp"),
             }
             self._request("POST", "/messages", body)
             return True
@@ -178,12 +281,25 @@ class HttpTransport(BaseTransport):
             )
             return False
 
-    def send_task(self, task_data: Dict[str, Any]) -> bool:
+    def send_task(self, task_data: Dict[str, Any], error: Optional[List[str]] = None) -> bool:
         """POST /api/v1/tasks."""
         try:
-            self._request("POST", "/tasks", task_data)
+            # The Hub's TaskCreate schema has `extra: "forbid"`, so we MUST
+            # NOT pass server-managed `created_at` / `updated` — the Hub
+            # assigns those. The client-generated `id` IS accepted by the Hub
+            # (see TaskCreate.id) so we keep it through: this lets the MCP
+            # `create_task` tool return the same id the Hub stored, so
+            # subsequent get_task / update_task calls by the agent find the
+            # task. Stripping it produced a misleading id mismatch where the
+            # Hub silently generated a different id and subsequent calls by
+            # id failed with "not found".
+            body = {k: v for k, v in task_data.items() if k not in ("created_at", "updated")}
+            self._request("POST", "/tasks", body)
             return True
         except RuntimeError as exc:
+            message = str(exc)
+            if error is not None:
+                error.append(message)
             logger.error(
                 "transport_error",
                 extra={

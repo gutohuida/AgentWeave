@@ -1,17 +1,17 @@
 """GET /api/v1/events — SSE stream and history."""
 
-import asyncio
-from typing import AsyncGenerator, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import AsyncGenerator, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from ...auth import get_project
+from ...auth import _make_ticket, get_project, get_project_for_sse
 from ...db.engine import get_session
 from ...db.models import EventLog
-from ...sse import sse_manager
+from ...sse import make_connected_event, sse_manager
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -43,27 +43,53 @@ async def event_history(
     ]
 
 
+@router.get("/ticket")
+async def get_event_ticket(project: Tuple[str, str] = Depends(get_project)):
+    """Issue a short-lived signed ticket for the SSE stream.
+
+    Clients using EventSource (which cannot send custom headers) should call this
+    first with their API key, then connect to /api/v1/events?token=<ticket>.
+    """
+    project_id, _ = project
+    token, expires = _make_ticket(project_id)
+    return {
+        "token": token,
+        "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).isoformat(),
+    }
+
+
 @router.get("")
 async def event_stream(
     request: Request,
-    project: Tuple[str, str] = Depends(get_project),
+    project: Tuple[str, str] = Depends(get_project_for_sse),
 ):
+    """Server-Sent Events stream.
+
+    Yields `sse_starlette.ServerSentEvent` (and subclass) objects straight
+    from the SSEManager queue. EventSourceResponse serializes them to the
+    standard SSE wire format (`event: <name>\\r\\ndata: <json>\\r\\n\\r\\n`).
+
+    Keepalives are produced by `EventSourceResponse(ping=15)` (a `: ping ...`
+    comment every 15s), not by a hand-rolled `yield ": keepalive\\n\\n"`.
+    Hand-rolling the keepalive would force us to yield a raw string, which
+    sse_starlette would re-wrap as `data: : keepalive\\n\\n` and break the
+    comment semantics.
+    """
     project_id, _ = project
     queue = sse_manager.subscribe(project_id)
 
-    async def generator() -> AsyncGenerator[str, None]:
+    async def generator() -> AsyncGenerator:
         try:
-            yield "data: connected\n\n"
+            yield make_connected_event()
             while True:
                 if await request.is_disconnected():
                     break
-                try:
-                    message = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield message
-                except asyncio.TimeoutError:
-                    # Send keepalive comment
-                    yield ": keepalive\n\n"
+                # Block forever (no timeout) — EventSourceResponse handles
+                # keepalives on its own via the `ping` parameter, so a stalled
+                # stream can never silently time out the connection.
+                message = await queue.get()
+                yield message
         finally:
             sse_manager.unsubscribe(project_id, queue)
 
-    return EventSourceResponse(generator())
+    return EventSourceResponse(generator(), ping=15)

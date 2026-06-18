@@ -8,7 +8,7 @@ async def test_trigger_returns_pilot_mode_response(app, auth_headers):
     """Test that trigger endpoint returns pilot-mode response without executing."""
     # First register an agent with pilot mode
     resp = await app.post(
-        "/api/v1/agents/claude/register-session",
+        "/api/v1/agents/claude-pilot-test/register-session",
         json={"session_id": "sess-pilot-123"},
         headers=auth_headers,
     )
@@ -21,7 +21,7 @@ async def test_trigger_returns_pilot_mode_response(app, auth_headers):
     resp = await app.post(
         "/api/v1/agent/trigger",
         json={
-            "agent": "claude",
+            "agent": "claude-pilot-test",
             "message": "Hello from test",
             "session_mode": "new",
         },
@@ -31,7 +31,7 @@ async def test_trigger_returns_pilot_mode_response(app, auth_headers):
     data = resp.json()
     assert data["success"] is True
     assert "pilot mode" in data["message"].lower()
-    assert data["agent"] == "claude"
+    assert data["agent"] == "claude-pilot-test"
     assert data["message_id"].startswith("msg-")
 
 
@@ -101,7 +101,7 @@ async def test_register_session_upserts(app, auth_headers):
 async def test_register_session_missing_session_id(app, auth_headers):
     """Test that register-session fails without session_id."""
     resp = await app.post(
-        "/api/v1/agents/claude/register-session",
+        "/api/v1/agents/missing-session-agent/register-session",
         json={},
         headers=auth_headers,
     )

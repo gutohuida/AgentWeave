@@ -10,11 +10,11 @@ Usage (mounted in FastAPI):
     app.mount("/mcp", mcp.sse_app())
 """
 
-import os
-import urllib.request
-import urllib.parse
-import urllib.error
 import json as _json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any, Dict, List, Optional
 
 try:
@@ -67,7 +67,7 @@ def _hub_request(
     req.add_header("Content-Type", "application/json")
 
     try:
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             return _json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"Hub API error {exc.code}: {exc.read().decode()}")
@@ -242,7 +242,7 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
+def update_task(task_id: str, status: str) -> Dict[str, Any]:
     """Update a task's status.
 
     Valid statuses: pending, assigned, in_progress, completed,
@@ -253,7 +253,6 @@ def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
                  create_task() (e.g. "task-abc123"). Do NOT use status names like
                  "pending" as task IDs.
         status: New status value
-        agent: Your agent name (for logging)
 
     Returns:
         Updated task dict, or {'error': '...'} on failure.

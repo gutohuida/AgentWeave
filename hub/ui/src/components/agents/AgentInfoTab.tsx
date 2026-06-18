@@ -3,6 +3,7 @@ import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
 import { formatDistanceToNow } from 'date-fns'
 import { useState } from 'react'
+import { getStatusConfig, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
 
 interface AgentInfoTabProps {
   agent: AgentSummary
@@ -20,13 +21,6 @@ const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }
   native: { bg: 'rgba(34,197,94,0.1)', color: 'var(--green)', label: 'native' },
 }
 
-const STATUS_CONFIG: Record<string, { dotColor: string; label: string; pulse: boolean; labelColor: string }> = {
-  running: { dotColor: 'var(--green)', label: 'Running', pulse: true, labelColor: 'var(--green)' },
-  active: { dotColor: 'var(--green)', label: 'Active', pulse: false, labelColor: 'var(--green)' },
-  idle: { dotColor: 'var(--text-3)', label: 'Idle', pulse: false, labelColor: 'var(--text-3)' },
-  waiting: { dotColor: 'var(--amber)', label: 'Waiting', pulse: false, labelColor: 'var(--amber)' },
-}
-
 export function AgentInfoTab({ agent }: AgentInfoTabProps) {
   const { data: sessionsData, isLoading: isLoadingSessions } = useAgentSessions(agent.name)
   const sessions = sessionsData?.sessions || []
@@ -34,9 +28,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
   const setPilotMode = useSetPilotMode()
   const [sessionIdInput, setSessionIdInput] = useState('')
 
-  const statusCfg = STATUS_CONFIG[agent.status] ?? {
-    dotColor: 'var(--text-3)', label: agent.status, pulse: false, labelColor: 'var(--text-3)',
-  }
+  const statusCfg = getStatusConfig(agent.status)
   const roleCfg = agent.role ? (ROLE_CONFIG[agent.role] ?? ROLE_CONFIG.collaborator) : null
 
   const handleRegisterSession = (e: React.FormEvent) => {
@@ -66,18 +58,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           Status
         </h3>
         <div className="flex items-center gap-3 mb-3">
-          <span className="relative flex h-3 w-3">
-            {statusCfg.pulse && (
-              <span
-                className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                style={{ background: statusCfg.dotColor }}
-              />
-            )}
-            <span
-              className="relative inline-flex rounded-full h-3 w-3"
-              style={{ background: statusCfg.dotColor }}
-            />
-          </span>
+          <StatusDot status={agent.status} size="lg" />
           <span
             className="text-sm capitalize"
             style={{ color: statusCfg.labelColor, fontWeight: statusCfg.pulse ? 600 : 500 }}
@@ -253,29 +234,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
               Development Roles
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {agent.dev_roles?.map((role, idx) => (
-                <span
-                  key={role}
-                  className="text-[11px] px-2 py-1 rounded-full"
-                  style={{
-                    background: 'rgba(168,85,247,0.1)',
-                    color: 'var(--purple)',
-                  }}
-                >
-                  {agent.dev_role_labels?.[idx] ?? role}
-                </span>
-              ))}
-              {!agent.dev_roles?.length && agent.dev_role && (
-                <span
-                  className="text-[11px] px-2 py-1 rounded-full"
-                  style={{
-                    background: 'rgba(168,85,247,0.1)',
-                    color: 'var(--purple)',
-                  }}
-                >
-                  {agent.dev_role_label ?? agent.dev_role}
-                </span>
-              )}
+              <DevRoleTagList agent={agent} size="md" />
             </div>
           </div>
         )}

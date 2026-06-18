@@ -54,6 +54,13 @@ export function ActivityLog() {
     getBufferedEvents().map((e) => ({ ...e, localId: counterRef.current++ }))
   )
   const [paused, setPaused] = useState(false)
+  // Defensive: useSSE registers the callback once and dispatches from a ref
+  // internally, but mirroring the AGENTS.md "stale closure" pattern protects
+  // against future refactors of useSSE.
+  const pausedRef = useRef(paused)
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all')
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -73,7 +80,7 @@ export function ActivityLog() {
   }, [isConfigured])
 
   useSSE((event) => {
-    if (paused) return
+    if (pausedRef.current) return
     setEvents((prev) => {
       const next = [...prev, { ...event, localId: counterRef.current++ }]
       return next.slice(-MAX_EVENTS)

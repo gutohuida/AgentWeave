@@ -2,13 +2,15 @@
 """Command-line interface for AgentWeave."""
 
 import argparse
+import contextlib
+import json
 import logging
 import os
 import shutil
 import subprocess
 import sys
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -115,7 +117,7 @@ def _print_readiness_summary(results: List[Any], *, title: str = "[READINESS]") 
     if rendered:
         print(rendered)
     else:
-        print("  [OK] No readiness problems detected.")
+        print_success("No readiness problems detected.")
 
 
 def _ensure_agentweave_gitignore(path: Optional[Path] = None) -> bool:
@@ -170,91 +172,108 @@ def _ensure_agentweave_env(path: Optional[Path] = None) -> bool:
 
 def cmd_init(args: argparse.Namespace) -> int:
     """Initialize a new session."""
-    import json as _json
+    session, code = _init_session(args)
+    if session is None:
+        return code
 
-    # Check for existing session (migration path)
-    existing_session = None
+    _write_readme(session)
+    _write_protocol(session)
+    _write_role_files(session)
+    _write_ai_context()
+    root_files_created = _write_root_contexts(session)
+    _write_shared_context(session)
+    skills_count, codex_skills_count = _generate_skills(session, args.force)
+    yml_path = _write_yaml(session)
+
+    _print_init_summary(
+        session,
+        root_files_created,
+        skills_count,
+        codex_skills_count,
+        yml_path,
+    )
+    return 0
+
+
+def _migrate_existing_session(args: argparse.Namespace) -> Optional[int]:
+    """Migrate from an existing session to agentweave.yml. Returns code if handled."""
+    try:
+        data = json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+        existing = Session(data)
+    except Exception:
+        return None
+    if not existing or args.force:
+        return None
+    print_info("Existing session detected.")
+    print_info("Generating agentweave.yml from current configuration...")
+    try:
+        from .config import generate_agentweave_yml
+
+        generate_agentweave_yml(existing)
+        if _ensure_agentweave_gitignore():
+            print_success("Updated .gitignore with AgentWeave runtime state")
+        if _ensure_agentweave_env():
+            print_success("Created .env for local AgentWeave secrets")
+        print_success("Generated agentweave.yml from existing session")
+        print_info("Run 'agentweave activate' to apply configuration")
+        return 0
+    except Exception as exc:
+        print_error(f"Failed to generate agentweave.yml: {exc}")
+        return 1
+
+
+def _init_session(args: argparse.Namespace) -> tuple[Optional[Session], int]:
+    """Create or migrate the session for init. Returns (session, return_code)."""
     if SESSION_FILE.exists():
-        try:
-            existing_session_data = _json.loads(SESSION_FILE.read_text(encoding="utf-8"))
-            existing_session = Session(existing_session_data)
-        except Exception:
-            pass
-
-        if existing_session and not args.force:
-            print_info("Existing session detected.")
-            print_info("Generating agentweave.yml from current configuration...")
-            try:
-                from .config import generate_agentweave_yml
-
-                generate_agentweave_yml(existing_session)
-                if _ensure_agentweave_gitignore():
-                    print_success("Updated .gitignore with AgentWeave runtime state")
-                if _ensure_agentweave_env():
-                    print_success("Created .env for local AgentWeave secrets")
-                print_success("Generated agentweave.yml from existing session")
-                print_info("Run 'agentweave activate' to apply configuration")
-                return 0
-            except Exception as e:
-                print_error(f"Failed to generate agentweave.yml: {e}")
-                return 1
+        code = _migrate_existing_session(args)
+        if code is not None:
+            return None, code
 
     if AGENTWEAVE_DIR.exists() and not args.force:
         if AGENTWEAVE_DIR.is_file():
             print_error(".agentweave exists as a file, not a directory.")
             print_info("Remove it with: rm .agentweave")
-            return 1
-        # Directory exists - check if it has meaningful content (not just logs)
-        # The logs directory is created automatically by logging setup
+            return None, 1
         has_session = SESSION_FILE.exists()
-        has_agents_dir = (AGENTWEAVE_DIR / "agents").exists()
-        has_tasks_dir = (AGENTWEAVE_DIR / "tasks").exists()
-        if has_session or has_agents_dir or has_tasks_dir:
+        has_agents = (AGENTWEAVE_DIR / "agents").exists()
+        has_tasks = (AGENTWEAVE_DIR / "tasks").exists()
+        if has_session or has_agents or has_tasks:
             print_warning(".agentweave/ already exists. Use --force to overwrite.")
-            return 1
-        # Directory only contains logs/other non-essential files - allow init
+            return None, 1
 
-    # Handle case where .agentweave exists as a file with --force
     if AGENTWEAVE_DIR.exists() and args.force and AGENTWEAVE_DIR.is_file():
         try:
             AGENTWEAVE_DIR.unlink()
             print_info("Removed existing .agentweave file.")
-        except OSError as e:
-            print_error(f"Cannot remove .agentweave file: {e}")
-            return 1
+        except OSError as exc:
+            print_error(f"Cannot remove .agentweave file: {exc}")
+            return None, 1
 
-    # Handle deprecation warning for --agents
     agents_arg = getattr(args, "agents", None)
     if agents_arg:
         print_warning("--agents is deprecated. Define agents in agentweave.yml instead.")
 
     ensure_dirs()
 
-    try:
-        # Parse agent list: --agents claude,kimi,gemini  OR fall back to default
-        agent_list = None
-        if agents_arg:
-            agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()]
+    agent_list = [a.strip() for a in agents_arg.split(",") if a.strip()] if agents_arg else None
+    principal = args.principal or (agent_list[0] if agent_list else DEFAULT_AGENTS[0])
+    effective_agents = agent_list if agent_list else DEFAULT_AGENTS
 
-        principal = args.principal or (agent_list[0] if agent_list else DEFAULT_AGENTS[0])
+    session = Session.create(
+        name=args.project or "Unnamed Project",
+        principal=principal,
+        mode=args.mode or "hierarchical",
+        agents=effective_agents,
+    )
+    session.save()
+    return session, 0
 
-        # In the declarative workflow, only create the principal at init time.
-        # Additional agents are declared in agentweave.yml and synced by activate.
-        effective_agents = agent_list if agent_list else DEFAULT_AGENTS
 
-        session = Session.create(
-            name=args.project or "Unnamed Project",
-            principal=principal,
-            mode=args.mode or "hierarchical",
-            agents=effective_agents,
-        )
-        session.save()
-
-        # Create README
-        agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
-        readme_path = AGENTWEAVE_DIR / "README.md"
-        with open(readme_path, "w", encoding="utf-8") as f:
-            f.write(f"""# AgentWeave Session: {session.name}
+def _write_readme(session: Session) -> None:
+    agents_listed = "\n".join(f"# agentweave relay --agent {ag}" for ag in session.agent_names)
+    readme_path = AGENTWEAVE_DIR / "README.md"
+    readme_path.write_text(
+        f"""# AgentWeave Session: {session.name}
 
 **ID:** {session.id}
 **Mode:** {session.mode}
@@ -299,132 +318,118 @@ agentweave summary
 - `messages/pending/` — Unread messages
 - `messages/archive/` — Message history
 - `shared/` — Shared context and decisions
-""")
+""",
+        encoding="utf-8",
+    )
 
-        # Write protocol.md — collaboration guide inside .agentweave/
-        non_principal = [a for a in session.agent_names if a != session.principal]
-        agents_list = ", ".join(non_principal) if non_principal else "kimi"
-        try:
-            collab_protocol = (
-                get_template("collab_protocol")
-                .replace("{principal}", session.principal)
-                .replace("{agents_list}", agents_list)
-                .replace("{mode}", session.mode)
-            )
-            protocol_path = AGENTWEAVE_DIR / "protocol.md"
-            with open(protocol_path, "w", encoding="utf-8") as f:
-                f.write(collab_protocol)
-        except FileNotFoundError:
-            pass  # Non-fatal
 
-        # Write roles.json and copy active role MD files to .agentweave/roles/
-        try:
-            import json as _json
+def _write_protocol(session: Session) -> None:
+    non_principal = [a for a in session.agent_names if a != session.principal]
+    agents_list = ", ".join(non_principal) if non_principal else "kimi"
+    try:
+        content = (
+            get_template("collab_protocol")
+            .replace("{principal}", session.principal)
+            .replace("{agents_list}", agents_list)
+            .replace("{mode}", session.mode)
+        )
+        (AGENTWEAVE_DIR / "protocol.md").write_text(content, encoding="utf-8")
+    except FileNotFoundError:
+        pass
 
-            roles_template_data = load_roles_template()
-            all_role_defs = roles_template_data["roles"]
 
-            # Build default-for map from _default_for metadata in the template
-            default_for_map: dict = {}
-            for role_id, role_def in all_role_defs.items():
-                for ag_name in role_def.get("_default_for", []):
-                    default_for_map[ag_name] = role_id
+def _write_role_files(session: Session) -> None:
+    try:
+        template_data = load_roles_template()
+        all_roles = template_data["roles"]
+        default_for_map: dict[str, str] = {}
+        for role_id, role_def in all_roles.items():
+            for ag in role_def.get("_default_for", []):
+                default_for_map[ag] = role_id
 
-            # Assign roles to this session's agents
-            agent_assignments: dict = {}
-            active_role_keys: set = set()
-            for ag in session.agent_names:
-                role_key = default_for_map.get(ag)
-                if role_key:
-                    agent_assignments[ag] = role_key
-                    active_role_keys.add(role_key)
-                # Agents not in _default_for start with no role.
-                # Use agentweave.yml + `agentweave activate` to assign roles.
-
-            # Build the project roles.json (strip internal _* fields)
-            roles_config = {
-                "version": 1,
-                "agent_assignments": agent_assignments,
-                "roles": {
-                    k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")}
-                    for k, v in all_role_defs.items()
-                    if k in active_role_keys
-                },
-            }
-            ROLES_CONFIG_FILE.write_text(
-                _json.dumps(roles_config, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-
-            # Push roles config to Hub if HTTP transport is active
-            try:
-                from .transport import get_transport
-
-                _t = get_transport()
-                if _t.get_transport_type() == "http":
-                    _t.push_roles_config(roles_config)
-            except Exception:
-                pass  # Non-fatal
-
-            # Copy active role MD files
-            import contextlib
-
-            ROLES_DIR.mkdir(exist_ok=True)
-            for role_key in active_role_keys:
-                with contextlib.suppress(FileNotFoundError):
-                    (ROLES_DIR / f"{role_key}.md").write_text(
-                        get_role_md(role_key), encoding="utf-8"
-                    )
-        except Exception:
-            pass  # Non-fatal
-
-        # Write .agentweave/ai_context.md — hidden source template (agents don't read this directly).
-        ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
-        if not ai_context_path.exists():
-            try:
-                ai_context = get_template("ai_context")
-                with open(ai_context_path, "w", encoding="utf-8") as f:
-                    f.write(ai_context)
-            except FileNotFoundError:
-                pass  # Non-fatal
-
-        # Write .agentweave/project_instructions.md — project-wide rules for all agents.
-        project_instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
-        if not project_instructions_path.exists():
-            project_instructions_path.write_text(
-                "# Project Instructions\n\n"
-                "Add project-wide rules here. These instructions are prepended to every agent's role guide.\n",
-                encoding="utf-8",
-            )
-
-        # Write agent-specific context files at project root (auto-read by each agent).
-        # claude → CLAUDE.md, gemini → GEMINI.md, everything else → AGENTS.md.
-        version_comment = f"AgentWeave v{__version__}"
-        written_root_files: set = set()
+        assignments: dict[str, str] = {}
+        active_roles: set[str] = set()
         for ag in session.agent_names:
-            _runner = session.get_runner_config(ag).get("runner", "native")
-            if _runner == "claude_proxy":
-                root_filename = "CLAUDE.md"
-            else:
-                root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
-            if root_filename in written_root_files:
-                continue  # multiple agents may share AGENTS.md — only write once
-            root_path = Path.cwd() / root_filename
-            if root_path.exists():
-                written_root_files.add(root_filename)
-                continue  # never overwrite an existing file
-            template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
-            try:
-                context_content = get_template(template_name).replace("{version}", version_comment)
-                with open(root_path, "w", encoding="utf-8") as f:
-                    f.write(context_content)
-                written_root_files.add(root_filename)
-            except FileNotFoundError:
-                pass  # Non-fatal
+            role_key = default_for_map.get(ag)
+            if role_key:
+                assignments[ag] = role_key
+                active_roles.add(role_key)
 
-        # Write shared/context.md — current project state (dynamic, changes daily)
-        context_md_path = SHARED_DIR / "context.md"
-        if not context_md_path.exists():
-            context_md_content = f"""# Current Project State
+        config = {
+            "version": 1,
+            "agent_assignments": assignments,
+            "roles": {
+                k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")}
+                for k, v in all_roles.items()
+                if k in active_roles
+            },
+        }
+        ROLES_CONFIG_FILE.write_text(
+            json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+        try:
+            from .transport import get_transport
+
+            t = get_transport()
+            if t.get_transport_type() == "http":
+                t.push_roles_config(config)
+        except Exception:
+            pass
+
+        ROLES_DIR.mkdir(exist_ok=True)
+        for role_key in active_roles:
+            with contextlib.suppress(FileNotFoundError):
+                (ROLES_DIR / f"{role_key}.md").write_text(get_role_md(role_key), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _write_ai_context() -> None:
+    ai_path = AGENTWEAVE_DIR / "ai_context.md"
+    if not ai_path.exists():
+        with contextlib.suppress(FileNotFoundError):
+            ai_path.write_text(get_template("ai_context"), encoding="utf-8")
+
+    instructions_path = AGENTWEAVE_DIR / "project_instructions.md"
+    if not instructions_path.exists():
+        instructions_path.write_text(
+            "# Project Instructions\n\n"
+            "Add project-wide rules here. These instructions are prepended to every agent's role guide.\n",
+            encoding="utf-8",
+        )
+
+
+def _write_root_contexts(session: Session) -> set[str]:
+    version_comment = f"AgentWeave v{__version__}"
+    written: set[str] = set()
+    for ag in session.agent_names:
+        runner = session.get_runner_config(ag).get("runner", "native")
+        if runner == "claude_proxy":
+            root_filename = "CLAUDE.md"
+        else:
+            root_filename = AGENT_CONTEXT_FILES.get(ag, AGENT_CONTEXT_FILES_DEFAULT)
+        if root_filename in written:
+            continue
+        root_path = Path.cwd() / root_filename
+        if root_path.exists():
+            written.add(root_filename)
+            continue
+        template_name = "claude_context" if root_filename == "CLAUDE.md" else "kimi_context"
+        try:
+            content = get_template(template_name).replace("{version}", version_comment)
+            root_path.write_text(content, encoding="utf-8")
+            written.add(root_filename)
+        except FileNotFoundError:
+            pass
+    return written
+
+
+def _write_shared_context(session: Session) -> None:
+    context_md_path = SHARED_DIR / "context.md"
+    if not context_md_path.exists():
+        context_md_path.write_text(
+            f"""# Current Project State
 
 > **Purpose:** What's being worked on right now — today's focus, recent decisions, blockers.
 >
@@ -466,91 +471,100 @@ agentweave summary
 
 *Last updated: [date]*
 *Session: {session.name} ({session.id})*
-"""
-            context_md_path.write_text(context_md_content, encoding="utf-8")
-
-        # Build list of root files that were created
-        root_files_created = sorted(written_root_files)
-        gitignore_updated = _ensure_agentweave_gitignore()
-        env_created = _ensure_agentweave_env()
-
-        print_success(f"Initialized session: {session.name}")
-        print(f"   ID:      {session.id}")
-        print(f"   Mode:    {session.mode}")
-        print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
-        print("\n[DIR] Created .agentweave/")
-        print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
-        print("     roles.json           <- agent role assignments and role registry (edit freely)")
-        print(
-            "     roles/               <- per-role behavioral guides (read yours at session start)"
-        )
-        print(
-            "     ai_context.md        <- project DNA source — fill this in, then update agent files"
-        )
-        print("     shared/context.md    <- current focus, recent decisions (update daily)")
-        if root_files_created:
-            print("\n[FILES] Created at project root (auto-read by agents each session):")
-            for fname in root_files_created:
-                print(f"     {fname}")
-        if gitignore_updated:
-            print("     .gitignore")
-        if env_created:
-            print("     .env")
-        print("\nFile purposes:")
-        print("  • .agentweave/ai_context.md  — Project DNA source (edit this)")
-        for fname in root_files_created:
-            print(f"  • {fname:<22} — Auto-loaded by agent; contains full project context")
-        print("  • .agentweave/ROLES.md       — Who does what? (per-session)")
-        print("  • .agentweave/shared/context.md — What are we doing today? (changes daily)")
-        print("\nNext steps:")
-        print("1. Fill in the [Replace with...] sections in .agentweave/ai_context.md")
-        print("2. Run `agentweave sync-context` to regenerate agent files from ai_context.md")
-        print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
-        print("4. Update .agentweave/shared/context.md with today's focus")
-        print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
-        print()
-        print("Zero-relay MCP mode (optional):")
-        print("  agentweave mcp setup   # configure MCP server in both agents (once)")
-        print(
-            "  agentweave start       # launch background watchdog — agents notify each other automatically"
+""",
+            encoding="utf-8",
         )
 
-        # Generate Claude Code skills in .claude/skills/
-        skills_count = _generate_claude_skills(session, Path.cwd(), force=args.force)
-        if skills_count > 0:
-            print(f"\n[SKILLS] Generated {skills_count} Claude Code skills in .claude/skills/")
-            print("  Available slash commands:")
-            print("    /aw-delegate   delegate a task to another agent")
-            print("    /aw-status     full collaboration status overview")
-            print("    /aw-done       mark a task complete and notify principal")
-            print("    /aw-review     request a code review")
-            print("    /aw-relay      generate relay prompt for an agent")
-            print("    /aw-sync       sync context files from ai_context.md")
-            print("    /aw-revise     accept and begin a revision")
-            print("  (aw-collab-start runs automatically at session start)")
 
-        # Generate Codex skills in .agents/skills/
-        codex_skills_count = _generate_codex_skills(session, Path.cwd(), force=args.force)
-        if codex_skills_count > 0:
-            print(f"\n[SKILLS] Generated {codex_skills_count} Codex skills in .agents/skills/")
-            print("  Invoke via $skill-name or the /skills menu in Codex CLI")
+def _generate_skills(session: Session, force: bool) -> tuple[int, int]:
+    claude_count = _generate_claude_skills(session, Path.cwd(), force=force)
+    codex_count = _generate_codex_skills(session, Path.cwd(), force=force)
+    return claude_count, codex_count
 
-        # Generate agentweave.yml configuration file
-        try:
-            from .config import generate_agentweave_yml
 
-            yml_path = generate_agentweave_yml(session)
-            print(f"\n[CONFIG] Created {yml_path}")
-            print("  This file defines your project agents and settings.")
-            print("  Edit it to add/remove agents, then run 'agentweave activate'")
-        except Exception as exc:
-            print_warning(f"Could not create agentweave.yml: {exc}")
+def _write_yaml(session: Session) -> Optional[Path]:
+    try:
+        from .config import generate_agentweave_yml
 
-        return 0
+        return generate_agentweave_yml(session)
+    except Exception as exc:
+        print_warning(f"Could not create agentweave.yml: {exc}")
+        return None
 
-    except ValueError as e:
-        print_error(str(e))
-        return 1
+
+def _print_init_next_steps(session: Session) -> None:
+    print("\nNext steps:")
+    print("1. Fill in the [Replace with...] sections in .agentweave/ai_context.md")
+    print("2. Run `agentweave sync-context` to regenerate agent files from ai_context.md")
+    print("3. Edit .agentweave/ROLES.md to assign the right dev roles")
+    print("4. Update .agentweave/shared/context.md with today's focus")
+    print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
+    print()
+    print("Zero-relay MCP mode (optional):")
+    print("  agentweave mcp setup   # configure MCP server in both agents (once)")
+    print(
+        "  agentweave start       # launch background watchdog — agents notify each other automatically"
+    )
+
+
+def _print_init_skills(claude_count: int, codex_count: int) -> None:
+    if claude_count > 0:
+        print(f"\n[SKILLS] Generated {claude_count} Claude Code skills in .claude/skills/")
+        print("  Available slash commands:")
+        print("    /aw-delegate   delegate a task to another agent")
+        print("    /aw-status     full collaboration status overview")
+        print("    /aw-done       mark a task complete and notify principal")
+        print("    /aw-review     request a code review")
+        print("    /aw-relay      generate relay prompt for an agent")
+        print("    /aw-sync       sync context files from ai_context.md")
+        print("    /aw-revise     accept and begin a revision")
+        print("  (aw-collab-start runs automatically at session start)")
+
+    if codex_count > 0:
+        print(f"\n[SKILLS] Generated {codex_count} Codex skills in .agents/skills/")
+        print("  Invoke via $skill-name or the /skills menu in Codex CLI")
+
+
+def _print_init_summary(
+    session: Session,
+    root_files: set[str],
+    skills_count: int,
+    codex_skills_count: int,
+    yml_path: Optional[Path],
+) -> None:
+    print_success(f"Initialized session: {session.name}")
+    print(f"   ID:      {session.id}")
+    print(f"   Mode:    {session.mode}")
+    print(f"   Agents:  {', '.join(session.agent_names)}  (principal: {session.principal})")
+    print("\n[DIR] Created .agentweave/")
+    print("     protocol.md          <- collaboration protocol (MCP vs manual, workflow)")
+    print("     roles.json           <- agent role assignments and role registry (edit freely)")
+    print("     roles/               <- per-role behavioral guides (read yours at session start)")
+    print("     ai_context.md        <- project DNA source — fill this in, then update agent files")
+    print("     shared/context.md    <- current focus, recent decisions (update daily)")
+    if root_files:
+        print("\n[FILES] Created at project root (auto-read by agents each session):")
+        for fname in root_files:
+            print(f"     {fname}")
+    gitignore_updated = _ensure_agentweave_gitignore()
+    env_created = _ensure_agentweave_env()
+    if gitignore_updated:
+        print("     .gitignore")
+    if env_created:
+        print("     .env")
+    print("\nFile purposes:")
+    print("  • .agentweave/ai_context.md  — Project DNA source (edit this)")
+    for fname in root_files:
+        print(f"  • {fname:<22} — Auto-loaded by agent; contains full project context")
+    print("  • .agentweave/ROLES.md       — Who does what? (per-session)")
+    print("  • .agentweave/shared/context.md — What are we doing today? (changes daily)")
+    _print_init_next_steps(session)
+    _print_init_skills(skills_count, codex_skills_count)
+
+    if yml_path:
+        print(f"\n[CONFIG] Created {yml_path}")
+        print("  This file defines your project agents and settings.")
+        print("  Edit it to add/remove agents, then run 'agentweave activate'")
 
 
 def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = False) -> int:
@@ -798,7 +812,7 @@ def cmd_summary(_args: argparse.Namespace) -> int:
     if ready_for_review:
         print(f"  [REVIEW] {len(ready_for_review)} task(s) ready for review")
     if approved:
-        print(f"  [OK] {len(approved)} task(s) approved")
+        print_success(f"{len(approved)} task(s) approved")
 
     any_tasks = (
         any(pending_by_agent[ag] or in_progress_by_agent[ag] for ag in all_agents)
@@ -941,7 +955,10 @@ def cmd_session_register(args: argparse.Namespace) -> int:
         agent_session_file.parent.mkdir(parents=True, exist_ok=True)
         import json
 
-        agent_session_data = {"session_id": session_id, "registered_at": datetime.now().isoformat()}
+        agent_session_data = {
+            "session_id": session_id,
+            "registered_at": datetime.now(timezone.utc).isoformat(),
+        }
         agent_session_file.write_text(json.dumps(agent_session_data, indent=2), encoding="utf-8")
     except Exception as exc:
         print_error(f"Failed to save local session file: {exc}")
@@ -1631,124 +1648,6 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
         project_instructions=project_instructions,
     ).context
 
-    from .roles import get_agent_roles
-
-    lines = []
-    lines.append(f"# {agent} — AgentWeave Context")
-    lines.append(
-        f"<!-- Generated by {version_comment} — run `agentweave sync-context --force` to regenerate -->"
-    )
-    lines.append("")
-
-    # --- AgentWeave Protocol section ---
-    lines.append("## AgentWeave Protocol")
-    lines.append("")
-    lines.append(
-        "You are participating in a multi-agent collaboration session managed by AgentWeave."
-    )
-    lines.append("")
-    lines.append("### Session Start Checklist (run these steps each new session)")
-    lines.append("")
-    lines.append("1. Run `get_status()` to check session info and your assigned role")
-    lines.append(f"2. Run `get_inbox('{agent}')` to check for unread messages")
-    lines.append("3. Run `list_tasks()` to see active tasks assigned to you")
-    lines.append("4. Read `.agentweave/shared/context.md` for current focus and decisions")
-    lines.append(
-        f"5. Check `.agentweave/agents/{agent}-checkpoint.md` for prior checkpoint if it exists"
-    )
-    lines.append("")
-    lines.append("### MCP Tools Available")
-    lines.append("")
-    lines.append("- `get_inbox(agent)` — retrieve unread messages")
-    lines.append("- `send_message(from, to, subject, content)` — send a message to another agent")
-    lines.append("- `get_status()` — session overview")
-    lines.append("- `list_tasks()` — see all tasks")
-    lines.append("- `get_task(task_id)` — task details")
-    lines.append("- `create_task(...)` — create a new task")
-    lines.append("- `update_task(task_id, ...)` — update task status/assignee")
-    lines.append("- `save_checkpoint(agent, content)` — save context before /compact")
-    lines.append("- `ask_user(question)` — ask the human a question")
-    lines.append("")
-    lines.append("**Important:** In MCP mode, do NOT use `agentweave relay` CLI commands.")
-    lines.append("Use the MCP tools above for all communication.")
-    lines.append("")
-
-    # --- Team Directory ---
-    lines.append("## Team Directory")
-    lines.append("")
-    for ag in session.agent_names:
-        runner_config = session.get_runner_config(ag)
-        runner_type = runner_config.get("runner", "native")
-        display_model = {
-            "claude": runner_config.get("model", "Claude"),
-            "claude_proxy": runner_config.get("model", "Claude Proxy"),
-            "kimi": runner_config.get("model", "Kimi"),
-            "codex": runner_config.get("model", "Codex"),
-            "codex_mcp": runner_config.get("model", "Codex MCP"),
-            "opencode": runner_config.get("model", "OpenCode"),
-            "manual": "Manual",
-        }.get(runner_type, runner_config.get("model", runner_type.title()))
-
-        ag_roles = get_agent_roles(ag)
-        roles_str = ", ".join(ag_roles) if ag_roles else "no role assigned"
-        marker = " ← you" if ag == agent else ""
-        lines.append(f"- **{ag}** ({display_model}) — {roles_str}{marker}")
-    lines.append("")
-
-    # --- Project Instructions ---
-    project_instructions = _get_project_instructions()
-    if project_instructions:
-        lines.append("## Project Instructions")
-        lines.append("")
-        lines.append(project_instructions)
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-
-    # --- Role Guide(s) ---
-    agent_roles = get_agent_roles(agent)
-    if agent_roles:
-        lines.append("## Your Role(s)")
-        lines.append("")
-        for role_id in agent_roles:
-            role_file = ROLES_DIR / f"{role_id}.md"
-            if role_file.exists():
-                try:
-                    role_content = role_file.read_text(encoding="utf-8").strip()
-                    lines.append(role_content)
-                    lines.append("")
-                except Exception:
-                    lines.append(f"### {role_id}")
-                    lines.append("(role guide file could not be read)")
-                    lines.append("")
-            else:
-                lines.append(f"### {role_id}")
-                lines.append(
-                    f"(role guide not found — run `agentweave roles add {agent} {role_id}`)"
-                )
-                lines.append("")
-    else:
-        lines.append("## Your Role")
-        lines.append("")
-        lines.append("No role assigned. Ask the principal to assign one with:")
-        lines.append(f"  agentweave roles add {agent} <role_id>")
-        lines.append("")
-
-    # --- Project Context ---
-    ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
-    if ai_context_path.exists():
-        try:
-            ai_context = ai_context_path.read_text(encoding="utf-8").strip()
-            if ai_context:
-                lines.append("## Project Context")
-                lines.append("")
-                lines.append(ai_context)
-                lines.append("")
-        except Exception:
-            pass
-
-    return "\n".join(lines) + "\n"
-
 
 def _kill_stale_watchdogs() -> list:
     """Find and terminate any running agentweave-watch processes.
@@ -1771,6 +1670,7 @@ def _kill_stale_watchdogs() -> list:
             ["tasklist", "/FI", "IMAGENAME eq agentweave-watch.exe", "/FO", "CSV", "/NH"],
             capture_output=True,
             text=True,
+            timeout=5,
         )
         for line in result.stdout.splitlines():
             parts = line.strip('"').split('","')
@@ -1778,7 +1678,9 @@ def _kill_stale_watchdogs() -> list:
                 try:
                     pid = int(parts[1])
                     if pid != my_pid:
-                        _sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+                        _sp.run(
+                            ["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=5
+                        )
                         killed.append(pid)
                 except (ValueError, OSError):
                     pass
@@ -1867,8 +1769,10 @@ def cmd_start(args: argparse.Namespace) -> int:
     # but was created manually without proper subdirectories)
     AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
     WATCHDOG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")  # noqa: SIM115
-    proc = _sp.Popen(cmd, stdout=log_fh, stderr=log_fh, stdin=_sp.DEVNULL, **spawn_kwargs)
+    # H8: do NOT pre-open the log fd in the parent. Popen.dupes() it into
+    # the child but never closes the parent's copy, leaking one fd on
+    # every `agentweave watch` invocation. The child opens its own log.
+    proc = _sp.Popen(cmd, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, stdin=_sp.DEVNULL, **spawn_kwargs)
 
     WATCHDOG_PID_FILE.write_text(str(proc.pid))
     print_success(f"Watchdog started in background (PID {proc.pid})")
@@ -2134,7 +2038,7 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
 
         mcp_args = _mcp_args(agent)
         try:
-            check = _sp.run([_cli, "--version"], capture_output=True, shell=_shell)
+            check = _sp.run([_cli, "--version"], capture_output=True, shell=_shell, timeout=10)
             if check.returncode != 0:
                 results[agent] = "not found"
                 continue
@@ -2149,6 +2053,7 @@ def cmd_mcp_setup(args: argparse.Namespace) -> int:
                 encoding="utf-8",
                 errors="replace",
                 shell=_shell,
+                timeout=15,
             )
             if result.returncode == 0:
                 results[agent] = "ok"
@@ -2209,7 +2114,9 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
 
     if transport_type == "git":
         # Verify we're inside a git repository
-        result = _sp.run(["git", "rev-parse", "--git-dir"], capture_output=True, text=True)
+        result = _sp.run(
+            ["git", "rev-parse", "--git-dir"], capture_output=True, text=True, timeout=10
+        )
         if result.returncode != 0:
             print_error("Not a git repository. Run `git init` first.")
             return 1
@@ -2222,24 +2129,27 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
             ["git", "ls-remote", "--heads", remote, branch],
             capture_output=True,
             text=True,
+            timeout=15,
         )
         branch_exists = bool(result.stdout.strip())
 
         if not branch_exists:
             print_info(f"Creating orphan branch '{branch}' on {remote}...")
             # Build an empty tree and push an initial commit via git plumbing
-            proc_b = _sp.run(["git", "mktree"], input=b"", capture_output=True)
+            proc_b = _sp.run(["git", "mktree"], input=b"", capture_output=True, timeout=5)
             empty_tree = proc_b.stdout.decode().strip()
             proc_t = _sp.run(
                 ["git", "commit-tree", empty_tree, "-m", "init: agentweave collab branch"],
                 capture_output=True,
                 text=True,
+                timeout=5,
             )
             commit_sha = proc_t.stdout.strip()
             proc = _sp.run(
                 ["git", "push", remote, f"{commit_sha}:refs/heads/{branch}"],
                 capture_output=True,
                 text=True,
+                timeout=30,
             )
             if proc.returncode != 0:
                 print_error(f"Failed to push branch to {remote}: {proc.stderr.strip()}")
@@ -2286,18 +2196,24 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         api_key = getattr(args, "api_key", None)
         project_id = getattr(args, "project_id", None)
 
-        if not url or not api_key or not project_id:
+        if not url or not api_key:
             print_error(
-                "HTTP transport requires --url, --api-key, and --project-id.\n"
+                "HTTP transport requires --url and --api-key.\n"
                 "Example:\n"
                 "  agentweave transport setup --type http \\\n"
                 "    --url http://localhost:8000 \\\n"
-                "    --api-key aw_live_... \\\n"
-                "    --project-id proj-default"
+                "    --api-key aw_live_..."
             )
             return 1
 
-        # Connectivity check
+        # Connectivity check + project_id discovery.
+        # We always hit /api/v1/status with the user's API key to (a) verify
+        # the key works and (b) read the Hub's actual project_id. This prevents
+        # the silent failure mode where the user types `proj-default` but the
+        # Hub was bootstrapped with a different project_id (e.g. `Agentweave`)
+        # — every subsequent MCP tool call would then 404/BOLA on the Hub and
+        # the agent would silently fall back to local-fs + curl.
+        import json as _json
         import urllib.error as _urllib_err
         import urllib.request as _urllib_req
 
@@ -2307,7 +2223,12 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         req.add_header("Accept", "application/json")
         try:
             with _urllib_req.urlopen(req, timeout=10) as resp:
-                resp.read()
+                hub_project_id = None
+                try:
+                    payload = _json.loads(resp.read().decode())
+                    hub_project_id = payload.get("project_id")
+                except (ValueError, _json.JSONDecodeError):
+                    pass
         except _urllib_err.HTTPError as exc:
             if exc.code == 401:
                 print_error("Hub rejected the API key (401 Unauthorized). Check --api-key.")
@@ -2317,6 +2238,30 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
         except _urllib_err.URLError as exc:
             print_error(f"Cannot reach Hub at {url}: {exc.reason}")
             return 1
+
+        if hub_project_id is None:
+            print_warning(
+                "Could not read project_id from the Hub's /api/v1/status response. "
+                "Falling back to --project-id."
+            )
+        elif not project_id:
+            # Auto-fill from the Hub — the most common setup case (the user
+            # doesn't know or doesn't care about the project_id; the Hub is
+            # the source of truth).
+            project_id = hub_project_id
+            print_info(f"Auto-detected Hub project_id: {project_id!r}")
+        elif project_id != hub_project_id:
+            # Mismatch — surface it loudly. Many Hub endpoints (tasks, messages,
+            # agents) filter by project_id, so a wrong value here will silently
+            # return empty results and the watchdog / MCP tools will appear
+            # broken.
+            print_warning(
+                f"--project-id={project_id!r} does not match the Hub's "
+                f"project_id ({hub_project_id!r}). The Hub will return empty "
+                "results for every query and the watchdog will never see any "
+                "messages or tasks. Using the Hub's value instead."
+            )
+            project_id = hub_project_id
 
         # Write transport.json
         AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -2380,13 +2325,15 @@ def cmd_transport_status(_args: argparse.Namespace) -> int:
             ["git", "ls-remote", "--heads", remote, branch],
             capture_output=True,
             text=True,
+            timeout=15,
         )
         if result.returncode == 0 and result.stdout.strip():
-            _sp.run(["git", "fetch", remote, branch, "--quiet"], capture_output=True)
+            _sp.run(["git", "fetch", remote, branch, "--quiet"], capture_output=True, timeout=30)
             result2 = _sp.run(
                 ["git", "ls-tree", f"{remote}/{branch}", "--name-only"],
                 capture_output=True,
                 text=True,
+                timeout=15,
             )
             files = [f for f in result2.stdout.splitlines() if f.strip()]
             msg_files = [f for f in files if "-task-for-" not in f]
@@ -2500,6 +2447,11 @@ HUB_COMPOSE_URL = (
     "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/docker-compose.yml"
 )
 HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub/.env.example"
+# Optional SHA256 sidecar URLs. Operators may publish these alongside the
+# files in hub/ to enable integrity verification. When unset (None), the
+# download proceeds without verification and a WARN is logged. (S9.)
+HUB_COMPOSE_SHA256_URL: Optional[str] = None
+HUB_ENV_SHA256_URL: Optional[str] = None
 
 
 def _hub_url(port: int = 8000) -> str:
@@ -2522,7 +2474,7 @@ def _docker_available() -> bool:
     if not shutil.which("docker"):
         return False
     # Check for docker compose (v2) or docker-compose (v1)
-    result = subprocess.run(["docker", "compose", "version"], capture_output=True)
+    result = subprocess.run(["docker", "compose", "version"], capture_output=True, timeout=10)
     if result.returncode == 0:
         return True
     # Fallback to docker-compose
@@ -2556,6 +2508,79 @@ def _fetch_setup_token(port: int = 8000) -> Optional[str]:
             return data.get("api_key")
     except Exception:
         return None
+
+
+def _download_with_sha256(
+    url: str,
+    dest: Path,
+    sha256_url: Optional[str] = None,
+    expected_sha256: Optional[str] = None,
+) -> bool:
+    """Download a file with optional SHA256 verification (S9).
+
+    Behavior:
+    - If sha256_url is None (and expected_sha256 is None), the file is
+      downloaded without verification. This is the current default.
+    - If sha256_url is set, the sidecar is downloaded, the file's SHA256
+      is computed, and they are compared. A mismatch fails loud: the
+      file is removed and False is returned.
+    - If sha256_url is set but the sidecar fetch fails (network or
+      missing file), a WARN is logged and the download proceeds
+      unverified. This lets operators adopt sidecar files
+      incrementally.
+    - expected_sha256 may be passed as a constant fallback when the
+      sidecar is unavailable. If both are provided, the sidecar wins.
+
+    Returns True on success (verified or unverified). False on
+    verification failure.
+    """
+    import hashlib
+    import urllib.error as _uerr
+    import urllib.request as _req
+
+    try:
+        _req.urlretrieve(url, dest)
+    except Exception as exc:
+        print_error(f"Failed to download {url}: {exc}")
+        return False
+
+    actual_sha = hashlib.sha256(dest.read_bytes()).hexdigest()
+    expected: Optional[str] = None
+
+    if sha256_url:
+        try:
+            with _req.urlopen(sha256_url, timeout=10) as resp:
+                expected = resp.read().decode("utf-8", errors="replace").strip().split()[0]
+        except (_uerr.HTTPError, _uerr.URLError, OSError):
+            print_warning(
+                f"Could not fetch SHA256 sidecar {sha256_url}; " f"proceeding without verification."
+            )
+        except Exception as exc:
+            print_warning(f"Unexpected error fetching SHA256 sidecar: {exc}")
+
+    if expected is None and expected_sha256:
+        expected = expected_sha256
+
+    if expected is None:
+        # No verification possible — log and accept
+        print_warning(
+            f"No SHA256 sidecar available for {url}; "
+            f"downloaded file is not verified. (sha256={actual_sha})"
+        )
+        return True
+
+    if actual_sha != expected.lower():
+        print_error(
+            f"SHA256 mismatch for {url}:\n"
+            f"  expected: {expected}\n"
+            f"  actual:   {actual_sha}\n"
+            f"Removing untrusted file {dest}."
+        )
+        with contextlib.suppress(OSError):
+            dest.unlink()
+        return False
+
+    return True
 
 
 def cmd_hub_start(args: argparse.Namespace) -> int:
@@ -2601,6 +2626,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
             capture_output=True,
             text=True,
             env=env,
+            timeout=600,
         )
         if result.returncode != 0:
             print_error(f"Failed to start Hub: {result.stderr}")
@@ -2612,20 +2638,21 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         compose_file = HUB_DIR / "docker-compose.yml"
         if not compose_file.exists():
             print_info("Downloading Hub configuration...")
-            try:
-                _req.urlretrieve(HUB_COMPOSE_URL, compose_file)
-            except Exception as exc:
-                print_error(f"Failed to download docker-compose.yml: {exc}")
+            if not _download_with_sha256(
+                url=HUB_COMPOSE_URL,
+                dest=compose_file,
+                sha256_url=HUB_COMPOSE_SHA256_URL,
+            ):
                 return 1
 
         # Download .env if not present
         env_file = HUB_DIR / ".env"
-        if not env_file.exists():
-            try:
-                _req.urlretrieve(HUB_ENV_URL, env_file)
-            except Exception as exc:
-                print_error(f"Failed to download .env: {exc}")
-                return 1
+        if not env_file.exists() and not _download_with_sha256(
+            url=HUB_ENV_URL,
+            dest=env_file,
+            sha256_url=HUB_ENV_SHA256_URL,
+        ):
+            return 1
 
         # Update .env with custom port if needed
         if port != 8000:
@@ -2647,6 +2674,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
             cwd=HUB_DIR,
             capture_output=True,
             text=True,
+            timeout=120,
         )
         if result.returncode != 0:
             print_error(f"Failed to start Hub: {result.stderr}")
@@ -2708,6 +2736,7 @@ def cmd_hub_stop(args: argparse.Namespace) -> int:
         capture_output=True,
         text=True,
         env=env,
+        timeout=60,
     )
     if result.returncode != 0:
         print_error(f"Failed to stop Hub: {result.stderr}")
@@ -2824,7 +2853,7 @@ def cmd_activate(_args: argparse.Namespace) -> int:
         sync_args = argparse.Namespace(force=False)
         cmd_sync_context(sync_args)
     except Exception as e:
-        print(f"[WARNING] Context sync failed: {e}")
+        print_warning(f"Context sync failed: {e}")
         print("          Run 'agentweave sync-context' manually after fixing the issue.")
         _emit_nonfatal_diagnostic(
             "context_sync",
@@ -2940,7 +2969,15 @@ def _build_opencode_launch_command(
 
 
 def _activate_transport(config: "AgentWeaveConfig") -> int:
-    """Configure transport by fetching API key from Hub if needed."""
+    """Configure transport by fetching API key from Hub if needed.
+
+    Always reads the Hub's actual project_id from `/api/v1/status` (after
+    fetching the bootstrap API key) so multi-project setups don't end up
+    with a hardcoded `proj-default` in transport.json. The Hub uses the
+    API key for project filtering, so a wrong project_id here is silently
+    masked on reads but causes the local-vs-Hub ID mismatch on writes
+    that drove the codex MCP-fallback bug.
+    """
     import json as _json
 
     from .utils import load_json, save_json
@@ -2950,7 +2987,9 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
     # Check if transport is already configured with same URL
     existing = load_json(TRANSPORT_CONFIG_FILE)
     if existing and existing.get("type") == "http" and existing.get("url") == hub_url:
-        # Re-fetch setup token to detect if Hub was restarted with a new API key
+        # Re-fetch setup token to detect if Hub was restarted with a new API key.
+        # If the project_id drifts (Hub re-bootstrapped with a different
+        # AW_BOOTSTRAP_PROJECT_ID), refresh it from the live status response.
         setup_token_url = f"{hub_url.rstrip('/')}/api/v1/setup/token"
         try:
             with urllib.request.urlopen(setup_token_url, timeout=5) as resp:
@@ -2958,10 +2997,20 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
                 fresh_key = data.get("api_key")
                 if fresh_key and fresh_key != existing.get("api_key"):
                     existing["api_key"] = fresh_key
-                    save_json(TRANSPORT_CONFIG_FILE, existing)
                     print("[TRANSPORT] API key refreshed (Hub restarted)")
                 else:
                     print("[TRANSPORT] Already configured")
+                # Re-read the Hub's project_id in case it changed.
+                hub_project_id = _fetch_hub_project_id(
+                    hub_url, fresh_key or existing.get("api_key", "")
+                )
+                if hub_project_id and hub_project_id != existing.get("project_id"):
+                    existing["project_id"] = hub_project_id
+                    print(
+                        f"[TRANSPORT] project_id refreshed to {hub_project_id!r} "
+                        "(Hub re-bootstrapped)"
+                    )
+                save_json(TRANSPORT_CONFIG_FILE, existing)
         except Exception:
             print("[TRANSPORT] Already configured")
         return 0
@@ -2973,6 +3022,18 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
             data = _json.loads(resp.read())
             api_key = data.get("api_key")
             if api_key:
+                # Discover the Hub's actual project_id so multi-project
+                # setups (one Hub, many CLI projects, one per env) don't
+                # accidentally pin every activate flow to "proj-default".
+                hub_project_id = _fetch_hub_project_id(hub_url, api_key)
+                if not hub_project_id:
+                    print_warning(
+                        "Could not read project_id from the Hub's "
+                        "/api/v1/status response. Falling back to "
+                        "'proj-default' — multi-project setups may break."
+                    )
+                    hub_project_id = "proj-default"
+
                 # Save transport config
                 TRANSPORT_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
                 save_json(
@@ -2981,10 +3042,10 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
                         "type": "http",
                         "url": hub_url,
                         "api_key": api_key,
-                        "project_id": "proj-default",
+                        "project_id": hub_project_id,
                     },
                 )
-                print(f"[TRANSPORT] Connected to Hub at {hub_url}")
+                print(f"[TRANSPORT] Connected to Hub at {hub_url} (project {hub_project_id!r})")
                 return 0
     except Exception as exc:
         print_warning(f"Could not auto-configure transport: {exc}")
@@ -2998,6 +3059,30 @@ def _activate_transport(config: "AgentWeaveConfig") -> int:
         return 0
 
     return 0
+
+
+def _fetch_hub_project_id(hub_url: str, api_key: str) -> Optional[str]:
+    """Return the Hub's bootstrapped project_id, or None on failure.
+
+    Used by `agentweave activate` (and re-used by `cmd_transport_setup`)
+    to keep the local `transport.json` in sync with the Hub. The Hub
+    itself is the source of truth — multi-project deployments create
+    one project per env, and the bootstrap name lives only on the Hub.
+    """
+    import json as _json
+    import urllib.request
+
+    status_url = f"{hub_url.rstrip('/')}/api/v1/status"
+    req = urllib.request.Request(status_url)
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            payload = _json.loads(resp.read().decode())
+            pid = payload.get("project_id")
+            return str(pid) if pid else None
+    except Exception:
+        return None
 
 
 def _activate_agents(config: "AgentWeaveConfig") -> int:
@@ -3655,8 +3740,9 @@ def cmd_checkpoint(args: argparse.Namespace) -> int:
         or "| (none) | | |"
     )
 
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    dt_display = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_utc = datetime.now(timezone.utc)
+    ts = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    dt_display = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     filename = f"{agent}-{ts}.md"
     filepath = checkpoints_dir / filename
 
@@ -4266,7 +4352,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"Command: {' '.join(cmd)}")
     print()
 
-    result = _subprocess.run(cmd, env=proc_env)
+    result = _subprocess.run(cmd, env=proc_env, timeout=600)
     return result.returncode
 
 

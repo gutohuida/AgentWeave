@@ -48,3 +48,62 @@ async def test_mark_message_read(app, auth_headers):
     resp3 = await app.get("/api/v1/messages?agent=kimi", headers=auth_headers)
     ids = [m["id"] for m in resp3.json()]
     assert msg_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_create_message_rejects_client_supplied_id(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/messages",
+        json={
+            "from": "claude",
+            "to": "kimi",
+            "content": "Hi",
+            "id": "msg-custom-id",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_message_rejects_client_supplied_timestamp(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/messages",
+        json={
+            "from": "claude",
+            "to": "kimi",
+            "content": "Hi",
+            "timestamp": "2026-01-01T00:00:00+00:00",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_message_rejects_overlong_subject(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/messages",
+        json={
+            "from": "claude",
+            "to": "kimi",
+            "subject": "x" * 257,
+            "content": "Hi",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_message_rejects_overlong_content(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/messages",
+        json={
+            "from": "claude",
+            "to": "kimi",
+            "content": "x" * 10001,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422

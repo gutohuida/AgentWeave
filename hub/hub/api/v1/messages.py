@@ -25,18 +25,15 @@ async def create_message(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
-    msg_id = body.id or f"msg-{short_id()}"
     msg = Message(
-        id=msg_id,
+        id=f"msg-{short_id()}",
         project_id=project_id,
         sender=body.sender,
         recipient=body.recipient,
         subject=body.subject,
         content=body.content,
         type=body.type,
-        timestamp=(
-            datetime.fromisoformat(body.timestamp) if body.timestamp else datetime.now(timezone.utc)
-        ),
+        timestamp=datetime.now(timezone.utc),
         task_id=body.task_id,
     )
     session.add(msg)

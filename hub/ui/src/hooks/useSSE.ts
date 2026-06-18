@@ -28,20 +28,71 @@ const SSE_EVENT_TYPES = [
 const MAX_BUFFERED = 200
 
 const listeners = new Set<SSEListener>()
-let eventSource: EventSource | null = null
+/** Subscribers notified when the SSE stream reconnects after a previous
+ * connection ended. The first connect (initial mount) does NOT fire this —
+ * only subsequent reconnects do. Used by useAgentOutput to schedule a
+ * one-shot reconciliation poll after the stream was down (M21). */
+const reconnectListeners = new Set<() => void>()
+let activeStream: { cancel: () => void } | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectedUrl = ''
 let connectedKey = ''
+let hasEverConnected = false
 const eventBuffer: SSEEvent[] = []
 
 export function getBufferedEvents(): SSEEvent[] {
   return eventBuffer.slice()
 }
 
-function handleNamedEvent(type: string, e: MessageEvent) {
+/** Subscribe to SSE stream reconnect events. The callback fires every time
+ * the underlying stream reconnects (NOT on the initial connect). Returns
+ * an unsubscribe function. */
+export function onSseReconnect(cb: () => void): () => void {
+  reconnectListeners.add(cb)
+  return () => {
+    reconnectListeners.delete(cb)
+  }
+}
+
+function fireReconnect(): void {
+  reconnectListeners.forEach((cb) => {
+    try {
+      cb()
+    } catch {
+      // Swallow listener errors so one bad subscriber doesn't break the chain.
+    }
+  })
+}
+
+export function cancelReconnect(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  if (activeStream) {
+    activeStream.cancel()
+    activeStream = null
+  }
+  connectedUrl = ''
+  connectedKey = ''
+}
+
+/**
+ * Test-only helper. Resets the module-level SSE state so unit tests are
+ * deterministic. Not intended for production use.
+ */
+export function __resetSSEStateForTest(): void {
+  cancelReconnect()
+  listeners.clear()
+  reconnectListeners.clear()
+  hasEverConnected = false
+  eventBuffer.length = 0
+}
+
+function dispatchEvent(type: string, data: unknown): void {
   try {
-    const data = JSON.parse(e.data) as Record<string, unknown>
-    const severity = typeof data?.severity === 'string' ? data.severity : undefined
+    const obj = (data ?? {}) as Record<string, unknown>
+    const severity = typeof obj?.severity === 'string' ? obj.severity : undefined
     const sseEvent: SSEEvent = { type, data, timestamp: new Date().toISOString(), severity }
     eventBuffer.push(sseEvent)
     if (eventBuffer.length > MAX_BUFFERED) eventBuffer.shift()
@@ -51,41 +102,125 @@ function handleNamedEvent(type: string, e: MessageEvent) {
   }
 }
 
-function connect(hubUrl: string, apiKey: string) {
+/**
+ * Parse a chunk of SSE bytes into events. SSE format:
+ *   event: <type>\n
+ *   data: <json>\n
+ *   \n
+ * We accumulate a partial line buffer for the rare case a chunk splits a frame.
+ */
+function feedSSEChunk(buffer: string, chunk: string): { remaining: string; events: Array<{ type: string; data: string }> } {
+  const combined = buffer + chunk
+  const events: Array<{ type: string; data: string }> = []
+  const frames = combined.split(/\r?\n\r?\n/)
+  // All but the last entry are complete frames
+  const remaining = frames.pop() ?? ''
+  for (const frame of frames) {
+    let eventType = 'message'
+    const dataLines: string[] = []
+    for (const line of frame.split(/\r?\n/)) {
+      if (line.startsWith('event:')) {
+        eventType = line.slice(6).trim()
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trim())
+      }
+    }
+    if (dataLines.length > 0) {
+      events.push({ type: eventType, data: dataLines.join('\n') })
+    }
+  }
+  return { remaining, events }
+}
+
+function scheduleReconnect(hubUrl: string, apiKey: string): void {
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = setTimeout(() => connect(hubUrl, apiKey), 3000)
+}
+
+async function connect(hubUrl: string, apiKey: string): Promise<void> {
   // No-op if already connected with the same config
-  if (
-    connectedUrl === hubUrl &&
-    connectedKey === apiKey &&
-    eventSource !== null &&
-    eventSource.readyState !== EventSource.CLOSED
-  ) {
+  if (connectedUrl === hubUrl && connectedKey === apiKey && activeStream !== null) {
     return
   }
   connectedUrl = hubUrl
   connectedKey = apiKey
-  if (eventSource) {
-    eventSource.close()
-    eventSource = null
-  }
-  const url = `${hubUrl}/api/v1/events?token=${encodeURIComponent(apiKey)}`
-  eventSource = new EventSource(url)
-
-  // Handle the initial "connected" confirmation (unnamed event)
-  eventSource.onmessage = () => {
-    // keepalive / connected — no-op
+  if (activeStream) {
+    activeStream.cancel()
+    activeStream = null
   }
 
-  // Subscribe to each named event type the server emits
-  for (const type of SSE_EVENT_TYPES) {
-    eventSource.addEventListener(type, (e) => handleNamedEvent(type, e as MessageEvent))
+  const url = `${hubUrl}/api/v1/events`
+  let response: Response
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+  } catch {
+    scheduleReconnect(hubUrl, apiKey)
+    return
+  }
+  if (!response.ok || !response.body) {
+    scheduleReconnect(hubUrl, apiKey)
+    return
   }
 
-  eventSource.onerror = () => {
-    eventSource?.close()
-    eventSource = null
-    if (reconnectTimer) clearTimeout(reconnectTimer)
-    reconnectTimer = setTimeout(() => connect(hubUrl, apiKey), 3000)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let cancelled = false
+
+  const cancel = () => {
+    cancelled = true
+    reader.cancel().catch(() => {})
   }
+  activeStream = { cancel }
+
+  // Fire the reconnect hook for any connect after the first one. The first
+  // connect is NOT a reconnect — it's the initial subscription. Subscribers
+  // (e.g. useAgentOutput) use this to schedule a one-shot reconciliation
+  // poll to catch up on events that arrived while the stream was down.
+  if (hasEverConnected) {
+    fireReconnect()
+  }
+  hasEverConnected = true
+
+  ;(async () => {
+    try {
+      while (!cancelled) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const { remaining, events } = feedSSEChunk(buffer, '')
+        buffer = remaining
+        for (const evt of events) {
+          // Only dispatch known event types and the unnamed "message" / "connected" keepalive
+          if (evt.type === 'message') {
+            // keepalive / connected — ignore
+            continue
+          }
+          if (SSE_EVENT_TYPES.includes(evt.type)) {
+            let parsed: unknown = evt.data
+            try {
+              parsed = JSON.parse(evt.data)
+            } catch {
+              // keep raw string
+            }
+            dispatchEvent(evt.type, parsed)
+          }
+        }
+      }
+    } catch {
+      // stream errored
+    } finally {
+      if (!cancelled) {
+        // Stream ended unexpectedly → schedule reconnect
+        if (activeStream && activeStream.cancel === cancel) {
+          activeStream = null
+        }
+        scheduleReconnect(hubUrl, apiKey)
+      }
+    }
+  })()
 }
 
 export function useSSE(onEvent?: SSEListener) {
@@ -100,7 +235,23 @@ export function useSSE(onEvent?: SSEListener) {
   useEffect(() => {
     if (!isConfigured) return
     connect(hubUrl, apiKey)
+    return () => {
+      // Cancel any in-flight stream on unmount; reconnect timer is preserved
+      // for an immediate remount with the same config.
+      if (activeStream) {
+        activeStream.cancel()
+        activeStream = null
+      }
+    }
   }, [hubUrl, apiKey, isConfigured])
+
+  // When the user clears their config (e.g. logout), tear down any pending
+  // reconnect timer so we don't keep retrying in the background.
+  useEffect(() => {
+    if (!isConfigured) {
+      cancelReconnect()
+    }
+  }, [isConfigured])
 
   useEffect(() => {
     const invalidateHandler: SSEListener = (event) => {

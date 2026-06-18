@@ -1,9 +1,9 @@
 """FastAPI application factory + lifespan."""
 
-import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +16,53 @@ from .db.engine import init_db
 from .scheduler import init_scheduler, shutdown_scheduler
 
 UI_DIST = Path(__file__).parent / "static" / "ui"
+
+
+class ContentSizeLimitMiddleware:
+    """ASGI middleware that rejects request bodies larger than a configured limit.
+
+    Defaults to 1 MB. Enforcing the cap at the middleware layer prevents giant
+    payloads from reaching FastAPI validation or route handlers.
+    """
+
+    def __init__(self, app, max_size: int = 1_048_576):
+        self.app = app
+        self.max_size = max_size
+
+    async def __call__(self, scope: Dict[str, Any], receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET")
+        if method in ("GET", "HEAD", "OPTIONS", "TRACE"):
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                length = int(content_length.decode())
+            except (ValueError, UnicodeDecodeError):
+                length = 0
+            if length > self.max_size:
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 413,
+                        "headers": [[b"content-type", b"application/json"]],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": b'{"detail":"Request body too large"}',
+                    }
+                )
+                return
+
+        await self.app(scope, receive, send)
 
 
 @asynccontextmanager
@@ -49,6 +96,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(
+        ContentSizeLimitMiddleware,
+        max_size=settings.aw_max_body_size,
+    )
+
     @app.get("/health", include_in_schema=False)
     async def health():
         return JSONResponse({"status": "ok"})
@@ -67,36 +119,9 @@ def create_app() -> FastAPI:
         async def serve_spa(full_path: str):
             if full_path.startswith("api/") or full_path == "health":
                 raise HTTPException(404)
-
-            # Inject runtime config so the dashboard connects automatically.
-            # The Hub is serving the dashboard, so it already knows its own key.
-            html = (UI_DIST / "index.html").read_text()
-
-            # Fetch the live API key from DB — it may be auto-generated and
-            # not present in settings.aw_bootstrap_api_key (env file)
-            from sqlalchemy import select as _select
-
-            from .db.engine import async_session_factory as _sf
-            from .db.models import ApiKey as _ApiKey
-
-            api_key_value = settings.aw_bootstrap_api_key
-            project_id_value = settings.aw_bootstrap_project_id
-            try:
-                async with _sf() as _db:
-                    _res = await _db.execute(
-                        _select(_ApiKey).where(_ApiKey.revoked == False).limit(1)  # noqa: E712
-                    )
-                    _row = _res.scalar_one_or_none()
-                    if _row:
-                        api_key_value = _row.id
-                        project_id_value = _row.project_id
-            except Exception:
-                pass  # fall back to settings values
-
-            config = json.dumps({"apiKey": api_key_value, "projectId": project_id_value})
-            script = f"<script>window.__AW_CONFIG__={config};</script>"
-            html = html.replace("</head>", f"{script}</head>")
-            return HTMLResponse(html)
+            if not (UI_DIST / "index.html").exists():
+                raise HTTPException(404, "UI not built")
+            return HTMLResponse((UI_DIST / "index.html").read_text())
 
     return app
 

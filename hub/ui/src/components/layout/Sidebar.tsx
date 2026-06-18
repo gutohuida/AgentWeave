@@ -1,8 +1,8 @@
-import { Icon } from '@/components/common/Icon'
 import { useQuestions } from '@/api/questions'
 import { useMessages } from '@/api/messages'
 import { useAgents } from '@/api/agents'
 import { useSessionSync } from '@/api/status'
+import { SidebarItem, type SidebarBadge } from './SidebarItem'
 
 type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
 
@@ -45,7 +45,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
   const activeAgents = agents?.filter((a) => a.status === 'active').length ?? 0
   const qualityActive = !!(sessionSync?.data?.quality)
 
-  function getBadge(id: Page): { count: number; danger: boolean } | null {
+  function getBadge(id: Page): SidebarBadge | null {
     if (id === 'messages'  && unread > 0)        return { count: unread, danger: false }
     if (id === 'questions' && unanswered > 0)    return { count: unanswered, danger: true }
     if (id === 'agents'    && activeAgents > 0)  return { count: activeAgents, danger: false }
@@ -62,37 +62,6 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
     padding: '8px 8px 4px',
     marginTop: 8,
   }
-
-  const navItemStyle = (active: boolean): React.CSSProperties => ({
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    width: '100%',
-    padding: '6px 8px',
-    borderRadius: 'var(--radius-sm)',
-    fontSize: 13,
-    fontWeight: 500,
-    color: active ? 'var(--text)' : 'var(--text-2)',
-    background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
-    transition: 'background 0.15s, color 0.15s',
-    cursor: 'pointer',
-    border: 'none',
-    textAlign: 'left',
-  })
-
-  const navItemBefore = (active: boolean): React.CSSProperties => ({
-    content: '""',
-    position: 'absolute',
-    left: 0,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: 2,
-    height: active ? 16 : 0,
-    background: 'var(--text)',
-    borderRadius: '0 2px 2px 0',
-    transition: 'height 0.15s',
-  })
 
   // Group nav items by section
   const topItems = NAV_ITEMS.filter((i) => !i.section)
@@ -121,49 +90,17 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
 
       {/* Top-level nav items */}
       <nav className="flex flex-col">
-        {topItems.map(({ id, label, icon }) => {
-          const active = activePage === id
-          const badge = getBadge(id)
-          return (
-            <button
-              key={id}
-              onClick={() => onNavigate(id)}
-              className="group"
-              style={navItemStyle(active)}
-              onMouseEnter={(e) => {
-                if (!active) {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                  e.currentTarget.style.color = 'var(--text)'
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!active) {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = 'var(--text-2)'
-                }
-              }}
-            >
-              <span style={navItemBefore(active)} />
-              <Icon name={icon} size={18} />
-              <span className="flex-1">{label}</span>
-              {badge && (
-                <span
-                  className="shrink-0"
-                  style={{
-                    fontSize: 10,
-                    borderRadius: 9999,
-                    padding: '1px 5px',
-                    background: badge.danger ? 'var(--red)' : 'var(--surface-3)',
-                    color: badge.danger ? '#fff' : 'var(--text-2)',
-                    fontWeight: 600,
-                  }}
-                >
-                  {badge.count}
-                </span>
-              )}
-            </button>
-          )
-        })}
+        {topItems.map(({ id, label, icon }) => (
+          <SidebarItem
+            key={id}
+            label={label}
+            icon={icon}
+            active={activePage === id}
+            badge={getBadge(id)}
+            onClick={() => onNavigate(id)}
+            testId={`nav-${id}`}
+          />
+        ))}
       </nav>
 
       {/* Sectioned nav items */}
@@ -171,49 +108,17 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
         <div key={section}>
           <div style={sectionLabelStyle}>{section}</div>
           <nav className="flex flex-col">
-            {items.map(({ id, label, icon }) => {
-              const active = activePage === id
-              const badge = getBadge(id)
-              return (
-                <button
-                  key={id}
-                  onClick={() => onNavigate(id)}
-                  className="group"
-                  style={navItemStyle(active)}
-                  onMouseEnter={(e) => {
-                    if (!active) {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                      e.currentTarget.style.color = 'var(--text)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) {
-                      e.currentTarget.style.background = 'transparent'
-                      e.currentTarget.style.color = 'var(--text-2)'
-                    }
-                  }}
-                >
-                  <span style={navItemBefore(active)} />
-                  <Icon name={icon} size={18} />
-                  <span className="flex-1">{label}</span>
-                  {badge && (
-                    <span
-                      className="shrink-0"
-                      style={{
-                        fontSize: 10,
-                        borderRadius: 9999,
-                        padding: '1px 5px',
-                        background: badge.danger ? 'var(--red)' : 'var(--surface-3)',
-                        color: badge.danger ? '#fff' : 'var(--text-2)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {badge.count}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
+            {items.map(({ id, label, icon }) => (
+              <SidebarItem
+                key={id}
+                label={label}
+                icon={icon}
+                active={activePage === id}
+                badge={getBadge(id)}
+                onClick={() => onNavigate(id)}
+                testId={`nav-${id}`}
+              />
+            ))}
           </nav>
         </div>
       ))}
@@ -225,22 +130,13 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
       <div
         style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}
       >
-        <button
+        <SidebarItem
+          label="Settings"
+          icon="settings"
+          active={false}
           onClick={onOpenSetup}
-          className="group"
-          style={navItemStyle(false)}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-            e.currentTarget.style.color = 'var(--text)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent'
-            e.currentTarget.style.color = 'var(--text-2)'
-          }}
-        >
-          <Icon name="settings" size={18} />
-          <span>Settings</span>
-        </button>
+          testId="nav-settings"
+        />
       </div>
     </div>
   )

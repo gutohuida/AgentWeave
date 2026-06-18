@@ -89,7 +89,7 @@ async def create_job(
             detail=f"Invalid cron expression: {e}",
         )
 
-    job_id = body.id or f"job-{short_id()}"
+    job_id = f"job-{short_id()}"
 
     # Compute next run
     next_run = None

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentweave-ai"
-version = "0.37.1"
+version = "0.38.0"
 description = "Multi-agent AI collaboration framework (Claude, Kimi, Gemini, Codex, and more)"
 readme = "README.md"
 license = {text = "MIT"}
@@ -71,7 +71,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
-ignore = ["E501"]
+ignore = ["E501", "UP045"]
 
 [tool.mypy]
 python_version = "3.8"

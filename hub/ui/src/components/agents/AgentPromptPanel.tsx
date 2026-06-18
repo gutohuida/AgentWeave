@@ -4,12 +4,11 @@ import { useAgentChatHistory, ChatMessage } from '@/api/agentChat'
 import { useAgentOutput, useAgentSessions, AgentSummary } from '@/api/agents'
 import { AgentPromptMessage } from './AgentPromptMessage'
 import { Icon } from '@/components/common/Icon'
+import { NEW_SESSION_ID } from '@/lib/constants'
 
 interface AgentPromptPanelProps {
   agent: AgentSummary
 }
-
-const NEW_SESSION_ID = '__new__'
 
 export function AgentPromptPanel({ agent }: AgentPromptPanelProps) {
   const { apiKey } = useConfigStore()
