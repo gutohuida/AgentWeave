@@ -14,15 +14,13 @@ process that emits an event.
                             AW_LOG_FILE env vars.
 """
 
+import contextlib
 import json
 import logging
 import logging.handlers
 
-import pytest
-
 from agentweave import logging_handlers
 from agentweave.constants import LOGS_DIR
-
 
 # ---------------------------------------------------------------------------
 # JSONRotatingFileHandler
@@ -208,10 +206,8 @@ def test_configure_logging_honors_aw_log_level(monkeypatch, tmp_path):
         assert dev_handlers[0].level == logging.DEBUG
     finally:
         for h in list(root.handlers):
-            try:
+            with contextlib.suppress(Exception):
                 h.close()
-            except Exception:
-                pass
         root.handlers = saved
 
 
@@ -225,13 +221,9 @@ def test_configure_logging_creates_logs_dir(tmp_path, monkeypatch):
     root.handlers = []
     try:
         logging_handlers._configure_logging()
-        assert (LOGS_DIR).exists(), (
-            f"LOGS_DIR ({LOGS_DIR}) must be created by _configure_logging"
-        )
+        assert (LOGS_DIR).exists(), f"LOGS_DIR ({LOGS_DIR}) must be created by _configure_logging"
     finally:
         for h in list(root.handlers):
-            try:
+            with contextlib.suppress(Exception):
                 h.close()
-            except Exception:
-                pass
         root.handlers = saved

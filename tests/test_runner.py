@@ -10,17 +10,11 @@ These are shared between cli.py (switch / run) and watchdog.py (auto-ping),
 so a regression here breaks every claude_proxy agent invocation.
 """
 
-import os
-
-import pytest
-
-from agentweave import runner
 from agentweave.runner import (
     build_claude_proxy_cmd,
     get_agent_env,
     get_missing_api_key_var,
 )
-
 
 # ---------------------------------------------------------------------------
 # Stub session
@@ -189,9 +183,7 @@ def test_build_claude_proxy_cmd_with_model():
 
 def test_build_claude_proxy_cmd_with_both_session_and_model():
     """Session + model together must not collide."""
-    cmd = build_claude_proxy_cmd(
-        "claude", "hi", session_id="sess-1", model="sonnet-4"
-    )
+    cmd = build_claude_proxy_cmd("claude", "hi", session_id="sess-1", model="sonnet-4")
     assert cmd[cmd.index("--resume") + 1] == "sess-1"
     assert cmd[cmd.index("--model") + 1] == "sonnet-4"
     assert cmd[-2:] == ["-p", "hi"]

@@ -19,12 +19,12 @@ only if both sides are updated together and round-trip cleanly.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 
 from agentweave import eventlog, logging_handlers
-from agentweave.constants import EVENTS_LOG_FILE, WATCHDOG_HEARTBEAT_FILE
+from agentweave.constants import EVENTS_LOG_FILE
 
 
 @pytest.fixture
@@ -43,13 +43,11 @@ def test_write_heartbeat_uses_tz_aware_iso(heartbeat_path):
     assert heartbeat_path.exists()
     text = heartbeat_path.read_text(encoding="utf-8").strip()
     parsed = datetime.fromisoformat(text)
-    assert parsed.tzinfo is not None, (
-        f"write_heartbeat produced a naive timestamp: {text!r}"
-    )
+    assert parsed.tzinfo is not None, f"write_heartbeat produced a naive timestamp: {text!r}"
     # And it should round-trip as UTC (offset of 0)
-    assert parsed.utcoffset().total_seconds() == 0, (
-        f"write_heartbeat produced non-UTC timestamp: {text!r}"
-    )
+    assert (
+        parsed.utcoffset().total_seconds() == 0
+    ), f"write_heartbeat produced non-UTC timestamp: {text!r}"
 
 
 def test_get_heartbeat_age_returns_positive_float_for_recent_heartbeat(
@@ -93,9 +91,13 @@ def test_logger_write_path_round_trips_through_get_events(tmp_path, monkeypatch)
     logger.setLevel(logging.INFO)
     logger.addHandler(file_handler)
     try:
-        logger.info("msg_sent", extra={"event": "msg_sent", "data": {
-            "from": "claude", "to": "kimi", "msg_id": "m-1", "subject": "hi"
-        }})
+        logger.info(
+            "msg_sent",
+            extra={
+                "event": "msg_sent",
+                "data": {"from": "claude", "to": "kimi", "msg_id": "m-1", "subject": "hi"},
+            },
+        )
         logger.flush() if hasattr(logger, "flush") else None
     finally:
         logger.removeHandler(file_handler)

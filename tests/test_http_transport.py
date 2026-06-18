@@ -394,9 +394,7 @@ class TestHttpTransportErrorClassification(unittest.TestCase):
         # Real-world shape: URLError(reason=socket.timeout("...")) — this is
         # what urlopen actually raises on a socket read timeout in Python
         # 3.10+. We pass a real socket.timeout instance as the reason.
-        mock_urlopen.side_effect = urllib.error.URLError(
-            socket.timeout("read timed out")
-        )
+        mock_urlopen.side_effect = urllib.error.URLError(socket.timeout("read timed out"))
         # First 2 attempts fail, 3rd succeeds (max_attempts=3).
         mock_urlopen.side_effect = [
             urllib.error.URLError(socket.timeout("read timed out")),
@@ -414,9 +412,7 @@ class TestHttpTransportErrorClassification(unittest.TestCase):
         'hub_unreachable', not 'hub_timeout'."""
         import urllib.error
 
-        mock_urlopen.side_effect = urllib.error.URLError(
-            "Name or service not known"
-        )
+        mock_urlopen.side_effect = urllib.error.URLError("Name or service not known")
         with self.assertRaises(HubTransportError) as ctx:
             self.transport._request("GET", "/agents")
         self.assertEqual(ctx.exception.classification, "hub_unreachable")
@@ -425,9 +421,7 @@ class TestHttpTransportErrorClassification(unittest.TestCase):
         """to_log_data() is the structured-log path used by every BaseTransport
         method when an error is swallowed. It must surface the method, error
         message, classification, and status_code (if any)."""
-        err = HubTransportError(
-            "Hub API 401: bad key", "hub_auth_failed", status_code=401
-        )
+        err = HubTransportError("Hub API 401: bad key", "hub_auth_failed", status_code=401)
         data = err.to_log_data("send_message")
         self.assertEqual(data["method"], "send_message")
         self.assertEqual(data["error"], "Hub API 401: bad key")

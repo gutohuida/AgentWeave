@@ -599,9 +599,7 @@ def test_branch_exists_on_remote_true_when_ls_remote_finds_branch(monkeypatch):
     responses = {
         "ls-remote": (0, "deadbeef\trefs/heads/agentweave/collab\n", ""),
     }
-    monkeypatch.setattr(
-        "agentweave.transport.git._run_git", _make_git_runner(responses)
-    )
+    monkeypatch.setattr("agentweave.transport.git._run_git", _make_git_runner(responses))
     assert t.branch_exists_on_remote() is True
 
 
@@ -609,9 +607,7 @@ def test_branch_exists_on_remote_false_when_ls_remote_empty(monkeypatch):
     """branch_exists_on_remote must return False when ls-remote returns nothing."""
     t = GitTransport(remote="origin", branch="agentweave/collab")
     responses = {"ls-remote": (0, "", "")}
-    monkeypatch.setattr(
-        "agentweave.transport.git._run_git", _make_git_runner(responses)
-    )
+    monkeypatch.setattr("agentweave.transport.git._run_git", _make_git_runner(responses))
     assert t.branch_exists_on_remote() is False
 
 
@@ -708,9 +704,7 @@ def test_get_pending_messages_filters_by_recipient(tmp_path, monkeypatch):
         lambda f: (
             msg_to_kimi
             if "aaaaaaaa" in f
-            else msg_to_claude
-            if "bbbbbbbb" in f
-            else msg_to_kimi_seen
+            else msg_to_claude if "bbbbbbbb" in f else msg_to_kimi_seen
         ),
     )
     # Pre-seed the seen set with m-seen-1.

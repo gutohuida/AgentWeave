@@ -147,9 +147,9 @@ def test_lock_held_blocks_other_thread_with_short_timeout(tmp_path, monkeypatch)
     t2.join(timeout=3.0)
     t1.join(timeout=3.0)
     assert t1_in_critical.is_set(), "T1 must have entered the critical section"
-    assert t2_result == [False], (
-        f"T2 should have failed to acquire (T1 held the lock), got {t2_result!r}"
-    )
+    assert t2_result == [
+        False
+    ], f"T2 should have failed to acquire (T1 held the lock), got {t2_result!r}"
 
 
 def test_concurrent_threads_exactly_one_wins(tmp_path, monkeypatch):
@@ -177,6 +177,7 @@ def test_concurrent_threads_exactly_one_wins(tmp_path, monkeypatch):
     t2.start()
     t1.join(timeout=3.0)
     t2.join(timeout=3.0)
-    assert sorted(results) == [False, True], (
-        f"exactly one of the two threads should win, got {results!r}"
-    )
+    assert sorted(results) == [
+        False,
+        True,
+    ], f"exactly one of the two threads should win, got {results!r}"
