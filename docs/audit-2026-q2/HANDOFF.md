@@ -2,7 +2,7 @@
 
 > **Living document.** Update as work progresses.
 > Created 2026-06-12 alongside the audit.
-> **Last updated:** 2026-06-18 (PR 11 verified pushed + Hub test env re-checked in this session; CLI 478+3 skipped; Hub 111+2 skipped; both blockers from prior session are RESOLVED)
+> **Last updated:** 2026-06-18 (PR 11 verified pushed + Hub test env re-checked; CLI 478+3 skipped; Hub 111+2 skipped; both blockers from prior session are RESOLVED; branch state updated to d741a31)
 
 This is the file you (or another agent) open first when picking up where a previous session left off. It has three jobs:
 
@@ -173,9 +173,10 @@ Update this block when branches change.
 
 ```
 Current branch: audit/2026-q2-hardening
-Latest commit: 9518178  (docs(audit): mark PR 11 shipped, update ready-to-copy prompt for PR 12)
-  Parent: 5cf515f  (fix(cli/watchdog): code quality sweep — print logging, Optional types, UUID length, helper splits (PR 11))
-Last test run: 2026-06-18 — CLI: 478 passed, 3 skipped. Hub: 111 passed, 2 skipped. Pushed to origin (9518178).
+Latest commit: d741a31  (docs(audit): mark PR 11 blockers resolved — pushed + Hub tests verified)
+  Parent: 9518178  (docs(audit): mark PR 11 shipped, update ready-to-copy prompt for PR 12)
+    Parent: 5cf515f  (fix(cli/watchdog): code quality sweep — print logging, Optional types, UUID length, helper splits (PR 11))
+Last test run: 2026-06-18 — CLI: 478 passed, 3 skipped. Hub: 111 passed, 2 skipped. Pushed to origin (d741a31).
 
 master:
   Latest commit: 15b5142  (docs: add deployment handoff for v0.37.1 / Hub v0.31.2)
@@ -218,7 +219,8 @@ Integration topology (linear, no merge commits):
   └─ c195ab1  fix(ui): dedup + SSE-only polling (PR 10)
   └─ 5cf515f  fix(cli/watchdog): code quality sweep (PR 11)
   └─ 3ad3279  docs(audit): mark PR 11 shipped, update ready-to-copy prompt
-  └─ 9518178  docs(audit): mark PR 11 shipped, update ready-to-copy prompt     ← HEAD
+  └─ 9518178  docs(audit): mark PR 11 shipped, update ready-to-copy prompt
+  └─ d741a31  docs(audit): mark PR 11 blockers resolved                        ← HEAD
 ```
 
 All commit SHAs above the opencode commit were rewritten by the rebase (their
