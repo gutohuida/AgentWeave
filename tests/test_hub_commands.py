@@ -91,8 +91,11 @@ class TestHubStartCommand:
 
     def test_hub_start_no_docker(self, capsys):
         """Test that hub start fails gracefully when Docker is not available."""
+        args = MagicMock()
+        args.native = False
+        args.no_detach = False
         with patch("agentweave.cli._docker_available", return_value=False):
-            result = cmd_hub_start(MagicMock())
+            result = cmd_hub_start(args)
             assert result == 1
             captured = capsys.readouterr()
             assert "Docker is not available" in captured.out
@@ -104,9 +107,12 @@ class TestHubStartCommand:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=None)
 
+        args = MagicMock()
+        args.native = False
+        args.no_detach = False
         with patch("agentweave.cli._docker_available", return_value=True):
             with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
-                result = cmd_hub_start(MagicMock())
+                result = cmd_hub_start(args)
                 assert result == 0
                 captured = capsys.readouterr()
                 assert "already running" in captured.out

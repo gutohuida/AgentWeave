@@ -2858,12 +2858,265 @@ def _download_with_sha256(
     return True
 
 
-def cmd_hub_start(args: argparse.Namespace) -> int:
-    """Start the AgentWeave Hub Docker container."""
+def _hub_pid_file() -> Path:
+    """Return the path to the native Hub PID file."""
+    return HUB_DIR / "hub.pid"
+
+
+def _hub_pid_running(port: Optional[int] = None) -> Optional[int]:
+    """Return the PID from hub.pid if the process is alive (and port matches), else None.
+
+    If port is given, only returns the PID if the native process was started on that port.
+    Removes a stale PID file if the process is no longer running.
+    """
+    pid_file = _hub_pid_file()
+    if not pid_file.exists():
+        return None
+    try:
+        content = pid_file.read_text().strip().splitlines()
+        pid = int(content[0])
+        file_port = int(content[1]) if len(content) > 1 else None
+    except (ValueError, OSError, IndexError):
+        with contextlib.suppress(OSError):
+            pid_file.unlink()
+        return None
+
+    # If a specific port was requested, only match if it's the same port
+    if port is not None and file_port is not None and file_port != port:
+        return None
+
+    # Check if process is alive (cross-platform)
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if handle == 0:
+                raise OSError("no such process")
+            kernel32.CloseHandle(handle)
+        else:
+            os.kill(pid, 0)
+        return pid
+    except (ProcessLookupError, OSError):
+        with contextlib.suppress(OSError):
+            pid_file.unlink()
+        return None
+
+
+def _hub_native_scaffold(data_dir: Path) -> tuple:
+    """Scaffold ~/.agentweave/hub/ for native mode.
+
+    Creates data dir and .env (with generated API key) if they don't exist.
+    Returns (env_path, api_key, is_first_run).
+    """
+    import secrets as _secrets
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    env_path = HUB_DIR / ".env"
+    is_first_run = not env_path.exists()
+    api_key = None
+
+    if is_first_run:
+        api_key = f"aw_live_{_secrets.token_hex(16)}"
+        db_path = data_dir / "agentweave.db"
+        # Use forward slashes for the SQLite URL (required on Windows)
+        db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
+        env_content = (
+            f"DATABASE_URL={db_url}\n"
+            f"AW_BOOTSTRAP_API_KEY={api_key}\n"
+            f"AW_BOOTSTRAP_PROJECT_ID=proj-default\n"
+            f"AW_BOOTSTRAP_PROJECT_NAME=Default Project\n"
+            f"AW_TICKET_SECRET={_secrets.token_hex(32)}\n"
+        )
+        env_path.write_text(env_content, encoding="utf-8")
+
+    return env_path, api_key, is_first_run
+
+
+def _hub_run_migrations(hub_pkg_dir: Path) -> bool:
+    """Run Alembic migrations using the installed hub package.
+
+    Expects DATABASE_URL to already be set in os.environ before calling.
+    """
+    try:
+        from alembic import command as _alembic_cmd
+        from alembic.config import Config as _AlembicConfig
+    except ImportError:
+        print_error("alembic is not installed. Run: pip install agentweave-hub")
+        return False
+
+    migrations_dir = hub_pkg_dir / "migrations"
+    if not migrations_dir.exists():
+        print_error(
+            f"Migrations not found at {migrations_dir}. "
+            "Is agentweave-hub installed from a released wheel?"
+        )
+        return False
+
+    try:
+        cfg = _AlembicConfig()
+        cfg.set_main_option("script_location", str(migrations_dir))
+        # hub.config.settings reads DATABASE_URL from os.environ at import time;
+        # we set it before importing hub.main so this is already correct.
+        _alembic_cmd.upgrade(cfg, "head")
+        return True
+    except Exception as exc:
+        print_error(f"Migration failed: {exc}")
+        return False
+
+
+def _hub_load_env_into(env: dict, env_path: Path) -> None:
+    """Load KEY=VALUE lines from env_path into env dict (setdefault, no override)."""
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env.setdefault(k.strip(), v.strip())
+    except OSError:
+        pass
+
+
+def _hub_native_start(port: int, detach: bool = True) -> int:
+    """Start the Hub natively using uvicorn (no Docker).
+
+    Handles scaffolding, migrations, and process management.
+    DATABASE_URL is set in os.environ BEFORE importing hub modules so that
+    hub.config.settings picks up the correct absolute path at import time.
+    """
+    import importlib.util as _imp_util
     import subprocess as _sp
     import urllib.request as _req
 
+    # 1. Check hub.main is available WITHOUT importing it yet
+    if _imp_util.find_spec("hub.main") is None:
+        print_error("agentweave-hub is not installed.")
+        print_info("Install it with: pip install agentweave-hub")
+        return 1
+
+    # 2. Check if Hub is already running
+    health_url = _hub_health_url(port)
+    try:
+        with _req.urlopen(health_url, timeout=2) as resp:
+            if resp.status == 200:
+                print_info(f"Hub is already running at {_hub_url(port)}")
+                return 0
+    except Exception:
+        pass
+
+    # 3. Clean up stale PID
+    _hub_pid_running(port=port)
+
+    # 4. Compute db_url early — before any hub imports — so DATABASE_URL is set
+    #    in os.environ before hub.config.settings is instantiated.
+    HUB_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir = HUB_DIR / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_path = data_dir / "agentweave.db"
+    db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
+
+    # Set DATABASE_URL so hub.config.settings gets the right value at import
+    _old_db_url = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = db_url
+
+    try:
+        # 5. Now safe to import hub (settings reads DATABASE_URL from env)
+        try:
+            import hub.main as _hub_main
+        except ImportError:
+            print_error("agentweave-hub is not installed.")
+            print_info("Install it with: pip install agentweave-hub")
+            return 1
+
+        hub_pkg_dir = Path(_hub_main.__file__).parent
+
+        # 6. Scaffold .env (creates it with the same db_url if first run)
+        env_path, api_key, is_first_run = _hub_native_scaffold(data_dir)
+
+        # 7. Run migrations
+        print_info("Running database migrations...")
+        if not _hub_run_migrations(hub_pkg_dir):
+            return 1
+
+        env = os.environ.copy()
+        env["AW_PORT"] = str(port)
+        _hub_load_env_into(env, env_path)
+
+        cmd = [
+            sys.executable, "-m", "uvicorn", "hub.main:app",
+            "--host", "0.0.0.0", "--port", str(port),
+        ]
+
+        if detach:
+            if sys.platform == "win32":
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                proc = _sp.Popen(
+                    cmd, env=env,
+                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+                    close_fds=True, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                )
+            else:
+                proc = _sp.Popen(
+                    cmd, env=env,
+                    start_new_session=True,
+                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                )
+
+            _hub_pid_file().write_text(f"{proc.pid}\n{port}", encoding="utf-8")
+            print_info(f"Starting Hub (native, PID {proc.pid}) on port {port}...")
+
+            if not _hub_health_check(port=port, timeout=60):
+                print_error("Hub failed to start within 60 seconds")
+                print_info(
+                    f"Check that port {port} is not in use and agentweave-hub is installed correctly."
+                )
+                with contextlib.suppress(OSError):
+                    _hub_pid_file().unlink()
+                return 1
+
+            print_success(f"Hub ready at {_hub_url(port)}")
+            if is_first_run and api_key:
+                print_info(f"API key: {api_key}")
+                print_info(f"(Saved to {HUB_DIR / '.env'})")
+        else:
+            # Foreground mode — block until Ctrl+C
+            if is_first_run and api_key:
+                print_info(f"API key: {api_key}  (saved to {HUB_DIR / '.env'})")
+            print_info(f"Starting Hub (native, foreground) on port {port} — press Ctrl+C to stop")
+            try:
+                import uvicorn  # type: ignore[import]
+
+                uvicorn.run("hub.main:app", host="0.0.0.0", port=port)
+            except ImportError:
+                print_error("uvicorn is not installed. Run: pip install agentweave-hub")
+                return 1
+            except KeyboardInterrupt:
+                print_info("Hub stopped.")
+
+        return 0
+
+    finally:
+        # Restore original DATABASE_URL
+        if _old_db_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = _old_db_url
+
+
+def cmd_hub_start(args: argparse.Namespace) -> int:
+    """Start the AgentWeave Hub."""
     port = getattr(args, "port", 8000)
+    native = getattr(args, "native", False)
+    no_detach = getattr(args, "no_detach", False)
+
+    if native:
+        return _hub_native_start(port=port, detach=not no_detach)
+
+    import subprocess as _sp
+    import urllib.request as _req
+
     local = getattr(args, "local", False)
     hub_url = _hub_url(port)
     health_url = _hub_health_url(port)
@@ -2872,6 +3125,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         print_error("Docker is not available")
         print_info("Please install Docker: https://docs.docker.com/get-docker/")
         print_info("Docker Desktop is recommended for Windows/Mac users.")
+        print_info("Alternatively, run without Docker: agentweave hub start --native")
         return 1
 
     # Check if Hub is already running on this port
@@ -2972,15 +3226,46 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
 
 
 def cmd_hub_stop(args: argparse.Namespace) -> int:
-    """Stop the AgentWeave Hub Docker container."""
+    """Stop the AgentWeave Hub (native process or Docker container)."""
     import subprocess as _sp
-    import urllib.request as _req
+    import time as _time
 
     port = getattr(args, "port", 8000)
     local = getattr(args, "local", False)
+
+    # --- Native mode: check PID file first ---
+    pid = _hub_pid_running(port=port)
+    if pid is not None:
+        print_info(f"Stopping Hub (native, PID {pid})...")
+        try:
+            if sys.platform == "win32":
+                import subprocess
+
+                _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            else:
+                os.kill(pid, 15)  # SIGTERM
+                # Wait up to 10s for graceful exit
+                for _ in range(10):
+                    _time.sleep(1)
+                    try:
+                        os.kill(pid, 0)
+                    except (ProcessLookupError, OSError):
+                        break
+                else:
+                    os.kill(pid, 9)  # SIGKILL fallback
+        except (ProcessLookupError, OSError):
+            pass
+        with contextlib.suppress(OSError):
+            _hub_pid_file().unlink()
+        print_success("Hub stopped")
+        return 0
+
+    # --- Docker mode ---
+    import urllib.request as _req
+
     health_url = _hub_health_url(port)
 
-    # Check if Hub is running
+    # Check if Hub is running at all
     try:
         with _req.urlopen(health_url, timeout=2) as resp:
             if resp.status != 200:
@@ -2997,8 +3282,13 @@ def cmd_hub_stop(args: argparse.Namespace) -> int:
             print_info("Run this command from the AgentWeave repository root.")
             return 1
     else:
-        if not HUB_DIR.exists():
-            print_error("Hub directory not found. Did you run 'agentweave hub start'?")
+        compose_file = HUB_DIR / "docker-compose.yml"
+        if not HUB_DIR.exists() or not compose_file.exists():
+            print_error(
+                f"Hub is running on port {port} but no docker-compose.yml found at {HUB_DIR}."
+            )
+            print_info("If you started it with 'docker compose' manually, stop it with:")
+            print_info("  docker compose down  (from the directory where you started it)")
             return 1
         compose_dir = HUB_DIR
 
@@ -3023,7 +3313,6 @@ def cmd_hub_stop(args: argparse.Namespace) -> int:
 
 def cmd_hub_status(args: argparse.Namespace) -> int:
     """Check the status of the AgentWeave Hub."""
-    import json as _json
     import urllib.error as _uerr
     import urllib.request as _req
 
@@ -3031,14 +3320,17 @@ def cmd_hub_status(args: argparse.Namespace) -> int:
     hub_url = _hub_url(port)
     health_url = _hub_health_url(port)
 
+    # Check native PID first
+    pid = _hub_pid_running(port=port)
+    mode_label = "native" if pid is not None else "docker"
+
     try:
         with _req.urlopen(health_url, timeout=5) as resp:
             if resp.status == 200:
-                data = _json.loads(resp.read())
-                print("[HUB] Status: running")
+                print(f"[HUB] Status: running ({mode_label})")
                 print(f"   URL:    {hub_url}")
-                if data.get("version"):
-                    print(f"   Version: {data['version']}")
+                if pid is not None:
+                    print(f"   PID:    {pid}")
                 return 0
     except _uerr.HTTPError as exc:
         print(f"[HUB] Status: error (HTTP {exc.code})")
@@ -3048,6 +3340,93 @@ def cmd_hub_status(args: argparse.Namespace) -> int:
 
     print("[HUB] Status: stopped")
     print("       Run 'agentweave hub start' to start the Hub")
+    print("       Run 'agentweave hub start --native' to start without Docker")
+    return 0
+
+
+def cmd_hub_destroy(args: argparse.Namespace) -> int:
+    """Destroy Hub data for a clean slate (data dir, optionally config too)."""
+    import shutil as _shutil
+
+    yes = getattr(args, "yes", False)
+    destroy_all = getattr(args, "all", False)
+
+    data_dir = HUB_DIR / "data"
+    env_path = HUB_DIR / ".env"
+    pid_file = _hub_pid_file()
+
+    if not data_dir.exists() and not env_path.exists() and not pid_file.exists():
+        print_info("No Hub data found. Nothing to destroy.")
+        return 0
+
+    # Describe what will be deleted
+    targets = [str(data_dir)]
+    if destroy_all:
+        targets.append(str(env_path))
+        targets.append("any log files in " + str(HUB_DIR))
+
+    print_warning("This will permanently delete the following Hub data:")
+    for t in targets:
+        print(f"  - {t}")
+    if not destroy_all:
+        print_info("(Use --all to also remove the .env config and API key)")
+
+    if not yes:
+        try:
+            answer = input("Type 'yes' to confirm: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            print_info("Destroy cancelled.")
+            return 0
+        if answer != "yes":
+            print_info("Destroy cancelled.")
+            return 0
+
+    # Stop the Hub first if running
+    pid = _hub_pid_running()
+    if pid is not None:
+        print_info(f"Stopping Hub (native, PID {pid}) before destroy...")
+        import subprocess as _sp
+        import time as _time
+
+        try:
+            if sys.platform == "win32":
+                _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            else:
+                os.kill(pid, 15)
+                for _ in range(10):
+                    _time.sleep(1)
+                    try:
+                        os.kill(pid, 0)
+                    except (ProcessLookupError, OSError):
+                        break
+                else:
+                    os.kill(pid, 9)
+        except (ProcessLookupError, OSError):
+            pass
+        with contextlib.suppress(OSError):
+            pid_file.unlink()
+
+    # Delete data directory
+    if data_dir.exists():
+        _shutil.rmtree(data_dir, ignore_errors=True)
+        print_info(f"Deleted {data_dir}")
+
+    # Always clean up PID file
+    with contextlib.suppress(OSError):
+        pid_file.unlink()
+
+    if destroy_all:
+        if env_path.exists():
+            env_path.unlink()
+            print_info(f"Deleted {env_path}")
+        # Remove any *.log files in hub dir
+        for log_file in HUB_DIR.glob("*.log"):
+            with contextlib.suppress(OSError):
+                log_file.unlink()
+                print_info(f"Deleted {log_file}")
+
+    print_success("Hub data destroyed. Run 'agentweave hub start' to start fresh.")
     return 0
 
 
@@ -5284,13 +5663,13 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Hub commands (lifecycle management)
     hub_parser = subparsers.add_parser(
         "hub",
-        help="Manage the AgentWeave Hub Docker container",
+        help="Manage the AgentWeave Hub",
     )
     hub_subparsers = hub_parser.add_subparsers(dest="hub_command")
 
     hub_start = hub_subparsers.add_parser(
         "start",
-        help="Start the Hub container (downloads config if needed)",
+        help="Start the Hub (Docker by default; use --native to run without Docker)",
     )
     hub_start.add_argument(
         "--port",
@@ -5298,6 +5677,19 @@ For more help: https://github.com/gutohuida/AgentWeave
         type=int,
         default=8000,
         help="Port to expose the Hub on (default: 8000)",
+    )
+    hub_start.add_argument(
+        "--native",
+        action="store_true",
+        default=False,
+        help="Run the Hub natively via uvicorn without Docker (requires pip install agentweave-hub)",
+    )
+    hub_start.add_argument(
+        "--no-detach",
+        action="store_true",
+        default=False,
+        dest="no_detach",
+        help="Run in the foreground instead of detaching (native mode only)",
     )
     hub_start.add_argument(
         "--local",
@@ -5308,7 +5700,7 @@ For more help: https://github.com/gutohuida/AgentWeave
 
     hub_stop = hub_subparsers.add_parser(
         "stop",
-        help="Stop the Hub container",
+        help="Stop the Hub",
     )
     hub_stop.add_argument(
         "--port",
@@ -5334,6 +5726,24 @@ For more help: https://github.com/gutohuida/AgentWeave
         type=int,
         default=8000,
         help="Port to check for Hub (default: 8000)",
+    )
+
+    hub_destroy = hub_subparsers.add_parser(
+        "destroy",
+        help="Permanently delete Hub data for a clean slate",
+    )
+    hub_destroy.add_argument(
+        "--yes",
+        action="store_true",
+        default=False,
+        help="Skip the confirmation prompt (for scripting)",
+    )
+    hub_destroy.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        dest="all",
+        help="Also delete .env (API key and config), not just the database",
     )
 
     # Hub heartbeat (http transport only)
@@ -5562,6 +5972,8 @@ def main(args: Optional[List[str]] = None) -> int:
                 return cmd_hub_stop(parsed_args)
             elif parsed_args.hub_command == "status":
                 return cmd_hub_status(parsed_args)
+            elif parsed_args.hub_command == "destroy":
+                return cmd_hub_destroy(parsed_args)
             else:
                 parser.parse_args(["hub", "--help"])
                 return 0

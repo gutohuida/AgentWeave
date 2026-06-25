@@ -32,3 +32,49 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
         twine upload dist/*
+
+  publish-hub:
+    if: startsWith(github.ref, 'refs/tags/hub-v')
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Build React UI
+      working-directory: hub/ui
+      run: |
+        npm ci
+        npm run build
+
+    - name: Copy built UI into hub package
+      run: |
+        mkdir -p hub/hub/static/ui
+        cp -r hub/ui/dist/. hub/hub/static/ui/
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build hub package
+      working-directory: hub
+      run: |
+        python -m build
+
+    - name: Publish hub to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      working-directory: hub
+      run: |
+        twine upload dist/*

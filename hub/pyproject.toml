@@ -32,7 +32,15 @@ where = ["."]
 include = ["hub*"]
 
 [tool.setuptools.package-data]
-hub = ["data/roles/*.md", "data/roles/*.json"]
+hub = [
+    "data/roles/*.md",
+    "data/roles/*.json",
+    "migrations/env.py",
+    "migrations/script.py.mako",
+    "migrations/versions/*.py",
+    "static/ui/**/*",
+    "static/ui/*",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
