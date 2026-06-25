@@ -1288,6 +1288,62 @@ class TestParseCodexStreamLine:
         assert usage is None
 
 
+class TestCopilotUsesPat:
+    """Tests for _copilot_uses_pat() — determines whether the serialization
+    lock should be skipped for concurrent copilot agent execution."""
+
+    def setup_method(self):
+        from agentweave.watchdog import _copilot_uses_pat
+
+        self._fn = _copilot_uses_pat
+
+    def test_pat_in_env_vars_and_environment(self, monkeypatch):
+        """Self-referential env_vars + matching env var → PAT detected."""
+        monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "ghp_abc123")
+        assert self._fn({"COPILOT_GITHUB_TOKEN": "COPILOT_GITHUB_TOKEN"}) is True
+
+    def test_gh_token_in_env_vars_and_environment(self, monkeypatch):
+        """GH_TOKEN variant is also recognised."""
+        monkeypatch.setenv("GH_TOKEN", "ghp_xyz")
+        assert self._fn({"GH_TOKEN": "GH_TOKEN"}) is True
+
+    def test_github_token_in_env_vars_and_environment(self, monkeypatch):
+        """GITHUB_TOKEN variant is also recognised."""
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_zzz")
+        assert self._fn({"GITHUB_TOKEN": "GITHUB_TOKEN"}) is True
+
+    def test_env_vars_key_present_but_env_not_set(self, monkeypatch):
+        """env_vars has the key but env var is unset → not PAT (fallback to OAuth)."""
+        monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        assert self._fn({"COPILOT_GITHUB_TOKEN": "COPILOT_GITHUB_TOKEN"}) is False
+
+    def test_no_env_vars_no_environment(self, monkeypatch):
+        """No config, no env var → OAuth assumed, lock should apply."""
+        monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        assert self._fn(None) is False
+
+    def test_no_env_vars_but_token_in_environment(self, monkeypatch):
+        """Token set globally in env without agent env_vars config → PAT detected."""
+        monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "ghp_global")
+        assert self._fn(None) is True
+
+    def test_empty_env_vars_dict_token_in_environment(self, monkeypatch):
+        """Empty env_vars dict, token in env → PAT detected."""
+        monkeypatch.setenv("COPILOT_GITHUB_TOKEN", "ghp_global")
+        assert self._fn({}) is True
+
+    def test_unrelated_env_vars_no_pat(self, monkeypatch):
+        """env_vars has unrelated keys and no PAT vars set → OAuth assumed."""
+        monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_TOKEN", raising=False)
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        assert self._fn({"SOME_OTHER_VAR": "SOME_OTHER_VAR"}) is False
+
+
 class TestWriteCodexContextUsage:
     """Tests for _write_codex_context_usage."""
 

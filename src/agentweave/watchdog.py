@@ -487,7 +487,7 @@ class Watchdog:
             # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
             # the minimax provider). Other runners (kimi, codex, claude, native)
             # are NOT yet enabled — see TODO at the env-resolution block.
-            if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+            if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
                 "env_vars"
             ):
                 env_vars = runner_config.get("env_vars")
@@ -929,7 +929,7 @@ class Watchdog:
             # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
             # the minimax provider). Other runners (kimi, codex, claude, native)
             # are NOT yet enabled — see TODO at the env-resolution block.
-            if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+            if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
                 "env_vars"
             ):
                 env_vars = runner_config.get("env_vars")
@@ -1746,6 +1746,31 @@ def _agent_ping_cmd(
     if runner_type == "codex_mcp":
         return [rc.get("cli", "codex"), rc.get("subcommand", "mcp-server")]
 
+    if runner_type == "copilot":
+        # Copilot CLI: non-interactive mode with JSONL output, UUID-based sessions.
+        # --output-format json → one JSON object per line (session ID in `result` event).
+        # --resume=<uuid>     → resume a specific session (= form avoids interactive picker).
+        # --allow-all-tools   → headless auto-approval (required for watchdog; --yolo adds
+        #                       --allow-all-paths and --allow-all-urls too).
+        # --no-ask-user       → prevent interactive questions that would block the watchdog.
+        cmd = ["copilot", "--output-format", "json", "--no-ask-user"]
+        session = Session.load()
+        if session:
+            model = session.get_runner_config(agent).get("model")
+            if model:
+                cmd += ["--model", model]
+            agent_cfg = session.agents.get(agent, {})
+            if agent_cfg.get("yolo"):
+                cmd += ["--yolo"]
+            else:
+                cmd += ["--allow-all-tools"]
+        else:
+            cmd += ["--allow-all-tools"]
+        if session_id:
+            cmd += [f"--resume={session_id}"]
+        cmd += ["-p", prompt]
+        return cmd
+
     # claude, claude_proxy, native — all use stream-json JSONL output
     cli = rc.get("cli") or agent  # native: use agent name as CLI
     model = None
@@ -2536,6 +2561,30 @@ def _extract_kimi_session_from_stdout(stdout_lines: List[str]) -> Optional[str]:
     return None
 
 
+def _copilot_uses_pat(env_vars: Optional[Dict[str, str]]) -> bool:
+    """Return True if the copilot agent will authenticate via a PAT, not OAuth.
+
+    PATs (COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN) are read atomically from
+    an env var and are safe for concurrent copilot processes. Native OAuth reads
+    from Windows Credential Manager, which races when multiple copilot processes
+    start simultaneously — only the first wins.
+
+    Checks both the agent's env_vars config (self-referential format where the
+    key and value are the same var name, e.g. {"COPILOT_GITHUB_TOKEN": "COPILOT_GITHUB_TOKEN"})
+    and the current process environment directly (for globally-set tokens).
+    """
+    pat_vars = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+    if env_vars:
+        for var in pat_vars:
+            if var in env_vars and os.environ.get(var):
+                return True
+    # Also check environment directly — user may have set it globally without the env: config
+    for var in pat_vars:
+        if os.environ.get(var):
+            return True
+    return False
+
+
 def _run_agent_subprocess(
     agent: str,
     cmd: list,
@@ -2564,6 +2613,32 @@ def _run_agent_subprocess(
             extra={"event": "watchdog_skip", "data": {}},
         )
         return
+
+    # Copilot agents using native OAuth share Windows Credential Manager — concurrent
+    # reads race and only the first process wins. Serialise OAuth-authenticated agents
+    # through a shared lock (60 s patience, then skip).
+    # PAT users (COPILOT_GITHUB_TOKEN / GH_TOKEN / GITHUB_TOKEN) read atomically from
+    # an env var; no race exists, so we skip the lock and allow full concurrency.
+    runner_type = _get_runner_type(agent)
+    runner_lock_name = (
+        f"spawn_runner_{runner_type}"
+        if runner_type == "copilot" and not _copilot_uses_pat(env_vars)
+        else None
+    )
+    runner_lock_held = False
+    if runner_lock_name:
+        if not acquire_lock(runner_lock_name, timeout=60):
+            msg = (
+                f"[watchdog] ⏳ {agent} queued too long waiting for another copilot agent "
+                "to finish — skipping this turn."
+            )
+            logger.warning(msg, extra={"event": "watchdog_skip", "data": {}})
+            if is_http:
+                with contextlib.suppress(Exception):
+                    transport.post_agent_output(agent, msg, session_id=known_session_id)
+            release_lock(lock_name)
+            return
+        runner_lock_held = True
 
     try:
         from .diagnostics import launch_blockers
@@ -2596,6 +2671,8 @@ def _run_agent_subprocess(
             agent, cmd, subject, transport, is_http, env_vars, prompt, known_session_id
         )
     finally:
+        if runner_lock_held and runner_lock_name:
+            release_lock(runner_lock_name)
         release_lock(lock_name)
 
 
@@ -2614,6 +2691,7 @@ def _do_run_agent_subprocess(
     is_kimi = runner_type == "kimi"
     is_opencode = runner_type == "opencode"
     is_codex = runner_type == "codex"
+    is_copilot = runner_type == "copilot"
     is_codex_mcp = runner_type == "codex_mcp"
     # Detect wire mode: --wire flag in cmd indicates JSON-RPC bidirectional mode
     is_wire_mode = is_kimi and "--wire" in cmd
@@ -2645,6 +2723,9 @@ def _do_run_agent_subprocess(
     # Mutable container so the stderr thread can read the latest session_id
     session_id_ref: List[Optional[str]] = [known_session_id]
     stale_codex_session: List[bool] = [False]
+    # Copilot auth failure flag — set by _drain_stderr when the Copilot CLI reports
+    # "No authentication information found" so the completion summary can show ❌.
+    copilot_auth_failed: List[bool] = [False]
     # Collect all stdout lines for Kimi session ID extraction (print mode only)
     kimi_stdout_lines: List[str] = []
     recent_stderr: List[str] = []
@@ -2705,6 +2786,7 @@ def _do_run_agent_subprocess(
         """Read stderr in a background thread and post each line as agent output
         and as a log event so it appears in the Hub Logs tab."""
         _error_keywords = ("Error", "Traceback", "Exception", "FAILED", "fatal")
+        _copilot_auth_phrase = "No authentication information found"
         try:
             for raw in proc.stderr:  # type: ignore[union-attr]
                 err_line = raw.rstrip("\n")
@@ -2715,6 +2797,10 @@ def _do_run_agent_subprocess(
                     continue
                 if is_codex and "Session not found for thread_id" in err_line:
                     stale_codex_session[0] = True
+
+                # Detect copilot auth failure — flag it so the summary shows ❌
+                if is_copilot and _copilot_auth_phrase in err_line:
+                    copilot_auth_failed[0] = True
 
                 # For Kimi: capture session ID from stderr resume line in real-time
                 if is_kimi and session_id_ref[0] is None:
@@ -2849,6 +2935,10 @@ def _do_run_agent_subprocess(
                 )
             elif is_opencode:
                 readable_lines, usage_data = _parse_opencode_stdout_line(line, session_id_ref)
+            elif is_copilot:
+                readable_lines, usage_data = _parse_copilot_stdout_line(
+                    line, runner_type, session_id_ref
+                )
             elif is_codex:
                 readable_lines, usage_data, stale = _parse_codex_stdout_line(
                     line, runner_type, session_id_ref
@@ -2897,8 +2987,17 @@ def _do_run_agent_subprocess(
         proc.wait()
         stderr_thread.join(timeout=5)
 
-        # Post a completion summary so we can confirm the pipeline is alive
-        summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
+        # Post a completion summary so we can confirm the pipeline is alive.
+        # Show ❌ with actionable guidance when copilot failed to authenticate.
+        if is_copilot and copilot_auth_failed[0]:
+            summary = (
+                f"[watchdog] ❌ {agent} failed — authentication error.\n"
+                "[watchdog]    Fix: set COPILOT_GITHUB_TOKEN in your .env (fine-grained PAT\n"
+                "[watchdog]    with 'Copilot Requests' permission). Native OAuth is not safe\n"
+                "[watchdog]    for concurrent headless use. Or run `copilot login` to refresh."
+            )
+        else:
+            summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
         logger.info(summary, extra={"event": "watchdog_agent_done", "data": {}})
         if is_http:
             with contextlib.suppress(Exception):
@@ -3238,6 +3337,68 @@ def _parse_codex_stdout_line(
     return readable_lines, usage_data, stale
 
 
+def _parse_copilot_stdout_line(
+    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+) -> tuple[list[str], Optional[Dict[str, Any]]]:
+    """Parse one line of GitHub Copilot CLI JSONL output (--output-format json).
+
+    Copilot emits one JSON object per line. Relevant event types:
+    - assistant.message: full agent response with content and tool requests
+    - result:            final event with sessionId, exitCode, and usage stats
+    - others:            session lifecycle, deltas, user echo — skipped
+    """
+    # Extract session ID from result event
+    if session_id_ref[0] is None:
+        extracted = _extract_jsonl_session_id(line, runner_type)
+        if extracted:
+            session_id_ref[0] = extracted
+
+    try:
+        data = json.loads(line)
+    except Exception:
+        stripped = line.strip()
+        return ([stripped] if stripped else [], None)
+
+    msg_type = data.get("type", "")
+    event_data = data.get("data", {})
+
+    # Full assistant message (streamed deltas are dropped; this is the complete version)
+    if msg_type == "assistant.message":
+        results = []
+        content = event_data.get("content", "").strip()
+        if content:
+            results.append(content)
+        # Tool request summaries
+        for req in event_data.get("toolRequests", []):
+            name = req.get("name", "?")
+            summary = req.get("intentionSummary", "")
+            if summary:
+                results.append(f"🔧 {name}: {summary}")
+            else:
+                args = req.get("arguments", {})
+                try:
+                    args_str = json.dumps(args, ensure_ascii=False)
+                    if len(args_str) > 200:
+                        args_str = args_str[:200] + "…"
+                except Exception:
+                    args_str = str(args)
+                results.append(f"🔧 {name}({args_str})")
+        return (results, None)
+
+    # Final result event — emit a brief summary
+    if msg_type == "result":
+        exit_code = data.get("exitCode", 0)
+        if exit_code != 0:
+            return ([f"[error] copilot exited with code {exit_code}"], None)
+        usage = data.get("usage", {})
+        premium = usage.get("premiumRequests", 0)
+        display = [f"[done] {premium} premium request(s)"] if premium else []
+        return (display, None)
+
+    # Ignore streaming deltas, session lifecycle, user echo, MCP status, etc.
+    return ([], None)
+
+
 def _parse_claude_stdout_line(
     line: str, runner_type: str, session_id_ref: List[Optional[str]]
 ) -> tuple[list[str], Optional[Dict[str, Any]]]:
@@ -3365,6 +3526,9 @@ def _make_ping_callback(
         sender = data.get("from", "another agent")
         runner_config = _sess.get_runner_config(recipient) if _sess else {}
         runner_type = runner_config.get("runner")
+        # Determine hub_client mode for the recipient agent
+        hub_client_mode = _sess.get_agent_hub_client(recipient) if _sess else "auto"
+
         if runner_type in ("codex", "codex_mcp"):
             content = data.get("content", "")
             prompt = "\n".join(
@@ -3382,7 +3546,14 @@ def _make_ping_callback(
             if transport is not None:
                 with contextlib.suppress(Exception):
                     transport.archive_message(msg_id)
+        elif hub_client_mode == "cli":
+            # CLI mode: agent cannot use MCP tools — instruct it to use CLI commands
+            prompt = (
+                f"You have a new AgentWeave message from {sender}. "
+                f"Run: agentweave inbox --agent {recipient} --mark-read"
+            )
         else:
+            # auto/mcp: default — agent uses MCP get_inbox() tool
             prompt = (
                 f"You have a new AgentWeave message from {sender}. "
                 f"Call get_inbox('{recipient}') to retrieve it and respond."
@@ -3406,7 +3577,7 @@ def _make_ping_callback(
             # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
             # the minimax provider). Other runners (kimi, codex, claude, native)
             # are NOT yet enabled — see TODO at the env-resolution block.
-            if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+            if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
                 "env_vars"
             ):
                 env_vars = runner_config.get("env_vars")
@@ -3552,6 +3723,7 @@ def _make_direct_trigger_callback(
 
         runner_config = _sess.get_runner_config(recipient) if _sess else {}
         runner_type = runner_config.get("runner")
+        hub_client_mode = _sess.get_agent_hub_client(recipient) if _sess else "auto"
         if runner_type in ("codex", "codex_mcp"):
             cleaned_content = re.sub(r"\[Session:\s*[^\]]+\]\n?\n?", "", content)
             cleaned_content = re.sub(r"\[NewSession\]\n?\n?", "", cleaned_content).strip()
@@ -3572,6 +3744,11 @@ def _make_direct_trigger_callback(
             if transport is not None:
                 with contextlib.suppress(Exception):
                     transport.archive_message(msg_id)
+        elif hub_client_mode == "cli":
+            prompt = (
+                f"You have a new AgentWeave message from user. "
+                f"Run: agentweave inbox --agent {recipient} --mark-read"
+            )
         else:
             prompt = (
                 f"You have a new AgentWeave message from user. "
@@ -3585,7 +3762,7 @@ def _make_direct_trigger_callback(
         # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
         # the minimax provider). Other runners (kimi, codex, claude, native)
         # are NOT yet enabled — see TODO at the env-resolution block.
-        if runner_config.get("runner") in ("claude_proxy", "opencode") and runner_config.get(
+        if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
             "env_vars"
         ):
             env_vars = runner_config.get("env_vars")
