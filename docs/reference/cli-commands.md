@@ -194,6 +194,21 @@ Creates a checkpoint file at `.agentweave/shared/checkpoints/<agent>-<timestamp>
 - Next steps for resuming
 - Blockers and open questions
 
+## Diagnostics
+
+```bash
+agentweave doctor          # check runtime readiness (session, transport, watchdog, agents, Hub)
+```
+
+The `doctor` command runs structured health checks and reports:
+- Session state (initialized, principal agent, mode)
+- Transport configuration (type, URL, connectivity)
+- Watchdog health (running, PID file)
+- Agent context files (presence and freshness)
+- Hub connectivity (API reachability if HTTP transport is active)
+
+Each check reports `ok`, `warn`, or `error` with a short description. Use this before running `agentweave activate` or when debugging connectivity issues.
+
 ## Activate
 
 ```bash

@@ -129,7 +129,7 @@ Map of agent name to agent configuration.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex`, `codex_mcp` |
+| `runner` | string | `"claude"` | How to invoke the agent: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex`, `codex_mcp`, `copilot` |
 | `model` | string | (runner default) | Model name to pass to the agent CLI when the runner supports model selection |
 | `roles` | list | `[]` | List of role IDs for this agent |
 | `env` | list | `[]` | List of environment variable names to pass to the agent |
@@ -138,6 +138,7 @@ Map of agent name to agent configuration.
 | `principal` | boolean | `false` | Mark this agent as the principal agent; at most one agent may set this |
 | `base_url` | string | unset | Custom HTTP(S) endpoint for compatible proxy runner setup |
 | `runner_options` | mapping | unset | Runner-specific options, such as `memory: false` for Codex |
+| `cli` | string | unset | Absolute path to the agent CLI binary. When set, AgentWeave uses this path instead of looking up the runner on `PATH`. Useful when multiple versions of the same binary are installed (e.g., on WSL). |
 
 **Example:**
 ```yaml
@@ -161,6 +162,11 @@ agents:
   opencode-dev:
     runner: opencode
     model: ollama/qwen2.5-coder:7b
+    cli: /usr/local/bin/opencode    # optional: pin specific binary path
+
+  copilot:
+    runner: copilot
+    yolo: true
 
   codex:
     runner: codex
@@ -184,6 +190,7 @@ agents:
 | `opencode` | OpenCode CLI (`opencode`) — supports local and cloud models |
 | `codex` | Codex CLI (`codex exec`) |
 | `codex_mcp` | Codex MCP server (`codex mcp-server`) with persistent `threadId` sessions |
+| `copilot` | GitHub Copilot CLI (`gh copilot`) — automated agent with MCP and session resumption |
 
 #### Model Selection
 
@@ -358,7 +365,7 @@ The CLI validates `agentweave.yml` on load:
 
 - YAML syntax must be valid
 - `project.mode` must be one of: `hierarchical`, `peer`, `review`
-- `agents.<name>.runner` must be one of: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex`, `codex_mcp`
+- `agents.<name>.runner` must be one of: `claude`, `kimi`, `native`, `claude_proxy`, `manual`, `opencode`, `codex`, `codex_mcp`, `copilot`
 - `agents.<name>.env` must be a list of strings (not key-value pairs)
 - at most one agent can set `principal: true`
 - `jobs.<name>.schedule` must be a valid 5-field cron expression

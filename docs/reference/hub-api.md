@@ -81,6 +81,14 @@ http://localhost:8000/api/v1
 | `GET` | `/questions/{id}` | Get question details |
 | `PATCH` | `/questions/{id}` | Update question (e.g., answer) |
 
+### Events
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/events/ticket` | Get a short-lived SSE auth ticket |
+| `GET` | `/events` | Live SSE stream (use ticket from above) |
+| `GET` | `/events/history` | Query historical events |
+
 ### Session Sync
 
 | Method | Path | Description |
@@ -149,13 +157,28 @@ Used by `agentweave activate` to auto-configure HTTP transport without manual AP
 
 The Hub exposes Server-Sent Events endpoints for real-time updates:
 
+### SSE Authentication
+
+SSE authentication uses short-lived signed tickets instead of passing API keys in the query string:
+
+```
+GET /api/v1/events/ticket   → returns { "ticket": "<short-lived-token>" }
+GET /api/v1/events?ticket=<token>
+```
+
+**Flow:**
+1. Call `GET /api/v1/events/ticket` with `Authorization: Bearer <api-key>` to obtain a ticket.
+2. Pass the ticket as a query parameter when opening the SSE stream: `GET /api/v1/events?ticket=<token>`.
+
+Non-SSE endpoints do **not** accept `?token=` query parameters — all REST calls must use the `Authorization` header.
+
 ### Live Events Stream
 
 ```
 GET /api/v1/events
 ```
 
-Connect with an `Authorization` header to receive live task, message, and log events.
+Connect using the ticket flow above to receive live task, message, and log events.
 
 ### Event History
 
@@ -164,6 +187,18 @@ GET /api/v1/events/history
 ```
 
 Query historical events with optional filters.
+
+## Request Limits
+
+The Hub enforces the following limits on all incoming requests:
+
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Request body size | 1 MB | HTTP 413 is returned for larger bodies |
+| Agent name / ID length | 128 chars | Enforced on create schemas |
+| Subject / title length | 256 chars | Enforced on message and task schemas |
+| Content length | 10,000 chars | Applies to message content and task descriptions |
+| `/agent/{agent}/chat` `limit` | 1–500 | Query parameter clamped to this range |
 
 ## MCP Server
 

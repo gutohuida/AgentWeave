@@ -60,6 +60,19 @@ Save a context checkpoint before handoffs or session end. Writes to `.agentweave
 - `blockers` — Optional unresolved blockers
 - `verification_commands` — Optional shell commands to verify state
 
+## Context
+
+### `build_agent_context(agent)`
+
+Build and return the full runtime context for a declared agent. Uses the centralized `context_builder` module to assemble project config, session state, roles, and quality governance settings into the same canonical context written to `.agentweave/context/<agent>.md`.
+
+Useful for orchestrators that need a fresh, in-memory context snapshot without triggering a full `sync-context` cycle.
+
+**Parameters:**
+- `agent` — Agent name to generate context for
+
+**Returns:** Object with `agent`, `context` (markdown string), and `generated_at` fields.
+
 ## Human Interaction (Hub only)
 
 ### `ask_user(from_agent, question)`
