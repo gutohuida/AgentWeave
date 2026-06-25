@@ -252,7 +252,7 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
             )
 
     # Validate cli override (optional, runner-relative). When set, it should be
-    # a non-empty string — the watchdog trusts it as the literal CLI to invoke.
+    # a non-empty string -- the watchdog trusts it as the literal CLI to invoke.
     # We don't validate that the file exists here; the user may be on a host
     # where the binary is only present at runtime, and a missing path is caught
     # at launch time with a clearer error than a YAML parse failure.
@@ -462,7 +462,7 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
             dependency_check=bool(quality_data.get("dependency_check", False)),
         )
 
-    # Parse opencode section (optional) — opaque nested config for opencode.json
+    # Parse opencode section (optional) -- opaque nested config for opencode.json
     # auto-generation. Lenient validation: just check it's a mapping if present.
     opencode_data = data.get("opencode")
     opencode: Optional[Dict[str, Any]] = None
@@ -481,11 +481,50 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
     )
 
 
+def _format_agent_block(
+    agent_name: str,
+    runner: str,
+    model: Optional[str],
+    env_vars: List[str],
+    yolo: bool,
+    pilot: bool,
+    is_principal: bool,
+    cli: Optional[str],
+    runner_options: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Render a single agent's YAML block (2-space indented, no trailing newline)."""
+    lines = [f"  {agent_name}:"]
+    lines.append(f"    runner: {runner}")
+    if model:
+        lines.append(f"    model: {model}")
+    if is_principal:
+        lines.append(f"    principal: true")
+    lines.append(f"    roles: []              # add roles: [tech_lead, backend_dev, ...]")
+    if env_vars:
+        env_str = ", ".join(env_vars)
+        lines.append(f"    env: [{env_str}]")
+    if yolo:
+        lines.append(f"    yolo: true")
+    if pilot:
+        lines.append(f"    pilot: true")
+    if cli:
+        lines.append(f"    cli: {cli}")
+    if runner_options:
+        lines.append("    runner_options:")
+        for k, v in runner_options.items():
+            lines.append(f"      {k}: {str(v).lower() if isinstance(v, bool) else v}")
+    return "\n".join(lines)
+
+
 def generate_agentweave_yml(
     session: Any,
     path: Optional[Path] = None,
 ) -> Path:
-    """Generate agentweave.yml from an existing Session object.
+    """Generate a comprehensive agentweave.yml from an existing Session object.
+
+    The generated file contains the active session agents at the top and
+    richly commented reference examples for every runner, section, and option
+    so operators can uncomment and adapt what they need.
 
     Args:
         session: A Session instance to serialize
@@ -493,16 +532,7 @@ def generate_agentweave_yml(
 
     Returns:
         Path to the generated file
-
-    Raises:
-        ImportError: If pyyaml is not installed.
     """
-    if yaml is None:
-        raise ImportError(
-            "pyyaml is required for agentweave.yml support. "
-            "Install with: pip install 'agentweave-ai[mcp]'"
-        )
-
     from .session import Session
 
     if not isinstance(session, Session):
@@ -510,81 +540,255 @@ def generate_agentweave_yml(
 
     target_path = path or AGENTWEAVE_YML_PATH
 
-    # Build config from session
-    agents: Dict[str, AgentConfig] = {}
+    # -- Build active-agent blocks from session ------------------------------
+    active_blocks: List[str] = []
     for agent_name in session.agent_names:
         runner_cfg = session.get_runner_config(agent_name)
-
-        # Get env vars as list of names
         env_vars = list(runner_cfg.get("env_vars", {}).values())
-
-        agents[agent_name] = AgentConfig(
-            runner=runner_cfg.get("runner", "claude"),
-            model=runner_cfg.get("model"),
-            roles=[],  # Roles are in roles.json, not session
-            env=env_vars,
-            yolo=session.get_agent_yolo(agent_name),
-            pilot=session.get_agent_pilot(agent_name),
-            cli=runner_cfg.get("cli"),
+        active_blocks.append(
+            _format_agent_block(
+                agent_name=agent_name,
+                runner=runner_cfg.get("runner", "claude"),
+                model=runner_cfg.get("model"),
+                env_vars=env_vars,
+                yolo=session.get_agent_yolo(agent_name),
+                pilot=session.get_agent_pilot(agent_name),
+                is_principal=(agent_name == session.principal),
+                cli=runner_cfg.get("cli"),
+                runner_options=runner_cfg.get("runner_options"),
+            )
         )
+    active_agents_yaml = "\n\n".join(active_blocks)
 
-    config = AgentWeaveConfig(
-        project=ProjectConfig(name=session.name, mode=session.mode),
-        hub=HubConfig(),
-        agents=agents,
-    )
+    project_name = session.name.replace('"', '\\"')
+    project_mode = session.mode
 
-    # Generate YAML with header comment
-    header = """# AgentWeave Configuration
-# This file defines your project settings, agents, and scheduled jobs.
-# It SHOULD be committed to version control.
+    template = f"""\
+# ==============================================================
+# AgentWeave Configuration -- {project_name}
+# ==============================================================
+# COMMIT this file. Remove or comment out what you don't need.
+# Never put secrets here -- use environment variables or .env
+# (agentweave init creates a .env placeholder at the project root).
 #
-# Secret values (API keys, tokens) should NOT be added here.
-# Use environment variables or a .env file instead (gitignored).
+# Apply changes at any time with:
+#   agentweave activate
+# Check health with:
+#   agentweave doctor
+# ==============================================================
 
-"""
+# -- PROJECT ----------------------------------------------------
+project:
+  name: "{project_name}"
 
-    runner_options_comment = """# runner_options example (per-agent, optional):
-# agents:
-#   codex:
-#     runner: codex
-#     runner_options:
-#       memory: true   # false disables Codex cross-session memory
+  # Collaboration mode -- controls who can assign tasks to whom.
+  #   hierarchical  The principal agent delegates; delegates report back (default)
+  #   peer          Any agent can assign tasks to any other
+  #   review        Optimized for code-review workflows
+  mode: {project_mode}
 
-"""
+# -- HUB --------------------------------------------------------
+hub:
+  url: http://localhost:8000
 
-    quality_comment = """# quality:
-#   # Enable a human or agent review gate before tasks are marked done.
+  # Start the Hub (choose one):
+  #   agentweave hub start            # Docker (recommended)
+  #   agentweave hub start --native   # no Docker -- needs: pip install agentweave-hub uvicorn
+
+# -- AGENTS -----------------------------------------------------
+# Runner types:
+#   claude      Claude Code CLI (claude)
+#   kimi        Kimi Code CLI (kimi)
+#   codex       OpenAI Codex CLI (codex exec --json)
+#   codex_mcp   Codex as persistent MCP server (codex mcp-server)
+#   opencode    OpenCode terminal agent (opencode)
+#   copilot     GitHub Copilot CLI (gh copilot)
+#   claude_proxy  Any OpenAI-compatible model routed through Claude CLI
+#   native      Use the agent name as the CLI command
+#   manual      No CLI -- relay prompts only
+#
+# Available roles (add to any agent):
+#   tech_lead | architect | backend_dev | frontend_dev | fullstack_dev
+#   qa_engineer | devops_engineer | security_engineer | data_engineer
+#   ml_engineer | technical_writer | code_reviewer | project_manager
+#
+# Common per-agent fields:
+#   runner:         (required) Which CLI to invoke -- see list above
+#   model:          Model name passed with --model (format varies by runner)
+#   roles:          Developer role list -- adds behavioral guides at session start
+#   env:            Env var NAMES (not values) to forward to the subprocess
+#   yolo:           true = skip confirmation prompts (autonomous mode). Default: false
+#   pilot:          true = human controls session start/resume. Default: false
+#   principal:      true = marks the lead/orchestrator; at most one agent. Default: false
+#   cli:            Absolute path to the binary (overrides PATH lookup; useful on WSL)
+#   base_url:       Custom HTTP endpoint (claude_proxy custom providers only)
+#   runner_options: Runner-specific map -- e.g. {{memory: false}} for Codex
+#   hub_client:     auto | mcp | cli -- how agent talks to Hub. Default: auto
+agents:
+
+{active_agents_yaml}
+
+  # -- Additional agent examples -- uncomment and adapt ------------
+
+  # -- Claude (Anthropic Claude Code CLI) --
+  # claude:
+  #   runner: claude
+  #   model: claude-sonnet-4-5        # optional; defaults to Anthropic's latest
+  #   roles: [tech_lead, backend_dev]
+  #   principal: true                 # this agent delegates to others
+  #   yolo: false                     # true = no confirmation prompts
+  #   pilot: false                    # true = you trigger sessions manually
+
+  # -- Kimi (Kimi Code CLI) --
+  # kimi:
+  #   runner: kimi
+  #   model: kimi-k2                  # optional; defaults to kimi-k2
+  #   roles: [frontend_dev]
+  #   pilot: true                     # recommended for Kimi -- session IDs must be registered
+  #   # After activating, register the session ID:
+  #   #   agentweave session register --agent kimi --session <id>
+
+  # -- OpenAI Codex CLI --
+  # codex:
+  #   runner: codex
+  #   model: gpt-5.5                  # optional; defaults to codex default
+  #   roles: [backend_dev]
+  #   yolo: true                      # codex works best with yolo enabled
+  #   runner_options:
+  #     memory: true                  # false = disable cross-session Codex memory
+
+  # -- Codex as persistent MCP server --
+  # codex-mcp:
+  #   runner: codex_mcp
+  #   model: gpt-5.5
+  #   roles: [backend_dev]
+  #   yolo: true
+  #   runner_options:
+  #     memory: false
+
+  # -- OpenCode (terminal AI coding agent, local or cloud) --
+  # opencode:
+  #   runner: opencode
+  #   # Model MUST be in 'provider/model' form (case-sensitive):
+  #   model: anthropic/claude-sonnet-4-5
+  #   # model: openai/gpt-4o
+  #   # model: ollama/qwen2.5-coder:7b   # local, no API key needed
+  #   # model: minimax-coding-plan/MiniMax-M3
+  #   roles: [backend_dev]
+  #   env: [MINIMAX_API_KEY]          # forward provider key to subprocess (if needed)
+  #   # cli: /abs/path/to/opencode    # pin binary -- prevents WSL PATH confusion
+  #   # Run `agentweave doctor` if you see ProviderModelNotFoundError
+
+  # -- GitHub Copilot CLI --
+  # copilot:
+  #   runner: copilot
+  #   roles: [backend_dev]
+  #   env: [COPILOT_GITHUB_TOKEN]     # fine-grained PAT with 'Copilot Requests' permission
+  #   yolo: false
+  #   # hub_client: cli               # uncomment if MCP is blocked by company policy
+
+  # -- MiniMax via Claude-proxy (built-in provider) --
+  # minimax:
+  #   runner: claude_proxy
+  #   model: MiniMax-M2.7             # optional; defaults to MiniMax-Text-01
+  #   env: [MINIMAX_API_KEY]
+  #   yolo: true
+
+  # -- Zhipu GLM via Claude-proxy (built-in provider) --
+  # glm:
+  #   runner: claude_proxy
+  #   model: glm-5
+  #   env: [ZHIPU_API_KEY]
+  #   yolo: true
+
+  # -- Any OpenAI-compatible provider via Claude-proxy --
+  # my-model:
+  #   runner: claude_proxy
+  #   model: custom-model-name
+  #   base_url: https://api.example.com/v1
+  #   env: [MY_MODEL_API_KEY]
+  #   yolo: true
+
+  # -- Manual relay (no CLI integration) --
+  # gemini:
+  #   runner: manual
+  #   roles: [frontend_dev]
+  #   # Use `agentweave relay --agent gemini` to generate relay prompts manually
+
+# -- JOBS -------------------------------------------------------
+# Scheduled recurring tasks (requires Hub / HTTP transport).
+# Cron format: minute hour day month weekday
+#   *  = any      */n = every n    n-m = range    n,m = list
+#
+# jobs:
+#   morning-standup:
+#     schedule: "0 9 * * 1-5"         # weekdays at 09:00
+#     agent: claude
+#     prompt: >
+#       Review yesterday's completed tasks, check for blockers,
+#       and post a standup summary to the team.
+#     enabled: true
+#
+#   weekly-cleanup:
+#     schedule: "0 17 * * 5"          # Fridays at 17:00
+#     agent: kimi
+#     prompt: "Archive completed tasks and generate a weekly summary."
+#     enabled: false                   # disabled until needed
+#
+#   nightly-tests:
+#     schedule: "0 2 * * *"           # every night at 02:00
+#     agent: codex
+#     prompt: "Run the full test suite and report any failures."
+#     enabled: true
+#
+# CLI equivalents:
+#   agentweave jobs create --name "..." --agent claude --message "..." --cron "0 9 * * 1-5"
+#   agentweave jobs list
+#   agentweave jobs pause <job_id>
+#   agentweave jobs run <job_id>
+
+# -- QUALITY GOVERNANCE -----------------------------------------
+# Optional quality controls for AI-generated code.
+#
+# quality:
+#   # Require a human or agent review before a task is marked done.
 #   review_required: false
 #
-#   # Where to write decision docs (ADR-lite).  Default: .agentweave/code-docs
-#   # docs_path: code-docs
+#   # Write ADR-lite decision docs for significant changes.
+#   # docs_path: .agentweave/code-docs    # where to write them (default)
+#   docs_threshold: never                 # all | non_trivial | never
 #
-#   # Which tasks require a decision doc: all | non_trivial | never
-#   docs_threshold: never
-#
-#   # Prevent the same agent from implementing and reviewing the same task.
-#   # off | warn | enforce  (enforce degrades to warn in single-agent sessions)
-#   echo_chamber_guard: off
+#   # Prevent the same agent from both implementing and reviewing a task.
+#   echo_chamber_guard: off               # off | warn | enforce
 #
 #   # Stamp completed tasks with the agent name and session ID.
 #   attribution_tag: false
 #
-#   # Flag hallucinated / unresolvable package names during review.
+#   # Flag hallucinated or unresolvable package names during review.
 #   dependency_check: false
 
+# -- OPENCODE PROVIDER CONFIG -----------------------------------
+# The top-level `opencode:` block is written verbatim to opencode.json
+# by `agentweave activate`. Use this to version-control provider config
+# instead of (or alongside) `opencode auth login`.
+# Keys you declare overwrite; other keys in opencode.json are preserved.
+#
+# opencode:
+#   provider:
+#     minimax:
+#       npm: "@ai-sdk/anthropic"
+#       name: "MiniMax"
+#       options:
+#         baseURL: "https://api.minimaxi.com/v1"
+#       models:
+#         M3:
+#           name: "MiniMax-M3"
+#   # agent:
+#   #   model: minimax-coding-plan/MiniMax-M3   # set a global default model
+#   # instructions: "Always respond in English."
 """
 
-    yaml_content = yaml.dump(
-        config.to_dict(),
-        default_flow_style=False,
-        sort_keys=False,
-        allow_unicode=True,
-    )
-
-    target_path.write_text(
-        header + yaml_content + runner_options_comment + quality_comment, encoding="utf-8"
-    )
+    target_path.write_text(template, encoding="utf-8")
     return target_path
 
 
