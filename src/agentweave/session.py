@@ -54,6 +54,22 @@ class Session:
         """Get session role for an agent (principal/delegate/reviewer/collaborator)."""
         return self.agents.get(agent, {}).get("role", "delegate")
 
+    @property
+    def hub_client(self) -> str:
+        """Get session-level hub_client mode (auto/cli/mcp). Defaults to 'auto'."""
+        from .constants import HUB_CLIENT_DEFAULT
+
+        return self._data.get("hub_client", HUB_CLIENT_DEFAULT)
+
+    def get_agent_hub_client(self, agent: str) -> str:
+        """Get hub_client mode for an agent, with per-agent override of session default."""
+        from .constants import HUB_CLIENT_DEFAULT
+
+        agent_override = self.agents.get(agent, {}).get("hub_client")
+        if agent_override:
+            return agent_override
+        return self._data.get("hub_client", HUB_CLIENT_DEFAULT)
+
     def get_agent_yolo(self, agent: str) -> bool:
         """Return True if yolo mode is enabled for the agent."""
         return bool(self.agents.get(agent, {}).get("yolo", False))

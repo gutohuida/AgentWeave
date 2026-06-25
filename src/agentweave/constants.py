@@ -141,6 +141,7 @@ RUNNER_TYPES = [
     "opencode",
     "codex",
     "codex_mcp",
+    "copilot",
 ]
 
 # Runner configuration — CLI properties per runner type.
@@ -222,6 +223,19 @@ RUNNER_CONFIGS: dict = {
         "cli": None,
         "session_source": "none",
     },
+    "copilot": {
+        "cli": "copilot",
+        # Session IDs are UUIDs emitted in the `result` JSONL event's `sessionId` field.
+        # Resume via --resume=<uuid> (single arg with = to disambiguate from interactive picker).
+        "session_flag": "--resume",
+        "output_format": "json",  # JSONL: one JSON object per line
+        "session_source": "jsonl",
+        "session_id_field": "sessionId",
+        "session_event_type": "result",
+        "model_flag": "--model",
+        # CLI-based MCP registration (same pattern as claude/kimi/codex)
+        "mcp_add_cmd": ["copilot", "mcp", "add", "{name}", "--", "{server_cmd}"],
+    },
 }
 
 # Agents that run through Claude CLI with custom env vars (no native CLI of their own)
@@ -246,7 +260,7 @@ AGENT_RUNNER_DEFAULTS: dict = {
     "glm": "claude_proxy",
     "cursor": "manual",
     "windsurf": "manual",
-    "copilot": "manual",
+    "copilot": "copilot",
     "opencode": "opencode",
     "codex": "codex",
 }
@@ -256,6 +270,13 @@ VALID_ROLES = ["principal", "delegate", "reviewer", "collaborator"]
 
 # Valid modes
 VALID_MODES = ["hierarchical", "peer", "review"]
+
+# Hub client modes — how agents interact with the Hub for messaging and tasks
+# auto: use MCP if registered, CLI otherwise (default)
+# cli:  always use agentweave CLI commands (for MCP-restricted environments)
+# mcp:  always use MCP tools
+HUB_CLIENT_MODES = ["auto", "cli", "mcp"]
+HUB_CLIENT_DEFAULT = "auto"
 
 # Quality governance constants
 VALID_DOC_THRESHOLDS = ["all", "non_trivial", "never"]

@@ -62,6 +62,12 @@
 project:
   name: "AgentWeave Multi-Model Test"
   mode: peer
+  # hub_client controls how agents interact with the Hub for messaging and tasks.
+  # auto (default): use MCP tools (get_inbox, send_message, etc.) if registered; CLI otherwise
+  # cli:            always use agentweave CLI commands (for MCP-restricted environments)
+  # mcp:            always use MCP tools
+  # This is a session-level default; individual agents can override it below.
+  # hub_client: auto
 
 hub:
   url: http://localhost:8000
@@ -100,3 +106,19 @@ agents:
     env: [MINIMAX_API_KEY]
     yolo: false
     pilot: false
+
+  # GitHub Copilot CLI runner.
+  # Requires GitHub Copilot CLI (npm install -g @github/copilot) and
+  # an auth token: export COPILOT_GITHUB_TOKEN=<fine-grained PAT>
+  # The PAT needs the 'Copilot Requests' permission.
+  # Run `agentweave mcp setup --agent copilot` once to register MCP.
+  # If MCP is blocked by company policy, set hub_client: cli so the
+  # watchdog instructs Copilot to use CLI commands for Hub interactions.
+  copilot:
+    runner: copilot
+    # model: claude-sonnet-4.5   # Optional — defaults to Copilot's default model
+    roles: [backend_dev]
+    env: [COPILOT_GITHUB_TOKEN]
+    yolo: false
+    pilot: false
+    # hub_client: cli  # Uncomment if MCP is blocked by company policy

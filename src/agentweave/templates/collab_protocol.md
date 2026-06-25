@@ -29,9 +29,54 @@ for ALL runner types: native (claude, kimi), claude_proxy (minimax, glm), and ma
 > purpose of Hub automation. If you find yourself reaching for these commands
 > while MCP tools are available, stop and use `send_message` instead.
 
-**If you do NOT have those tools (local/git mode only):**
+**If you do NOT have MCP tools but have Hub transport (Hub+CLI mode):**
+The watchdog will instruct you to run `agentweave inbox --agent <name> --mark-read`.
+Use CLI commands to interact with the Hub — see "Hub+CLI Workflow" below.
+
+**If you have neither MCP nor Hub (local/git mode only):**
 Use `agentweave relay --agent <name>` to generate a relay prompt, then ask the
 user to paste it into the target agent's session.
+
+---
+
+## Hub+CLI Workflow (Hub transport, MCP not available)
+
+This applies when your project uses Hub transport but MCP tools are not registered
+(e.g., company policy blocks MCP servers). The watchdog instructs you to use CLI.
+
+### Delegate agent reads inbox and works:
+```bash
+agentweave inbox --agent <your-agent-name>   # reads messages AND marks them as read
+agentweave task update <task_id> --status in_progress --json
+# … do the work …
+agentweave task update <task_id> --status completed --json
+agentweave msg send --from <your-agent> --to <recipient> --subject "Done: <title>" -m "..."
+```
+
+### Check tasks and session state:
+```bash
+agentweave task list --json              # all active tasks (Hub source of truth)
+agentweave task list --assignee <agent> # tasks for specific agent
+agentweave task show <task_id> --json   # full task details
+agentweave agents list                  # all agents in the session
+```
+
+### Ask the human a question (Hub only):
+```bash
+agentweave question ask --from <agent> --question "Should I use PostgreSQL or SQLite?"
+# Note the question_id, then poll:
+agentweave question get --id <question_id> --json
+```
+
+### Create a task and delegate:
+```bash
+agentweave task create --title "Implement auth" --assignee <agent> --json
+agentweave msg send --from <you> --to <agent> --subject "New task" -m "..."
+```
+
+> ⚠ Do NOT use `agentweave relay` or `agentweave quick` in Hub+CLI mode.
+> Those are for local/git transport only. Hub messages are delivered automatically
+> by the watchdog — you only need to `agentweave msg send`.
 
 ---
 
@@ -92,7 +137,7 @@ agentweave task list
 
 ### Delegate in relay mode:
 ```bash
-agentweave inbox --agent <your-agent-name>
+agentweave inbox --agent <your-agent-name> --mark-read
 agentweave task update <task_id> --status in_progress
 agentweave task update <task_id> --status completed
 agentweave msg send --to {principal} --subject "Done: <title>" --message "..."
@@ -242,21 +287,29 @@ Either agent can ask another to invoke one of their specialized sub-agents:
 # Status and overview
 agentweave status              # Full status with per-agent breakdown
 agentweave summary             # Quick summary for relay decisions
+agentweave agents list         # List all agents with roles, runners, hub_client mode
 
-# Task management
-agentweave task create --title "Task name" --assignee <agent>
+# Task management (transport-aware: routes to Hub when hub transport is active)
+agentweave task create --title "Task name" --assignee <agent> [--json]
 agentweave task list           # List all active tasks
-agentweave task show <id>      # Show task details
-agentweave task update <id> --status in_progress
-agentweave task update <id> --status completed
+agentweave task list --assignee <agent> [--json]
+agentweave task show <id>      # Show task details [--json]
+agentweave task update <id> --status in_progress [--json]
+agentweave task update <id> --status completed [--json]
 
 # Delegation
 agentweave quick --to <agent> "Task description"
-agentweave relay --agent <agent>   # Generate relay prompt
+agentweave relay --agent <agent>   # Generate relay prompt (local/git only)
 
 # Messaging
-agentweave inbox --agent <agent>
-agentweave msg send --to <agent> --message "..."
+agentweave inbox --agent <agent>              # Read + mark as read (default)
+agentweave inbox --agent <agent> --no-mark-read  # Read without consuming
+agentweave msg peek --agent <agent>           # Peek without marking read
+agentweave msg send --from <agent> --to <agent> --message "..."
+
+# Hub Q&A (requires Hub/HTTP transport)
+agentweave question ask --from <agent> --question "..."
+agentweave question get --id <question_id> [--json]
 
 # Watchdog (auto-ping daemon)
 agentweave start               # Start background watchdog

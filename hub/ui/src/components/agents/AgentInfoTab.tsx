@@ -19,6 +19,7 @@ const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }
   claude_proxy: { bg: 'rgba(245,158,11,0.1)', color: 'var(--amber)', label: 'proxy' },
   manual: { bg: 'rgba(161,161,170,0.1)', color: 'var(--text-3)', label: 'manual' },
   native: { bg: 'rgba(34,197,94,0.1)', color: 'var(--green)', label: 'native' },
+  copilot: { bg: 'rgba(36,160,242,0.1)', color: '#24a0f2', label: 'copilot' },
 }
 
 export function AgentInfoTab({ agent }: AgentInfoTabProps) {

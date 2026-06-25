@@ -1208,6 +1208,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
 def cmd_task_create(args: argparse.Namespace) -> int:
     """Create a new task."""
     ensure_dirs()
+    output_json: bool = getattr(args, "json", False)
 
     try:
         task = Task.create(
@@ -1223,46 +1224,101 @@ def cmd_task_create(args: argparse.Namespace) -> int:
         # Validate
         is_valid, errors = validate_task(task.to_dict())
         if not is_valid:
-            print_error("Task validation failed:")
-            for err in errors:
-                print(f"  - {err}")
+            if output_json:
+                print(json.dumps({"error": "; ".join(errors)}, indent=2))
+            else:
+                print_error("Task validation failed:")
+                for err in errors:
+                    print(f"  - {err}")
             return 1
 
-        # Lock and save
-        if not acquire_lock(f"task_{task.id}", timeout=5):
-            print_error("Could not create task - another process is working")
-            return 1
+        from .transport import get_transport
 
-        try:
-            task.save()
+        transport = get_transport()
+        transport_type = transport.get_transport_type()
 
-            # Update session
-            session = Session.load()
-            if session:
-                session.add_task(task.id)
-                session.save()
-        finally:
-            release_lock(f"task_{task.id}")
+        if transport_type == "http":
+            # Hub transport: send directly without local file (Hub is source of truth)
+            send_errors: List[str] = []
+            if not transport.send_task(task.to_dict(), error=send_errors):
+                detail = send_errors[0] if send_errors else "unknown error"
+                if output_json:
+                    print(json.dumps({"error": f"Failed to create task on Hub: {detail}"}))
+                else:
+                    print_error(f"Failed to create task on Hub: {detail}")
+                return 1
+        else:
+            # Local / git: file-based with lock
+            if not acquire_lock(f"task_{task.id}", timeout=5):
+                if output_json:
+                    print(json.dumps({"error": "Could not create task — another process is working"}))
+                else:
+                    print_error("Could not create task - another process is working")
+                return 1
+            try:
+                task.save()
+                session = Session.load()
+                if session:
+                    session.add_task(task.id)
+                    session.save()
+                if transport_type == "git":
+                    transport.send_task(task.to_dict())
+            finally:
+                release_lock(f"task_{task.id}")
 
-        print_success(f"Created task: {task.id}")
-        print(f"   Title: {task.title}")
-        print(f"   Assignee: {task.assignee or 'Unassigned'}")
-        print(f"   Priority: {task.priority}")
-        print(f"\n   File: {AGENTWEAVE_DIR}/tasks/active/{task.id}.json")
+        if output_json:
+            print(json.dumps(task.to_dict(), indent=2, default=str))
+        else:
+            print_success(f"Created task: {task.id}")
+            print(f"   Title: {task.title}")
+            print(f"   Assignee: {task.assignee or 'Unassigned'}")
+            print(f"   Priority: {task.priority}")
         return 0
 
     except Exception as e:
-        print_error(f"Failed to create task: {e}")
+        if output_json:
+            print(json.dumps({"error": str(e)}))
+        else:
+            print_error(f"Failed to create task: {e}")
         return 1
 
 
 def cmd_task_list(args: argparse.Namespace) -> int:
     """List tasks."""
+    output_json: bool = getattr(args, "json", False)
+    assignee: Optional[str] = getattr(args, "assignee", None)
+
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() == "http":
+        tasks_data = transport.get_active_tasks(assignee or None)
+        if output_json:
+            print(json.dumps(tasks_data, indent=2, default=str))
+            return 0
+        if not tasks_data:
+            print_info("No tasks found.")
+            return 0
+        print(f"[TASK] Tasks ({len(tasks_data)}):")
+        print("-" * 80)
+        for t in tasks_data:
+            status_str = t.get("status", "unknown")
+            print(f"[{status_str:12}] {t.get('id', '?')}: {t.get('title', '?')}")
+            print(f"           Assignee: {t.get('assignee') or 'Unassigned'}")
+            print(f"           Priority: {t.get('priority', 'medium')}")
+            print()
+        return 0
+
+    # Local / git: file-based
     tasks = Task.list_all(
         status=args.status,
-        assignee=args.assignee,
+        assignee=assignee,
         active_only=args.active_only,
     )
+
+    if output_json:
+        print(json.dumps([t.to_dict() for t in tasks], indent=2, default=str))
+        return 0
 
     if not tasks:
         print_info("No tasks found.")
@@ -1281,69 +1337,127 @@ def cmd_task_list(args: argparse.Namespace) -> int:
 
 def cmd_task_show(args: argparse.Namespace) -> int:
     """Show task details."""
+    output_json: bool = getattr(args, "json", False)
+
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() == "http":
+        task_data = transport.get_task_by_id(args.task_id)  # type: ignore[attr-defined]
+        if task_data is None:
+            if output_json:
+                print(json.dumps({"error": f"Task not found: {args.task_id}"}))
+            else:
+                print_error(f"Task not found: {args.task_id}")
+            return 1
+        if output_json:
+            print(json.dumps(task_data, indent=2, default=str))
+        else:
+            print(f"Task: {task_data.get('id')}")
+            print(f"Title: {task_data.get('title')}")
+            print(f"Status: {task_data.get('status')}")
+            print(f"Assignee: {task_data.get('assignee') or 'Unassigned'}")
+            print(f"Priority: {task_data.get('priority', 'medium')}")
+            print(f"Description: {task_data.get('description', '')}")
+        return 0
+
     task = Task.load(args.task_id)
     if not task:
-        print_error(f"Task not found: {args.task_id}")
+        if output_json:
+            print(json.dumps({"error": f"Task not found: {args.task_id}"}))
+        else:
+            print_error(f"Task not found: {args.task_id}")
         return 1
 
-    print(task.to_markdown())
+    if output_json:
+        print(json.dumps(task.to_dict(), indent=2, default=str))
+    else:
+        print(task.to_markdown())
     return 0
 
 
 def cmd_task_update(args: argparse.Namespace) -> int:
     """Update task status."""
-    # Try to acquire lock
+    output_json: bool = getattr(args, "json", False)
+
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() == "http":
+        if args.status:
+            ok = transport.update_task_status(args.task_id, args.status)  # type: ignore[attr-defined]
+            if not ok:
+                if output_json:
+                    print(json.dumps({"error": f"Failed to update task '{args.task_id}' on Hub"}))
+                else:
+                    print_error(f"Failed to update task '{args.task_id}' on Hub")
+                return 1
+        task_data = transport.get_task_by_id(args.task_id)  # type: ignore[attr-defined]
+        if output_json:
+            print(json.dumps(task_data or {"id": args.task_id, "status": args.status}, indent=2, default=str))
+        else:
+            print_success(f"Updated task: {args.task_id}")
+            if args.status:
+                print(f"   Status: {args.status}")
+        return 0
+
+    # Local / git: file-based with lock
     if not acquire_lock(f"task_{args.task_id}", timeout=10):
-        print_error("Task is currently being edited by another process")
+        if output_json:
+            print(json.dumps({"error": "Task is currently being edited by another process"}))
+        else:
+            print_error("Task is currently being edited by another process")
         return 1
 
     try:
         task = Task.load(args.task_id)
         if not task:
-            print_error(f"Task not found: {args.task_id}")
+            if output_json:
+                print(json.dumps({"error": f"Task not found: {args.task_id}"}))
+            else:
+                print_error(f"Task not found: {args.task_id}")
             return 1
 
         if args.status:
             old_status = task.status
             agent_name = getattr(args, "agent", None) or task.assignee
             task.update(agent=agent_name, status=args.status)
-            print(f"Status: {old_status} -> {args.status}")
+            if not output_json:
+                print(f"Status: {old_status} -> {args.status}")
 
-            # Move to completed if appropriate
             if args.status in ["completed", "approved"]:
                 task.move_to_completed()
-
-                # Update session
                 session = Session.load()
                 if session:
                     session.complete_task(task.id)
                     session.save()
-
-                print("Moved to completed/")
+                if not output_json:
+                    print("Moved to completed/")
 
         if args.note:
             notes = task.to_dict().get("notes", [])
             from .utils import now_iso
 
-            notes.append(
-                {
-                    "timestamp": now_iso(),
-                    "note": args.note,
-                }
-            )
+            notes.append({"timestamp": now_iso(), "note": args.note})
             task.update(notes=notes)
-            print("Added note")
+            if not output_json:
+                print("Added note")
 
-        # Validate before saving
         is_valid, errors = validate_task(task.to_dict())
         if not is_valid:
-            print_error("Validation failed:")
-            for err in errors:
-                print(f"  - {err}")
+            if output_json:
+                print(json.dumps({"error": "; ".join(errors)}))
+            else:
+                print_error("Validation failed:")
+                for err in errors:
+                    print(f"  - {err}")
             return 1
 
         task.save()
-        print_success(f"Updated task: {args.task_id}")
+        if output_json:
+            print(json.dumps(task.to_dict(), indent=2, default=str))
+        else:
+            print_success(f"Updated task: {args.task_id}")
         return 0
 
     finally:
@@ -1386,24 +1500,35 @@ def cmd_msg_send(args: argparse.Namespace) -> int:
 
 
 def cmd_inbox(args: argparse.Namespace) -> int:
-    """Check inbox."""
+    """Check inbox, optionally mark messages as read."""
     agent = args.agent
+    mark_read: bool = getattr(args, "mark_read", True)
+    output_json: bool = getattr(args, "json", False)
+
     if agent:
         messages = MessageBus.get_inbox(agent)
     else:
         session = Session.load()
         if session:
-            print_info("Checking inbox for all agents...")
+            if not output_json:
+                print_info("Checking inbox for all agents...")
             messages = []
             for ag in session.agent_names:
                 messages += MessageBus.get_inbox(ag)
         else:
-            # No session: fall back to default agents
             from .constants import DEFAULT_AGENTS
 
             messages = []
             for _ag in DEFAULT_AGENTS:
                 messages += MessageBus.get_inbox(_ag)
+
+    if output_json:
+        msg_list = [m.to_dict() for m in messages]
+        if mark_read:
+            for m in messages:
+                MessageBus.mark_read(m.id)
+        print(json.dumps(msg_list, indent=2, default=str))
+        return 0
 
     if not messages:
         print_info(f"No messages for {agent or 'anyone'}")
@@ -1415,6 +1540,54 @@ def cmd_inbox(args: argparse.Namespace) -> int:
         print(f"From: {msg.sender}")
         print(f"To: {msg.recipient}")
         print(f"Subject: {msg.subject or '(no subject)'}")
+        print(f"ID: {msg.id}")
+        print(f"Time: {msg.timestamp}")
+        print(f"\n{msg.content}")
+        print("-" * 80)
+
+    if mark_read:
+        for m in messages:
+            MessageBus.mark_read(m.id)
+        print_info(f"Marked {len(messages)} message(s) as read.")
+
+    return 0
+
+
+def cmd_msg_peek(args: argparse.Namespace) -> int:
+    """Peek at inbox without marking messages as read."""
+    agent = args.agent
+    output_json: bool = getattr(args, "json", False)
+
+    if agent:
+        messages = MessageBus.get_inbox(agent)
+    else:
+        session = Session.load()
+        if session:
+            messages = []
+            for ag in session.agent_names:
+                messages += MessageBus.get_inbox(ag)
+        else:
+            from .constants import DEFAULT_AGENTS
+
+            messages = []
+            for _ag in DEFAULT_AGENTS:
+                messages += MessageBus.get_inbox(_ag)
+
+    if output_json:
+        print(json.dumps([m.to_dict() for m in messages], indent=2, default=str))
+        return 0
+
+    if not messages:
+        print_info(f"No messages for {agent or 'anyone'} (not marked as read)")
+        return 0
+
+    print(f"[PEEK] Messages ({len(messages)}) — not marked as read:")
+    print("-" * 80)
+    for msg in messages:
+        print(f"From: {msg.sender}")
+        print(f"To: {msg.recipient}")
+        print(f"Subject: {msg.subject or '(no subject)'}")
+        print(f"ID: {msg.id}")
         print(f"Time: {msg.timestamp}")
         print(f"\n{msg.content}")
         print("-" * 80)
@@ -1430,6 +1603,106 @@ def cmd_msg_read(args: argparse.Namespace) -> int:
     else:
         print_error(f"Message not found: {args.msg_id}")
         return 1
+
+
+def cmd_agents_list(args: argparse.Namespace) -> int:
+    """List agents in the current session with their roles and runners."""
+    output_json: bool = getattr(args, "json", False)
+
+    from .roles import get_agent_roles, load_roles_config
+
+    session = Session.load()
+    if not session:
+        if output_json:
+            print(json.dumps({"agents": []}))
+        else:
+            print_info("No active session. Run: agentweave init")
+        return 0
+
+    roles_config = load_roles_config()
+    agents = []
+    for name in session.agent_names:
+        runner_cfg = session.get_runner_config(name)
+        agents.append(
+            {
+                "name": name,
+                "session_role": session.get_agent_role(name),
+                "runner": runner_cfg.get("runner", "native"),
+                "dev_roles": get_agent_roles(name, roles_config),
+                "is_principal": name == session.principal,
+                "hub_client": session.get_agent_hub_client(name),
+            }
+        )
+
+    if output_json:
+        print(json.dumps({"agents": agents}, indent=2, default=str))
+        return 0
+
+    print(f"[AGENTS] Session agents ({len(agents)}):")
+    print("-" * 80)
+    for a in agents:
+        principal_marker = " [PRINCIPAL]" if a["is_principal"] else ""
+        dev_roles_str = ", ".join(a["dev_roles"]) if a["dev_roles"] else "none"
+        print(f"  {a['name']}{principal_marker}")
+        print(f"    Session role : {a['session_role']}")
+        print(f"    Runner       : {a['runner']}")
+        print(f"    Dev roles    : {dev_roles_str}")
+        print(f"    Hub client   : {a['hub_client']}")
+        print()
+
+    return 0
+
+
+def cmd_question_ask(args: argparse.Namespace) -> int:
+    """Ask the human user a question via the Hub (HTTP transport only)."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() != "http":
+        print_error("'question ask' requires Hub (HTTP) transport.")
+        print_info("Use 'agentweave msg send --to user ...' for local/git transport.")
+        return 1
+
+    question_id = transport.ask_question(  # type: ignore[attr-defined]
+        from_agent=args.from_agent, question=args.question
+    )
+    if not question_id:
+        print_error("Failed to submit question to Hub.")
+        return 1
+
+    output_json: bool = getattr(args, "json", False)
+    if output_json:
+        print(json.dumps({"question_id": question_id, "status": "pending"}, indent=2))
+    else:
+        print_success(f"Question submitted: {question_id}")
+        print(f"   Poll for answer: agentweave question get --id {question_id}")
+    return 0
+
+
+def cmd_question_get(args: argparse.Namespace) -> int:
+    """Check if a Hub question has been answered."""
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() != "http":
+        print_error("'question get' requires Hub (HTTP) transport.")
+        return 1
+
+    result = transport.get_answer(args.question_id)  # type: ignore[attr-defined]
+    if result is None:
+        print_error(f"Question not found: {args.question_id}")
+        return 1
+
+    output_json: bool = getattr(args, "json", False)
+    if output_json:
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        answered = result.get("answered", False)
+        if answered:
+            print_success(f"Answer: {result.get('answer', '')}")
+        else:
+            print_info(f"Question {args.question_id} is still pending.")
+    return 0
 
 
 def cmd_delegate(args: argparse.Namespace) -> int:
@@ -2894,6 +3167,14 @@ def cmd_activate(_args: argparse.Namespace) -> int:
                 print(
                     f"  {name}:  {_build_opencode_launch_command(name, model=_model, cli=_cli_override)}"
                 )
+            elif _runner == "copilot":
+                from .runner import get_claude_session_id as _get_copilot_sid
+
+                _sid = _get_copilot_sid(name)
+                print(
+                    f"  {name}:  {_build_copilot_launch_command(name, model=_model, session_id=_sid)}"
+                )
+                print("         (AGENTS.md is read automatically by Copilot CLI)")
             else:
                 # kimi and other runners
                 print(f'  {name}:  agentweave run --agent {name} "<task>"')
@@ -2940,6 +3221,20 @@ def _build_codex_launch_command(
     if yolo:
         parts += ["--dangerously-bypass-approvals-and-sandbox"]
     parts.append(prompt)
+    return " ".join(parts)
+
+
+def _build_copilot_launch_command(
+    agent: str,
+    model: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> str:
+    """Build a human-run GitHub Copilot CLI command for an AgentWeave agent."""
+    parts = ["copilot"]
+    if model:
+        parts += ["--model", model]
+    if session_id:
+        parts += [f"--resume={session_id}"]
     return " ".join(parts)
 
 
@@ -3657,6 +3952,25 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
         print(f"    eval $(agentweave switch {agent})")
         print("  Or to run it directly:")
         print(f"    agentweave run --agent {agent}")
+    elif runner == "copilot":
+        print()
+        print("  This agent uses the GitHub Copilot CLI.")
+        import os as _os
+
+        token = (
+            _os.environ.get("COPILOT_GITHUB_TOKEN")
+            or _os.environ.get("GH_TOKEN")
+            or _os.environ.get("GITHUB_TOKEN")
+        )
+        if not token:
+            print_warning(
+                "  No Copilot auth token detected. Set COPILOT_GITHUB_TOKEN to a"
+                " fine-grained PAT with 'Copilot Requests' permission."
+            )
+        print(f"  Register the MCP server:  agentweave mcp setup --agent {agent}")
+        print(f"  Show launch command:      agentweave switch {agent}")
+        print()
+        print("  Copilot CLI automatically reads AGENTS.md for project context.")
     elif runner == "kimi":
         print()
         print("  This agent uses the Kimi Code CLI.")
@@ -4230,6 +4544,33 @@ def cmd_switch(args: argparse.Namespace) -> int:
         )
         return 0
 
+    if runner == "copilot":
+        print_info(f"{agent} is a GitHub Copilot CLI agent")
+        print()
+        # Check auth token
+        import os as _os
+
+        token = (
+            _os.environ.get("COPILOT_GITHUB_TOKEN")
+            or _os.environ.get("GH_TOKEN")
+            or _os.environ.get("GITHUB_TOKEN")
+        )
+        if not token:
+            print_warning(
+                "No Copilot auth token found. Set one of:\n"
+                "  export COPILOT_GITHUB_TOKEN=<fine-grained PAT with 'Copilot Requests' permission>\n"
+                "  export GH_TOKEN=<github-pat>\n"
+                "  export GITHUB_TOKEN=<github-pat>"
+            )
+            print()
+        model = runner_config.get("model")
+        print("Launch command:")
+        print(f"  {_build_copilot_launch_command(agent, model=model)}")
+        print()
+        print("Note: Copilot CLI automatically reads AGENTS.md for project context.")
+        print(f"  Register MCP server first:  agentweave mcp setup --agent {agent}")
+        return 0
+
     if runner == "codex":
         print_info(f"{agent} is a Codex agent")
         print()
@@ -4611,6 +4952,7 @@ For more help: https://github.com/gutohuida/AgentWeave
         nargs="+",
         help="Acceptance criteria",
     )
+    task_create.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # Task list
     task_list = task_subparsers.add_parser("list", help="List tasks")
@@ -4627,10 +4969,12 @@ For more help: https://github.com/gutohuida/AgentWeave
         action="store_true",
         help="Show only active tasks",
     )
+    task_list.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # Task show
     task_show = task_subparsers.add_parser("show", help="Show task details")
     task_show.add_argument("task_id", help="Task ID")
+    task_show.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # Task update
     task_update = task_subparsers.add_parser("update", help="Update task")
@@ -4650,6 +4994,7 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="New status",
     )
     task_update.add_argument("--note", help="Add a note")
+    task_update.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # Message commands
     msg_parser = subparsers.add_parser("msg", help="Message management")
@@ -4687,12 +5032,36 @@ For more help: https://github.com/gutohuida/AgentWeave
     msg_read = msg_subparsers.add_parser("read", help="Mark message as read")
     msg_read.add_argument("msg_id", help="Message ID")
 
+    # Peek (non-destructive inbox view)
+    msg_peek = msg_subparsers.add_parser("peek", help="Peek at inbox without marking messages as read")
+    msg_peek.add_argument("--agent", "-a", help="Peek for specific agent (any agent name)")
+    msg_peek.add_argument("--json", action="store_true", default=False, help="Output as JSON")
+
     # Inbox
-    inbox_parser = subparsers.add_parser("inbox", help="Check inbox")
+    inbox_parser = subparsers.add_parser("inbox", help="Check inbox (marks messages as read by default)")
     inbox_parser.add_argument(
         "--agent",
         "-a",
         help="Check for specific agent (any agent name)",
+    )
+    inbox_parser.add_argument(
+        "--mark-read",
+        dest="mark_read",
+        action="store_true",
+        default=True,
+        help="Mark messages as read after printing (default: on)",
+    )
+    inbox_parser.add_argument(
+        "--no-mark-read",
+        dest="mark_read",
+        action="store_false",
+        help="Show messages without marking them as read",
+    )
+    inbox_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="Output as JSON",
     )
 
     # Delegate shortcut
@@ -4724,6 +5093,25 @@ For more help: https://github.com/gutohuida/AgentWeave
         default="medium",
         help="Task priority",
     )
+
+    # Agents list
+    agents_parser = subparsers.add_parser("agents", help="List agents in the current session")
+    agents_subparsers = agents_parser.add_subparsers(dest="agents_command")
+    agents_list_p = agents_subparsers.add_parser("list", help="List all agents with roles and runner info")
+    agents_list_p.add_argument("--json", action="store_true", default=False, help="Output as JSON")
+
+    # Question commands (Hub only)
+    question_parser = subparsers.add_parser("question", help="Hub Q&A — ask and answer questions")
+    question_subparsers = question_parser.add_subparsers(dest="question_command")
+
+    q_ask = question_subparsers.add_parser("ask", help="Ask the human user a question via the Hub")
+    q_ask.add_argument("--from", "-f", dest="from_agent", required=True, help="Asking agent name")
+    q_ask.add_argument("--question", "-q", required=True, help="Question text")
+    q_ask.add_argument("--json", action="store_true", default=False, help="Output as JSON")
+
+    q_get = question_subparsers.add_parser("get", help="Check if a Hub question has been answered")
+    q_get.add_argument("--id", dest="question_id", required=True, help="Question ID")
+    q_get.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # update-template
     update_tmpl_parser = subparsers.add_parser(
@@ -5120,11 +5508,27 @@ def main(args: Optional[List[str]] = None) -> int:
                 return cmd_msg_send(parsed_args)
             elif parsed_args.msg_command == "read":
                 return cmd_msg_read(parsed_args)
+            elif parsed_args.msg_command == "peek":
+                return cmd_msg_peek(parsed_args)
             else:
                 parser.parse_args(["msg", "--help"])
                 return 0
         elif parsed_args.command == "inbox":
             return cmd_inbox(parsed_args)
+        elif parsed_args.command == "agents":
+            if parsed_args.agents_command == "list":
+                return cmd_agents_list(parsed_args)
+            else:
+                parser.parse_args(["agents", "--help"])
+                return 0
+        elif parsed_args.command == "question":
+            if parsed_args.question_command == "ask":
+                return cmd_question_ask(parsed_args)
+            elif parsed_args.question_command == "get":
+                return cmd_question_get(parsed_args)
+            else:
+                parser.parse_args(["question", "--help"])
+                return 0
         elif parsed_args.command == "delegate":
             return cmd_delegate(parsed_args)
         elif parsed_args.command == "update-template":

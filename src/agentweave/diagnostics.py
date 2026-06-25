@@ -676,6 +676,34 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
                 category="agent",
             )
         )
+    if runner == "copilot":
+        import os as _os
+
+        has_token = bool(
+            _os.environ.get("COPILOT_GITHUB_TOKEN")
+            or _os.environ.get("GH_TOKEN")
+            or _os.environ.get("GITHUB_TOKEN")
+        )
+        if not has_token:
+            results.append(
+                warn(
+                    "copilot_no_auth_token",
+                    agent,
+                    (
+                        f"Agent {agent!r} uses the copilot runner but no GitHub auth token "
+                        "was detected (COPILOT_GITHUB_TOKEN / GH_TOKEN / GITHUB_TOKEN)."
+                    ),
+                    hint=(
+                        "Set COPILOT_GITHUB_TOKEN to a fine-grained PAT with the "
+                        "'Copilot Requests' permission in your .env file. "
+                        "Native OAuth ('copilot login') is not safe for headless watchdog use: "
+                        "concurrent copilot processes race on the Windows Credential Manager "
+                        "token — only the first process wins. A PAT is read atomically from "
+                        "an env var and is safe for any number of concurrent agents."
+                    ),
+                    category="agent",
+                )
+            )
     cli = _runner_cli(agent, runner)
     cli_override = _runner_cli_override(agent, session)
     if cli:
@@ -718,15 +746,24 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
                 )
             )
         else:
+            # Build a runner-specific install hint where known
+            if cli == "copilot":
+                install_hint = (
+                    "Install GitHub Copilot CLI: `npm install -g @github/copilot` "
+                    "(cross-platform) or `winget install GitHub.Copilot` (Windows). "
+                    "Then authenticate with `copilot login` or set COPILOT_GITHUB_TOKEN."
+                )
+            else:
+                install_hint = (
+                    f"Install {cli}, update the runner for {agent}, or pin the "
+                    f"binary with `cli: /absolute/path/to/{cli}` in agentweave.yml."
+                )
             results.append(
                 fail(
                     "agent_cli_missing",
                     agent,
                     f"Runner CLI {cli!r} was not found in PATH.",
-                    hint=(
-                        f"Install {cli}, update the runner for {agent}, or pin the "
-                        f"binary with `cli: /absolute/path/to/{cli}` in agentweave.yml."
-                    ),
+                    hint=install_hint,
                     category="runner",
                     data={"cli": cli, "cli_pinned": False},
                 )

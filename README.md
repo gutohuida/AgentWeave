@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://badge.fury.io/py/agentweave-ai)
 
-> **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, Minimax, GLM, and more**
+> **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, Minimax, GLM, GitHub Copilot, and more**
 >
 > 📖 [Documentation](https://gutohuida.github.io/AgentWeave/)
 
@@ -426,6 +426,7 @@ make lint
 | Multi-role support | ✅ Done (v0.15.0) | Multiple roles per agent with `agentweave roles` CLI and Hub sync |
 | AI Jobs | ✅ Done (v0.20.1) | Scheduled recurring agent tasks with cron expressions |
 | Pilot Mode | ✅ Done (v0.21.0) | Manual session management for Kimi and proxy agents |
+| GitHub Copilot runner | ✅ Done (v0.38.0) | Run GitHub Copilot CLI as an automated agent with MCP and session resumption |
 | Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
 
 ---
