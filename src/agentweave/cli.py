@@ -1251,7 +1251,9 @@ def cmd_task_create(args: argparse.Namespace) -> int:
             # Local / git: file-based with lock
             if not acquire_lock(f"task_{task.id}", timeout=5):
                 if output_json:
-                    print(json.dumps({"error": "Could not create task — another process is working"}))
+                    print(
+                        json.dumps({"error": "Could not create task — another process is working"})
+                    )
                 else:
                     print_error("Could not create task - another process is working")
                 return 1
@@ -1394,7 +1396,11 @@ def cmd_task_update(args: argparse.Namespace) -> int:
                 return 1
         task_data = transport.get_task_by_id(args.task_id)  # type: ignore[attr-defined]
         if output_json:
-            print(json.dumps(task_data or {"id": args.task_id, "status": args.status}, indent=2, default=str))
+            print(
+                json.dumps(
+                    task_data or {"id": args.task_id, "status": args.status}, indent=2, default=str
+                )
+            )
         else:
             print_success(f"Updated task: {args.task_id}")
             if args.status:
@@ -1502,7 +1508,7 @@ def cmd_msg_send(args: argparse.Namespace) -> int:
 def cmd_inbox(args: argparse.Namespace) -> int:
     """Check inbox, optionally mark messages as read."""
     agent = args.agent
-    mark_read: bool = getattr(args, "mark_read", True)
+    mark_read: bool = getattr(args, "mark_read", False)
     output_json: bool = getattr(args, "json", False)
 
     if agent:
@@ -2904,6 +2910,44 @@ def _hub_pid_running(port: Optional[int] = None) -> Optional[int]:
         return None
 
 
+def _hub_kill_pid(pid: int) -> None:
+    """Terminate a native Hub process by PID (graceful SIGTERM, then forced)."""
+    import subprocess as _sp
+    import time as _time
+
+    try:
+        if sys.platform == "win32":
+            _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=15)
+        else:
+            os.kill(pid, 15)  # SIGTERM
+            for _ in range(10):
+                _time.sleep(1)
+                try:
+                    os.kill(pid, 0)
+                except (ProcessLookupError, OSError):
+                    break
+            else:
+                os.kill(pid, 9)  # SIGKILL fallback
+    except (ProcessLookupError, OSError):
+        pass
+
+
+def _hub_native_confirmed(port: int) -> bool:
+    """Return True if a Hub health endpoint actually responds on ``port``.
+
+    Called before force-killing a PID read from hub.pid: after an OS PID recycle
+    the stored PID may belong to an unrelated process. Confirming the Hub is
+    genuinely serving on the recorded port prevents killing a bystander process.
+    """
+    import urllib.request as _req
+
+    try:
+        with _req.urlopen(_hub_health_url(port), timeout=2) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
 def _hub_native_scaffold(data_dir: Path) -> tuple:
     """Scaffold ~/.agentweave/hub/ for native mode.
 
@@ -2930,6 +2974,11 @@ def _hub_native_scaffold(data_dir: Path) -> tuple:
             f"AW_TICKET_SECRET={_secrets.token_hex(32)}\n"
         )
         env_path.write_text(env_content, encoding="utf-8")
+        # This file holds the bootstrap API key and ticket secret — restrict it to
+        # the owner on POSIX (mirrors the 0600 handling of transport.json).
+        if os.name != "nt":
+            with contextlib.suppress(OSError):
+                os.chmod(env_path, 0o600)
 
     return env_path, api_key, is_first_run
 
@@ -3023,7 +3072,7 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
     try:
         # 5. Now safe to import hub (settings reads DATABASE_URL from env)
         try:
-            import hub.main as _hub_main
+            import hub.main as _hub_main  # type: ignore[import]
         except ImportError:
             print_error("agentweave-hub is not installed.")
             print_info("Install it with: pip install agentweave-hub")
@@ -3044,24 +3093,35 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
         _hub_load_env_into(env, env_path)
 
         cmd = [
-            sys.executable, "-m", "uvicorn", "hub.main:app",
-            "--host", "0.0.0.0", "--port", str(port),
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "hub.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
         ]
 
         if detach:
             if sys.platform == "win32":
-                DETACHED_PROCESS = 0x00000008
-                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                DETACHED_PROCESS = 0x00000008  # noqa: N806
+                CREATE_NEW_PROCESS_GROUP = 0x00000200  # noqa: N806
                 proc = _sp.Popen(
-                    cmd, env=env,
+                    cmd,
+                    env=env,
                     creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-                    close_fds=True, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                    close_fds=True,
+                    stdout=_sp.DEVNULL,
+                    stderr=_sp.DEVNULL,
                 )
             else:
                 proc = _sp.Popen(
-                    cmd, env=env,
+                    cmd,
+                    env=env,
                     start_new_session=True,
-                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                    stdout=_sp.DEVNULL,
+                    stderr=_sp.DEVNULL,
                 )
 
             _hub_pid_file().write_text(f"{proc.pid}\n{port}", encoding="utf-8")
@@ -3072,6 +3132,9 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
                 print_info(
                     f"Check that port {port} is not in use and agentweave-hub is installed correctly."
                 )
+                # Terminate the orphaned uvicorn process so it doesn't linger and
+                # bind the port with no PID file left to track it.
+                _hub_kill_pid(proc.pid)
                 with contextlib.suppress(OSError):
                     _hub_pid_file().unlink()
                 return 1
@@ -3088,7 +3151,7 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
             try:
                 import uvicorn  # type: ignore[import]
 
-                uvicorn.run("hub.main:app", host="0.0.0.0", port=port)
+                uvicorn.run("hub.main:app", host="127.0.0.1", port=port)
             except ImportError:
                 print_error("uvicorn is not installed. Run: pip install agentweave-hub")
                 return 1
@@ -3228,7 +3291,6 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
 def cmd_hub_stop(args: argparse.Namespace) -> int:
     """Stop the AgentWeave Hub (native process or Docker container)."""
     import subprocess as _sp
-    import time as _time
 
     port = getattr(args, "port", 8000)
     local = getattr(args, "local", False)
@@ -3236,29 +3298,18 @@ def cmd_hub_stop(args: argparse.Namespace) -> int:
     # --- Native mode: check PID file first ---
     pid = _hub_pid_running(port=port)
     if pid is not None:
-        print_info(f"Stopping Hub (native, PID {pid})...")
-        try:
-            if sys.platform == "win32":
-                import subprocess
-
-                _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
-            else:
-                os.kill(pid, 15)  # SIGTERM
-                # Wait up to 10s for graceful exit
-                for _ in range(10):
-                    _time.sleep(1)
-                    try:
-                        os.kill(pid, 0)
-                    except (ProcessLookupError, OSError):
-                        break
-                else:
-                    os.kill(pid, 9)  # SIGKILL fallback
-        except (ProcessLookupError, OSError):
-            pass
+        if _hub_native_confirmed(port):
+            print_info(f"Stopping Hub (native, PID {pid})...")
+            _hub_kill_pid(pid)
+            with contextlib.suppress(OSError):
+                _hub_pid_file().unlink()
+            print_success("Hub stopped")
+            return 0
+        # PID is alive but nothing is serving the Hub on the recorded port — most
+        # likely a recycled PID owned by an unrelated process. Never kill it; just
+        # discard the stale PID file and fall through to the Docker check.
         with contextlib.suppress(OSError):
             _hub_pid_file().unlink()
-        print_success("Hub stopped")
-        return 0
 
     # --- Docker mode ---
     import urllib.request as _req
@@ -3385,25 +3436,18 @@ def cmd_hub_destroy(args: argparse.Namespace) -> int:
     # Stop the Hub first if running
     pid = _hub_pid_running()
     if pid is not None:
-        print_info(f"Stopping Hub (native, PID {pid}) before destroy...")
-        import subprocess as _sp
-        import time as _time
-
-        try:
-            if sys.platform == "win32":
-                _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
-            else:
-                os.kill(pid, 15)
-                for _ in range(10):
-                    _time.sleep(1)
-                    try:
-                        os.kill(pid, 0)
-                    except (ProcessLookupError, OSError):
-                        break
-                else:
-                    os.kill(pid, 9)
-        except (ProcessLookupError, OSError):
-            pass
+        # Read the recorded port so we can confirm identity before killing.
+        recorded_port: Optional[int] = None
+        with contextlib.suppress(OSError, ValueError, IndexError):
+            _content = pid_file.read_text().strip().splitlines()
+            recorded_port = int(_content[1]) if len(_content) > 1 else None
+        if recorded_port is not None and not _hub_native_confirmed(recorded_port):
+            # Alive PID but no Hub serving on the recorded port — likely a recycled
+            # PID owned by an unrelated process. Skip the kill; just clear the file.
+            print_info("No running native Hub found (stale PID file removed).")
+        else:
+            print_info(f"Stopping Hub (native, PID {pid}) before destroy...")
+            _hub_kill_pid(pid)
         with contextlib.suppress(OSError):
             pid_file.unlink()
 
@@ -5412,12 +5456,14 @@ For more help: https://github.com/gutohuida/AgentWeave
     msg_read.add_argument("msg_id", help="Message ID")
 
     # Peek (non-destructive inbox view)
-    msg_peek = msg_subparsers.add_parser("peek", help="Peek at inbox without marking messages as read")
+    msg_peek = msg_subparsers.add_parser(
+        "peek", help="Peek at inbox without marking messages as read"
+    )
     msg_peek.add_argument("--agent", "-a", help="Peek for specific agent (any agent name)")
     msg_peek.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # Inbox
-    inbox_parser = subparsers.add_parser("inbox", help="Check inbox (marks messages as read by default)")
+    inbox_parser = subparsers.add_parser("inbox", help="Check inbox (read-only unless --mark-read)")
     inbox_parser.add_argument(
         "--agent",
         "-a",
@@ -5427,14 +5473,15 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--mark-read",
         dest="mark_read",
         action="store_true",
-        default=True,
-        help="Mark messages as read after printing (default: on)",
+        default=False,
+        help="Mark messages as read (archive them) after printing",
     )
     inbox_parser.add_argument(
         "--no-mark-read",
         dest="mark_read",
         action="store_false",
-        help="Show messages without marking them as read",
+        default=False,
+        help="Show messages without marking them as read (default)",
     )
     inbox_parser.add_argument(
         "--json",
@@ -5476,7 +5523,9 @@ For more help: https://github.com/gutohuida/AgentWeave
     # Agents list
     agents_parser = subparsers.add_parser("agents", help="List agents in the current session")
     agents_subparsers = agents_parser.add_subparsers(dest="agents_command")
-    agents_list_p = agents_subparsers.add_parser("list", help="List all agents with roles and runner info")
+    agents_list_p = agents_subparsers.add_parser(
+        "list", help="List all agents with roles and runner info"
+    )
     agents_list_p.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 
     # Question commands (Hub only)

@@ -1288,6 +1288,91 @@ class TestParseCodexStreamLine:
         assert usage is None
 
 
+class TestAgentPingCmdCopilot:
+    """Tests for _agent_ping_cmd with the copilot runner."""
+
+    @pytest.fixture(autouse=True)
+    def setup_session(self, tmp_path):
+        """Set up a temporary session with copilot agents."""
+        self.tmp_path = tmp_path
+        self.session_dir = tmp_path / ".agentweave"
+        self.session_dir.mkdir()
+        self.agents_dir = self.session_dir / "agents"
+        self.agents_dir.mkdir()
+        self.context_dir = self.session_dir / "context"
+        self.context_dir.mkdir()
+
+        session_data = {
+            "id": "test-session",
+            "name": "Test",
+            "mode": "hierarchical",
+            "principal": "claude",
+            "agents": {
+                "copilot-dev": {"runner": "copilot", "model": "claude-opus-4.5"},
+                "copilot-qa": {"runner": "copilot"},
+                "copilot-yolo": {"runner": "copilot", "model": "claude-sonnet-4-5", "yolo": True},
+            },
+        }
+        session_file = self.session_dir / "session.json"
+        session_file.write_text(json.dumps(session_data))
+
+        from agentweave.session import Session
+
+        self.session = Session(session_data)
+
+        with patch("agentweave.watchdog.AGENTS_DIR", self.agents_dir), patch(
+            "agentweave.watchdog.AGENT_CONTEXT_DIR", self.context_dir
+        ), patch("agentweave.session.Session.load", return_value=self.session):
+            yield
+
+    def test_copilot_basic_no_session_no_model(self):
+        """Basic dispatch without session or model uses --allow-all-tools by default."""
+        cmd = _agent_ping_cmd("copilot-qa", "do the task")
+        assert cmd[0] == "copilot"
+        assert "--output-format" in cmd
+        idx = cmd.index("--output-format")
+        assert cmd[idx + 1] == "json"
+        assert "--no-ask-user" in cmd
+        assert "--allow-all-tools" in cmd
+        assert "--yolo" not in cmd
+        assert "--model" not in cmd
+        assert "--resume" not in cmd and not any(c.startswith("--resume=") for c in cmd)
+        assert cmd[-2] == "-p"
+        assert cmd[-1] == "do the task"
+
+    def test_copilot_with_model(self):
+        """--model is appended when the agent config has a model, choosing
+        e.g. claude-opus-4.5 or claude-sonnet-4-5 for the Copilot CLI."""
+        cmd = _agent_ping_cmd("copilot-dev", "do the task")
+        assert "--model" in cmd
+        idx = cmd.index("--model")
+        assert cmd[idx + 1] == "claude-opus-4.5"
+
+    def test_copilot_without_model_configured(self):
+        """No --model flag when the agent config has no model set."""
+        cmd = _agent_ping_cmd("copilot-qa", "do the task")
+        assert "--model" not in cmd
+
+    def test_copilot_yolo_uses_yolo_flag_not_allow_all_tools(self):
+        """yolo=true swaps --allow-all-tools for the broader --yolo flag,
+        while still forwarding the configured model."""
+        cmd = _agent_ping_cmd("copilot-yolo", "do the task")
+        assert "--yolo" in cmd
+        assert "--allow-all-tools" not in cmd
+        assert "--model" in cmd
+        idx = cmd.index("--model")
+        assert cmd[idx + 1] == "claude-sonnet-4-5"
+
+    def test_copilot_resume_with_session(self):
+        """Resume uses the single-arg --resume=<uuid> form to avoid the
+        interactive session picker."""
+        cmd = _agent_ping_cmd("copilot-dev", "do the task", session_id="sess-uuid-1234")
+        resume_args = [c for c in cmd if c.startswith("--resume=")]
+        assert resume_args == ["--resume=sess-uuid-1234"]
+        # Model flag is still present alongside resume.
+        assert "--model" in cmd
+
+
 class TestCopilotUsesPat:
     """Tests for _copilot_uses_pat() — determines whether the serialization
     lock should be skipped for concurrent copilot agent execution."""

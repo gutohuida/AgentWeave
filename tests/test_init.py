@@ -251,9 +251,8 @@ class TestInitCommand:
 
         # Check header comments are present
         assert "AgentWeave Configuration" in content
-        assert "SHOULD be committed" in content
-        assert "Secret values" in content
-        assert "NOT be added here" in content
+        assert "COMMIT this file" in content
+        assert "Never put secrets here" in content
 
     def test_init_creates_project_instructions(self, tmp_path, monkeypatch):
         """Test that init creates .agentweave/project_instructions.md."""

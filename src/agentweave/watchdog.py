@@ -487,9 +487,11 @@ class Watchdog:
             # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
             # the minimax provider). Other runners (kimi, codex, claude, native)
             # are NOT yet enabled — see TODO at the env-resolution block.
-            if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
-                "env_vars"
-            ):
+            if runner_config.get("runner") in (
+                "claude_proxy",
+                "opencode",
+                "copilot",
+            ) and runner_config.get("env_vars"):
                 env_vars = runner_config.get("env_vars")
 
         # Fire in background thread
@@ -929,9 +931,11 @@ class Watchdog:
             # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
             # the minimax provider). Other runners (kimi, codex, claude, native)
             # are NOT yet enabled — see TODO at the env-resolution block.
-            if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
-                "env_vars"
-            ):
+            if runner_config.get("runner") in (
+                "claude_proxy",
+                "opencode",
+                "copilot",
+            ) and runner_config.get("env_vars"):
                 env_vars = runner_config.get("env_vars")
 
         # Fire in background thread
@@ -2569,20 +2573,12 @@ def _copilot_uses_pat(env_vars: Optional[Dict[str, str]]) -> bool:
     from Windows Credential Manager, which races when multiple copilot processes
     start simultaneously — only the first wins.
 
-    Checks both the agent's env_vars config (self-referential format where the
-    key and value are the same var name, e.g. {"COPILOT_GITHUB_TOKEN": "COPILOT_GITHUB_TOKEN"})
-    and the current process environment directly (for globally-set tokens).
+    Whether a PAT is in the agent's ``env_vars`` config only matters if the token
+    is actually present in the process environment (which is what the copilot CLI
+    reads), so the authoritative check is the live environment.
     """
     pat_vars = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
-    if env_vars:
-        for var in pat_vars:
-            if var in env_vars and os.environ.get(var):
-                return True
-    # Also check environment directly — user may have set it globally without the env: config
-    for var in pat_vars:
-        if os.environ.get(var):
-            return True
-    return False
+    return any(os.environ.get(var) for var in pat_vars)
 
 
 def _run_agent_subprocess(
@@ -3577,9 +3573,11 @@ def _make_ping_callback(
             # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
             # the minimax provider). Other runners (kimi, codex, claude, native)
             # are NOT yet enabled — see TODO at the env-resolution block.
-            if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
-                "env_vars"
-            ):
+            if runner_config.get("runner") in (
+                "claude_proxy",
+                "opencode",
+                "copilot",
+            ) and runner_config.get("env_vars"):
                 env_vars = runner_config.get("env_vars")
 
         import time as _t
@@ -3762,9 +3760,11 @@ def _make_direct_trigger_callback(
         # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
         # the minimax provider). Other runners (kimi, codex, claude, native)
         # are NOT yet enabled — see TODO at the env-resolution block.
-        if runner_config.get("runner") in ("claude_proxy", "opencode", "copilot") and runner_config.get(
-            "env_vars"
-        ):
+        if runner_config.get("runner") in (
+            "claude_proxy",
+            "opencode",
+            "copilot",
+        ) and runner_config.get("env_vars"):
             env_vars = runner_config.get("env_vars")
 
         logger.info(

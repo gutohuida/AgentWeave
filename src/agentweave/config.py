@@ -481,6 +481,21 @@ def load_agentweave_yml(path: Optional[Path] = None) -> AgentWeaveConfig:
     )
 
 
+def _yaml_dq(value: Any) -> str:
+    """Escape a value for safe inclusion inside a YAML double-quoted scalar.
+
+    Escapes backslashes first (so they don't corrupt later escapes), then double
+    quotes, then the control characters that would otherwise break the scalar or
+    span extra lines. Without this, a project name containing a Windows path
+    (e.g. ``C:\\Users\\me\\proj``) or a newline produced invalid YAML that failed
+    to parse for the entire generated file.
+    """
+    text = str(value)
+    text = text.replace("\\", "\\\\").replace('"', '\\"')
+    text = text.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    return text
+
+
 def _format_agent_block(
     agent_name: str,
     runner: str,
@@ -498,15 +513,15 @@ def _format_agent_block(
     if model:
         lines.append(f"    model: {model}")
     if is_principal:
-        lines.append(f"    principal: true")
-    lines.append(f"    roles: []              # add roles: [tech_lead, backend_dev, ...]")
+        lines.append("    principal: true")
+    lines.append("    roles: []              # add roles: [tech_lead, backend_dev, ...]")
     if env_vars:
         env_str = ", ".join(env_vars)
         lines.append(f"    env: [{env_str}]")
     if yolo:
-        lines.append(f"    yolo: true")
+        lines.append("    yolo: true")
     if pilot:
-        lines.append(f"    pilot: true")
+        lines.append("    pilot: true")
     if cli:
         lines.append(f"    cli: {cli}")
     if runner_options:
@@ -560,7 +575,7 @@ def generate_agentweave_yml(
         )
     active_agents_yaml = "\n\n".join(active_blocks)
 
-    project_name = session.name.replace('"', '\\"')
+    project_name = _yaml_dq(session.name)
     project_mode = session.mode
 
     template = f"""\
@@ -682,6 +697,7 @@ agents:
   # -- GitHub Copilot CLI --
   # copilot:
   #   runner: copilot
+  #   model: claude-sonnet-4-5        # optional; choose e.g. claude-opus-4.5, gpt-5.5
   #   roles: [backend_dev]
   #   env: [COPILOT_GITHUB_TOKEN]     # fine-grained PAT with 'Copilot Requests' permission
   #   yolo: false

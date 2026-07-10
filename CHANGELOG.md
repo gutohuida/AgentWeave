@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.39.0] - 2026-07-02
+
+### Added (CLI)
+- **Native Hub mode (no Docker).** `agentweave hub start --native` runs the Hub via `uvicorn` without Docker: scaffolds `~/.agentweave/hub/.env` with a generated API key on first run, runs Alembic migrations, and manages a cross-platform PID file for the start/stop/status lifecycle. `--no-detach` runs in the foreground for development. The Docker path now suggests `--native` when Docker is unavailable.
+- **GitHub Copilot CLI runner.** New `copilot` runner type with JSONL (`--output-format json`) stdout parsing, UUID session resume (`--resume=<uuid>`), auth-failure detection, and CLI-based MCP registration. `AGENT_RUNNER_DEFAULTS["copilot"]` now defaults to the `copilot` runner (previously `manual`).
+- **Hub-aware CLI.** `task create/list/show/update` now route through the active transport layer, so tasks created via the CLI are visible to the Hub (previously local-filesystem only). Added `--json` output to `inbox`, `task`, and `agents`; new `agentweave agents list`, `agentweave question ask/get`, and `agentweave msg peek` commands.
+- **`hub_client` config (`auto`/`cli`/`mcp`).** Session- and per-agent-level setting that lets the watchdog ping agents with CLI commands (`agentweave inbox --mark-read`) instead of MCP tool calls, so any agent type works in MCP-restricted environments.
+- **Comprehensive `agentweave.yml` template on `init`.** Fully commented reference covering every runner, plus `jobs`, `quality`, and `opencode` sections; no longer requires `pyyaml` at generation time.
+- **Hub PyPI packaging.** `publish.yml` gains a `publish-hub` job (on `hub-v*` tags) that builds the UI, packages migrations + static UI into the wheel, and publishes `agentweave-hub` to PyPI.
+- **Documented Copilot CLI model selection.** The `copilot` runner already forwarded a configured `model` (e.g. `claude-opus-4.5`, `claude-sonnet-4-5`) via `--model`; the `agentweave.yml` template now shows this with an example, and `_agent_ping_cmd` gained dedicated test coverage for the flag alongside `--yolo`/`--allow-all-tools` and `--resume=<uuid>`.
+
+### Security (CLI)
+- **Native Hub now binds to `127.0.0.1` instead of `0.0.0.0`.** Binding to all interfaces exposed the unauthenticated `GET /api/v1/setup/token` endpoint — which returns the bootstrap API key and gates only on RFC1918 source IPs (all of `10/8` and `172.16-31`) — to other hosts on a corporate LAN. Loopback binding closes this without affecting same-machine CLI discovery or the Docker deployment.
+- **Native `.env` is written `0600` on POSIX.** The scaffolded `~/.agentweave/hub/.env` holds the bootstrap API key and ticket secret; it was previously created world-readable (umask default). Now restricted to the owner, matching the existing `transport.json` handling.
+
+### Fixed (CLI)
+- **`agentweave inbox` is read-only by default again.** The unreleased default of marking every message read (and, with no `--agent`, draining *all* agents' inboxes) could silently consume messages before their target agent processed them. Marking-as-read now requires an explicit `--mark-read`; the watchdog CLI-mode prompt already passes it.
+- **Concurrent Copilot agents with PAT auth.** The `spawn_runner_copilot` serialization lock (needed only for the Windows Credential Manager OAuth race) is now skipped when a PAT (`COPILOT_GITHUB_TOKEN`/`GH_TOKEN`/`GITHUB_TOKEN`) is configured, allowing full concurrency. OAuth users remain serialized.
+- **`hub stop`/`hub destroy` no longer risk killing an unrelated process.** After an OS PID recycle the stored PID could belong to a bystander; the native stop/destroy paths now confirm the Hub is actually serving on the recorded port before terminating, and otherwise just clear the stale PID file.
+- **Orphaned `uvicorn` on failed native startup.** When the startup health check times out, the spawned process is now terminated instead of being left to linger and bind the port with no PID file to track it.
+- **Invalid `agentweave.yml` for names with backslashes/newlines.** The generator only escaped double quotes; a project name containing a Windows path or newline produced a file that failed to parse. Backslashes, quotes, and control characters are now escaped.
+
+---
 ## [0.38.1] - 2026-06-18
 
 ### Fixed (CLI)
