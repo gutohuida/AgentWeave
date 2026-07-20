@@ -36,6 +36,8 @@ jobs:
   publish-hub:
     if: startsWith(github.ref, 'refs/tags/hub-v')
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
 
     steps:
     - uses: actions/checkout@v4
@@ -64,7 +66,7 @@ jobs:
     - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build twine
+        pip install build
 
     - name: Build hub package
       working-directory: hub
@@ -72,9 +74,6 @@ jobs:
         python -m build
 
     - name: Publish hub to PyPI
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      working-directory: hub
-      run: |
-        twine upload dist/*
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: hub/dist
