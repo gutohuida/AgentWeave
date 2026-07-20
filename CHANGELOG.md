@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Maintenance release; no notable Hub-side changes.
 
 ---
+## [Hub 0.34.1] - 2026-07-20
+
+### Fixed (Hub)
+- **Hub PyPI publishing switched to OIDC trusted publishing.** The `publish-hub` job in `.github/workflows/publish.yml` now uses `pypa/gh-action-pypi-publish` with `permissions: id-token: write` instead of a stored `PYPI_API_TOKEN`, matching the trusted publisher configured on PyPI for `agentweave-hub`.
+
+---
 ## [0.40.0] - 2026-07-20
 
 ### Added (CLI)
