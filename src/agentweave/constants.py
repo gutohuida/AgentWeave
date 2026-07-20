@@ -304,7 +304,9 @@ PRIORITIES = ["low", "medium", "high", "critical"]
 CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
 
 # Valid role IDs (from templates/roles/roles.json)
+# This is the single source of truth; roles.py imports VALID_ROLE_IDS from here.
 VALID_ROLE_IDS = [
+    # Human-title (developer) roles
     "tech_lead",
     "architect",
     "backend_dev",
@@ -318,6 +320,14 @@ VALID_ROLE_IDS = [
     "technical_writer",
     "code_reviewer",
     "project_manager",
+    # AI-native (function-first) roles
+    "coordinator",
+    "model_router",
+    "explorer",
+    "implementer",
+    "verifier",
+    "guardian",
+    "context_keeper",
 ]
 
 # Claude context window limits by model name substring (all Claude 3.x/4.x are 200K)

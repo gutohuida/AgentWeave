@@ -92,6 +92,55 @@
       "responsibilities_short": "Task tracking, progress coordination",
       "file": "roles/project_manager.md",
       "_default_for": []
+    },
+    "coordinator": {
+      "label": "Coordinator",
+      "version": 1,
+      "responsibilities_short": "Orchestrate: decompose goal, delegate in parallel, aggregate results",
+      "file": "roles/coordinator.md",
+      "_default_for": []
+    },
+    "model_router": {
+      "label": "Model Router",
+      "version": 1,
+      "responsibilities_short": "Route each task to the best agent/model by difficulty, capability, cost",
+      "file": "roles/model_router.md",
+      "_default_for": []
+    },
+    "explorer": {
+      "label": "Explorer",
+      "version": 1,
+      "responsibilities_short": "Reconnaissance and grounding; return condensed, cited findings",
+      "file": "roles/explorer.md",
+      "_default_for": []
+    },
+    "implementer": {
+      "label": "Implementer",
+      "version": 1,
+      "responsibilities_short": "Turn a well-specified task into working, tested code (stack-agnostic)",
+      "file": "roles/implementer.md",
+      "_default_for": []
+    },
+    "verifier": {
+      "label": "Verifier",
+      "version": 1,
+      "responsibilities_short": "Evidence-gated evaluation against tests and specs",
+      "file": "roles/verifier.md",
+      "_default_for": []
+    },
+    "guardian": {
+      "label": "Guardian",
+      "version": 1,
+      "responsibilities_short": "AI-specific safety review: slopsquatting, injection, scopes, secrets",
+      "file": "roles/guardian.md",
+      "_default_for": []
+    },
+    "context_keeper": {
+      "label": "Context Keeper",
+      "version": 1,
+      "responsibilities_short": "Curate shared memory; summarize/compact; fight context rot",
+      "file": "roles/context_keeper.md",
+      "_default_for": []
     }
   }
 }

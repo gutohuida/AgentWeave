@@ -623,9 +623,14 @@ hub:
 #   manual      No CLI -- relay prompts only
 #
 # Available roles (add to any agent):
-#   tech_lead | architect | backend_dev | frontend_dev | fullstack_dev
-#   qa_engineer | devops_engineer | security_engineer | data_engineer
-#   ml_engineer | technical_writer | code_reviewer | project_manager
+#   Human-title (developer) roles:
+#     tech_lead | architect | backend_dev | frontend_dev | fullstack_dev
+#     qa_engineer | devops_engineer | security_engineer | data_engineer
+#     ml_engineer | technical_writer | code_reviewer | project_manager
+#   AI-native (function-first) roles:
+#     coordinator | model_router | explorer | implementer | verifier
+#     guardian | context_keeper
+#   Both sets are supported and can be combined (e.g. [implementer, frontend_dev]).
 #
 # Common per-agent fields:
 #   runner:         (required) Which CLI to invoke -- see list above

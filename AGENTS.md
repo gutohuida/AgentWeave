@@ -199,7 +199,9 @@ add_role_to_agent("kimi", "backend_dev", config)
 set_agent_roles("claude", ["tech_lead", "backend_dev"], config)
 ```
 
-Available roles: `backend_dev`, `frontend_dev`, `tech_lead`, `qa_engineer`, `devops_engineer`, `security_engineer`, `docs_writer`, `product_manager`, `project_manager`, `ui_designer`, `ux_researcher`, `data_engineer`, `data_scientist`, `mobile_dev`
+Available roles (see `constants.py` `VALID_ROLE_IDS` for the source of truth):
+- Human-title: `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
+- AI-native (function-first): `coordinator`, `model_router`, `explorer`, `implementer`, `verifier`, `guardian`, `context_keeper`
 
 Role guides are auto-copied to `.agentweave/roles/{role}.md` when assigned.
 

@@ -140,7 +140,31 @@ agentweave roles set <agent> <role1,role2,...> # set multiple roles (replaces ex
 agentweave roles available                     # list available role types
 ```
 
-**Available roles:** `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
+**Available roles:**
+
+*Human-title (developer) roles:* `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
+
+*AI-native (function-first) roles:* `coordinator`, `model_router`, `explorer`, `implementer`, `verifier`, `guardian`, `context_keeper`
+
+### AI-Native Roles
+
+The AI-native roles name an agent by the **cognitive function** it performs rather than a human job title. They reflect where multi-agent frameworks and research have converged, and they fill gaps the human-title roles don't cover. Both vocabularies are fully supported and can be combined on the same agent.
+
+| Role | Responsibility |
+|------|----------------|
+| `coordinator` | Orchestrate: decompose the goal, delegate independent workstreams in parallel, aggregate results. |
+| `model_router` | Route each task to the best agent/model by difficulty × capability × cost × latency; prefer a cheap-first cascade; respect human model pins. |
+| `explorer` | Reconnaissance and grounding — investigate code/docs/web and return condensed, cited findings. |
+| `implementer` | Turn a well-specified task into working, tested code (stack-agnostic). |
+| `verifier` | Evidence-gated evaluation against tests and specs — never opinion-driven, never open-ended "reflect and revise". |
+| `guardian` | AI-specific safety review: slopsquatting/hallucinated packages, prompt injection, over-broad scopes, hardcoded secrets. |
+| `context_keeper` | Curate `shared/context.md`, summarize/compact, and fight context rot over long sessions. |
+
+**When to prefer AI-native roles:** when you want roles that map to *what an agent does* (orchestrate, route, explore, implement, verify, guard, remember) rather than to a job description — especially for `model_router` (choose the right model per task) and `context_keeper` (long-session memory curation), which have no human-title equivalent.
+
+**When to prefer human-title roles:** when stack- or domain-specific guidance is what matters (e.g. `frontend_dev`, `data_engineer`).
+
+You can layer both — for example, an `implementer` that is also a `frontend_dev` gets the functional contract *and* the stack-specific guide.
 
 ### Multi-Role Examples
 
@@ -150,6 +174,13 @@ agentweave roles add claude backend_dev
 
 # Set multiple roles at once (replaces any existing roles)
 agentweave roles set kimi backend_dev,frontend_dev
+
+# Assign AI-native roles
+agentweave roles add claude coordinator
+agentweave roles set gpt model_router
+
+# Combine an AI-native functional role with a human-title domain add-on
+agentweave roles set kimi implementer,frontend_dev
 
 # Remove a specific role
 agentweave roles remove claude backend_dev

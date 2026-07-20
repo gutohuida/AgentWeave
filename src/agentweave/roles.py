@@ -7,26 +7,12 @@ transport is configured.
 
 from typing import Any, Dict, List, Optional, Tuple
 
+# VALID_ROLE_IDS is defined canonically in constants.py; re-exported here for
+# backward compatibility. Add new role IDs in constants.py only.
 from .constants import ROLES_CONFIG_FILE
+from .constants import VALID_ROLE_IDS as VALID_ROLE_IDS
 from .templates import load_roles_template
 from .utils import load_json, save_json
-
-# Valid role IDs from the templates
-VALID_ROLE_IDS = [
-    "tech_lead",
-    "architect",
-    "backend_dev",
-    "frontend_dev",
-    "fullstack_dev",
-    "qa_engineer",
-    "devops_engineer",
-    "security_engineer",
-    "data_engineer",
-    "ml_engineer",
-    "technical_writer",
-    "code_reviewer",
-    "project_manager",
-]
 
 
 def load_roles_config() -> Optional[Dict[str, Any]]:
@@ -103,6 +89,37 @@ def get_available_roles() -> List[Tuple[str, str, str]]:
             ("technical_writer", "Technical Writer", "Documentation, READMEs, API docs"),
             ("code_reviewer", "Code Reviewer", "Pull request reviews, style enforcement"),
             ("project_manager", "Project Manager", "Task tracking, progress coordination"),
+            (
+                "coordinator",
+                "Coordinator",
+                "Orchestrate: decompose goal, delegate in parallel, aggregate results",
+            ),
+            (
+                "model_router",
+                "Model Router",
+                "Route each task to the best agent/model by difficulty, capability, cost",
+            ),
+            (
+                "explorer",
+                "Explorer",
+                "Reconnaissance and grounding; return condensed, cited findings",
+            ),
+            (
+                "implementer",
+                "Implementer",
+                "Turn a well-specified task into working, tested code (stack-agnostic)",
+            ),
+            ("verifier", "Verifier", "Evidence-gated evaluation against tests and specs"),
+            (
+                "guardian",
+                "Guardian",
+                "AI-specific safety review: slopsquatting, injection, scopes, secrets",
+            ),
+            (
+                "context_keeper",
+                "Context Keeper",
+                "Curate shared memory; summarize/compact; fight context rot",
+            ),
         ]
 
 

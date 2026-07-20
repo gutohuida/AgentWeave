@@ -219,3 +219,143 @@ class TestAgentRolesDisplay:
         config = {"agent_roles": {"kimi": "backend_dev"}}  # Legacy: string instead of list
         roles = get_agent_roles("kimi", config)
         assert roles == ["backend_dev"]
+
+
+AI_NATIVE_ROLE_IDS = [
+    "coordinator",
+    "model_router",
+    "explorer",
+    "implementer",
+    "verifier",
+    "guardian",
+    "context_keeper",
+]
+
+ROLE_SKELETON_SECTIONS = [
+    "## You Are Responsible For",
+    "## You Are NOT Responsible For",
+    "## Behavioral Rules",
+    "## Anti-Patterns",
+    "## Escalation Path",
+]
+
+
+class TestAINativeRoles:
+    """Test the AI-native (function-first) roles added alongside the human-title roles."""
+
+    def test_valid_role_ids_single_source_of_truth(self):
+        """roles.py re-exports the canonical VALID_ROLE_IDS from constants.py."""
+        from agentweave.constants import VALID_ROLE_IDS as CONSTANTS_IDS
+        from agentweave.roles import VALID_ROLE_IDS as ROLES_IDS
+
+        # Same object — defined once in constants.py, imported by roles.py.
+        assert ROLES_IDS is CONSTANTS_IDS
+
+    def test_all_new_roles_in_valid_role_ids(self):
+        """All seven AI-native role IDs are registered as valid."""
+        from agentweave.constants import VALID_ROLE_IDS
+
+        for role_id in AI_NATIVE_ROLE_IDS:
+            assert role_id in VALID_ROLE_IDS
+
+    def test_human_title_roles_still_present(self):
+        """The 13 human-title roles remain valid (additive, non-breaking)."""
+        from agentweave.constants import VALID_ROLE_IDS
+
+        for role_id in [
+            "tech_lead",
+            "architect",
+            "backend_dev",
+            "frontend_dev",
+            "fullstack_dev",
+            "qa_engineer",
+            "devops_engineer",
+            "security_engineer",
+            "data_engineer",
+            "ml_engineer",
+            "technical_writer",
+            "code_reviewer",
+            "project_manager",
+        ]:
+            assert role_id in VALID_ROLE_IDS
+
+    def test_roles_json_entries_well_formed(self):
+        """Each new role has a well-formed roles.json entry with _default_for: []."""
+        from agentweave.templates import load_roles_template
+
+        roles = load_roles_template()["roles"]
+        for role_id in AI_NATIVE_ROLE_IDS:
+            assert role_id in roles, f"{role_id} missing from roles.json"
+            entry = roles[role_id]
+            assert entry["label"]
+            assert entry["version"] == 1
+            assert entry["responsibilities_short"]
+            assert entry["file"] == f"roles/{role_id}.md"
+            assert entry["_default_for"] == []
+
+    def test_no_agent_auto_assigned_new_role(self):
+        """No known agent is defaulted to any of the new AI-native roles."""
+        from agentweave.templates import load_roles_template
+
+        roles = load_roles_template()["roles"]
+        for role_id, entry in roles.items():
+            if role_id in AI_NATIVE_ROLE_IDS:
+                assert entry["_default_for"] == [], f"{role_id} must not be a default"
+
+    def test_new_roles_pass_validation(self):
+        """Each new role ID passes validate_role()."""
+        for role_id in AI_NATIVE_ROLE_IDS:
+            is_valid, error = validate_role(role_id)
+            assert is_valid is True, f"{role_id}: {error}"
+
+    def test_get_available_roles_lists_all_twenty(self):
+        """get_available_roles() returns all 20 roles (13 human + 7 AI-native)."""
+        role_ids = [r[0] for r in get_available_roles()]
+        for role_id in AI_NATIVE_ROLE_IDS:
+            assert role_id in role_ids
+        assert len(role_ids) == 20
+
+    def test_role_md_files_load_with_skeleton(self):
+        """Each new role .md loads and contains all six skeleton sections."""
+        from agentweave.templates import get_role_md
+
+        for role_id in AI_NATIVE_ROLE_IDS:
+            content = get_role_md(role_id)
+            assert content.startswith("# "), f"{role_id} missing title heading"
+            assert "> **Scope:**" in content, f"{role_id} missing Scope blockquote"
+            for section in ROLE_SKELETON_SECTIONS:
+                assert section in content, f"{role_id} missing section: {section}"
+
+    def test_assign_new_role_copies_md_file(self, tmp_path, monkeypatch):
+        """Assigning a new role copies its .md guide to .agentweave/roles/."""
+        from agentweave.roles import copy_role_md_file
+
+        monkeypatch.chdir(tmp_path)
+        os.makedirs(".agentweave", exist_ok=True)
+
+        for role_id in AI_NATIVE_ROLE_IDS:
+            assert copy_role_md_file(role_id) is True
+            copied = tmp_path / ".agentweave" / "roles" / f"{role_id}.md"
+            assert copied.exists(), f"{role_id}.md was not copied"
+            assert "> **Scope:**" in copied.read_text(encoding="utf-8")
+
+    def test_set_agent_roles_accepts_new_roles(self):
+        """set_agent_roles accepts the new roles and records role definitions."""
+        config = None
+        success, msg, config = set_agent_roles(
+            "router-agent", ["model_router", "coordinator"], config
+        )
+        assert success is True
+        roles = get_agent_roles("router-agent", config)
+        assert "model_router" in roles
+        assert "coordinator" in roles
+
+    def test_model_router_can_layer_on_domain_role(self):
+        """AI-native and human-title roles can be combined on one agent (add-on pattern)."""
+        config = None
+        config = add_role_to_agent("worker", "implementer", config)[2]
+        success, msg, config = add_role_to_agent("worker", "frontend_dev", config)
+        assert success is True
+        roles = get_agent_roles("worker", config)
+        assert "implementer" in roles
+        assert "frontend_dev" in roles
