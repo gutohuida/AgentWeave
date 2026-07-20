@@ -15,6 +15,22 @@ For technical delivery planning, use `/aw-spec-technical-explore`.
 
 ---
 
+## Spec-Driven Mindset
+
+Even while exploring loosely, bias the thinking toward what will later become a rigorous
+specification (produced by `/aw-spec-propose` as an approval-gated `spec.html`):
+
+- **Separate WHAT/WHY from HOW.** Stay on user-facing behavior, goals, and constraints.
+  Resist committing to a stack or architecture here — that is `/aw-spec-technical-explore`.
+- **Push toward testable requirements.** When a need becomes concrete, phrase it as an
+  assertion you could test ("the system MUST …"), not a vague wish.
+- **Name explicit non-goals**, not just what is in scope.
+- **Flag ambiguity, don't resolve it silently.** Mark open unknowns as
+  `[NEEDS CLARIFICATION: question]` so they are visible for the proposal to resolve.
+- **Capture the "why"** behind constraints — a justified rule generalizes to edge cases.
+
+---
+
 ## The Stance
 
 - **Curious, not prescriptive** - Ask questions that emerge naturally.
@@ -137,16 +153,19 @@ Generated: <date>
 - [Goal]
 
 ## Non-Goals
-- [Out of scope]
+- [Explicit out-of-scope item — state these, don't rely on omission]
 
 ## Requirements Emerging
-- [Requirement or behavior]
+- [Phrase as a testable assertion where possible, e.g. "System MUST …" / "SHOULD …"]
 
 ## Codebase Context
 - [Relevant files, modules, commands, docs, or patterns]
 
 ## Options Discussed
 - [Option]: [tradeoff]
+
+## Open Questions
+- [ ] [NEEDS CLARIFICATION: unresolved question the proposal must answer]
 
 ## Risks / Unknowns
 - [Risk or open question]
@@ -174,7 +193,7 @@ When the idea is clear enough, summarize:
 Next: run `/aw-spec-technical-explore` to plan how to build it, or keep exploring the idea.
 ```
 
-If the user wants to skip technical exploration, it is acceptable to move directly to `/aw-spec-propose`, but note that the proposal will need to make more technical assumptions.
+If the user wants to skip technical exploration, it is acceptable to move directly to `/aw-spec-propose`, but note that the proposal will need to make more technical assumptions. `/aw-spec-propose` turns this thinking into an authoritative, approval-gated `spec.html`.
 
 ---
 

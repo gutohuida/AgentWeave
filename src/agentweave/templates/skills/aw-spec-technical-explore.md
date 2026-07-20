@@ -18,6 +18,22 @@ For product/problem discovery, use `/aw-spec-explore`.
 
 ---
 
+## Spec-Driven Mindset
+
+The output of this stage feeds the **Design** section of the authoritative `spec.html`
+that `/aw-spec-propose` generates. Keep it disciplined:
+
+- **HOW belongs here, WHAT/WHY stays in requirements.** Architecture, stack, data model,
+  and sequencing live in Design — do not restate or mutate user-facing requirements.
+- **Justify every non-obvious decision.** Record the "why", not just the choice, so it
+  generalizes and can be challenged later.
+- **Mark unresolved technical unknowns** as `[NEEDS CLARIFICATION: question]` rather than
+  guessing — the proposal must resolve them before approval.
+- **Make testing and sequencing explicit and traceable**, so tasks can later map back to
+  requirement IDs.
+
+---
+
 ## The Stance
 
 - **Architecture-first** - Understand the current system before choosing a path.
@@ -217,7 +233,7 @@ Generated: <date>
 - [Decision inherited from the codebase]
 
 ## Decisions For This Change
-- **[Decision]**: [choice and rationale]
+- **[Decision]**: [choice and rationale — always record the "why"]
 
 ## Testing Strategy
 - [What to test, when, and with which commands]
@@ -228,11 +244,14 @@ Generated: <date>
 ## AgentWeave Execution Strategy
 - [Agents, roles, sequencing, review, quality settings]
 
+## Open Questions
+- [ ] [NEEDS CLARIFICATION: unresolved technical question the proposal must answer]
+
 ## Risks / Unknowns
 - [Risk or unresolved technical question]
 
 ## Ready For Proposal
-- [What `/aw-spec-propose` should carry into proposal/design/tasks/team]
+- [What `/aw-spec-propose` should carry into the spec.html Design, Tasks, and Team sections]
 ```
 
 Always offer before writing notes. If the user does not want artifacts, provide a concise technical summary instead.
@@ -253,7 +272,7 @@ When the technical path is clear, summarize:
 **Agent plan**: [roles/agents/sequencing]
 **Open questions**: [if any]
 
-Next: run `/aw-spec-propose` to formalize this into proposal, design, tasks, and team artifacts.
+Next: run `/aw-spec-propose` to formalize this into an authoritative, approval-gated `spec.html` (requirements, design, tasks, and team in one document).
 ```
 
 ---

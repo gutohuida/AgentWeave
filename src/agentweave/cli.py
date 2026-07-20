@@ -58,6 +58,7 @@ from .session import Session
 from .task import Task
 from .templates import (
     get_role_md,
+    get_skill_reference,
     get_skill_template,
     get_template,
     list_skill_templates,
@@ -569,6 +570,42 @@ def _print_init_summary(
         print("  Edit it to add/remove agents, then run 'agentweave activate'")
 
 
+# Reference documents bundled into a skill's directory at generation time.
+# These live in templates/skills/references/ and are NOT skills themselves.
+SKILL_SUPPORT_FILES: dict[str, list[str]] = {
+    "aw-spec-propose": ["html-spec-conventions.md"],
+    "aw-spec-apply": ["html-spec-conventions.md"],
+    "aw-spec-archive": ["html-spec-conventions.md"],
+}
+
+
+def _ensure_skill_support_files(skill_dir: Path, name: str, force: bool = False) -> int:
+    """Copy any declared reference documents into a generated skill directory.
+
+    Reference docs are bundled verbatim (no substitution) so a skill is
+    self-contained and can link to its authoring guide. Returns the number of
+    support files written.
+    """
+    support_files = SKILL_SUPPORT_FILES.get(name)
+    if not support_files:
+        return 0
+
+    written = 0
+    for filename in support_files:
+        dest = skill_dir / filename
+        if dest.exists() and not force:
+            continue
+        try:
+            content = get_skill_reference(filename)
+        except FileNotFoundError:
+            continue
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written += 1
+
+    return written
+
+
 def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = False) -> int:
     """Generate .claude/skills/ from skill templates, personalized for this session.
 
@@ -595,18 +632,18 @@ def _generate_claude_skills(session: "Session", base_dir: Path, force: bool = Fa
     for name in sorted(skill_names):
         skill_dir = skills_dir / name
         skill_file = skill_dir / "SKILL.md"
-        if skill_file.exists() and not force:
-            continue
-        try:
-            template = get_skill_template(name)
-        except FileNotFoundError:
-            continue
-        content = template
-        for key, value in substitutions.items():
-            content = content.replace("{" + key + "}", value)
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        skill_file.write_text(content, encoding="utf-8")
-        count += 1
+        if force or not skill_file.exists():
+            try:
+                template = get_skill_template(name)
+            except FileNotFoundError:
+                continue
+            content = template
+            for key, value in substitutions.items():
+                content = content.replace("{" + key + "}", value)
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            skill_file.write_text(content, encoding="utf-8")
+            count += 1
+        _ensure_skill_support_files(skill_dir, name, force=force)
 
     return count
 
@@ -640,18 +677,18 @@ def _generate_codex_skills(session: "Session", base_dir: Path, force: bool = Fal
     for name in sorted(skill_names):
         skill_dir = skills_dir / name
         skill_file = skill_dir / "SKILL.md"
-        if skill_file.exists() and not force:
-            continue
-        try:
-            template = get_skill_template(name)
-        except FileNotFoundError:
-            continue
-        content = template
-        for key, value in substitutions.items():
-            content = content.replace("{" + key + "}", value)
-        skill_dir.mkdir(parents=True, exist_ok=True)
-        skill_file.write_text(content, encoding="utf-8")
-        count += 1
+        if force or not skill_file.exists():
+            try:
+                template = get_skill_template(name)
+            except FileNotFoundError:
+                continue
+            content = template
+            for key, value in substitutions.items():
+                content = content.replace("{" + key + "}", value)
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            skill_file.write_text(content, encoding="utf-8")
+            count += 1
+        _ensure_skill_support_files(skill_dir, name, force=force)
 
     return count
 

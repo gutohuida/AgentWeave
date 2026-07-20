@@ -15,11 +15,20 @@ The AW-Spec workflow provides a structured way to move from an unclear idea to c
 |-------|---------|-------|--------|
 | **Explore** | Investigate the idea, problem, workflows, requirements, and risks | `/aw-spec-explore` | Understanding, optional `idea.md` |
 | **Technical Explore** | Investigate architecture, stack, deployment, testing, sequencing, and agent plan | `/aw-spec-technical-explore` | Technical direction, optional `technical.md` |
-| **Propose** | Create structured plan with design, tasks, and team ownership | `/aw-spec-propose` | `proposal.md`, `design.md`, `tasks.md`, `team.md` |
-| **Apply** | Implement the planned changes | `/aw-spec-apply` | Working code |
+| **Propose** | Create the authoritative, approval-gated specification | `/aw-spec-propose` | `spec.html` (single self-contained doc) |
+| **Apply** | Implement the planned changes (only after approval) | `/aw-spec-apply` | Working code |
 | **Archive** | Finalize and store completed work | `/aw-spec-archive` | Archived change |
 
 Both exploration stages are optional, but they are useful when the scope is unclear, the implementation is complex, or multiple agents will work on the change.
+
+The Propose stage produces a single authoritative **`spec.html`** — a self-contained HTML
+specification that **replaces** the older markdown artifacts (`proposal.md`, `design.md`,
+`tasks.md`, `team.md`). It follows spec-driven-development best practices (testable
+requirements with IDs, producer/consumer conformance split, Given/When/Then acceptance
+criteria, numbered algorithms, explicit non-goals, task→requirement traceability) and
+must be **explicitly approved by the user** before implementation begins. See
+[`html-spec-conventions.md`](../../src/agentweave/templates/skills/references/html-spec-conventions.md)
+for the authoring conventions and the machine-readable metadata contract.
 
 ## Prerequisites
 
@@ -86,7 +95,7 @@ spec/discovery/<name>/technical.md
 
 ## Stage 3: Propose
 
-Once the idea and technical path are clear, create a structured proposal with the artifacts needed for implementation.
+Once the idea and technical path are clear, generate the authoritative specification.
 
 ```bash
 /aw-spec-propose "add-user-authentication"
@@ -101,14 +110,31 @@ spec/discovery/<name>/technical.md
 
 If discovery notes do not exist, propose still works from the user's request.
 
-This creates a change directory at `spec/changes/<name>/` containing:
+This creates a change directory at `spec/changes/<name>/` containing a single
+self-contained **`spec.html`**:
 
-| Artifact | Purpose |
-|----------|---------|
-| `proposal.md` | What and why: business case, scope, goals, non-goals |
-| `design.md` | How: technical approach, decisions, architecture, risks |
-| `tasks.md` | Implementation checklist with role or agent ownership |
-| `team.md` | Recommended team, current-session gaps, setup commands |
+| Section | Purpose |
+|---------|---------|
+| Summary / Problem | What and why: business case and motivation |
+| Scope & Non-Goals | Explicit in-scope and out-of-scope items |
+| Conformance | Producer (allowed inputs) vs. consumer (required behavior) |
+| Requirements | Testable `FR-00x` assertions (MUST/SHOULD/MAY) |
+| Acceptance Criteria | Given/When/Then, linked to requirement IDs |
+| Behavior / Algorithms | Numbered steps for multi-step/conditional behavior |
+| Design | How: approach, architecture, decisions, security |
+| Team & Ownership | Recommended roles, current-session gaps |
+| Tasks | Implementation checklist, each traced to requirement IDs |
+| Open Questions | `[NEEDS CLARIFICATION]` markers (must be empty to approve) |
+| Approval | Approval status, approver, and date |
+
+Task completion state and the approval status live **inside** `spec.html` as
+machine-readable metadata (`aw-spec-status`) and per-task `data-status` attributes.
+
+### Approval Gate
+
+`spec.html` starts as `draft`. Propose ends by asking the user to **approve** the
+specification. Only on explicit approval does its status flip to `approved`. Implementation
+(`/aw-spec-apply`) is **blocked** until the spec is approved.
 
 ### Change Directory Structure
 
@@ -116,15 +142,12 @@ This creates a change directory at `spec/changes/<name>/` containing:
 spec/
 └── changes/
     └── add-user-authentication/
-        ├── proposal.md
-        ├── design.md
-        ├── tasks.md
-        └── team.md
+        └── spec.html
 ```
 
 ## Stage 4: Apply
 
-Implement the tasks from your proposal.
+Implement the tasks from your **approved** specification.
 
 ```bash
 # Apply the current change
@@ -136,29 +159,32 @@ Implement the tasks from your proposal.
 
 The apply stage:
 
-1. Reads the formal spec artifacts (`proposal.md`, `design.md`, `tasks.md`)
-2. Shows progress, such as `3/7 tasks complete`
-3. Works through each pending task
-4. Marks tasks complete as they finish (`- [ ]` to `- [x]`)
-5. Delegates work to matching agents when appropriate and confirmed by the user
+1. **Enforces the approval gate** — refuses to run unless `spec.html` has
+   `aw-spec-status="approved"`
+2. Reads the authoritative `spec.html` (requirements, design, tasks)
+3. Shows progress, such as `3/7 tasks complete`
+4. Works through each pending task (TDD: tests first), scoped to its requirement IDs
+5. Marks tasks complete **inside `spec.html`** by flipping each task's `data-status` to
+   `done` and checking its checkbox, then updating the progress counter
+6. Delegates work to matching agents when appropriate and confirmed by the user
 
-Earlier discovery notes are supporting context. The formal proposal, design, and tasks are the source of truth during implementation.
+Earlier discovery notes are supporting context. The approved `spec.html` is the source of
+truth during implementation.
 
 ### Agent Delegation
 
-Tasks can include role or agent ownership:
+Each task in `spec.html` carries role and agent ownership as data attributes:
 
-```markdown
-## Backend Developer - claude
-
-- [ ] Create API endpoints
-
-## Frontend Developer - kimi
-
-- [ ] Build login page UI
+```html
+<li class="task" data-task-id="T1" data-status="pending"
+    data-role="backend_dev" data-agent="claude" data-requirements="FR-1">
+  <input type="checkbox" disabled>
+  <span class="task-desc">Create the token-refresh endpoint.</span>
+</li>
 ```
 
-When applying changes with role ownership, tasks can be delegated to matching agents in your session.
+When applying changes with role ownership, tasks can be delegated to matching agents in
+your session.
 
 ## Stage 5: Archive
 
@@ -174,10 +200,10 @@ When all tasks are complete, archive the change to keep your workspace clean.
 
 Archiving:
 
-1. Checks that all artifacts are complete
-2. Verifies all tasks are marked done
+1. Verifies the spec was approved (`aw-spec-status="approved"`)
+2. Verifies every task in `spec.html` has `data-status="done"`
 3. Optionally syncs delta specs to the main spec library
-4. Moves the change to `spec/changes/archive/YYYY-MM-DD-<name>/`
+4. Moves the change (including `spec.html`) to `spec/changes/archive/YYYY-MM-DD-<name>/`
 
 ## Workflow Integration
 
@@ -195,15 +221,17 @@ User: "I want to add user authentication"
    -> Optionally capture spec/discovery/add-user-authentication/technical.md
 
 3. /aw-spec-propose "add-user-authentication"
-   -> Creates proposal.md, design.md, tasks.md, and team.md
+   -> Generates the authoritative spec/changes/add-user-authentication/spec.html
    -> Uses discovery notes if present
+   -> Ends by asking the user to APPROVE the spec (status: draft -> approved)
 
 4. /aw-spec-apply
+   -> Blocked until the spec is approved
    -> Implements tasks one by one or delegates them
-   -> Marks tasks complete
+   -> Marks tasks complete inside spec.html (data-status="done")
 
 5. /aw-spec-archive
-   -> Moves completed change to archive
+   -> Verifies approval + all tasks done, then moves the change to archive
 ```
 
 ### Lightweight Path
@@ -252,8 +280,8 @@ The AW-Spec workflow is not strictly linear. You can:
 
 ### When to Apply
 
-- The proposal and design are reviewed enough to implement
-- Tasks are concrete
+- The `spec.html` has been **approved** by the user (required — apply is blocked otherwise)
+- Tasks are concrete and traced to requirement IDs
 - Ownership and sequencing are clear
 
 ### When to Archive
