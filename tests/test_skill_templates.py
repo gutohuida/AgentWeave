@@ -8,6 +8,63 @@ from agentweave.templates import (
     list_skill_templates,
 )
 
+SETUP_SKILLS = [
+    "aw-setup",
+    "aw-setup-agent",
+    "aw-setup-hub",
+    "aw-setup-transport",
+    "aw-setup-roles",
+    "aw-setup-proxy",
+    "aw-setup-security",
+]
+
+
+def test_setup_skill_templates_are_listed():
+    skills = list_skill_templates()
+
+    for name in SETUP_SKILLS:
+        assert name in skills, f"missing setup skill template: {name}"
+        template = get_skill_template(name)
+        assert f"name: {name}" in template
+        assert "description:" in template
+
+
+def test_setup_skill_templates_reference_real_commands():
+    assert "agentweave activate" in get_skill_template("aw-setup")
+    assert "agentweave hub start" in get_skill_template("aw-setup-hub")
+    assert "transport setup --type git" in get_skill_template("aw-setup-transport")
+    assert "roles set" in get_skill_template("aw-setup-roles")
+    assert "--runner claude_proxy" in get_skill_template("aw-setup-proxy")
+    assert "agent configure" in get_skill_template("aw-setup-agent")
+
+
+def test_setup_security_skill_covers_quality_guards():
+    template = get_skill_template("aw-setup-security")
+    assert "echo_chamber_guard" in template
+    assert "dependency_check" in template
+    assert "review_required" in template
+    assert "attribution_tag" in template
+    assert "guardian" in template
+
+
+def test_skill_generation_includes_setup_skills(tmp_path):
+    session = Session.create(
+        name="SetupProject",
+        principal="claude",
+        agents=["claude", "kimi"],
+    )
+
+    _generate_claude_skills(session, tmp_path)
+    _generate_codex_skills(session, tmp_path)
+
+    for name in SETUP_SKILLS:
+        claude_skill = tmp_path / ".claude" / "skills" / name / "SKILL.md"
+        codex_skill = tmp_path / ".agents" / "skills" / name / "SKILL.md"
+        assert claude_skill.exists(), f"missing .claude skill: {name}"
+        assert codex_skill.exists(), f"missing .agents skill: {name}"
+        assert "SetupProject" in claude_skill.read_text(encoding="utf-8")
+        assert "SetupProject" in codex_skill.read_text(encoding="utf-8")
+
 
 def test_aw_spec_technical_explore_template_is_listed():
     skills = list_skill_templates()

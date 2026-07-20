@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [0.41.0] - 2026-07-20
+
+### Added (CLI)
+- **Project-setup skills installed by `init`.** Seven new skill templates are generated into `.claude/skills/` and `.agents/skills/` alongside the existing `aw-*` skills: `aw-setup` (guided end-to-end project setup — mode, Hub none/local/remote, agents/runners, roles, security guardrails, API keys, then `activate` + `doctor`), `aw-setup-agent` (add/reconfigure one agent: runner picker, model, roles, env, yolo/pilot), `aw-setup-hub` (local Docker/native Hub lifecycle and remote-Hub connection), `aw-setup-transport` (local vs git vs http, incl. `--cluster` workspaces), `aw-setup-roles` (full 20-role catalog with assignment via CLI or `agentweave.yml`), `aw-setup-proxy` (claude_proxy providers, `.env` keys, `switch`/`run`), and `aw-setup-security` (the `quality:` guardrails — `review_required`, `echo_chamber_guard`, `dependency_check`, `attribution_tag`, `docs_threshold` — plus guardian/security roles and a secrets-hygiene checklist).
+- **Spec-workflow skills overhauled to SDD best practices.** `aw-spec-propose`, `aw-spec-apply`, and `aw-spec-archive` now author an authoritative HTML `spec.html` with structured requirements (`FR-*`), status gates, approval tracking, and bundled conventions; markdown artifacts are replaced by the single HTML spec.
+
+### Changed (CLI)
+- **Deployment skill fixed.** `aw-deploy` now reads PyPI's canonical `info.version` instead of string-sorting release keys (which incorrectly reported `0.9.7` as the latest), uses Git-Bash-compatible `pwd -W`, and distinguishes CLI (`v*`) from Hub (`hub-v*`) tags.
+
+### Added (Hub v0.34.0)
+- Maintenance release; no notable Hub-side changes.
+
+---
 ## [0.40.0] - 2026-07-20
 
 ### Added (CLI)
