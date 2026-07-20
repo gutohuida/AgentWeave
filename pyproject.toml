@@ -80,6 +80,13 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = ["src/agentweave/mcp"]
 
+# alembic is an optional, lazily-imported dependency (only needed for
+# `agentweave hub start --native`, provided by the separate agentweave-hub
+# package) and ships no type stubs for mypy to resolve.
+[[tool.mypy.overrides]]
+module = "alembic.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
