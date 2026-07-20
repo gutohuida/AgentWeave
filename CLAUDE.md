@@ -9,7 +9,7 @@ You are working on the **AgentWeave Framework** — a multi-agent AI collaborati
 - **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard, self-hosted via Docker
 - **Documentation** (`docs/`) — MkDocs with Material theme, deployed to GitHub Pages
 
-Current version: **v0.37.1** (CLI + Hub v0.31.2)
+Current version: **v0.40.0** (CLI + Hub v0.33.0)
 
 ## Quick Commands
 

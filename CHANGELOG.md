@@ -6,13 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
-## [Unreleased]
+## [0.40.0] - 2026-07-20
 
 ### Added (CLI)
 - **Seven AI-native agent roles.** Added function-first roles alongside the existing 13 human-title roles: `coordinator` (orchestrate/decompose/delegate in parallel), `model_router` (route each task to the best agent/model by difficulty × capability × cost, with a cheap-first cascade), `explorer` (reconnaissance, condensed cited findings), `implementer` (stack-agnostic executor), `verifier` (evidence-gated evaluation — never open-ended "reflect and revise"), `guardian` (AI-specific safety: slopsquatting, prompt injection, over-broad scopes, secrets), and `context_keeper` (curate shared memory, fight context rot). These reflect where multi-agent frameworks and research have converged — roles named by cognitive function rather than job title — and fill gaps (model routing, long-session memory) that no human-title role covers. All ship with empty `_default_for`, so existing agent defaults are unchanged; the 13 human-title roles remain fully supported and can be combined with the new roles (e.g. `implementer` + `frontend_dev`).
 
 ### Changed (CLI)
 - **`VALID_ROLE_IDS` consolidated to a single source of truth.** The role-ID list is now defined once in `constants.py` and re-exported from `roles.py`, removing the prior duplication that had to be kept in sync by hand.
+
+### Added (Hub v0.33.0)
+- **Native Hub mode support.** Companion Hub-side changes for `agentweave hub start --native`: `uvicorn`-based start/stop/status lifecycle, bootstrap `.env` scaffolding with a generated API key, and Alembic migrations run automatically on first start.
+- **Hub-aware CLI transport routing.** Hub REST endpoints now back the CLI's `task`/`agents`/`question`/`msg` commands so tasks and messages created via the CLI are visible in the Hub dashboard.
+- **Hub PyPI packaging workflow.** `publish.yml` gained a `publish-hub` job (triggered on `hub-v*` tags) that builds the React UI, bundles it with Alembic migrations into the wheel, and publishes `agentweave-hub` to PyPI.
 
 ---
 ## [0.39.0] - 2026-07-02
