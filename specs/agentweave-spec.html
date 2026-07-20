@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave — Canonical Regeneration Specification</title>
+<meta name="description" content="A single, self-contained, regeneration-grade specification for the AgentWeave multi-agent AI collaboration framework (CLI + Hub backend + Hub UI + docs).">
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f8fa;
+    --surface-2: #eef1f5;
+    --border: #d9dee6;
+    --text: #1b1f24;
+    --text-dim: #57606a;
+    --accent: #4c56d6;
+    --accent-soft: #eceefd;
+    --normative: #0b6b3a;
+    --normative-soft: #e8f6ee;
+    --note: #0969da;
+    --note-soft: #ddf0ff;
+    --warn: #9a6700;
+    --warn-soft: #fff4d6;
+    --example: #6639ba;
+    --example-soft: #f2ecfb;
+    --reference: #57606a;
+    --reference-soft: #f0f2f5;
+    --danger: #cf222e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sidebar-w: 320px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface-2: #1c2230; --border: #2d333b;
+      --text: #e6edf3; --text-dim: #9198a1; --accent: #7c85ff; --accent-soft: #1d2140;
+      --normative: #3fb950; --normative-soft: #12261a; --note: #58a6ff; --note-soft: #0d2136;
+      --warn: #d29922; --warn-soft: #2b2413; --example: #a371f7; --example-soft: #21193a;
+      --reference: #9198a1; --reference-soft: #171b22; --danger: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--text); background: var(--bg);
+    line-height: 1.6; font-size: 16px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, kbd, samp { font-family: var(--mono); font-size: 0.9em; }
+  code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+  pre {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem; overflow-x: auto; line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+
+  /* Layout */
+  #layout { display: flex; min-height: 100vh; }
+  #sidebar {
+    width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); position: sticky; top: 0;
+    height: 100vh; overflow-y: auto; background: var(--surface);
+    border-right: 1px solid var(--border); padding: 1rem 0.75rem 3rem;
+  }
+  #sidebar h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin: 0.25rem 0.5rem 0.5rem; }
+  #search {
+    width: 100%; padding: 0.5rem 0.65rem; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); color: var(--text); margin-bottom: 0.75rem; font-size: 0.9rem;
+  }
+  #toc ul { list-style: none; margin: 0; padding: 0; }
+  #toc li { margin: 0; }
+  #toc a {
+    display: block; padding: 0.28rem 0.5rem; border-radius: 6px; color: var(--text-dim);
+    font-size: 0.9rem; line-height: 1.35;
+  }
+  #toc a:hover { background: var(--surface-2); text-decoration: none; color: var(--text); }
+  #toc a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  #toc .lvl-1 { font-weight: 600; color: var(--text); margin-top: 0.4rem; }
+  #toc .lvl-2 a { padding-left: 1.4rem; font-size: 0.85rem; }
+  #toc .lvl-3 a { padding-left: 2.2rem; font-size: 0.82rem; }
+  #toc li.hidden { display: none; }
+
+  main {
+    flex: 1 1 auto; max-width: 960px; margin: 0 auto; padding: 2rem 2.5rem 6rem; min-width: 0;
+  }
+  header.doc-header { border-bottom: 2px solid var(--border); padding-bottom: 1.25rem; margin-bottom: 1.5rem; }
+  header.doc-header h1 { font-size: 2rem; margin: 0 0 0.35rem; }
+  header.doc-header .subtitle { color: var(--text-dim); font-size: 1.05rem; }
+  .meta-badges { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .meta-badges span {
+    font-size: 0.78rem; padding: 0.2rem 0.55rem; border-radius: 999px;
+    background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border);
+  }
+
+  section { margin: 2.75rem 0; scroll-margin-top: 1rem; }
+  section > h2 {
+    font-size: 1.6rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; margin-top: 0;
+  }
+  h3 { font-size: 1.25rem; margin-top: 2rem; }
+  h4 { font-size: 1.05rem; margin-top: 1.5rem; }
+  h2 .sec-num, h3 .sec-num, h4 .sec-num { color: var(--text-dim); font-weight: 600; margin-right: 0.5rem; }
+  .anchor { color: var(--text-dim); opacity: 0; margin-left: 0.4rem; font-weight: 400; text-decoration: none; }
+  h2:hover .anchor, h3:hover .anchor, h4:hover .anchor { opacity: 1; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--surface); }
+
+  /* Conformance / typographic markers */
+  .rfc { font-variant: small-caps; font-weight: 700; letter-spacing: 0.02em; }
+  .rfc.must { color: var(--normative); }
+  .rfc.should { color: var(--note); }
+  .rfc.may { color: var(--example); }
+
+  .block { border-radius: 8px; padding: 0.85rem 1rem; margin: 1rem 0; border: 1px solid var(--border); }
+  .block .label { font-weight: 700; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; display: block; margin-bottom: 0.3rem; }
+  .requirement { background: var(--normative-soft); border-color: var(--normative); }
+  .requirement .label { color: var(--normative); }
+  .note { background: var(--note-soft); border-color: var(--note); }
+  .note .label { color: var(--note); }
+  .warning { background: var(--warn-soft); border-color: var(--warn); }
+  .warning .label { color: var(--warn); }
+  .example { background: var(--example-soft); border-color: var(--example); }
+  .example .label { color: var(--example); }
+  .reference { background: var(--reference-soft); border-color: var(--reference); border-style: dashed; }
+  .reference .label { color: var(--reference); }
+  .openissue { background: var(--warn-soft); border-color: var(--danger); border-left: 4px solid var(--danger); }
+  .openissue .label { color: var(--danger); }
+
+  .req-id {
+    display: inline-block; font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+    background: var(--normative); color: #fff; padding: 0.1rem 0.45rem; border-radius: 4px; margin-right: 0.5rem;
+    vertical-align: middle;
+  }
+  .req-id.info { background: var(--reference); }
+
+  dfn { font-style: normal; font-weight: 700; color: var(--accent); }
+  .term-link { border-bottom: 1px dotted var(--accent); }
+
+  ol.algorithm { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 0.85rem 1rem 0.85rem 2.4rem; }
+  ol.algorithm li { margin: 0.3rem 0; }
+  ol.algorithm ol { margin-top: 0.3rem; }
+
+  .pill { display:inline-block; font-size:0.75rem; padding:0.1rem 0.45rem; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); }
+
+  footer.doc-footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 0.85rem; }
+
+  #tocToggle { display: none; }
+  @media (max-width: 900px) {
+    #sidebar { position: fixed; z-index: 50; transform: translateX(-100%); transition: transform 0.2s; box-shadow: 2px 0 12px rgba(0,0,0,0.2); }
+    #sidebar.open { transform: translateX(0); }
+    #tocToggle {
+      display: block; position: fixed; top: 0.75rem; left: 0.75rem; z-index: 60;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 1rem; cursor: pointer;
+    }
+    main { padding: 3.5rem 1.1rem 5rem; }
+  }
+  .no-results { padding: 0.5rem; color: var(--text-dim); font-style: italic; }
+</style>
+</head>
+<body>
+<button id="tocToggle" aria-label="Toggle navigation">☰ Contents</button>
+<div id="layout">
+<nav id="sidebar">
+  <input id="search" type="search" placeholder="Filter sections…" aria-label="Filter sections">
+  <h2>Contents</h2>
+  <div id="toc">
+  <ul>
+    <li class="lvl-1"><a href="#front-matter">0. Front Matter</a></li>
+    <li class="lvl-2"><a href="#how-to-read">0.1 How to read this spec</a></li>
+    <li class="lvl-2"><a href="#conformance">0.2 Conformance classes</a></li>
+    <li class="lvl-2"><a href="#conventions">0.3 Typographic conventions</a></li>
+    <li class="lvl-2"><a href="#section-map">0.4 Section map</a></li>
+    <li class="lvl-2"><a href="#spec-changelog">0.5 Specification changelog</a></li>
+    <li class="lvl-1"><a href="#overview">1. Overview &amp; Scope</a></li>
+    <li class="lvl-2"><a href="#operation-modes">1.1 Operation modes</a></li>
+    <li class="lvl-2"><a href="#non-goals">1.2 Non-goals</a></li>
+    <li class="lvl-1"><a href="#glossary">2. Glossary</a></li>
+    <li class="lvl-1"><a href="#domain-model">3. Domain Model &amp; State</a></li>
+    <li class="lvl-2"><a href="#entity-session">3.1 Session</a></li>
+    <li class="lvl-2"><a href="#entity-agent">3.2 Agent</a></li>
+    <li class="lvl-2"><a href="#entity-task">3.3 Task</a></li>
+    <li class="lvl-2"><a href="#task-lifecycle">3.4 Task lifecycle</a></li>
+    <li class="lvl-2"><a href="#entity-message">3.5 Message</a></li>
+    <li class="lvl-2"><a href="#entity-question">3.6 Question</a></li>
+    <li class="lvl-2"><a href="#entity-job">3.7 Job &amp; JobRun</a></li>
+    <li class="lvl-2"><a href="#entity-event">3.8 Event</a></li>
+    <li class="lvl-2"><a href="#directory-layout">3.9 .agentweave/ layout</a></li>
+    <li class="lvl-1"><a href="#cli">4. CLI Specification</a></li>
+    <li class="lvl-2"><a href="#cli-config">4.1 agentweave.yml</a></li>
+    <li class="lvl-2"><a href="#cli-commands">4.2 Command surface</a></li>
+    <li class="lvl-2"><a href="#cli-runners">4.3 Runners</a></li>
+    <li class="lvl-2"><a href="#cli-env">4.4 Environment variables</a></li>
+    <li class="lvl-1"><a href="#transport">5. Transport Layer</a></li>
+    <li class="lvl-1"><a href="#mcp-tools">6. MCP Tools</a></li>
+    <li class="lvl-1"><a href="#hub-backend">7. Hub Backend</a></li>
+    <li class="lvl-2"><a href="#hub-app">7.1 App &amp; config</a></li>
+    <li class="lvl-2"><a href="#hub-auth">7.2 Authentication</a></li>
+    <li class="lvl-2"><a href="#hub-db">7.3 Database schema</a></li>
+    <li class="lvl-2"><a href="#hub-endpoints">7.4 REST endpoints</a></li>
+    <li class="lvl-2"><a href="#hub-sse">7.5 SSE events</a></li>
+    <li class="lvl-2"><a href="#hub-scheduler">7.6 Scheduler</a></li>
+    <li class="lvl-1"><a href="#hub-ui">8. Hub UI</a></li>
+    <li class="lvl-1"><a href="#logging">9. Logging &amp; Observability</a></li>
+    <li class="lvl-1"><a href="#roles">10. Roles System</a></li>
+    <li class="lvl-1"><a href="#reference-impl">11. Reference Implementation</a></li>
+    <li class="lvl-1"><a href="#regeneration">12. Regeneration Guide</a></li>
+    <li class="lvl-1"><a href="#requirements-index">13. Requirements Index</a></li>
+    <li class="lvl-1"><a href="#dev-order">14. Development Order &amp; Cycle</a></li>
+    <li class="lvl-2"><a href="#dev-cycle">14.1 The development cycle</a></li>
+    <li class="lvl-2"><a href="#dev-conventions">14.2 Conventions</a></li>
+    <li class="lvl-2"><a href="#dev-backlog">14.3 Task backlog</a></li>
+    <li class="lvl-2"><a href="#dev-milestones">14.4 Milestones &amp; gates</a></li>
+  </ul>
+  </div>
+</nav>
+<main>
+<header class="doc-header">
+  <h1>AgentWeave — Canonical Regeneration Specification</h1>
+  <div class="subtitle">A single, self-contained specification detailed enough for any capable LLM to regenerate the entire AgentWeave framework — CLI, Hub backend, Hub UI, and documentation — without access to the original source code.</div>
+  <div class="meta-badges">
+    <span>CLI v0.40.0</span>
+    <span>Hub v0.33.0</span>
+    <span>Status: Living Standard</span>
+    <span>Spec-Driven Development</span>
+    <span>Last generated: 2026-07-20</span>
+  </div>
+</header>
+
+<!-- =============================== FRONT MATTER =============================== -->
+<section id="front-matter">
+  <h2><span class="sec-num">0.</span>Front Matter<a class="anchor" href="#front-matter">#</a></h2>
+  <p>This document is the <strong>canonical, authoritative specification</strong> for
+  <dfn id="dfn-agentweave">AgentWeave</dfn>, a multi-agent AI collaboration framework. It is written for
+  <em>spec-only development</em>: the specification — not the code — is the source of truth. A capable large
+  language model (LLM) reading this document <span class="rfc must">must</span> be able to regenerate a
+  functionally-equivalent implementation of the entire project from this document alone.</p>
+
+  <div class="block note">
+    <span class="label">Note</span>
+    This specification separates <strong>normative</strong> requirements (binding on any implementation) from
+    <strong>informative</strong> reference material (the current reference implementation's technology choices).
+    Where the two conflict, normative requirements win. The reference implementation is provided so regeneration
+    can be <em>faithful</em> (byte-comparable behavior) rather than merely <em>equivalent</em>.
+  </div>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-META-001</span> This document describes a specific implementation revision —
+    <strong>CLI v0.40.0</strong> and <strong>Hub v0.33.0</strong> (mirrored in the header badges). A regenerated
+    implementation <span class="rfc must">must</span> target these versions unless a later spec revision supersedes
+    them. The specification follows a <strong>living-spec / spec-as-source</strong> persistence model: this document
+    is the human-authored source of truth and implementation artifacts are treated as derived. Consequently, when a
+    code change alters any normative value set defined here (constants, command surface, REST endpoints, SSE event
+    names, database columns/indexes), the change <span class="rfc must">must</span> be reflected back into this
+    document in the same change set, and the version badges plus the
+    <a href="#spec-changelog">specification changelog</a> updated. Where this document and the code disagree, the
+    discrepancy <span class="rfc must">must</span> be recorded as an <a href="#conventions">Open Issue</a> rather
+    than silently resolved.</div>
+
+  <h3 id="how-to-read"><span class="sec-num">0.1</span>How to read this spec<a class="anchor" href="#how-to-read">#</a></h3>
+  <p>Read <a href="#overview">§1 Overview</a> and <a href="#glossary">§2 Glossary</a> first — every later section
+  depends on the terms defined there. Then read the <a href="#domain-model">§3 Domain Model</a>, which defines the
+  shared entities (<span class="term-link">Task</span>, <span class="term-link">Message</span>,
+  <span class="term-link">Agent</span>, etc.) that the CLI, MCP tools, Hub backend, and Hub UI all operate on.
+  The four subsystem sections (<a href="#cli">§4 CLI</a>, <a href="#transport">§5 Transport</a>,
+  <a href="#mcp-tools">§6 MCP Tools</a>, <a href="#hub-backend">§7 Hub Backend</a>, <a href="#hub-ui">§8 Hub UI</a>)
+  can be read independently but all reference §3. Finish with the
+  <a href="#regeneration">§12 Regeneration Guide</a>, which gives the recommended build order.</p>
+
+  <h3 id="conformance"><span class="sec-num">0.2</span>Conformance classes<a class="anchor" href="#conformance">#</a></h3>
+  <p>Following the WHATWG HTML Living Standard's producer/consumer distinction, this spec separates two kinds of
+  requirement:</p>
+  <ul>
+    <li><strong>Requirements on producers</strong> (what a user, agent, or client is <em>allowed</em> to
+      supply — e.g. valid field values, allowed inputs). These state what input is well-formed.</li>
+    <li><strong>Requirements on consumers</strong> (how AgentWeave software <em>must act</em> in response —
+      validation, persistence, side effects, responses). Requirements on producers have no bearing on how a
+      consumer must handle malformed input; consumer behavior for invalid input is specified separately.</li>
+  </ul>
+  <p>The key words <span class="rfc must">must</span>, <span class="rfc must">must not</span>,
+  <span class="rfc should">should</span>, <span class="rfc should">should not</span>, and
+  <span class="rfc may">may</span> are to be interpreted as in RFC 2119. A requirement written as
+  "<span class="rfc must">must</span>" is binding; "<span class="rfc should">should</span>" is a strong
+  recommendation; "<span class="rfc may">may</span>" is optional.</p>
+
+  <h3 id="conventions"><span class="sec-num">0.3</span>Typographic conventions<a class="anchor" href="#conventions">#</a></h3>
+  <p>The following labeled blocks distinguish <em>what kind</em> of text you are reading. Only Requirement blocks
+  and inline <span class="rfc must">must</span>/<span class="rfc should">should</span>/<span class="rfc may">may</span>
+  statements are normative.</p>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-XXX-000</span> A normative, testable assertion. Every requirement carries a stable ID
+    of the form <code>FR-&lt;AREA&gt;-&lt;NNN&gt;</code> and is listed in the
+    <a href="#requirements-index">Requirements Index</a>.</div>
+  <div class="block note"><span class="label">Note</span> Non-normative clarification or rationale. Explains the
+    "why" behind a rule; not itself binding.</div>
+  <div class="block example"><span class="label">Example</span> Illustrative only. Concrete values shown are one
+    valid possibility, not the only allowed form.</div>
+  <div class="block warning"><span class="label">Warning</span> A hazard, security concern, or common
+    mistake to avoid.</div>
+  <div class="block reference"><span class="label">Reference Implementation</span> Informative. Describes the
+    <em>current</em> technology choices (Python, FastAPI, React, etc.). An implementation
+    <span class="rfc may">may</span> substitute an equivalent stack unless a normative requirement says otherwise.</div>
+  <div class="block openissue"><span class="label">Open Issue</span> A known discrepancy between this document and
+    the reference implementation, or an intentionally-unresolved ambiguity, that a reader
+    <span class="rfc must not">must not</span> treat as settled. Each Open Issue states the observed behavior and
+    what remains to be decided or fixed.</div>
+
+  <p><dfn>Defined terms</dfn> appear in bold accent color at their definition and are cross-referenced elsewhere.
+  Numbered <strong>algorithms</strong> specify ordered behavior that <span class="rfc must">must</span> be
+  performed in sequence:</p>
+  <ol class="algorithm">
+    <li>This is an algorithm step.</li>
+    <li>If a condition holds, do something.</li>
+    <li>Otherwise, return to step 1.</li>
+  </ol>
+
+  <h3 id="section-map"><span class="sec-num">0.4</span>Section map<a class="anchor" href="#section-map">#</a></h3>
+  <table>
+    <thead><tr><th>Section</th><th>Depends on</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>§1 Overview</td><td>—</td><td>What AgentWeave is, modes, non-goals.</td></tr>
+      <tr><td>§2 Glossary</td><td>§1</td><td>Defined terms used everywhere.</td></tr>
+      <tr><td>§3 Domain Model</td><td>§2</td><td>Shared entities, fields, invariants, file formats.</td></tr>
+      <tr><td>§4 CLI</td><td>§3, §5, §6</td><td>Command surface, config, runtime state.</td></tr>
+      <tr><td>§5 Transport</td><td>§3</td><td>Pluggable message/task I/O backends.</td></tr>
+      <tr><td>§6 MCP Tools</td><td>§3, §7</td><td>Tools agents call over MCP.</td></tr>
+      <tr><td>§7 Hub Backend</td><td>§3</td><td>REST API, DB, SSE, scheduler.</td></tr>
+      <tr><td>§8 Hub UI</td><td>§7</td><td>React dashboard over the Hub API.</td></tr>
+      <tr><td>§9 Logging</td><td>§3, §7</td><td>Structured events and forwarding.</td></tr>
+      <tr><td>§10 Roles</td><td>§3</td><td>Multi-role agent model.</td></tr>
+      <tr><td>§11 Reference Impl</td><td>all</td><td>Pinned stack, build/test/packaging.</td></tr>
+      <tr><td>§12 Regeneration Guide</td><td>all</td><td>Ordered rebuild + acceptance checklists.</td></tr>
+      <tr><td>§13 Requirements Index</td><td>all</td><td>Traceability table of all FR-IDs.</td></tr>
+      <tr><td>§14 Development Order &amp; Cycle</td><td>§3–§13</td><td>Enumerated task backlog + per-task loop + milestone gates.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="spec-changelog"><span class="sec-num">0.5</span>Specification changelog<a class="anchor" href="#spec-changelog">#</a></h3>
+  <p>Each row records a revision of <em>this specification</em> and the implementation revision it targets. Per
+  <a href="#front-matter">FR-META-001</a>, this table <span class="rfc must">must</span> be updated whenever a
+  normative value set changes.</p>
+  <table>
+    <thead><tr><th>Spec date</th><th>Targets</th><th>Changes</th></tr></thead>
+    <tbody>
+      <tr><td>2026-07-20</td><td>CLI v0.40.0 · Hub v0.33.0</td><td>Initial canonical specification.</td></tr>
+      <tr><td>2026-07-20 (rev. 2)</td><td>CLI v0.40.0 · Hub v0.33.0</td><td>Accuracy pass reconciling the spec with the code: corrected the <code>setup/token</code> access rule (FR-HUB-005), database indexes (FR-HUB-006), and UI data-layer/SSE-invalidation claims (FR-UI-004); added the missing CLI commands (<code>msg peek</code>, <code>question ask/get</code>, <code>hub destroy</code>, <code>agents list</code>) and the <code>hub_client</code> config option; introduced version anchoring &amp; the living-spec persistence model (FR-META-001), Open Issue markers, and an FR-ID→test traceability column.</td></tr>
+      <tr><td>2026-07-20 (rev. 3)</td><td>CLI v0.40.0 · Hub v0.33.0</td><td>Added <a href="#dev-order">§14 Development Order &amp; Cycle</a>: a per-task development loop, task conventions, a fully enumerated <code>T-NNN</code> backlog (dependencies, satisfied FR-IDs, binary acceptance checks) and six MVP-first milestones with gates.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- =============================== OVERVIEW =============================== -->
+<section id="overview">
+  <h2><span class="sec-num">1.</span>Overview &amp; Scope<a class="anchor" href="#overview">#</a></h2>
+  <p><span class="term-link">AgentWeave</span> is a framework that lets multiple independent AI coding agents
+  (for example Claude, Kimi, Gemini, Codex, Copilot, and OpenAI-compatible models run through a proxy) collaborate
+  on the same software project. It provides three things: (a) a shared, structured
+  <span class="term-link">Task</span> and <span class="term-link">Message</span> substrate so agents can delegate
+  work and communicate; (b) a pluggable <span class="term-link">transport</span> layer so that substrate can live
+  on the local filesystem, in a git branch, or in a central Hub server; and (c) a web
+  <span class="term-link">Hub</span> for humans to observe and steer the collaboration in real time.</p>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CORE-001</span> The system <span class="rfc must">must</span> consist of two
+    independently-packaged components: a <strong>CLI package</strong> (installable and usable with zero required
+    runtime third-party dependencies) and a <strong>Hub</strong> (a server plus web dashboard). The CLI
+    <span class="rfc must">must</span> be fully functional for local, single-machine collaboration without the Hub.</div>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CORE-002</span> The CLI <span class="rfc must">must</span> expose both an
+    <code>agentweave</code> and a short-alias <code>aw</code> console entry point that behave identically.</div>
+
+  <h3 id="operation-modes"><span class="sec-num">1.1</span>Operation modes<a class="anchor" href="#operation-modes">#</a></h3>
+  <table>
+    <thead><tr><th>Mode</th><th>Mechanism</th><th>Best for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Hub</strong> (recommended)</td><td>Self-hosted server + web dashboard; agents/CLI talk to it over HTTP; real-time updates via SSE.</td><td>Teams, multi-machine, live monitoring.</td></tr>
+      <tr><td><strong>Zero-relay MCP</strong></td><td>MCP tools plus a <span class="term-link">watchdog</span> daemon that auto-delivers messages/tasks and can auto-trigger agents.</td><td>Autonomous loops on one machine.</td></tr>
+      <tr><td><strong>Manual relay</strong></td><td>The CLI generates a "relay prompt" the human pastes into the next agent.</td><td>Quick one-off delegation, no daemon.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CORE-003</span> A project's collaboration <span class="term-link">mode</span>
+    <span class="rfc must">must</span> be one of <code>hierarchical</code>, <code>peer</code>, or <code>review</code>.
+    In <code>hierarchical</code> mode a single <span class="term-link">principal</span> agent delegates and
+    reviews; in <code>peer</code> mode any agent may assign work to any other; <code>review</code> mode is
+    specialized for code-review workflows.</div>
+
+  <h3 id="non-goals"><span class="sec-num">1.2</span>Non-goals<a class="anchor" href="#non-goals">#</a></h3>
+  <p>The following are explicitly <strong>out of scope</strong>. A regenerating implementation
+  <span class="rfc must not">must not</span> add them unless a future spec revision requires it:</p>
+  <ul>
+    <li>AgentWeave does <strong>not</strong> implement or bundle the agent models/CLIs themselves. It orchestrates
+      <em>existing</em> external agent CLIs (e.g. <code>claude</code>, <code>kimi</code>, <code>codex</code>).</li>
+    <li>It does <strong>not</strong> provide a hosted/SaaS multi-tenant service. The Hub is single-tenant,
+      self-hosted, and project-scoped by API key.</li>
+    <li>It does <strong>not</strong> perform automated code review quality judgements itself; it provides the
+      workflow (task states, review gates) that agents and humans use.</li>
+    <li>It does <strong>not</strong> manage secrets storage. Only environment-variable <em>names</em> are stored in
+      config; secret values live in the shell environment or a git-ignored <code>.env</code>.</li>
+    <li>The CLI does <strong>not</strong> require the Hub, and the Hub does <strong>not</strong> require any
+      specific agent CLI to be installed to start.</li>
+  </ul>
+</section>
+
+<!-- =============================== GLOSSARY =============================== -->
+<section id="glossary">
+  <h2><span class="sec-num">2.</span>Glossary<a class="anchor" href="#glossary">#</a></h2>
+  <p>These terms are used with these exact meanings throughout the spec.</p>
+  <dl>
+    <p><dfn id="dfn-agent">Agent</dfn> — A named AI coding assistant participating in a project. Identified by a
+    name matching <code>^[a-zA-Z0-9_-]{1,32}$</code>. Any matching name is accepted; a curated list of
+    <em>known</em> agents exists only for defaults/suggestions.</p>
+    <p><dfn id="dfn-runner">Runner</dfn> — How an agent's CLI is invoked (e.g. <code>claude</code>, <code>kimi</code>,
+    <code>codex</code>, <code>claude_proxy</code>, <code>manual</code>). Determines the command, session-resume
+    flag, output format, and MCP-registration command.</p>
+    <p><dfn id="dfn-principal">Principal</dfn> — The single agent designated to lead a
+    <span class="term-link">Session</span> in <code>hierarchical</code> mode. At most one agent per project.</p>
+    <p><dfn id="dfn-session">Session</dfn> — The runtime state of a project's collaboration: its mode, principal,
+    agent roster, and task lists. Persisted as JSON.</p>
+    <p><dfn id="dfn-task">Task</dfn> — A unit of delegated work with a title, description, assignee, priority, and a
+    lifecycle <span class="term-link">status</span>.</p>
+    <p><dfn id="dfn-message">Message</dfn> — An inter-agent communication with a sender, recipient, subject, and
+    content.</p>
+    <p><dfn id="dfn-question">Question</dfn> — A query an agent posts to the human (Hub only), optionally blocking,
+    that the human answers.</p>
+    <p><dfn id="dfn-job">Job</dfn> — A scheduled, recurring instruction to an agent, defined by a cron expression.</p>
+    <p><dfn id="dfn-role">Role</dfn> — A behavioral guide assigned to an agent (e.g. <code>backend_dev</code>,
+    <code>coordinator</code>). An agent may hold multiple roles simultaneously.</p>
+    <p><dfn id="dfn-transport">Transport</dfn> — The pluggable backend through which messages and tasks are stored
+    and retrieved: <code>local</code> (filesystem), <code>git</code> (orphan branch), or <code>http</code> (Hub).</p>
+    <p><dfn id="dfn-hub">Hub</dfn> — The self-hosted FastAPI server plus React dashboard that centralizes
+    collaboration state and provides real-time monitoring.</p>
+    <p><dfn id="dfn-watchdog">Watchdog</dfn> — A background daemon that polls for new messages/tasks and can
+    auto-trigger agent CLIs.</p>
+    <p><dfn id="dfn-mcp">MCP</dfn> — The Model Context Protocol. AgentWeave exposes tools to agents via MCP servers
+    (a CLI-side server and a Hub-side server).</p>
+    <p><dfn id="dfn-relay">Relay prompt</dfn> — A generated block of text summarizing pending work, meant to be
+    pasted into an agent to hand off control (manual-relay mode).</p>
+    <p><dfn id="dfn-proxy">Proxy agent</dfn> — An OpenAI/Anthropic-compatible model (e.g. MiniMax, GLM) run through
+    the Claude CLI by overriding its base URL and API key (<code>claude_proxy</code> runner).</p>
+    <p><dfn id="dfn-pilot">Pilot mode</dfn> — A per-agent flag that disables auto-triggering so a human controls
+    that agent's sessions manually.</p>
+    <p><dfn id="dfn-yolo">Yolo mode</dfn> — A per-agent flag allowing the agent to act without confirmation prompts.</p>
+  </dl>
+</section>
+
+<!-- =============================== DOMAIN MODEL =============================== -->
+<section id="domain-model">
+  <h2><span class="sec-num">3.</span>Domain Model &amp; State<a class="anchor" href="#domain-model">#</a></h2>
+  <p>This section defines the entities shared by all subsystems. Field names are normative wire/serialization names.
+  The CLI persists these as JSON files under <a href="#directory-layout"><code>.agentweave/</code></a>; the Hub
+  persists them in a relational database (<a href="#hub-db">§7.3</a>). Both representations
+  <span class="rfc must">must</span> preserve the fields defined here.</p>
+
+  <div class="block note"><span class="label">Note</span> Identifiers are generated as
+  <code>&lt;prefix&gt;-&lt;8 hex chars&gt;</code>, e.g. <code>task-1a2b3c4d</code>, <code>msg-9f8e7d6c</code>,
+  <code>session-…</code>, <code>job-…</code>. Timestamps are ISO-8601 strings (UTC). Every ID that becomes a
+  filename <span class="rfc must">must</span> match <code>^[a-zA-Z0-9_-]+$</code> (path-traversal defense).</div>
+
+  <h3 id="entity-session"><span class="sec-num">3.1</span>Session<a class="anchor" href="#entity-session">#</a></h3>
+  <p>A <span class="term-link">Session</span> captures the collaboration's runtime state.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>string</td><td>Generated <code>session-…</code>.</td></tr>
+      <tr><td><code>name</code></td><td>string</td><td>Project display name.</td></tr>
+      <tr><td><code>created</code>, <code>updated</code></td><td>ISO-8601</td><td>Timestamps.</td></tr>
+      <tr><td><code>mode</code></td><td>enum</td><td>One of <code>hierarchical</code>, <code>peer</code>, <code>review</code>. Default <code>hierarchical</code>.</td></tr>
+      <tr><td><code>principal</code></td><td>string</td><td>Principal agent name. Default <code>claude</code>.</td></tr>
+      <tr><td><code>agents</code></td><td>map</td><td>Map of agent name → <code>{role, since, runner?, model?, env_vars?, yolo?, pilot?, runner_options?}</code>.</td></tr>
+      <tr><td><code>active_tasks</code>, <code>completed_tasks</code></td><td>list</td><td>Task-ID references.</td></tr>
+      <tr><td><code>discussions</code></td><td>list</td><td>Discussion references.</td></tr>
+    </tbody>
+  </table>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-SESS-001</span> On session creation the implementation <span class="rfc must">must</span>
+    reject any agent name (including the principal) not matching <code>^[a-zA-Z0-9_-]{1,32}$</code>, ensure the
+    principal is included in the agent roster, and assign each agent a <span class="term-link">session role</span>
+    of <code>principal</code> (the principal), <code>delegate</code> (when exactly two agents), or
+    <code>collaborator</code> (three or more). Valid session roles are
+    <code>principal</code>, <code>delegate</code>, <code>reviewer</code>, <code>collaborator</code>.</div>
+
+  <h3 id="entity-agent"><span class="sec-num">3.2</span>Agent<a class="anchor" href="#entity-agent">#</a></h3>
+  <p>An <span class="term-link">Agent</span> is a named participant. Per-agent configuration keys are:
+  <code>role</code>, <code>since</code>, <code>runner</code>, <code>env_vars</code>, <code>model</code>,
+  <code>yolo</code>, <code>pilot</code>, <code>runner_options</code>.</p>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-AGT-001</span> Agent names <span class="rfc must">must</span> be validated against
+    <code>^[a-zA-Z0-9_-]{1,32}$</code>. A cluster-prefixed form <code>&lt;cluster&gt;.&lt;agent&gt;</code> (used by
+    the git transport) <span class="rfc must">must</span> validate the segment after the final dot.</div>
+  <div class="block reference"><span class="label">Reference Implementation</span>
+    Known agent names seeded for defaults/suggestions (not a validation gate): <code>claude, kimi, gemini, codex,
+    aider, cline, cursor, windsurf, copilot, opendevin, gpt, qwen, minimax, glm, opencode</code>. Default roster
+    when none specified: <code>[claude, kimi]</code>. The root context file an agent auto-reads is
+    <code>CLAUDE.md</code> for <code>claude</code>, <code>GEMINI.md</code> for <code>gemini</code>, and
+    <code>AGENTS.md</code> for everything else.</div>
+
+  <h3 id="entity-task"><span class="sec-num">3.3</span>Task<a class="anchor" href="#entity-task">#</a></h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>string</td><td>Generated <code>task-…</code>. Required.</td></tr>
+      <tr><td><code>title</code></td><td>string</td><td>Required. Reference limit: 256 chars.</td></tr>
+      <tr><td><code>description</code></td><td>string</td><td>Default <code>""</code>. Reference limit: 10,000 chars.</td></tr>
+      <tr><td><code>status</code></td><td>enum</td><td>Required; see <a href="#task-lifecycle">§3.4</a>. Default <code>pending</code>.</td></tr>
+      <tr><td><code>priority</code></td><td>enum</td><td>One of <code>low, medium, high, critical</code>. Default <code>medium</code>; invalid values coerced to <code>medium</code>.</td></tr>
+      <tr><td><code>assignee</code>, <code>assigner</code></td><td>string?</td><td>Agent names (validated).</td></tr>
+      <tr><td><code>created_at</code>, <code>updated</code></td><td>ISO-8601</td><td><code>created_at</code> required.</td></tr>
+      <tr><td><code>requirements</code>, <code>acceptance_criteria</code>, <code>deliverables</code>, <code>notes</code></td><td>list</td><td>Default <code>[]</code>.</td></tr>
+    </tbody>
+  </table>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-TASK-001</span> Task validation <span class="rfc must">must</span> require
+    <code>id</code>, <code>title</code>, <code>status</code>, <code>created_at</code>; reject any
+    <code>status</code> not in the lifecycle set and any <code>priority</code> not in
+    <code>{low, medium, high, critical}</code>; and validate <code>assignee</code>/<code>assigner</code> as agent
+    names when present. All task writes <span class="rfc must">must</span> pass through this validation and be
+    performed under a file lock (<a href="#cli-locking">§4</a>).</div>
+
+  <h3 id="task-lifecycle"><span class="sec-num">3.4</span>Task lifecycle<a class="anchor" href="#task-lifecycle">#</a></h3>
+  <p>The eight task statuses are <code>pending, assigned, in_progress, completed, under_review,
+  revision_needed, approved, rejected</code>. The canonical happy path and branches:</p>
+  <pre>pending → assigned → in_progress → completed → under_review → approved
+                                             ↘ revision_needed (loops back to in_progress)
+                                             ↘ rejected</pre>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>pending</code></td><td>Created, not yet assigned.</td></tr>
+      <tr><td><code>assigned</code></td><td>Assigned to an agent, awaiting start.</td></tr>
+      <tr><td><code>in_progress</code></td><td>Agent actively working.</td></tr>
+      <tr><td><code>completed</code></td><td>Work finished, awaiting review.</td></tr>
+      <tr><td><code>under_review</code></td><td>Being reviewed.</td></tr>
+      <tr><td><code>revision_needed</code></td><td>Changes required; loops back to <code>in_progress</code>.</td></tr>
+      <tr><td><code>approved</code></td><td>Review passed; done.</td></tr>
+      <tr><td><code>rejected</code></td><td>Will not be completed.</td></tr>
+    </tbody>
+  </table>
+  <div class="block note"><span class="label">Note</span> The status set is enforced everywhere (CLI, MCP,
+  Hub). The transition graph above is the intended workflow; the reference implementation validates the
+  <em>value</em> of <code>status</code> but does not hard-block arbitrary transitions, so tooling
+  <span class="rfc should">should</span> present the graph while the store accepts any valid status value.</div>
+
+  <h3 id="entity-message"><span class="sec-num">3.5</span>Message<a class="anchor" href="#entity-message">#</a></h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td><code>id</code></td><td>string</td><td>Generated <code>msg-…</code>.</td></tr>
+      <tr><td><code>from</code></td><td>string</td><td>Sender agent (serialized key is <code>from</code>).</td></tr>
+      <tr><td><code>to</code></td><td>string</td><td>Recipient agent.</td></tr>
+      <tr><td><code>subject</code></td><td>string?</td><td>Reference limit: 256 chars.</td></tr>
+      <tr><td><code>content</code></td><td>string</td><td>Default <code>""</code>. Reference limit: 10,000 chars.</td></tr>
+      <tr><td><code>type</code></td><td>enum</td><td>One of <code>message, delegation, review, discussion</code> (Hub also accepts <code>direct_trigger</code>). Default <code>message</code>.</td></tr>
+      <tr><td><code>timestamp</code></td><td>ISO-8601</td><td>Created time.</td></tr>
+      <tr><td><code>read</code>, <code>read_at</code></td><td>bool / ISO?</td><td>Read state.</td></tr>
+      <tr><td><code>task_id</code>, <code>session_id</code></td><td>string?</td><td>Optional links.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="entity-question"><span class="sec-num">3.6</span>Question<a class="anchor" href="#entity-question">#</a></h3>
+  <p>A <span class="term-link">Question</span> is Hub-only. Fields: <code>id</code>, <code>from_agent</code>,
+  <code>question</code>, <code>answer?</code>, <code>answered</code> (bool), <code>blocking</code> (bool),
+  <code>created_at</code>, <code>answered_at?</code>.</p>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-QST-001</span> When a question is answered, the implementation
+    <span class="rfc must">must</span> set <code>answered=true</code>, record <code>answered_at</code>, and
+    deliver the answer back to the asking agent as a <span class="term-link">Message</span>.</div>
+
+  <h3 id="entity-job"><span class="sec-num">3.7</span>Job &amp; JobRun<a class="anchor" href="#entity-job">#</a></h3>
+  <p>A <span class="term-link">Job</span> schedules a recurring instruction to an agent. Fields: <code>id</code>,
+  <code>name</code>, <code>agent</code>, <code>message</code>, <code>cron</code>, <code>session_mode</code>
+  (<code>new</code>|<code>resume</code>, default <code>new</code>), <code>enabled</code> (default <code>true</code>),
+  <code>created_at</code>, <code>last_run?</code>, <code>next_run?</code>, <code>run_count</code>,
+  <code>last_session_id?</code>, <code>source</code> (<code>hub</code>|<code>local</code>). A <strong>JobRun</strong>
+  records one firing: <code>id</code>, <code>job_id</code>, <code>fired_at</code>, <code>status</code>
+  (<code>fired</code>|<code>failed</code>), <code>trigger</code> (<code>scheduled</code>|<code>manual</code>),
+  <code>session_id?</code>, <code>error_summary?</code>.</p>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-JOB-001</span> <code>cron</code> <span class="rfc must">must</span> be a valid
+    <strong>5-field</strong> expression (<code>minute hour day month weekday</code>, weekday 0=Sunday). Firing a
+    job <span class="rfc must">must</span> deliver a <span class="term-link">Message</span> to the target agent,
+    update <code>last_run</code>/<code>next_run</code>, increment <code>run_count</code>, and record a JobRun.</div>
+
+  <h3 id="entity-event"><span class="sec-num">3.8</span>Event<a class="anchor" href="#entity-event">#</a></h3>
+  <p>An <strong>Event</strong> is a structured log record: <code>event_type</code>, optional <code>agent</code>,
+  arbitrary <code>data</code>, <code>severity</code> (<code>debug|info|warning|error</code>; default
+  <code>info</code>), and <code>timestamp</code>. The CLI appends events to a JSON-lines file; the Hub stores them
+  in a table and rebroadcasts them over SSE (<a href="#logging">§9</a>, <a href="#hub-sse">§7.5</a>).</p>
+
+  <h3 id="directory-layout"><span class="sec-num">3.9</span><code>.agentweave/</code> directory layout<a class="anchor" href="#directory-layout">#</a></h3>
+  <p>The CLI persists all local runtime state under a <code>.agentweave/</code> directory at the project root.</p>
+  <table>
+    <thead><tr><th>Path</th><th>Contents</th><th>Committed?</th></tr></thead>
+    <tbody>
+      <tr><td><code>.agentweave/session.json</code></td><td>Session state.</td><td>No (gitignored)</td></tr>
+      <tr><td><code>.agentweave/agents/*.json</code></td><td>Per-agent runtime (resume IDs, etc.).</td><td>No</td></tr>
+      <tr><td><code>.agentweave/tasks/active/</code>, <code>tasks/completed/</code></td><td>Task JSON files.</td><td>No</td></tr>
+      <tr><td><code>.agentweave/messages/pending/</code>, <code>messages/archive/</code></td><td>Message JSON files.</td><td>No</td></tr>
+      <tr><td><code>.agentweave/jobs/</code>, <code>jobs/history/</code></td><td>Local-transport jobs + run history.</td><td>No</td></tr>
+      <tr><td><code>.agentweave/transport.json</code></td><td>Transport config (may hold secrets).</td><td>No</td></tr>
+      <tr><td><code>.agentweave/roles.json</code>, <code>roles/*.md</code></td><td>Role assignments + role guides.</td><td><strong>Yes</strong></td></tr>
+      <tr><td><code>.agentweave/ai_context.md</code></td><td>AI context source.</td><td><strong>Yes</strong></td></tr>
+      <tr><td><code>.agentweave/context/&lt;agent&gt;.md</code></td><td>Generated per-agent context.</td><td>No</td></tr>
+      <tr><td><code>.agentweave/shared/checkpoints/</code></td><td>Context checkpoints.</td><td>No</td></tr>
+      <tr><td><code>.agentweave/logs/events.jsonl</code></td><td>Structured event log (rotated).</td><td>No</td></tr>
+      <tr><td><code>.agentweave/watchdog.pid|.log|.heartbeat</code></td><td>Watchdog runtime.</td><td>No</td></tr>
+      <tr><td><code>.agentweave/.git_seen/</code></td><td>Git-transport seen-set.</td><td>No</td></tr>
+    </tbody>
+  </table>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-FS-001</span> The implementation <span class="rfc must">must</span> add a managed,
+    marker-delimited block to the project <code>.gitignore</code> covering all machine-local/secret runtime state
+    (<code>tasks/*/</code>, <code>messages/*/</code>, <code>agents/*.json</code>, <code>session.json</code>,
+    <code>transport.json</code>, <code>.git_seen/</code>, <code>logs/</code>, watchdog files,
+    <code>triggered_direct.json</code>, <code>project_instructions.md</code>, <code>.env</code>) while leaving
+    <code>roles.json</code>, <code>roles/*.md</code>, and <code>ai_context.md</code> committable.</div>
+</section>
+
+<!-- =============================== CLI =============================== -->
+<section id="cli">
+  <h2><span class="sec-num">4.</span>CLI Specification<a class="anchor" href="#cli">#</a></h2>
+  <p>The CLI (<code>agentweave</code> / <code>aw</code>) is the primary operator interface. It reads
+  <a href="#cli-config"><code>agentweave.yml</code></a> for declarative configuration and persists runtime state
+  under <a href="#directory-layout"><code>.agentweave/</code></a>.</p>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CLI-001</span> All task and message state mutations <span class="rfc must">must</span>
+    be performed while holding a file-based mutex (a named lock) and <span class="rfc must">must</span> write files
+    atomically (write to a temp file, then rename) so concurrent CLI/watchdog processes cannot corrupt state.
+    <span id="cli-locking"></span></div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CLI-002</span> The CLI <span class="rfc must">must</span> automatically load a
+    <code>.env</code> file from the current working directory. Shell-exported variables
+    <span class="rfc must">must</span> take precedence over <code>.env</code> values.</div>
+
+  <h3 id="cli-config"><span class="sec-num">4.1</span><code>agentweave.yml</code><a class="anchor" href="#cli-config">#</a></h3>
+  <p>The single committed source of truth for project configuration. It contains <strong>no secrets</strong>.</p>
+  <div class="block example"><span class="label">Example</span>
+  <pre>project:
+  name: "My Awesome App"
+  mode: hierarchical           # hierarchical | peer | review
+
+hub:
+  url: http://localhost:8000
+
+agents:
+  claude:
+    runner: claude
+    model: &lt;claude-model&gt;
+    roles: [tech_lead, backend_dev]
+    yolo: false
+    pilot: false
+    principal: true
+  minimax:
+    runner: claude_proxy
+    model: MiniMax-M2.7
+    env: [MINIMAX_API_KEY]
+    yolo: true
+
+jobs:
+  daily-standup:
+    schedule: "0 9 * * 1-5"
+    agent: claude
+    prompt: "Generate a daily standup summary"
+    enabled: true
+
+quality:
+  review_required: true
+  docs_threshold: non_trivial   # all | non_trivial | never
+  echo_chamber_guard: warn      # off | warn | enforce</pre></div>
+
+  <h4>Section reference</h4>
+  <table>
+    <thead><tr><th>Path</th><th>Type / values</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td><code>project.name</code></td><td>string</td><td><code>"Unnamed Project"</code></td></tr>
+      <tr><td><code>project.mode</code></td><td><code>hierarchical|peer|review</code></td><td><code>hierarchical</code></td></tr>
+      <tr><td><code>hub.url</code></td><td>string (no trailing slash)</td><td><code>http://localhost:8000</code></td></tr>
+      <tr><td><code>hub_client</code></td><td><code>auto|cli|mcp</code> — how agents talk to the Hub (session-level default; <code>auto</code> uses MCP when registered, else CLI). Consulted by the watchdog to pick MCP vs CLI dispatch.</td><td><code>auto</code></td></tr>
+      <tr><td><code>agents.&lt;n&gt;.runner</code></td><td>see <a href="#cli-runners">§4.3</a></td><td><code>claude</code></td></tr>
+      <tr><td><code>agents.&lt;n&gt;.model</code></td><td>string</td><td>runner default</td></tr>
+      <tr><td><code>agents.&lt;n&gt;.roles</code></td><td>list of role IDs</td><td><code>[]</code></td></tr>
+      <tr><td><code>agents.&lt;n&gt;.env</code></td><td>list of var <em>names</em></td><td><code>[]</code></td></tr>
+      <tr><td><code>agents.&lt;n&gt;.yolo</code> / <code>.pilot</code> / <code>.principal</code></td><td>bool</td><td><code>false</code></td></tr>
+      <tr><td><code>agents.&lt;n&gt;.base_url</code></td><td>string</td><td>unset</td></tr>
+      <tr><td><code>agents.&lt;n&gt;.cli</code></td><td>absolute path override</td><td>unset (use PATH)</td></tr>
+      <tr><td><code>agents.&lt;n&gt;.runner_options</code></td><td>mapping (e.g. <code>memory: false</code>)</td><td>unset</td></tr>
+      <tr><td><code>agents.&lt;n&gt;.hub_client</code></td><td><code>auto|cli|mcp</code> — per-agent override of the session-level <code>hub_client</code></td><td>inherits session default</td></tr>
+      <tr><td><code>jobs.&lt;n&gt;.schedule</code></td><td>5-field cron (required)</td><td>—</td></tr>
+      <tr><td><code>jobs.&lt;n&gt;.agent</code> / <code>.prompt</code></td><td>string (required)</td><td>—</td></tr>
+      <tr><td><code>jobs.&lt;n&gt;.enabled</code></td><td>bool</td><td><code>true</code></td></tr>
+      <tr><td><code>quality.review_required</code></td><td>bool</td><td><code>false</code></td></tr>
+      <tr><td><code>quality.docs_threshold</code></td><td><code>all|non_trivial|never</code></td><td><code>never</code></td></tr>
+      <tr><td><code>quality.echo_chamber_guard</code></td><td><code>off|warn|enforce</code></td><td><code>off</code></td></tr>
+      <tr><td><code>quality.attribution_tag</code> / <code>.dependency_check</code></td><td>bool</td><td><code>false</code></td></tr>
+      <tr><td><code>quality.docs_path</code></td><td>string</td><td>unset</td></tr>
+    </tbody>
+  </table>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CLI-003</span> On load the CLI <span class="rfc must">must</span> validate
+    <code>agentweave.yml</code> and report errors with line numbers: YAML must parse; <code>project.mode</code>,
+    each <code>runner</code>, <code>quality.docs_threshold</code>, and <code>quality.echo_chamber_guard</code> must
+    be in their allowed sets; <code>env</code> must be a list of variable name strings (not key/value pairs);
+    at most one agent may set <code>principal: true</code>; each job <code>schedule</code> must be a valid 5-field
+    cron.</div>
+
+  <h3 id="cli-commands"><span class="sec-num">4.2</span>Command surface<a class="anchor" href="#cli-commands">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CLI-004</span> The CLI <span class="rfc must">must</span> implement the following
+    commands with the described behavior. Commands operate through the active
+    <span class="term-link">transport</span> (<a href="#transport">§5</a>) so they work identically in local, git,
+    and Hub modes unless noted.</div>
+
+  <h4>Session &amp; lifecycle</h4>
+  <table>
+    <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>init --project "Name" [--agents a,b]</code></td><td>Create session + <code>agentweave.yml</code>; if a legacy <code>session.json</code> exists, generate config from it.</td></tr>
+      <tr><td><code>activate</code></td><td>Idempotent apply of <code>agentweave.yml</code>: configure HTTP transport (auto-fetch API key from Hub), sync agents into session, register MCP server, start watchdog, sync jobs, regenerate context files.</td></tr>
+      <tr><td><code>status</code></td><td>Full session status including watchdog state.</td></tr>
+      <tr><td><code>summary</code></td><td>Quick overview for relay decisions: tasks by status, unread counts, action items.</td></tr>
+      <tr><td><code>doctor</code></td><td>Runtime readiness checks (session, transport, watchdog, agent context files, Hub connectivity) each reporting <code>ok|warn|error</code>.</td></tr>
+      <tr><td><code>session register --agent &lt;n&gt; --session &lt;id&gt;</code></td><td>Register a pilot agent's CLI session ID.</td></tr>
+      <tr><td><code>checkpoint --agent &lt;n&gt; --reason &lt;r&gt; [--note ...]</code></td><td>Write a context checkpoint markdown to <code>.agentweave/shared/checkpoints/</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Tasks, messages &amp; delegation</h4>
+  <table>
+    <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>task create --title T [--assignee a] [--priority p] [--description d]</code></td><td>Create a task (validated, locked write).</td></tr>
+      <tr><td><code>task list</code> / <code>task show &lt;id&gt;</code></td><td>List/show tasks.</td></tr>
+      <tr><td><code>task update &lt;id&gt; --status s [--note n]</code></td><td>Update status (validated against the lifecycle set).</td></tr>
+      <tr><td><code>quick --to a "desc"</code> / <code>delegate --to a "desc"</code></td><td>Quick task delegation (aliases).</td></tr>
+      <tr><td><code>msg send --to a --subject s --message m</code></td><td>Send a message.</td></tr>
+      <tr><td><code>msg read &lt;id&gt;</code></td><td>Mark a message read/archived.</td></tr>
+      <tr><td><code>msg peek &lt;id&gt;</code></td><td>Show a message without marking it read/archived.</td></tr>
+      <tr><td><code>inbox --agent a</code></td><td>Show an agent's inbox.</td></tr>
+      <tr><td><code>relay --agent a [--run]</code></td><td>Generate a relay prompt; <code>--run</code> auto-runs for <code>claude_proxy</code> agents.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Agents, runners &amp; modes</h4>
+  <table>
+    <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>agent configure &lt;n&gt; [--runner r] [--base-url u] [--api-key-var V] [--pilot|--no-pilot]</code></td><td>Configure a runner; built-in defaults for <code>minimax</code>/<code>glm</code>.</td></tr>
+      <tr><td><code>agent set-session &lt;n&gt; &lt;id&gt;</code></td><td>Register a resume session ID.</td></tr>
+      <tr><td><code>agent set-model &lt;n&gt; &lt;model&gt;</code></td><td>Set the model for a runner.</td></tr>
+      <tr><td><code>switch &lt;n&gt;</code></td><td>Output eval-able <code>export</code> commands to switch shell to a proxy agent.</td></tr>
+      <tr><td><code>run --agent &lt;n&gt; ["task"]</code></td><td>Set env vars and launch the agent CLI with a relay prompt.</td></tr>
+      <tr><td><code>yolo --agent a --enable|--disable</code></td><td>Toggle yolo mode.</td></tr>
+      <tr><td><code>roles list|available|add &lt;a&gt; &lt;r&gt;|remove &lt;a&gt; &lt;r&gt;|set &lt;a&gt; r1,r2</code></td><td>Manage multi-role assignments (<a href="#roles">§10</a>).</td></tr>
+      <tr><td><code>agents list</code></td><td>List agents in the current session with roles, runner, and <code>hub_client</code> mode.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Transport, Hub &amp; MCP</h4>
+  <table>
+    <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>transport setup --type http --url U --api-key K --project-id P</code></td><td>Configure HTTP (Hub) transport.</td></tr>
+      <tr><td><code>transport setup --type git --cluster name</code></td><td>Configure git orphan-branch transport.</td></tr>
+      <tr><td><code>transport status|pull|disable</code></td><td>Show / pull / disable transport.</td></tr>
+      <tr><td><code>hub-heartbeat</code></td><td>Publish agent status to Hub (HTTP only).</td></tr>
+      <tr><td><code>hub start [--port N] | stop | status</code></td><td>Manage the local Hub container.</td></tr>
+      <tr><td><code>hub destroy [--force]</code></td><td>Stop and remove the local Hub container and its data.</td></tr>
+      <tr><td><code>mcp setup</code></td><td>Register the MCP server with all session agents.</td></tr>
+      <tr><td><code>sync-context</code></td><td>Regenerate agent context files from <code>ai_context.md</code> + config.</td></tr>
+      <tr><td><code>update-template</code></td><td>Emit a prompt to update the template with new best practices.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Watchdog, jobs, logs &amp; human</h4>
+  <table>
+    <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>start</code> / <code>stop</code></td><td>Start/stop the background watchdog daemon.</td></tr>
+      <tr><td><code>log [-f]</code></td><td>View (or follow) the structured event log.</td></tr>
+      <tr><td><code>jobs create --name N --agent a --message m --cron C [--session-mode new|resume]</code></td><td>Create a scheduled job.</td></tr>
+      <tr><td><code>jobs list [--agent a] | get &lt;id&gt; | pause &lt;id&gt; | resume &lt;id&gt; | run &lt;id&gt; | delete &lt;id&gt; [--force]</code></td><td>Manage jobs.</td></tr>
+      <tr><td><code>reply --id &lt;qid&gt; "answer"</code></td><td>Answer a human question (Hub only).</td></tr>
+      <tr><td><code>question ask "text" [--blocking]</code> · <code>question get &lt;qid&gt;</code></td><td>Ask the human a question via the Hub / check whether it has been answered (Hub only).</td></tr>
+    </tbody>
+  </table>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-CLI-005</span> The <span class="term-link">watchdog</span> daemon
+    <span class="rfc must">must</span> poll for new messages/tasks and <span class="rfc may">may</span> auto-trigger
+    an agent's runner. When a trigger carries no <code>[Session: &lt;id&gt;]</code> tag it
+    <span class="rfc must">must</span> start a <em>new</em> agent session (it <span class="rfc must not">must not</span>
+    fall back to resuming a previously stored session). It <span class="rfc must">must</span> maintain a
+    heartbeat file and a PID file, both machine-local.</div>
+
+  <h3 id="cli-runners"><span class="sec-num">4.3</span>Runners<a class="anchor" href="#cli-runners">#</a></h3>
+  <p>A <span class="term-link">runner</span> declares how to invoke and resume an agent CLI. Valid runners:
+  <code>claude, native, claude_proxy, kimi, manual, opencode, codex, codex_mcp, copilot</code>.</p>
+  <table>
+    <thead><tr><th>Runner</th><th>CLI</th><th>Resume flag</th><th>Session source</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><code>claude</code></td><td><code>claude</code></td><td><code>--resume</code></td><td>jsonl</td><td>stream-json output.</td></tr>
+      <tr><td><code>claude_proxy</code></td><td><code>claude</code></td><td><code>--resume</code></td><td>jsonl</td><td>env override for base URL + API key (MiniMax, GLM).</td></tr>
+      <tr><td><code>native</code></td><td>agent name</td><td><code>--resume</code></td><td>jsonl</td><td>Use the agent name as the binary.</td></tr>
+      <tr><td><code>kimi</code></td><td><code>kimi</code></td><td><code>--session</code></td><td>stdout resume line</td><td>Parses "To resume this session: kimi -r &lt;ID&gt;".</td></tr>
+      <tr><td><code>opencode</code></td><td><code>opencode run</code></td><td><code>--session</code></td><td>stable (<code>agentweave-&lt;agent&gt;</code>)</td><td>File-based MCP via <code>opencode.json</code>.</td></tr>
+      <tr><td><code>codex</code></td><td><code>codex exec</code></td><td><code>resume</code></td><td>jsonl (<code>thread_id</code>)</td><td>event <code>thread.started</code>.</td></tr>
+      <tr><td><code>codex_mcp</code></td><td><code>codex mcp-server</code></td><td>—</td><td>mcp (<code>threadId</code>)</td><td>Persistent thread sessions.</td></tr>
+      <tr><td><code>copilot</code></td><td><code>copilot</code></td><td><code>--resume=&lt;uuid&gt;</code></td><td>jsonl (<code>sessionId</code>)</td><td>event <code>result</code>.</td></tr>
+      <tr><td><code>manual</code></td><td>none</td><td>—</td><td>none</td><td>Relay prompts only.</td></tr>
+    </tbody>
+  </table>
+  <div class="block reference"><span class="label">Reference Implementation</span>
+    Built-in <code>claude_proxy</code> providers: <code>minimax</code> → base URL
+    <code>https://api.minimax.io/anthropic</code>, key var <code>MINIMAX_API_KEY</code>, model
+    <code>MiniMax-M2.7</code>; <code>glm</code> → <code>https://open.bigmodel.cn/api/anthropic</code>, key var
+    <code>ZHIPU_API_KEY</code>, model <code>glm-5</code>. Default runner per known agent otherwise defaults to
+    <code>native</code>.</div>
+
+  <h3 id="cli-env"><span class="sec-num">4.4</span>Environment variables<a class="anchor" href="#cli-env">#</a></h3>
+  <table>
+    <thead><tr><th>Variable</th><th>Scope</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>AW_LOG_LEVEL</code></td><td>CLI</td><td>Tracing level (<code>DEBUG|INFO|WARNING|ERROR</code>); default <code>WARNING</code>.</td></tr>
+      <tr><td><code>AW_LOG_FILE</code></td><td>CLI</td><td>Optional custom tracing log path.</td></tr>
+      <tr><td><code>MINIMAX_API_KEY</code>, <code>ZHIPU_API_KEY</code>, custom</td><td>Proxy</td><td>Secret values for proxy providers; resolved at runtime, never stored in config.</td></tr>
+    </tbody>
+  </table>
+  <div class="block warning"><span class="label">Warning</span> Only environment-variable <em>names</em> are ever
+  written to config files. Secret values <span class="rfc must not">must not</span> be committed and
+  <span class="rfc must not">must not</span> appear in <code>agentweave.yml</code>.</div>
+</section>
+
+<!-- =============================== TRANSPORT =============================== -->
+<section id="transport">
+  <h2><span class="sec-num">5.</span>Transport Layer<a class="anchor" href="#transport">#</a></h2>
+  <p>All message and task I/O flows through a pluggable <span class="term-link">transport</span> so the same CLI and
+  MCP behavior works on the local filesystem, across machines via git, or against the Hub.</p>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-TR-001</span> The transport interface <span class="rfc must">must</span> define these
+    six abstract operations, and every backend <span class="rfc must">must</span> implement all six:
+    <code>send_message(message_data) → bool</code>, <code>get_pending_messages(agent) → list</code>,
+    <code>archive_message(message_id) → bool</code>, <code>send_task(task_data, error?) → bool</code>,
+    <code>get_active_tasks(agent?) → list</code>, and <code>get_transport_type() → "local"|"git"|"http"</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-TR-002</span> The interface <span class="rfc must">must</span> additionally provide
+    optional operations that default to <em>not supported</em> (raising) or no-op on backends that lack them: job
+    operations (<code>create_job, list_jobs, get_job, update_job, delete_job, fire_job</code>),
+    <code>push_session</code>, <code>push_roles_config</code>, <code>push_log</code>,
+    <code>register_session</code>, <code>is_agent_registered</code>, and <code>get_agent_registration</code>.</div>
+
+  <h3>5.1 Backend selection</h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-TR-003</span> Transport <span class="rfc must">must</span> be selected from
+    <code>.agentweave/transport.json</code>: absent → <strong>Local</strong>; <code>type: "git"</code> →
+    <strong>Git</strong>; <code>type: "http"</code> → <strong>HTTP</strong>.</div>
+  <table>
+    <thead><tr><th>Transport</th><th>Storage</th><th>Use case</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Local</strong></td><td>JSON files under <code>.agentweave/</code>.</td><td>Single machine.</td></tr>
+      <tr><td><strong>Git</strong></td><td>Append-only files on a dedicated orphan branch <code>agentweave/collab</code>.</td><td>Cross-machine without a server.</td></tr>
+      <tr><td><strong>HTTP</strong></td><td>Hub REST API.</td><td>Team / real-time monitoring.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-TR-004</span> The <strong>Git</strong> transport <span class="rfc must">must</span> use
+    only git plumbing (<code>hash-object</code>, <code>mktree</code>, <code>commit-tree</code>, <code>push</code>)
+    and <span class="rfc must not">must not</span> modify the working tree or <code>HEAD</code>. It
+    <span class="rfc must">must</span> be append-only with UUID-suffixed filenames and maintain a local
+    <code>.git_seen/</code> set to avoid reprocessing.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-TR-005</span> The <strong>HTTP</strong> transport <span class="rfc must">must</span> use
+    only the language's standard-library HTTP client (no new third-party runtime dependency) and target the Hub
+    REST API described in <a href="#hub-endpoints">§7.4</a>.</div>
+</section>
+
+<!-- =============================== MCP TOOLS =============================== -->
+<section id="mcp-tools">
+  <h2><span class="sec-num">6.</span>MCP Tools<a class="anchor" href="#mcp-tools">#</a></h2>
+  <p>Agents interact with AgentWeave through <span class="term-link">MCP</span> tools. Two MCP servers exist: a
+  <strong>CLI-side</strong> server (stdio; operates through the active transport) and a <strong>Hub-side</strong>
+  server (stdio; calls the Hub REST API directly using <code>HUB_URL</code>, <code>HUB_API_KEY</code>,
+  <code>HUB_PROJECT_ID</code>). Tool names and semantics are shared; some tools require Hub/HTTP transport.</p>
+
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-MCP-001</span> Both MCP servers <span class="rfc must">must</span> expose the messaging
+    and task tools with identical names and argument shapes:
+    <code>send_message(from, to, subject, content, type?, task_id?)</code>,
+    <code>get_inbox(agent)</code> (which <span class="rfc must">must</span> auto-archive returned messages),
+    <code>mark_read(message_id)</code>, <code>list_tasks(agent?)</code>, <code>get_task(task_id)</code>,
+    <code>create_task(title, description?, assignee?, assigner?, priority?, requirements?, acceptance_criteria?)</code>,
+    and <code>update_task(task_id, status)</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-MCP-002</span> Session tools <span class="rfc must">must</span> include
+    <code>get_status()</code>, <code>list_agents()</code> (returning per-agent <code>name</code>,
+    <code>session_role</code>, <code>runner</code>, <code>dev_roles</code>, <code>is_principal</code>),
+    <code>get_agent_context(agent)</code>, and <code>get_context(role)</code>. Job tools
+    <span class="rfc must">must</span> include <code>create_job</code>, <code>list_jobs</code>, <code>get_job</code>,
+    <code>toggle_job</code>, <code>delete_job</code>, <code>run_job</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-MCP-003</span> The following tools <span class="rfc must">must</span> require Hub/HTTP
+    transport and <span class="rfc must">must</span> return an error when only local transport is active:
+    <code>ask_user(from_agent, question, blocking?)</code>, <code>get_answer(question_id)</code>,
+    <code>register_agent(name, contact_mode, ...)</code> (where <code>contact_mode ∈ {poll, mcp-push,
+    watchdog-spawn}</code>), <code>update_agent_config(name, ...)</code>, <code>register_session(from_agent,
+    session_id)</code>, <code>get_agent_config(agent)</code>, and <code>heartbeat(agent)</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-MCP-004</span> The CLI-side server <span class="rfc must">must</span> additionally
+    provide <code>save_checkpoint(agent, session_intent, files_modified, decisions, next_steps, reason,
+    blockers?, verification_commands?)</code>, writing a markdown checkpoint to
+    <code>.agentweave/shared/checkpoints/&lt;agent&gt;-&lt;timestamp&gt;.md</code>.</div>
+  <div class="block note"><span class="label">Note</span> The Hub-side server implements the same tool set by
+  translating each call into the corresponding REST endpoint (<a href="#hub-endpoints">§7.4</a>), auto-injecting
+  <code>project_id</code> into payloads. <code>get_inbox</code> is implemented as list-then-PATCH-read per message.</div>
+</section>
+
+<!-- =============================== HUB BACKEND =============================== -->
+<section id="hub-backend">
+  <h2><span class="sec-num">7.</span>Hub Backend<a class="anchor" href="#hub-backend">#</a></h2>
+  <p>The Hub is a project-scoped server exposing a REST API (base path <code>/api/v1</code>), a live SSE stream, a
+  job scheduler, and a Hub-side MCP server. It is single-tenant per deployment but multi-project via API keys.</p>
+
+  <h3 id="hub-app"><span class="sec-num">7.1</span>App &amp; configuration<a class="anchor" href="#hub-app">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-001</span> The app <span class="rfc must">must</span> initialize the database and
+    start the scheduler on startup, and stop the scheduler on shutdown. It <span class="rfc must">must</span>
+    expose an unauthenticated <code>GET /health</code> returning <code>{"status":"ok"}</code>, register all
+    <code>/api/v1</code> routers, and — when a built UI bundle is present — serve it as an SPA (static assets plus
+    a catch-all fallback that excludes paths beginning with <code>api/</code> or equal to <code>health</code>).</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-002</span> A middleware <span class="rfc must">must</span> reject any request whose
+    body exceeds the configured max size with HTTP <strong>413</strong> and
+    <code>{"detail":"Request body too large"}</code>. Reference limits: body 1&nbsp;MB; agent name/ID 128 chars;
+    subject/title 256 chars; message content &amp; task description 10,000 chars; chat <code>limit</code> query
+    clamped to 1–500.</div>
+  <table>
+    <thead><tr><th>Setting</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td><code>DATABASE_URL</code></td><td><code>sqlite+aiosqlite:///data/agentweave.db</code></td></tr>
+      <tr><td><code>AW_PORT</code></td><td><code>8000</code></td></tr>
+      <tr><td><code>AW_BOOTSTRAP_API_KEY</code></td><td>auto-generated <code>aw_live_{32 hex}</code> if empty</td></tr>
+      <tr><td><code>AW_BOOTSTRAP_PROJECT_ID</code> / <code>_NAME</code></td><td><code>proj-default</code> / <code>Default Project</code></td></tr>
+      <tr><td><code>AW_CORS_ORIGINS</code></td><td>empty (comma-separated list)</td></tr>
+      <tr><td><code>AW_TICKET_SECRET</code></td><td>empty</td></tr>
+      <tr><td><code>AW_TICKET_TTL</code></td><td><code>300</code> (seconds)</td></tr>
+      <tr><td><code>AW_MAX_BODY_SIZE</code></td><td><code>1048576</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="hub-auth"><span class="sec-num">7.2</span>Authentication<a class="anchor" href="#hub-auth">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-003</span> Except for <code>GET /health</code> and <code>GET /api/v1/setup/token</code>,
+    every endpoint <span class="rfc must">must</span> require a bearer token via <code>Authorization: Bearer
+    &lt;key&gt;</code>. A valid key <span class="rfc must">must</span> start with the exact prefix
+    <code>aw_live_</code>, exist in the key store, and not be revoked. Failures <span class="rfc must">must</span>
+    return HTTP <strong>401</strong>. The key resolves the request's project scope.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-004</span> The SSE stream <span class="rfc must">must</span> accept either the bearer
+    header <em>or</em> a short-lived signed ticket passed as <code>?token=</code>. A ticket has the form
+    <code>aw_ticket_{project_id}:{expires}:{signature}</code> where the signature is a truncated (32-char)
+    HMAC-SHA256 over <code>{project_id}:{expires}</code>; expired or invalid tickets <span class="rfc must">must</span>
+    yield <strong>401</strong>. Non-SSE endpoints <span class="rfc must not">must not</span> accept
+    <code>?token=</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-005</span> <code>GET /api/v1/setup/token</code> <span class="rfc must">must</span> be
+    unauthenticated but reachable only from local/Docker-internal callers — accepted source addresses are IPv4
+    loopback (<code>127.0.0.0/8</code>), IPv6 loopback (<code>::1</code>), and the Docker private ranges
+    <code>10.0.0.0/8</code> and <code>172.16.0.0/12</code> (Docker port-forwarding makes host requests appear to
+    originate from the Docker gateway IP). It returns a non-revoked API key as
+    <code>{"api_key": "&lt;the aw_live_… key&gt;"}</code>, <strong>403</strong> for any other caller, or
+    <strong>503</strong> if no key exists. This bootstraps <code>agentweave activate</code> without manual key entry.
+    <div class="block openissue"><span class="label">Open Issue</span> The reference implementation selects the key
+    with <code>LIMIT 1</code> and <em>no explicit ordering</em>, so "the" key is only well-defined when a single
+    non-revoked key exists; multi-key deployments get a database-order-dependent result. A future revision should
+    specify a deterministic selection (e.g. oldest non-revoked key).</div></div>
+
+  <h3 id="hub-db"><span class="sec-num">7.3</span>Database schema<a class="anchor" href="#hub-db">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-006</span> The Hub <span class="rfc must">must</span> persist the following tables.
+    Every project-scoped table has a <code>project_id</code> foreign key to <code>projects.id</code>. Timestamps are
+    timezone-aware. Migrations <span class="rfc must">must</span> be applied in order 0001→0008.</div>
+  <table>
+    <thead><tr><th>Table</th><th>Key columns (types &amp; rules)</th></tr></thead>
+    <tbody>
+      <tr><td><code>projects</code></td><td><code>id</code> PK(64), <code>name</code>(256), <code>created_at</code>.</td></tr>
+      <tr><td><code>api_keys</code></td><td><code>id</code> PK(128, the <code>aw_live_…</code> key), <code>project_id</code> FK, <code>label</code>(128) def "", <code>revoked</code> bool def false, <code>created_at</code>.</td></tr>
+      <tr><td><code>agents</code></td><td><code>id</code> PK, <code>name</code>(64, indexed), <code>pilot</code> bool, <code>registered_session_id</code>(128?), <code>contact_mode</code>(32?), <code>self_registered</code> bool, <code>mcp_endpoint</code>(256?), <code>spawn_cmd</code> JSON?, <code>config</code> JSON?, <code>created_at</code>, <code>updated</code>. Index <code>(project_id,name)</code>.</td></tr>
+      <tr><td><code>messages</code></td><td><code>id</code> PK, <code>sender</code>(64), <code>recipient</code>(64, idx), <code>subject</code>(256?), <code>content</code> Text def "", <code>type</code>(32) def "message", <code>timestamp</code>, <code>read</code> bool(idx), <code>read_at</code>?, <code>task_id</code>(64?), <code>session_id</code>(128?). Indexes <code>(project,recipient)</code>, <code>(project,read)</code>. (<code>session_id</code> is stored but is <em>not</em> separately indexed in the reference implementation.)</td></tr>
+      <tr><td><code>tasks</code></td><td><code>id</code> PK, <code>title</code>(256), <code>description</code> Text, <code>status</code>(32, idx) def "pending", <code>priority</code>(16) def "medium", <code>assignee</code>(64?, idx), <code>assigner</code>(64?), <code>created_at</code>, <code>updated</code>, JSON <code>requirements/acceptance_criteria/deliverables/notes</code>. Indexes <code>(project,status)</code>, <code>(project,assignee)</code>.</td></tr>
+      <tr><td><code>questions</code></td><td><code>id</code> PK, <code>from_agent</code>(64), <code>question</code> Text, <code>answer</code> Text?, <code>answered</code> bool(idx), <code>blocking</code> bool, <code>created_at</code>, <code>answered_at</code>?.</td></tr>
+      <tr><td><code>event_logs</code></td><td><code>id</code> PK, <code>event_type</code>(64, idx), <code>agent</code>(64?, idx), <code>data</code> JSON?, <code>severity</code>(10, idx) server-default "info", <code>timestamp</code>. Index <code>(project,timestamp)</code>.</td></tr>
+      <tr><td><code>agent_heartbeats</code></td><td><code>id</code> PK, <code>agent</code>(64, idx), <code>status</code>(32) def "active", <code>message</code> Text?, <code>timestamp</code>. Index <code>(project,agent)</code>.</td></tr>
+      <tr><td><code>agent_outputs</code></td><td><code>id</code> PK, <code>agent</code>(64, idx), <code>session_id</code>(128?), <code>content</code> Text, <code>timestamp</code>(idx). Indexes <code>(project,agent)</code>, <code>(project,timestamp)</code>.</td></tr>
+      <tr><td><code>project_sessions</code></td><td><code>project_id</code> PK/FK, <code>data</code> JSON, <code>synced_at</code>.</td></tr>
+      <tr><td><code>project_roles_config</code></td><td><code>project_id</code> PK/FK, <code>data</code> JSON, <code>synced_at</code>.</td></tr>
+      <tr><td><code>project_instructions</code></td><td><code>project_id</code> PK/FK, <code>content</code> Text def "", <code>updated_at</code>.</td></tr>
+      <tr><td><code>ai_jobs</code></td><td><code>id</code> PK, <code>name</code>(256), <code>agent</code>(64, idx), <code>message</code> Text, <code>cron</code>(128), <code>session_mode</code>(16) def "new", <code>enabled</code> bool(idx) def true, <code>created_at</code>, <code>last_run</code>?, <code>next_run</code>?, <code>run_count</code> int def 0, <code>last_session_id</code>(128?), <code>source</code>(16) def "hub". <code>project_id</code> FK; indexes <code>(project_id,agent)</code>, <code>(project_id,enabled)</code>.</td></tr>
+      <tr><td><code>job_runs</code></td><td><code>id</code> PK, <code>job_id</code> FK(cascade), <code>fired_at</code>, <code>status</code>(16) def "fired", <code>trigger</code>(16) def "scheduled", <code>session_id</code>(128?), <code>error_summary</code>(500?). Index <code>(job_id,fired_at)</code>.</td></tr>
+    </tbody>
+  </table>
+  <div class="block note"><span class="label">Note</span> Validation-only value sets (no DB enum): message types
+  <code>message, delegation, review, discussion, direct_trigger</code>; task statuses and priorities as in §3;
+  job <code>session_mode ∈ {new, resume}</code>; agent <code>contact_mode ∈ {poll, mcp-push, watchdog-spawn}</code>.
+  The scheduler also owns an <code>apscheduler_jobs</code> table.</div>
+
+  <h3 id="hub-endpoints"><span class="sec-num">7.4</span>REST endpoints<a class="anchor" href="#hub-endpoints">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-007</span> The Hub <span class="rfc must">must</span> implement all endpoints below
+    under <code>/api/v1</code>. Create endpoints return <strong>201</strong>; deletes return <strong>204</strong>;
+    missing resources return <strong>404</strong>. Every create/update that changes shared state
+    <span class="rfc must">must</span> both persist an event and broadcast the corresponding SSE event
+    (<a href="#hub-sse">§7.5</a>).</div>
+
+  <h4>Messages, tasks, questions, status</h4>
+  <table>
+    <thead><tr><th>Method &amp; path</th><th>Body / query → behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /messages</code></td><td><code>{from,to,subject?,content,type,task_id?}</code> → create; broadcast <code>message_created</code>.</td></tr>
+      <tr><td><code>GET /messages</code></td><td>query <code>agent?,offset,limit,history,sort,conversation?</code> → unread unless <code>history=true</code>; filter by recipient or two-party conversation.</td></tr>
+      <tr><td><code>PATCH /messages/{id}/read</code></td><td>mark read, set <code>read_at</code>, broadcast <code>message_read</code>.</td></tr>
+      <tr><td><code>POST /tasks</code></td><td><code>TaskCreate</code> (client <code>id?</code> accepted if valid; 409 on duplicate) → create.</td></tr>
+      <tr><td><code>GET /tasks</code> · <code>GET /tasks/{id}</code></td><td>list (query <code>agent?,status?,offset,limit</code>) / detail.</td></tr>
+      <tr><td><code>PATCH /tasks/{id}</code></td><td><code>{status?,priority?,assignee?,description?,notes?}</code> → update; broadcast <code>task_updated</code>.</td></tr>
+      <tr><td><code>POST /questions</code></td><td><code>{from_agent,question,blocking?}</code> → broadcast <code>question_asked</code>.</td></tr>
+      <tr><td><code>GET /questions</code> · <code>GET /questions/{id}</code></td><td>list (query <code>answered?</code>) / detail.</td></tr>
+      <tr><td><code>PATCH /questions/{id}</code></td><td><code>{answer}</code> → mark answered, create reply message, broadcast <code>question_answered</code> + <code>message_created</code>.</td></tr>
+      <tr><td><code>GET /status</code></td><td>snapshot: <code>message_counts</code>, <code>task_counts</code> by status, <code>question_counts</code>, <code>agents_active</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Agents</h4>
+  <table>
+    <thead><tr><th>Method &amp; path</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /agents</code></td><td>Merged agent summaries (session config + roles + DB agents + activity + heartbeats + context warnings + session start times).</td></tr>
+      <tr><td><code>GET /agents/configured</code></td><td><code>{source, agents, can_modify}</code> from synced session.</td></tr>
+      <tr><td><code>GET /agents/{name}/timeline</code></td><td>Merged recent messages (50) + logs (50) + heartbeats (20).</td></tr>
+      <tr><td><code>POST /agents/register</code></td><td>Self-register/update; reject collision with configured names; return <code>{role, context}</code>.</td></tr>
+      <tr><td><code>PATCH /agents/{name}</code></td><td>Update <code>contact_mode/mcp_endpoint/spawn_cmd</code>; merge <code>config</code>.</td></tr>
+      <tr><td><code>GET /agents/context?role=</code> · <code>GET /agents/agent-context?agent=</code></td><td>Role guide / full runtime-or-onboarding context.</td></tr>
+      <tr><td><code>GET|PUT /agents/roles/config</code></td><td>Get / upsert roles config.</td></tr>
+      <tr><td><code>POST /agents/{name}/heartbeat</code></td><td><code>{status,message?}</code> → broadcast <code>agent_heartbeat</code>.</td></tr>
+      <tr><td><code>POST|GET /agents/{name}/output</code></td><td>Post output (broadcast <code>agent_output</code>, and <code>agent_session_changed</code> on first output for a session) / list (query <code>limit,since?</code>).</td></tr>
+      <tr><td><code>POST /agents/{name}/context-usage</code></td><td>Broadcast <code>context_warning</code>.</td></tr>
+      <tr><td><code>POST /agents/{name}/compact</code> · <code>/new-session</code></td><td>Enqueue a message to the agent and persist an event. <code>/new-session</code> broadcasts <code>new_session_request</code> over SSE; <code>/compact</code> persists a <code>compact_request</code> event but does <em>not</em> broadcast it (see the Open Issue in <a href="#hub-sse">§7.5</a>).</td></tr>
+      <tr><td><code>POST /agents/{name}/register-session</code> · <code>/pilot</code></td><td>Register pilot session ID / toggle pilot mode.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Agent trigger &amp; chat</h4>
+  <table>
+    <thead><tr><th>Method &amp; path</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /agent/trigger</code></td><td><code>{agent,message,session_mode:new|resume,session_id?,work_dir?}</code> → create a trigger message for the watchdog; inspect heartbeat + pilot/manual status; return an execution-confidence result.</td></tr>
+      <tr><td><code>GET /agent/sessions/{agent}</code></td><td>Distinct session IDs from agent outputs.</td></tr>
+      <tr><td><code>GET /agent/{agent}/chat/{session_id}</code></td><td>Reconstruct a session chat from messages + outputs.</td></tr>
+      <tr><td><code>GET /agent/{agent}/chat</code></td><td>Recent mixed chat across sessions (query <code>limit</code>).</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Logs, events, session, jobs, instructions, setup</h4>
+  <table>
+    <thead><tr><th>Method &amp; path</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><code>POST /logs</code></td><td><code>{event_type,agent,data?,severity}</code> → persist + broadcast <code>log_event</code>.</td></tr>
+      <tr><td><code>GET /logs</code> · <code>GET /logs/agents</code></td><td>Query events (filters <code>agent,event_type,severity,since</code>) / distinct agent names.</td></tr>
+      <tr><td><code>GET /events/ticket</code></td><td>Issue SSE ticket <code>{token, expires_at}</code>.</td></tr>
+      <tr><td><code>GET /events</code></td><td>SSE stream; first frame <code>connected</code>; keepalive ping every 15s.</td></tr>
+      <tr><td><code>GET /events/history</code></td><td>Historical events oldest-first (query <code>limit,severity?</code>).</td></tr>
+      <tr><td><code>POST|GET /session/sync</code></td><td>Upsert session data, sync agent rows, broadcast <code>session_synced</code> / return synced snapshot.</td></tr>
+      <tr><td><code>POST|GET /jobs</code></td><td>Create (validate cron, schedule if enabled, broadcast <code>job_created</code>) / list (query <code>agent?</code>).</td></tr>
+      <tr><td><code>GET|PATCH|DELETE /jobs/{id}</code></td><td>Detail (with last 10 runs) / update (broadcast <code>job_updated</code>) / delete (204, broadcast <code>job_deleted</code>).</td></tr>
+      <tr><td><code>GET /jobs/{id}/history</code> · <code>POST /jobs/{id}/run</code></td><td>Run history / manual fire.</td></tr>
+      <tr><td><code>GET|PUT /project/instructions</code></td><td>Get / upsert project-wide instructions.</td></tr>
+      <tr><td><code>GET /setup/token</code></td><td>Bootstrap key (localhost-only; see FR-HUB-005).</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="hub-sse"><span class="sec-num">7.5</span>SSE events<a class="anchor" href="#hub-sse">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-008</span> The SSE manager <span class="rfc must">must</span> maintain per-project
+    subscriber queues (bounded; dropping events for slow consumers) and broadcast named events. The event-name
+    vocabulary <span class="rfc must">must</span> be exactly: <code>connected</code>, <code>message_created</code>,
+    <code>message_read</code>, <code>task_created</code>, <code>task_updated</code>, <code>question_asked</code>,
+    <code>question_answered</code>, <code>log_event</code>, <code>agent_heartbeat</code>, <code>agent_output</code>,
+    <code>agent_session_changed</code>, <code>context_warning</code>, <code>compact_request</code>,
+    <code>new_session_request</code>, <code>session_synced</code>, <code>job_created</code>, <code>job_updated</code>,
+    <code>job_deleted</code>, <code>job_fired</code>, <code>job_run_failed</code>, <code>agent_triggered</code>,
+    <code>agent_trigger_confidence</code>.</div>
+  <div class="block openissue"><span class="label">Open Issue</span> <code>compact_request</code> is part of the
+    reserved event vocabulary but is <em>not</em> currently broadcast over SSE by the reference implementation:
+    <code>POST /agents/{name}/compact</code> only persists a <code>compact_request</code> event log and enqueues the
+    agent message. Either the endpoint should broadcast it (to match <code>new_session_request</code>) or the name
+    should be documented as event-log-only. Left unresolved pending a decision.</div>
+
+  <h3 id="hub-scheduler"><span class="sec-num">7.6</span>Scheduler<a class="anchor" href="#hub-scheduler">#</a></h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-HUB-009</span> The scheduler <span class="rfc must">must</span> run as an async
+    singleton with a persistent job store, load all enabled jobs on startup, and use UTC with misfire grace and
+    coalescing. On firing a job it <span class="rfc must">must</span>: create a <span class="term-link">Message</span>
+    to the target agent (sender <code>user</code>, subject <code>"Scheduled job: {name}"</code>, content including
+    the job message plus a <code>[Session: …]</code> or <code>[NewSession]</code> marker); update
+    <code>last_run</code>/<code>next_run</code>/<code>run_count</code>; create a JobRun; prune history to the last
+    100 runs per job; and broadcast <code>job_fired</code> + <code>message_created</code>. On failure it
+    <span class="rfc must">must</span> mark the run <code>failed</code>, store a redacted
+    <code>error_summary</code> (≤500 chars), and broadcast <code>job_run_failed</code> at severity
+    <code>error</code>.</div>
+  <div class="block reference"><span class="label">Reference Implementation</span> Backend: Python 3.10+, FastAPI,
+    SQLAlchemy (async), SQLite via <code>aiosqlite</code> by default (PostgreSQL via <code>asyncpg</code>
+    supported), Alembic migrations, APScheduler <code>AsyncIOScheduler</code> + <code>SQLAlchemyJobStore</code>,
+    <code>sse-starlette</code>, Pydantic schemas with <code>extra="forbid"</code>. The Hub-side MCP server is run
+    as <code>python -m hub.mcp_server</code>.</div>
+</section>
+
+<!-- =============================== HUB UI =============================== -->
+<section id="hub-ui">
+  <h2><span class="sec-num">8.</span>Hub UI<a class="anchor" href="#hub-ui">#</a></h2>
+  <p>The Hub dashboard is a single-page application over the Hub REST API and SSE stream. It lets a human observe
+  agents, tasks, messages, questions, logs, and jobs, and drive agent chats.</p>
+
+  <h3>8.1 Shell &amp; navigation</h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-UI-001</span> On startup the app <span class="rfc must">must</span> bootstrap
+    configuration: load a stored API key or fetch one from <code>GET /api/v1/setup/token</code>; show a
+    "Connecting…" state until ready; then render the shell and open the SSE connection. If not configured it
+    <span class="rfc must">must</span> present a setup modal for Hub URL, API key, and project ID.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-UI-002</span> The shell <span class="rfc must">must</span> provide a top status bar
+    (project name; live counts for messages/tasks/questions/agents; context warnings; light/dark toggle) and a left
+    sidebar with these pages, grouped WORK / COMMUNICATION / OBSERVE:
+    <code>overview, messages, tasks, questions, activity, logs, agents, jobs, quality, instructions</code>.
+    Sidebar badge counts <span class="rfc must">must</span> come from live queries.</div>
+
+  <h3>8.2 Data layer</h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-UI-003</span> All server state <span class="rfc must">must</span> be fetched through a
+    query-cache layer keyed per resource, using a single authenticated fetch helper that adds the
+    <code>Authorization</code> header, sets JSON content type, warns on 401, and throws typed errors on non-OK.
+    Config/preferences (API key, Hub URL, project ID, theme, light/dark mode) <span class="rfc must">must</span> be
+    held in a small global store, persisting session data to <code>sessionStorage</code> and preferences to
+    <code>localStorage</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-UI-004</span> The SSE stream <span class="rfc must">must</span> invalidate the relevant
+    query caches per event type: message/read → messages+status; task events → tasks+status; question
+    events → questions+status; heartbeat → tasks+agents; context warning → agents; agent session changed → that
+    agent's sessions. In the reference implementation the central SSE hook owns those invalidations, while
+    <code>session_synced</code> is handled inside the <code>useAgents</code> query (refetch on that event) rather
+    than by the central hook, and <code>agent_output</code>/<code>log_event</code> are consumed to append to the
+    live output and activity/log views (streaming) rather than to invalidate a cache. Live-log and activity views
+    <span class="rfc must">must</span> update from the stream.</div>
+  <div class="block reference"><span class="label">Reference Implementation</span> React 18 (18.3.1) + TypeScript
+    (5.7.2) + Vite (6.x); TanStack React Query 5.x (server state), Zustand 5.x (config store), Tailwind CSS 3.x with
+    CSS-variable themes driven by <code>data-theme</code>/<code>data-mode</code> on <code>&lt;html&gt;</code>, Radix
+    UI primitives, and <code>lucide-react</code> icons (Material Symbols are referenced by icon name in components,
+    not installed as a package). Utility libs: <code>date-fns</code>, <code>clsx</code>, <code>tailwind-merge</code>,
+    <code>class-variance-authority</code>. Only a few hooks poll on an interval — <code>useAgents</code> (10s),
+    <code>useAgentChatHistory</code> (3s), <code>useStatus</code> (30s), <code>useJobs</code> (10s); the rest
+    (<code>useTasks</code>, <code>useMessages</code>/<code>useMessageHistory</code>, <code>useQuestions</code>,
+    <code>useLogs</code>, <code>useInstructions</code>) have <em>no</em> refetch interval and rely on SSE-driven
+    cache invalidation. <code>useAgentOutput</code> uses REST seed + SSE append + gap poll. Mutation/side-effect
+    hooks also exist (e.g. <code>useMarkRead</code>, <code>useUpdateTask</code>, <code>useAnswerQuestion</code>,
+    the job mutations, <code>useSaveInstructions</code>, <code>useRegisterSession</code>, <code>useSetPilotMode</code>).
+    Query keys mirror the resource, e.g. <code>['agents']</code>, <code>['tasks']</code>,
+    <code>['agent',name,'chat',sessionId]</code>.</div>
+
+  <h3>8.3 Components</h3>
+  <table>
+    <thead><tr><th>Area</th><th>Component → responsibility</th></tr></thead>
+    <tbody>
+      <tr><td>Agents</td><td><code>AgentsPage</code> (list + detail, active/idle filter), <code>AgentCard</code> (status dot, dev-role badges, model, EXT/PILOT tags, context bar), <code>AgentDetailPanel</code> (tabs Output/Tasks/Messages/Info), <code>AgentOutputPanel</code> &amp; <code>AgentPromptPanel</code> (chat + session selector), <code>AgentInfoTab</code>, <code>AgentActivityTab</code>, <code>AgentTimeline</code>, <code>AgentMessageSender</code>.</td></tr>
+      <tr><td>Tasks</td><td><code>TasksBoard</code> (kanban by status, assignee filter, rejected accordion), <code>TaskCard</code> (badges, assignee status, details).</td></tr>
+      <tr><td>Messages</td><td><code>MessagesFeed</code> (inbox/history toggle, filters, group-by-conversation), <code>ConversationGroup</code>, <code>MessageCard</code>.</td></tr>
+      <tr><td>Questions</td><td><code>QuestionsPanel</code> (blocking/non-blocking split), <code>QuestionInterruptCard</code>, <code>AnswerForm</code>.</td></tr>
+      <tr><td>Logs / Activity</td><td><code>LogsView</code> (search/filter/live/severity chips), <code>LogLine</code>, <code>ActivityLog</code> (SSE feed + history backfill), <code>EventRow</code>.</td></tr>
+      <tr><td>Jobs</td><td><code>JobsPage</code>, <code>JobCard</code> (run history, actions), <code>JobForm</code> (cron validation).</td></tr>
+      <tr><td>Other pages</td><td><code>OverviewPage</code>, <code>QualityHealthPanel</code>, <code>InstructionsPage</code>.</td></tr>
+      <tr><td>Layout / common</td><td><code>Sidebar</code>, <code>SidebarItem</code>, <code>StatusBar</code>, <code>SetupModal</code>; <code>Icon</code>, <code>Badge</code>, <code>EmptyState</code>, <code>ErrorBoundary</code>. (There is a single <code>Badge</code> component — no separate <code>StatusBadge</code>. The sidebar's "Settings" entry opens the <code>SetupModal</code> rather than routing to a page.)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.4 Agent chat &amp; session routing</h3>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-UI-005</span> The agent chat panel <span class="rfc must">must</span> support two
+    session modes — <code>new</code> and <code>resume</code> — via a session selector whose options are a
+    "New conversation" entry plus the agent's existing sessions. Sending a message
+    <span class="rfc must">must</span> POST <code>/api/v1/agent/trigger</code> with <code>{agent, message,
+    session_mode, session_id?}</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-UI-006</span> Session-routing behavior <span class="rfc must">must</span> follow this
+    algorithm to prevent messages leaking into the wrong session:
+    <ol class="algorithm">
+      <li>If sessions exist and the user has <em>not</em> explicitly chosen "New conversation", auto-select the
+        most recent session and set mode to <code>resume</code>.</li>
+      <li>When the user clicks "New conversation", set mode to <code>new</code>, select the new-session sentinel,
+        clear local messages, and record the current output-line index as the new-session baseline.</li>
+      <li>On send, insert an optimistic user bubble immediately, then trigger; on success refetch history, on
+        failure remove the optimistic bubble.</li>
+      <li>While in <code>new</code> mode, watch only output lines that arrived after the baseline; when a real
+        session ID is detected, switch to <code>resume</code> for that session.</li>
+      <li>In <code>resume</code> mode, merge server chat history with local messages, de-duplicating optimistic
+        temp messages; do not replace local state with empty history.</li>
+    </ol>
+  </div>
+  <div class="block warning"><span class="label">Warning</span> Because React re-renders are asynchronous, the send
+  handler <span class="rfc must">must</span> read the current session mode and selected session from refs
+  (not closure-captured state) to avoid a stale-closure bug that routes a new-chat message to the previous session.</div>
+</section>
+
+<!-- =============================== LOGGING =============================== -->
+<section id="logging">
+  <h2><span class="sec-num">9.</span>Logging &amp; Observability<a class="anchor" href="#logging">#</a></h2>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-LOG-001</span> The CLI <span class="rfc must">must</span> emit structured events
+    through the language's standard logging facility using two handlers: a rotating JSON-lines file handler writing
+    to <code>.agentweave/logs/events.jsonl</code> (reference: 10&nbsp;MB rotation, 5 backups) and a Hub-forwarding
+    handler that, when HTTP transport is active, forwards records at INFO/WARNING/ERROR to
+    <code>POST /api/v1/logs</code>.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-LOG-002</span> Each event record <span class="rfc must">must</span> carry
+    <code>event_type</code>, optional <code>agent</code>, arbitrary structured <code>data</code>, a
+    <code>severity</code> (<code>debug|info|warning|error</code>), and a timestamp. Developer tracing verbosity
+    <span class="rfc must">must</span> be controlled by <code>AW_LOG_LEVEL</code> (default <code>WARNING</code>) and
+    optionally redirected by <code>AW_LOG_FILE</code>.</div>
+  <div class="block note"><span class="label">Note</span> The Hub persists forwarded events in
+  <code>event_logs</code> and rebroadcasts them as <code>log_event</code> SSE events, so the dashboard's Logs and
+  Activity views reflect CLI/agent activity in real time.</div>
+</section>
+
+<!-- =============================== ROLES =============================== -->
+<section id="roles">
+  <h2><span class="sec-num">10.</span>Roles System<a class="anchor" href="#roles">#</a></h2>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-ROLE-001</span> An <span class="term-link">agent</span> <span class="rfc must">must</span>
+    be able to hold <em>multiple</em> roles simultaneously. Role assignments <span class="rfc must">must</span> be
+    persisted in a committable <code>.agentweave/roles.json</code>, and assigning a role
+    <span class="rfc must">must</span> copy that role's markdown behavioral guide to
+    <code>.agentweave/roles/&lt;role&gt;.md</code>. When an agent has multiple roles it
+    <span class="rfc must">must</span> receive all corresponding guides at session start.</div>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-ROLE-002</span> The set of valid role IDs <span class="rfc must">must</span> be exactly
+    the following two families. <strong>Human-title:</strong> <code>tech_lead, architect, backend_dev,
+    frontend_dev, fullstack_dev, qa_engineer, devops_engineer, security_engineer, data_engineer, ml_engineer,
+    technical_writer, code_reviewer, project_manager</code>. <strong>AI-native (function-first):</strong>
+    <code>coordinator, model_router, explorer, implementer, verifier, guardian, context_keeper</code>. The two
+    families <span class="rfc may">may</span> be combined on one agent.</div>
+  <table>
+    <thead><tr><th>AI-native role</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td><code>coordinator</code></td><td>Decompose the goal, delegate parallel workstreams, aggregate results.</td></tr>
+      <tr><td><code>model_router</code></td><td>Route each task to the best agent/model by difficulty × capability × cost × latency; respect human pins.</td></tr>
+      <tr><td><code>explorer</code></td><td>Reconnaissance/grounding; return condensed, cited findings.</td></tr>
+      <tr><td><code>implementer</code></td><td>Turn a well-specified task into working, tested code.</td></tr>
+      <tr><td><code>verifier</code></td><td>Evidence-gated evaluation against tests and specs.</td></tr>
+      <tr><td><code>guardian</code></td><td>AI-safety review: hallucinated packages, prompt injection, over-broad scopes, secrets.</td></tr>
+      <tr><td><code>context_keeper</code></td><td>Curate shared context, summarize/compact, fight context rot.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- =============================== REFERENCE IMPL =============================== -->
+<section id="reference-impl">
+  <h2><span class="sec-num">11.</span>Reference Implementation<a class="anchor" href="#reference-impl">#</a></h2>
+  <div class="block reference"><span class="label">Reference Implementation</span> This entire section is
+  informative. It pins the technology choices of the current implementation so regeneration can be faithful. A
+  reimplementation <span class="rfc may">may</span> substitute an equivalent stack provided every normative
+  requirement in §§1–10 still holds.</div>
+
+  <h3>11.1 Stack</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Technology</th></tr></thead>
+    <tbody>
+      <tr><td>CLI language</td><td>Python 3.8+ (argparse), <strong>zero required runtime deps</strong>; optional extras: <code>mcp</code> (fastmcp, pyyaml), <code>jobs</code> (croniter), <code>docs</code> (mkdocs, mkdocs-material).</td></tr>
+      <tr><td>CLI packaging</td><td>setuptools (PEP 517); PyPI package <code>agentweave-ai</code>; console scripts <code>agentweave</code> and <code>aw</code>.</td></tr>
+      <tr><td>CLI MCP</td><td>FastMCP server over stdio.</td></tr>
+      <tr><td>Hub backend</td><td>Python 3.10+, FastAPI, SQLAlchemy async, Alembic, SQLite (aiosqlite) / PostgreSQL (asyncpg), APScheduler, sse-starlette, Pydantic.</td></tr>
+      <tr><td>Hub UI</td><td>React 18, TypeScript, Vite, TanStack React Query, Zustand, Tailwind CSS, Radix UI.</td></tr>
+      <tr><td>Hub deploy</td><td>Docker + docker-compose.</td></tr>
+      <tr><td>Docs</td><td>MkDocs + Material theme, deployed to GitHub Pages.</td></tr>
+      <tr><td>Quality</td><td>ruff + black + mypy (line length 100); pytest (CLI &amp; Hub).</td></tr>
+    </tbody>
+  </table>
+
+  <h3>11.2 Repository layout</h3>
+  <pre>src/agentweave/           # CLI package
+  cli.py session.py task.py messaging.py locking.py validator.py
+  watchdog.py roles.py runner.py constants.py config.py utils.py
+  eventlog.py jobs.py logging_handlers.py context_builder.py diagnostics.py
+  transport/  (base.py local.py git.py http.py config.py)
+  mcp/server.py
+  templates/  (ai_context.md, roles/*.md)
+hub/
+  hub/  main.py auth.py config.py scheduler.py sse.py mcp_server.py
+        db/(models.py engine.py)  migrations/versions/*  api/v1/*  schemas/*
+  ui/   src/(App.tsx api/* store/* hooks/* components/*)
+tests/                    # CLI pytest suite
+hub/tests/                # Hub pytest suite
+docs/                     # MkDocs site
+pyproject.toml  README.md  CHANGELOG.md  agentweave.template.yml</pre>
+
+  <h3>11.3 Build / test / run</h3>
+  <pre># CLI dev install + checks
+pip install -e ".[dev,mcp]"
+ruff check src/ ; black src/ ; mypy src/ ; pytest tests/ -v
+
+# Hub
+cd hub && docker compose up -d              # run backend
+cd hub/ui && npm install && npm run dev      # UI hot-reload (5173)
+cd hub/ui && npm run build                   # production bundle
+pytest hub/tests/ -v
+
+# Docs
+mkdocs serve                                 # http://localhost:8000</pre>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-PKG-001</span> The CLI package <span class="rfc must">must</span> install with no
+    required third-party runtime dependencies; MCP, jobs, and docs capabilities <span class="rfc must">must</span>
+    be optional extras. The HTTP transport and logging Hub-forwarding <span class="rfc must not">must not</span>
+    introduce a required runtime dependency (standard-library HTTP only).</div>
+</section>
+
+<!-- =============================== REGENERATION GUIDE =============================== -->
+<section id="regeneration">
+  <h2><span class="sec-num">12.</span>Regeneration Guide<a class="anchor" href="#regeneration">#</a></h2>
+  <p>This section tells an implementing LLM the recommended order to rebuild the project and how to verify each
+  phase. Build bottom-up: shared model first, then the subsystems that depend on it. For a fully enumerated,
+  trackable task backlog and a repeatable per-task loop, see <a href="#dev-order">§14 Development Order &amp; Cycle</a>.</p>
+  <ol class="algorithm">
+    <li><strong>Constants &amp; domain model (§3).</strong> Implement the entities, ID generation, validation, and
+      the valid-value sets (statuses, priorities, runners, roles, modes). <em>Verify:</em> unit tests reject
+      invalid status/priority/agent-name and accept valid ones.</li>
+    <li><strong>Locking &amp; local transport (§5).</strong> Implement the file mutex, atomic writes, and the
+      Local transport implementing the six-method interface. <em>Verify:</em> create/list/update a task and
+      send/receive/archive a message round-trip on disk under concurrent access.</li>
+    <li><strong>CLI (§4).</strong> Implement <code>agentweave.yml</code> parsing/validation, the command surface,
+      runners, watchdog, and the <code>.agentweave/</code> layout + managed <code>.gitignore</code> block.
+      <em>Verify:</em> <code>init</code> → <code>task create</code> → <code>task update</code> → <code>status</code>
+      produces the expected state; <code>doctor</code> reports readiness.</li>
+    <li><strong>Git &amp; HTTP transports (§5).</strong> Add the orphan-branch transport (plumbing only) and the
+      stdlib HTTP transport. <em>Verify:</em> <code>transport status</code> reflects each; git transport never
+      touches the working tree.</li>
+    <li><strong>Hub backend (§7).</strong> Implement the DB schema + migrations, auth, all REST endpoints, SSE
+      manager with the exact event vocabulary, and the scheduler. <em>Verify:</em> the Hub tests pass;
+      <code>POST /messages</code>/<code>/tasks</code>/<code>/questions</code> return 201 and broadcast SSE;
+      <code>/health</code> and localhost-only <code>/setup/token</code> behave per §7.2.</li>
+    <li><strong>MCP servers (§6).</strong> Implement the CLI-side (transport-backed) and Hub-side (REST-backed)
+      MCP servers with the shared tool set. <em>Verify:</em> <code>get_inbox</code> auto-archives; Hub-only tools
+      error under local transport.</li>
+    <li><strong>Hub UI (§8).</strong> Implement the shell, config bootstrap, query hooks, SSE cache invalidation,
+      components, and the agent-chat session-routing algorithm. <em>Verify:</em> the acceptance flows in §8 hold —
+      especially that a new chat does not route into a previous session.</li>
+    <li><strong>Logging, roles, docs (§9, §10, §11).</strong> Wire the dual logging handlers, multi-role
+      assignment with guide-copy, and the MkDocs site. <em>Verify:</em> events appear in
+      <code>events.jsonl</code> and (with HTTP transport) in the Hub Logs view; <code>roles set</code> writes
+      <code>roles.json</code> and copies guides.</li>
+  </ol>
+  <div class="block requirement"><span class="label">Requirement</span>
+    <span class="req-id">FR-REGEN-001</span> A regenerated implementation is conformant when every
+    <code>FR-*</code> requirement in the <a href="#requirements-index">Requirements Index</a> is satisfied and the
+    per-phase verifications above pass. Behavioral equivalence to the reference implementation
+    <span class="rfc should">should</span> be checked against the CLI and Hub test suites described in §11.3.</div>
+
+  <div class="block note"><span class="label">Note</span> <strong>Maintaining this specification.</strong> This
+  document is the source of truth (<a href="#front-matter">FR-META-001</a>), so it must not be allowed to drift from
+  the code. Recommended process: (1) any change set that alters a normative value set — the CLI command surface,
+  <code>agentweave.yml</code> keys, runners, MCP tool names, REST endpoints, SSE event names, or DB
+  columns/indexes — updates this document in the same change set; (2) bump the header version badges and add a row
+  to the <a href="#spec-changelog">specification changelog</a>; (3) record any not-yet-reconciled difference as an
+  <a href="#conventions">Open Issue</a> rather than deleting the affected text; (4) keep the
+  <a href="#requirements-index">Requirements Index</a> traceability column pointing at real, passing tests. A
+  lightweight CI check <span class="rfc may">may</span> assert that the enumerated value sets in
+  <code>constants.py</code>, the registered API routes, and the broadcast SSE names each still appear verbatim in
+  this file, failing the build on divergence. If the single self-contained HTML is hard to review in diffs, the
+  document <span class="rfc may">may</span> be authored from a Markdown source that generates this HTML, provided
+  the generated single-file artifact remains the deliverable handed to a regenerating LLM.</div>
+</section>
+
+<!-- =============================== REQUIREMENTS INDEX =============================== -->
+<section id="requirements-index">
+  <h2><span class="sec-num">13.</span>Requirements Index<a class="anchor" href="#requirements-index">#</a></h2>
+  <p>Traceability of every normative requirement to its section and to the test(s) that verify it. Per
+  <a href="#front-matter">FR-META-001</a>, new or changed requirements <span class="rfc must">must</span> be added
+  here with a verifying test (or marked <em>n/a</em> with a reason). Paths are relative to the repository root.</p>
+  <table>
+    <thead><tr><th>ID</th><th>Section</th><th>Summary</th><th>Verified by (tests)</th></tr></thead>
+    <tbody>
+      <tr><td>FR-META-001</td><td><a href="#front-matter">§0</a></td><td>Version anchoring &amp; living-spec persistence model.</td><td><em>n/a</em> — process/maintenance requirement.</td></tr>
+      <tr><td>FR-CORE-001</td><td><a href="#overview">§1</a></td><td>Two independent components; CLI works without Hub.</td><td><code>tests/test_cli.py</code>, <code>tests/test_init.py</code></td></tr>
+      <tr><td>FR-CORE-002</td><td><a href="#overview">§1</a></td><td><code>agentweave</code> and <code>aw</code> entry points.</td><td><code>pyproject.toml</code> console-scripts; <code>tests/test_cli.py</code></td></tr>
+      <tr><td>FR-CORE-003</td><td><a href="#operation-modes">§1.1</a></td><td>Modes hierarchical/peer/review.</td><td><code>tests/test_constants.py</code>, <code>tests/test_session.py</code></td></tr>
+      <tr><td>FR-SESS-001</td><td><a href="#entity-session">§3.1</a></td><td>Session/agent-name validation &amp; role assignment.</td><td><code>tests/test_session.py</code></td></tr>
+      <tr><td>FR-AGT-001</td><td><a href="#entity-agent">§3.2</a></td><td>Agent-name regex incl. cluster prefix.</td><td><code>tests/test_constants.py</code>, <code>tests/test_validator.py</code></td></tr>
+      <tr><td>FR-TASK-001</td><td><a href="#entity-task">§3.3</a></td><td>Task validation + locked writes.</td><td><code>tests/test_task.py</code>, <code>tests/test_validator.py</code>, <code>tests/test_locking.py</code></td></tr>
+      <tr><td>FR-QST-001</td><td><a href="#entity-question">§3.6</a></td><td>Answered question delivered back as message.</td><td><code>hub/tests/test_questions.py</code></td></tr>
+      <tr><td>FR-JOB-001</td><td><a href="#entity-job">§3.7</a></td><td>5-field cron; firing delivers message + JobRun.</td><td><code>tests/test_jobs.py</code>, <code>hub/tests/test_jobs.py</code></td></tr>
+      <tr><td>FR-FS-001</td><td><a href="#directory-layout">§3.9</a></td><td>Managed gitignore block.</td><td><code>tests/test_init.py</code>, <code>tests/test_activate.py</code></td></tr>
+      <tr><td>FR-CLI-001</td><td><a href="#cli">§4</a></td><td>Locked, atomic state writes.</td><td><code>tests/test_locking.py</code>, <code>tests/test_task.py</code></td></tr>
+      <tr><td>FR-CLI-002</td><td><a href="#cli">§4</a></td><td><code>.env</code> autoload; shell precedence.</td><td><code>tests/test_runner.py</code>, <code>tests/test_config.py</code></td></tr>
+      <tr><td>FR-CLI-003</td><td><a href="#cli-config">§4.1</a></td><td>yml validation with line numbers.</td><td><code>tests/test_config.py</code></td></tr>
+      <tr><td>FR-CLI-004</td><td><a href="#cli-commands">§4.2</a></td><td>Command surface.</td><td><code>tests/test_cli.py</code>, <code>tests/test_hub_commands.py</code></td></tr>
+      <tr><td>FR-CLI-005</td><td><a href="#cli-commands">§4.2</a></td><td>Watchdog trigger/new-session rule.</td><td><code>tests/test_watchdog.py</code>, <code>tests/test_watchdog_session.py</code></td></tr>
+      <tr><td>FR-TR-001…005</td><td><a href="#transport">§5</a></td><td>Six-method interface, optionals, selection, git plumbing, stdlib HTTP.</td><td><code>tests/test_transport_local.py</code>, <code>tests/test_transport_git.py</code>, <code>tests/test_http_transport.py</code></td></tr>
+      <tr><td>FR-MCP-001…004</td><td><a href="#mcp-tools">§6</a></td><td>Shared tool set, session/job tools, Hub-only tools, checkpoint.</td><td><code>tests/test_mcp_server.py</code>, <code>hub/tests/test_mcp_server.py</code></td></tr>
+      <tr><td>FR-HUB-001</td><td><a href="#hub-app">§7.1</a></td><td>App init, health, SPA serving.</td><td><code>hub/tests/test_status.py</code>, <code>hub/tests/test_runtime_diagnostics.py</code></td></tr>
+      <tr><td>FR-HUB-002</td><td><a href="#hub-app">§7.1</a></td><td>Body-size limit → 413.</td><td><code>hub/tests/test_bola.py</code>, <code>hub/tests/test_auth.py</code></td></tr>
+      <tr><td>FR-HUB-003</td><td><a href="#hub-auth">§7.2</a></td><td>Bearer auth; <code>aw_live_</code>; 401.</td><td><code>hub/tests/test_auth.py</code>, <code>hub/tests/test_bola.py</code></td></tr>
+      <tr><td>FR-HUB-004</td><td><a href="#hub-auth">§7.2</a></td><td>SSE ticket auth.</td><td><code>hub/tests/test_auth.py</code>, <code>hub/tests/test_sse.py</code></td></tr>
+      <tr><td>FR-HUB-005</td><td><a href="#hub-auth">§7.2</a></td><td>Localhost/Docker setup token.</td><td><code>hub/tests/test_setup.py</code></td></tr>
+      <tr><td>FR-HUB-006</td><td><a href="#hub-db">§7.3</a></td><td>DB schema + migrations 0001→0008.</td><td><code>hub/tests/test_migrations.py</code></td></tr>
+      <tr><td>FR-HUB-007</td><td><a href="#hub-endpoints">§7.4</a></td><td>REST endpoints + status codes + SSE.</td><td><code>hub/tests/test_messages.py</code>, <code>test_tasks.py</code>, <code>test_questions.py</code>, <code>test_agents.py</code>, <code>test_agent_chat.py</code>, <code>test_instructions.py</code>, <code>test_jobs_crud.py</code></td></tr>
+      <tr><td>FR-HUB-008</td><td><a href="#hub-sse">§7.5</a></td><td>SSE event vocabulary.</td><td><code>hub/tests/test_sse.py</code></td></tr>
+      <tr><td>FR-HUB-009</td><td><a href="#hub-scheduler">§7.6</a></td><td>Scheduler firing/failure behavior.</td><td><code>hub/tests/test_jobs.py</code></td></tr>
+      <tr><td>FR-UI-001…006</td><td><a href="#hub-ui">§8</a></td><td>Bootstrap, shell, data layer, SSE invalidation, chat, session routing.</td><td><code>hub/ui/src/__tests__/</code> (<code>App-mount</code>, <code>configStore</code>, <code>useSSE</code>, <code>agentChat</code>, <code>agentOutput-polling</code>, <code>SidebarItem</code>, <code>ActivityLog</code>)</td></tr>
+      <tr><td>FR-LOG-001…002</td><td><a href="#logging">§9</a></td><td>Dual handlers; event record fields.</td><td><code>tests/test_logging_handlers.py</code>, <code>tests/test_eventlog.py</code></td></tr>
+      <tr><td>FR-ROLE-001…002</td><td><a href="#roles">§10</a></td><td>Multi-role; valid role ID sets.</td><td><code>tests/test_roles.py</code>, <code>tests/test_constants.py</code></td></tr>
+      <tr><td>FR-PKG-001</td><td><a href="#reference-impl">§11</a></td><td>Zero required runtime deps; optional extras.</td><td><code>pyproject.toml</code> (<code>dependencies = []</code>)</td></tr>
+      <tr><td>FR-REGEN-001</td><td><a href="#regeneration">§12</a></td><td>Conformance = all FR satisfied + verifications pass.</td><td>Full CLI + Hub + UI suites (<code>pytest tests/</code>, <code>pytest hub/tests/</code>, <code>npm test</code>)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- =============================== DEVELOPMENT ORDER & CYCLE =============================== -->
+<section id="dev-order">
+  <h2><span class="sec-num">14.</span>Development Order &amp; Cycle<a class="anchor" href="#dev-order">#</a></h2>
+  <p>This section turns the coarse phases of the <a href="#regeneration">§12 Regeneration Guide</a> into a
+  granular, trackable backlog and a repeatable per-task working loop, so an AI (or human) can build AgentWeave
+  <em>incrementally</em> — always with a runnable increment and a binary acceptance check at each step. §12 remains
+  the high-level phase order; this section is its enumerated expansion.</p>
+
+  <h3 id="dev-cycle"><span class="sec-num">14.1</span>The development cycle<a class="anchor" href="#dev-cycle">#</a></h3>
+  <p>To build the project, repeat the following loop until every task is <code>done</code>:</p>
+  <ol class="algorithm">
+    <li><strong>Select a task.</strong> Choose the lowest-numbered task whose dependencies are all
+      <code>done</code>. Tasks marked <code>[P]</code> that share the same satisfied dependencies
+      <span class="rfc may">may</span> be built in parallel.</li>
+    <li><strong>Ground in the spec.</strong> Read the sections named in the task's <em>Satisfies</em> column (its
+      <code>FR-*</code> IDs) and any entities in <a href="#domain-model">§3</a> it touches. Resolve every
+      referenced term before writing code.</li>
+    <li><strong>Implement in scope.</strong> Build only what the task describes. Do not add speculative behavior;
+      unspecified details <span class="rfc must not">must not</span> be silently invented — raise them as an
+      <a href="#conventions">Open Issue</a> instead.</li>
+    <li><strong>Verify.</strong> Run the task's <em>Acceptance check</em>. It is a binary pass/fail gate; the task
+      is not <code>done</code> until it passes.</li>
+    <li><strong>Reconcile.</strong> If the implementation reveals that the spec is wrong or incomplete, apply
+      <a href="#front-matter">FR-META-001</a>: update the affected spec text (and the
+      <a href="#spec-changelog">changelog</a>) in the same change set, or record an
+      <a href="#conventions">Open Issue</a>.</li>
+    <li><strong>Record &amp; commit.</strong> Mark the task <code>done</code> and commit with a message that
+      references the task ID and the FR-IDs it satisfies (e.g. <code>T-018: DB models + migrations (FR-HUB-006)</code>).</li>
+    <li><strong>Gate at milestones.</strong> When the last task of a milestone completes, run that milestone's
+      <em>gate</em> (<a href="#dev-milestones">§14.4</a>). Do not start the next milestone until the gate passes.</li>
+  </ol>
+  <div class="block note"><span class="label">Note</span> The loop is <em>test-anchored</em>: every acceptance
+  check maps to a real test from the <a href="#requirements-index">§13</a> traceability column, so "done" always
+  means "verified", never "written".</div>
+
+  <h3 id="dev-conventions"><span class="sec-num">14.2</span>Conventions<a class="anchor" href="#dev-conventions">#</a></h3>
+  <table>
+    <thead><tr><th>Convention</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>T-NNN</code></td><td>Stable task identifier. Lower numbers are generally earlier; ordering is defined by the <em>Depends on</em> graph, not the number alone.</td></tr>
+      <tr><td>Status</td><td>Each task is <code>todo</code> → <code>in_progress</code> → <code>done</code>, or <code>blocked</code> (record why). A task becomes <em>ready</em> when all its dependencies are <code>done</code>.</td></tr>
+      <tr><td><code>[P]</code></td><td>Parallelizable: the task shares no ordering constraint with its <code>[P]</code> siblings and <span class="rfc may">may</span> be built concurrently.</td></tr>
+      <tr><td>Depends on</td><td>Task IDs that <span class="rfc must">must</span> be <code>done</code> first. The dependency graph <span class="rfc must">must</span> stay acyclic.</td></tr>
+      <tr><td>Satisfies</td><td>The <code>FR-*</code> requirement(s) the task implements — the contract it is verified against.</td></tr>
+      <tr><td>Acceptance check</td><td>A concrete, binary command/test that must pass. Reuses the §13 verifying tests.</td></tr>
+      <tr><td><code>M1…M6</code></td><td>Milestones — each is a <em>runnable increment</em> (MVP-first), guarded by a gate in §14.4.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="dev-backlog"><span class="sec-num">14.3</span>Task backlog<a class="anchor" href="#dev-backlog">#</a></h3>
+
+  <h4>M1 — Local single-machine CLI (MVP)</h4>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
+    <tbody>
+      <tr><td>T-001</td><td>Constants &amp; value sets: statuses, priorities, runners, roles, modes, contact modes, directory paths.</td><td>—</td><td>FR-CORE-003, FR-ROLE-002</td><td><code>pytest tests/test_constants.py</code></td></tr>
+      <tr><td>T-002 <code>[P]</code></td><td>ID generation (<code>&lt;prefix&gt;-&lt;8hex&gt;</code>) + agent-name regex incl. cluster prefix.</td><td>T-001</td><td>FR-AGT-001</td><td><code>pytest tests/test_validator.py tests/test_utils.py</code></td></tr>
+      <tr><td>T-003</td><td>Domain entities + validate/sanitize (Task, Message, Session, Question, Job, Event).</td><td>T-001, T-002</td><td>FR-TASK-001, FR-SESS-001</td><td><code>pytest tests/test_validator.py tests/test_session.py tests/test_task.py</code></td></tr>
+      <tr><td>T-004</td><td>File-based named mutex + atomic (temp-then-rename) writes.</td><td>T-001</td><td>FR-CLI-001</td><td><code>pytest tests/test_locking.py</code></td></tr>
+      <tr><td>T-005</td><td>Local transport implementing the six-method interface.</td><td>T-003, T-004</td><td>FR-TR-001, FR-TR-003</td><td><code>pytest tests/test_transport_local.py</code></td></tr>
+      <tr><td>T-006 <code>[P]</code></td><td><code>agentweave.yml</code> parse + validate with line numbers.</td><td>T-001</td><td>FR-CLI-003</td><td><code>pytest tests/test_config.py</code></td></tr>
+      <tr><td>T-007 <code>[P]</code></td><td><code>.env</code> autoload with shell-var precedence.</td><td>T-001</td><td>FR-CLI-002</td><td><code>pytest tests/test_runner.py tests/test_config.py</code></td></tr>
+      <tr><td>T-008</td><td>Session/lifecycle commands (<code>init</code>, <code>activate</code>, <code>status</code>, <code>summary</code>, <code>doctor</code>) + <code>.agentweave/</code> layout + managed <code>.gitignore</code> block.</td><td>T-005, T-006</td><td>FR-CORE-001, FR-FS-001</td><td><code>pytest tests/test_init.py tests/test_activate.py tests/test_diagnostics.py</code></td></tr>
+      <tr><td>T-009</td><td>Task/message/delegation commands (<code>task *</code>, <code>quick</code>/<code>delegate</code>, <code>msg send/read/peek</code>, <code>inbox</code>, <code>relay</code>).</td><td>T-005, T-008</td><td>FR-CLI-004</td><td><code>pytest tests/test_cli.py tests/test_messaging.py</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>M2 — Autonomous local (runners, watchdog, roles, logging, CLI-MCP)</h4>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
+    <tbody>
+      <tr><td>T-010</td><td>Runner registry + dispatch (<code>claude, native, claude_proxy, kimi, opencode, codex, codex_mcp, copilot, manual</code>) incl. proxy providers.</td><td>T-009</td><td>FR-CLI-004 (§4.3)</td><td><code>pytest tests/test_runner.py tests/test_opencode_cli_override.py</code></td></tr>
+      <tr><td>T-011 <code>[P]</code></td><td>Agent config/mode commands (<code>agent configure/set-session/set-model</code>, <code>switch</code>, <code>run</code>, <code>yolo</code>).</td><td>T-010</td><td>FR-CLI-004</td><td><code>pytest tests/test_cli.py tests/test_cli_pilot.py</code></td></tr>
+      <tr><td>T-012</td><td>Watchdog daemon: poll, auto-trigger, new-session rule (no resume fallback), heartbeat + PID files.</td><td>T-010</td><td>FR-CLI-005</td><td><code>pytest tests/test_watchdog.py tests/test_watchdog_session.py tests/test_cli_watch.py</code></td></tr>
+      <tr><td>T-013 <code>[P]</code></td><td>Multi-role system: <code>roles.json</code>, guide copy to <code>roles/&lt;role&gt;.md</code>, <code>roles</code> CLI.</td><td>T-008</td><td>FR-ROLE-001, FR-ROLE-002</td><td><code>pytest tests/test_roles.py</code></td></tr>
+      <tr><td>T-014 <code>[P]</code></td><td>Logging: rotating JSONL handler + Hub-forward handler; <code>AW_LOG_LEVEL</code>/<code>AW_LOG_FILE</code>.</td><td>T-008</td><td>FR-LOG-001, FR-LOG-002</td><td><code>pytest tests/test_logging_handlers.py tests/test_eventlog.py</code></td></tr>
+      <tr><td>T-015</td><td>CLI-side MCP server (transport-backed tools incl. <code>save_checkpoint</code>; Hub-only tools error under local).</td><td>T-009, T-013</td><td>FR-MCP-001, FR-MCP-002, FR-MCP-004</td><td><code>pytest tests/test_mcp_server.py</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>M3 — Cross-machine (git transport)</h4>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
+    <tbody>
+      <tr><td>T-016</td><td>Git orphan-branch transport: plumbing only, append-only UUID-suffixed files, <code>.git_seen/</code> set; never touches working tree/HEAD.</td><td>T-005</td><td>FR-TR-004</td><td><code>pytest tests/test_transport_git.py</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>M4 — Hub backend</h4>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
+    <tbody>
+      <tr><td>T-017</td><td>App factory + config/settings + <code>GET /health</code> + SPA serving + body-limit middleware (413).</td><td>—</td><td>FR-HUB-001, FR-HUB-002</td><td><code>pytest hub/tests/test_status.py hub/tests/test_runtime_diagnostics.py</code></td></tr>
+      <tr><td>T-018</td><td>DB models + async engine + Alembic migrations 0001→0008.</td><td>T-017</td><td>FR-HUB-006</td><td><code>pytest hub/tests/test_migrations.py</code></td></tr>
+      <tr><td>T-019</td><td>Auth: bearer <code>aw_live_</code> + 401 + project scope; SSE ticket; localhost/Docker <code>setup/token</code>.</td><td>T-018</td><td>FR-HUB-003, FR-HUB-004, FR-HUB-005</td><td><code>pytest hub/tests/test_auth.py hub/tests/test_setup.py hub/tests/test_bola.py</code></td></tr>
+      <tr><td>T-020 <code>[P]</code></td><td>SSE manager: per-project bounded queues + exact event vocabulary.</td><td>T-018</td><td>FR-HUB-008</td><td><code>pytest hub/tests/test_sse.py</code></td></tr>
+      <tr><td>T-021</td><td>REST: messages, tasks, questions, status (201/204/404/409; persist + broadcast).</td><td>T-019, T-020</td><td>FR-HUB-007, FR-QST-001</td><td><code>pytest hub/tests/test_messages.py hub/tests/test_tasks.py hub/tests/test_questions.py hub/tests/test_status.py</code></td></tr>
+      <tr><td>T-022 <code>[P]</code></td><td>REST: agents, agent trigger, agent chat.</td><td>T-019, T-020</td><td>FR-HUB-007</td><td><code>pytest hub/tests/test_agents.py hub/tests/test_agent_chat.py hub/tests/test_agents_self_registered.py hub/tests/test_pilot_mode.py</code></td></tr>
+      <tr><td>T-023 <code>[P]</code></td><td>REST: logs, events (+ ticket/history), session-sync, project instructions, setup.</td><td>T-019, T-020</td><td>FR-HUB-007</td><td><code>pytest hub/tests/test_instructions.py hub/tests/test_agents.py</code></td></tr>
+      <tr><td>T-024</td><td>Scheduler (async singleton + persistent jobstore, UTC, misfire/coalesce) + jobs endpoints; fire/failure behavior.</td><td>T-021</td><td>FR-HUB-009, FR-JOB-001</td><td><code>pytest hub/tests/test_jobs.py hub/tests/test_jobs_crud.py</code></td></tr>
+      <tr><td>T-025</td><td>HTTP transport (stdlib <code>urllib</code> only — no new runtime dep) targeting the Hub API.</td><td>T-021, T-005</td><td>FR-TR-005, FR-PKG-001</td><td><code>pytest tests/test_http_transport.py</code></td></tr>
+      <tr><td>T-026</td><td>Hub-side MCP server (REST-backed, auto-inject <code>project_id</code>, incl. <code>get_agent_config</code>).</td><td>T-021, T-015</td><td>FR-MCP-001, FR-MCP-002, FR-MCP-003</td><td><code>pytest hub/tests/test_mcp_server.py</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>M5 — Hub UI</h4>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
+    <tbody>
+      <tr><td>T-027</td><td>App bootstrap: config store, setup modal, API-key discovery, "Connecting…" state, open SSE.</td><td>T-019</td><td>FR-UI-001, FR-UI-003</td><td><code>npm test</code> → <code>App-mount</code>, <code>configStore</code></td></tr>
+      <tr><td>T-028 <code>[P]</code></td><td>Shell: status bar + sidebar pages/badges (WORK/COMMUNICATION/OBSERVE).</td><td>T-027</td><td>FR-UI-002</td><td><code>npm test</code> → <code>SidebarItem</code></td></tr>
+      <tr><td>T-029</td><td>Data layer: query hooks + authed fetch helper + SSE cache invalidation mapping.</td><td>T-027, T-020</td><td>FR-UI-003, FR-UI-004</td><td><code>npm test</code> → <code>useSSE</code>, <code>useSSE-lifecycle</code></td></tr>
+      <tr><td>T-030 <code>[P]</code></td><td>Agents components incl. <code>AgentPromptPanel</code> session-routing (refs, optimistic bubble, baseline).</td><td>T-029, T-022</td><td>FR-UI-005, FR-UI-006</td><td><code>npm test</code> → <code>agentChat</code>, <code>agentOutput-polling</code>, <code>agentStatus</code></td></tr>
+      <tr><td>T-031 <code>[P]</code></td><td>Other pages: tasks, messages, questions, logs, activity, jobs, overview, quality, instructions.</td><td>T-029</td><td>FR-UI-002</td><td><code>npm test</code> → <code>ActivityLog</code>, <code>smoke</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>M6 — Docs, packaging &amp; conformance</h4>
+  <table>
+    <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
+    <tbody>
+      <tr><td>T-032 <code>[P]</code></td><td>MkDocs site (Material theme).</td><td>T-009</td><td>§11</td><td><code>mkdocs build</code> succeeds.</td></tr>
+      <tr><td>T-033 <code>[P]</code></td><td>Packaging: <code>pyproject.toml</code>, console scripts <code>agentweave</code>/<code>aw</code>, optional extras, zero runtime deps.</td><td>T-009</td><td>FR-PKG-001, FR-CORE-002</td><td><code>pip install -e ".[dev,mcp]"</code>; <code>agentweave --help</code>; <code>dependencies == []</code>.</td></tr>
+      <tr><td>T-034</td><td>Conformance sweep: every <code>FR-*</code> satisfied + all traceability tests green.</td><td>all</td><td>FR-REGEN-001</td><td><code>pytest tests/ &amp;&amp; pytest hub/tests/ &amp;&amp; npm test</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="dev-milestones"><span class="sec-num">14.4</span>Milestones &amp; gates<a class="anchor" href="#dev-milestones">#</a></h3>
+  <table>
+    <thead><tr><th>Milestone</th><th>Runnable increment</th><th>Gate (must pass before next milestone)</th></tr></thead>
+    <tbody>
+      <tr><td><strong>M1</strong> Local CLI MVP</td><td>Two agents collaborate locally with no Hub: create/list/update tasks, send/read messages.</td><td><code>init</code>→<code>task create</code>→<code>task update</code>→<code>status</code> works; <code>doctor</code> reports readiness; <code>pytest tests/test_task.py tests/test_messaging.py tests/test_locking.py tests/test_transport_local.py tests/test_config.py tests/test_cli.py</code> pass.</td></tr>
+      <tr><td><strong>M2</strong> Autonomous local</td><td>Zero-relay loop: watchdog auto-triggers runners; roles &amp; structured logging active; agents use CLI-side MCP.</td><td><code>pytest tests/test_watchdog.py tests/test_watchdog_session.py tests/test_roles.py tests/test_logging_handlers.py tests/test_mcp_server.py tests/test_runner.py</code> pass.</td></tr>
+      <tr><td><strong>M3</strong> Cross-machine</td><td>Two clones collaborate over the git orphan branch.</td><td><code>pytest tests/test_transport_git.py</code> passes; git transport provably never modifies the working tree or <code>HEAD</code>.</td></tr>
+      <tr><td><strong>M4</strong> Hub backend</td><td>Hub serves the REST API + SSE + scheduler; CLI works over HTTP transport.</td><td><code>pytest hub/tests/</code> passes; creates return 201 and broadcast SSE; <code>/health</code> and localhost-only <code>/setup/token</code> behave per §7.2; <code>pytest tests/test_http_transport.py</code> passes.</td></tr>
+      <tr><td><strong>M5</strong> Hub UI</td><td>Dashboard observes agents/tasks/messages/questions/logs/jobs and drives agent chats live over SSE.</td><td><code>npm test</code> passes; the §8 acceptance flows hold — especially that a new chat does <em>not</em> route into a previous session.</td></tr>
+      <tr><td><strong>M6</strong> Finish</td><td>Docs build, package installs cleanly, whole system conformant.</td><td>FR-REGEN-001: every <code>FR-*</code> satisfied and all traceability tests (<a href="#requirements-index">§13</a>) green.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer class="doc-footer">
+  <p>AgentWeave Canonical Regeneration Specification. This document is intended to be self-contained and offline —
+  it embeds all styling and scripting and references no external resources. Hand this single file to an LLM to
+  regenerate the project.</p>
+  <p>Source project: <code>agentweave-ai</code> (PyPI) · Hub server + React dashboard · MkDocs documentation.</p>
+</footer>
+</main>
+</div>
+
+<script>
+(function () {
+  // Anchor "#" click helpers, active-section highlighting, and TOC filter.
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var idToLink = {};
+  tocLinks.forEach(function (a) {
+    var id = a.getAttribute('href').slice(1);
+    idToLink[id] = a;
+  });
+
+  // Scrollspy: highlight the nearest heading in view.
+  var targets = Object.keys(idToLink).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  function onScroll() {
+    var top = window.scrollY + 120;
+    var current = null;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].offsetTop <= top) current = targets[i];
+    }
+    tocLinks.forEach(function (a) { a.classList.remove('active'); });
+    if (current && idToLink[current.id]) idToLink[current.id].classList.add('active');
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // TOC filter box.
+  var search = document.getElementById('search');
+  var items = Array.prototype.slice.call(document.querySelectorAll('#toc li'));
+  search.addEventListener('input', function () {
+    var q = search.value.trim().toLowerCase();
+    items.forEach(function (li) {
+      var a = li.querySelector('a');
+      if (!a) return;
+      var match = a.textContent.toLowerCase().indexOf(q) !== -1;
+      li.classList.toggle('hidden', q.length > 0 && !match);
+    });
+  });
+
+  // Mobile TOC toggle.
+  var toggle = document.getElementById('tocToggle');
+  var sidebar = document.getElementById('sidebar');
+  toggle.addEventListener('click', function () { sidebar.classList.toggle('open'); });
+  sidebar.addEventListener('click', function (e) {
+    if (e.target.tagName === 'A') sidebar.classList.remove('open');
+  });
+})();
+</script>
+</body>
+</html>
