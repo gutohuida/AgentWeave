@@ -220,11 +220,11 @@
   <h1>AgentWeave — Canonical Regeneration Specification</h1>
   <div class="subtitle">A single, self-contained specification detailed enough for any capable LLM to regenerate the entire AgentWeave framework — CLI, Hub backend, Hub UI, and documentation — without access to the original source code.</div>
   <div class="meta-badges">
-    <span>CLI v0.40.0</span>
-    <span>Hub v0.33.0</span>
+    <span>CLI v0.42.0</span>
+    <span>Hub v0.35.0</span>
     <span>Status: Living Standard</span>
     <span>Spec-Driven Development</span>
-    <span>Last generated: 2026-07-20</span>
+    <span>Last generated: 2026-07-24</span>
   </div>
 </header>
 
@@ -247,7 +247,7 @@
 
   <div class="block requirement"><span class="label">Requirement</span>
     <span class="req-id">FR-META-001</span> This document describes a specific implementation revision —
-    <strong>CLI v0.40.0</strong> and <strong>Hub v0.33.0</strong> (mirrored in the header badges). A regenerated
+    <strong>CLI v0.42.0</strong> and <strong>Hub v0.35.0</strong> (mirrored in the header badges). A regenerated
     implementation <span class="rfc must">must</span> target these versions unless a later spec revision supersedes
     them. The specification follows a <strong>living-spec / spec-as-source</strong> persistence model: this document
     is the human-authored source of truth and implementation artifacts are treated as derived. Consequently, when a
@@ -347,6 +347,7 @@
       <tr><td>2026-07-20</td><td>CLI v0.40.0 · Hub v0.33.0</td><td>Initial canonical specification.</td></tr>
       <tr><td>2026-07-20 (rev. 2)</td><td>CLI v0.40.0 · Hub v0.33.0</td><td>Accuracy pass reconciling the spec with the code: corrected the <code>setup/token</code> access rule (FR-HUB-005), database indexes (FR-HUB-006), and UI data-layer/SSE-invalidation claims (FR-UI-004); added the missing CLI commands (<code>msg peek</code>, <code>question ask/get</code>, <code>hub destroy</code>, <code>agents list</code>) and the <code>hub_client</code> config option; introduced version anchoring &amp; the living-spec persistence model (FR-META-001), Open Issue markers, and an FR-ID→test traceability column.</td></tr>
       <tr><td>2026-07-20 (rev. 3)</td><td>CLI v0.40.0 · Hub v0.33.0</td><td>Added <a href="#dev-order">§14 Development Order &amp; Cycle</a>: a per-task development loop, task conventions, a fully enumerated <code>T-NNN</code> backlog (dependencies, satisfied FR-IDs, binary acceptance checks) and six MVP-first milestones with gates.</td></tr>
+      <tr><td>2026-07-24</td><td>CLI v0.42.0 · Hub v0.35.0</td><td>Added the <strong>project-spec system</strong>: the AI-native <code>spec</code> <a href="#roles">role</a> (FR-ROLE-002); the <code>agentweave spec push</code> command and the transport <code>push_spec</code> optional operation (FR-CLI-004, FR-TR-002) with watchdog auto-push; the Hub <code>project_specs</code> table and migration <strong>0009</strong> (FR-HUB-006); the <code>/project/specs/sync</code>, <code>/project/specs</code>, and <code>/project/spec</code> REST endpoints (FR-HUB-007); the <code>spec_updated</code> SSE event (FR-HUB-008); and the Hub UI <a href="#hub-ui">Spec page</a> (FR-UI-002). Bumped version anchors to CLI v0.42.0 · Hub v0.35.0.</td></tr>
     </tbody>
   </table>
 </section>
@@ -430,6 +431,10 @@
     <p><dfn id="dfn-job">Job</dfn> — A scheduled, recurring instruction to an agent, defined by a cron expression.</p>
     <p><dfn id="dfn-role">Role</dfn> — A behavioral guide assigned to an agent (e.g. <code>backend_dev</code>,
     <code>coordinator</code>). An agent may hold multiple roles simultaneously.</p>
+    <p><dfn id="dfn-spec">Project spec</dfn> — A self-contained HTML specification document authored and maintained
+    by an agent holding the <code>spec</code> role. The living project spec lives at <code>spec/spec.html</code>;
+    per-change specs live at <code>spec/changes/&lt;name&gt;/spec.html</code>. Specs are committed to the repository
+    and, under HTTP transport, mirrored to the Hub for viewing/editing in the Hub UI Spec page.</p>
     <p><dfn id="dfn-transport">Transport</dfn> — The pluggable backend through which messages and tasks are stored
     and retrieved: <code>local</code> (filesystem), <code>git</code> (orphan branch), or <code>http</code> (Hub).</p>
     <p><dfn id="dfn-hub">Hub</dfn> — The self-hosted FastAPI server plus React dashboard that centralizes
@@ -618,6 +623,11 @@
     <code>transport.json</code>, <code>.git_seen/</code>, <code>logs/</code>, watchdog files,
     <code>triggered_direct.json</code>, <code>project_instructions.md</code>, <code>.env</code>) while leaving
     <code>roles.json</code>, <code>roles/*.md</code>, and <code>ai_context.md</code> committable.</div>
+  <div class="block note"><span class="label">Note</span> <span class="term-link">Project specs</span> are stored
+    <em>outside</em> <code>.agentweave/</code>, at the repository root under <code>spec/</code>: the living spec at
+    <code>spec/spec.html</code> and per-change specs at <code>spec/changes/&lt;name&gt;/spec.html</code>. These are
+    committed. Under HTTP transport the watchdog and <code>agentweave spec push</code> mirror them to the Hub
+    (<a href="#hub-endpoints">§7.4</a>).</div>
 </section>
 
 <!-- =============================== CLI =============================== -->
@@ -767,6 +777,7 @@ quality:
       <tr><td><code>transport setup --type http --url U --api-key K --project-id P</code></td><td>Configure HTTP (Hub) transport.</td></tr>
       <tr><td><code>transport setup --type git --cluster name</code></td><td>Configure git orphan-branch transport.</td></tr>
       <tr><td><code>transport status|pull|disable</code></td><td>Show / pull / disable transport.</td></tr>
+      <tr><td><code>spec push</code></td><td>Push local spec HTML files (<code>spec/spec.html</code>, <code>spec/changes/*/spec.html</code>) to the Hub (HTTP only). Errors if the active transport is not <code>http</code>.</td></tr>
       <tr><td><code>hub-heartbeat</code></td><td>Publish agent status to Hub (HTTP only).</td></tr>
       <tr><td><code>hub start [--port N] | stop | status</code></td><td>Manage the local Hub container.</td></tr>
       <tr><td><code>hub destroy [--force]</code></td><td>Stop and remove the local Hub container and its data.</td></tr>
@@ -795,7 +806,10 @@ quality:
     an agent's runner. When a trigger carries no <code>[Session: &lt;id&gt;]</code> tag it
     <span class="rfc must">must</span> start a <em>new</em> agent session (it <span class="rfc must not">must not</span>
     fall back to resuming a previously stored session). It <span class="rfc must">must</span> maintain a
-    heartbeat file and a PID file, both machine-local.</div>
+    heartbeat file and a PID file, both machine-local. Under HTTP transport the watchdog
+    <span class="rfc should">should</span> also mirror <span class="term-link">project specs</span> to the Hub —
+    pushing all discovered spec files once at startup and thereafter only files whose modification time changed —
+    without letting a spec-push failure interrupt its poll loop.</div>
 
   <h3 id="cli-runners"><span class="sec-num">4.3</span>Runners<a class="anchor" href="#cli-runners">#</a></h3>
   <p>A <span class="term-link">runner</span> declares how to invoke and resume an agent CLI. Valid runners:
@@ -852,6 +866,7 @@ quality:
     optional operations that default to <em>not supported</em> (raising) or no-op on backends that lack them: job
     operations (<code>create_job, list_jobs, get_job, update_job, delete_job, fire_job</code>),
     <code>push_session</code>, <code>push_roles_config</code>, <code>push_log</code>,
+    <code>push_spec(path, content)</code> (mirror a project-spec HTML file to the Hub; HTTP-only),
     <code>register_session</code>, <code>is_agent_registered</code>, and <code>get_agent_registration</code>.</div>
 
   <h3>5.1 Backend selection</h3>
@@ -984,7 +999,7 @@ quality:
   <div class="block requirement"><span class="label">Requirement</span>
     <span class="req-id">FR-HUB-006</span> The Hub <span class="rfc must">must</span> persist the following tables.
     Every project-scoped table has a <code>project_id</code> foreign key to <code>projects.id</code>. Timestamps are
-    timezone-aware. Migrations <span class="rfc must">must</span> be applied in order 0001→0008.</div>
+    timezone-aware. Migrations <span class="rfc must">must</span> be applied in order 0001→0009.</div>
   <table>
     <thead><tr><th>Table</th><th>Key columns (types &amp; rules)</th></tr></thead>
     <tbody>
@@ -1000,6 +1015,7 @@ quality:
       <tr><td><code>project_sessions</code></td><td><code>project_id</code> PK/FK, <code>data</code> JSON, <code>synced_at</code>.</td></tr>
       <tr><td><code>project_roles_config</code></td><td><code>project_id</code> PK/FK, <code>data</code> JSON, <code>synced_at</code>.</td></tr>
       <tr><td><code>project_instructions</code></td><td><code>project_id</code> PK/FK, <code>content</code> Text def "", <code>updated_at</code>.</td></tr>
+      <tr><td><code>project_specs</code></td><td>Composite PK <code>(project_id</code> FK<code>, path</code>(255)) — one row per spec file; <code>content</code> Text (not null), <code>updated_at</code> (default+onupdate now). Paths look like <code>spec/spec.html</code> or <code>spec/changes/&lt;slug&gt;/spec.html</code>. Added by migration <code>0009</code>.</td></tr>
       <tr><td><code>ai_jobs</code></td><td><code>id</code> PK, <code>name</code>(256), <code>agent</code>(64, idx), <code>message</code> Text, <code>cron</code>(128), <code>session_mode</code>(16) def "new", <code>enabled</code> bool(idx) def true, <code>created_at</code>, <code>last_run</code>?, <code>next_run</code>?, <code>run_count</code> int def 0, <code>last_session_id</code>(128?), <code>source</code>(16) def "hub". <code>project_id</code> FK; indexes <code>(project_id,agent)</code>, <code>(project_id,enabled)</code>.</td></tr>
       <tr><td><code>job_runs</code></td><td><code>id</code> PK, <code>job_id</code> FK(cascade), <code>fired_at</code>, <code>status</code>(16) def "fired", <code>trigger</code>(16) def "scheduled", <code>session_id</code>(128?), <code>error_summary</code>(500?). Index <code>(job_id,fired_at)</code>.</td></tr>
     </tbody>
@@ -1078,6 +1094,9 @@ quality:
       <tr><td><code>GET|PATCH|DELETE /jobs/{id}</code></td><td>Detail (with last 10 runs) / update (broadcast <code>job_updated</code>) / delete (204, broadcast <code>job_deleted</code>).</td></tr>
       <tr><td><code>GET /jobs/{id}/history</code> · <code>POST /jobs/{id}/run</code></td><td>Run history / manual fire.</td></tr>
       <tr><td><code>GET|PUT /project/instructions</code></td><td>Get / upsert project-wide instructions.</td></tr>
+      <tr><td><code>POST /project/specs/sync</code></td><td><code>{path,content}</code> → upsert the spec row for <code>(project,path)</code>; <code>path</code> is validated (repo-relative, no traversal); broadcast <code>spec_updated</code> with <code>{path}</code>.</td></tr>
+      <tr><td><code>GET /project/specs</code></td><td>List this project's specs (<code>spec/spec.html</code> first, then by path) as <code>{specs:[{path,updated_at}]}</code>.</td></tr>
+      <tr><td><code>GET /project/spec?path=</code></td><td>Return one spec's full <code>{path,content,updated_at}</code>; <strong>404</strong> if the path is unknown.</td></tr>
       <tr><td><code>GET /setup/token</code></td><td>Bootstrap key (localhost-only; see FR-HUB-005).</td></tr>
     </tbody>
   </table>
@@ -1092,7 +1111,7 @@ quality:
     <code>agent_session_changed</code>, <code>context_warning</code>, <code>compact_request</code>,
     <code>new_session_request</code>, <code>session_synced</code>, <code>job_created</code>, <code>job_updated</code>,
     <code>job_deleted</code>, <code>job_fired</code>, <code>job_run_failed</code>, <code>agent_triggered</code>,
-    <code>agent_trigger_confidence</code>.</div>
+    <code>agent_trigger_confidence</code>, <code>spec_updated</code>.</div>
   <div class="block openissue"><span class="label">Open Issue</span> <code>compact_request</code> is part of the
     reserved event vocabulary but is <em>not</em> currently broadcast over SSE by the reference implementation:
     <code>POST /agents/{name}/compact</code> only persists a <code>compact_request</code> event log and enqueues the
@@ -1134,7 +1153,7 @@ quality:
     <span class="req-id">FR-UI-002</span> The shell <span class="rfc must">must</span> provide a top status bar
     (project name; live counts for messages/tasks/questions/agents; context warnings; light/dark toggle) and a left
     sidebar with these pages, grouped WORK / COMMUNICATION / OBSERVE:
-    <code>overview, messages, tasks, questions, activity, logs, agents, jobs, quality, instructions</code>.
+    <code>overview, messages, tasks, questions, activity, logs, agents, jobs, quality, instructions, spec</code>.
     Sidebar badge counts <span class="rfc must">must</span> come from live queries.</div>
 
   <h3>8.2 Data layer</h3>
@@ -1179,6 +1198,7 @@ quality:
       <tr><td>Questions</td><td><code>QuestionsPanel</code> (blocking/non-blocking split), <code>QuestionInterruptCard</code>, <code>AnswerForm</code>.</td></tr>
       <tr><td>Logs / Activity</td><td><code>LogsView</code> (search/filter/live/severity chips), <code>LogLine</code>, <code>ActivityLog</code> (SSE feed + history backfill), <code>EventRow</code>.</td></tr>
       <tr><td>Jobs</td><td><code>JobsPage</code>, <code>JobCard</code> (run history, actions), <code>JobForm</code> (cron validation).</td></tr>
+      <tr><td>Spec</td><td><code>SpecPage</code> — renders a synced <span class="term-link">project spec</span> in a sandboxed iframe (spec picker for the living spec + change specs, manual refresh) alongside an embedded chat panel for driving the <code>spec</code>-role agent; auto-refreshes on the <code>spec_updated</code> SSE event. Stamps the dashboard's light/dark mode onto the spec document (<code>&lt;html data-theme&gt;</code>) and injects an anchor-click handler so in-page navigation scrolls rather than reloading the sandboxed frame.</td></tr>
       <tr><td>Other pages</td><td><code>OverviewPage</code>, <code>QualityHealthPanel</code>, <code>InstructionsPage</code>.</td></tr>
       <tr><td>Layout / common</td><td><code>Sidebar</code>, <code>SidebarItem</code>, <code>StatusBar</code>, <code>SetupModal</code>; <code>Icon</code>, <code>Badge</code>, <code>EmptyState</code>, <code>ErrorBoundary</code>. (There is a single <code>Badge</code> component — no separate <code>StatusBadge</code>. The sidebar's "Settings" entry opens the <code>SetupModal</code> rather than routing to a page.)</td></tr>
     </tbody>
@@ -1247,7 +1267,7 @@ quality:
     the following two families. <strong>Human-title:</strong> <code>tech_lead, architect, backend_dev,
     frontend_dev, fullstack_dev, qa_engineer, devops_engineer, security_engineer, data_engineer, ml_engineer,
     technical_writer, code_reviewer, project_manager</code>. <strong>AI-native (function-first):</strong>
-    <code>coordinator, model_router, explorer, implementer, verifier, guardian, context_keeper</code>. The two
+    <code>coordinator, model_router, explorer, implementer, verifier, guardian, context_keeper, spec</code>. The two
     families <span class="rfc may">may</span> be combined on one agent.</div>
   <table>
     <thead><tr><th>AI-native role</th><th>Responsibility</th></tr></thead>
@@ -1259,6 +1279,7 @@ quality:
       <tr><td><code>verifier</code></td><td>Evidence-gated evaluation against tests and specs.</td></tr>
       <tr><td><code>guardian</code></td><td>AI-safety review: hallucinated packages, prompt injection, over-broad scopes, secrets.</td></tr>
       <tr><td><code>context_keeper</code></td><td>Curate shared context, summarize/compact, fight context rot.</td></tr>
+      <tr><td><code>spec</code></td><td>Author and maintain the <span class="term-link">project spec</span> as self-contained HTML (<code>spec/spec.html</code> and per-change specs); interview the user for requirements; enforce the draft→approved gate before implementation; keep the spec in sync with the code.</td></tr>
     </tbody>
   </table>
 </section>
@@ -1410,8 +1431,8 @@ mkdocs serve                                 # http://localhost:8000</pre>
       <tr><td>FR-HUB-003</td><td><a href="#hub-auth">§7.2</a></td><td>Bearer auth; <code>aw_live_</code>; 401.</td><td><code>hub/tests/test_auth.py</code>, <code>hub/tests/test_bola.py</code></td></tr>
       <tr><td>FR-HUB-004</td><td><a href="#hub-auth">§7.2</a></td><td>SSE ticket auth.</td><td><code>hub/tests/test_auth.py</code>, <code>hub/tests/test_sse.py</code></td></tr>
       <tr><td>FR-HUB-005</td><td><a href="#hub-auth">§7.2</a></td><td>Localhost/Docker setup token.</td><td><code>hub/tests/test_setup.py</code></td></tr>
-      <tr><td>FR-HUB-006</td><td><a href="#hub-db">§7.3</a></td><td>DB schema + migrations 0001→0008.</td><td><code>hub/tests/test_migrations.py</code></td></tr>
-      <tr><td>FR-HUB-007</td><td><a href="#hub-endpoints">§7.4</a></td><td>REST endpoints + status codes + SSE.</td><td><code>hub/tests/test_messages.py</code>, <code>test_tasks.py</code>, <code>test_questions.py</code>, <code>test_agents.py</code>, <code>test_agent_chat.py</code>, <code>test_instructions.py</code>, <code>test_jobs_crud.py</code></td></tr>
+      <tr><td>FR-HUB-006</td><td><a href="#hub-db">§7.3</a></td><td>DB schema + migrations 0001→0009 (incl. <code>project_specs</code>).</td><td><code>hub/tests/test_migrations.py</code></td></tr>
+      <tr><td>FR-HUB-007</td><td><a href="#hub-endpoints">§7.4</a></td><td>REST endpoints + status codes + SSE (incl. spec sync/list/get).</td><td><code>hub/tests/test_messages.py</code>, <code>test_tasks.py</code>, <code>test_questions.py</code>, <code>test_agents.py</code>, <code>test_agent_chat.py</code>, <code>test_instructions.py</code>, <code>test_jobs_crud.py</code>, <code>test_spec.py</code></td></tr>
       <tr><td>FR-HUB-008</td><td><a href="#hub-sse">§7.5</a></td><td>SSE event vocabulary.</td><td><code>hub/tests/test_sse.py</code></td></tr>
       <tr><td>FR-HUB-009</td><td><a href="#hub-scheduler">§7.6</a></td><td>Scheduler firing/failure behavior.</td><td><code>hub/tests/test_jobs.py</code></td></tr>
       <tr><td>FR-UI-001…006</td><td><a href="#hub-ui">§8</a></td><td>Bootstrap, shell, data layer, SSE invalidation, chat, session routing.</td><td><code>hub/ui/src/__tests__/</code> (<code>App-mount</code>, <code>configStore</code>, <code>useSSE</code>, <code>agentChat</code>, <code>agentOutput-polling</code>, <code>SidebarItem</code>, <code>ActivityLog</code>)</td></tr>
@@ -1525,6 +1546,7 @@ mkdocs serve                                 # http://localhost:8000</pre>
       <tr><td>T-024</td><td>Scheduler (async singleton + persistent jobstore, UTC, misfire/coalesce) + jobs endpoints; fire/failure behavior.</td><td>T-021</td><td>FR-HUB-009, FR-JOB-001</td><td><code>pytest hub/tests/test_jobs.py hub/tests/test_jobs_crud.py</code></td></tr>
       <tr><td>T-025</td><td>HTTP transport (stdlib <code>urllib</code> only — no new runtime dep) targeting the Hub API.</td><td>T-021, T-005</td><td>FR-TR-005, FR-PKG-001</td><td><code>pytest tests/test_http_transport.py</code></td></tr>
       <tr><td>T-026</td><td>Hub-side MCP server (REST-backed, auto-inject <code>project_id</code>, incl. <code>get_agent_config</code>).</td><td>T-021, T-015</td><td>FR-MCP-001, FR-MCP-002, FR-MCP-003</td><td><code>pytest hub/tests/test_mcp_server.py</code></td></tr>
+      <tr><td>T-035</td><td>Project-spec sync: <code>project_specs</code> table + migration 0009; <code>/project/specs/sync</code>·<code>/specs</code>·<code>/spec</code> endpoints (path-validated, broadcast <code>spec_updated</code>); transport <code>push_spec</code>; <code>agentweave spec push</code> + watchdog auto-push; <code>spec</code> role.</td><td>T-021, T-025, T-013</td><td>FR-HUB-006, FR-HUB-007, FR-HUB-008, FR-TR-002, FR-CLI-004, FR-ROLE-002</td><td><code>pytest hub/tests/test_spec.py hub/tests/test_migrations.py tests/test_watchdog.py tests/test_roles.py</code></td></tr>
     </tbody>
   </table>
 
@@ -1537,6 +1559,7 @@ mkdocs serve                                 # http://localhost:8000</pre>
       <tr><td>T-029</td><td>Data layer: query hooks + authed fetch helper + SSE cache invalidation mapping.</td><td>T-027, T-020</td><td>FR-UI-003, FR-UI-004</td><td><code>npm test</code> → <code>useSSE</code>, <code>useSSE-lifecycle</code></td></tr>
       <tr><td>T-030 <code>[P]</code></td><td>Agents components incl. <code>AgentPromptPanel</code> session-routing (refs, optimistic bubble, baseline).</td><td>T-029, T-022</td><td>FR-UI-005, FR-UI-006</td><td><code>npm test</code> → <code>agentChat</code>, <code>agentOutput-polling</code>, <code>agentStatus</code></td></tr>
       <tr><td>T-031 <code>[P]</code></td><td>Other pages: tasks, messages, questions, logs, activity, jobs, overview, quality, instructions.</td><td>T-029</td><td>FR-UI-002</td><td><code>npm test</code> → <code>ActivityLog</code>, <code>smoke</code></td></tr>
+      <tr><td>T-036 <code>[P]</code></td><td>Spec page: sandboxed-iframe spec viewer (picker + refresh) + embedded <code>spec</code>-agent chat; refresh on <code>spec_updated</code> SSE; light/dark theme injection + anchor-scroll fix.</td><td>T-029, T-035</td><td>FR-UI-002</td><td><code>npm test</code> → spec view; manual: living + change specs render and switch theme.</td></tr>
     </tbody>
   </table>
 

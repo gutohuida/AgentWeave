@@ -6,16 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
-## [Unreleased]
+## [0.42.0] - 2026-07-24
 
 ### Added (CLI)
 - **New `spec` role.** An AI-native role specialized in authoring and maintaining the project spec as self-contained HTML (`spec/spec.html` plus per-change `spec/changes/<name>/spec.html`), following the bundled `aw-spec` HTML conventions (RFC 2119 modal verbs, requirement IDs, non-goals, `[NEEDS CLARIFICATION]` markers, approval gate). Registered in `constants.VALID_ROLE_IDS`, `roles.json`, and `roles.py`, with a role guide at `templates/roles/spec.md` (mirrored to `hub/data/roles/spec.md`).
 - **`aw-setup` nudges spec-first on fresh projects.** When a scaffolded project has no spec, `aw-setup` proposes starting lean with a single `spec`-role agent that interviews the user and produces `spec/spec.html` before the full roster interview.
 - **`agentweave spec push`.** Manually pushes local spec HTML files to the Hub (HTTP transport only); the watchdog also pushes new/changed spec files automatically while running.
+- **Generated `spec.html` is now navigable and theme-aware.** The `aw-spec-propose` HTML conventions and skeleton gained a sticky scroll-spy table of contents, a sticky header with a live task-progress bar, and a three-layer light/dark CSS variable scheme (`prefers-color-scheme` plus an explicit `data-theme` override) so specs look right both standalone and inside the Hub.
+- **`aw-setup`/`aw-setup-agent`/`aw-setup-proxy` always ask which model to use** for each agent instead of silently accepting a runner's default model.
 
 ### Added (Hub)
 - **Spec tab.** A new Hub UI page renders the project spec HTML in a sandboxed iframe with a spec picker (living spec + change specs), a manual refresh button, and an embedded chat panel for talking to the spec agent (default: the agent with the `spec` role) to edit the spec live. Auto-refreshes on the `spec_updated` SSE event.
 - **Spec storage endpoints.** `POST /api/v1/project/specs/sync`, `GET /api/v1/project/specs`, `GET /api/v1/project/spec` backed by a new `project_specs` table (Alembic migration `0009`), with path validation and a `spec_updated` SSE broadcast on sync.
+- **Spec viewer matches the dashboard's theme and no longer blanks on in-page navigation.** The Spec page stamps the Hub's active light/dark mode onto the rendered spec document and injects an anchor-click interceptor so TOC/cross-reference links scroll within the sandboxed iframe instead of triggering a failed top-level navigation.
 
 ---
 ## [0.41.0] - 2026-07-20
