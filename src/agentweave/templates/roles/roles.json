@@ -141,6 +141,13 @@
       "responsibilities_short": "Curate shared memory; summarize/compact; fight context rot",
       "file": "roles/context_keeper.md",
       "_default_for": []
+    },
+    "spec": {
+      "label": "Spec Author",
+      "version": 1,
+      "responsibilities_short": "Author and maintain the project spec (HTML), keep it current with the code",
+      "file": "roles/spec.md",
+      "_default_for": []
     }
   }
 }

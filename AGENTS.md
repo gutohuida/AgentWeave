@@ -201,7 +201,7 @@ set_agent_roles("claude", ["tech_lead", "backend_dev"], config)
 
 Available roles (see `constants.py` `VALID_ROLE_IDS` for the source of truth):
 - Human-title: `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
-- AI-native (function-first): `coordinator`, `model_router`, `explorer`, `implementer`, `verifier`, `guardian`, `context_keeper`
+- AI-native (function-first): `coordinator`, `model_router`, `explorer`, `implementer`, `verifier`, `guardian`, `context_keeper`, `spec`
 
 Role guides are auto-copied to `.agentweave/roles/{role}.md` when assigned.
 
@@ -300,6 +300,7 @@ Key React components in `hub/ui/src/components/`:
 | `MessagesFeed.tsx` | Inbox + message history |
 | `QuestionsPanel.tsx` | Human Q&A interface |
 | `LogsView.tsx` | Structured log viewer |
+| `SpecPage.tsx` | Renders the project spec HTML + live chat with the spec agent |
 
 ## Code Style Guidelines
 

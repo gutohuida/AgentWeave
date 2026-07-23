@@ -237,6 +237,23 @@ class ProjectInstructions(Base):
     )
 
 
+class ProjectSpec(Base):
+    """Stores per-project spec HTML files synced from the CLI.
+
+    One row per (project, path) — upserted on POST /project/specs/sync.
+    Paths look like ``spec/spec.html`` or ``spec/changes/<slug>/spec.html``.
+    """
+
+    __tablename__ = "project_specs"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
+    path: Mapped[str] = mapped_column(String(255), primary_key=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class AgentOutput(Base):
     __tablename__ = "agent_outputs"
 

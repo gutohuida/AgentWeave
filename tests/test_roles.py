@@ -229,6 +229,7 @@ AI_NATIVE_ROLE_IDS = [
     "verifier",
     "guardian",
     "context_keeper",
+    "spec",
 ]
 
 ROLE_SKELETON_SECTIONS = [
@@ -252,7 +253,7 @@ class TestAINativeRoles:
         assert ROLES_IDS is CONSTANTS_IDS
 
     def test_all_new_roles_in_valid_role_ids(self):
-        """All seven AI-native role IDs are registered as valid."""
+        """All eight AI-native role IDs are registered as valid."""
         from agentweave.constants import VALID_ROLE_IDS
 
         for role_id in AI_NATIVE_ROLE_IDS:
@@ -308,12 +309,18 @@ class TestAINativeRoles:
             is_valid, error = validate_role(role_id)
             assert is_valid is True, f"{role_id}: {error}"
 
-    def test_get_available_roles_lists_all_twenty(self):
-        """get_available_roles() returns all 20 roles (13 human + 7 AI-native)."""
+    def test_get_available_roles_lists_all_twenty_one(self):
+        """get_available_roles() returns all 21 roles (13 human + 8 AI-native)."""
         role_ids = [r[0] for r in get_available_roles()]
         for role_id in AI_NATIVE_ROLE_IDS:
             assert role_id in role_ids
-        assert len(role_ids) == 20
+        assert len(role_ids) == 21
+
+    def test_spec_role(self):
+        """The spec role validates and is listed by get_available_roles()."""
+        is_valid, error = validate_role("spec")
+        assert is_valid is True, error
+        assert "spec" in [r[0] for r in get_available_roles()]
 
     def test_role_md_files_load_with_skeleton(self):
         """Each new role .md loads and contains all six skeleton sections."""

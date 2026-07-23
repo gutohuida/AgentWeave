@@ -120,6 +120,11 @@ def get_available_roles() -> List[Tuple[str, str, str]]:
                 "Context Keeper",
                 "Curate shared memory; summarize/compact; fight context rot",
             ),
+            (
+                "spec",
+                "Spec Author",
+                "Author and maintain the project spec (HTML), keep it current with the code",
+            ),
         ]
 
 

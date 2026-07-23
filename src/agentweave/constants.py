@@ -328,6 +328,7 @@ VALID_ROLE_IDS = [
     "verifier",
     "guardian",
     "context_keeper",
+    "spec",
 ]
 
 # Claude context window limits by model name substring (all Claude 3.x/4.x are 200K)

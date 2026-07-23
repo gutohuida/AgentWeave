@@ -13,9 +13,10 @@ import { JobsPage } from '@/components/jobs/JobsPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { OverviewPage } from '@/components/overview/OverviewPage'
+import { SpecPage } from '@/components/spec/SpecPage'
 import { useSSE } from '@/hooks/useSSE'
 
-export type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
+export type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions' | 'spec'
 
 type PageWrapper = 'scroll' | 'flex-col'
 
@@ -35,6 +36,7 @@ const PAGES: Record<Page, PageMeta> = {
   agents:       { Component: AgentsPage as ComponentType<{ onNavigate?: (page: string) => void }>,       wrapper: 'flex-col' },
   jobs:         { Component: JobsPage as ComponentType<{ onNavigate?: (page: string) => void }>,         wrapper: 'flex-col' },
   instructions: { Component: InstructionsPage as ComponentType<{ onNavigate?: (page: string) => void }>,  wrapper: 'flex-col' },
+  spec:         { Component: SpecPage as ComponentType<{ onNavigate?: (page: string) => void }>,         wrapper: 'flex-col' },
 }
 
 const WRAPPER_CLASS: Record<PageWrapper, string> = {

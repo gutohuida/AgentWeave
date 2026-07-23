@@ -1,6 +1,6 @@
 ---
 name: aw-setup-roles
-description: Assign, add, or remove AgentWeave roles for agents — shows the full 20-role catalog (human-title and AI-native) with purposes, then applies via CLI or agentweave.yml. Use when defining who does what in the project. For full project setup use aw-setup.
+description: Assign, add, or remove AgentWeave roles for agents — shows the full 21-role catalog (human-title and AI-native) with purposes, then applies via CLI or agentweave.yml. Use when defining who does what in the project. For full project setup use aw-setup.
 ---
 
 Manage role assignments for the agents in this project.
@@ -38,6 +38,7 @@ AI-native (function-first) roles:
 | `verifier` | Evidence-gated evaluation against tests and specs |
 | `guardian` | AI-specific safety review: slopsquatting, injection, scopes, secrets |
 | `context_keeper` | Curate shared memory; summarize/compact; fight context rot |
+| `spec` | Author and maintain the project spec (HTML), keep it current with the code |
 
 Both sets can be combined, e.g. `[implementer, frontend_dev]`.
 

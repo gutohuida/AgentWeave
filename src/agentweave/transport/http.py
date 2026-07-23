@@ -477,6 +477,27 @@ class HttpTransport(BaseTransport):
             )
             return False
 
+    def push_spec(self, path: str, content: str) -> bool:
+        """POST /api/v1/project/specs/sync — push a spec HTML file to the Hub.
+
+        Called at watchdog startup and whenever a spec file changes, plus
+        manually via `agentweave spec push`. `path` is the repo-relative
+        path (e.g. "spec/spec.html") the Hub uses to upsert the spec.
+        """
+        try:
+            self._request("POST", "/project/specs/sync", {"path": path, "content": content})
+            return True
+        except RuntimeError as exc:
+            logger.warning(
+                "push_spec failed: %s",
+                str(exc),
+                extra={
+                    "event": "transport_error",
+                    "data": _transport_error_data("push_spec", exc),
+                },
+            )
+            return False
+
     def push_roles_config(self, roles_config: Dict[str, Any]) -> bool:
         """PUT /api/v1/agents/roles/config — push roles.json to the Hub.
 

@@ -123,20 +123,20 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
   },
 
   bootstrap: async () => {
-    // Don't overwrite an apiKey that already came from sessionStorage
-    if (get().apiKey) {
-      set({ bootstrapState: 'ready' })
-      return
+    const current = get()
+    const localHub = !current.hubUrl ||
+      /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\/?$/i.test(current.hubUrl)
+
+    // For a local Hub, reconcile stale sessionStorage with the Hub's current
+    // setup token. This prevents normal browser sessions from getting stuck
+    // on an old project/key while private mode appears to work.
+    const token = localHub ? await fetchSetupToken() : null
+    if (token?.apiKey && token.apiKey !== get().apiKey) {
+      get().setConfig(token.apiKey, get().hubUrl || window.location.origin, token.projectId)
+    } else if (!get().apiKey && token) {
+      get().setConfig(token.apiKey, get().hubUrl || window.location.origin, token.projectId)
     }
-    const token = await fetchSetupToken()
-    if (token) {
-      // Only persist if the user still hasn't configured a key (e.g. via SetupModal)
-      if (!get().apiKey) {
-        get().setConfig(token.apiKey, window.location.origin, token.projectId)
-      }
-      set({ bootstrapState: 'ready' })
-    } else {
-      set({ bootstrapState: 'failed' })
-    }
+
+    set({ bootstrapState: get().apiKey ? 'ready' : 'failed' })
   },
 }))

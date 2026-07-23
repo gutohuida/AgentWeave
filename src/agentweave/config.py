@@ -643,7 +643,7 @@ hub:
 #     ml_engineer | technical_writer | code_reviewer | project_manager
 #   AI-native (function-first) roles:
 #     coordinator | model_router | explorer | implementer | verifier
-#     guardian | context_keeper
+#     guardian | context_keeper | spec
 #   Both sets are supported and can be combined (e.g. [implementer, frontend_dev]).
 #
 # Common per-agent fields:

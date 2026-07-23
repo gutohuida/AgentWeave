@@ -23,6 +23,7 @@ const SSE_EVENT_TYPES = [
   'agent_session_changed',
   'log_event',
   'context_warning',
+  'spec_updated',
 ]
 
 const MAX_BUFFERED = 200
@@ -38,6 +39,9 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let connectedUrl = ''
 let connectedKey = ''
 let hasEverConnected = false
+let subscriberCount = 0
+let connectingUrl = ''
+let connectingKey = ''
 const eventBuffer: SSEEvent[] = []
 
 export function getBufferedEvents(): SSEEvent[] {
@@ -75,6 +79,8 @@ export function cancelReconnect(): void {
   }
   connectedUrl = ''
   connectedKey = ''
+  connectingUrl = ''
+  connectingKey = ''
 }
 
 /**
@@ -86,6 +92,7 @@ export function __resetSSEStateForTest(): void {
   listeners.clear()
   reconnectListeners.clear()
   hasEverConnected = false
+  subscriberCount = 0
   eventBuffer.length = 0
 }
 
@@ -133,15 +140,22 @@ function feedSSEChunk(buffer: string, chunk: string): { remaining: string; event
 }
 
 function scheduleReconnect(hubUrl: string, apiKey: string): void {
+  if (subscriberCount === 0) return
   if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = setTimeout(() => connect(hubUrl, apiKey), 3000)
 }
 
 async function connect(hubUrl: string, apiKey: string): Promise<void> {
+  if (subscriberCount === 0) return
   // No-op if already connected with the same config
   if (connectedUrl === hubUrl && connectedKey === apiKey && activeStream !== null) {
     return
   }
+  // Multiple mounted hooks may ask for the stream in the same render pass.
+  // Share the in-flight connection attempt as well as the resulting stream.
+  if (connectingUrl === hubUrl && connectingKey === apiKey) return
+  connectingUrl = hubUrl
+  connectingKey = apiKey
   connectedUrl = hubUrl
   connectedKey = apiKey
   if (activeStream) {
@@ -156,12 +170,30 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
   } catch {
+    if (connectingUrl === hubUrl && connectingKey === apiKey) {
+      connectingUrl = ''
+      connectingKey = ''
+    }
     scheduleReconnect(hubUrl, apiKey)
     return
   }
   if (!response.ok || !response.body) {
+    if (connectingUrl === hubUrl && connectingKey === apiKey) {
+      connectingUrl = ''
+      connectingKey = ''
+    }
     scheduleReconnect(hubUrl, apiKey)
     return
+  }
+
+  if (subscriberCount === 0) {
+    await response.body.cancel()
+    return
+  }
+
+  if (connectingUrl === hubUrl && connectingKey === apiKey) {
+    connectingUrl = ''
+    connectingKey = ''
   }
 
   const reader = response.body.getReader()
@@ -234,13 +266,15 @@ export function useSSE(onEvent?: SSEListener) {
 
   useEffect(() => {
     if (!isConfigured) return
+    subscriberCount += 1
     connect(hubUrl, apiKey)
     return () => {
-      // Cancel any in-flight stream on unmount; reconnect timer is preserved
-      // for an immediate remount with the same config.
-      if (activeStream) {
-        activeStream.cancel()
-        activeStream = null
+      subscriberCount = Math.max(0, subscriberCount - 1)
+      // The stream is shared by every useSSE consumer. Only the final
+      // subscriber may tear it down; unmounting a page must not interrupt
+      // another page's live updates.
+      if (subscriberCount === 0) {
+        cancelReconnect()
       }
     }
   }, [hubUrl, apiKey, isConfigured])

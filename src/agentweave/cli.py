@@ -697,6 +697,7 @@ def _generate_codex_skills(session: "Session", base_dir: Path, force: bool = Fal
 def cmd_status(_args: argparse.Namespace) -> int:
     """Show session status."""
     import os as _os
+    from .diagnostics import _process_exists
 
     from .constants import WATCHDOG_PID_FILE
 
@@ -718,8 +719,10 @@ def cmd_status(_args: argparse.Namespace) -> int:
     if WATCHDOG_PID_FILE.exists():
         try:
             watchdog_pid = int(WATCHDOG_PID_FILE.read_text(encoding="utf-8").strip())
-            _os.kill(watchdog_pid, 0)
-            watchdog_status = f"running (PID {watchdog_pid})"
+            if _process_exists(watchdog_pid):
+                watchdog_status = f"running (PID {watchdog_pid})"
+            else:
+                watchdog_status = "stopped (stale PID file)"
         except (OSError, ProcessLookupError, ValueError):
             watchdog_status = "stopped (stale PID file)"
     heartbeat_age = get_heartbeat_age()
@@ -1997,10 +2000,11 @@ def _kill_stale_watchdogs() -> list:
                 try:
                     pid = int(parts[1])
                     if pid != my_pid:
-                        _sp.run(
+                        kill_result = _sp.run(
                             ["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=5
                         )
-                        killed.append(pid)
+                        if kill_result.returncode == 0:
+                            killed.append(pid)
                 except (ValueError, OSError):
                     pass
     else:
@@ -2715,6 +2719,39 @@ def cmd_transport_pull(_args: argparse.Namespace) -> int:
 
     print_success("Pull complete")
     return 0
+
+
+def cmd_spec_push(_args: argparse.Namespace) -> int:
+    """Push local spec HTML files to the Hub (HTTP transport only)."""
+    from .transport import get_transport
+    from .watchdog import _discover_spec_files
+
+    t = get_transport()
+    if t.get_transport_type() != "http" or not hasattr(t, "push_spec"):
+        print_error("spec push requires Hub (http) transport.")
+        print_info("Run: agentweave transport setup --type http ...")
+        return 1
+
+    specs = _discover_spec_files()
+    if not specs:
+        print_info("No spec files found (spec/spec.html, spec/changes/*/spec.html).")
+        return 0
+
+    pushed = 0
+    for rel_path, file_path in specs.items():
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print_warning(f"Skipping {rel_path}: {exc}")
+            continue
+        if t.push_spec(rel_path, content):
+            print_success(f"Pushed {rel_path}")
+            pushed += 1
+        else:
+            print_error(f"Failed to push {rel_path}")
+
+    print_info(f"Spec push complete: {pushed}/{len(specs)} file(s) pushed")
+    return 0 if pushed == len(specs) else 1
 
 
 def cmd_hub_heartbeat(args: argparse.Namespace) -> int:
@@ -5768,6 +5805,16 @@ For more help: https://github.com/gutohuida/AgentWeave
     # transport disable
     transport_subparsers.add_parser("disable", help="Disable transport, revert to local")
 
+    # Spec commands (Hub spec sync)
+    spec_parser = subparsers.add_parser(
+        "spec",
+        help="Manage project specs (Hub sync)",
+    )
+    spec_subparsers = spec_parser.add_subparsers(dest="spec_command")
+
+    # spec push
+    spec_subparsers.add_parser("push", help="Push local spec HTML files to the Hub")
+
     # Activate command
     subparsers.add_parser(
         "activate",
@@ -6079,6 +6126,12 @@ def main(args: Optional[List[str]] = None) -> int:
                 return 0
         elif parsed_args.command == "activate":
             return cmd_activate(parsed_args)
+        elif parsed_args.command == "spec":
+            if parsed_args.spec_command == "push":
+                return cmd_spec_push(parsed_args)
+            else:
+                parser.parse_args(["spec", "--help"])
+                return 0
         elif parsed_args.command == "hub":
             if parsed_args.hub_command == "start":
                 return cmd_hub_start(parsed_args)

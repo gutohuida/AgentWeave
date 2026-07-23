@@ -436,3 +436,45 @@ class TestHttpTransportErrorClassification(unittest.TestCase):
         self.assertNotIn("status_code", data)
         self.assertEqual(data["method"], "get_pending_messages")
         self.assertEqual(data["classification"], "hub_invalid_response")
+
+
+class TestHttpTransportPushSpec(unittest.TestCase):
+    """push_spec POSTs spec HTML files to /project/specs/sync."""
+
+    def setUp(self):
+        self.transport = HttpTransport(
+            url="http://localhost:8000",
+            api_key="aw_live_testkey",
+            project_id="proj-test",
+        )
+
+    def test_push_spec_success(self):
+        with patch.object(self.transport, "_request", return_value={"ok": True}) as mock_req:
+            result = self.transport.push_spec("spec/spec.html", "<html>...</html>")
+        self.assertTrue(result)
+        mock_req.assert_called_once_with(
+            "POST",
+            "/project/specs/sync",
+            {"path": "spec/spec.html", "content": "<html>...</html>"},
+        )
+
+    def test_push_spec_change_path(self):
+        with patch.object(self.transport, "_request", return_value={"ok": True}) as mock_req:
+            result = self.transport.push_spec(
+                "spec/changes/add-thing/spec.html", "<html>change</html>"
+            )
+        self.assertTrue(result)
+        mock_req.assert_called_once_with(
+            "POST",
+            "/project/specs/sync",
+            {"path": "spec/changes/add-thing/spec.html", "content": "<html>change</html>"},
+        )
+
+    def test_push_spec_failure_returns_false(self):
+        with patch.object(
+            self.transport,
+            "_request",
+            side_effect=HubTransportError("Hub API 500: boom", "hub_api_error", 500),
+        ):
+            result = self.transport.push_spec("spec/spec.html", "<html>...</html>")
+        self.assertFalse(result)

@@ -1607,3 +1607,117 @@ class TestPopenUsesUtf8Encoding:
             'errors="replace" in watchdog.py:\n'
             + "\n".join(f"  watchdog.py:{ln}: {l}" for ln, l in issues)
         )
+
+
+class TestSpecSync:
+    """Spec-file discovery and mtime-diff push logic (http transport only)."""
+
+    @pytest.fixture
+    def project(self, tmp_path, monkeypatch):
+        """Empty project root as CWD (spec paths are CWD-relative)."""
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
+
+    def _make_watchdog(self):
+        from agentweave.watchdog import Watchdog
+
+        transport = MagicMock()
+        transport.get_transport_type.return_value = "http"
+        transport.poll_interval = 5.0
+        transport.push_spec.return_value = True
+        return Watchdog(transport=transport), transport
+
+    def _write_specs(self, root: Path) -> None:
+        change_dir = root / "spec" / "changes" / "add-thing"
+        change_dir.mkdir(parents=True)
+        (root / "spec" / "spec.html").write_text("<html>main</html>", encoding="utf-8")
+        (change_dir / "spec.html").write_text("<html>change</html>", encoding="utf-8")
+
+    def test_discover_spec_files(self, project):
+        from agentweave.watchdog import _discover_spec_files
+
+        self._write_specs(project)
+        specs = _discover_spec_files()
+        assert set(specs.keys()) == {
+            "spec/spec.html",
+            "spec/changes/add-thing/spec.html",
+        }
+
+    def test_discover_spec_files_empty(self, project):
+        from agentweave.watchdog import _discover_spec_files
+
+        assert _discover_spec_files() == {}
+
+    def test_push_all_seeds_mtimes(self, project):
+        self._write_specs(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        pushed = {call.args[0] for call in transport.push_spec.call_args_list}
+        assert pushed == {"spec/spec.html", "spec/changes/add-thing/spec.html"}
+        assert set(wd.known_spec_mtimes.keys()) == pushed
+        # Content is passed through as UTF-8 text
+        contents = {call.args[0]: call.args[1] for call in transport.push_spec.call_args_list}
+        assert contents["spec/spec.html"] == "<html>main</html>"
+
+    def test_unchanged_specs_not_repushed(self, project):
+        self._write_specs(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.push_spec.reset_mock()
+        wd._sync_spec_files()
+        transport.push_spec.assert_not_called()
+
+    def test_changed_spec_repushed(self, project):
+        import os
+
+        self._write_specs(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.push_spec.reset_mock()
+
+        changed = project / "spec" / "changes" / "add-thing" / "spec.html"
+        changed.write_text("<html>v2</html>", encoding="utf-8")
+        new_mtime = changed.stat().st_mtime + 100
+        os.utime(changed, (new_mtime, new_mtime))
+
+        wd._sync_spec_files()
+        transport.push_spec.assert_called_once_with(
+            "spec/changes/add-thing/spec.html", "<html>v2</html>"
+        )
+
+    def test_new_spec_file_pushed(self, project):
+        self._write_specs(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.push_spec.reset_mock()
+
+        new_change = project / "spec" / "changes" / "other-change"
+        new_change.mkdir(parents=True)
+        (new_change / "spec.html").write_text("<html>new</html>", encoding="utf-8")
+
+        wd._sync_spec_files()
+        transport.push_spec.assert_called_once_with(
+            "spec/changes/other-change/spec.html", "<html>new</html>"
+        )
+
+    def test_failed_push_not_recorded_and_retried(self, project):
+        self._write_specs(project)
+        wd, transport = self._make_watchdog()
+        transport.push_spec.return_value = False
+        wd._sync_spec_files(push_all=True)
+        assert wd.known_spec_mtimes == {}
+        # Next poll retries the push
+        transport.push_spec.return_value = True
+        wd._sync_spec_files()
+        assert set(wd.known_spec_mtimes.keys()) == {
+            "spec/spec.html",
+            "spec/changes/add-thing/spec.html",
+        }
+
+    def test_no_push_spec_method_is_noop(self, project):
+        """Non-http transports (no push_spec) must be skipped silently."""
+        self._write_specs(project)
+        wd, transport = self._make_watchdog()
+        del transport.push_spec  # MagicMock without the attribute
+        wd._sync_spec_files(push_all=True)  # must not raise
+        assert wd.known_spec_mtimes == {}

@@ -26,7 +26,7 @@ Ask (or infer from the request):
 | `manual` | — | human relays prompts (Cursor, Windsurf, web chat) |
 | `native` | any | generic spawn; pin binary with `cli:` |
 
-- **Model** (optional) — passed to the CLI when supported.
+- **Model** — always ask which model to use, even when the runner has a built-in default (e.g. `claude_proxy` providers). Passed to the CLI when supported.
 - **Roles** — pick from `agentweave roles available` (or invoke `aw-setup-roles`).
 - **yolo** — auto-approve all tool prompts (autonomous loops only).
 - **pilot** — human drives the CLI session manually; auto-execution is disabled.

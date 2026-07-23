@@ -4,7 +4,7 @@ import { useAgents } from '@/api/agents'
 import { useSessionSync } from '@/api/status'
 import { SidebarItem, type SidebarBadge } from './SidebarItem'
 
-type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions'
+type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions' | 'spec'
 
 interface SidebarProps {
   activePage: Page
@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'agents',    label: 'Agents',    icon: 'smart_toy' },
   { id: 'instructions', label: 'Instructions', icon: 'description' },
   { id: 'tasks',     label: 'Tasks',     icon: 'task_alt',     section: 'WORK' },
+  { id: 'spec',      label: 'Spec',      icon: 'article',      section: 'WORK' },
   { id: 'jobs',      label: 'Jobs',      icon: 'schedule',     section: 'WORK' },
   { id: 'messages',  label: 'Messages',  icon: 'chat',         section: 'COMMUNICATION' },
   { id: 'questions', label: 'Questions', icon: 'help',         section: 'COMMUNICATION' },

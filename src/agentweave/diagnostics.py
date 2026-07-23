@@ -466,6 +466,21 @@ def check_transport() -> list[DiagnosticResult]:
 
 
 def _process_exists(pid: int) -> bool:
+    if os.name == "nt":
+        # ``os.kill(pid, 0)`` is not a reliable existence check on Windows;
+        # on some Python builds it raises an internal exception even when the
+        # process is alive. Query the process handle directly instead.
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            handle = kernel32.OpenProcess(0x1000, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except (AttributeError, OSError):
+            return False
     try:
         os.kill(pid, 0)
         return True

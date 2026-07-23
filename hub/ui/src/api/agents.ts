@@ -80,7 +80,13 @@ export function useAgents() {
     queryKey: ['agents'],
     queryFn: () => getJson<AgentSummary[]>('/api/v1/agents'),
     enabled: isConfigured,
-    refetchInterval: 10000,
+    // SSE normally invalidates this query immediately on heartbeat events.
+    // Keep a faster fallback while an agent is active so a missed SSE event
+    // cannot leave controls disabled until the user refreshes the page.
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data?.some((agent) => agent.status === 'running') ? 2000 : 10000
+    },
   })
 }
 
@@ -162,7 +168,7 @@ export function useSetPilotMode() {
 }
 
 export function useAgentOutput(name: string | null) {
-  const { isConfigured, apiKey } = useConfigStore()
+  const { isConfigured } = useConfigStore()
   const queryClient = useQueryClient()
   const nameRef = useRef(name)
   const isInitialMount = useRef(true)
@@ -233,55 +239,61 @@ export function useAgentOutput(name: string | null) {
   useEffect(() => {
     if (!isConfigured || !name) return
 
-    const poll = async () => {
-      try {
-        const currentLines = linesCache.get(cacheKey) || []
-        const lastTimestamp = currentLines[currentLines.length - 1]?.timestamp
-        const since = lastTimestamp
-          ? `&since=${encodeURIComponent(lastTimestamp)}`
-          : ''
-        const url = `/api/v1/agents/${name}/output?limit=50${since}`
-        const response = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        })
-        if (response.ok) {
-          const newLines: AgentOutputLine[] = await response.json()
-          if (newLines.length > 0) {
-            const existingIds = new Set((linesCache.get(cacheKey) || []).map(l => l.id))
-            const uniqueNew = newLines.filter(l => !existingIds.has(l.id))
-            if (uniqueNew.length > 0) {
-              const merged = [...(linesCache.get(cacheKey) || []), ...uniqueNew]
-              linesCache.set(cacheKey, merged)
-              queryClient.invalidateQueries({ queryKey: ['agents', name, 'lines'] })
-            }
-          }
-        }
-      } catch {
-        // Silently fail polling - SSE is the primary source
-      }
-    }
-
-    // Publish poll to the ref so the SSE handler (handleSSE.current) can
-    // re-arm the gap timer around a fresh `poll()` invocation.
-    pollRef.current = () => { void poll() }
+    let disposed = false
 
     const armGapTimer = () => {
+      if (disposed) return
       if (gapTimerRef.current) clearTimeout(gapTimerRef.current)
       gapTimerRef.current = setTimeout(() => {
         gapTimerRef.current = null
         pollRef.current?.()
       }, 5000)
     }
+
+    const poll = async () => {
+      if (disposed) return
+      try {
+        const currentLines = linesCache.get(cacheKey) || []
+        const lastTimestamp = currentLines[currentLines.length - 1]?.timestamp
+        const since = lastTimestamp
+          ? `&since=${encodeURIComponent(lastTimestamp)}`
+          : ''
+        const newLines = await getJson<AgentOutputLine[]>(
+          `/api/v1/agents/${name}/output?limit=50${since}`,
+        )
+        if (!disposed && newLines.length > 0) {
+          const existingIds = new Set((linesCache.get(cacheKey) || []).map(l => l.id))
+          const uniqueNew = newLines.filter(l => !existingIds.has(l.id))
+          if (uniqueNew.length > 0) {
+            const merged = [...(linesCache.get(cacheKey) || []), ...uniqueNew]
+            merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+            linesCache.set(cacheKey, merged)
+            queryClient.invalidateQueries({ queryKey: ['agents', name, 'lines'] })
+          }
+        }
+      } catch {
+        // Silently fail polling - SSE is the primary source
+      } finally {
+        // A fallback poll is a reconciliation cycle, not a one-shot recovery.
+        // Re-arm even when the Hub request fails so a stalled SSE stream heals.
+        armGapTimer()
+      }
+    }
+
+    // Publish poll to the ref so the SSE handler (handleSSE.current) can
+    // re-arm the gap timer around a fresh `poll()` invocation.
+    pollRef.current = () => { void poll() }
     armGapTimer()
 
     // Initial poll on mount to seed from REST.
-    poll()
+    void poll()
 
     // Reconnect handler: SSE just re-established after being down.
     // Poll once to catch up on any events the stream missed.
     const unsubscribe = onSseReconnect(poll)
 
     return () => {
+      disposed = true
       if (gapTimerRef.current) {
         clearTimeout(gapTimerRef.current)
         gapTimerRef.current = null
@@ -289,7 +301,7 @@ export function useAgentOutput(name: string | null) {
       pollRef.current = null
       unsubscribe()
     }
-  }, [isConfigured, name, cacheKey, apiKey, queryClient])
+  }, [isConfigured, name, cacheKey, queryClient])
 
   // Append new lines from SSE and reset the gap timer on each event so the
   // poll only fires when the stream is actually quiet.
@@ -308,11 +320,6 @@ export function useAgentOutput(name: string | null) {
       timestamp: d.timestamp
     }
 
-    const current = linesCache.get(agentKey) || []
-    if (current.some(l => l.id === newLine.id)) return
-    linesCache.set(agentKey, [...current, newLine])
-    queryClient.invalidateQueries({ queryKey: ['agents', d.agent, 'lines'] })
-
     // Reset the gap timer — a fresh event means the stream is alive.
     // pollRef is non-null while the polling useEffect is mounted.
     if (pollRef.current) {
@@ -322,6 +329,11 @@ export function useAgentOutput(name: string | null) {
         pollRef.current?.()
       }, 5000)
     }
+
+    const current = linesCache.get(agentKey) || []
+    if (current.some(l => l.id === newLine.id)) return
+    linesCache.set(agentKey, [...current, newLine])
+    queryClient.invalidateQueries({ queryKey: ['agents', d.agent, 'lines'] })
   }
 
   useSSE((event) => handleSSE.current(event))

@@ -15,6 +15,7 @@ from .session_sync import router as session_sync_router
 from .jobs import router as jobs_router
 from .setup import router as setup_router
 from .instructions import router as instructions_router
+from .spec import router as spec_router
 
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(messages_router)
@@ -30,3 +31,4 @@ v1_router.include_router(session_sync_router)
 v1_router.include_router(jobs_router)
 v1_router.include_router(setup_router)
 v1_router.include_router(instructions_router)
+v1_router.include_router(spec_router)

@@ -18,6 +18,8 @@ Naming an agent `minimax` or `glm` auto-selects `claude_proxy` as its runner wit
 
 ## 2. Configure the agent
 
+Always ask the user which model to use — do not silently accept the provider's default model shown above.
+
 Quick path (updates runtime state directly):
 
 ```bash

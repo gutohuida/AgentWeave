@@ -33,6 +33,24 @@ from .utils import load_dotenv, load_json
 logger = logging.getLogger(__name__)
 
 
+def _discover_spec_files() -> Dict[str, Path]:
+    """Discover spec HTML files relative to the project root (CWD).
+
+    Returns a mapping of repo-relative path (e.g. "spec/spec.html",
+    "spec/changes/add-thing/spec.html") to the local file Path.
+    """
+    specs: Dict[str, Path] = {}
+    spec_root = Path("spec")
+    root_spec = spec_root / "spec.html"
+    if root_spec.is_file():
+        specs["spec/spec.html"] = root_spec
+    changes_dir = spec_root / "changes"
+    if changes_dir.is_dir():
+        for change_spec in sorted(changes_dir.glob("*/spec.html")):
+            specs[change_spec.as_posix()] = change_spec
+    return specs
+
+
 class Watchdog:
     """Monitors .agentweave/ (local) or a remote transport for changes."""
 
@@ -67,6 +85,7 @@ class Watchdog:
         self.known_messages: Set[str] = set()
         self.known_tasks: Set[str] = set()
         self.known_remote_files: Set[str] = set()  # for git transport
+        self.known_spec_mtimes: Dict[str, float] = {}  # spec path -> last pushed mtime
         self.running = False
         self.retry_after = retry_after  # seconds; None = no retry
         self.pinged_at: Dict[str, float] = {}  # msg_id -> unix time of last ping
@@ -684,6 +703,9 @@ class Watchdog:
             task_id = task.get("id", "")
             if task_id:
                 self.known_tasks.add(task_id)
+        # Initial push of all local spec HTML files so the Hub has them
+        # even if they haven't changed since the watchdog started.
+        self._sync_spec_files(push_all=True)
 
     def _check_once_http(self) -> None:
         """Poll Hub REST API for new messages and tasks."""
@@ -726,6 +748,68 @@ class Watchdog:
             if task_id and task_id not in self.known_tasks:
                 self.known_tasks.add(task_id)
                 self.callback("new_task", task)
+
+        # Push any new/changed spec HTML files to the Hub
+        self._sync_spec_files()
+
+    def _sync_spec_files(self, push_all: bool = False) -> None:
+        """Push new or changed spec HTML files to the Hub (http transport only).
+
+        Fully defensive: spec sync must never break the poll loop, so every
+        per-file failure is logged and skipped. A file's mtime is recorded
+        in known_spec_mtimes only after a successful push, so a transient
+        Hub error is retried on the next poll.
+        """
+        if not hasattr(self.transport, "push_spec"):
+            return
+        try:
+            specs = _discover_spec_files()
+        except Exception as exc:
+            logger.warning(
+                "spec_discovery_failed",
+                extra={"event": "spec_discovery_failed", "data": {"error": str(exc)}},
+            )
+            return
+        for rel_path, file_path in specs.items():
+            try:
+                mtime = file_path.stat().st_mtime
+            except OSError as exc:
+                logger.warning(
+                    "spec_stat_failed",
+                    extra={
+                        "event": "spec_stat_failed",
+                        "data": {"path": rel_path, "error": str(exc)},
+                    },
+                )
+                continue
+            if not push_all and self.known_spec_mtimes.get(rel_path) == mtime:
+                continue
+            try:
+                content = file_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                logger.warning(
+                    f"   [WARN] Could not read spec file {rel_path}: {exc}",
+                    extra={
+                        "event": "spec_read_failed",
+                        "data": {"path": rel_path, "error": str(exc)},
+                    },
+                )
+                continue
+            try:
+                if self.transport.push_spec(rel_path, content):
+                    self.known_spec_mtimes[rel_path] = mtime
+                    logger.info(
+                        "spec_pushed",
+                        extra={"event": "spec_pushed", "data": {"path": rel_path}},
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "spec_push_failed",
+                    extra={
+                        "event": "spec_push_failed",
+                        "data": {"path": rel_path, "error": str(exc)},
+                    },
+                )
 
     def _handle_codex_new_session(self, agent: str) -> None:
         """Delete session file and reset context usage for a Codex agent."""

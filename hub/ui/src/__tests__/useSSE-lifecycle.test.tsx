@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import {
   useSSE,
@@ -102,6 +103,46 @@ describe('M22 — useSSE reconnect lifecycle: clear on cancel, clear on unmount'
     await new Promise((r) => setTimeout(r, 20))
     const afterCount = setTimeoutCallsOf(setTimeoutSpy, 3000).length
     expect(afterCount).toBe(beforeCount)
+  })
+
+  it('keeps the shared stream alive while another subscriber remains mounted', async () => {
+    let streamCancelled = false
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(': keepalive\n\n'))
+      },
+      cancel() {
+        streamCancelled = true
+      },
+    })
+    ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    const hideSecond: { current: ((hidden: boolean) => void) | null } = { current: null }
+    function Pair() {
+      const [showSecond, setShowSecond] = useState(true)
+      hideSecond.current = (hidden) => setShowSecond(!hidden)
+      return <><Probe />{showSecond && <Probe />}</>
+    }
+
+    const { unmount } = render(withQueryClient(<Pair />))
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1))
+
+    // Removing one page must not cancel the global stream used by the other.
+    act(() => hideSecond.current?.(true))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(streamCancelled).toBe(false)
+
+    unmount()
+    await waitFor(() => expect(streamCancelled).toBe(true))
   })
 
   it('cancels the reconnect timer when clearConfig flips isConfigured to false', async () => {

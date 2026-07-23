@@ -3,3 +3,8 @@
 
 node_modules/
 dist/
+
+# tsc build-mode artifacts (emitted by `tsc -b` / `npm run build`)
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
