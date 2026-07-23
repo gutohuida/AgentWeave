@@ -696,10 +696,8 @@ def _generate_codex_skills(session: "Session", base_dir: Path, force: bool = Fal
 
 def cmd_status(_args: argparse.Namespace) -> int:
     """Show session status."""
-    import os as _os
-    from .diagnostics import _process_exists
-
     from .constants import WATCHDOG_PID_FILE
+    from .diagnostics import _process_exists
 
     session = Session.load()
     if not session:
