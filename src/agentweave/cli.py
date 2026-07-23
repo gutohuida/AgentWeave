@@ -8,6 +8,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -3511,6 +3512,27 @@ def cmd_hub_destroy(args: argparse.Namespace) -> int:
     return 0
 
 
+def _clear_scaffold_marker(yml_path: "Path") -> None:
+    """Flip `scaffold: true` to `scaffold: false` in agentweave.yml in place.
+
+    Uses a targeted text substitution (not a full YAML re-dump) so all the
+    hand-written comments and formatting in the file are preserved.
+    """
+    try:
+        content = yml_path.read_text(encoding="utf-8")
+        new_content = re.sub(
+            r"^(\s*scaffold:\s*)true\s*$",
+            r"\1false",
+            content,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if new_content != content:
+            yml_path.write_text(new_content, encoding="utf-8")
+    except Exception as exc:
+        print_warning(f"Could not clear scaffold marker in {yml_path}: {exc}")
+
+
 def cmd_activate(_args: argparse.Namespace) -> int:
     """Activate the AgentWeave project - reconcile agentweave.yml with runtime state.
 
@@ -3650,6 +3672,12 @@ def cmd_activate(_args: argparse.Namespace) -> int:
     except Exception as exc:
         print_warning(f"Could not run readiness diagnostics: {exc}")
         _emit_nonfatal_diagnostic("readiness", f"Could not run readiness diagnostics: {exc}")
+
+    # Clear the `scaffold: true` marker now that the project has gone through
+    # at least one successful activate — signals to setup skills (aw-setup)
+    # that agentweave.yml reflects reviewed answers, not just init defaults.
+    if config.project.scaffold:
+        _clear_scaffold_marker(AGENTWEAVE_YML_PATH)
 
     print_success("Activate complete!")
     print("Your project is ready for multi-agent collaboration.")

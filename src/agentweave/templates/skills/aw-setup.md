@@ -18,13 +18,19 @@ Run these and read the results before asking anything:
 2. `agentweave doctor` — runtime readiness issues
 3. Check which of these exist: `agentweave.yml`, `.agentweave/session.json`, `.agentweave/transport.json`, `.env`
 
-If `agentweave.yml` already exists, read it and treat its values as the current answers — only ask the user what they want to change. If nothing exists yet, run:
+If `agentweave.yml` doesn't exist yet, run:
 
 ```bash
 agentweave init --project "<name>" --principal <principal-agent> --mode hierarchical
 ```
 
 (`init` is fully flag-driven; it creates `.agentweave/`, a commented `agentweave.yml`, `.gitignore` entries, and a scaffold `.env`.)
+
+If `agentweave.yml` already exists, check `project.scaffold` before deciding how to treat it:
+- **`scaffold: true`** (or the file was just created by `init` above) — this is an untouched default, not a real decision. Run the **full interview** below as if nothing existed; don't skip questions just because the keys are present.
+- **`scaffold` absent or `false`** — this file reflects reviewed answers. Read it and treat its values as the current answers — only ask the user what they want to change.
+
+`scaffold: true` is cleared automatically the first time `agentweave activate` runs successfully (step 5), so a normal setup pass naturally flips it once the user is done.
 
 ## 2. Interview — one decision at a time
 
