@@ -1598,12 +1598,18 @@ def _extract_kimi_code_session(workdir: Path) -> Optional[str]:
     invoked from) and return the session with the newest mtime. The
     per-session ``state.json`` does NOT carry ``workDir`` for native
     kimi-code sessions, so the index is the only reliable source.
+
+    Paths are compared as ``Path`` objects, never as strings: kimi-code writes
+    ``workDir`` with forward slashes ("C:/Users/x/proj") while ``str(Path)`` on
+    Windows yields backslashes ("C:\\Users\\x\\proj"), so a string compare never
+    matches there and every session looks undiscoverable. ``Path`` equality
+    normalizes both separators and case on Windows, and stays exact on POSIX.
     """
     index_file = Path.home() / ".kimi-code" / "session_index.jsonl"
     if not index_file.is_file():
         return None
     try:
-        target = str(workdir.resolve())
+        targets = {workdir, workdir.resolve()}
     except OSError:
         return None
     best_mtime = -1.0
@@ -1618,7 +1624,13 @@ def _extract_kimi_code_session(workdir: Path) -> Optional[str]:
                     rec = json.loads(ln)
                 except json.JSONDecodeError:
                     continue
-                if rec.get("workDir") != target:
+                raw_workdir = rec.get("workDir") or ""
+                if not raw_workdir:
+                    continue
+                try:
+                    if Path(raw_workdir) not in targets:
+                        continue
+                except (OSError, ValueError):
                     continue
                 sd = rec.get("sessionDir") or ""
                 sid = rec.get("sessionId") or ""

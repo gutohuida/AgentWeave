@@ -1,6 +1,7 @@
 """Tests for watchdog dispatch logic."""
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1721,3 +1722,157 @@ class TestSpecSync:
         del transport.push_spec  # MagicMock without the attribute
         wd._sync_spec_files(push_all=True)  # must not raise
         assert wd.known_spec_mtimes == {}
+
+
+class TestExtractKimiCodeSession:
+    """Tests for _extract_kimi_code_session (kimi-code v0.x session discovery).
+
+    kimi-code v0.x emits no session id on stdout, so the watchdog recovers it
+    by matching the working directory against ~/.kimi-code/session_index.jsonl.
+    kimi-code writes workDir with forward slashes; on Windows str(Path) uses
+    backslashes, so comparing raw strings silently matched nothing and every
+    kimi agent started a fresh session on every turn.
+    """
+
+    def _write_index(self, home: Path, records: list) -> None:
+        index_dir = home / ".kimi-code"
+        index_dir.mkdir(parents=True, exist_ok=True)
+        index_dir.joinpath("session_index.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in records), encoding="utf-8"
+        )
+
+    def test_matches_forward_slash_workdir(self, tmp_path, monkeypatch):
+        """A forward-slash workDir must match a native Path cwd on any OS."""
+        home = tmp_path / "home"
+        project = tmp_path / "proj"
+        project.mkdir()
+        session_dir = tmp_path / "sess"
+        session_dir.mkdir()
+
+        self._write_index(
+            home,
+            [
+                {
+                    "sessionId": "session_abc",
+                    "sessionDir": str(session_dir),
+                    # As kimi-code writes it: forward slashes, even on Windows.
+                    "workDir": project.resolve().as_posix(),
+                }
+            ],
+        )
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        from agentweave.watchdog import _extract_kimi_code_session
+
+        assert _extract_kimi_code_session(project) == "session_abc"
+
+    def test_picks_most_recent_session_for_workdir(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        project = tmp_path / "proj"
+        project.mkdir()
+        old_dir = tmp_path / "old"
+        old_dir.mkdir()
+        new_dir = tmp_path / "new"
+        new_dir.mkdir()
+        os.utime(old_dir, (1000, 1000))
+        os.utime(new_dir, (2000, 2000))
+
+        self._write_index(
+            home,
+            [
+                {
+                    "sessionId": "session_old",
+                    "sessionDir": str(old_dir),
+                    "workDir": project.resolve().as_posix(),
+                },
+                {
+                    "sessionId": "session_new",
+                    "sessionDir": str(new_dir),
+                    "workDir": project.resolve().as_posix(),
+                },
+            ],
+        )
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        from agentweave.watchdog import _extract_kimi_code_session
+
+        assert _extract_kimi_code_session(project) == "session_new"
+
+    def test_ignores_other_workdirs(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        project = tmp_path / "proj"
+        project.mkdir()
+        other = tmp_path / "other"
+        other.mkdir()
+        session_dir = tmp_path / "sess"
+        session_dir.mkdir()
+
+        self._write_index(
+            home,
+            [
+                {
+                    "sessionId": "session_other",
+                    "sessionDir": str(session_dir),
+                    "workDir": other.resolve().as_posix(),
+                }
+            ],
+        )
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        from agentweave.watchdog import _extract_kimi_code_session
+
+        assert _extract_kimi_code_session(project) is None
+
+    def test_skips_malformed_records(self, tmp_path, monkeypatch):
+        """A bad line, a missing workDir, and a vanished sessionDir are skipped."""
+        home = tmp_path / "home"
+        project = tmp_path / "proj"
+        project.mkdir()
+        session_dir = tmp_path / "sess"
+        session_dir.mkdir()
+        wd_posix = project.resolve().as_posix()
+
+        index_dir = home / ".kimi-code"
+        index_dir.mkdir(parents=True)
+        index_dir.joinpath("session_index.jsonl").write_text(
+            "\n".join(
+                [
+                    "not json at all",
+                    json.dumps({"sessionId": "no_workdir", "sessionDir": str(session_dir)}),
+                    json.dumps(
+                        {"sessionId": "", "sessionDir": str(session_dir), "workDir": wd_posix}
+                    ),
+                    json.dumps(
+                        {
+                            "sessionId": "gone",
+                            "sessionDir": str(tmp_path / "does-not-exist"),
+                            "workDir": wd_posix,
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "sessionId": "session_good",
+                            "sessionDir": str(session_dir),
+                            "workDir": wd_posix,
+                        }
+                    ),
+                ]
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        from agentweave.watchdog import _extract_kimi_code_session
+
+        assert _extract_kimi_code_session(project) == "session_good"
+
+    def test_missing_index_returns_none(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        home.mkdir()
+        project = tmp_path / "proj"
+        project.mkdir()
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+        from agentweave.watchdog import _extract_kimi_code_session
+
+        assert _extract_kimi_code_session(project) is None
