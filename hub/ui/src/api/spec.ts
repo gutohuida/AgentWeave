@@ -6,6 +6,15 @@ import { useSSE } from '@/hooks/useSSE'
 export interface SpecEntry {
   path: string
   updated_at?: string
+  // Additive — present only for documents covered by the active valid
+  // manifest ("filed"); absent for "unindexed" (never reconciled),
+  // "unfiled" (reconciled but no manifest entry), or "stale" documents.
+  title?: string
+  kind?: 'baseline' | 'system-map' | 'roadmap' | 'change-spec'
+  status?: string
+  parent?: string | null
+  order?: number
+  state?: 'filed' | 'unindexed' | 'unfiled' | 'stale'
 }
 
 export interface SpecDocument {
@@ -14,11 +23,44 @@ export interface SpecDocument {
   updated_at?: string
 }
 
+export interface SpecManifestSummary {
+  state: 'valid' | 'absent' | 'unreadable' | 'invalid'
+  version: number | null
+  source_id: string
+  updated_at: string
+}
+
+export interface SpecDiagnostic {
+  code: string
+  path?: string | null
+  field?: string | null
+  expected?: string | null
+  actual?: string | null
+  source_ids?: string[] | null
+}
+
+export interface SpecMissingEntry {
+  path: string
+  title: string
+  kind: string
+  status: string
+  parent: string | null
+  order: number
+}
+
+export interface SpecListResponse {
+  specs: SpecEntry[]
+  home: string | null
+  manifest: SpecManifestSummary | null
+  missing: SpecMissingEntry[]
+  diagnostics: SpecDiagnostic[]
+}
+
 export function useSpecList() {
   const { isConfigured } = useConfigStore()
-  return useQuery<{ specs: SpecEntry[] }>({
+  return useQuery<SpecListResponse>({
     queryKey: ['specs'],
-    queryFn: () => getJson<{ specs: SpecEntry[] }>('/api/v1/project/specs'),
+    queryFn: () => getJson<SpecListResponse>('/api/v1/project/specs'),
     enabled: isConfigured,
   })
 }
