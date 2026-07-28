@@ -28,27 +28,32 @@ from .constants import (
     TRIGGERED_DIRECT_FILE,
     _get_context_limit,
 )
+from .spec_manifest import discover_spec_files as _discover_spec_files_safe
+from .spec_manifest import load_manifest
 from .utils import load_dotenv, load_json
 
 logger = logging.getLogger(__name__)
 
 
 def _discover_spec_files() -> Dict[str, Path]:
-    """Discover spec HTML files relative to the project root (CWD).
+    """Discover every safe spec HTML file beneath `spec/` (relative to CWD).
 
     Returns a mapping of repo-relative path (e.g. "spec/spec.html",
-    "spec/changes/add-thing/spec.html") to the local file Path.
+    "spec/changes/add-thing/spec.html") to the local file Path. Recursive and
+    manifest-independent — a document does not need a `spec/index.json` entry
+    to be discovered. Rejected candidates (unsafe path, escaping symlink,
+    non-regular file) are logged as a diagnostic, not silently dropped.
     """
-    specs: Dict[str, Path] = {}
-    spec_root = Path("spec")
-    root_spec = spec_root / "spec.html"
-    if root_spec.is_file():
-        specs["spec/spec.html"] = root_spec
-    changes_dir = spec_root / "changes"
-    if changes_dir.is_dir():
-        for change_spec in sorted(changes_dir.glob("*/spec.html")):
-            specs[change_spec.as_posix()] = change_spec
-    return specs
+    discovered, diagnostics = _discover_spec_files_safe(Path("spec"))
+    for diag in diagnostics:
+        logger.warning(
+            "spec_discovery_unsafe_candidate",
+            extra={
+                "event": "spec_discovery_unsafe_candidate",
+                "data": {"path": diag.path, "reason": diag.reason},
+            },
+        )
+    return discovered
 
 
 class Watchdog:
@@ -86,6 +91,9 @@ class Watchdog:
         self.known_tasks: Set[str] = set()
         self.known_remote_files: Set[str] = set()  # for git transport
         self.known_spec_mtimes: Dict[str, float] = {}  # spec path -> last pushed mtime
+        # (discovered paths, manifest text) last successfully reconciled with the Hub —
+        # None until the first complete, all-succeeded sync cycle.
+        self.known_spec_reconcile_fingerprint: Optional[Tuple[frozenset, Optional[str]]] = None
         self.running = False
         self.retry_after = retry_after  # seconds; None = no retry
         self.pinged_at: Dict[str, float] = {}  # msg_id -> unix time of last ping
@@ -753,24 +761,29 @@ class Watchdog:
         self._sync_spec_files()
 
     def _sync_spec_files(self, push_all: bool = False) -> None:
-        """Push new or changed spec HTML files to the Hub (http transport only).
+        """Push new or changed spec HTML files to the Hub (http transport only),
+        then submit a reconciliation snapshot if this cycle fully succeeded.
 
         Fully defensive: spec sync must never break the poll loop, so every
         per-file failure is logged and skipped. A file's mtime is recorded
         in known_spec_mtimes only after a successful push, so a transient
-        Hub error is retried on the next poll.
+        Hub error is retried on the next poll. Any failure this cycle also
+        suppresses reconciliation — a snapshot is never submitted against an
+        incomplete upload set.
         """
         if not hasattr(self.transport, "push_spec"):
             return
         try:
-            specs = _discover_spec_files()
+            discovered = _discover_spec_files()
         except Exception as exc:
             logger.warning(
                 "spec_discovery_failed",
                 extra={"event": "spec_discovery_failed", "data": {"error": str(exc)}},
             )
             return
-        for rel_path, file_path in specs.items():
+
+        all_ok = True
+        for rel_path, file_path in discovered.items():
             try:
                 mtime = file_path.stat().st_mtime
             except OSError as exc:
@@ -781,6 +794,7 @@ class Watchdog:
                         "data": {"path": rel_path, "error": str(exc)},
                     },
                 )
+                all_ok = False
                 continue
             if not push_all and self.known_spec_mtimes.get(rel_path) == mtime:
                 continue
@@ -794,6 +808,7 @@ class Watchdog:
                         "data": {"path": rel_path, "error": str(exc)},
                     },
                 )
+                all_ok = False
                 continue
             try:
                 if self.transport.push_spec(rel_path, content):
@@ -802,6 +817,8 @@ class Watchdog:
                         "spec_pushed",
                         extra={"event": "spec_pushed", "data": {"path": rel_path}},
                     )
+                else:
+                    all_ok = False
             except Exception as exc:
                 logger.warning(
                     "spec_push_failed",
@@ -810,6 +827,72 @@ class Watchdog:
                         "data": {"path": rel_path, "error": str(exc)},
                     },
                 )
+                all_ok = False
+
+        # Drop mtimes for files no longer discovered, so a deletion is
+        # reflected in the next reconciliation snapshot's inventory.
+        for stale_path in set(self.known_spec_mtimes) - set(discovered):
+            del self.known_spec_mtimes[stale_path]
+
+        if all_ok:
+            self._reconcile_specs(discovered, force=push_all)
+
+    def _reconcile_specs(self, discovered: Dict[str, Path], force: bool) -> None:
+        """Submit a complete source snapshot (inventory + manifest state) to
+        the Hub, so it can detect deletions and drift without a stale
+        checkout ever being treated as globally authoritative.
+
+        Only called after a sync cycle where every discovered file matched a
+        successful upload marker. Sends only when the inventory or manifest
+        changed since the last successful snapshot, or when `force` (startup).
+        """
+        if not hasattr(self.transport, "reconcile_specs"):
+            return
+
+        manifest_path = Path("spec/index.json")
+        manifest_text: Optional[str] = None
+        manifest_state = "absent"
+        if manifest_path.is_file():
+            try:
+                manifest_text = manifest_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                logger.warning(
+                    "spec_manifest_read_failed",
+                    extra={"event": "spec_manifest_read_failed", "data": {"error": str(exc)}},
+                )
+                manifest_state = "unreadable"
+        if manifest_text is not None:
+            manifest, _diagnostics = load_manifest(manifest_text)
+            manifest_state = "valid" if manifest is not None else "invalid"
+
+        fingerprint = (frozenset(discovered.keys()), manifest_text)
+        if not force and fingerprint == self.known_spec_reconcile_fingerprint:
+            return
+
+        try:
+            result = self.transport.reconcile_specs(
+                manifest_text=manifest_text,
+                manifest_state=manifest_state,
+                discovered_paths=sorted(discovered.keys()),
+            )
+        except Exception as exc:
+            logger.warning(
+                "spec_reconcile_failed",
+                extra={"event": "spec_reconcile_failed", "data": {"error": str(exc)}},
+            )
+            return
+        if result is None:
+            # Transport-level failure — already logged by the transport;
+            # retry next cycle by leaving the fingerprint unchanged.
+            return
+        self.known_spec_reconcile_fingerprint = fingerprint
+        logger.info(
+            "spec_reconciled",
+            extra={
+                "event": "spec_reconciled",
+                "data": {"document_count": len(discovered), "manifest_state": manifest_state},
+            },
+        )
 
     def _handle_codex_new_session(self, agent: str) -> None:
         """Delete session file and reset context usage for a Codex agent."""

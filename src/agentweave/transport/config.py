@@ -4,23 +4,43 @@ from pathlib import Path
 from typing import Optional
 
 from ..constants import TRANSPORT_CONFIG_FILE
-from ..utils import load_json
+from ..utils import generate_id, load_json, save_json
 from .base import BaseTransport
 
 
-def _find_transport_config() -> Optional[dict]:
+def _ensure_spec_source_id(config: dict, path: Path) -> str:
+    """Return this workspace's stable, non-secret spec-sync source ID.
+
+    Generated once (at `transport setup --type http` or lazily on first use
+    by an existing config) and persisted at `path`, the exact transport.json
+    this config was loaded from — which may be in a parent directory when
+    called from a nested CWD. Contains no credential or machine-identifying
+    path, just a random token the Hub uses to tell apart snapshots from
+    different checkouts of the same project.
+    """
+    source_id = config.get("spec_source_id")
+    if isinstance(source_id, str) and source_id:
+        return source_id
+    source_id = generate_id("spec-src", uuid_length=16)
+    config["spec_source_id"] = source_id
+    save_json(path, config)
+    return source_id
+
+
+def _find_transport_config() -> Optional[tuple]:
     """Find and load transport.json by walking up from CWD.
 
     Searches CWD and every parent directory for .agentweave/transport.json.
     This allows the MCP server (started by an agent from any working directory)
     to find the project's transport config without requiring an exact CWD match.
 
-    Returns None if no config is found in any ancestor directory.
+    Returns (config, path) for the first match, or None if no config is
+    found in any ancestor directory.
     """
     # First try the standard relative path (fast path for CLI use)
     config = load_json(TRANSPORT_CONFIG_FILE)
     if config:
-        return config
+        return config, TRANSPORT_CONFIG_FILE
 
     # Walk up the directory tree — handles MCP server CWD != project dir
     try:
@@ -35,7 +55,7 @@ def _find_transport_config() -> Optional[dict]:
             candidate = directory / ".agentweave" / "transport.json"
             config = load_json(candidate)
             if config:
-                return config
+                return config, candidate
 
     return None
 
@@ -59,11 +79,12 @@ def get_transport() -> BaseTransport:
     "{cluster}.{agent}" as the sender, and inbox filtering matches both
     "{cluster}.{agent}" and plain "{agent}" for backward compatibility.
     """
-    config = _find_transport_config()
-    if not config:
+    found = _find_transport_config()
+    if not found:
         from .local import LocalTransport
 
         return LocalTransport()
+    config, config_path = found
 
     transport_type = config.get("type", "local")
 
@@ -83,6 +104,7 @@ def get_transport() -> BaseTransport:
             url=config.get("url", ""),
             api_key=config.get("api_key", ""),
             project_id=config.get("project_id", ""),
+            source_id=_ensure_spec_source_id(config, config_path),
         )
         # Sync local jobs to Hub on connect
         import contextlib

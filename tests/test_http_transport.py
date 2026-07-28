@@ -478,3 +478,64 @@ class TestHttpTransportPushSpec(unittest.TestCase):
         ):
             result = self.transport.push_spec("spec/spec.html", "<html>...</html>")
         self.assertFalse(result)
+
+
+class TestHttpTransportReconcileSpecs(unittest.TestCase):
+    """reconcile_specs POSTs a complete source snapshot to /project/specs/reconcile."""
+
+    def setUp(self):
+        self.transport = HttpTransport(
+            url="http://localhost:8000",
+            api_key="aw_live_testkey",
+            project_id="proj-test",
+            source_id="spec-src-abc123",
+        )
+
+    def test_reconcile_valid_manifest(self):
+        with patch.object(self.transport, "_request", return_value={"diagnostics": []}) as mock_req:
+            result = self.transport.reconcile_specs(
+                manifest_text='{"version": 1}',
+                manifest_state="valid",
+                discovered_paths=["spec/spec.html"],
+            )
+        self.assertEqual(result, {"diagnostics": []})
+        mock_req.assert_called_once_with(
+            "POST",
+            "/project/specs/reconcile",
+            {
+                "source_id": "spec-src-abc123",
+                "manifest_state": "valid",
+                "discovered_paths": ["spec/spec.html"],
+                "prune": False,
+                "manifest_text": '{"version": 1}',
+            },
+        )
+
+    def test_reconcile_absent_manifest_omits_text(self):
+        with patch.object(self.transport, "_request", return_value={}) as mock_req:
+            self.transport.reconcile_specs(
+                manifest_text=None,
+                manifest_state="absent",
+                discovered_paths=[],
+            )
+        _, _, body = mock_req.call_args[0]
+        self.assertNotIn("manifest_text", body)
+
+    def test_reconcile_prune(self):
+        with patch.object(self.transport, "_request", return_value={}) as mock_req:
+            self.transport.reconcile_specs(
+                manifest_text=None, manifest_state="absent", discovered_paths=[], prune=True
+            )
+        _, _, body = mock_req.call_args[0]
+        self.assertTrue(body["prune"])
+
+    def test_reconcile_failure_returns_none(self):
+        with patch.object(
+            self.transport,
+            "_request",
+            side_effect=HubTransportError("Hub API 500: boom", "hub_api_error", 500),
+        ):
+            result = self.transport.reconcile_specs(
+                manifest_text=None, manifest_state="absent", discovered_paths=[]
+            )
+        self.assertIsNone(result)

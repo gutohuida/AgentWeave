@@ -574,9 +574,10 @@ def _print_init_summary(
 # Reference documents bundled into a skill's directory at generation time.
 # These live in templates/skills/references/ and are NOT skills themselves.
 SKILL_SUPPORT_FILES: dict[str, list[str]] = {
-    "aw-spec-propose": ["html-spec-conventions.md"],
+    "aw-spec-propose": ["html-spec-conventions.md", "spec-manifest-conventions.md"],
     "aw-spec-apply": ["html-spec-conventions.md"],
-    "aw-spec-archive": ["html-spec-conventions.md"],
+    "aw-spec-archive": ["html-spec-conventions.md", "spec-manifest-conventions.md"],
+    "aw-spec-reindex": ["html-spec-conventions.md", "spec-manifest-conventions.md"],
 }
 
 
@@ -2585,16 +2586,17 @@ def cmd_transport_setup(args: argparse.Namespace) -> int:
             project_id = hub_project_id
 
         # Write transport.json
+        from .transport.config import _ensure_spec_source_id
+
         AGENTWEAVE_DIR.mkdir(parents=True, exist_ok=True)
-        save_json(
-            TRANSPORT_CONFIG_FILE,
-            {
-                "type": "http",
-                "url": url,
-                "api_key": api_key,
-                "project_id": project_id,
-            },
-        )
+        config = {
+            "type": "http",
+            "url": url,
+            "api_key": api_key,
+            "project_id": project_id,
+        }
+        save_json(TRANSPORT_CONFIG_FILE, config)
+        _ensure_spec_source_id(config, TRANSPORT_CONFIG_FILE)
 
         print_success("HTTP transport configured!")
         print(f"   URL:        {url}")
@@ -2719,8 +2721,11 @@ def cmd_transport_pull(_args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_spec_push(_args: argparse.Namespace) -> int:
-    """Push local spec HTML files to the Hub (HTTP transport only)."""
+def cmd_spec_push(args: argparse.Namespace) -> int:
+    """Push local spec HTML files to the Hub and reconcile (HTTP transport only)."""
+    from pathlib import Path as _Path
+
+    from .spec_manifest import load_manifest
     from .transport import get_transport
     from .watchdog import _discover_spec_files
 
@@ -2732,24 +2737,74 @@ def cmd_spec_push(_args: argparse.Namespace) -> int:
 
     specs = _discover_spec_files()
     if not specs:
-        print_info("No spec files found (spec/spec.html, spec/changes/*/spec.html).")
+        print_info("No spec files found beneath spec/.")
         return 0
 
     pushed = 0
+    all_ok = True
     for rel_path, file_path in specs.items():
         try:
             content = file_path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
             print_warning(f"Skipping {rel_path}: {exc}")
+            all_ok = False
             continue
         if t.push_spec(rel_path, content):
             print_success(f"Pushed {rel_path}")
             pushed += 1
         else:
             print_error(f"Failed to push {rel_path}")
+            all_ok = False
 
     print_info(f"Spec push complete: {pushed}/{len(specs)} file(s) pushed")
-    return 0 if pushed == len(specs) else 1
+
+    prune = bool(getattr(args, "prune", False))
+    if not all_ok:
+        if prune:
+            print_warning("Not all files pushed successfully — skipping reconciliation/prune.")
+        return 1
+
+    if not hasattr(t, "reconcile_specs"):
+        return 0
+
+    manifest_path = _Path("spec/index.json")
+    manifest_text: Optional[str] = None
+    manifest_state = "absent"
+    if manifest_path.is_file():
+        try:
+            manifest_text = manifest_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print_warning(f"Could not read spec/index.json: {exc}")
+            manifest_state = "unreadable"
+    if manifest_text is not None:
+        manifest, diagnostics = load_manifest(manifest_text)
+        manifest_state = "valid" if manifest is not None else "invalid"
+        if manifest is None:
+            for diag in diagnostics:
+                print_warning(f"Manifest: {diag.code}" + (f" ({diag.path})" if diag.path else ""))
+
+    result = t.reconcile_specs(
+        manifest_text=manifest_text,
+        manifest_state=manifest_state,
+        discovered_paths=sorted(specs.keys()),
+        prune=prune,
+    )
+    if result is None:
+        # Old Hub without the reconcile endpoint, or a transient failure —
+        # per-file push already succeeded above, so this is not fatal.
+        print_warning("Reconciliation not available (old Hub, or a connection error).")
+        return 0
+
+    for diag in result.get("diagnostics", []) or []:
+        code = diag.get("code", "diagnostic") if isinstance(diag, dict) else str(diag)
+        path = diag.get("path") if isinstance(diag, dict) else None
+        print_warning(f"Drift: {code}" + (f" ({path})" if path else ""))
+
+    pruned = result.get("pruned", []) or []
+    if pruned:
+        print_success(f"Pruned {len(pruned)} orphaned row(s): {', '.join(pruned)}")
+
+    return 0
 
 
 def cmd_hub_heartbeat(args: argparse.Namespace) -> int:
@@ -5811,7 +5866,14 @@ For more help: https://github.com/gutohuida/AgentWeave
     spec_subparsers = spec_parser.add_subparsers(dest="spec_command")
 
     # spec push
-    spec_subparsers.add_parser("push", help="Push local spec HTML files to the Hub")
+    spec_push_parser = spec_subparsers.add_parser(
+        "push", help="Push local spec HTML files to the Hub"
+    )
+    spec_push_parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="After a complete successful sync, delete Hub rows no active source claims",
+    )
 
     # Activate command
     subparsers.add_parser(

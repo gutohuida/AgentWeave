@@ -1684,6 +1684,28 @@ class TestSpecSync:
 
         assert _discover_spec_files() == {}
 
+    def test_discover_spec_files_recurses_beyond_the_two_legacy_globs(self, project):
+        """M1 regression: system maps, roadmaps, and archived changes are now
+        discovered without a spec/index.json entry (the old implementation
+        only matched spec/spec.html and spec/changes/*/spec.html)."""
+        from agentweave.watchdog import _discover_spec_files
+
+        (project / "spec" / "roadmaps").mkdir(parents=True)
+        (project / "spec" / "system-map.html").write_text("<html>map</html>", encoding="utf-8")
+        (project / "spec" / "roadmaps" / "epic.html").write_text(
+            "<html>roadmap</html>", encoding="utf-8"
+        )
+        archived = project / "spec" / "changes" / "archive" / "old-thing"
+        archived.mkdir(parents=True)
+        (archived / "spec.html").write_text("<html>archived</html>", encoding="utf-8")
+
+        specs = _discover_spec_files()
+        assert set(specs.keys()) == {
+            "spec/system-map.html",
+            "spec/roadmaps/epic.html",
+            "spec/changes/archive/old-thing/spec.html",
+        }
+
     def test_push_all_seeds_mtimes(self, project):
         self._write_specs(project)
         wd, transport = self._make_watchdog()
@@ -1757,6 +1779,147 @@ class TestSpecSync:
         del transport.push_spec  # MagicMock without the attribute
         wd._sync_spec_files(push_all=True)  # must not raise
         assert wd.known_spec_mtimes == {}
+
+
+class TestSpecReconciliation:
+    """Reconciliation snapshot submission (task 2.3/2.4)."""
+
+    @pytest.fixture
+    def project(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
+
+    def _make_watchdog(self):
+        from agentweave.watchdog import Watchdog
+
+        transport = MagicMock()
+        transport.get_transport_type.return_value = "http"
+        transport.poll_interval = 5.0
+        transport.push_spec.return_value = True
+        transport.reconcile_specs.return_value = {"diagnostics": []}
+        return Watchdog(transport=transport), transport
+
+    def _write_spec(self, root: Path) -> None:
+        (root / "spec").mkdir(parents=True, exist_ok=True)
+        (root / "spec" / "spec.html").write_text("<html>main</html>", encoding="utf-8")
+
+    def test_startup_sends_complete_snapshot(self, project):
+        self._write_spec(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.assert_called_once_with(
+            manifest_text=None,
+            manifest_state="absent",
+            discovered_paths=["spec/spec.html"],
+        )
+
+    def test_unchanged_poll_does_not_reconcile_again(self, project):
+        self._write_spec(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.reset_mock()
+        wd._sync_spec_files()
+        transport.reconcile_specs.assert_not_called()
+
+    def test_manifest_only_change_triggers_reconcile(self, project):
+        self._write_spec(project)
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.reset_mock()
+
+        manifest = {
+            "version": 1,
+            "home": "spec/spec.html",
+            "documents": [
+                {
+                    "path": "spec/spec.html",
+                    "title": "Main",
+                    "kind": "baseline",
+                    "status": "living",
+                    "parent": None,
+                    "order": 10,
+                }
+            ],
+        }
+        (project / "spec" / "index.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+        wd._sync_spec_files()
+        transport.reconcile_specs.assert_called_once_with(
+            manifest_text=json.dumps(manifest),
+            manifest_state="valid",
+            discovered_paths=["spec/spec.html"],
+        )
+
+    def test_deletion_is_reflected_in_next_snapshot(self, project):
+        self._write_spec(project)
+        change_dir = project / "spec" / "changes" / "add-thing"
+        change_dir.mkdir(parents=True)
+        (change_dir / "spec.html").write_text("<html>change</html>", encoding="utf-8")
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.reset_mock()
+
+        (change_dir / "spec.html").unlink()
+
+        wd._sync_spec_files()
+        transport.reconcile_specs.assert_called_once_with(
+            manifest_text=None,
+            manifest_state="absent",
+            discovered_paths=["spec/spec.html"],
+        )
+
+    def test_malformed_manifest_reports_invalid_but_still_reconciles(self, project):
+        self._write_spec(project)
+        (project / "spec" / "index.json").write_text("{not json", encoding="utf-8")
+        wd, transport = self._make_watchdog()
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.assert_called_once_with(
+            manifest_text="{not json",
+            manifest_state="invalid",
+            discovered_paths=["spec/spec.html"],
+        )
+
+    def test_partial_upload_failure_suppresses_reconciliation(self, project):
+        self._write_spec(project)
+        (project / "spec" / "changes" / "add-thing").mkdir(parents=True)
+        (project / "spec" / "changes" / "add-thing" / "spec.html").write_text(
+            "<html>change</html>", encoding="utf-8"
+        )
+        wd, transport = self._make_watchdog()
+        transport.push_spec.side_effect = [True, False]
+
+        wd._sync_spec_files(push_all=True)
+
+        transport.reconcile_specs.assert_not_called()
+
+    def test_retries_reconciliation_on_next_successful_cycle(self, project):
+        self._write_spec(project)
+        wd, transport = self._make_watchdog()
+        transport.push_spec.return_value = False
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.assert_not_called()
+
+        transport.push_spec.return_value = True
+        wd._sync_spec_files(push_all=True)
+        transport.reconcile_specs.assert_called_once()
+
+    def test_failed_reconcile_response_does_not_update_fingerprint(self, project):
+        self._write_spec(project)
+        wd, transport = self._make_watchdog()
+        transport.reconcile_specs.return_value = None
+        wd._sync_spec_files(push_all=True)
+        assert wd.known_spec_reconcile_fingerprint is None
+
+        transport.reconcile_specs.return_value = {"diagnostics": []}
+        wd._sync_spec_files()  # nothing changed on disk, but fingerprint never recorded
+        transport.reconcile_specs.assert_called()
+
+    def test_non_http_transport_is_noop(self, project):
+        """Transports without reconcile_specs (e.g. local) must be skipped silently."""
+        self._write_spec(project)
+        wd, transport = self._make_watchdog()
+        del transport.reconcile_specs
+        wd._sync_spec_files(push_all=True)  # must not raise
 
 
 class TestExtractKimiCodeSession:
