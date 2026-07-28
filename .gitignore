@@ -138,9 +138,3 @@ testrun/
 
 # Local scratch output
 prints/
-
-# OpenSpec working directory — changes/ and specs/ are local working state,
-# but config.yaml is tracked, so ignore the contents rather than the directory
-# (a `!` exception cannot re-include a file under an ignored directory).
-openspec/*
-!openspec/config.yaml
