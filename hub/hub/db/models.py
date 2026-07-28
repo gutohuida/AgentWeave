@@ -254,6 +254,31 @@ class ProjectSpec(Base):
     )
 
 
+class ProjectSpecSnapshot(Base):
+    """One reconciliation snapshot per (project, source) — the complete
+    inventory and manifest state a single CLI workspace last reported.
+
+    Kept separate from ``ProjectSpec`` (the content cache) because a snapshot
+    can describe a document that has no content row yet (declared in the
+    manifest but never uploaded) and because multiple machines/checkouts of
+    the same project each get their own row, letting the Hub detect
+    cross-source disagreement instead of trusting whichever polled last.
+    """
+
+    __tablename__ = "project_spec_snapshots"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    manifest_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # "valid" | "absent" | "unreadable" | "invalid"
+    manifest_state: Mapped[str] = mapped_column(String(16), nullable=False)
+    inventory: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+    diagnostics: Mapped[List[Any]] = mapped_column(JSON, nullable=False, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+
 class AgentOutput(Base):
     __tablename__ = "agent_outputs"
 

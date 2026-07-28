@@ -122,7 +122,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0009. The full
+    migration runs cleanly and the version lands at 0010. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -130,7 +130,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0009).
+    # Verify alembic_version is at the latest revision (0010).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -141,7 +141,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0009", f"expected alembic_version=0009, got {version}"
+    assert version == "0010", f"expected alembic_version=0010, got {version}"
 
 
 def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
@@ -204,7 +204,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
     """For a file-based DB, _run_alembic_upgrade must actually apply migrations.
 
     Verifies the H5 fix at the unit level: a file-based URL is not skipped,
-    alembic is invoked, and the alembic_version table ends up at 0009.
+    alembic is invoked, and the alembic_version table ends up at 0010.
     """
     from hub.db.engine import _run_alembic_upgrade
 
@@ -226,7 +226,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0009", f"expected alembic_version=0009, got {version}"
+    assert version == "0010", f"expected alembic_version=0010, got {version}"
 
 
 @pytest.mark.asyncio
