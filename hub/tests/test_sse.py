@@ -3,8 +3,9 @@
 import json
 
 import pytest
-from hub.sse import SSEManager, make_connected_event
 from sse_starlette.event import JSONServerSentEvent, ServerSentEvent
+
+from hub.sse import SSEManager, make_connected_event
 
 
 @pytest.mark.asyncio
@@ -80,8 +81,9 @@ async def test_event_stream_wire_format_no_double_wrap():
     as a "message"-type keepalive. The persisted message was in the DB
     but never reached the UI, causing the "message never goes" symptom.
     """
-    from hub.sse import SSEManager, make_connected_event
     from sse_starlette.event import ServerSentEvent
+
+    from hub.sse import SSEManager, make_connected_event
 
     # 1. Unit-level: the connected helper is a ServerSentEvent (not a string).
     evt = make_connected_event()

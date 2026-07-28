@@ -33,9 +33,7 @@ class SpecSyncRequest(BaseModel):
     @classmethod
     def _validate_path(cls, v: str) -> str:
         if not SPEC_PATH_RE.match(v):
-            raise ValueError(
-                "path must be 'spec/spec.html' or 'spec/changes/<slug>/spec.html'"
-            )
+            raise ValueError("path must be 'spec/spec.html' or 'spec/changes/<slug>/spec.html'")
         return v
 
 
@@ -78,9 +76,7 @@ async def list_specs(
 ):
     """List all specs for this project — ``spec/spec.html`` first, then by path."""
     project_id, _ = project
-    result = await session.execute(
-        select(ProjectSpec).where(ProjectSpec.project_id == project_id)
-    )
+    result = await session.execute(select(ProjectSpec).where(ProjectSpec.project_id == project_id))
     rows = sorted(
         result.scalars().all(),
         key=lambda r: (r.path != "spec/spec.html", r.path),
@@ -97,9 +93,7 @@ async def get_spec(
     """Return one spec's full content; 404 if the path is unknown."""
     project_id, _ = project
     result = await session.execute(
-        select(ProjectSpec).where(
-            ProjectSpec.project_id == project_id, ProjectSpec.path == path
-        )
+        select(ProjectSpec).where(ProjectSpec.project_id == project_id, ProjectSpec.path == path)
     )
     row = result.scalars().first()
     if not row:

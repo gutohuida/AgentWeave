@@ -24,8 +24,9 @@ async def test_setup_token_requires_localhost():
     has the check present.
     """
     # Import the endpoint function to verify it has localhost check
-    from hub.api.v1.setup import get_setup_token
     import inspect
+
+    from hub.api.v1.setup import get_setup_token
 
     source = inspect.getsource(get_setup_token)
     # Verify the check for 127.0.0.1 is present

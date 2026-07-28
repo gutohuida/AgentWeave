@@ -5,9 +5,6 @@ import json
 import platform
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
-
-import pytest
 
 from agentweave.cli import (
     _build_codex_launch_command,
@@ -474,9 +471,9 @@ class TestDatetimeIsTzAware:
         from pathlib import Path
 
         src = Path("src/agentweave/cli.py").read_text(encoding="utf-8")
-        assert "datetime.now(timezone.utc)" in src, (
-            "Expected datetime.now(timezone.utc) somewhere in cli.py"
-        )
+        assert (
+            "datetime.now(timezone.utc)" in src
+        ), "Expected datetime.now(timezone.utc) somewhere in cli.py"
 
 
 class TestTransportJsonAtomicWrite:
@@ -495,7 +492,6 @@ class TestTransportJsonAtomicWrite:
         """Run the git branch of cmd_transport_setup and verify
         transport.json exists with the expected keys, and is chmod 0600
         on POSIX (the write_json_atomic contract)."""
-        import platform
 
         import agentweave.cli as cli_mod
         from agentweave.cli import cmd_transport_setup
@@ -548,15 +544,15 @@ class TestTransportJsonAtomicWrite:
         """Regression guard: utils.save_json must remain a thin wrapper
         around write_json_atomic so the 0600 + atomic semantics are
         inherited by every call site (S8)."""
-        from agentweave import utils
-
         # Inspect the source of save_json
         import inspect
 
+        from agentweave import utils
+
         src = inspect.getsource(utils.save_json)
-        assert "write_json_atomic" in src, (
-            f"utils.save_json no longer delegates to write_json_atomic: {src!r}"
-        )
+        assert (
+            "write_json_atomic" in src
+        ), f"utils.save_json no longer delegates to write_json_atomic: {src!r}"
 
 
 class TestSubprocessRunHasTimeout:
@@ -571,7 +567,6 @@ class TestSubprocessRunHasTimeout:
     """
 
     def _find_undefined_subprocess_runs(self):
-        import re
         from pathlib import Path
 
         src = Path("src/agentweave/cli.py").read_text(encoding="utf-8")
@@ -594,9 +589,10 @@ class TestSubprocessRunHasTimeout:
 
     def test_no_subprocess_run_without_timeout(self):
         issues = self._find_undefined_subprocess_runs()
-        assert not issues, (
-            "M12 regression: subprocess.run calls in cli.py without timeout=:\n"
-            + "\n".join(f"  cli.py:{ln}: {l}" for ln, l in issues)
+        assert (
+            not issues
+        ), "M12 regression: subprocess.run calls in cli.py without timeout=:\n" + "\n".join(
+            f"  cli.py:{ln}: {line}" for ln, line in issues
         )
 
 
@@ -618,6 +614,7 @@ class TestDownloadWithSha256:
         from agentweave.cli import _download_with_sha256
 
         dest = tmp_path / "out.txt"
+
         # The helper will be called with a fake URL; we patch urlretrieve
         # at the urllib.request module level (the helper imports urllib.request
         # as _req inside the function, so the module attribute is the right
@@ -685,4 +682,3 @@ class TestDownloadWithSha256:
         assert result is False
         # Destination should not exist — the corrupted file must be cleaned up
         assert not dest.exists()
-

@@ -2548,15 +2548,6 @@ def _parse_codex_stream_line(line: str) -> tuple:
     return ([], None)
 
 
-def _extract_claude_session_id(line: str) -> Optional[str]:
-    """Parse a JSONL line from claude --output-format stream-json, return session_id if present."""
-    try:
-        data = json.loads(line)
-        return data.get("session_id") or None
-    except Exception:
-        return None
-
-
 def _parse_claude_stream_line(line: str) -> tuple:
     """Parse one JSONL line from `claude --output-format stream-json`.
 

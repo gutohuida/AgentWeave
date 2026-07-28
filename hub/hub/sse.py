@@ -21,6 +21,7 @@ this once and for all.
 """
 
 import asyncio
+import contextlib
 from typing import Any, Dict, List
 
 from sse_starlette.event import JSONServerSentEvent, ServerSentEvent
@@ -44,10 +45,8 @@ class SSEManager:
     def unsubscribe(self, project_id: str, queue: asyncio.Queue) -> None:
         """Remove a subscriber queue (called on client disconnect)."""
         subscribers = self._subscribers.get(project_id, [])
-        try:
+        with contextlib.suppress(ValueError):
             subscribers.remove(queue)
-        except ValueError:
-            pass
         if not subscribers:
             self._subscribers.pop(project_id, None)
 
@@ -63,10 +62,13 @@ class SSEManager:
         """
         event = JSONServerSentEvent(data=data, event=event_type)
         for q in list(self._subscribers.get(project_id, [])):
-            try:
+            # Slow consumer — drop event rather than block. Kept as try/except
+            # rather than contextlib.suppress: this runs per-subscriber on every
+            # broadcast, and suppress() allocates a context manager each pass.
+            try:  # noqa: SIM105
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                pass  # Slow consumer — drop event rather than block
+                pass
 
 
 # Helper so the /api/v1/events generator can produce the "connected" frame

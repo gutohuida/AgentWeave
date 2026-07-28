@@ -2,20 +2,20 @@
 
 from fastapi import APIRouter
 
-from .messages import router as messages_router
-from .tasks import router as tasks_router
-from .questions import router as questions_router
-from .status import router as status_router
-from .events import router as events_router
-from .logs import router as logs_router
-from .agents import router as agents_router
-from .agent_trigger import router as agent_trigger_router
 from .agent_chat import router as agent_chat_router
-from .session_sync import router as session_sync_router
-from .jobs import router as jobs_router
-from .setup import router as setup_router
+from .agent_trigger import router as agent_trigger_router
+from .agents import router as agents_router
+from .events import router as events_router
 from .instructions import router as instructions_router
+from .jobs import router as jobs_router
+from .logs import router as logs_router
+from .messages import router as messages_router
+from .questions import router as questions_router
+from .session_sync import router as session_sync_router
+from .setup import router as setup_router
 from .spec import router as spec_router
+from .status import router as status_router
+from .tasks import router as tasks_router
 
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(messages_router)

@@ -15,12 +15,6 @@ from .constants import (
 _ENV_VAR_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 
 
-class ValidationError(Exception):
-    """Raised when validation fails."""
-
-    pass
-
-
 def _valid_agent(name: Any) -> bool:
     """Return True if name is a valid agent identifier.
 

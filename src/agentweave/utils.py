@@ -147,13 +147,6 @@ def write_json_atomic(
         return False
 
 
-def list_json_files(directory: Path) -> list:
-    """List all JSON files in directory."""
-    if not directory.exists():
-        return []
-    return sorted(directory.glob("*.json"))
-
-
 def print_success(message: str) -> None:
     """Print success message."""
     print(f"[OK] {message}")

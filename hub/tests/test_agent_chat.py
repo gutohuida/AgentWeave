@@ -28,7 +28,6 @@ import pytest
 from hub.db.engine import async_session_factory
 from hub.db.models import AgentOutput, Message
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -319,9 +318,7 @@ async def test_message_with_session_tag_strips_tag_from_displayed_content(app, a
 
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-strip", headers=auth_headers)
     assert resp.status_code == 200
-    msg = next(
-        m for m in resp.json()["messages"] if m["id"] == "m-strip"
-    )
+    msg = next(m for m in resp.json()["messages"] if m["id"] == "m-strip")
     assert msg["content"] == "user-visible"
 
 
@@ -376,11 +373,46 @@ async def test_messages_sorted_by_timestamp(app, auth_headers):
     agent = "agent_t8"
     now = datetime.now(timezone.utc)
     # 3 outputs and 2 messages, interleaved.
-    await _add_output(project_id, out_id="o1", agent=agent, content="first", session_id="sess-Z", timestamp=now - timedelta(seconds=10))
-    await _add_message(project_id, msg_id="m1", recipient=agent, session_id="sess-Z", content="second", timestamp=now - timedelta(seconds=9))
-    await _add_output(project_id, out_id="o2", agent=agent, content="third", session_id="sess-Z", timestamp=now - timedelta(seconds=8))
-    await _add_message(project_id, msg_id="m2", recipient=agent, session_id="sess-Z", content="fourth", timestamp=now - timedelta(seconds=7))
-    await _add_output(project_id, out_id="o3", agent=agent, content="fifth", session_id="sess-Z", timestamp=now - timedelta(seconds=6))
+    await _add_output(
+        project_id,
+        out_id="o1",
+        agent=agent,
+        content="first",
+        session_id="sess-Z",
+        timestamp=now - timedelta(seconds=10),
+    )
+    await _add_message(
+        project_id,
+        msg_id="m1",
+        recipient=agent,
+        session_id="sess-Z",
+        content="second",
+        timestamp=now - timedelta(seconds=9),
+    )
+    await _add_output(
+        project_id,
+        out_id="o2",
+        agent=agent,
+        content="third",
+        session_id="sess-Z",
+        timestamp=now - timedelta(seconds=8),
+    )
+    await _add_message(
+        project_id,
+        msg_id="m2",
+        recipient=agent,
+        session_id="sess-Z",
+        content="fourth",
+        timestamp=now - timedelta(seconds=7),
+    )
+    await _add_output(
+        project_id,
+        out_id="o3",
+        agent=agent,
+        content="fifth",
+        session_id="sess-Z",
+        timestamp=now - timedelta(seconds=6),
+    )
 
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-Z", headers=auth_headers)
     assert resp.status_code == 200

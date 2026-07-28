@@ -29,12 +29,8 @@ router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 
 
 class TriggerAgentRequest(BaseModel):
-    agent: str = Field(
-        ..., max_length=64, description="Target agent name (e.g., 'claude', 'kimi')"
-    )
-    message: str = Field(
-        ..., max_length=10000, description="Message/prompt to send to the agent"
-    )
+    agent: str = Field(..., max_length=64, description="Target agent name (e.g., 'claude', 'kimi')")
+    message: str = Field(..., max_length=10000, description="Message/prompt to send to the agent")
     session_mode: str = Field(
         default="new",
         max_length=64,
@@ -92,14 +88,13 @@ async def trigger_agent(
         )
 
     # Validate work_dir
-    if body.work_dir:
-        if ".." in body.work_dir or "~" in body.work_dir or any(
-            ord(c) < 32 for c in body.work_dir
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid work_dir",
-            )
+    if body.work_dir and (
+        ".." in body.work_dir or "~" in body.work_dir or any(ord(c) < 32 for c in body.work_dir)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid work_dir",
+        )
 
     # Check if agent is in pilot mode and inspect recent heartbeat state.
     agent_result = await session.execute(
@@ -264,7 +259,8 @@ async def get_agent_sessions(
     Returns sessions that the agent has generated output for, ordered by recency.
     Each session includes last_active (most recent output) and started_at (first output).
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
+
     from ...db.models import AgentOutput
 
     project_id, _ = project

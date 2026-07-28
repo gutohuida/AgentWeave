@@ -125,23 +125,3 @@ def is_locked(lock_name: str) -> bool:
         pass
 
     return True
-
-
-def wait_for_unlock(lock_name: str, timeout: float = DEFAULT_TIMEOUT) -> bool:
-    """Wait for a lock to be released.
-
-    Args:
-        lock_name: Name of the lock
-        timeout: Maximum time to wait
-
-    Returns:
-        True if unlocked (or was never locked), False if timeout
-    """
-    start_time = time.time()
-
-    while time.time() - start_time < timeout:
-        if not is_locked(lock_name):
-            return True
-        time.sleep(DEFAULT_RETRY_DELAY)
-
-    return False

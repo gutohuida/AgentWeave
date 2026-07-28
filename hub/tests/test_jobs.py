@@ -1,14 +1,11 @@
 """Tests for job endpoints."""
 
+import importlib.util
+
 import pytest
 
 # Check if croniter is available
-try:
-    from croniter import croniter
-
-    CRONITER_AVAILABLE = True
-except ImportError:
-    CRONITER_AVAILABLE = False
+CRONITER_AVAILABLE = importlib.util.find_spec("croniter") is not None
 
 
 @pytest.mark.asyncio

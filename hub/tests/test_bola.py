@@ -177,9 +177,7 @@ async def project_a_resources(app, project_a):
 
 
 @pytest.mark.asyncio
-async def test_cross_project_object_reads_return_404(
-    app, other_project, project_a_resources
-):
+async def test_cross_project_object_reads_return_404(app, other_project, project_a_resources):
     """Project B's key must not be able to read Project A's individual resources."""
     b = other_project["headers"]
     ids = project_a_resources
@@ -194,15 +192,14 @@ async def test_cross_project_object_reads_return_404(
 
     for method, path in object_endpoints:
         resp = await app.request(method, path, headers=b)
-        assert resp.status_code in (401, 404), (
-            f"BOLA leak on {method} {path}: got {resp.status_code}"
-        )
+        assert resp.status_code in (
+            401,
+            404,
+        ), f"BOLA leak on {method} {path}: got {resp.status_code}"
 
 
 @pytest.mark.asyncio
-async def test_cross_project_list_reads_return_empty_data(
-    app, other_project, project_a_resources
-):
+async def test_cross_project_list_reads_return_empty_data(app, other_project, project_a_resources):
     """Project B's key must see empty project-scoped lists, not Project A's data."""
     b = other_project["headers"]
     a_ids = set(project_a_resources.values())
@@ -226,9 +223,9 @@ async def test_cross_project_list_reads_return_empty_data(
         data = resp.json()
         assert isinstance(data, list), f"{path} did not return a list"
         # No Project A ids should appear anywhere in the response.
-        assert not any(item.get("id") in a_ids for item in data if isinstance(item, dict)), (
-            f"{path} leaked Project A resources"
-        )
+        assert not any(
+            item.get("id") in a_ids for item in data if isinstance(item, dict)
+        ), f"{path} leaked Project A resources"
 
     # Agent sessions returns a dict wrapper; ensure the inner list is empty.
     sessions_resp = await app.get("/api/v1/agent/sessions/alice", headers=b)
@@ -271,9 +268,7 @@ async def test_cross_project_list_reads_return_empty_data(
 
 
 @pytest.mark.asyncio
-async def test_project_a_can_still_read_its_own_resources(
-    app, project_a, project_a_resources
-):
+async def test_project_a_can_still_read_its_own_resources(app, project_a, project_a_resources):
     """Isolation must not break the legitimate owner's access."""
     ids = project_a_resources
     a_headers = project_a["headers"]

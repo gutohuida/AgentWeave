@@ -10,9 +10,8 @@ PR 7 / DB-4: Existing deployments that ran 0007 with the old unbounded
 `ALTER COLUMN`) works as well as PostgreSQL.
 """
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "0008"
 down_revision = "0007"

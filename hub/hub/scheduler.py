@@ -51,8 +51,8 @@ class JobScheduler:
 
     async def start(self) -> None:
         """Start the scheduler and load all enabled jobs from DB."""
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
         from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
         # Create job store using our database
         job_store = SQLAlchemyJobStore(
@@ -85,6 +85,7 @@ class JobScheduler:
     def _get_sync_engine(self) -> Any:
         """Get a sync SQLAlchemy engine for APScheduler jobstore."""
         from sqlalchemy import create_engine
+
         from .config import settings
 
         # Convert async URL to sync URL
@@ -169,7 +170,8 @@ class JobScheduler:
 
         Called automatically after each job fire to maintain history size.
         """
-        from sqlalchemy import select, delete
+        from sqlalchemy import delete, select
+
         from .db.models import JobRun
 
         try:

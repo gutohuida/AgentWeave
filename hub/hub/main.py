@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__
 from .api.v1 import v1_router
 from .config import settings
 from .db.engine import init_db
@@ -80,7 +81,7 @@ def create_app() -> FastAPI:
             "Self-hosted collaboration server for AgentWeave agents. "
             "Provides REST + SSE + MCP interfaces for messages, tasks, and human interaction."
         ),
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
 

@@ -77,17 +77,17 @@ async def create_job(
 
     # Validate cron using croniter
     try:
-        from croniter import CroniterBadCronError, croniter
+        from croniter import croniter
 
         croniter(body.cron)
     except ImportError:
         # croniter not installed - skip validation
-        CroniterBadCronError = ValueError
+        pass
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid cron expression: {e}",
-        )
+        ) from e
 
     job_id = f"job-{short_id()}"
 
@@ -117,12 +117,12 @@ async def create_job(
     session.add(job)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Job with ID '{job_id}' already exists",
-        )
+        ) from e
     await session.refresh(job)
 
     # Add to scheduler if enabled
@@ -246,7 +246,7 @@ async def update_job(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid cron expression: {e}",
-                )
+                ) from e
 
             job.cron = body.cron
             # Recompute next_run
@@ -395,6 +395,7 @@ async def run_job(
         # Get the run_id from the most recent run we just created
         # (scheduler creates it within the same session)
         from sqlalchemy import select
+
         from ...db.models import JobRun
 
         result = await session.execute(
@@ -410,7 +411,7 @@ async def run_job(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fire job: {_safe_error_summary(e)}",
-        )
+        ) from e
 
     # Note: sse_manager.broadcast("job_fired") is already done by _fire_job_internal
     # We only return the success response here to avoid duplicate events

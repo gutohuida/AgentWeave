@@ -3,14 +3,24 @@
 import logging
 import os
 import secrets
-from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..config import settings
-from .models import Base, ApiKey, Project, AIJob, JobRun, ProjectInstructions
+
+# AIJob, JobRun and ProjectInstructions are imported for their side effect: importing
+# a model registers its mapper on Base.metadata, which is what `create_all` (below)
+# iterates over. Dropping them as "unused" silently stops those tables being created.
+from .models import (  # noqa: F401
+    AIJob,
+    ApiKey,
+    Base,
+    JobRun,
+    Project,
+    ProjectInstructions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +75,6 @@ async def _run_alembic_upgrade() -> None:
 
     try:
         import asyncio
-        from functools import partial
 
         from alembic import command
         from alembic.config import Config
@@ -107,7 +116,7 @@ async def init_db() -> None:
     await _run_alembic_upgrade()
 
     async with async_session_factory() as session:
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         # Check if any keys exist
         count = await session.scalar(select(func.count()).select_from(ApiKey))

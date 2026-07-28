@@ -1,6 +1,7 @@
 """Agent monitor endpoints."""
 
 import asyncio
+import contextlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -39,6 +40,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 _24H = timedelta(hours=24)
 _ACTIVE_TASK_STATUSES = ("pending", "assigned", "in_progress", "under_review", "revision_needed")
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+_CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
@@ -63,7 +65,7 @@ async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]
         if path.exists():
             try:
                 return json.loads(path.read_text())
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 continue
     return None
 
@@ -118,10 +120,8 @@ async def list_agents(
     if not roles_defs:
         bundled_roles = Path(__file__).parent.parent.parent / "data" / "roles" / "roles.json"
         if bundled_roles.exists():
-            try:
+            with contextlib.suppress(OSError, json.JSONDecodeError):
                 roles_defs = json.loads(bundled_roles.read_text(encoding="utf-8")).get("roles", {})
-            except (json.JSONDecodeError, IOError):
-                pass
 
     # If no session.json, fall back to agents seen in DB activity (last 24h).
     # This covers the Docker case where the hub can't read the host's session.json —
@@ -259,7 +259,10 @@ async def list_agents(
         .group_by(Task.assignee)
     )
     active_task_counts_res = await session.execute(active_task_counts_q)
-    active_task_counts = {name: cnt for name, cnt in active_task_counts_res}
+    # Not `dict(...)`: a SQLAlchemy Result exposes .keys(), so dict() takes the
+    # mapping path and tries to subscript it rather than iterating (name, count)
+    # rows, raising TypeError. The comprehension forces row iteration.
+    active_task_counts = {name: cnt for name, cnt in active_task_counts_res}  # noqa: C416
 
     # Bulk fetch latest context_warning event data per agent
     ctx_q = (
@@ -322,10 +325,7 @@ async def list_agents(
         if agent_name in agent_roles_data:
             # New format: agent_roles is a dict of lists
             roles_entry = agent_roles_data[agent_name]
-            if isinstance(roles_entry, list):
-                dev_role_keys = roles_entry
-            else:
-                dev_role_keys = [roles_entry]
+            dev_role_keys = roles_entry if isinstance(roles_entry, list) else [roles_entry]
         elif agent_name in agent_assignments:
             # Legacy format: agent_assignments is a dict of single role strings
             legacy_role = agent_assignments[agent_name]
@@ -337,10 +337,7 @@ async def list_agents(
         # Fallback to roles stored in agent config (self-registered agents)
         if not dev_role_keys and agent_meta.get("roles"):
             _meta_roles = agent_meta["roles"]
-            if isinstance(_meta_roles, list):
-                dev_role_keys = _meta_roles
-            else:
-                dev_role_keys = [_meta_roles]
+            dev_role_keys = _meta_roles if isinstance(_meta_roles, list) else [_meta_roles]
 
         # Get primary role (first one) for single-role display
         dev_role_key = dev_role_keys[0] if dev_role_keys else None
@@ -554,7 +551,7 @@ async def _load_role_content(role: str, project_id: str, db: AsyncSession) -> st
                 from agentweave.templates import get_role_md
 
                 role_content = get_role_md(role)
-            except Exception:
+            except Exception as exc:
                 # Fallback for local dev when agentweave isn't installed as a package
                 pkg_file = (
                     Path(__file__).parent.parent.parent.parent.parent.parent
@@ -567,7 +564,7 @@ async def _load_role_content(role: str, project_id: str, db: AsyncSession) -> st
                 if pkg_file.exists():
                     role_content = pkg_file.read_text(encoding="utf-8")
                 else:
-                    raise FileNotFoundError(f"Role template not found: {role}")
+                    raise FileNotFoundError(f"Role template not found: {role}") from exc
 
     # Fetch project instructions from DB
     result = await db.execute(
@@ -786,12 +783,10 @@ async def register_agent(
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
 
-    CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
-
-    if contact_mode not in CONTACT_MODES:
+    if contact_mode not in _CONTACT_MODES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}",
+            detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(_CONTACT_MODES)}",
         )
 
     # Reject collision with configured agents
@@ -877,11 +872,10 @@ async def patch_agent(
     # Update top-level fields if provided
     if "contact_mode" in body:
         contact_mode = body["contact_mode"]
-        CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
-        if contact_mode not in CONTACT_MODES:
+        if contact_mode not in _CONTACT_MODES:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(CONTACT_MODES)}",
+                detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(_CONTACT_MODES)}",
             )
         agent_row.contact_mode = contact_mode
 

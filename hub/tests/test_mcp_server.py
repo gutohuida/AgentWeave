@@ -20,7 +20,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -169,7 +168,7 @@ def test_hub_request_appends_query_params(hub):
     """params={...} must be urlencoded onto the request URL."""
     from hub.mcp_server import _hub_request
 
-    hub.set_response(b'[]')
+    hub.set_response(b"[]")
     _hub_request("GET", "/messages", params={"agent": "alice", "limit": 10})
     url = hub.calls[0]["url"]
     assert "agent=alice" in url
@@ -425,7 +424,7 @@ def test_get_agent_config_for_claude_proxy_agent(hub):
         b'{"data": {"agents": {"minimax": {"env_vars": {'
         b'"ANTHROPIC_BASE_URL": "https://api.minimaxi.com",'
         b'"ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY"'
-        b'}}}}}'
+        b"}}}}}"
     )
     hub.set_responses(agents_body, session_body)
     result = get_agent_config("minimax")
@@ -533,7 +532,7 @@ def test_register_agent_posts_all_fields(hub):
     from hub.mcp_server import register_agent
 
     hub.set_response(b'{"role": "delegate", "context": "hi"}')
-    result = register_agent(
+    register_agent(
         name="bob",
         contact_mode="mcp-push",
         role_request="backend_dev",

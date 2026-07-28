@@ -15,12 +15,10 @@ fix is applied. After the fix, every test in this file must pass.
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -46,12 +44,10 @@ def test_model_error_summary_is_string_500() -> None:
     regressed to Text.
     """
     col = JobRun.__table__.columns["error_summary"]
-    assert isinstance(col.type, sa.String), (
-        f"error_summary must be a String column, got {type(col.type).__name__}"
-    )
-    assert col.type.length == 500, (
-        f"error_summary must have length=500, got {col.type.length}"
-    )
+    assert isinstance(
+        col.type, sa.String
+    ), f"error_summary must be a String column, got {type(col.type).__name__}"
+    assert col.type.length == 500, f"error_summary must have length=500, got {col.type.length}"
 
 
 @pytest.mark.asyncio
@@ -60,9 +56,7 @@ async def test_error_summary_accepts_500_chars(app) -> None:
     payload = "x" * 500
     async with async_session_factory() as session:
         project_id, key_id, job_id, run_id = _seed_minimum(session)
-        run = JobRun(
-            id=run_id, job_id=job_id, project_id=project_id, error_summary=payload
-        )
+        run = JobRun(id=run_id, job_id=job_id, project_id=project_id, error_summary=payload)
         session.add(run)
         await session.commit()
         await session.refresh(run)
@@ -95,11 +89,7 @@ async def test_error_summary_rejects_501_chars(app) -> None:
     run_id = f"run-mig-501-{secrets.token_hex(4)}"
     async with async_session_factory() as session:
         session.add(Project(id=project_id, name="501-char test project"))
-        session.add(
-            ApiKey(
-                id=key_id, project_id=project_id, label="501-test", revoked=False
-            )
-        )
+        session.add(ApiKey(id=key_id, project_id=project_id, label="501-test", revoked=False))
         session.add(
             AIJob(
                 id=job_id,
@@ -110,9 +100,7 @@ async def test_error_summary_rejects_501_chars(app) -> None:
                 cron="0 9 * * *",
             )
         )
-        run = JobRun(
-            id=run_id, job_id=job_id, project_id=project_id, error_summary=payload
-        )
+        run = JobRun(id=run_id, job_id=job_id, project_id=project_id, error_summary=payload)
         session.add(run)
         with pytest.raises((DataError, IntegrityError)):
             await session.commit()
@@ -175,8 +163,7 @@ def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
     cols_before = _inspect_columns(db_url, "job_runs")
     summary_before = next(c for c in cols_before if c["name"] == "error_summary")
     assert not isinstance(summary_before["type"], sa.String) or (
-        isinstance(summary_before["type"], sa.String)
-        and summary_before["type"].length != 500
+        isinstance(summary_before["type"], sa.String) and summary_before["type"].length != 500
     ), (
         "Test setup error: expected error_summary to be a non-String(500) "
         f"type before upgrade, got {type(summary_before['type']).__name__}"
@@ -193,8 +180,7 @@ def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
         f"{type(summary_after['type']).__name__}"
     )
     assert summary_after["type"].length == 500, (
-        f"error_summary must have length=500 after 0008, got "
-        f"{summary_after['type'].length}"
+        f"error_summary must have length=500 after 0008, got " f"{summary_after['type'].length}"
     )
 
 
@@ -287,9 +273,7 @@ def _seed_minimum(session) -> tuple[str, str, str, str]:
     job_id = "job-mig-test-0001"
     run_id = "run-mig-test-0001"
     session.add(Project(id=project_id, name="Migration Test Project"))
-    session.add(
-        ApiKey(id=key_id, project_id=project_id, label="migration-test", revoked=False)
-    )
+    session.add(ApiKey(id=key_id, project_id=project_id, label="migration-test", revoked=False))
     session.add(
         AIJob(
             id=job_id,
@@ -355,19 +339,12 @@ async def _create_old_0007_state_async(db_url: str, db_file: Path) -> None:
             await conn.run_sync(Base.metadata.create_all)
             # Re-add error_summary as Text to simulate the old migration.
             await conn.execute(sa.text("ALTER TABLE job_runs DROP COLUMN error_summary"))
-            await conn.execute(
-                sa.text("ALTER TABLE job_runs ADD COLUMN error_summary TEXT")
-            )
+            await conn.execute(sa.text("ALTER TABLE job_runs ADD COLUMN error_summary TEXT"))
             # Stamp the alembic version.
             await conn.execute(
-                sa.text(
-                    "CREATE TABLE alembic_version "
-                    "(version_num VARCHAR(32) NOT NULL)"
-                )
+                sa.text("CREATE TABLE alembic_version " "(version_num VARCHAR(32) NOT NULL)")
             )
-            await conn.execute(
-                sa.text("INSERT INTO alembic_version (version_num) VALUES ('0007')")
-            )
+            await conn.execute(sa.text("INSERT INTO alembic_version (version_num) VALUES ('0007')"))
     finally:
         await engine.dispose()
 

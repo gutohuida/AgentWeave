@@ -1,9 +1,9 @@
 """Agent chat endpoints — GET /api/v1/agent/{agent}/chat/{session_id}"""
 
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from datetime import datetime, timedelta
+from typing import List, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,25 +123,26 @@ async def get_chat_history(
         #    Only include if they fall within this session's time window AND no other
         #    session started closer to the message (nearest-session wins, prevents
         #    messages from previous new-sessions bleeding into the current one).
-        if msg.session_id is None and "[Session:" not in content:
-            if session_first_ts is not None and session_last_ts is not None:
-                in_window = (
-                    session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
-                )
-                # Exclude if another session started between this message and the current session
-                closer_session_exists = any(
-                    msg.timestamp <= other_ts < session_first_ts
-                    for other_ts in other_first_timestamps
-                )
-                if in_window and not closer_session_exists:
-                    messages.append(
-                        ChatMessage(
-                            id=msg.id,
-                            role="user",
-                            content=content,
-                            timestamp=msg.timestamp,
-                        )
+        if (
+            msg.session_id is None
+            and "[Session:" not in content
+            and session_first_ts is not None
+            and session_last_ts is not None
+        ):
+            in_window = session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
+            # Exclude if another session started between this message and the current session
+            closer_session_exists = any(
+                msg.timestamp <= other_ts < session_first_ts for other_ts in other_first_timestamps
+            )
+            if in_window and not closer_session_exists:
+                messages.append(
+                    ChatMessage(
+                        id=msg.id,
+                        role="user",
+                        content=content,
+                        timestamp=msg.timestamp,
                     )
+                )
 
     # Add agent outputs for this session
     for output in session_outputs:

@@ -561,8 +561,4 @@ class TestCreateTask:
         assert "error" in result
         assert "Failed to save task locally" in result["error"]
         err_lower = result["error"].lower()
-        assert (
-            "not a directory" in err_lower
-            or "cannot" in err_lower
-            or "file exists" in err_lower
-        )
+        assert "not a directory" in err_lower or "cannot" in err_lower or "file exists" in err_lower

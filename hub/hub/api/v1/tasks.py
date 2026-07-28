@@ -78,7 +78,7 @@ async def create_task(
     session.add(task)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         # Another writer beat us to this id (extremely unlikely with an 8-hex
         # suffix, but possible across distributed CLI + Hub). Reject with 409
         # so the caller can decide whether to retry with a fresh id.
@@ -86,7 +86,7 @@ async def create_task(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Task id '{task_id}' already exists",
-        )
+        ) from e
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
     await persist_event(
         session,

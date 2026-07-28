@@ -70,7 +70,7 @@ def _hub_request(
         with urllib.request.urlopen(req, timeout=10) as resp:
             return _json.loads(resp.read())
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Hub API error {exc.code}: {exc.read().decode()}")
+        raise RuntimeError(f"Hub API error {exc.code}: {exc.read().decode()}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +134,9 @@ def get_inbox(agent: str) -> List[Dict[str, Any]]:
     try:
         messages = _hub_request("GET", "/messages", params={"agent": agent})
         for msg in messages:
-            try:
+            # Best-effort read receipts; kept as try/except rather than
+            # contextlib.suppress to avoid a context manager per message.
+            try:  # noqa: SIM105
                 _hub_request("PATCH", f"/messages/{msg['id']}/read")
             except RuntimeError:
                 pass

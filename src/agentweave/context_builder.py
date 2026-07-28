@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from .constants import AGENT_CONTEXT_DIR, AGENTWEAVE_DIR, ROLES_DIR
+from .constants import AGENTWEAVE_DIR, ROLES_DIR
 
 PLACEHOLDER_MARKERS = (
     "[Replace with:",
@@ -468,11 +468,3 @@ def build_external_agent_context(
         missing=sorted(set(missing)),
         metadata={"context_hash": _hash_text(context), "context_path": None},
     )
-
-
-def write_agent_context_file(result: ContextBuildResult) -> Path:
-    """Write a built context result to `.agentweave/context/<agent>.md`."""
-    AGENT_CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
-    target = AGENT_CONTEXT_DIR / f"{result.agent}.md"
-    target.write_text(result.context, encoding="utf-8")
-    return target

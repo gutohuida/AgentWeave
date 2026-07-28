@@ -142,9 +142,7 @@ async def test_create_task_honors_client_supplied_id(app, auth_headers):
     assert resp.json()["id"] == "task-custom1234"
 
     # Subsequent get by that id must succeed.
-    resp = await app.get(
-        "/api/v1/tasks/task-custom1234", headers=auth_headers
-    )
+    resp = await app.get("/api/v1/tasks/task-custom1234", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["id"] == "task-custom1234"
 
@@ -152,9 +150,7 @@ async def test_create_task_honors_client_supplied_id(app, auth_headers):
 @pytest.mark.asyncio
 async def test_create_task_generates_id_when_omitted(app, auth_headers):
     """When the client omits id, the Hub still generates one."""
-    resp = await app.post(
-        "/api/v1/tasks", json={"title": "No id"}, headers=auth_headers
-    )
+    resp = await app.post("/api/v1/tasks", json={"title": "No id"}, headers=auth_headers)
     assert resp.status_code == 201
     body = resp.json()
     assert body["id"].startswith("task-")
@@ -166,10 +162,10 @@ async def test_create_task_rejects_malformed_id(app, auth_headers):
     """An id with characters outside [A-Za-z0-9_-] or with leading digit
     is rejected — protects against path traversal and entity-type spoofing."""
     for bad in [
-        "../etc/passwd",          # path traversal
-        "task bad space",         # whitespace
-        "1task-leading-digit",    # leading digit
-        "",                       # empty
+        "../etc/passwd",  # path traversal
+        "task bad space",  # whitespace
+        "1task-leading-digit",  # leading digit
+        "",  # empty
     ]:
         resp = await app.post(
             "/api/v1/tasks",

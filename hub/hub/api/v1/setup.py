@@ -38,9 +38,7 @@ def _is_local_address(host: Optional[str]) -> bool:
         return True
     if a == 10:
         return True
-    if a == 172 and 16 <= b <= 31:
-        return True
-    return False
+    return a == 172 and 16 <= b <= 31
 
 
 @router.get("/setup/token")
@@ -62,7 +60,7 @@ async def get_setup_token(request: Request) -> dict[str, Any]:
 
     async with async_session_factory() as session:
         # Get the first non-revoked API key
-        result = await session.execute(select(ApiKey).where(ApiKey.revoked == False).limit(1))
+        result = await session.execute(select(ApiKey).where(ApiKey.revoked.is_(False)).limit(1))
         api_key = result.scalar_one_or_none()
 
         if not api_key:

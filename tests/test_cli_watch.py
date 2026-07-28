@@ -46,9 +46,7 @@ def test_cmd_start_does_not_leak_fd_on_posix(tmp_path, monkeypatch):
 
     after = set(os.listdir(f"/proc/{os.getpid()}/fd"))
     # No new fds should be open in the parent after cmd_start returns
-    assert before == after, (
-        f"fd leak: opened={after - before}, closed={before - after}"
-    )
+    assert before == after, f"fd leak: opened={after - before}, closed={before - after}"
 
 
 def test_cmd_start_source_does_not_open_watchdog_log_in_parent():
@@ -60,9 +58,9 @@ def test_cmd_start_source_does_not_open_watchdog_log_in_parent():
     # The buggy line was:
     #   log_fh = open(WATCHDOG_LOG_FILE, "a", encoding="utf-8")
     # The fix removes this. Check that the substring is gone.
-    assert "log_fh = open(WATCHDOG_LOG_FILE" not in src, (
-        "H8 regression: cmd_start must not open WATCHDOG_LOG_FILE in the parent"
-    )
+    assert (
+        "log_fh = open(WATCHDOG_LOG_FILE" not in src
+    ), "H8 regression: cmd_start must not open WATCHDOG_LOG_FILE in the parent"
 
 
 def test_cmd_start_passes_devnull_to_popen(tmp_path, monkeypatch):
@@ -97,8 +95,8 @@ def test_cmd_start_passes_devnull_to_popen(tmp_path, monkeypatch):
 
     kw = captured.get("kwargs", {})
     # The child should not receive a parent-owned log fd
-    assert kw.get("stdout") is subprocess.DEVNULL, (
-        f"stdout should be DEVNULL, got {kw.get('stdout')!r}"
-    )
+    assert (
+        kw.get("stdout") is subprocess.DEVNULL
+    ), f"stdout should be DEVNULL, got {kw.get('stdout')!r}"
     assert kw.get("stderr") is subprocess.DEVNULL
     assert kw.get("stdin") is subprocess.DEVNULL

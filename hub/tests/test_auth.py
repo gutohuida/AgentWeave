@@ -36,11 +36,9 @@ async def test_old_api_key_query_rejected_for_sse(app):
 
     token = "aw_live_testkey_abcdefgh"
     try:
-        resp = await app.get(
-            "/api/v1/events", params={"token": token}, timeout=httpx.Timeout(1.0)
-        )
+        resp = await app.get("/api/v1/events", params={"token": token}, timeout=httpx.Timeout(1.0))
     except httpx.ReadTimeout:
-        assert False, "SSE stream accepted raw API key and hung instead of 401"
+        raise AssertionError("SSE stream accepted raw API key and hung instead of 401") from None
     assert resp.status_code == 401
 
 
@@ -64,7 +62,7 @@ async def test_sse_ticket_flow(app, auth_headers):
     except (asyncio.TimeoutError, TimeoutError):
         pass  # expected: ticket accepted and stream is held open
     else:
-        assert False, "SSE stream returned immediately instead of staying open"
+        raise AssertionError("SSE stream returned immediately instead of staying open")
 
 
 @pytest.mark.asyncio

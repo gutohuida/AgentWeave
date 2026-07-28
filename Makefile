@@ -1,4 +1,4 @@
-.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format hub-build hub-up hub-down hub-full-build sync-roles
+.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format format-check hub-build hub-up hub-down hub-full-build sync-roles
 
 # ── CLI (src/agentweave) ─────────────────────────────────────────────────────
 
@@ -25,11 +25,14 @@ test-all: test-cli test-hub
 # ── Code quality ─────────────────────────────────────────────────────────────
 
 lint:
-	ruff check src/
+	ruff check src/ hub/ tests/
 	mypy src/
 
 format:
-	black src/ hub/hub/
+	black src/ hub/hub/ hub/tests/ tests/
+
+format-check:
+	black --check src/ hub/hub/ hub/tests/ tests/
 
 # ── Docker (Hub) ─────────────────────────────────────────────────────────────
 

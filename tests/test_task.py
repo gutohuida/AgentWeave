@@ -1,7 +1,5 @@
 """Tests for agentweave.task."""
 
-import pytest
-
 from agentweave.constants import TASKS_ACTIVE_DIR, TASKS_COMPLETED_DIR
 from agentweave.task import Task, TaskStatus
 from agentweave.utils import ensure_dirs

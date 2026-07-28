@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
     Index,
-    JSON,
     String,
     Text,
 )

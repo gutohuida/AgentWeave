@@ -1,13 +1,8 @@
 """Tests for agentweave hub CLI commands."""
 
-import subprocess
-import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agentweave.cli import (
-    HUB_DIR,
     _docker_available,
     _fetch_setup_token,
     _hub_health_check,
@@ -110,7 +105,9 @@ class TestHubStartCommand:
         args = MagicMock()
         args.native = False
         args.no_detach = False
-        with patch("agentweave.cli._docker_available", return_value=True):
+        # Kept nested: parenthesized multi-context `with` is a syntax error on
+        # Python 3.8/3.9, which this suite still runs against in CI.
+        with patch("agentweave.cli._docker_available", return_value=True):  # noqa: SIM117
             with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
                 result = cmd_hub_start(args)
                 assert result == 0
@@ -156,6 +153,6 @@ class TestHubStatusCommand:
         with patch(
             "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
         ):
-            result = cmd_hub_status(MagicMock())
+            cmd_hub_status(MagicMock())
             captured = capsys.readouterr()
             assert "stopped" in captured.out.lower()

@@ -23,7 +23,9 @@ async def test_sync_list_get_round_trip(app, auth_headers):
     assert specs[0]["path"] == "spec/spec.html"
     assert specs[0]["updated_at"]
 
-    get_resp = await app.get(f"{BASE}/spec", params={"path": "spec/spec.html"}, headers=auth_headers)
+    get_resp = await app.get(
+        f"{BASE}/spec", params={"path": "spec/spec.html"}, headers=auth_headers
+    )
     assert get_resp.status_code == 200
     data = get_resp.json()
     assert data["path"] == "spec/spec.html"
@@ -49,7 +51,9 @@ async def test_sync_upsert_overwrites_content_and_updates_timestamp(app, auth_he
     assert resp2.status_code == 200
     assert resp2.json()["updated_at"] >= first_updated
 
-    get_resp = await app.get(f"{BASE}/spec", params={"path": "spec/spec.html"}, headers=auth_headers)
+    get_resp = await app.get(
+        f"{BASE}/spec", params={"path": "spec/spec.html"}, headers=auth_headers
+    )
     assert get_resp.status_code == 200
     assert get_resp.json()["content"] == "<html>new</html>"
 

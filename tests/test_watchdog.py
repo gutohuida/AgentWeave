@@ -67,8 +67,14 @@ class TestAgentPingCmdKimi:
         """Model flag is appended when agent config has a model."""
         cmd = _agent_ping_cmd("kimi-dev", "do the task")
         assert cmd == [
-            "kimi", "--print", "--output-format", "stream-json",
-            "--model", "kimi-k2", "-p", "do the task",
+            "kimi",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--model",
+            "kimi-k2",
+            "-p",
+            "do the task",
         ]
         assert "--wire" not in cmd
 
@@ -76,7 +82,12 @@ class TestAgentPingCmdKimi:
         """No --model flag when model is not configured."""
         cmd = _agent_ping_cmd("kimi-qa", "do the task")
         assert cmd == [
-            "kimi", "--print", "--output-format", "stream-json", "-p", "do the task",
+            "kimi",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "-p",
+            "do the task",
         ]
         assert "--wire" not in cmd
 
@@ -84,8 +95,16 @@ class TestAgentPingCmdKimi:
         """Resume keeps the configured model flag and uses -S."""
         cmd = _agent_ping_cmd("kimi-dev", "do the task", session_id="sess-123")
         assert cmd == [
-            "kimi", "--print", "--output-format", "stream-json",
-            "--model", "kimi-k2", "-S", "sess-123", "-p", "do the task",
+            "kimi",
+            "--print",
+            "--output-format",
+            "stream-json",
+            "--model",
+            "kimi-k2",
+            "-S",
+            "sess-123",
+            "-p",
+            "do the task",
         ]
         assert "--wire" not in cmd
 
@@ -139,8 +158,13 @@ class TestAgentPingCmdKimiCode:
         """kimi-code v0: --output-format stream-json + -m <model> + -p (no -y unless enabled)."""
         cmd = _agent_ping_cmd("kimi-dev", "do the task")
         assert cmd == [
-            "kimi", "--output-format", "stream-json",
-            "-m", "kimi-k2", "-p", "do the task",
+            "kimi",
+            "--output-format",
+            "stream-json",
+            "-m",
+            "kimi-k2",
+            "-p",
+            "do the task",
         ]
         assert "-y" not in cmd
 
@@ -148,7 +172,11 @@ class TestAgentPingCmdKimiCode:
         """kimi-code v0: no -m flag when model is not configured; no -y unless enabled."""
         cmd = _agent_ping_cmd("kimi-qa", "do the task")
         assert cmd == [
-            "kimi", "--output-format", "stream-json", "-p", "do the task",
+            "kimi",
+            "--output-format",
+            "stream-json",
+            "-p",
+            "do the task",
         ]
         assert "-y" not in cmd
 
@@ -156,8 +184,15 @@ class TestAgentPingCmdKimiCode:
         """kimi-code v0: -S <id> placed before -p for session resume; no -y unless enabled."""
         cmd = _agent_ping_cmd("kimi-dev", "do the task", session_id="ses-uuid-here")
         assert cmd == [
-            "kimi", "--output-format", "stream-json",
-            "-m", "kimi-k2", "-S", "ses-uuid-here", "-p", "do the task",
+            "kimi",
+            "--output-format",
+            "stream-json",
+            "-m",
+            "kimi-k2",
+            "-S",
+            "ses-uuid-here",
+            "-p",
+            "do the task",
         ]
         assert "-y" not in cmd
 
@@ -166,15 +201,26 @@ class TestAgentPingCmdKimiCode:
         cmd = _agent_ping_cmd("kimi-yolo", "do the task")
         assert "-y" in cmd
         assert cmd == [
-            "kimi", "--output-format", "stream-json", "-y", "-p", "do the task",
+            "kimi",
+            "--output-format",
+            "stream-json",
+            "-y",
+            "-p",
+            "do the task",
         ]
 
     def test_kimi_code_with_yolo_and_resume(self):
         """kimi-code v0: -y + -S <id> + -p when both yolo and session_id are set."""
         cmd = _agent_ping_cmd("kimi-yolo", "do the task", session_id="ses-uuid-here")
         assert cmd == [
-            "kimi", "--output-format", "stream-json", "-y",
-            "-S", "ses-uuid-here", "-p", "do the task",
+            "kimi",
+            "--output-format",
+            "stream-json",
+            "-y",
+            "-S",
+            "ses-uuid-here",
+            "-p",
+            "do the task",
         ]
 
 
@@ -270,9 +316,7 @@ class TestKimiCodeParser:
         from agentweave.watchdog import _KimiCodeParser
 
         parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}'
-        )
+        out = parser.feed('{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}')
         assert out == ["  💬 Hi there"]
 
     def test_v1_assistant_think_renders_emoji(self):
@@ -357,9 +401,7 @@ class TestKimiCodeParser:
         from agentweave.watchdog import _KimiCodeParser
 
         parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"role":"user","content":[{"type":"text","text":"hello"}]}'
-        )
+        out = parser.feed('{"role":"user","content":[{"type":"text","text":"hello"}]}')
         assert out == []
 
     def test_v1_tool_result_string_content_renders_text(self):
@@ -377,9 +419,7 @@ class TestKimiCodeParser:
         from agentweave.watchdog import _KimiCodeParser
 
         parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"role":"tool","content":"","tool_call_id":"call-1"}'
-        )
+        out = parser.feed('{"role":"tool","content":"","tool_call_id":"call-1"}')
         assert out == ["     ✓ ok"]
 
     def test_v1_event_with_unknown_role_is_skipped(self):
@@ -410,9 +450,7 @@ class TestKimiCodeParser:
             _json.dumps(
                 {
                     "role": "assistant",
-                    "content": [
-                        {"type": "think", "think": "I need to check inbox"}
-                    ],
+                    "content": [{"type": "think", "think": "I need to check inbox"}],
                     "tool_calls": [
                         {
                             "type": "function",
@@ -456,9 +494,7 @@ class TestKimiCodeParser:
         from agentweave.watchdog import _KimiCodeParser
 
         parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"role":"assistant","content":"Done! I wrote helloworld.py."}'
-        )
+        out = parser.feed('{"role":"assistant","content":"Done! I wrote helloworld.py."}')
         assert out == ["  💬 Done! I wrote helloworld.py."]
 
     def test_v1_assistant_empty_string_content_emits_nothing(self):
@@ -599,7 +635,7 @@ class TestAgentPingCmdOpencode:
 
     def test_opencode_with_context_file(self):
         """Role file injected when present, with absolute path so opencode
-        can find it from any cwd (including UNC paths like \\wsl.localhost\...)."""
+        can find it from any cwd (including UNC paths like \\wsl.localhost\\...)."""
         context_file = self.context_dir / "opencode-dev.md"
         context_file.write_text("# Context")
         cmd = _agent_ping_cmd("opencode-dev", "do the task")
@@ -644,16 +680,16 @@ class TestAgentPingCmdOpencode:
             },
         }
         session = Session(session_data)
-        with patch("agentweave.watchdog.AGENTS_DIR", project_root / ".agentweave" / "agents"), patch(
-            "agentweave.watchdog.AGENT_CONTEXT_DIR", ctx_dir
-        ), patch("agentweave.session.Session.load", return_value=session):
+        with patch(
+            "agentweave.watchdog.AGENTS_DIR", project_root / ".agentweave" / "agents"
+        ), patch("agentweave.watchdog.AGENT_CONTEXT_DIR", ctx_dir), patch(
+            "agentweave.session.Session.load", return_value=session
+        ):
             cmd = wd._agent_ping_cmd("opencode-unc", "do the task")
 
         idx = cmd.index("--file")
         file_arg = Path(cmd[idx + 1])
-        assert file_arg.is_absolute(), (
-            f"opencode --file must be absolute, got relative: {file_arg}"
-        )
+        assert file_arg.is_absolute(), f"opencode --file must be absolute, got relative: {file_arg}"
         # Must point to the actual file regardless of cwd
         assert file_arg.exists()
 
@@ -703,6 +739,7 @@ class TestAgentPingCmdOpencode:
         opencode falls back to C:\\Windows and never loads the project
         config, leaving MCP tools unavailable to the agent."""
         from pathlib import Path as _Path
+
         cmd = _agent_ping_cmd("opencode-qa", "do the task")
         assert "--dir" in cmd
         idx = cmd.index("--dir")
@@ -739,9 +776,7 @@ class TestOpencodeEnvForwarding:
             },
         )
         session.save()
-        monkeypatch.setattr(
-            "agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode"
-        )
+        monkeypatch.setattr("agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode")
         monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
         monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
         popen = MagicMock()
@@ -786,9 +821,7 @@ class TestOpencodeEnvForwarding:
             },
         )
         session.save()
-        monkeypatch.setattr(
-            "agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode"
-        )
+        monkeypatch.setattr("agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode")
         monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
         monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
         popen = MagicMock()
@@ -813,9 +846,14 @@ class TestOpencodeEnvForwarding:
         # opencode does NOT block on missing keys (unlike claude_proxy)
         popen.assert_called()
         # a [WARN] was emitted via logger.warning (Q1: print -> logger migration)
-        assert any("MINIMAX_API_KEY" in rec.getMessage() and "not set" in rec.getMessage() for rec in caplog.records)
+        assert any(
+            "MINIMAX_API_KEY" in rec.getMessage() and "not set" in rec.getMessage()
+            for rec in caplog.records
+        )
 
-    def test_opencode_env_vars_entry_skips_name_to_name_resolution_for_literal_values(self, tmp_path, monkeypatch):
+    def test_opencode_env_vars_entry_skips_name_to_name_resolution_for_literal_values(
+        self, tmp_path, monkeypatch
+    ):
         """Literal-value entries (key != value) are passed through unchanged."""
         from agentweave import watchdog as wd
         from agentweave.session import Session
@@ -834,9 +872,7 @@ class TestOpencodeEnvForwarding:
             },
         )
         session.save()
-        monkeypatch.setattr(
-            "agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode"
-        )
+        monkeypatch.setattr("agentweave.diagnostics.shutil.which", lambda _cli: "/usr/bin/opencode")
         monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
         monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
         popen = MagicMock()
@@ -1566,7 +1602,6 @@ class TestPopenUsesUtf8Encoding:
         required.
         """
         from pathlib import Path
-        import re
 
         src = Path("src/agentweave/watchdog.py").read_text(encoding="utf-8")
         # Find every `subprocess.Popen(` call site and check the
@@ -1584,7 +1619,7 @@ class TestPopenUsesUtf8Encoding:
         assert not issues, (
             "M5 regression: subprocess.Popen(text=True, ...) calls without "
             "encoding='utf-8' in watchdog.py:\n"
-            + "\n".join(f"  watchdog.py:{ln}: {l}" for ln, l in issues)
+            + "\n".join(f"  watchdog.py:{ln}: {line}" for ln, line in issues)
         )
 
     def test_watchdog_popen_kwargs_include_errors_replace(self):
@@ -1606,7 +1641,7 @@ class TestPopenUsesUtf8Encoding:
         assert not issues, (
             "M5 regression: subprocess.Popen(text=True, ...) calls without "
             'errors="replace" in watchdog.py:\n'
-            + "\n".join(f"  watchdog.py:{ln}: {l}" for ln, l in issues)
+            + "\n".join(f"  watchdog.py:{ln}: {line}" for ln, line in issues)
         )
 
 

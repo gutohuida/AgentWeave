@@ -1,8 +1,10 @@
 """Tests for agentweave.jobs module."""
 
-import pytest
 from datetime import datetime, timedelta
-from agentweave.jobs import Job, JobRun, CRONITER_AVAILABLE
+
+import pytest
+
+from agentweave.jobs import CRONITER_AVAILABLE, Job, JobRun
 
 
 class TestJobRun:

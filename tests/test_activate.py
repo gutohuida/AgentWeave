@@ -7,10 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 import yaml
-
-from agentweave.config import AgentWeaveConfig, AgentConfig, ProjectConfig, HubConfig
 
 
 @pytest.fixture
@@ -60,7 +57,7 @@ class TestActivateCommand:
         (tmp_path / "agentweave.yml").write_text(yaml.dump(config))
 
         # Run activate
-        result = subprocess.run(
+        subprocess.run(
             [sys.executable, "-m", "agentweave", "activate"],
             capture_output=True,
             text=True,
@@ -90,7 +87,7 @@ class TestActivateCommand:
         (tmp_path / "agentweave.yml").write_text(yaml.dump(config))
 
         # First activate
-        result1 = subprocess.run(
+        subprocess.run(
             [sys.executable, "-m", "agentweave", "activate"],
             capture_output=True,
             text=True,
@@ -101,7 +98,7 @@ class TestActivateCommand:
         session1 = json.loads(session_file.read_text())
 
         # Second activate
-        result2 = subprocess.run(
+        subprocess.run(
             [sys.executable, "-m", "agentweave", "activate"],
             capture_output=True,
             text=True,
@@ -252,8 +249,11 @@ class TestActivateMcp:
             calls["cmd_mcp_setup"] += 1
             # Simulate the file-based registration by writing opencode.json
             import json as _json
+
             (Path(".").resolve() / "opencode.json").write_text(
-                _json.dumps({"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}})
+                _json.dumps(
+                    {"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}}
+                )
             )
             return 0
 
@@ -312,9 +312,7 @@ class TestActivateMcp:
         assert calls["cmd_mcp_setup"] == 0
         assert result == 0
 
-    def test_opencode_file_missing_triggers_registration(
-        self, session_with_opencode, monkeypatch
-    ):
+    def test_opencode_file_missing_triggers_registration(self, session_with_opencode, monkeypatch):
         """When opencode.json is missing (or has no agentweave entry)
         and kimi is registered, _activate_mcp must still call
         cmd_mcp_setup to write the opencode MCP block."""
@@ -325,8 +323,11 @@ class TestActivateMcp:
         def _fake_setup(args):
             calls["cmd_mcp_setup"] += 1
             import json as _json
+
             (Path(".").resolve() / "opencode.json").write_text(
-                _json.dumps({"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}})
+                _json.dumps(
+                    {"mcp": {"agentweave": {"type": "local", "command": ["agentweave-mcp"]}}}
+                )
             )
             return 0
 
@@ -403,7 +404,7 @@ class TestActivateMcp:
         with patch("agentweave.cli.cmd_mcp_setup", _fake_setup), patch(
             "subprocess.run", return_value=fake_kimi_mcp_list
         ):
-            result = _activate_mcp()
+            _activate_mcp()
 
         assert calls["cmd_mcp_setup"] == 1
 

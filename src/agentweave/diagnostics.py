@@ -33,7 +33,6 @@ from .constants import (
 SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.I)
 SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
 
-STATUS_ORDER = {"pass": 0, "warn": 1, "fail": 2}
 
 REQUIRED_CONTEXT_SECTIONS = (
     "## Project Operating Profile",
@@ -988,14 +987,6 @@ def summarize(results: Iterable[DiagnosticResult]) -> dict[str, int]:
     for result in results:
         summary[result.status] = summary.get(result.status, 0) + 1
     return summary
-
-
-def worst_status(results: Iterable[DiagnosticResult]) -> str:
-    worst = "pass"
-    for result in results:
-        if STATUS_ORDER.get(result.status, 0) > STATUS_ORDER[worst]:
-            worst = result.status
-    return worst
 
 
 def format_results(results: Iterable[DiagnosticResult]) -> str:
