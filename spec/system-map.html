@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave — System Map</title>
+<meta name="description" content="Durable system-level specification for AgentWeave: intent, constraints, bounded contexts and ownership, and the shared contracts every child change spec must respect.">
+<meta name="aw-spec-kind" content="system-map">
+<meta name="aw-spec-name" content="agentweave-system-map">
+<meta name="aw-spec-status" content="living">
+<meta name="aw-spec-generated-at" content="2026-07-27">
+<style>
+  /* 1. Light-mode defaults (also used standalone, outside the Hub). */
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --surface: #f7f8fa; --surface-2: #eef1f5; --border: #d9dee6;
+    --text: #1b1f24; --text-dim: #57606a; --accent: #4c56d6; --accent-soft: #eceefd;
+    --normative: #0b6b3a; --normative-soft: #e8f6ee; --note: #0969da; --note-soft: #ddf0ff;
+    --warn: #9a6700; --warn-soft: #fff4d6; --example: #6639ba; --example-soft: #f2ecfb;
+    --reference: #57606a; --reference-soft: #f0f2f5; --danger: #cf222e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sidebar-w: 300px;
+  }
+  /* 2. Standalone dark mode (file opened directly, OS set to dark). */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface-2: #1c2230; --border: #2d333b;
+      --text: #e6edf3; --text-dim: #9198a1; --accent: #7c85ff; --accent-soft: #1d2140;
+      --normative: #3fb950; --normative-soft: #12261a; --note: #58a6ff; --note-soft: #0d2136;
+      --warn: #d29922; --warn-soft: #2b2413; --example: #a371f7; --example-soft: #21193a;
+      --reference: #9198a1; --reference-soft: #171b22; --danger: #f85149;
+    }
+  }
+  /* 3. Explicit overrides — the Hub stamps data-theme on <html> and must win over the OS. */
+  :root[data-theme="light"] {
+    --bg: #ffffff; --surface: #f7f8fa; --surface-2: #eef1f5; --border: #d9dee6;
+    --text: #1b1f24; --text-dim: #57606a; --accent: #4c56d6; --accent-soft: #eceefd;
+    --normative: #0b6b3a; --normative-soft: #e8f6ee; --note: #0969da; --note-soft: #ddf0ff;
+    --warn: #9a6700; --warn-soft: #fff4d6; --example: #6639ba; --example-soft: #f2ecfb;
+    --reference: #57606a; --reference-soft: #f0f2f5; --danger: #cf222e;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2230; --border: #2d333b;
+    --text: #e6edf3; --text-dim: #9198a1; --accent: #7c85ff; --accent-soft: #1d2140;
+    --normative: #3fb950; --normative-soft: #12261a; --note: #58a6ff; --note-soft: #0d2136;
+    --warn: #d29922; --warn-soft: #2b2413; --example: #a371f7; --example-soft: #21193a;
+    --reference: #9198a1; --reference-soft: #171b22; --danger: #f85149;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+  body { margin: 0; font-family: var(--sans); color: var(--text); background: var(--bg); line-height: 1.6; font-size: 16px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
+  code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; line-height: 1.45; }
+  pre code { background: none; padding: 0; }
+
+  #layout { display: flex; min-height: 100vh; }
+  #sidebar { width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); position: sticky; top: 0; height: 100vh;
+    overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border); padding: 1rem 0.75rem 3rem; }
+  #sidebar h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin: 0.25rem 0.5rem 0.5rem; }
+  #toc ul { list-style: none; margin: 0; padding: 0; }
+  #toc a { display: block; padding: 0.28rem 0.5rem; border-radius: 6px; color: var(--text-dim); font-size: 0.9rem; line-height: 1.35; }
+  #toc a:hover { background: var(--surface-2); text-decoration: none; color: var(--text); }
+  #toc a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  #toc .lvl-1 { font-weight: 600; color: var(--text); margin-top: 0.4rem; }
+  #toc .lvl-2 a { padding-left: 1.4rem; font-size: 0.85rem; }
+
+  main { flex: 1 1 auto; max-width: 960px; margin: 0 auto; padding: 2rem 2.5rem 6rem; min-width: 0; }
+  header.doc-header { border-bottom: 2px solid var(--border); padding-bottom: 1.25rem; margin-bottom: 1.5rem; }
+  header.doc-header h1 { font-size: 2rem; margin: 0 0 0.35rem; }
+  header.doc-header .subtitle { color: var(--text-dim); font-size: 1.05rem; }
+  .meta-badges { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .meta-badges span { font-size: 0.78rem; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border); }
+
+  section { margin: 2.75rem 0; scroll-margin-top: 1rem; }
+  section > h2 { font-size: 1.6rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; margin-top: 0; }
+  h3 { font-size: 1.2rem; margin-top: 2rem; }
+  h2 .sec-num, h3 .sec-num { color: var(--text-dim); font-weight: 600; margin-right: 0.5rem; }
+  .anchor { color: var(--text-dim); opacity: 0; margin-left: 0.4rem; font-weight: 400; text-decoration: none; }
+  h2:hover .anchor, h3:hover .anchor { opacity: 1; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--surface); }
+  .table-scroll { overflow-x: auto; }
+
+  .rfc { font-variant: small-caps; font-weight: 700; letter-spacing: 0.02em; }
+  .rfc.must { color: var(--normative); }
+  .rfc.should { color: var(--note); }
+  .rfc.may { color: var(--example); }
+
+  .block { border-radius: 8px; padding: 0.85rem 1rem; margin: 1rem 0; border: 1px solid var(--border); }
+  .block .label { font-weight: 700; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; display: block; margin-bottom: 0.3rem; }
+  .requirement { background: var(--normative-soft); border-color: var(--normative); }
+  .requirement .label { color: var(--normative); }
+  .note { background: var(--note-soft); border-color: var(--note); }
+  .note .label { color: var(--note); }
+  .warning { background: var(--warn-soft); border-color: var(--warn); }
+  .warning .label { color: var(--warn); }
+  .example { background: var(--example-soft); border-color: var(--example); }
+  .example .label { color: var(--example); }
+  .reference { background: var(--reference-soft); border-color: var(--reference); border-style: dashed; }
+  .reference .label { color: var(--reference); }
+  .openissue { background: var(--warn-soft); border-color: var(--danger); border-left: 4px solid var(--danger); }
+  .openissue .label { color: var(--danger); }
+
+  .req-id { display: inline-block; font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+    background: var(--normative); color: #fff; padding: 0.1rem 0.45rem; border-radius: 4px; margin-right: 0.5rem; vertical-align: middle; }
+  .req-id.info { background: var(--reference); }
+  dfn { font-style: normal; font-weight: 700; color: var(--accent); }
+  ol.algorithm { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: 0.85rem 1rem 0.85rem 2.4rem; }
+  ol.algorithm li { margin: 0.3rem 0; }
+  footer.doc-footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 0.85rem; }
+
+  #tocToggle { display: none; }
+  @media (max-width: 900px) {
+    #sidebar { position: fixed; z-index: 50; transform: translateX(-100%); transition: transform 0.2s; box-shadow: 2px 0 12px rgba(0,0,0,0.2); }
+    #sidebar.open { transform: translateX(0); }
+    #tocToggle { display: block; position: fixed; top: 0.75rem; left: 0.75rem; z-index: 60; background: var(--accent);
+      color: #fff; border: none; border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 1rem; cursor: pointer; }
+    main { padding: 3.5rem 1.1rem 5rem; }
+  }
+</style>
+</head>
+<body>
+<button id="tocToggle" aria-label="Toggle navigation">☰ Contents</button>
+<div id="layout">
+<nav id="sidebar">
+  <h2>Contents</h2>
+  <div id="toc">
+  <ul>
+    <li class="lvl-1"><a href="#front-matter">0. Front Matter</a></li>
+    <li class="lvl-2"><a href="#document-role">0.1 Role of this document</a></li>
+    <li class="lvl-2"><a href="#conformance">0.2 Conformance classes</a></li>
+    <li class="lvl-2"><a href="#conventions">0.3 Typographic conventions</a></li>
+    <li class="lvl-1"><a href="#intent">1. System Intent</a></li>
+    <li class="lvl-1"><a href="#constraints">2. Durable Constraints</a></li>
+    <li class="lvl-1"><a href="#contexts">3. Domains &amp; Ownership</a></li>
+    <li class="lvl-1"><a href="#contracts">4. Shared Contracts</a></li>
+    <li class="lvl-1"><a href="#change-rules">5. Rules for Child Specs</a></li>
+    <li class="lvl-1"><a href="#non-goals">6. Non-Goals of This Document</a></li>
+    <li class="lvl-1"><a href="#index">7. Requirements Index</a></li>
+    <li class="lvl-1"><a href="#changelog">8. Changelog</a></li>
+  </ul>
+  </div>
+</nav>
+<main>
+<header class="doc-header">
+  <h1>AgentWeave — System Map</h1>
+  <div class="subtitle">Durable system context: intent, constraints, bounded contexts and ownership, and the shared
+  contracts every child change specification must respect.</div>
+  <div class="meta-badges">
+    <span>Status: Living</span>
+    <span>Scope: whole system</span>
+    <span>Last reviewed: 2026-07-27</span>
+  </div>
+</header>
+
+<!-- =============================== FRONT MATTER =============================== -->
+<section id="front-matter">
+  <h2><span class="sec-num">0.</span>Front Matter<a class="anchor" href="#front-matter">#</a></h2>
+
+  <h3 id="document-role"><span class="sec-num">0.1</span>Role of this document<a class="anchor" href="#document-role">#</a></h3>
+  <p>This document holds the <strong>durable</strong> system knowledge for
+  <dfn id="dfn-agentweave">AgentWeave</dfn>: what the system is for, the constraints that outlive any single change,
+  which bounded context owns what, and the contracts that cross those boundaries. It is deliberately small. Detailed
+  behavior lives elsewhere:</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Document</th><th>Holds</th><th>Changes when</th></tr></thead>
+    <tbody>
+      <tr><td><strong>This system map</strong></td><td>Intent, durable constraints, context ownership, shared contracts</td><td>A boundary, constraint, or contract changes</td></tr>
+      <tr><td><a href="agentweave-spec.html">agentweave-spec.html</a></td><td>Detailed living behavioral baseline (CLI, transport, MCP, Hub, UI)</td><td>Specified behavior changes</td></tr>
+      <tr><td><a href="roadmaps/agentweave-reconstruction.html">roadmaps/agentweave-reconstruction.html</a></td><td>Independently deliverable vertical slices and their dependencies</td><td>A slice is added, split, or completed</td></tr>
+      <tr><td><code>spec/changes/&lt;name&gt;/spec.html</code></td><td>One approved change: requirements, acceptance criteria, design, tasks</td><td>Per change, via <code>/aw-spec-propose</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="block note"><span class="label">Note</span> Keeping durable context out of child specs is what stops
+  every change document from re-litigating system-wide decisions, and stops the same rule from being restated in
+  divergent forms across sibling specs. A child spec <span class="rfc should">should</span> link here rather than
+  copy from here.</div>
+
+  <h3 id="conformance"><span class="sec-num">0.2</span>Conformance classes<a class="anchor" href="#conformance">#</a></h3>
+  <p>Following the WHATWG HTML Living Standard's producer/consumer distinction, requirements in AgentWeave
+  specifications separate two audiences:</p>
+  <ul>
+    <li><strong>Requirements on producers</strong> — what a user, agent, or client is <em>allowed</em> to supply
+      (well-formed input, valid field values, permitted call sequences).</li>
+    <li><strong>Requirements on consumers</strong> — how AgentWeave software <span class="rfc must">must</span> act
+      in response (validation, persistence, side effects, responses). Requirements on producers have no bearing on
+      how a consumer handles malformed input; that behavior is specified separately.</li>
+  </ul>
+  <p>The key words <span class="rfc must">must</span>, <span class="rfc must">must not</span>,
+  <span class="rfc should">should</span>, and <span class="rfc may">may</span> are to be interpreted as in RFC 2119.</p>
+
+  <h3 id="conventions"><span class="sec-num">0.3</span>Typographic conventions<a class="anchor" href="#conventions">#</a></h3>
+  <p>Only Requirement blocks and inline <span class="rfc must">must</span>/<span class="rfc should">should</span>/<span class="rfc may">may</span>
+  statements are normative.</p>
+  <div class="block requirement"><span class="label">Requirement</span><span class="req-id">SM-X-000</span>
+    A normative, testable assertion with a stable ID, listed in the <a href="#index">Requirements Index</a>.</div>
+  <div class="block note"><span class="label">Note</span> Non-normative rationale — the "why" behind a rule.</div>
+  <div class="block example"><span class="label">Example</span> Illustrative only; one valid possibility, not the only one.</div>
+  <div class="block warning"><span class="label">Warning</span> A hazard or common mistake.</div>
+  <div class="block openissue"><span class="label">Open Issue</span> A known unresolved question that a reader
+    <span class="rfc must">must not</span> treat as settled.</div>
+</section>
+
+<!-- =============================== INTENT =============================== -->
+<section id="intent">
+  <h2><span class="sec-num">1.</span>System Intent<a class="anchor" href="#intent">#</a></h2>
+  <p>AgentWeave coordinates AI agents working on a shared project through a CLI, local/git/HTTP transports, an
+  optional Hub backend and UI, and role-based workflow guidance. The detailed behavioral baseline is
+  <a href="agentweave-spec.html">agentweave-spec.html</a>.</p>
+
+  <div class="block requirement" id="SM-I-001"><span class="label">Requirement</span><span class="req-id">SM-I-001</span>
+    Every change specification <span class="rfc must">must</span> state which part of this intent it advances, and
+    <span class="rfc must">must not</span> introduce a capability that belongs to a context it does not own
+    (see <a href="#contexts">§3</a>) without an accompanying shared-contract change (see <a href="#contracts">§4</a>).</div>
+</section>
+
+<!-- =============================== CONSTRAINTS =============================== -->
+<section id="constraints">
+  <h2><span class="sec-num">2.</span>Durable Constraints<a class="anchor" href="#constraints">#</a></h2>
+  <p>These hold across changes. A change that breaks one is not a normal change: it supersedes this document and
+  <span class="rfc must">must</span> update it in the same change set.</p>
+
+  <div class="block requirement" id="SM-C-001"><span class="label">Requirement</span><span class="req-id">SM-C-001</span>
+    The Python CLI <span class="rfc must">must</span> support Python 3.8+ and
+    <span class="rfc must">must not</span> require runtime dependencies for its default feature set.</div>
+  <div class="block requirement" id="SM-C-002"><span class="label">Requirement</span><span class="req-id">SM-C-002</span>
+    The Hub backend <span class="rfc must">must</span> be FastAPI with SQLAlchemy; the Hub UI
+    <span class="rfc must">must</span> be React/TypeScript. A substitution is a system-map change, not a child-spec
+    decision.</div>
+  <div class="block requirement" id="SM-C-003"><span class="label">Requirement</span><span class="req-id">SM-C-003</span>
+    Tasks, messages, sessions, and transport operations <span class="rfc must">must</span> retain the validation and
+    concurrency guarantees specified in <a href="agentweave-spec.html">the living baseline</a>. A change that relaxes
+    one <span class="rfc must">must</span> record the relaxation as a normative change there, not only in its own spec.</div>
+  <div class="block requirement" id="SM-C-004"><span class="label">Requirement</span><span class="req-id">SM-C-004</span>
+    Tests, schemas/migrations, fixtures, configuration, and runbooks are independent verification evidence. A change
+    <span class="rfc must not">must not</span> claim complete behavioral coverage from a passing test suite alone;
+    it <span class="rfc must">must</span> name the evidence it checked and the coverage gaps that remain.</div>
+  <div class="block note"><span class="label">Note</span> SM-C-004 exists because a spec-driven workflow makes it
+  cheap to generate confident-sounding coverage claims. Naming what was <em>not</em> verified is what keeps a
+  regenerated implementation honest.</div>
+</section>
+
+<!-- =============================== CONTEXTS =============================== -->
+<section id="contexts">
+  <h2><span class="sec-num">3.</span>Domains &amp; Ownership<a class="anchor" href="#contexts">#</a></h2>
+  <p>Each row is a bounded context: it owns its internal model and exposes a public integration surface. Contexts
+  integrate through that surface only.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>ID</th><th>Context</th><th>Owns</th><th>Public integration surface</th></tr></thead>
+    <tbody>
+      <tr id="ctx-collab"><td><code>CTX-COLLAB</code></td><td>Collaboration core</td><td>sessions, tasks, messages, questions, validation</td><td>CLI commands, transport interface, task/message schemas</td></tr>
+      <tr id="ctx-exec"><td><code>CTX-EXEC</code></td><td>Agent execution</td><td>agent configuration, runners, watchdog, roles</td><td>runner and role contracts, trigger inputs</td></tr>
+      <tr id="ctx-transport"><td><code>CTX-TRANSPORT</code></td><td>Transport</td><td>local, git, and HTTP delivery semantics</td><td><code>BaseTransport</code>, Hub REST client contract</td></tr>
+      <tr id="ctx-hub"><td><code>CTX-HUB</code></td><td>Hub platform</td><td>auth, persistence, REST, SSE, scheduling, project-spec sync</td><td>versioned HTTP/SSE/MCP contracts</td></tr>
+      <tr id="ctx-ui"><td><code>CTX-UI</code></td><td>Hub UI</td><td>dashboard presentation, query/cache behavior, agent chat</td><td>Hub REST/SSE contract</td></tr>
+      <tr id="ctx-docs"><td><code>CTX-DOCS</code></td><td>Documentation and packaging</td><td>installability, operator/user guidance</td><td>package/CLI/docs build contracts</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="block requirement" id="SM-D-001"><span class="label">Requirement</span><span class="req-id">SM-D-001</span>
+    A context <span class="rfc must not">must not</span> import another context's internal model. Integration
+    <span class="rfc must">must</span> go through the listed public surface.</div>
+  <div class="block note"><span class="label">Note</span> The same term may be represented differently across
+  contexts. The Hub's persisted task representation and the CLI's local task representation integrate through their
+  contract; neither imports the other's internal model. This is deliberate — a single unified model across all
+  contexts costs more than it returns.</div>
+  <div class="block example"><span class="label">Example</span> A change that adds a task field visible in the
+  dashboard touches <code>CTX-COLLAB</code> (the field and its validation), <code>SM-K-002</code> (the Hub REST/SSE
+  contract carrying it), and <code>CTX-UI</code> (its presentation) — three ownership areas, one shared contract, and
+  therefore one contract task rather than three private field definitions.</div>
+</section>
+
+<!-- =============================== CONTRACTS =============================== -->
+<section id="contracts">
+  <h2><span class="sec-num">4.</span>Shared Contracts<a class="anchor" href="#contracts">#</a></h2>
+  <p>A shared contract is any interface owned by no single change. Changing one is a cross-context event.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>ID</th><th>Contract</th><th>Producers</th><th>Consumers</th></tr></thead>
+    <tbody>
+      <tr id="SM-K-001"><td><code>SM-K-001</code></td><td><code>BaseTransport</code> method contract and transport payload validation</td><td>CLI, watchdog, MCP tools</td><td>local / git / HTTP transport implementations</td></tr>
+      <tr id="SM-K-002"><td><code>SM-K-002</code></td><td>Hub REST API, SSE event vocabulary, Hub-side MCP tools, authentication behavior</td><td>CLI HTTP transport, Hub UI, agents over MCP</td><td>Hub backend</td></tr>
+      <tr id="SM-K-003"><td><code>SM-K-003</code></td><td><code>spec.html</code> metadata and task-attribute convention used by the AW-Spec workflow</td><td><code>/aw-spec-propose</code></td><td><code>/aw-spec-apply</code>, <code>/aw-spec-archive</code>, Hub spec viewer</td></tr>
+      <tr id="SM-K-004"><td><code>SM-K-004</code></td><td><code>agentweave.yml</code> and the generated agent-context / role contracts</td><td>operators, <code>agentweave</code> setup commands</td><td>CLI, runners, quality governance, skills</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="block requirement" id="SM-K-010"><span class="label">Requirement</span><span class="req-id">SM-K-010</span>
+    A change that alters a contract in this table <span class="rfc must">must</span>, in its own child spec, name:
+    (a) the contract ID, (b) its compatibility strategy, and (c) the contract tests that verify it.</div>
+  <div class="block requirement" id="SM-K-011"><span class="label">Requirement</span><span class="req-id">SM-K-011</span>
+    The contract change <span class="rfc must">must</span> be specified once, in one task traced to one requirement.
+    Sibling specs <span class="rfc must not">must not</span> restate it; they reference the contract ID.</div>
+
+  <p>Applied to a proposed cross-context change, in order:</p>
+  <ol class="algorithm">
+    <li>Identify every context in <a href="#contexts">§3</a> the change touches.</li>
+    <li>If more than one context is touched, identify the contract in this table that carries the interaction.</li>
+    <li>If no existing contract carries it, stop: either the change belongs inside one context, or a new contract
+      <span class="rfc must">must</span> be added here first.</li>
+    <li>State the compatibility strategy for the contract: additive, versioned, or breaking with a migration.</li>
+    <li>Name the contract test that fails today and passes after the change; if none exists, add writing it as a task.</li>
+  </ol>
+</section>
+
+<!-- =============================== CHANGE RULES =============================== -->
+<section id="change-rules">
+  <h2><span class="sec-num">5.</span>Rules for Child Specs<a class="anchor" href="#change-rules">#</a></h2>
+  <div class="block requirement" id="SM-R-001"><span class="label">Requirement</span><span class="req-id">SM-R-001</span>
+    A child spec <span class="rfc must">must</span> cover exactly one vertical capability with its own acceptance
+    criteria. Splitting by frontend / API / database layer <span class="rfc must not">must not</span> be used.</div>
+  <div class="block requirement" id="SM-R-002"><span class="label">Requirement</span><span class="req-id">SM-R-002</span>
+    When a request contains multiple independently demonstrable outcomes, a shallow roadmap
+    <span class="rfc must">must</span> be created or updated before any child spec is authored. Each roadmap row
+    carries a stable ID, intent, explicit in/deferred boundary, dependencies, status, and a link to its child spec.</div>
+  <div class="block requirement" id="SM-R-003"><span class="label">Requirement</span><span class="req-id">SM-R-003</span>
+    A child spec <span class="rfc must">must</span> link to its parent roadmap row, and the roadmap row
+    <span class="rfc must">must</span> link back to the child spec.</div>
+  <div class="block requirement" id="SM-R-004"><span class="label">Requirement</span><span class="req-id">SM-R-004</span>
+    A child spec <span class="rfc must">must</span> declare its persistence model — <em>flow-back</em> (artifacts
+    edited and reconciled manually), <em>flow-forward</em> (a new immutable change directory per change), or
+    <em>living spec</em> (the spec is the source and downstream artifacts are regenerated) — and the reconciliation
+    rule that applies after implementation.</div>
+  <div class="block note"><span class="label">Note</span> The three names come from the spec-persistence literature
+  (Böckeler, <em>Understanding Spec-Driven Development</em>, martinfowler.com) and from GitHub Spec Kit's
+  <code>docs/concepts/spec-persistence.md</code>. AgentWeave uses <strong>flow-forward</strong> for
+  <code>spec/changes/&lt;name&gt;/</code> and <strong>living spec</strong> for this map and
+  <a href="agentweave-spec.html">agentweave-spec.html</a>.</div>
+  <div class="block warning"><span class="label">Warning</span> Do not create a roadmap for a small coherent change
+  merely because it has several tasks. Decomposition has a cost — apply it when a slice is not independently testable
+  or cannot be implemented in one approval cycle.</div>
+</section>
+
+<!-- =============================== NON-GOALS =============================== -->
+<section id="non-goals">
+  <h2><span class="sec-num">6.</span>Non-Goals of This Document<a class="anchor" href="#non-goals">#</a></h2>
+  <p>Stated explicitly so nothing is inferred from omission:</p>
+  <ul>
+    <li>It does not specify behavior. Field-level rules, command surfaces, endpoints, and events belong to
+      <a href="agentweave-spec.html">agentweave-spec.html</a>.</li>
+    <li>It does not schedule work. Sequencing and slice boundaries belong to
+      <a href="roadmaps/agentweave-reconstruction.html">the roadmap</a>.</li>
+    <li>It does not hold tasks, agent assignments, or approval state. Those belong to a change's
+      <code>spec.html</code>.</li>
+    <li>It does not record implementation history. That belongs to the repository's changelog and commits.</li>
+  </ul>
+</section>
+
+<!-- =============================== INDEX =============================== -->
+<section id="index">
+  <h2><span class="sec-num">7.</span>Requirements Index<a class="anchor" href="#index">#</a></h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>ID</th><th>Summary</th><th>Section</th></tr></thead>
+    <tbody>
+      <tr><td><a href="#SM-I-001"><code>SM-I-001</code></a></td><td>Change states the intent it advances; no cross-context capability without a contract change</td><td><a href="#intent">§1</a></td></tr>
+      <tr><td><a href="#SM-C-001"><code>SM-C-001</code></a></td><td>CLI supports Python 3.8+, no default runtime dependencies</td><td><a href="#constraints">§2</a></td></tr>
+      <tr><td><a href="#SM-C-002"><code>SM-C-002</code></a></td><td>Hub backend FastAPI + SQLAlchemy; UI React/TypeScript</td><td><a href="#constraints">§2</a></td></tr>
+      <tr><td><a href="#SM-C-003"><code>SM-C-003</code></a></td><td>Validation and concurrency guarantees are retained</td><td><a href="#constraints">§2</a></td></tr>
+      <tr><td><a href="#SM-C-004"><code>SM-C-004</code></a></td><td>Evidence named; no coverage claim from tests alone</td><td><a href="#constraints">§2</a></td></tr>
+      <tr><td><a href="#SM-D-001"><code>SM-D-001</code></a></td><td>No cross-context internal-model imports</td><td><a href="#contexts">§3</a></td></tr>
+      <tr><td><a href="#SM-K-010"><code>SM-K-010</code></a></td><td>Contract change names ID, compatibility strategy, contract tests</td><td><a href="#contracts">§4</a></td></tr>
+      <tr><td><a href="#SM-K-011"><code>SM-K-011</code></a></td><td>Contract change specified once; siblings reference it</td><td><a href="#contracts">§4</a></td></tr>
+      <tr><td><a href="#SM-R-001"><code>SM-R-001</code></a></td><td>One vertical capability per child spec</td><td><a href="#change-rules">§5</a></td></tr>
+      <tr><td><a href="#SM-R-002"><code>SM-R-002</code></a></td><td>Roadmap before child specs for multi-outcome requests</td><td><a href="#change-rules">§5</a></td></tr>
+      <tr><td><a href="#SM-R-003"><code>SM-R-003</code></a></td><td>Bidirectional roadmap ↔ child spec links</td><td><a href="#change-rules">§5</a></td></tr>
+      <tr><td><a href="#SM-R-004"><code>SM-R-004</code></a></td><td>Persistence model and reconciliation rule declared</td><td><a href="#change-rules">§5</a></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- =============================== CHANGELOG =============================== -->
+<section id="changelog">
+  <h2><span class="sec-num">8.</span>Changelog<a class="anchor" href="#changelog">#</a></h2>
+  <table>
+    <thead><tr><th>Date</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>2026-07-20</td><td>Initial system map (Markdown).</td></tr>
+      <tr><td>2026-07-27</td><td>Converted to a self-contained HTML specification. Added conformance classes,
+        typographic conventions, stable requirement IDs (<code>SM-*</code>), context and contract IDs, the
+        cross-context contract algorithm, explicit non-goals, the persistence-model rule (SM-R-004), and a
+        requirements index.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer class="doc-footer">
+  <p>AgentWeave System Map — self-contained and offline: all styling and scripting are embedded and no external
+  resource is referenced.</p>
+  <p>Companions: <a href="agentweave-spec.html">behavioral baseline</a> ·
+  <a href="roadmaps/agentweave-reconstruction.html">reconstruction roadmap</a>.</p>
+</footer>
+</main>
+</div>
+
+<script>
+(function () {
+  // The Hub embeds spec documents in a sandboxed iframe (sandbox="allow-scripts", no
+  // allow-same-origin). Native "#hash" navigation inside that opaque origin can blank the
+  // frame until a manual reload, so intercept every same-document anchor click and scroll.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute('href').slice(1);
+    var target = id ? document.getElementById(id) : null;
+    e.preventDefault();
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // Scrollspy: highlight the nearest heading in view.
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var idToLink = {};
+  tocLinks.forEach(function (a) { idToLink[a.getAttribute('href').slice(1)] = a; });
+  var targets = Object.keys(idToLink).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  function onScroll() {
+    var top = window.scrollY + 120, current = null;
+    for (var i = 0; i < targets.length; i++) { if (targets[i].offsetTop <= top) current = targets[i]; }
+    tocLinks.forEach(function (a) { a.classList.remove('active'); });
+    if (current && idToLink[current.id]) idToLink[current.id].classList.add('active');
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Mobile TOC toggle.
+  var toggle = document.getElementById('tocToggle');
+  var sidebar = document.getElementById('sidebar');
+  toggle.addEventListener('click', function () { sidebar.classList.toggle('open'); });
+  sidebar.addEventListener('click', function (e) { if (e.target.tagName === 'A') sidebar.classList.remove('open'); });
+})();
+</script>
+</body>
+</html>

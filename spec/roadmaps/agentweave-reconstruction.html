@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap: AgentWeave Reconstruction</title>
+<meta name="description" content="Shallow epic roadmap decomposing the AgentWeave baseline into independently verifiable vertical slices, each with a stable ID, scope boundary, dependencies, status, and child-spec link.">
+<meta name="aw-spec-kind" content="roadmap">
+<meta name="aw-spec-name" content="agentweave-reconstruction">
+<meta name="aw-spec-status" content="living">
+<meta name="aw-spec-generated-at" content="2026-07-27">
+<style>
+  /* 1. Light-mode defaults (also used standalone, outside the Hub). */
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff; --surface: #f7f8fa; --surface-2: #eef1f5; --border: #d9dee6;
+    --text: #1b1f24; --text-dim: #57606a; --accent: #4c56d6; --accent-soft: #eceefd;
+    --normative: #0b6b3a; --normative-soft: #e8f6ee; --note: #0969da; --note-soft: #ddf0ff;
+    --warn: #9a6700; --warn-soft: #fff4d6; --example: #6639ba; --example-soft: #f2ecfb;
+    --reference: #57606a; --reference-soft: #f0f2f5; --danger: #cf222e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sidebar-w: 300px;
+  }
+  /* 2. Standalone dark mode (file opened directly, OS set to dark). */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface-2: #1c2230; --border: #2d333b;
+      --text: #e6edf3; --text-dim: #9198a1; --accent: #7c85ff; --accent-soft: #1d2140;
+      --normative: #3fb950; --normative-soft: #12261a; --note: #58a6ff; --note-soft: #0d2136;
+      --warn: #d29922; --warn-soft: #2b2413; --example: #a371f7; --example-soft: #21193a;
+      --reference: #9198a1; --reference-soft: #171b22; --danger: #f85149;
+    }
+  }
+  /* 3. Explicit overrides — the Hub stamps data-theme on <html> and must win over the OS. */
+  :root[data-theme="light"] {
+    --bg: #ffffff; --surface: #f7f8fa; --surface-2: #eef1f5; --border: #d9dee6;
+    --text: #1b1f24; --text-dim: #57606a; --accent: #4c56d6; --accent-soft: #eceefd;
+    --normative: #0b6b3a; --normative-soft: #e8f6ee; --note: #0969da; --note-soft: #ddf0ff;
+    --warn: #9a6700; --warn-soft: #fff4d6; --example: #6639ba; --example-soft: #f2ecfb;
+    --reference: #57606a; --reference-soft: #f0f2f5; --danger: #cf222e;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2230; --border: #2d333b;
+    --text: #e6edf3; --text-dim: #9198a1; --accent: #7c85ff; --accent-soft: #1d2140;
+    --normative: #3fb950; --normative-soft: #12261a; --note: #58a6ff; --note-soft: #0d2136;
+    --warn: #d29922; --warn-soft: #2b2413; --example: #a371f7; --example-soft: #21193a;
+    --reference: #9198a1; --reference-soft: #171b22; --danger: #f85149;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+  body { margin: 0; font-family: var(--sans); color: var(--text); background: var(--bg); line-height: 1.6; font-size: 16px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, kbd { font-family: var(--mono); font-size: 0.9em; }
+  code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; line-height: 1.45; }
+  pre code { background: none; padding: 0; }
+
+  #layout { display: flex; min-height: 100vh; }
+  #sidebar { width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); position: sticky; top: 0; height: 100vh;
+    overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border); padding: 1rem 0.75rem 3rem; }
+  #sidebar h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin: 0.25rem 0.5rem 0.5rem; }
+  #toc ul { list-style: none; margin: 0; padding: 0; }
+  #toc a { display: block; padding: 0.28rem 0.5rem; border-radius: 6px; color: var(--text-dim); font-size: 0.9rem; line-height: 1.35; }
+  #toc a:hover { background: var(--surface-2); text-decoration: none; color: var(--text); }
+  #toc a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  #toc .lvl-1 { font-weight: 600; color: var(--text); margin-top: 0.4rem; }
+  #toc .lvl-2 a { padding-left: 1.4rem; font-size: 0.85rem; }
+
+  main { flex: 1 1 auto; max-width: 960px; margin: 0 auto; padding: 2rem 2.5rem 6rem; min-width: 0; }
+  header.doc-header { border-bottom: 2px solid var(--border); padding-bottom: 1.25rem; margin-bottom: 1.5rem; }
+  header.doc-header h1 { font-size: 2rem; margin: 0 0 0.35rem; }
+  header.doc-header .subtitle { color: var(--text-dim); font-size: 1.05rem; }
+  .meta-badges { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .meta-badges span { font-size: 0.78rem; padding: 0.2rem 0.55rem; border-radius: 999px; background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border); }
+
+  section { margin: 2.75rem 0; scroll-margin-top: 1rem; }
+  section > h2 { font-size: 1.6rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; margin-top: 0; }
+  h3 { font-size: 1.2rem; margin-top: 2rem; }
+  h2 .sec-num, h3 .sec-num { color: var(--text-dim); font-weight: 600; margin-right: 0.5rem; }
+  .anchor { color: var(--text-dim); opacity: 0; margin-left: 0.4rem; font-weight: 400; text-decoration: none; }
+  h2:hover .anchor, h3:hover .anchor { opacity: 1; }
+
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 600; }
+  tbody tr:nth-child(even) { background: var(--surface); }
+  .table-scroll { overflow-x: auto; }
+
+  .rfc { font-variant: small-caps; font-weight: 700; letter-spacing: 0.02em; }
+  .rfc.must { color: var(--normative); }
+  .rfc.should { color: var(--note); }
+  .rfc.may { color: var(--example); }
+
+  .block { border-radius: 8px; padding: 0.85rem 1rem; margin: 1rem 0; border: 1px solid var(--border); }
+  .block .label { font-weight: 700; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; display: block; margin-bottom: 0.3rem; }
+  .requirement { background: var(--normative-soft); border-color: var(--normative); }
+  .requirement .label { color: var(--normative); }
+  .note { background: var(--note-soft); border-color: var(--note); }
+  .note .label { color: var(--note); }
+  .warning { background: var(--warn-soft); border-color: var(--warn); }
+  .warning .label { color: var(--warn); }
+  .example { background: var(--example-soft); border-color: var(--example); }
+  .example .label { color: var(--example); }
+  .openissue { background: var(--warn-soft); border-color: var(--danger); border-left: 4px solid var(--danger); }
+  .openissue .label { color: var(--danger); }
+
+  .req-id { display: inline-block; font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+    background: var(--normative); color: #fff; padding: 0.1rem 0.45rem; border-radius: 4px; margin-right: 0.5rem; vertical-align: middle; }
+  .slice-id { display: inline-block; font-family: var(--mono); font-weight: 700; background: var(--accent);
+    color: #fff; padding: 0.1rem 0.5rem; border-radius: 4px; margin-right: 0.5rem; font-size: 0.8rem; vertical-align: middle; }
+  .status { display: inline-block; font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); }
+  .status.planned { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+  .status.in-progress { background: var(--note-soft); color: var(--note); border-color: var(--note); }
+  .status.done { background: var(--normative-soft); color: var(--normative); border-color: var(--normative); }
+  dl.slice { margin: 0.5rem 0 0; }
+  dl.slice dt { font-weight: 700; color: var(--text-dim); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.7rem; }
+  dl.slice dd { margin: 0.15rem 0 0; }
+  ol.algorithm { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+    border-radius: 6px; padding: 0.85rem 1rem 0.85rem 2.4rem; }
+  ol.algorithm li { margin: 0.3rem 0; }
+  footer.doc-footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 0.85rem; }
+
+  #tocToggle { display: none; }
+  @media (max-width: 900px) {
+    #sidebar { position: fixed; z-index: 50; transform: translateX(-100%); transition: transform 0.2s; box-shadow: 2px 0 12px rgba(0,0,0,0.2); }
+    #sidebar.open { transform: translateX(0); }
+    #tocToggle { display: block; position: fixed; top: 0.75rem; left: 0.75rem; z-index: 60; background: var(--accent);
+      color: #fff; border: none; border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 1rem; cursor: pointer; }
+    main { padding: 3.5rem 1.1rem 5rem; }
+  }
+</style>
+</head>
+<body>
+<button id="tocToggle" aria-label="Toggle navigation">☰ Contents</button>
+<div id="layout">
+<nav id="sidebar">
+  <h2>Contents</h2>
+  <div id="toc">
+  <ul>
+    <li class="lvl-1"><a href="#front-matter">0. Front Matter</a></li>
+    <li class="lvl-2"><a href="#document-role">0.1 Role of this document</a></li>
+    <li class="lvl-2"><a href="#vocabulary">0.2 Status vocabulary</a></li>
+    <li class="lvl-1"><a href="#slices">1. Slices</a></li>
+    <li class="lvl-2"><a href="#R1">R1 Local collaboration core</a></li>
+    <li class="lvl-2"><a href="#R2">R2 Local agent execution</a></li>
+    <li class="lvl-2"><a href="#R3">R3 Cross-machine transport</a></li>
+    <li class="lvl-2"><a href="#R4">R4 Hub platform</a></li>
+    <li class="lvl-2"><a href="#R5">R5 Hub dashboard</a></li>
+    <li class="lvl-2"><a href="#R6">R6 Packaging &amp; conformance</a></li>
+    <li class="lvl-1"><a href="#dependencies">2. Dependency Order</a></li>
+    <li class="lvl-1"><a href="#maintenance">3. Maintaining This Roadmap</a></li>
+    <li class="lvl-1"><a href="#non-goals">4. Non-Goals</a></li>
+    <li class="lvl-1"><a href="#changelog">5. Changelog</a></li>
+  </ul>
+  </div>
+</nav>
+<main>
+<header class="doc-header">
+  <h1>Roadmap: AgentWeave Reconstruction</h1>
+  <div class="subtitle">Rebuild the current AgentWeave baseline as independently verifiable vertical capabilities —
+  one approvable, demonstrable slice at a time.</div>
+  <div class="meta-badges">
+    <span>Status: Living</span>
+    <span>6 slices · 0 complete</span>
+    <span>Last reviewed: 2026-07-27</span>
+  </div>
+</header>
+
+<!-- =============================== FRONT MATTER =============================== -->
+<section id="front-matter">
+  <h2><span class="sec-num">0.</span>Front Matter<a class="anchor" href="#front-matter">#</a></h2>
+
+  <h3 id="document-role"><span class="sec-num">0.1</span>Role of this document<a class="anchor" href="#document-role">#</a></h3>
+  <p>This roadmap is <strong>shallow by design</strong>: it divides scope and nothing else. It supersedes using the
+  task backlog inside <a href="../agentweave-spec.html">agentweave-spec.html</a> as a single implementation-sized
+  specification; that document remains the detailed behavior source. Durable constraints, context ownership, and
+  shared contracts live in the <a href="../system-map.html">system map</a>.</p>
+  <div class="block requirement" id="RM-001"><span class="label">Requirement</span><span class="req-id">RM-001</span>
+    A slice row <span class="rfc must">must</span> own the division of scope only. Requirements, acceptance
+    criteria, design, and tasks for a slice <span class="rfc must">must</span> live in that slice's child spec at
+    <code>spec/changes/&lt;name&gt;/spec.html</code>, not here.</div>
+  <div class="block note"><span class="label">Note</span> The separation matters because scope and detail change at
+  different rates. A roadmap that also carries requirements has to be re-approved every time a requirement moves.</div>
+
+  <h3 id="vocabulary"><span class="sec-num">0.2</span>Status vocabulary<a class="anchor" href="#vocabulary">#</a></h3>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Status</th><th>Means</th></tr></thead>
+    <tbody>
+      <tr><td><span class="status planned">planned</span></td><td>Boundary agreed; no child spec authored yet.</td></tr>
+      <tr><td><span class="status in-progress">in-progress</span></td><td>A child spec exists and is approved; tasks are being applied.</td></tr>
+      <tr><td><span class="status done">done</span></td><td>Every task in the child spec is complete and its acceptance evidence is recorded.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- =============================== SLICES =============================== -->
+<section id="slices">
+  <h2><span class="sec-num">1.</span>Slices<a class="anchor" href="#slices">#</a></h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>ID</th><th>Slice</th><th>Depends on</th><th>Status</th><th>Child spec</th></tr></thead>
+    <tbody>
+      <tr><td><a href="#R1"><code>R1</code></a></td><td>Local collaboration core</td><td>—</td><td><span class="status planned">planned</span></td><td>— (not authored)</td></tr>
+      <tr><td><a href="#R2"><code>R2</code></a></td><td>Local agent execution</td><td>R1</td><td><span class="status planned">planned</span></td><td>— (not authored)</td></tr>
+      <tr><td><a href="#R3"><code>R3</code></a></td><td>Cross-machine transport</td><td>R1</td><td><span class="status planned">planned</span></td><td>— (not authored)</td></tr>
+      <tr><td><a href="#R4"><code>R4</code></a></td><td>Hub platform</td><td>R1</td><td><span class="status planned">planned</span></td><td>— (not authored)</td></tr>
+      <tr><td><a href="#R5"><code>R5</code></a></td><td>Hub dashboard</td><td>R4</td><td><span class="status planned">planned</span></td><td>— (not authored)</td></tr>
+      <tr><td><a href="#R6"><code>R6</code></a></td><td>Packaging and conformance</td><td>R1–R5</td><td><span class="status planned">planned</span></td><td>— (not authored)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="R1"><span class="slice-id">R1</span>Local collaboration core<a class="anchor" href="#R1">#</a></h3>
+  <dl class="slice">
+    <dt>Intent</dt><dd>Create a usable local session with validated tasks and messages.</dd>
+    <dt>In scope</dt><dd>Session lifecycle, task and message entities, validation and concurrency guarantees, local CLI surface for creating and reading them.</dd>
+    <dt>Deferred</dt><dd>Runners, the Hub, and any cross-machine transport.</dd>
+    <dt>Demonstrable outcome</dt><dd>A user creates a session in an empty project, adds and reads tasks and messages through the CLI, and malformed input is rejected with the specified validation behavior.</dd>
+    <dt>Depends on</dt><dd>—</dd>
+    <dt>Detail</dt><dd><a href="../agentweave-spec.html#domain-model">agentweave-spec.html §3</a>, <a href="../agentweave-spec.html#cli">§4</a>, <a href="../agentweave-spec.html#dev-order">§14</a></dd>
+    <dt>Contracts touched</dt><dd><a href="../system-map.html#SM-K-001"><code>SM-K-001</code></a> (transport interface shape), <a href="../system-map.html#SM-K-004"><code>SM-K-004</code></a></dd>
+    <dt>Status</dt><dd><span class="status planned">planned</span></dd>
+  </dl>
+
+  <h3 id="R2"><span class="slice-id">R2</span>Local agent execution<a class="anchor" href="#R2">#</a></h3>
+  <dl class="slice">
+    <dt>Intent</dt><dd>Run configured agents with roles, watchdog, logging, and CLI MCP.</dd>
+    <dt>In scope</dt><dd>Agent configuration, runner invocation, role assignment, watchdog polling and triggering, structured logging, the CLI-side MCP tool surface.</dd>
+    <dt>Deferred</dt><dd>Hub backend and dashboard.</dd>
+    <dt>Demonstrable outcome</dt><dd>A configured agent is triggered from a local session, performs work under an assigned role, and its activity appears in the structured log.</dd>
+    <dt>Depends on</dt><dd><a href="#R1">R1</a></dd>
+    <dt>Detail</dt><dd><a href="../agentweave-spec.html#cli">agentweave-spec.html §4</a>, <a href="../agentweave-spec.html#mcp-tools">§6</a>, <a href="../agentweave-spec.html#logging">§9</a>, <a href="../agentweave-spec.html#roles">§10</a>, <a href="../agentweave-spec.html#dev-order">§14</a></dd>
+    <dt>Contracts touched</dt><dd><a href="../system-map.html#SM-K-004"><code>SM-K-004</code></a> (runner and role contracts)</dd>
+    <dt>Status</dt><dd><span class="status planned">planned</span></dd>
+  </dl>
+
+  <h3 id="R3"><span class="slice-id">R3</span>Cross-machine transport<a class="anchor" href="#R3">#</a></h3>
+  <dl class="slice">
+    <dt>Intent</dt><dd>Exchange collaboration data safely through Git.</dd>
+    <dt>In scope</dt><dd>Git transport delivery semantics, payload validation, conflict and concurrency handling on shared branches.</dd>
+    <dt>Deferred</dt><dd>Hub services; HTTP transport belongs to <a href="#R4">R4</a>.</dd>
+    <dt>Demonstrable outcome</dt><dd>Two clones of the same project exchange tasks and messages through Git without loss or corruption under concurrent writes.</dd>
+    <dt>Depends on</dt><dd><a href="#R1">R1</a></dd>
+    <dt>Detail</dt><dd><a href="../agentweave-spec.html#transport">agentweave-spec.html §5</a>, <a href="../agentweave-spec.html#dev-order">§14</a></dd>
+    <dt>Contracts touched</dt><dd><a href="../system-map.html#SM-K-001"><code>SM-K-001</code></a></dd>
+    <dt>Status</dt><dd><span class="status planned">planned</span></dd>
+  </dl>
+
+  <h3 id="R4"><span class="slice-id">R4</span>Hub platform<a class="anchor" href="#R4">#</a></h3>
+  <dl class="slice">
+    <dt>Intent</dt><dd>Provide authenticated persistence, REST, SSE, scheduling, and Hub MCP.</dd>
+    <dt>In scope</dt><dd>Hub application and configuration, authentication, database schema and migrations, REST endpoints, SSE event vocabulary, scheduler, Hub-side MCP tools.</dd>
+    <dt>Deferred</dt><dd>Dashboard implementation (<a href="#R5">R5</a>).</dd>
+    <dt>Demonstrable outcome</dt><dd>A CLI client authenticates against a running Hub, pushes and reads collaboration data over REST, and receives the specified SSE events.</dd>
+    <dt>Depends on</dt><dd><a href="#R1">R1</a></dd>
+    <dt>Detail</dt><dd><a href="../agentweave-spec.html#hub-backend">agentweave-spec.html §7</a>, <a href="../agentweave-spec.html#dev-order">§14</a></dd>
+    <dt>Contracts touched</dt><dd><a href="../system-map.html#SM-K-002"><code>SM-K-002</code></a>, <a href="../system-map.html#SM-K-003"><code>SM-K-003</code></a> (project-spec sync)</dd>
+    <dt>Status</dt><dd><span class="status planned">planned</span></dd>
+  </dl>
+
+  <h3 id="R5"><span class="slice-id">R5</span>Hub dashboard<a class="anchor" href="#R5">#</a></h3>
+  <dl class="slice">
+    <dt>Intent</dt><dd>Operate and observe the Hub through the React UI.</dd>
+    <dt>In scope</dt><dd>Dashboard shell and navigation, query/cache behavior over the Hub contract, components, agent chat and session routing, spec viewing.</dd>
+    <dt>Deferred</dt><dd>Backend semantics — the UI consumes the <a href="../system-map.html#SM-K-002"><code>SM-K-002</code></a> contract and does not redesign it.</dd>
+    <dt>Demonstrable outcome</dt><dd>An operator drives an existing Hub entirely from the dashboard: viewing sessions, tasks and specs, and receiving live updates from SSE.</dd>
+    <dt>Depends on</dt><dd><a href="#R4">R4</a></dd>
+    <dt>Detail</dt><dd><a href="../agentweave-spec.html#hub-ui">agentweave-spec.html §8</a>, <a href="../agentweave-spec.html#dev-order">§14</a></dd>
+    <dt>Contracts touched</dt><dd><a href="../system-map.html#SM-K-002"><code>SM-K-002</code></a> (consumer only)</dd>
+    <dt>Status</dt><dd><span class="status planned">planned</span></dd>
+  </dl>
+
+  <h3 id="R6"><span class="slice-id">R6</span>Packaging and conformance<a class="anchor" href="#R6">#</a></h3>
+  <dl class="slice">
+    <dt>Intent</dt><dd>Produce installable packages, documentation, and full conformance evidence.</dd>
+    <dt>In scope</dt><dd>Package build and installability, documentation build, and the conformance evidence set required by <a href="../system-map.html#constraints"><code>SM-C-004</code></a>.</dd>
+    <dt>Deferred</dt><dd>Any new product behavior. If packaging reveals a behavior gap, it belongs to the owning slice, not here.</dd>
+    <dt>Demonstrable outcome</dt><dd>A clean machine installs the published package, runs the documented quickstart, and the recorded evidence set names every unverified area.</dd>
+    <dt>Depends on</dt><dd><a href="#R1">R1</a>, <a href="#R2">R2</a>, <a href="#R3">R3</a>, <a href="#R4">R4</a>, <a href="#R5">R5</a></dd>
+    <dt>Detail</dt><dd><a href="../agentweave-spec.html#reference-impl">agentweave-spec.html §11</a>, <a href="../agentweave-spec.html#requirements-index">§13</a>, <a href="../agentweave-spec.html#dev-order">§14</a></dd>
+    <dt>Contracts touched</dt><dd><a href="../system-map.html#SM-K-004"><code>SM-K-004</code></a> (packaging/CLI/docs build contracts)</dd>
+    <dt>Status</dt><dd><span class="status planned">planned</span></dd>
+  </dl>
+</section>
+
+<!-- =============================== DEPENDENCIES =============================== -->
+<section id="dependencies">
+  <h2><span class="sec-num">2.</span>Dependency Order<a class="anchor" href="#dependencies">#</a></h2>
+<pre>
+        ┌──────────────────────── R1 Local collaboration core
+        │                              │
+        │              ┌───────────────┼───────────────┐
+        │              ▼               ▼               ▼
+        │        R2 Local agent   R3 Cross-machine   R4 Hub platform
+        │           execution        transport            │
+        │              │               │                  ▼
+        │              │               │            R5 Hub dashboard
+        │              │               │                  │
+        └──────────────┴───────────────┴──────────────────┴──► R6 Packaging &amp; conformance
+</pre>
+  <div class="block note"><span class="label">Note</span> R2, R3, and R4 are siblings: once R1 is done they may be
+  specified and implemented in parallel, by different agents, because none consumes another's internal model.</div>
+</section>
+
+<!-- =============================== MAINTENANCE =============================== -->
+<section id="maintenance">
+  <h2><span class="sec-num">3.</span>Maintaining This Roadmap<a class="anchor" href="#maintenance">#</a></h2>
+  <div class="block requirement" id="RM-002"><span class="label">Requirement</span><span class="req-id">RM-002</span>
+    Slice IDs <span class="rfc must">must</span> remain stable. A slice that is dropped is marked as such; its ID
+    <span class="rfc must not">must not</span> be reused.</div>
+  <div class="block requirement" id="RM-003"><span class="label">Requirement</span><span class="req-id">RM-003</span>
+    When implementation of a slice begins, its <em>Child spec</em> cell <span class="rfc must">must</span> be
+    replaced with the path to <code>spec/changes/&lt;name&gt;/spec.html</code>, and the child spec
+    <span class="rfc must">must</span> name this roadmap and its row ID in its Summary.</div>
+  <div class="block requirement" id="RM-004"><span class="label">Requirement</span><span class="req-id">RM-004</span>
+    If a slice is still too large for one approval and implementation cycle, a child roadmap
+    <span class="rfc must">must</span> be added rather than combining unrelated work into one spec.</div>
+  <div class="block requirement" id="RM-005"><span class="label">Requirement</span><span class="req-id">RM-005</span>
+    A slice <span class="rfc must not">must not</span> be marked <span class="status done">done</span> while any
+    task in its child spec is pending or its acceptance evidence is unrecorded.</div>
+
+  <p>To start the next slice:</p>
+  <ol class="algorithm">
+    <li>Pick the lowest-numbered slice whose dependencies are all <span class="status done">done</span>.</li>
+    <li>Confirm its <em>In scope</em> and <em>Deferred</em> lines still describe what is wanted; update them first if not.</li>
+    <li>Run <code>/aw-spec-propose</code> for that slice only, passing the slice ID; the child spec inherits the boundary verbatim.</li>
+    <li>Update this row: status → <span class="status in-progress">in-progress</span>, child-spec path filled in.</li>
+    <li>After <code>/aw-spec-apply</code> completes every task and evidence is recorded, set the status to
+      <span class="status done">done</span>.</li>
+  </ol>
+</section>
+
+<!-- =============================== NON-GOALS =============================== -->
+<section id="non-goals">
+  <h2><span class="sec-num">4.</span>Non-Goals<a class="anchor" href="#non-goals">#</a></h2>
+  <ul>
+    <li>This roadmap does not estimate, schedule by date, or assign agents. Ownership is decided in each child spec.</li>
+    <li>It does not restate requirements from <a href="../agentweave-spec.html">the behavioral baseline</a>; it points at them.</li>
+    <li>It does not decompose by layer. There is deliberately no "API slice" or "database slice" — each row is a
+      vertical capability that can be demonstrated on its own.</li>
+  </ul>
+</section>
+
+<!-- =============================== CHANGELOG =============================== -->
+<section id="changelog">
+  <h2><span class="sec-num">5.</span>Changelog<a class="anchor" href="#changelog">#</a></h2>
+  <table>
+    <thead><tr><th>Date</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td>2026-07-20</td><td>Initial reconstruction roadmap (Markdown table).</td></tr>
+      <tr><td>2026-07-27</td><td>Converted to a self-contained HTML roadmap. Added per-slice anchors with explicit
+        in-scope / deferred / demonstrable-outcome lines, touched-contract references into the system map, a status
+        vocabulary, the dependency graph, normative maintenance rules (<code>RM-001</code>…<code>RM-005</code>), and
+        explicit non-goals.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer class="doc-footer">
+  <p>AgentWeave reconstruction roadmap — self-contained and offline: all styling and scripting are embedded and no
+  external resource is referenced.</p>
+  <p>Companions: <a href="../system-map.html">system map</a> · <a href="../agentweave-spec.html">behavioral baseline</a>.</p>
+</footer>
+</main>
+</div>
+
+<script>
+(function () {
+  // The Hub embeds spec documents in a sandboxed iframe (sandbox="allow-scripts", no
+  // allow-same-origin). Native "#hash" navigation inside that opaque origin can blank the
+  // frame until a manual reload, so intercept every same-document anchor click and scroll.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a) return;
+    var id = a.getAttribute('href').slice(1);
+    var target = id ? document.getElementById(id) : null;
+    e.preventDefault();
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // Scrollspy: highlight the nearest heading in view.
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var idToLink = {};
+  tocLinks.forEach(function (a) { idToLink[a.getAttribute('href').slice(1)] = a; });
+  var targets = Object.keys(idToLink).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+  function onScroll() {
+    var top = window.scrollY + 120, current = null;
+    for (var i = 0; i < targets.length; i++) { if (targets[i].offsetTop <= top) current = targets[i]; }
+    tocLinks.forEach(function (a) { a.classList.remove('active'); });
+    if (current && idToLink[current.id]) idToLink[current.id].classList.add('active');
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Mobile TOC toggle.
+  var toggle = document.getElementById('tocToggle');
+  var sidebar = document.getElementById('sidebar');
+  toggle.addEventListener('click', function () { sidebar.classList.toggle('open'); });
+  sidebar.addEventListener('click', function (e) { if (e.target.tagName === 'A') sidebar.classList.remove('open'); });
+})();
+</script>
+</body>
+</html>
