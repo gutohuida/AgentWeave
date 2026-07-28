@@ -97,6 +97,74 @@ def test_skill_generation_includes_aw_spec_technical_explore(tmp_path):
     assert "SkillProject" in codex_skill.read_text(encoding="utf-8")
 
 
+def test_aw_spec_reindex_template_is_listed():
+    skills = list_skill_templates()
+
+    assert "aw-spec-reindex" in skills
+
+    template = get_skill_template("aw-spec-reindex")
+    assert "name: aw-spec-reindex" in template
+    assert "spec/index.json" in template
+
+
+def test_skill_generation_includes_aw_spec_reindex(tmp_path):
+    session = Session.create(
+        name="ReindexProject",
+        principal="claude",
+        agents=["claude", "codex"],
+    )
+
+    claude_count = _generate_claude_skills(session, tmp_path)
+    codex_count = _generate_codex_skills(session, tmp_path)
+
+    claude_skill = tmp_path / ".claude" / "skills" / "aw-spec-reindex" / "SKILL.md"
+    codex_skill = tmp_path / ".agents" / "skills" / "aw-spec-reindex" / "SKILL.md"
+
+    assert claude_count > 0
+    assert codex_count > 0
+    assert claude_skill.exists()
+    assert codex_skill.exists()
+    assert "ReindexProject" in claude_skill.read_text(encoding="utf-8")
+
+    # Both its support docs are bundled directly beside it (no references/ subfolder).
+    for root in (tmp_path / ".claude" / "skills", tmp_path / ".agents" / "skills"):
+        assert (root / "aw-spec-reindex" / "html-spec-conventions.md").exists()
+        assert (root / "aw-spec-reindex" / "spec-manifest-conventions.md").exists()
+
+
+def test_propose_and_archive_bundle_manifest_conventions(tmp_path):
+    session = Session.create(
+        name="ManifestConventionsProject",
+        principal="claude",
+        agents=["claude", "codex"],
+    )
+    _generate_claude_skills(session, tmp_path)
+
+    for skill in ("aw-spec-propose", "aw-spec-archive"):
+        ref = tmp_path / ".claude" / "skills" / skill / "spec-manifest-conventions.md"
+        assert ref.exists(), f"missing manifest conventions reference in {skill}"
+        assert "aw-spec-reindex" in ref.read_text(encoding="utf-8")
+
+
+def test_propose_skill_maintains_the_manifest():
+    template = get_skill_template("aw-spec-propose")
+    assert "spec/index.json" in template
+
+
+def test_archive_skill_updates_manifest_and_drops_obsolete_specs_merge():
+    template = get_skill_template("aw-spec-archive")
+    assert "spec/index.json" in template
+    # M3 regression: the old "merge into spec/specs/" flow was obsolete cruft
+    # from before the single spec/ root — it must not be re-introduced.
+    assert "spec/specs/" not in template
+
+
+def test_html_spec_conventions_is_kind_aware_about_status():
+    ref = get_skill_reference("html-spec-conventions.md")
+    assert '"living"' in ref
+    assert "change-spec` only" in ref or "change-spec only" in ref
+
+
 def test_reference_docs_are_not_listed_as_skills():
     # Files under templates/skills/references/ are reference docs, not skills.
     skills = list_skill_templates()

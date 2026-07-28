@@ -13,7 +13,8 @@ be referenced explicitly.
 **Agents:** {agents_list}
 
 **Machine-readable contract:** the metadata and task attributes this skill checks are
-defined in `html-spec-conventions.md` (bundled beside this skill).
+defined in `html-spec-conventions.md` (bundled beside this skill). The manifest fields this
+skill updates on move are defined in `spec-manifest-conventions.md` (also bundled).
 
 ---
 
@@ -75,12 +76,16 @@ only when every task in its child spec is `data-status="done"` **and** its accep
 is recorded — an archived-anyway change with open tasks leaves the row where it was, with a
 note naming what is outstanding.
 
-### 4. Merge specs into the project library (optional)
+### 4. Update the spec manifest
 
-If `spec/changes/<name>/specs/` exists and contains spec files, ask:
-> "Merge spec files into the project spec library at `spec/specs/`?"
-
-If yes, for each file: copy if absent, or ask whether to merge/overwrite/skip if it exists.
+Update `spec/index.json` **before** moving the directory (step 5), so the new path is correct
+when the manifest is read next:
+- Update this change's entry `path` from `spec/changes/<name>/spec.html` to
+  `spec/changes/archive/YYYY-MM-DD-<name>/spec.html`.
+- Leave `parent`/`order`/`title`/`kind`/`status` as they were — archiving does not change what
+  a document *is*, only where it lives.
+- If the change has a parent roadmap row, this is also where you update that row's status per
+  step 2's roadmap note (same operation, not a separate pass).
 
 ### 4b. Decision docs move with the change
 
@@ -118,7 +123,7 @@ any change-local decision docs.
 - <agent-a> (tech_lead, backend_dev): X tasks
 - <agent-b> (frontend_dev): Y tasks
 
-**Specs merged:** [files merged to spec/specs/, or "none"]
+**Manifest:** spec/index.json updated (path, and parent roadmap row if applicable)
 
 **Evidence / remaining limits:** [preserved evidence locations and any Open Issues]
 
@@ -132,5 +137,6 @@ Change archived successfully.
 - Verify approval status and task completion before archiving; warn clearly on either gap.
 - Never delete the change directory — always move it (history is preserved).
 - Do not edit `spec.html` during archive except to record archive metadata if needed.
-- Only merge spec files with explicit user confirmation.
+- Update the manifest's path/relationships for the moved document — never leave
+  `spec/index.json` pointing at the pre-archive path.
 - If the archive directory already has a folder with the same name, append `-2` (or ask).

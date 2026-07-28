@@ -17,7 +17,10 @@ Run these and read the results before asking anything:
 1. `agentweave status` — is there a session? transport type? watchdog?
 2. `agentweave doctor` — runtime readiness issues
 3. Check which of these exist: `agentweave.yml`, `.agentweave/session.json`, `.agentweave/transport.json`, `.env`
-4. Check for a project spec: `spec/spec.html` and any `spec/changes/*/spec.html` — does the project already have an HTML spec?
+4. Check for a project spec: `find spec -name "*.html"` (and `spec/index.json` if present) —
+   does the project already have an HTML spec anywhere under `spec/`? Don't assume the baseline
+   is named `spec/spec.html` — an existing project may use a named baseline
+   (`spec/agentweave-spec.html`, etc.) declared as `home` in `spec/index.json`.
 
 If `agentweave.yml` doesn't exist yet, run:
 
@@ -35,10 +38,12 @@ If `agentweave.yml` already exists, check `project.scaffold` before deciding how
 
 ### Fresh project with no spec? Propose starting lean
 
-If **no spec exists** (no `spec/spec.html`, no `spec/changes/*/spec.html`) **AND `scaffold: true`**, propose this lean path to the user before launching into the full interview:
+If **no spec exists anywhere under `spec/`** **AND `scaffold: true`**, propose this lean path to
+the user before launching into the full interview:
 
 1. Create a **single agent** (the user picks the runner and the model) with the **`spec`** role.
-2. That agent interviews the user and produces `spec/spec.html` — the living project spec.
+2. That agent interviews the user and produces the project's living spec (`spec/spec.html` or a
+   named baseline of its choosing) and a `spec/index.json` entry declaring it `home`.
 3. Defer the full **roster** interview (the wider team of agents and their roles, steps 2c–2d) until the spec exists — it is much easier to choose agents and roles once the project is specified.
 
 The user may decline and continue with the normal full interview below — respect that choice and move on.
@@ -46,11 +51,11 @@ The user may decline and continue with the normal full interview below — respe
 **If the user accepts the lean path, do NOT stop after creating the spec agent — keep the setup moving so the project is actually usable:**
 
 1. Pick the collaboration **mode** (2a). `hierarchical` is a safe default here; confirm briefly, don't belabor it.
-2. **Ask about the Hub (2b) and offer to set it up now.** This matters for the spec flow specifically: the Hub's **Spec tab** is where the user views `spec/spec.html` and chats with the spec agent live to edit it. Ask directly, e.g. *"Want me to set up the Hub now so you can view and edit the spec from the dashboard's Spec tab? (local Docker / local native / remote / skip)"* — then walk it via `aw-setup-hub` and write `hub.url`.
+2. **Ask about the Hub (2b) and offer to set it up now.** This matters for the spec flow specifically: the Hub's **Spec tab** is where the user views the project spec and chats with the spec agent live to edit it. Ask directly, e.g. *"Want me to set up the Hub now so you can view and edit the spec from the dashboard's Spec tab? (local Docker / local native / remote / skip)"* — then walk it via `aw-setup-hub` and write `hub.url`.
 3. **Skip** the security-guardrails and API-key deep dives (2e/2f) for now unless a chosen runner needs a key to start — note they'll be covered when the full roster is set up.
 4. **Write the config** (step 3), then **activate and verify** (step 5) so the spec agent, watchdog, and any Hub are actually running.
 5. **Wrap up with an explicit continuation path** (step 6), telling the user exactly how to resume:
-   - Start the spec agent and let it interview you and produce `spec/spec.html`.
+   - Start the spec agent and let it interview you and produce the project's living spec.
    - If the Hub is running, open the **Spec tab** to review the spec and chat with the spec agent to refine it.
    - Once the spec exists, **re-run `aw-setup`** (or `aw-setup-agent` / `aw-setup-roles`) to build out the full agent roster — this skill will detect the spec and skip straight to the roster interview.
 
@@ -99,7 +104,7 @@ Offer the catalog (full table in `aw-setup-roles`):
 - Human-title: `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
 - AI-native: `coordinator`, `model_router`, `explorer`, `implementer`, `verifier`, `guardian`, `context_keeper`, `spec`
 
-Sensible defaults: principal → `tech_lead` (hierarchical) or `coordinator` (peer); a second strong agent → `code_reviewer` or `verifier`; the **first agent on a fresh project with no spec** → `spec` (it interviews the user and produces `spec/spec.html`). Set via `agents.<name>.roles` in the yml or `agentweave roles set <agent> <csv>`.
+Sensible defaults: principal → `tech_lead` (hierarchical) or `coordinator` (peer); a second strong agent → `code_reviewer` or `verifier`; the **first agent on a fresh project with no spec** → `spec` (it interviews the user and produces the project's living spec). Set via `agents.<name>.roles` in the yml or `agentweave roles set <agent> <csv>`.
 
 ### e. Security guardrails
 Ask about each `quality:` option (details in `aw-setup-security`):

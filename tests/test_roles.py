@@ -333,6 +333,42 @@ class TestAINativeRoles:
             for section in ROLE_SKELETON_SECTIONS:
                 assert section in content, f"{role_id} missing section: {section}"
 
+    def test_spec_role_matches_hub_packaged_copy(self):
+        """The CLI's spec role source and the Hub's packaged copy must stay
+        behaviorally equivalent — the Hub bundles its own copy for its own UI
+        rather than importing the CLI package (see hub/hub/data/roles/)."""
+        from pathlib import Path
+
+        from agentweave.templates import get_role_md
+
+        cli_content = get_role_md("spec")
+        hub_path = (
+            Path(__file__).resolve().parent.parent / "hub" / "hub" / "data" / "roles" / "spec.md"
+        )
+        hub_content = hub_path.read_text(encoding="utf-8")
+        assert cli_content == hub_content, (
+            "src/agentweave/templates/roles/spec.md and hub/hub/data/roles/spec.md "
+            "have drifted — keep them identical."
+        )
+
+    def test_spec_role_does_not_reference_a_broken_skill_path(self):
+        """M2 regression: the role guide previously hardcoded
+        `.agents/skills/aw-spec-propose/references/html-spec-conventions.md` —
+        wrong for Claude (`.claude/skills/...`) and wrong even for Codex, since
+        support files are generated directly under the skill directory with no
+        `references/` subfolder (see _ensure_skill_support_files in cli.py)."""
+        from agentweave.templates import get_role_md
+
+        content = get_role_md("spec")
+        assert "references/html-spec-conventions.md" not in content
+        assert ".agents/skills/" not in content
+
+    def test_spec_role_routes_to_reindex_skill(self):
+        from agentweave.templates import get_role_md
+
+        content = get_role_md("spec")
+        assert "aw-spec-reindex" in content
+
     def test_assign_new_role_copies_md_file(self, tmp_path, monkeypatch):
         """Assigning a new role copies its .md guide to .agentweave/roles/."""
         from agentweave.roles import copy_role_md_file

@@ -7,6 +7,8 @@
 - Owning the durable spec layer under `spec/`: the system map (`spec/system-map.html`), epic roadmaps
   (`spec/roadmaps/*.html`), and the living behavioral spec (`spec/*.html`)
 - Owning per-change specs (`spec/changes/<name>/spec.html` when that workflow is in use)
+- Keeping `spec/index.json` (the document manifest — home document, parent/order relationships)
+  accurate as you create, move, or archive documents
 - Interviewing the user to capture requirements, scope, and non-goals before implementation starts
 - Keeping normative requirements in sync with code and recording the supporting evidence: tests, contracts,
   fixtures, migrations, configuration, operational requirements, and known coverage gaps
@@ -23,38 +25,26 @@
 
 ### On session start
 1. Read `roles.json`, `protocol.md`, `shared/context.md`
-2. Inventory `spec/` before assuming a path — it is the single spec root, and the aw-spec skills and Hub
-   spec sync both resolve under it: `spec/system-map.html`, `spec/roadmaps/*.html`, `spec/changes/<name>/spec.html`,
-   `spec/discovery/<name>/`, `spec/changes/archive/`. Read the system map and living spec first, then the
-   relevant active change specs. If a project still keeps specs elsewhere (e.g. a legacy `specs/`), say so and
-   agree one root with the user rather than writing into two trees
-3. Read the HTML spec conventions at `.agents/skills/aw-spec-propose/references/html-spec-conventions.md` — every spec you write MUST follow them
+2. Inventory `spec/` before assuming a path — it is the single spec root. The Hub and watchdog
+   discover every safe `spec/**/*.html` file independently of `spec/index.json`, so a document
+   missing from the manifest is still visible (reported as drift), not lost. Read the system map
+   and living spec first, then the relevant active change specs. If a project still keeps specs
+   elsewhere (e.g. a legacy `specs/`), say so and agree one root with the user rather than writing
+   into two trees
+3. Use the aw-spec skills below for procedure — each bundles the authoring/manifest reference
+   docs it needs (`html-spec-conventions.md`, `spec-manifest-conventions.md`) next to itself.
+   Read those from inside the skill, not from this guide.
 
-### When authoring or updating a spec
-- Follow the HTML spec conventions exactly:
-  - Self-contained single-file HTML — inline CSS/JS only, no external assets, renders offline
-  - Sticky sidebar table of contents with scroll-spy highlighting, and a sticky header with a live task-progress bar, for navigation
-  - Theme-aware: CSS custom properties with light defaults, a `prefers-color-scheme: dark` override, and explicit `:root[data-theme="light"/"dark"]` overrides — the Hub stamps `data-theme` on `<html>` to match its own light/dark toggle when it renders the spec in an iframe
-  - `<meta name="aw-spec-status">` (`draft` until the user explicitly approves, then `approved`)
-  - RFC 2119 modal verbs: every requirement uses MUST / SHOULD / MAY — never vague prose
-  - Labeled callout blocks (`.note`, `.example`, `.warning`, `.issue`) so non-normative content is never mistaken for binding rules
-  - Numbered-step algorithms (`<ol class="algorithm">`) for any ordered or conditional behavior — not prose paragraphs
-  - An explicit **Non-Goals** section — never rely on omission to define scope
-  - `[NEEDS CLARIFICATION: ...]` markers in an Open Questions section for every unresolved ambiguity — the spec MUST NOT be approved while any remain
-  - Requirement IDs (e.g. `FR-1`) that tasks trace back to
-- Capture WHAT and WHY, not HOW: requirements and acceptance criteria describe user-facing behavior, goals, and constraints — no tech-stack commitments
-- Write every requirement as a testable assertion; every acceptance criterion is binary pass/fail
-- Distinguish normative requirements from informative reference material and from agent-instruction files
-- Treat passing tests as evidence, not proof of complete reconstruction: state what coverage, contracts, fixtures,
-  migrations, configuration, and operational behavior were checked and what remains unverified
-- Keep a deliberate spec lifecycle: update a living spec with the change, preserve archived change history, and
-  record material conflicts as open issues rather than silently choosing code or prose
-- Keep the layers separate: durable constraints, bounded contexts, and shared contracts belong in the system map
-  and are referenced by ID, not restated in a change spec. When a request holds several independently
-  demonstrable outcomes, add or update an epic roadmap under `spec/roadmaps/` first, then specify one vertical
-  slice at a time — a child spec stays inside its roadmap row's boundary
-- Use the aw-spec skills: `aw-spec-explore` / `aw-spec-technical-explore` to investigate, `aw-spec-propose` to generate the spec
-- Enforce the approval gate: implementation (`aw-spec-apply`) only runs on an approved spec
+### Which skill for which step
+- **Investigate:** `aw-spec-explore` (product framing) / `aw-spec-technical-explore` (codebase grounding)
+- **Author or update a spec:** `aw-spec-propose` — generates the self-contained HTML spec and
+  maintains its `spec/index.json` entry in the same pass
+- **Implement:** `aw-spec-apply` — refuses to run on an unapproved spec
+- **Complete a change:** `aw-spec-archive` — verifies approval and task completion, moves the
+  change, updates its manifest entry
+- **Hub reports manifest drift:** `aw-spec-reindex` — deterministic mechanical repair
+  (title/kind/status refresh, unfiled documents); asks before touching anything semantic
+  (parent, home, a missing-file removal)
 
 ### When the user asks for spec changes (e.g. via the Hub Spec tab)
 - Edit the spec file in place, then regenerate the complete HTML file — never leave it half-broken or partially updated
@@ -82,6 +72,8 @@
   spec covers one demonstrable outcome
 - Writing specs into a second tree (`specs/`, a stray `spec/specs/`) — `spec/` is the one root
 - Letting the spec go stale after a feature change — a stale spec is worse than no spec
+- Guessing a manifest's semantic fields (`parent`, `home`) or discarding an entry for a missing
+  file without evidence — ask, or leave it as reported drift
 - Claiming that a spec or passing test suite alone guarantees a faithful rebuild
 
 ## Escalation Path

@@ -37,6 +37,12 @@ A roadmap and a system map are still specs: self-contained HTML, stable IDs, nor
 language, labelled non-normative blocks, explicit non-goals. They simply carry no task list
 and no approval metadata, because nothing is implemented directly from them.
 
+**Status is kind-aware.** `baseline`, `system-map`, and `roadmap` documents use
+`<meta name="aw-spec-status" content="living">` — there is no draft/approved cycle for them,
+because nothing is implemented directly from them and they are expected to be edited in place
+as the system evolves. Only `change-spec` uses the `draft` → `approved` hard gate described
+below, because that is the one kind `/aw-spec-apply` actually implements from.
+
 ## Spec hierarchy and decomposition
 
 `spec.html` is authoritative for **one change**, not necessarily for an entire system or
@@ -81,12 +87,13 @@ carry state and traceability, not decoration.
 
 `/aw-spec-apply` and `/aw-spec-archive` parse these. They MUST be present and exact.
 
-### 1. Approval status (the hard gate)
+### 1. Approval status (the hard gate — `change-spec` only)
 
-Put these in `<head>`:
+Put these in `<head>` for a `change-spec` document:
 
 ```html
 <meta name="aw-spec-name" content="<change-name>">
+<meta name="aw-spec-kind" content="change-spec">
 <meta name="aw-spec-status" content="draft">        <!-- draft | approved -->
 <meta name="aw-spec-approved-by" content="">        <!-- filled on approval -->
 <meta name="aw-spec-approved-at" content="">        <!-- ISO date, filled on approval -->
@@ -96,6 +103,15 @@ Put these in `<head>`:
 - Only after the user **explicitly approves** does the status flip to `approved`
   (and `approved-by` / `approved-at` get filled in).
 - `/aw-spec-apply` **refuses to run** unless `aw-spec-status` is `approved`.
+
+A `baseline`/`system-map`/`roadmap` document instead uses:
+
+```html
+<meta name="aw-spec-kind" content="baseline">        <!-- or system-map | roadmap -->
+<meta name="aw-spec-status" content="living">
+```
+
+No approval metadata, no gate — these documents don't drive `/aw-spec-apply`.
 
 ### 2. Tasks (traceable + trackable)
 

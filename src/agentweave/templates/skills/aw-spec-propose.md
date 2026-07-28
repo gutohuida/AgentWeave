@@ -26,6 +26,9 @@ skeleton live next to this skill at `html-spec-conventions.md`. Read it before w
 `spec.html`. It defines the machine-readable contract that `/aw-spec-apply` and
 `/aw-spec-archive` depend on.
 
+**Manifest reference:** `spec-manifest-conventions.md` (also bundled beside this skill)
+defines `spec/index.json`, the document manifest this skill updates in step 7a.
+
 When the spec is approved, run `/aw-spec-apply`.
 
 ---
@@ -213,6 +216,17 @@ The reviewer task MUST be assigned to a **different agent** than the implementer
 add a visible warning in the Tasks/Team sections:
 > ⚠ No reviewer assigned — add via: `agentweave roles add <agent> code_reviewer`
 
+### 7a. Update the spec manifest
+
+Update `spec/index.json` in the same operation (create it if absent — see
+`spec-manifest-conventions.md` for the shape and field-ownership rules):
+
+- Add or refresh this change's entry: `title`/`kind: "change-spec"`/`status: "draft"` from the
+  HTML you just wrote.
+- Set `parent` to the relevant roadmap row's path if step 1b identified one, else `null`.
+- Pick an `order` after the highest existing sibling at the same level.
+- Never touch another document's entry as a side effect of proposing this change.
+
 ### 7b. Self-check the spec before showing it
 
 Run this pass yourself — it is cheap and it is what stops a plausible-looking spec from
@@ -293,6 +307,8 @@ Once approved, run /aw-spec-apply to implement.
 - `spec.html` is the only artifact — do NOT create `proposal.md`, `design.md`,
   `tasks.md`, or `team.md`.
 - Read `html-spec-conventions.md` before authoring; follow its metadata and task contracts exactly.
+- Update `spec/index.json` in the same operation (step 7a) — do not leave a new change spec
+  unfiled when its manifest entry is this cheap to write.
 - Read discovery notes when present; surface conflicts with the codebase instead of overriding either silently.
 - Keep requirements free of implementation detail; keep the "how" in the Design section.
 - Every task must trace to at least one requirement ID.
