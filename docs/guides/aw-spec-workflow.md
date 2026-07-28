@@ -21,6 +21,26 @@ The AW-Spec workflow provides a structured way to move from an unclear idea to c
 
 Both exploration stages are optional, but they are useful when the scope is unclear, the implementation is complex, or multiple agents will work on the change.
 
+## Large Work: Roadmap Before Child Specs
+
+`spec.html` is the approved contract for one independently demonstrable change, not a
+container for every part of a system. When a request contains multiple outcomes that can be
+tested, approved, or shipped separately, first create `spec/roadmaps/<epic-name>.html`.
+
+A roadmap is a spec document too: self-contained HTML with the same conventions, marked
+`<meta name="aw-spec-kind" content="roadmap">`, but with no task list and no approval gate —
+nothing is implemented directly from it.
+
+Each roadmap row has a stable ID (and an element `id` so child specs can link to it), a
+one-line intent, an explicit in/deferred scope boundary, dependencies, status, and a link to
+its child change spec. Then run `/aw-spec-propose` for
+one ready row at a time. Use vertical capability slices (for example, “invoice history”)
+rather than frontend/API/database slices. Keep durable principles, domain ownership, and
+shared API/event/schema contracts outside individual child specs.
+
+Do not add a roadmap merely because a small change has several tasks; use one when a single
+change would no longer be coherent or independently testable.
+
 The Propose stage produces a single authoritative **`spec.html`** — a self-contained HTML
 specification that **replaces** the older markdown artifacts (`proposal.md`, `design.md`,
 `tasks.md`, `team.md`). It follows spec-driven-development best practices (testable

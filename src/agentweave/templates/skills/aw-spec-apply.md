@@ -4,8 +4,9 @@ description: Implement tasks from an approved HTML specification (spec.html). En
 ---
 
 Implement tasks from a change's **approved** specification. The authoritative artifact is
-a single self-contained `spec.html` (it replaced the old markdown artifacts). Treat it as
-the source of truth during implementation.
+a single self-contained `spec.html` (it replaced the old markdown artifacts). Treat its
+normative requirements as the source of truth, and use tests, contracts, fixtures, migrations,
+configuration, and operational material as supporting verification evidence.
 
 **Project:** {project_name}
 **Mode:** {mode}
@@ -52,9 +53,24 @@ grep -o 'name="aw-spec-status" content="[^"]*"' spec/changes/<name>/spec.html
 ### 3. Read context and quality config
 
 From `spec.html`, read the full spec: Summary, Requirements (`FR-*`), Acceptance Criteria,
-Behavior/Algorithms, Design (approach, decisions, security), Team, and the Tasks section
+Behavior/Algorithms, Design (approach, decisions, security), Evidence & Coverage Limits,
+Spec Lifecycle, Team, and the Tasks section
 with each task's `data-task-id`, `data-status`, `data-role`, `data-agent`, and
 `data-requirements`.
+
+If the Summary names a parent roadmap (`spec/roadmaps/<epic>.html`), read that row's intent
+and scope boundary. Do not implement deferred sibling work; record a discovered cross-slice
+dependency or contract change for reconciliation instead of silently expanding this change.
+
+Then run a **cross-artifact consistency check** before touching code — read-only, one pass:
+
+- Does every task still reference a requirement ID that exists in this spec?
+- Does the spec stay inside its roadmap row's in/deferred boundary?
+- Does any requirement contradict a durable constraint or shared contract in the system map?
+- Do the acceptance criteria cover every requirement a task claims to satisfy?
+
+Report the findings. If a contradiction is material, stop and ask — an approved spec that
+disagrees with the system map is a re-approval, not a judgement call you make mid-implementation.
 
 If the Design section references discovery inputs in `spec/discovery/<name>/`, use them
 only as supporting context — the approved `spec.html` wins on any conflict.
@@ -95,19 +111,24 @@ For each pending task (`data-status="pending"`) owned by `{principal}`:
 
 1. Announce: "Working on: (Tn) [description] — satisfies [requirement IDs]"
 2. **Write tests first** (TDD) — write the test spec for the acceptance criteria this
-   task's requirements demand, before implementing.
+   task's requirements demand before implementing when the project supports it. Where no
+   executable baseline exists, derive requirement tests from the approved acceptance criteria
+   and label them as proposed coverage rather than observed behavior.
 3. Implement the change — minimal and scoped to this task and its requirement IDs.
 4. **Produce a decision doc before marking complete** (if `docs_threshold` applies):
    - Resolve path `<docs_path>/<task-id>.md` or `.agentweave/code-docs/<task-id>.md`
    - Use the `code_decision.md` template; fill `requirement` from the task's requirement
      IDs and description; list modified and AI-generated files.
    - Do not mark complete until the doc exists.
-5. **Mark the task done inside `spec.html`** — for this task's `<li class="task">`:
+5. **Verify the full task evidence.** Run the stated test/build/lint/contract checks and any
+   required migration, configuration, deployment, or manual/security check. Record a material
+   coverage gap or conflict as an Open Issue; do not treat a green unit test as proof of it.
+6. **Mark the task done inside `spec.html`** — for this task's `<li class="task">`:
    - set `data-status="done"`
    - check its checkbox (`<input type="checkbox" disabled>` → add `checked`)
    Then update the `.progress` element: bump `data-done` and the visible "N / M tasks complete".
-6. Announce: "Done: (Tn) [description]"
-7. Continue to the next task.
+7. Announce: "Done: (Tn) [description]"
+8. Continue to the next task.
 
 **Pause if:**
 - A task is ambiguous or its requirement is unclear → ask before proceeding.
@@ -163,4 +184,6 @@ Run /aw-spec-archive when all tasks across all agents are done.
 - Keep code changes minimal and scoped to each task and its requirement IDs.
 - Update task state in `spec.html` immediately after each task completes.
 - Pause on errors, blockers, or unclear requirements — don't guess.
+- Follow the spec's stated lifecycle: reconcile material implementation discoveries with the spec deliberately;
+  re-approval is required when a material approved requirement changes.
 - Delegate to other agents only with explicit user confirmation.

@@ -12,9 +12,54 @@ importantly — the WHATWG HTML Living Standard, which is engineered to be
 reverse-engineering each other." That is exactly the property we want in a spec an AI
 agent will execute.
 
+**Sourcing rule.** Every convention here traces to first-party documentation or to the
+WHATWG standard itself, verified 2026-07-27. Recovered/leaked vendor system prompts
+circulating in community repos are *not* authoritative and are not used as a source; where
+a practice is only attested by one, it is marked as such rather than stated as fact.
+
+## Document kinds
+
+Three kinds of document share these conventions. Declare which one you are writing in
+`<head>` — tooling and review expectations scale with it:
+
+```html
+<meta name="aw-spec-kind" content="change-spec">   <!-- change-spec | roadmap | system-map | baseline -->
+```
+
+| Kind | Holds | Has tasks / approval gate? |
+|---|---|---|
+| `change-spec` | One change: requirements, acceptance criteria, design, tasks | Yes — this is what `/aw-spec-propose` writes |
+| `roadmap` | Slice rows: stable ID, intent, in/deferred boundary, dependencies, status, child-spec link | No |
+| `system-map` | Durable constraints, bounded contexts, shared contracts, rules for child specs | No |
+| `baseline` | Detailed living behavioral spec for a whole system | No |
+
+A roadmap and a system map are still specs: self-contained HTML, stable IDs, normative
+language, labelled non-normative blocks, explicit non-goals. They simply carry no task list
+and no approval metadata, because nothing is implemented directly from them.
+
+## Spec hierarchy and decomposition
+
+`spec.html` is authoritative for **one change**, not necessarily for an entire system or
+epic. Keep durable system rules, glossary, domain ownership, quality attributes, and shared
+contracts in a system map. When a request contains multiple independently demonstrable
+capabilities, write a shallow, version-controlled epic roadmap before authoring child specs.
+Each roadmap row needs a stable ID, intent, explicit in/deferred boundary, dependencies,
+status, and link to the child `spec.html`.
+
+Split by a vertical capability with its own acceptance criteria, not by frontend/API/database
+layer. A child spec links to its parent roadmap row; the roadmap links back to the child.
+Only split when a slice is not independently testable or cannot be implemented coherently in
+one cycle. Shared API/event/schema changes belong in an explicit contract referenced by both
+contexts, not duplicated across child specs.
+
 ---
 
 ## Why HTML (not markdown)
+
+Markdown is the better default for *agent-facing source* text: it is what every current
+instruction-file convention uses (AGENTS.md, CLAUDE.md, Cursor rules, Spec Kit's own
+`spec.md`), and it costs fewer tokens. HTML is chosen here deliberately, for three
+properties Markdown cannot provide, not out of preference:
 
 - **One self-contained, authoritative document.** A single file a human opens in a
   browser, reads top-to-bottom, and explicitly approves before any code is written.
@@ -25,6 +70,10 @@ agent will execute.
 - **Approval + progress live in the file.** The approval gate and per-task completion
   state are encoded as metadata/attributes inside `spec.html`, so no companion state
   file is needed.
+
+The trade-off is real: HTML is heavier to read and to diff. Keep prose in the document
+lean, and never use HTML markup where a plain sentence would do — the structure is there to
+carry state and traceability, not decoration.
 
 ---
 
@@ -93,7 +142,18 @@ ambiguity. Give them separate subsections or a labelled column.
 
 ### C. Requirements as testable assertions
 Write each requirement with a stable ID and a modal verb (MUST / SHOULD / MAY), or EARS
-syntax (`WHEN <event> THEN <system> SHALL <response>`). Never vague prose.
+syntax. The form Kiro's own documentation uses is:
+
+```
+WHEN <condition or event> THE SYSTEM SHALL <expected behavior>
+```
+
+(Its bugfix specs add `SHALL CONTINUE TO` for behavior that must not regress. The wider
+`IF … THEN …` / `WHEN … AND …` keyword family comes from the general EARS literature, not
+from first-party Kiro docs — use it if it helps, but do not cite it as a vendor rule.)
+
+Never vague prose. A requirement that cannot be turned into a passing or failing test is
+not a requirement.
 
 ```html
 <tr id="FR-1">
@@ -162,6 +222,49 @@ misinterpretation trigger).
   `code_reviewer` when `review_required: true`.
 
 ---
+
+## Persistence model — name the one you are using
+
+Every spec states, in a **Spec Lifecycle** section, how it relates to the code after
+implementation. The three models are the ones documented in GitHub Spec Kit
+(`docs/concepts/spec-persistence.md`) and in Birgitta Böckeler's article on martinfowler.com;
+none is a default, and picking silently is what produces stale specs:
+
+| Model | Rule | Reconciliation after implementation |
+|---|---|---|
+| **Flow-back** | Any artifact may be edited; the spec is corrected to match reality | State who reconciles, and when |
+| **Flow-forward** | A new immutable change directory per change; old ones are history | State that the change dir is frozen at archive time |
+| **Living spec** | The spec is the human-authored source; downstream artifacts are derived | State that a code change altering a normative value must update the spec in the same change set |
+
+AgentWeave uses **flow-forward** for `spec/changes/<name>/` and **living spec** for the
+system map, roadmaps, and the behavioral baseline.
+
+> **Do not overclaim.** A spec plus a green test suite does not prove a system can be
+> regenerated. Say what evidence was checked (tests, contracts, fixtures, migrations,
+> configuration, runbooks) and what remains unverified. This is the single most common way a
+> spec-driven workflow misleads the person approving it.
+
+## Self-check before review
+
+Run this before showing a spec to anyone. It is the "unit tests for your requirements" pass —
+cheap, and it catches the failures that survive a confident-sounding draft.
+
+**Structural (the machine contract):**
+- Every `href="#..."` resolves; no duplicate `id`s.
+- No external CSS/JS/font/image — the file renders offline.
+- `<head>` metadata present and exact; `aw-spec-status="draft"` until the user approves.
+- Every `li.task` carries `data-task-id`, `data-status`, `data-role`, `data-agent`, and
+  `data-requirements` pointing at requirement IDs that exist in the document.
+- Three theme layers (`:root`, `prefers-color-scheme`, `:root[data-theme]`) and the
+  same-document anchor-click interceptor are present.
+
+**Content (traceability and falsifiability):**
+- Requirement → acceptance criterion → task, in both directions, with no orphans.
+- Every requirement states MUST/SHOULD/MAY or `THE SYSTEM SHALL`, and is testable.
+- Ordered or conditional behavior is an `<ol class="algorithm">`, not a paragraph.
+- Non-Goals is non-empty; producer requirements are separate from consumer requirements.
+- Notes/examples/warnings are class-labelled; nothing informative reads as binding.
+- Open Questions is empty before approval.
 
 ## Self-contained styling
 

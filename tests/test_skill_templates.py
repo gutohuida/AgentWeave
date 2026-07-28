@@ -113,6 +113,7 @@ def test_html_spec_conventions_reference_is_available():
 def test_propose_skill_targets_html_spec_and_approval_gate():
     template = get_skill_template("aw-spec-propose")
     assert "spec.html" in template
+    assert "roadmap" in template
     # HTML replaces the old markdown artifacts.
     assert "replaces" in template
     # SDD conventions and approval gate must be present.
@@ -144,6 +145,9 @@ def test_skill_generation_bundles_html_spec_reference(tmp_path):
 
     _generate_claude_skills(session, tmp_path)
     _generate_codex_skills(session, tmp_path)
+
+    for root in (tmp_path / ".claude" / "skills", tmp_path / ".agents" / "skills"):
+        assert "roadmap" in (root / "aw-spec-propose" / "SKILL.md").read_text(encoding="utf-8")
 
     for root, marker in (
         (tmp_path / ".claude" / "skills", "claude"),

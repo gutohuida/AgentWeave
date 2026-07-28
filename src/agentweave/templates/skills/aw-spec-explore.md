@@ -39,6 +39,9 @@ specification (produced by `/aw-spec-propose` as an approval-gated `spec.html`):
 - **Open-threaded** - Surface multiple possible directions and let the user follow what resonates.
 - **Visual** - Use ASCII diagrams when they make workflows, states, or boundaries clearer.
 - **Patient** - Let the idea become clear before proposing structure.
+- **Evidence-aware** - Keep observed code, tests, contracts, and instructions distinct from intended behavior.
+- **Boundary-aware** - Surface whether the idea is one capability or an epic that needs a
+  roadmap of independently demonstrable slices.
 
 ---
 
@@ -159,7 +162,10 @@ Generated: <date>
 - [Phrase as a testable assertion where possible, e.g. "System MUST …" / "SHOULD …"]
 
 ## Codebase Context
-- [Relevant files, modules, commands, docs, or patterns]
+- [Relevant files, modules, commands, docs, contracts, tests/fixtures, or operational patterns]
+
+## Evidence / Coverage Limits
+- [What was observed and which behavior remains unverified]
 
 ## Options Discussed
 - [Option]: [tradeoff]
@@ -172,6 +178,9 @@ Generated: <date>
 
 ## Ready For Technical Exploration
 - [What `/aw-spec-technical-explore` should investigate next]
+
+## Candidate Slice Boundary
+- [One demonstrable outcome, what is in, what is deferred to a sibling, and dependencies]
 ```
 
 Always offer before writing notes. If the user does not want artifacts, keep exploring conversationally.

@@ -42,6 +42,8 @@ that `/aw-spec-propose` generates. Keep it disciplined:
 - **Explicit about tradeoffs** - Make the cost of each technical choice visible.
 - **AgentWeave-aware** - Plan which agents and roles should own each piece of work.
 - **Test-conscious** - Decide what to test, when to test, and who owns verification.
+- **Boundary-conscious** - Map domain ownership and shared contracts before dividing a
+  large request; prefer vertical capabilities over frontend/API/database workstreams.
 
 ---
 
@@ -133,6 +135,8 @@ Make testing explicit:
 - What integration or API tests are needed?
 - What UI or browser checks are needed?
 - What manual verification is still necessary?
+- Which contracts, fixtures, migrations, configuration, and operational checks are required beyond tests?
+- What important behavior remains unverified or inferred?
 - Which tests should run during implementation, before review, and before archive?
 
 For each major work area, identify:
@@ -229,6 +233,9 @@ Generated: <date>
 ## Integration Points
 - [File/module/API/component/command]
 
+## Domain / Contract Boundaries
+- [Which context owns each rule or data; shared API/event/schema contract; compatibility impact]
+
 ## Decisions Already Made
 - [Decision inherited from the codebase]
 
@@ -238,8 +245,14 @@ Generated: <date>
 ## Testing Strategy
 - [What to test, when, and with which commands]
 
+## Evidence / Coverage Limits
+- [Tests, contracts, fixtures, migrations, configuration, operations, and what remains unverified]
+
 ## Deployment / Operations
 - [Deployment, migrations, secrets, rollback, docs]
+
+## Spec Lifecycle
+- [Living / flow-forward / reconciliation process and how implementation updates the artifacts]
 
 ## AgentWeave Execution Strategy
 - [Agents, roles, sequencing, review, quality settings]

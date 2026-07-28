@@ -3,8 +3,10 @@ name: aw-spec-archive
 description: Archive a completed spec change. Reads the authoritative spec.html, verifies every task is done and the spec was approved, then moves the change (including spec.html and decision docs) to spec/changes/archive/ with a timestamp.
 ---
 
-Archive a completed spec change. The authoritative artifact is a single self-contained
-`spec.html` (it replaced the old markdown artifacts).
+Archive a completed spec change. The normative artifact is a single self-contained
+`spec.html` (it replaced the old markdown artifacts); its test, contract, fixture, migration,
+configuration, and operational evidence must remain discoverable with the archived record or
+be referenced explicitly.
 
 **Project:** {project_name}
 **Principal:** {principal}
@@ -62,21 +64,32 @@ agentweave task list --status revision_needed
 If any tasks for this change are `under_review` or `revision_needed`, warn strongly and
 ask before archiving — tasks under review are not done.
 
-### 3. Merge specs into the project library (optional)
+3. **Evidence and lifecycle:** read the spec's Evidence & Coverage Limits and Spec Lifecycle
+sections. Preserve links to any shared tests, contracts, fixtures, migrations, decision docs,
+or runbooks. If material coverage gaps or Open Issues remain, include them in the archive summary;
+do not represent the archive as a complete reconstruction guarantee.
+
+If the spec references a parent roadmap (`spec/roadmaps/<epic>.html`), update only that row's
+status and child-spec link; do not change sibling scope while archiving. A row moves to `done`
+only when every task in its child spec is `data-status="done"` **and** its acceptance evidence
+is recorded — an archived-anyway change with open tasks leaves the row where it was, with a
+note naming what is outstanding.
+
+### 4. Merge specs into the project library (optional)
 
 If `spec/changes/<name>/specs/` exists and contains spec files, ask:
 > "Merge spec files into the project spec library at `spec/specs/`?"
 
 If yes, for each file: copy if absent, or ask whether to merge/overwrite/skip if it exists.
 
-### 3b. Decision docs move with the change
+### 4b. Decision docs move with the change
 
 Any decision docs produced during apply (under `<docs_path>/` or `.agentweave/code-docs/`
 that belong to this change) move automatically with the change directory in the next step
 if they live inside it. If they live in a shared docs path, note their location in the
 summary rather than moving shared files.
 
-### 4. Archive the change
+### 5. Archive the change
 
 ```bash
 date +%Y-%m-%d
@@ -87,7 +100,7 @@ mv spec/changes/<name> spec/changes/archive/YYYY-MM-DD-<name>
 The moved directory includes `spec.html` (the full, approved, completed specification) and
 any change-local decision docs.
 
-### 5. Show completion summary
+### 6. Show completion summary
 
 ```
 ## Archived: <name>
@@ -106,6 +119,8 @@ any change-local decision docs.
 - <agent-b> (frontend_dev): Y tasks
 
 **Specs merged:** [files merged to spec/specs/, or "none"]
+
+**Evidence / remaining limits:** [preserved evidence locations and any Open Issues]
 
 Change archived successfully.
 ```
