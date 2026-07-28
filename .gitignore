@@ -57,18 +57,12 @@ dmypy.json
 # Legacy runtime dir (pre-rename) — ignore entirely
 .interagent/
 
-# AgentWeave state (keep structure, ignore state files)
-.agentweave/tasks/*/
-.agentweave/messages/*/
-.agentweave/agents/*.json
-.agentweave/session.json
-.agentweave/project_instructions.md
-
-# But keep the directory structure and docs
-!.agentweave/README.md
-!.agentweave/protocol.md
-!.agentweave/ai_context.md
-!.agentweave/ROLES.md
+# AgentWeave runtime state — the whole directory is machine-local and never
+# tracked (tasks, messages, agents, session.json, transport.json + secrets,
+# watchdog pid/log, generated context). Matches at any depth, so this also
+# covers hub/.agentweave/. Note: a `!` negation cannot re-include a file
+# inside an ignored directory, so per-file exceptions here would be inert.
+.agentweave/
 
 # Local development
 *.local
@@ -78,15 +72,6 @@ dmypy.json
 # Inter-agent working files (not for version control)
 kimichanges.md
 kimiwork.md
-
-# Transport config and state (machine-local, contain secrets)
-.agentweave/transport.json
-.agentweave/.git_seen/
-
-# Watchdog daemon PID, log, and triggered-message tracking (machine-local)
-.agentweave/watchdog.pid
-.agentweave/watchdog.log
-.agentweave/triggered_direct.json
 
 # UI design concepts — kept locally for reference, not tracked
 hub/ui-concepts/
@@ -99,14 +84,46 @@ hub/ui-concepts/
 *.bmp
 *.webp
 
-# Hub's own agentweave runtime state
-hub/.agentweave/
-
 # Hub runtime database (Docker volume data)
 hub/data/
 
 # Claude Code lock files
 .claude/scheduled_tasks.lock
+
+# Generated project skills. AgentWeave dogfoods itself: `agentweave init` renders
+# src/agentweave/templates/skills/<name>.md into .claude/skills/<name>/SKILL.md with
+# this project's agent names substituted in. They are build output — committing them
+# means every template edit needs a matching regenerated commit, and in practice the
+# copies silently drifted several releases behind the templates.
+#
+# Only template-derived names are listed. .claude/skills/ ALSO holds hand-written
+# skills with no template (aw-deploy, aw-jobs, check-build, copilot-test-setup,
+# openspec-*) which must stay tracked — do not replace this with `.claude/skills/`.
+#
+# Regenerate this list after adding a skill template:
+#   for t in src/agentweave/templates/skills/*.md; do echo ".claude/skills/$(basename "$t" .md)/"; done
+.claude/skills/aw-checkpoint/
+.claude/skills/aw-collab-start/
+.claude/skills/aw-delegate/
+.claude/skills/aw-done/
+.claude/skills/aw-relay/
+.claude/skills/aw-review/
+.claude/skills/aw-revise/
+.claude/skills/aw-setup-agent/
+.claude/skills/aw-setup-hub/
+.claude/skills/aw-setup-proxy/
+.claude/skills/aw-setup-roles/
+.claude/skills/aw-setup-security/
+.claude/skills/aw-setup-transport/
+.claude/skills/aw-setup/
+.claude/skills/aw-spec-apply/
+.claude/skills/aw-spec-archive/
+.claude/skills/aw-spec-explore/
+.claude/skills/aw-spec-propose/
+.claude/skills/aw-spec-technical-explore/
+.claude/skills/aw-status/
+.claude/skills/aw-sync/
+.claude/skills/aw-verify/
 
 # Codex local skills and agent metadata
 .agents/
@@ -119,7 +136,11 @@ testrun/
 /agentweave-test/
 *.test/
 
+# Local scratch output
 prints/
 
-.agentweave/
-openspec/
+# OpenSpec working directory — changes/ and specs/ are local working state,
+# but config.yaml is tracked, so ignore the contents rather than the directory
+# (a `!` exception cannot re-include a file under an ignored directory).
+openspec/*
+!openspec/config.yaml
