@@ -9,7 +9,8 @@ You are working on the **AgentWeave Framework** — a multi-agent AI collaborati
 - **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard, self-hosted via Docker
 - **Documentation** (`docs/`) — MkDocs with Material theme, deployed to GitHub Pages
 
-Current version: **v0.40.0** (CLI + Hub v0.33.0)
+Current version: see `pyproject.toml` (CLI) and `hub/pyproject.toml` (Hub) — those are the
+single source of truth; version numbers repeated in prose go stale.
 
 ## Quick Commands
 
@@ -128,12 +129,9 @@ hub/
 │   │   │   ├── agents/       # Agent UI
 │   │   │   │   ├── AgentsPage.tsx
 │   │   │   │   ├── AgentCard.tsx          # Role badges, runner badge
-│   │   │   │   ├── AgentPromptPanel.tsx   # Chat + session selector
 │   │   │   │   ├── AgentOutputPanel.tsx   # Live output logs
-│   │   │   │   ├── AgentActivityTab.tsx
-│   │   │   │   ├── AgentInfoTab.tsx
-│   │   │   │   ├── AgentMessageSender.tsx
-│   │   │   │   └── AgentTimeline.tsx
+│   │   │   │   ├── AgentActivityTab.tsx   # Output + timeline events
+│   │   │   │   └── AgentInfoTab.tsx
 │   │   │   ├── tasks/        # TaskBoard, TaskCard
 │   │   │   ├── messages/     # MessagesFeed, MessageCard, ConversationGroup
 │   │   │   ├── questions/    # QuestionsPanel, AnswerForm
@@ -142,7 +140,7 @@ hub/
 │   │   │   ├── layout/       # Sidebar, StatusBar, SetupModal
 │   │   │   └── common/       # Badge, Icon, EmptyState
 │   │   ├── store/            # Zustand stores (configStore)
-│   │   └── hooks/            # useSSE, useCopy, useApiConfig
+│   │   └── hooks/            # useSSE, useCopy
 │   └── package.json
 ├── docker-compose.yml
 └── Dockerfile

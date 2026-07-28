@@ -1,6 +1,6 @@
 # AgentWeave Framework - Agent Guide
 
-> This file provides essential information for AI coding agents working on the **AgentWeave Framework** codebase itself (v0.15.0).
+> This file provides essential information for AI coding agents working on the **AgentWeave Framework** codebase itself. For the current version see `pyproject.toml` (CLI) and `hub/pyproject.toml` (Hub).
 
 ## Project Overview
 
@@ -99,7 +99,6 @@ AgentWeave/
 │   │   │   │   ├── agents/      # Agent UI components
 │   │   │   │   │   ├── AgentsPage.tsx
 │   │   │   │   │   ├── AgentCard.tsx
-│   │   │   │   │   ├── AgentPromptPanel.tsx    # Chat interface
 │   │   │   │   │   ├── AgentOutputPanel.tsx    # Output logs
 │   │   │   │   │   ├── AgentActivityTab.tsx
 │   │   │   │   │   └── ...
@@ -293,7 +292,6 @@ Key React components in `hub/ui/src/components/`:
 | Component | Purpose |
 |-----------|---------|
 | `AgentsPage.tsx` | Main agent list + detail view |
-| `AgentPromptPanel.tsx` | Chat interface with session selector |
 | `AgentOutputPanel.tsx` | Real-time output log viewer |
 | `AgentCard.tsx` | Agent summary card with roles badges |
 | `TasksBoard.tsx` | Kanban-style task board |

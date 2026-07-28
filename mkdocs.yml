@@ -96,6 +96,8 @@ nav:
     - 2026 Q2 Hardening:
       - archive/2026-q2-hardening/index.md
       - Changes: archive/2026-q2-hardening/changes.md
+    - Autonomous Dev Loop (shelved):
+      - archive/autonomous-dev-loop/index.md
 
 extra:
   social:
