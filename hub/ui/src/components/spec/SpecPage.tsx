@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { fetchWithAuth } from '@/api/client'
 import { useSpec, useSpecEvents, useSpecList } from '@/api/spec'
 import { useQueryClient } from '@tanstack/react-query'
-import { useAgentOutput, useAgents } from '@/api/agents'
+import { useAgentOutput, useAgentSessions, useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
 
 // Stamps the Hub's active light/dark mode onto the spec document's <html> tag so
@@ -78,6 +78,19 @@ export function SpecPage() {
   const agent = agents?.find((a) => a.name === selectedAgent)
   const isRunning = agent?.status === 'running'
 
+  // Messages resume the agent's last saved session by default. `startNewSession`
+  // is a one-shot escape: it applies to the next message only, so the message
+  // after it continues the session that was just created.
+  const [startNewSession, setStartNewSession] = useState(false)
+  useEffect(() => {
+    setStartNewSession(false)
+  }, [selectedAgent])
+
+  // Only used to tell the user whether the next message continues something.
+  // The session id itself is never sent — the watchdog resolves it.
+  const { data: sessionData } = useAgentSessions(selectedAgent || null)
+  const hasSavedSession = (sessionData?.sessions?.length ?? 0) > 0
+
   const { lines } = useAgentOutput(selectedAgent || null)
   const filteredLines = lines.filter(
     (line) =>
@@ -113,10 +126,14 @@ export function SpecPage() {
       // server when the UI runs on port 5173, causing the request to hang.
       const res = await fetchWithAuth('/api/v1/agent/trigger', {
         method: 'POST',
+        // `resume` with no session_id makes the trigger endpoint emit no
+        // session tag, so the watchdog falls back to the agent's last saved
+        // session (or starts a new one if there is none). Resolving the id
+        // here would duplicate that rule in a second place.
         body: JSON.stringify({
           agent: selectedAgent,
           message: message.trim(),
-          session_mode: 'new',
+          session_mode: startNewSession ? 'new' : 'resume',
         }),
         signal: controller.signal,
       })
@@ -127,6 +144,8 @@ export function SpecPage() {
       // may arrive later. Refresh immediately so the running state is not
       // dependent on an agent_heartbeat SSE event.
       setTriggerState('queued')
+      // Consumed — the next message resumes the session this one creates.
+      setStartNewSession(false)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
       await queryClient.refetchQueries({ queryKey: ['agents'], type: 'active' })
       setMessage('')
@@ -267,6 +286,29 @@ export function SpecPage() {
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => setStartNewSession((v) => !v)}
+              disabled={!selectedAgent}
+              title={
+                startNewSession
+                  ? 'Next message starts a new session — click to keep the current one'
+                  : 'Start a new session with the next message'
+              }
+              aria-pressed={startNewSession}
+              aria-label="Start a new session"
+              className="px-1.5 py-1 rounded-md transition-colors disabled:opacity-50"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: startNewSession ? 'var(--blue)' : 'var(--surface)',
+                border: '1px solid var(--border)',
+                color: startNewSession ? '#fff' : 'var(--text-3)',
+                cursor: selectedAgent ? 'pointer' : 'not-allowed',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              <Icon name="restart_alt" size={14} />
+            </button>
             {agent && (
               <span
                 className="flex items-center gap-1.5"
@@ -323,6 +365,28 @@ export function SpecPage() {
           >
             {sendError && (
               <span style={{ fontSize: 11, color: 'var(--red)' }}>{sendError}</span>
+            )}
+            {selectedAgent && (
+              <span
+                data-testid="session-continuity"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  color: startNewSession ? 'var(--blue)' : 'var(--text-3)',
+                }}
+              >
+                <Icon
+                  name={startNewSession ? 'restart_alt' : hasSavedSession ? 'link' : 'add'}
+                  size={12}
+                />
+                {startNewSession
+                  ? 'Next message starts a new session'
+                  : hasSavedSession
+                    ? `Continuing ${selectedAgent}'s most recent session`
+                    : 'No session yet — the next message starts one'}
+              </span>
             )}
             <div className="flex gap-2">
               {triggerState !== 'idle' && (
