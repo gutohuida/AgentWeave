@@ -1,12 +1,12 @@
-"""Validator for spec/agentweave-1.0-spec.html (rev. 5).
+"""Validator for spec/agentweave-spec.html.
 
 Checks:
 1. Tag balance (html.parser), no unclosed tags at EOF
 2. Every href="#..." resolves to a real id
 3. No duplicate ids
-4. FR traceability: FR-IDs defined in body == FR-IDs in the §14 index
+4. FR traceability: FR-IDs defined in body == FR-IDs linked in the §13 index
 5. RFC keyword/class mismatches (class says must-not but text says must, or inverse)
-6. Section numbering: h2 sequence 0..17
+6. Section numbering: h2 sec-num sequence is contiguous from 0
 7. Counts: task IDs, Q rows
 """
 
@@ -15,7 +15,7 @@ import re
 import sys
 from html.parser import HTMLParser
 
-PATH = "spec/agentweave-1.0-spec.html"
+PATH = "spec/agentweave-spec.html"
 VOID = {"br", "hr", "img", "input", "meta", "link", "area", "base", "col", "embed", "source", "track", "wbr"}
 
 src = io.open(PATH, encoding="utf-8").read()
@@ -71,18 +71,21 @@ missing = sorted(set(h for h in c.hrefs if h and h not in c.ids))
 if missing:
     errors.append("broken anchors: %s" % missing)
 
-# h2 numbering
+# h2 numbering — contiguous from 0 (the section count itself is not fixed;
+# the spec has been restructured before and may be again)
 h2nums = [int(m.group(1)) for m in re.finditer(r'<h2><span class="sec-num">(\d+)\.</span>', src)]
-if h2nums != list(range(0, 18)):
+if h2nums != list(range(0, len(h2nums))):
     errors.append("h2 sequence wrong: %s" % h2nums)
 
-# FR traceability: body = whole doc minus the §14 index table
+# FR traceability: body = whole doc minus the §13 index table. The body
+# defines each FR in a <span class="req-id">; the index links back to each
+# definition with <a href="#FR-...">.
 idx_start = src.index('id="requirements-index"')
 idx_end = src.index("</table>", idx_start)
 idx_text = src[idx_start:idx_end]
 body_text = src[:idx_start] + src[idx_end:]
 body_defined = sorted(set(re.findall(r'<span class="req-id">(FR-[A-Z]+-\d+)</span>', body_text)) - {"FR-XXX-000"})
-indexed = sorted(set(re.findall(r'<span class="req-id">(FR-[A-Z]+-\d+)</span>', idx_text)))
+indexed = sorted(set(re.findall(r'href="#(FR-[A-Z]+-\d+)"', idx_text)))
 if body_defined != indexed:
     errors.append("FR mismatch: only-in-body=%s only-in-index=%s"
                   % (sorted(set(body_defined) - set(indexed)), sorted(set(indexed) - set(body_defined))))

@@ -21,6 +21,10 @@ The AW-Spec workflow provides a structured way to move from an unclear idea to c
 
 Both exploration stages are optional, but they are useful when the scope is unclear, the implementation is complex, or multiple agents will work on the change.
 
+A sixth skill, `/aw-spec-reindex`, isn't part of the linear flow above — it repairs
+`spec/index.json` (the document manifest) on demand, whenever the Hub reports drift. See
+[The Spec Manifest and the Hub](#the-spec-manifest-and-the-hub) below.
+
 ## Large Work: Roadmap Before Child Specs
 
 `spec.html` is the approved contract for one independently demonstrable change, not a
@@ -49,6 +53,34 @@ criteria, numbered algorithms, explicit non-goals, task→requirement traceabili
 must be **explicitly approved by the user** before implementation begins. See
 [`html-spec-conventions.md`](../../src/agentweave/templates/skills/references/html-spec-conventions.md)
 for the authoring conventions and the machine-readable metadata contract.
+
+## The Spec Manifest and the Hub
+
+Every safe `spec/**/*.html` file — baseline, system map, roadmaps, active and archived
+changes — syncs to the Hub on its own; a document does not need to be declared anywhere to be
+visible. `spec/index.json` sits alongside that discovery as an optional, versioned manifest
+that gives the Hub two things discovery alone cannot: an explicit **home** document to open
+by default, and the **parent/order** relationships between a roadmap and its child changes.
+
+`/aw-spec-propose` and `/aw-spec-archive` maintain their own manifest entry as part of their
+normal work. If the manifest ever drifts from disk — a document created or moved by hand, a
+file deleted outside the workflow — the Hub's **Spec tab** reports it (unfiled, missing, or
+stale documents; intrinsic metadata conflicts) and offers a one-click **Repair manifest**
+action that triggers `/aw-spec-reindex`, the mechanical repair skill. Reindex refreshes
+title/kind/status from each document's own `<head>` and adds unfiled documents automatically;
+anything semantic (which roadmap a change belongs to, whether a missing file was really
+deleted) it asks about rather than guessing.
+
+**Multi-machine safety.** The Hub is explicitly built for more than one checkout syncing the
+same project. Ordinary synchronization — from the watchdog or `agentweave spec push` — never
+deletes stored content, even when a document disappears from one machine's inventory; it is
+reported as stale instead, in case another active checkout still has it. Only an explicit
+`agentweave spec push --prune` removes rows no active source claims at all, and even then it
+preserves any path a different active source is still reporting.
+
+**HTML-only in the Hub.** `spec/index.json` itself is never rendered as a document — it is
+navigation metadata, not spec content. Markdown discovery notes (`idea.md`, `technical.md`)
+stay agent-facing and are not synced either.
 
 ## Prerequisites
 
@@ -222,7 +254,8 @@ Archiving:
 
 1. Verifies the spec was approved (`aw-spec-status="approved"`)
 2. Verifies every task in `spec.html` has `data-status="done"`
-3. Optionally syncs delta specs to the main spec library
+3. Updates `spec/index.json` with the change's new archived path (and its parent roadmap
+   row's status, if it belongs to one)
 4. Moves the change (including `spec.html`) to `spec/changes/archive/YYYY-MM-DD-<name>/`
 
 ## Workflow Integration

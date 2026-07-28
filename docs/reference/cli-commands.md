@@ -96,6 +96,25 @@ agentweave hub stop              # stop the local Hub container
 agentweave hub status            # show Hub container/API status
 ```
 
+## Spec
+
+Manual spec sync to the Hub (HTTP transport only — the watchdog also does this automatically
+on every poll). Recursively discovers every safe `spec/**/*.html` file, uploads changed
+content, then submits a reconciliation snapshot so the Hub can compute drift and detect
+deletions.
+
+```bash
+agentweave spec push             # push all spec HTML files, report drift diagnostics
+agentweave spec push --prune     # also delete Hub rows no active source (this or another
+                                  # machine) still claims — never deletes content an active
+                                  # source still reports
+```
+
+Ordinary `spec push` (no `--prune`) never deletes anything from the Hub, even for a document
+that disappeared locally — it's reported as stale in case another checkout still has it. See
+[AW-Spec Workflow: The Spec Manifest and the Hub](../guides/aw-spec-workflow.md#the-spec-manifest-and-the-hub)
+for the full manifest/drift/repair model.
+
 ## Context Management
 
 ```bash

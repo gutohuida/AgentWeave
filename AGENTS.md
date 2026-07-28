@@ -46,6 +46,7 @@ AgentWeave/
 │   ├── messaging.py             # MessageBus for agent communication
 │   ├── locking.py               # File-based mutex for concurrency
 │   ├── validator.py             # JSON schema validation
+│   ├── spec_manifest.py         # spec/index.json validation + safe spec/**/*.html discovery
 │   ├── watchdog.py              # File monitoring daemon with auto-ping
 │   ├── eventlog.py              # Event logging (read-path utilities)
 │   ├── runner.py                # Agent runner helpers (claude_proxy support)
@@ -74,6 +75,7 @@ AgentWeave/
 │   ├── hub/                     # Python package
 │   │   ├── main.py              # FastAPI app factory
 │   │   ├── mcp_server.py        # Hub-side MCP server (11 tools)
+│   │   ├── spec_manifest.py     # Independent copy of CLI manifest validation (kept in sync by hand)
 │   │   ├── db/                  # SQLAlchemy models
 │   │   ├── api/v1/              # REST API endpoints
 │   │   │   ├── agents.py        # Agent management

@@ -273,6 +273,7 @@ When you run `agentweave init`, Claude Code skills are auto-generated in `.claud
 | `/aw-spec-propose` | Create a structured proposal with design and tasks |
 | `/aw-spec-apply` | Implement tasks from a proposal |
 | `/aw-spec-archive` | Archive a completed change |
+| `/aw-spec-reindex` | Repair `spec/index.json` (the spec manifest) when the Hub reports drift |
 
 ### Utility Skills
 

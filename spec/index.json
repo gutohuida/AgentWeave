@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "home": "spec/agentweave-spec.html",
+  "documents": [
+    {
+      "path": "spec/agentweave-spec.html",
+      "title": "AgentWeave — Canonical Regeneration Specification",
+      "kind": "baseline",
+      "status": "living",
+      "parent": null,
+      "order": 10
+    },
+    {
+      "path": "spec/system-map.html",
+      "title": "AgentWeave — System Map",
+      "kind": "system-map",
+      "status": "living",
+      "parent": null,
+      "order": 20
+    },
+    {
+      "path": "spec/roadmaps/agentweave-reconstruction.html",
+      "title": "Roadmap: AgentWeave Reconstruction",
+      "kind": "roadmap",
+      "status": "living",
+      "parent": null,
+      "order": 30
+    }
+  ]
+}
