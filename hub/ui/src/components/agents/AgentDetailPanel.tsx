@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { AgentSummary } from '@/api/agents'
 import { useTasks } from '@/api/tasks'
-import { requestCompact, requestNewSession } from '@/api/context'
 import { AgentOutputPanel } from './AgentOutputPanel'
 import { AgentActivityTab } from './AgentActivityTab'
 import { AgentInfoTab } from './AgentInfoTab'
@@ -19,37 +18,8 @@ type DetailTab = 'output' | 'tasks' | 'messages' | 'info'
 
 export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('output')
-  const [compacting, setCompacting] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [actionMsg, setActionMsg] = useState<string | null>(null)
   const { data: tasks = [] } = useTasks()
   const agentTasks = tasks.filter((t) => t.assignee === agent.name)
-
-  async function handleCompact() {
-    setCompacting(true)
-    try {
-      await requestCompact(agent.name)
-      setActionMsg('Compact request sent')
-    } catch {
-      setActionMsg('Failed to send')
-    } finally {
-      setCompacting(false)
-      setTimeout(() => setActionMsg(null), 3000)
-    }
-  }
-
-  async function handleReset() {
-    setResetting(true)
-    try {
-      await requestNewSession(agent.name)
-      setActionMsg('Context reset requested')
-    } catch {
-      setActionMsg('Failed to send')
-    } finally {
-      setResetting(false)
-      setTimeout(() => setActionMsg(null), 3000)
-    }
-  }
 
   const tabs: { id: DetailTab; label: string }[] = [
     { id: 'output', label: 'Output' },
@@ -81,33 +51,7 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
 
           {/* Context state + actions */}
           <ContextUsageIndicator value={agent.context_usage} />
-
-          {agent.runner === 'codex' ? (
-            <span className="text-xs" style={{ color: 'var(--green)' }}>Auto-managed</span>
-          ) : (
-            <button
-              onClick={handleCompact}
-              disabled={compacting}
-              className="text-xs font-medium px-2.5 py-1 rounded transition-opacity disabled:opacity-50"
-              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-            >
-              {compacting ? '…' : 'Compact'}
-            </button>
-          )}
-          <button
-            onClick={handleReset}
-            disabled={resetting}
-            className="text-xs font-medium px-2.5 py-1 rounded transition-opacity disabled:opacity-50"
-            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
-          >
-            {resetting ? '…' : 'Reset'}
-          </button>
         </div>
-        {actionMsg && (
-          <p className="text-xs mt-1.5 text-center" style={{ color: 'var(--blue)' }}>
-            {actionMsg}
-          </p>
-        )}
       </div>
 
       {/* Tabs */}

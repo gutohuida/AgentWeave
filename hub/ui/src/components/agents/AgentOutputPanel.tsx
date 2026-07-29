@@ -10,6 +10,26 @@ interface AgentOutputPanelProps {
 }
 
 const NEW_SESSION_VALUE = '__new__'
+const HANDOFF_PROMPT = `Prepare a durable AgentWeave handoff before ending this session.
+
+Invoke your aw-checkpoint skill with reason pre_handoff. Save the current intent, files modified,
+decisions and rationale, blockers, exact next steps, and verification commands under
+.agentweave/shared/checkpoints/. Stop after confirming the checkpoint path.`
+
+const RESUME_HANDOFF_PREFIX = `Resume from the latest durable AgentWeave handoff.
+
+Before doing anything else, find and read the newest checkpoint for your agent under
+.agentweave/shared/checkpoints/, then read .agentweave/shared/context.md. Treat the checkpoint
+as authoritative and continue from its Next Steps.
+
+User request:`
+
+type HandoffState = 'idle' | 'preparing' | 'ready'
+
+interface PendingNewSession {
+  knownSessionIds: Set<string>
+  outputStartIndex: number
+}
 
 export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
@@ -22,14 +42,64 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const [message, setMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<string>('')
+  const [handoffState, setHandoffState] = useState<HandoffState>('idle')
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null)
+  const handoffOutputStartRef = useRef<number | null>(null)
+  const handoffSawRunningRef = useRef(false)
+  const pendingNewSessionRef = useRef<PendingNewSession | null>(null)
   const { data: sessionsData } = useAgentSessions(agent.name)
   const sessions = sessionsData?.sessions || []
+
+  useEffect(() => {
+    setSelectedSessionId('')
+    setHandoffState('idle')
+    setSessionNotice(null)
+    handoffOutputStartRef.current = null
+    handoffSawRunningRef.current = false
+    pendingNewSessionRef.current = null
+  }, [agent.name])
 
   useEffect(() => {
     if (sessions.length > 0 && !selectedSessionId) {
       setSelectedSessionId(sessions[0].id)
     }
   }, [sessions, selectedSessionId])
+
+  useEffect(() => {
+    const outputStart = handoffOutputStartRef.current
+    if (handoffState !== 'preparing' || outputStart === null) return
+    if (agent.status === 'running') {
+      handoffSawRunningRef.current = true
+      return
+    }
+
+    const completed = lines.slice(outputStart).some(
+      (line) => line.kind === 'status' && line.payload?.phase === 'completed',
+    )
+    if (completed || handoffSawRunningRef.current) {
+      handoffOutputStartRef.current = null
+      handoffSawRunningRef.current = false
+      setHandoffState('ready')
+      setSessionNotice('Handoff ready — your next message starts fresh and resumes it')
+    }
+  }, [agent.status, handoffState, lines.length])
+
+  useEffect(() => {
+    const pending = pendingNewSessionRef.current
+    if (!pending) return
+
+    const outputSessionId = lines
+      .slice(pending.outputStartIndex)
+      .map((line) => line.session_id)
+      .find((id): id is string => Boolean(id) && !pending.knownSessionIds.has(id as string))
+    const listedSessionId = sessions.find((session) => !pending.knownSessionIds.has(session.id))?.id
+    const newSessionId = outputSessionId || listedSessionId
+    if (!newSessionId) return
+
+    pendingNewSessionRef.current = null
+    setSelectedSessionId(newSessionId)
+    setSessionNotice(`Continuing new conversation ${newSessionId.slice(0, 12)}…`)
+  }, [lines, sessions])
 
   useEffect(() => {
     if (autoscroll && bottomRef.current) {
@@ -46,28 +116,83 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
 
   const sessionId = [...lines].reverse().find((l) => l.session_id)?.session_id
   const isRunning = agent.status === 'running'
+  const isBindingNewSession = pendingNewSessionRef.current !== null
+  const handoffUnavailable = agent.pilot || agent.runner === 'manual'
+  const interactionLocked =
+    isRunning || isSending || handoffState === 'preparing' || isBindingNewSession
+  const currentSessionId =
+    selectedSessionId && selectedSessionId !== NEW_SESSION_VALUE
+      ? selectedSessionId
+      : undefined
+
+  const postTrigger = async (
+    triggerMessage: string,
+    sessionMode: 'new' | 'resume',
+    triggerSessionId?: string,
+  ) => {
+    const response = await fetch('/api/v1/agent/trigger', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        agent: agent.name,
+        message: triggerMessage,
+        session_mode: sessionMode,
+        session_id: sessionMode === 'resume' ? triggerSessionId : undefined,
+      }),
+    })
+    if (!response.ok) {
+      throw new Error(`Trigger failed with status ${response.status}`)
+    }
+  }
+
+  const handleHandoff = async () => {
+    if (!apiKey || !currentSessionId || isRunning || isSending) return
+    setIsSending(true)
+    setHandoffState('preparing')
+    setSessionNotice('Preparing durable handoff…')
+    handoffOutputStartRef.current = lines.length
+    handoffSawRunningRef.current = false
+    try {
+      await postTrigger(HANDOFF_PROMPT, 'resume', currentSessionId)
+      setSelectedSessionId(NEW_SESSION_VALUE)
+    } catch (err) {
+      console.error('Failed to prepare handoff:', err)
+      handoffOutputStartRef.current = null
+      handoffSawRunningRef.current = false
+      setHandoffState('idle')
+      setSelectedSessionId(currentSessionId)
+      setSessionNotice('Failed to prepare handoff')
+    } finally {
+      setIsSending(false)
+    }
+  }
 
   const handleSend = async () => {
     if (!message.trim() || !apiKey) return
     setIsSending(true)
+    const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
+    const outgoingMessage =
+      isNew && handoffState === 'ready'
+        ? `${RESUME_HANDOFF_PREFIX}\n\n${message.trim()}`
+        : message.trim()
+    if (isNew) {
+      pendingNewSessionRef.current = {
+        knownSessionIds: new Set(sessions.map((session) => session.id)),
+        outputStartIndex: lines.length,
+      }
+      setSessionNotice('Starting new conversation…')
+    }
     try {
-      const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
-      await fetch('/api/v1/agent/trigger', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          agent: agent.name,
-          message: message.trim(),
-          session_mode: isNew ? 'new' : 'resume',
-          session_id: isNew ? undefined : selectedSessionId,
-        }),
-      })
+      await postTrigger(outgoingMessage, isNew ? 'new' : 'resume', selectedSessionId)
       setMessage('')
+      if (isNew) setHandoffState('idle')
     } catch (err) {
       console.error('Failed to send message:', err)
+      if (isNew) pendingNewSessionRef.current = null
+      setSessionNotice('Failed to send message')
     } finally {
       setIsSending(false)
     }
@@ -183,26 +308,92 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
         className="shrink-0 border-t px-3 py-2 flex flex-col gap-2"
         style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
-        {/* Session selector */}
-        <select
-          value={selectedSessionId}
-          onChange={(e) => setSelectedSessionId(e.target.value)}
-          className="w-full px-2 py-1 rounded-lg text-xs border"
+        {/* Session selector + durable handoff */}
+        <div className="flex gap-2">
+          <select
+            value={selectedSessionId}
+            aria-label="Conversation"
+            disabled={interactionLocked}
+            onChange={(e) => {
+              setSelectedSessionId(e.target.value)
+              setHandoffState('idle')
+              setSessionNotice(null)
+              handoffOutputStartRef.current = null
+              handoffSawRunningRef.current = false
+              pendingNewSessionRef.current = null
+            }}
+            className="flex-1 min-w-0 px-2 py-1 rounded-lg text-xs border"
+            style={{
+              background: 'var(--surface)',
+              borderColor: 'var(--border)',
+              color: 'var(--text-3)',
+              outline: 'none',
+            }}
+          >
+            <option value={NEW_SESSION_VALUE}>New conversation (start fresh)</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.id.slice(0, 28)}{s.id.length > 28 ? '…' : ''}
+                {s.last_active && ` (${new Date(s.last_active).toLocaleDateString()})`}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleHandoff}
+            disabled={
+              !currentSessionId
+              || interactionLocked
+              || handoffState !== 'idle'
+              || handoffUnavailable
+            }
+            title={
+              handoffUnavailable
+                ? 'Handoff requires an automatically managed runner'
+                : 'Save a durable checkpoint, then resume it in a fresh conversation'
+            }
+            className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: 'var(--surface)',
+              borderColor: 'var(--border)',
+              color: 'var(--text-2)',
+            }}
+          >
+            {handoffState === 'preparing'
+              ? 'Preparing…'
+              : handoffState === 'ready'
+                ? 'Ready'
+                : 'Handoff'}
+          </button>
+        </div>
+
+        <span
+          data-testid="session-continuity"
+          className="flex items-center gap-1"
           style={{
-            background: 'var(--surface)',
-            borderColor: 'var(--border)',
-            color: 'var(--text-3)',
-            outline: 'none',
+            fontSize: 11,
+            color:
+              handoffState === 'ready' || selectedSessionId === NEW_SESSION_VALUE
+                ? 'var(--blue)'
+                : 'var(--text-3)',
           }}
         >
-          <option value={NEW_SESSION_VALUE}>New session</option>
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.id.slice(0, 28)}{s.id.length > 28 ? '…' : ''}
-              {s.last_active && ` (${new Date(s.last_active).toLocaleDateString()})`}
-            </option>
-          ))}
-        </select>
+          <Icon
+            name={
+              handoffState === 'preparing'
+                ? 'hourglass_top'
+                : selectedSessionId === NEW_SESSION_VALUE
+                  ? 'move_up'
+                  : 'link'
+            }
+            size={12}
+          />
+          {sessionNotice
+            || (selectedSessionId === NEW_SESSION_VALUE
+              ? 'Next message starts a fresh conversation'
+              : currentSessionId
+                ? `Continuing ${currentSessionId.slice(0, 12)}…`
+                : 'No conversation yet')}
+        </span>
 
         {/* Input row */}
         <div className="flex gap-2">
@@ -212,7 +403,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
             onKeyDown={handleKeyDown}
             placeholder={isRunning ? `${agent.name} is responding…` : `Message ${agent.name}…`}
             rows={1}
-            disabled={isRunning || isSending}
+            disabled={interactionLocked}
             className="flex-1 px-3 py-2 rounded-lg text-xs resize-none border disabled:opacity-50"
             style={{
               background: 'var(--surface)',
@@ -231,11 +422,12 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
           />
           <button
             onClick={handleSend}
-            disabled={!message.trim() || isSending || isRunning}
+            aria-label="Send message"
+            disabled={!message.trim() || interactionLocked}
             className="px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: message.trim() && !isSending && !isRunning ? 'var(--blue)' : 'var(--surface)',
-              color: message.trim() && !isSending && !isRunning ? '#fff' : 'var(--text-3)',
+              background: message.trim() && !interactionLocked ? 'var(--blue)' : 'var(--surface)',
+              color: message.trim() && !interactionLocked ? '#fff' : 'var(--text-3)',
               border: 'none',
               cursor: 'pointer',
             }}
