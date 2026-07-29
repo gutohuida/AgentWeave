@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import itertools
 import json
 import logging
@@ -409,9 +410,24 @@ class Watchdog:
         if not CONTEXT_USAGE_DIR.exists():
             return
         for usage_file in CONTEXT_USAGE_DIR.glob("*.json"):
-            data = load_json(usage_file) or {}
-            agent = data.get("agent", usage_file.stem)
-            warning = bool(data.get("warning", False))
+            raw = load_json(usage_file) or {}
+            agent = raw.get("agent", usage_file.stem)
+            percent = raw.get("percent")
+            # Threshold policy lives here, not in the writer (design.md decision
+            # 12): only a "measured" sample auto-warns -- "estimated" samples are
+            # displayable but don't trigger the warning/compact-decision flow.
+            warning = False
+            critical = False
+            if raw.get("status") == "measured" and isinstance(percent, (int, float)):
+                warning = percent >= 70
+                critical = percent >= 90
+            data = {
+                **raw,
+                "warning": warning,
+                "critical": critical,
+                "threshold_warning": 70,
+                "threshold_critical": 90,
+            }
 
             # Always post to Hub when data changes (not just at warning threshold)
             if self.transport.get_transport_type() == "http":
@@ -2349,105 +2365,50 @@ def _clear_agent_session(agent: str) -> None:
         session_file.unlink()
 
 
-def _write_context_usage(
-    agent: str,
-    input_tokens: int,
-    model: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
-    """Write context usage data to .agentweave/shared/context_usage/<agent>.json.
-
-    Computes percent based on model's context limit, with warning at 70% and
-    critical at 90%. Returns the usage_data dict on success, None on error.
+def _canonical_context_usage_dict(agent: str, sample: ContextUsageSample) -> Dict[str, Any]:
+    """Serialize a `ContextUsageSample` using its own canonical field names
+    (design.md decision 7), plus `agent` for the on-disk file/Hub payload's
+    convenience -- `agent` is not itself a sample field, since the sample is
+    already scoped to one agent by the file it lives in.
     """
-    context_limit = _get_context_limit(model or "")
-    percent = min(100, int((input_tokens / context_limit) * 100)) if context_limit > 0 else 0
-    warning = percent >= 70
-    critical = percent >= 90
-
-    usage_data: Dict[str, Any] = {
+    return {
         "agent": agent,
-        "percent": percent,
-        "model": model or "unknown",
-        "input_tokens": input_tokens,
-        "context_limit": context_limit,
-        "warning": warning,
-        "critical": critical,
-        "threshold_warning": 70,
-        "threshold_critical": 90,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "status": sample.status,
+        "context_tokens": sample.context_tokens,
+        "limit_tokens": sample.limit_tokens,
+        "percent": sample.percent,
+        "model": sample.model,
+        "session_id": sample.session_id,
+        "source": sample.source,
+        "basis": sample.basis,
+        "breakdown": sample.breakdown,
+        "observed_at": sample.observed_at,
     }
 
+
+def _write_canonical_context_usage(
+    agent: str, sample: ContextUsageSample
+) -> Optional[Dict[str, Any]]:
+    """Atomically write `agent`'s latest context snapshot, replacing the
+    separate generic/Codex/Kimi-wire writers this once was (design.md
+    decision 7/8: normalize storage to one canonical schema, written once).
+
+    A temp-file-then-replace avoids a reader ever observing a truncated file
+    mid-write. Returns the serialized dict on success, None on error.
+    """
+    data = _canonical_context_usage_dict(agent, sample)
     try:
         CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
         usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
-        usage_file.write_text(json.dumps(usage_data, indent=2))
-        return usage_data
+        tmp_file = usage_file.with_suffix(f".json.{os.getpid()}.tmp")
+        tmp_file.write_text(json.dumps(data, indent=2))
+        os.replace(tmp_file, usage_file)
+        return data
     except OSError as exc:
         logger.warning(
             "context_usage_write_failed",
             extra={
                 "event": "context_usage_write_failed",
-                "data": {"agent": agent, "error": str(exc)},
-            },
-        )
-        return None
-
-
-def _write_codex_context_usage(
-    agent: str,
-    usage_data: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """Write context usage data from Codex turn.completed event.
-
-    Computes percent based on CODEX_MODEL_CONTEXT_LIMITS, with warning at 70%
-    and critical at 90%. Returns the usage_data dict on success, None on error.
-    """
-    from .constants import CODEX_MODEL_CONTEXT_LIMITS
-
-    input_tokens = usage_data.get("input_tokens", 0) or 0
-    output_tokens = usage_data.get("output_tokens", 0) or 0
-    total_tokens = input_tokens + output_tokens
-
-    # Get model from session config
-    model = None
-    from .session import Session
-
-    _sess = Session.load()
-    if _sess:
-        runner_config = _sess.get_runner_config(agent)
-        model = runner_config.get("model")
-
-    context_limit = CODEX_MODEL_CONTEXT_LIMITS.get(model, 128000) if model else 128000
-    percent = min(100, int((total_tokens / context_limit) * 100)) if context_limit > 0 else 0
-    warning = percent >= 70
-    critical = percent >= 90
-
-    result: Dict[str, Any] = {
-        "agent": agent,
-        "percent": percent,
-        "model": model or "unknown",
-        "tokens_used": total_tokens,
-        "tokens_limit": context_limit,
-        "input_tokens": input_tokens,
-        "cached_input_tokens": usage_data.get("cached_input_tokens", 0),
-        "output_tokens": output_tokens,
-        "warning": warning,
-        "critical": critical,
-        "threshold_warning": 70,
-        "threshold_critical": 90,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    try:
-        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
-        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
-        usage_file.write_text(json.dumps(result, indent=2))
-        return result
-    except OSError as exc:
-        logger.warning(
-            "codex_context_usage_write_failed",
-            extra={
-                "event": "codex_context_usage_write_failed",
                 "data": {"agent": agent, "error": str(exc)},
             },
         )
@@ -2695,49 +2656,22 @@ def _reset_context_usage(agent: str) -> None:
         )
 
 
-def _write_context_usage_from_wire(
-    agent: str,
-    wire_usage: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    """Write context usage data from Kimi wire mode StatusUpdate event.
-
-    Args:
-        agent: The agent name
-        wire_usage: Dict with 'percent', 'context_usage_ratio', 'context_tokens', 'max_context_tokens'
-
-    Returns the usage_data dict on success, None on error.
+def _kimi_wire_legacy_sample(wire_usage: Dict[str, Any]) -> ContextUsageSample:
+    """Convert a legacy Kimi `--wire` (v1) StatusUpdate usage dict into a
+    canonical sample so it can go through the one shared writer (design.md
+    decision 7). Parsing this legacy v1 event itself is unchanged/out of
+    scope (design.md decision 10: v1 stays regression-only) -- only its
+    final persistence step is unified here.
     """
-    percent = wire_usage.get("percent", 0)
-    warning = percent >= 70
-    critical = percent >= 90
-
-    usage_data: Dict[str, Any] = {
-        "agent": agent,
-        "percent": percent,
-        "model": "kimi-wire",
-        "input_tokens": wire_usage.get("context_tokens", 0),
-        "context_limit": wire_usage.get("max_context_tokens", 0),
-        "warning": warning,
-        "critical": critical,
-        "threshold_warning": 70,
-        "threshold_critical": 90,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    try:
-        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
-        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
-        usage_file.write_text(json.dumps(usage_data, indent=2))
-        return usage_data
-    except OSError as exc:
-        logger.warning(
-            "context_usage_wire_write_failed",
-            extra={
-                "event": "context_usage_wire_write_failed",
-                "data": {"agent": agent, "error": str(exc)},
-            },
-        )
-        return None
+    limit_tokens = wire_usage.get("max_context_tokens") or None
+    return ContextUsageSample(
+        status="measured",
+        source="kimi_wire",
+        basis="latest_request_input",
+        context_tokens=wire_usage.get("context_tokens"),
+        limit_tokens=limit_tokens,
+        model="kimi-wire",
+    )
 
 
 def _build_agent_context(agent: str, session: Any) -> str:
@@ -3824,6 +3758,51 @@ def _do_run_agent_subprocess(
             if resolved:
                 run_cmd = [resolved, *run_cmd[1:]]
 
+        # Resolve model/limit for the two stdout-native samples that don't
+        # already carry their own (design.md decision 4/5): Claude from the
+        # Claude model-name table, OpenCode from its own installed model
+        # catalog (task 3.15/3.16). Codex/Copilot/Kimi's auxiliary collectors
+        # resolve their own model/limit internally, or leave it honestly
+        # absent (Copilot) rather than guess from an unowned table.
+        from .session import Session
+
+        resolved_model: Optional[str] = None
+        _sess_for_model = Session.load()
+        if _sess_for_model:
+            resolved_model = _sess_for_model.get_runner_config(agent).get("model")
+        resolved_limit: Optional[int] = None
+        codex_fallback_limit: Optional[int] = None
+        if is_opencode:
+            resolved_limit = _opencode_model_context_limit(
+                _opencode_models_catalog(), resolved_model
+            )
+        elif is_codex:
+            from .constants import CODEX_MODEL_CONTEXT_LIMITS
+
+            codex_fallback_limit = CODEX_MODEL_CONTEXT_LIMITS.get(resolved_model, 128000)
+        elif not is_kimi and not is_copilot:
+            resolved_limit = _get_context_limit(resolved_model or "")
+
+        # Auxiliary usage collector (design.md decision 1/5): a second,
+        # independent producer alongside the stdout adapter, for the three
+        # runners whose stream alone can't supply an accurate non-cumulative
+        # context sample. Claude/OpenCode stay stdout-native (no collector).
+        collector: Optional[RunnerUsageCollector] = None
+        if is_codex:
+            collector = CodexRolloutCollector()
+        elif is_copilot:
+            collector = CopilotOtelCollector()
+        elif is_kimi_code:
+            collector = KimiWireCollector()
+        if collector is not None:
+            collector.setup(agent=agent)
+            if isinstance(collector, CopilotOtelCollector) and collector.env:
+                if proc_env is None:
+                    proc_env = os.environ.copy()
+                proc_env.update(collector.env)
+        bound_session_id: Optional[str] = None
+        collector_sample: Optional[ContextUsageSample] = None
+
         proc = subprocess.Popen(
             run_cmd,
             stdout=subprocess.PIPE,
@@ -3871,11 +3850,18 @@ def _do_run_agent_subprocess(
                 )
 
         output_line_count = 0
-        usage_data_for_context: Optional[Dict[str, Any]] = None
+        # Stdout-native sample (Claude/OpenCode; also Codex's cumulative
+        # estimate, which _select_codex_usage only falls back to). Not used
+        # at all for Copilot/Kimi-code, whose context comes solely from
+        # `collector_sample` above.
+        usage_data_for_context: Optional[ContextUsageSample] = None
+        # Legacy Kimi `--wire` (v1) usage dict; unrelated to KimiWireCollector.
+        wire_usage_dict: Optional[Dict[str, Any]] = None
         # Track compaction state to only reset on transition into compaction
         was_in_compaction = False
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
+            usage_data: ContextUsageSample | Dict[str, Any] | None
 
             if is_kimi:
                 (
@@ -3901,11 +3887,7 @@ def _do_run_agent_subprocess(
                     line, session_id_ref, run_id=run_id
                 )
                 readable_lines = _assign_sequence(parsed_opencode_line.events, sequence_counter)
-                usage_data = (
-                    {"input_tokens": parsed_opencode_line.usage.context_tokens}
-                    if parsed_opencode_line.usage is not None
-                    else None
-                )
+                usage_data = parsed_opencode_line.usage
             elif is_copilot:
                 parsed_copilot_line = _parse_copilot_stdout_line(
                     line, runner_type, session_id_ref, run_id=run_id
@@ -3919,11 +3901,10 @@ def _do_run_agent_subprocess(
                     line, runner_type, session_id_ref, run_id=run_id
                 )
                 readable_lines = _assign_sequence(parsed_codex_line.events, sequence_counter)
-                usage_data = (
-                    dict(parsed_codex_line.usage.breakdown or {})
-                    if parsed_codex_line.usage is not None
-                    else None
-                )
+                # This is only the cumulative stdout estimate (design.md decision
+                # 4); _select_codex_usage below prefers the collector's exact
+                # rollout-derived sample and falls back to this one.
+                usage_data = parsed_codex_line.usage
                 if stale:
                     stale_codex_session[0] = True
             else:
@@ -3931,14 +3912,34 @@ def _do_run_agent_subprocess(
                     line, runner_type, session_id_ref, run_id=run_id
                 )
                 readable_lines = _assign_sequence(parsed_claude_line.events, sequence_counter)
-                usage_data = (
-                    {"input_tokens": parsed_claude_line.usage.context_tokens}
-                    if parsed_claude_line.usage is not None
-                    else None
-                )
+                usage_data = parsed_claude_line.usage
 
             session_id = session_id_ref[0]
-            if usage_data is not None:
+
+            # Bind/rebind the auxiliary collector to the active provider
+            # session as soon as its identity is known, and reset this
+            # agent's snapshot to unavailable the moment a genuinely new
+            # (non-resumed) session begins (design.md decision 6) -- before
+            # its first measurement, not after.
+            if session_id_ref[0] and session_id_ref[0] != bound_session_id:
+                is_new_session = run_session_id is None or session_id_ref[0] != run_session_id
+                if is_new_session:
+                    _write_canonical_context_usage(
+                        agent, ContextUsageSample(status="unavailable", source=runner_type)
+                    )
+                if collector is not None:
+                    collector.bind(session_id=session_id_ref[0])
+                bound_session_id = session_id_ref[0]
+
+            if collector is not None:
+                observed = collector.observe()
+                if observed is not None:
+                    collector_sample = observed
+
+            if is_wire_mode:
+                if isinstance(usage_data, dict) and usage_data:
+                    wire_usage_dict = usage_data
+            elif isinstance(usage_data, ContextUsageSample):
                 usage_data_for_context = usage_data
 
             # Stream to Hub or local stdout
@@ -3974,6 +3975,15 @@ def _do_run_agent_subprocess(
         proc.wait()
         stderr_thread.join(timeout=5)
 
+        # Final collector poll so a trailing auxiliary-file record written
+        # right as stdout closed is not lost (design.md decision 5), then
+        # release the collector's invocation-scoped resources.
+        if collector is not None:
+            final_sample = collector.final_poll()
+            if final_sample is not None:
+                collector_sample = final_sample
+            collector.close()
+
         # Post a completion summary so we can confirm the pipeline is alive.
         # A non-zero exit is a canonical run-error, not a completion — copilot's
         # auth failure gets an actionable message; any other non-zero exit gets
@@ -4008,36 +4018,39 @@ def _do_run_agent_subprocess(
                     agent, lifecycle_event.content, session_id=session_id_ref[0]
                 )
 
-        # Write context usage if we captured usage data (Claude/claude_proxy or Kimi wire mode)
-        if not is_kimi and not is_codex and usage_data_for_context and proc.returncode == 0:
-            input_tokens = usage_data_for_context.get("input_tokens")
-            if input_tokens is not None:
-                # Get model from session config
-                model = None
-                from .session import Session
+        # Resolve this run's final context sample from whichever producer
+        # actually has one, then persist it through the one shared writer
+        # (design.md decision 1/7: raw provider dicts never reach the writer).
+        if proc.returncode == 0:
+            final_context_sample: Optional[ContextUsageSample] = None
+            if is_codex:
+                final_context_sample = _select_codex_usage(collector_sample, usage_data_for_context)
+                if (
+                    final_context_sample is not None
+                    and final_context_sample is usage_data_for_context
+                    and final_context_sample.limit_tokens is None
+                ):
+                    # Only the cumulative stdout estimate lacks a limit; the
+                    # rollout-derived sample already carries its own
+                    # model_context_window.
+                    final_context_sample = dataclasses.replace(
+                        final_context_sample, limit_tokens=codex_fallback_limit
+                    )
+            elif collector is not None:
+                final_context_sample = collector_sample
+            elif is_wire_mode:
+                if wire_usage_dict is not None:
+                    final_context_sample = _kimi_wire_legacy_sample(wire_usage_dict)
+            elif usage_data_for_context is not None:
+                final_context_sample = dataclasses.replace(
+                    usage_data_for_context, model=resolved_model, limit_tokens=resolved_limit
+                )
 
-                _sess = Session.load()
-                if _sess:
-                    runner_config = _sess.get_runner_config(agent)
-                    model = runner_config.get("model")
-                ctx_data = _write_context_usage(agent, input_tokens, model)
+            if final_context_sample is not None:
+                ctx_data = _write_canonical_context_usage(agent, final_context_sample)
                 if is_http and ctx_data:
                     with contextlib.suppress(Exception):
                         transport.post_context_usage(agent, ctx_data)
-
-        # Write context usage for Codex (from turn.completed JSONL events)
-        if is_codex and usage_data_for_context and proc.returncode == 0:
-            ctx_data = _write_codex_context_usage(agent, usage_data_for_context)
-            if is_http and ctx_data:
-                with contextlib.suppress(Exception):
-                    transport.post_context_usage(agent, ctx_data)
-
-        # Write context usage for Kimi wire mode (uses context_usage ratio instead of input_tokens)
-        if is_wire_mode and usage_data_for_context and proc.returncode == 0:
-            ctx_data = _write_context_usage_from_wire(agent, usage_data_for_context)
-            if is_http and ctx_data:
-                with contextlib.suppress(Exception):
-                    transport.post_context_usage(agent, ctx_data)
 
         return proc.returncode or 0
 
@@ -5178,23 +5191,16 @@ def _make_direct_trigger_callback(
             session_id = _load_agent_session(recipient)
 
         # Reset context usage and message count when starting a new session
+        # (design.md decision 6: a new session immediately replaces the
+        # previous snapshot with unavailable until its first measurement).
         if is_new_session:
-            _reset_context_usage(recipient)
+            reset_data = _write_canonical_context_usage(
+                recipient, ContextUsageSample(status="unavailable", source="watchdog")
+            )
             # Immediately notify Hub to clear the context bar in Mission Control
-            if is_http and transport is not None:
-                try:
-                    reset_data = {
-                        "agent": recipient,
-                        "percent": 0,
-                        "warning": False,
-                        "critical": False,
-                        "threshold_warning": 70,
-                        "threshold_critical": 90,
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }
+            if is_http and transport is not None and reset_data:
+                with contextlib.suppress(Exception):
                     transport.post_context_usage(recipient, reset_data)
-                except Exception:
-                    pass
             # Clear context usage cache on watchdog instance if available
             if watchdog_instance is not None:
                 watchdog_instance._last_context_posted.pop(recipient, None)

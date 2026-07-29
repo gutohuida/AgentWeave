@@ -99,14 +99,14 @@
   before output delivery
 - [x] 4.3 Emit canonical started, retrying, completed, skipped, and run-error lifecycle events at
   known runner boundaries
-- [ ] 4.4 Update the runner loop to deliver zero or more normalized events and zero or more
+- [x] 4.4 Update the runner loop to deliver zero or more normalized events and zero or more
   independent context samples without fabricating either output
-- [ ] 4.5 Bind collectors to the active agent, run, and provider session and reject mismatched or
+- [x] 4.5 Bind collectors to the active agent, run, and provider session and reject mismatched or
   pre-invocation observations
-- [ ] 4.6 Reset a new session's context snapshot to `unavailable` before its first measurement
-- [ ] 4.7 Reconstruct active session binding after watchdog restart without carrying stale
+- [x] 4.6 Reset a new session's context snapshot to `unavailable` before its first measurement
+- [x] 4.7 Reconstruct active session binding after watchdog restart without carrying stale
   in-memory cumulative deltas
-- [ ] 4.8 Replace the generic, Codex, and Kimi context writers with one atomic canonical snapshot
+- [x] 4.8 Replace the generic, Codex, and Kimi context writers with one atomic canonical snapshot
   writer
 - [ ] 4.9 Add legacy context readers for `tokens_used`, `tokens_limit`, `input_tokens`,
   `context_limit`, and ratio-form `context_usage`

@@ -32,6 +32,7 @@ from agentweave.watchdog import (
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
     _kimi_model_context_limit,
+    _kimi_wire_legacy_sample,
     _kimi_wire_usage_sample,
     _KimiCodeParser,
     _new_run_id,
@@ -51,7 +52,7 @@ from agentweave.watchdog import (
     _run_agent_subprocess,
     _run_codex_mcp_turn,
     _select_codex_usage,
-    _write_codex_context_usage,
+    _write_canonical_context_usage,
 )
 
 
@@ -2413,120 +2414,91 @@ class TestCopilotUsesPat:
         assert self._fn({"SOME_OTHER_VAR": "SOME_OTHER_VAR"}) is False
 
 
-class TestWriteCodexContextUsage:
-    """Tests for _write_codex_context_usage."""
+class TestWriteCanonicalContextUsage:
+    """Tests for _write_canonical_context_usage (task 4.8): one atomic writer
+    for every runner, using ContextUsageSample's own canonical field names."""
 
     @pytest.fixture(autouse=True)
     def setup_dirs(self, tmp_path):
-        self.tmp_path = tmp_path
-        self.session_dir = tmp_path / ".agentweave"
-        self.session_dir.mkdir()
-        self.shared_dir = self.session_dir / "shared"
-        self.shared_dir.mkdir()
-        self.context_usage_dir = self.shared_dir / "context_usage"
+        self.context_usage_dir = tmp_path / "context_usage"
         self.context_usage_dir.mkdir()
-
         with patch("agentweave.watchdog.CONTEXT_USAGE_DIR", self.context_usage_dir):
             yield
 
-    def test_known_model_limit(self, tmp_path, monkeypatch):
-        """Uses correct limit for known Codex models."""
-        monkeypatch.chdir(tmp_path)
-        session_data = {
-            "id": "test-session",
-            "name": "Test",
-            "mode": "hierarchical",
-            "principal": "claude",
-            "agents": {"codex-dev": {"runner": "codex", "model": "gpt-5.5"}},
-        }
-        session_file = tmp_path / ".agentweave" / "session.json"
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-        session_file.write_text(json.dumps(session_data))
+    def test_writes_canonical_fields(self):
+        sample = ContextUsageSample(
+            status="measured",
+            source="codex_rollout",
+            basis="provider_context",
+            context_tokens=1000,
+            limit_tokens=128000,
+            model="gpt-5.5",
+            session_id="sess-1",
+        )
+        result = _write_canonical_context_usage("codex-dev", sample)
+        assert result is not None
+        assert result["agent"] == "codex-dev"
+        assert result["status"] == "measured"
+        assert result["context_tokens"] == 1000
+        assert result["limit_tokens"] == 128000
+        assert result["percent"] == pytest.approx(0.78, abs=0.01)
+        assert result["model"] == "gpt-5.5"
+        assert result["session_id"] == "sess-1"
+        assert result["source"] == "codex_rollout"
+        assert result["basis"] == "provider_context"
+        # No legacy alias fields (tokens_used/tokens_limit/context_limit/warning/
+        # critical/threshold_*) leak from the writer -- those are a reader concern.
+        assert "tokens_used" not in result
+        assert "tokens_limit" not in result
+        assert "warning" not in result
 
-        from agentweave.session import Session
+    def test_writes_unavailable_sample(self):
+        sample = ContextUsageSample(status="unavailable", source="watchdog")
+        result = _write_canonical_context_usage("some-agent", sample)
+        assert result is not None
+        assert result["status"] == "unavailable"
+        assert result["context_tokens"] is None
+        assert result["percent"] is None
 
-        sess = Session(session_data)
-        with patch("agentweave.session.Session.load", return_value=sess):
-            usage_data = {"input_tokens": 136000, "output_tokens": 10000, "cached_input_tokens": 0}
-            result = _write_codex_context_usage("codex-dev", usage_data)
-            assert result is not None
-            assert result["tokens_limit"] == 272000
-            assert result["tokens_used"] == 146000
-            assert result["percent"] == 53
+    def test_persists_to_disk_and_survives_a_reread(self):
+        sample = ContextUsageSample(
+            status="measured", source="claude", basis="latest_request_input", context_tokens=500
+        )
+        _write_canonical_context_usage("agent-x", sample)
+        on_disk = json.loads((self.context_usage_dir / "agent-x.json").read_text())
+        assert on_disk["context_tokens"] == 500
+        assert on_disk["status"] == "measured"
 
-    def test_unknown_model_fallback(self, tmp_path, monkeypatch):
-        """Falls back to 128000 for unknown models."""
-        monkeypatch.chdir(tmp_path)
-        session_data = {
-            "id": "test-session",
-            "name": "Test",
-            "mode": "hierarchical",
-            "principal": "claude",
-            "agents": {"codex-dev": {"runner": "codex", "model": "unknown-model"}},
-        }
-        session_file = tmp_path / ".agentweave" / "session.json"
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-        session_file.write_text(json.dumps(session_data))
+    def test_write_failure_returns_none(self, monkeypatch):
+        from agentweave import watchdog as wd
 
-        from agentweave.session import Session
+        monkeypatch.setattr(
+            wd.Path,
+            "write_text",
+            lambda self, *_a, **_k: (_ for _ in ()).throw(OSError("disk full")),
+        )
+        sample = ContextUsageSample(status="unavailable", source="watchdog")
+        assert _write_canonical_context_usage("agent-x", sample) is None
 
-        sess = Session(session_data)
-        with patch("agentweave.session.Session.load", return_value=sess):
-            usage_data = {"input_tokens": 64000, "output_tokens": 10000, "cached_input_tokens": 0}
-            result = _write_codex_context_usage("codex-dev", usage_data)
-            assert result is not None
-            assert result["tokens_limit"] == 128000
-            assert result["percent"] == 57
 
-    def test_warning_threshold(self, tmp_path, monkeypatch):
-        """Sets warning=True when percent >= 70."""
-        monkeypatch.chdir(tmp_path)
-        session_data = {
-            "id": "test-session",
-            "name": "Test",
-            "mode": "hierarchical",
-            "principal": "claude",
-            "agents": {"codex-dev": {"runner": "codex", "model": "gpt-4o"}},
-        }
-        session_file = tmp_path / ".agentweave" / "session.json"
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-        session_file.write_text(json.dumps(session_data))
+class TestKimiWireLegacySample:
+    """_kimi_wire_legacy_sample (task 4.8): converts the legacy Kimi --wire
+    (v1) StatusUpdate usage dict into a canonical sample for the shared writer."""
 
-        from agentweave.session import Session
+    def test_converts_tokens_and_limit(self):
+        sample = _kimi_wire_legacy_sample(
+            {"percent": 42, "context_tokens": 1000, "max_context_tokens": 2381}
+        )
+        assert sample.status == "measured"
+        assert sample.source == "kimi_wire"
+        assert sample.context_tokens == 1000
+        assert sample.limit_tokens == 2381
+        assert sample.model == "kimi-wire"
 
-        sess = Session(session_data)
-        with patch("agentweave.session.Session.load", return_value=sess):
-            # 70% of 128000 = 89600
-            usage_data = {"input_tokens": 80000, "output_tokens": 9600, "cached_input_tokens": 0}
-            result = _write_codex_context_usage("codex-dev", usage_data)
-            assert result is not None
-            assert result["warning"] is True
-            assert result["critical"] is False
-
-    def test_critical_threshold(self, tmp_path, monkeypatch):
-        """Sets critical=True when percent >= 90."""
-        monkeypatch.chdir(tmp_path)
-        session_data = {
-            "id": "test-session",
-            "name": "Test",
-            "mode": "hierarchical",
-            "principal": "claude",
-            "agents": {"codex-dev": {"runner": "codex", "model": "gpt-4o"}},
-        }
-        session_file = tmp_path / ".agentweave" / "session.json"
-        session_file.parent.mkdir(parents=True, exist_ok=True)
-        session_file.write_text(json.dumps(session_data))
-
-        from agentweave.session import Session
-
-        sess = Session(session_data)
-        with patch("agentweave.session.Session.load", return_value=sess):
-            # 90% of 128000 = 115200
-            usage_data = {"input_tokens": 105000, "output_tokens": 10200, "cached_input_tokens": 0}
-            result = _write_codex_context_usage("codex-dev", usage_data)
-            assert result is not None
-            assert result["warning"] is True
-            assert result["critical"] is True
+    def test_zero_max_tokens_becomes_none_not_zero(self):
+        """A limit of 0 means unknown, not a real zero-token context window."""
+        sample = _kimi_wire_legacy_sample({"context_tokens": 100, "max_context_tokens": 0})
+        assert sample.limit_tokens is None
 
 
 def _write_codex_rollout(
@@ -4307,6 +4279,165 @@ def _prepare_codex_agent(tmp_path, monkeypatch, agent="codex-agent"):
     monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
     monkeypatch.setattr("agentweave.diagnostics.launch_blockers", lambda *_a, **_k: [])
     return agent
+
+
+class TestContextUsageInvocationWiring:
+    """Tasks 4.4-4.8: verify canonical usage delivery through a full mocked run."""
+
+    @staticmethod
+    def _codex_usage_line(input_tokens=1000, output_tokens=500):
+        return json.dumps(
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "cached_input_tokens": 200,
+                    "output_tokens": output_tokens,
+                    "reasoning_output_tokens": 50,
+                },
+            }
+        )
+
+    def test_codex_rollout_sample_wins_over_stdout_estimate(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        session_id = "rollout-wins"
+        codex_home = tmp_path / "codex-home"
+        monkeypatch.setenv("CODEX_HOME", str(codex_home))
+        rollout = (
+            codex_home
+            / "sessions"
+            / "2026"
+            / "07"
+            / "29"
+            / f"rollout-2026-07-29T00-00-00-{session_id}.jsonl"
+        )
+        _write_codex_rollout(
+            rollout,
+            session_id=session_id,
+            token_count_events=[
+                {
+                    "last_token_usage": {
+                        "total_tokens": 8000,
+                        "reasoning_output_tokens": 500,
+                    },
+                    "model_context_window": 64000,
+                }
+            ],
+        )
+        proc = _fake_proc([self._codex_usage_line()], [], 0)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+
+        _run_agent_subprocess(
+            agent,
+            ["codex", "exec"],
+            "subject",
+            MagicMock(),
+            True,
+            known_session_id=session_id,
+        )
+
+        usage = json.loads(
+            (tmp_path / ".agentweave" / "shared" / "context_usage" / f"{agent}.json").read_text()
+        )
+        assert usage["status"] == "measured"
+        assert usage["source"] == "codex_rollout"
+        assert usage["context_tokens"] == 7500
+        assert usage["limit_tokens"] == 64000
+        assert usage["session_id"] == session_id
+
+    def test_codex_stdout_estimate_gets_fallback_limit_without_rollout(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        session_id = "no-rollout"
+        monkeypatch.setenv("CODEX_HOME", str(tmp_path / "empty-codex-home"))
+        proc = _fake_proc([self._codex_usage_line()], [], 0)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+
+        _run_agent_subprocess(
+            agent,
+            ["codex", "exec"],
+            "subject",
+            MagicMock(),
+            True,
+            known_session_id=session_id,
+        )
+
+        usage = json.loads(
+            (tmp_path / ".agentweave" / "shared" / "context_usage" / f"{agent}.json").read_text()
+        )
+        assert usage["status"] == "estimated"
+        assert usage["source"] == "codex"
+        assert usage["basis"] == "cumulative_delta"
+        assert usage["context_tokens"] == 1500
+        assert usage["limit_tokens"] == 128000
+
+    def test_new_session_resets_before_collector_bind_and_observe(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        actions = []
+
+        class RecordingCollector(RunnerUsageCollector):
+            def setup(self, *, agent, workdir=None):
+                actions.append(("setup", agent))
+
+            def bind(self, *, session_id):
+                actions.append(("bind", session_id))
+
+            def observe(self):
+                actions.append(("observe", None))
+                return ContextUsageSample(
+                    status="measured",
+                    source="recording",
+                    basis="provider_context",
+                    context_tokens=10,
+                    limit_tokens=100,
+                )
+
+            def close(self):
+                actions.append(("close", None))
+
+        real_write = wd._write_canonical_context_usage
+
+        def recording_write(agent_name, sample):
+            actions.append(("write", sample.status))
+            return real_write(agent_name, sample)
+
+        monkeypatch.setattr(wd, "CodexRolloutCollector", RecordingCollector)
+        monkeypatch.setattr(wd, "_write_canonical_context_usage", recording_write)
+        thread_line = json.dumps({"type": "thread.started", "thread_id": "new-session"})
+        proc = _fake_proc([thread_line], [], 0)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+
+        _run_agent_subprocess(agent, ["codex", "exec"], "subject", MagicMock(), True)
+
+        assert actions.index(("write", "unavailable")) < actions.index(("bind", "new-session"))
+        assert actions.index(("bind", "new-session")) < actions.index(("observe", None))
+        assert actions[-1] == ("write", "measured")
+
+    def test_copilot_otel_environment_reaches_subprocess(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        agent = "copilot-agent"
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=[agent])
+        session.set_runner_config(agent, "copilot", {})
+        session.save()
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        monkeypatch.setattr("agentweave.diagnostics.launch_blockers", lambda *_a, **_k: [])
+        popen = MagicMock(return_value=_fake_proc([], [], 0))
+        monkeypatch.setattr(wd.subprocess, "Popen", popen)
+
+        _run_agent_subprocess(agent, ["copilot"], "subject", MagicMock(), True)
+
+        proc_env = popen.call_args.kwargs["env"]
+        assert proc_env["COPILOT_OTEL_FILE_EXPORTER_PATH"].endswith(".jsonl")
+        assert proc_env["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "false"
 
 
 class TestLifecycleEventsCompletionAndRunError:
