@@ -50,6 +50,44 @@ from .utils import generate_id, load_dotenv, load_json
 logger = logging.getLogger(__name__)
 
 
+class RunnerUsageCollector(ABC):
+    """Resolves auxiliary provider-side context usage a runner's own stdout
+    stream cannot supply on its own (design.md decision 1: "Coordinate two
+    producers at the invocation boundary").
+
+    The invocation coordinator drives exactly one collector instance per
+    runner process through this lifecycle, in order: `setup` before the
+    process spawns, `bind` once the provider session identity is known, zero
+    or more `observe` calls while stdout is still open, one `final_poll`
+    after stdout closes (so a trailing auxiliary write is not lost), then
+    `close`. Implementations must tolerate absent, partial, or malformed
+    auxiliary data and return `None` rather than raise or fabricate a
+    sample — the stdout adapter's own result always stands on its own.
+    """
+
+    def setup(self, *, agent: str, workdir: Optional[Path] = None) -> None:  # noqa: B027
+        """Prepare invocation-scoped resources before the runner process spawns.
+
+        No-op by default; only collectors that must configure something before
+        spawn (e.g. Copilot's OTel exporter path) need to override this.
+        """
+
+    @abstractmethod
+    def bind(self, *, session_id: str) -> None:
+        """Associate this collector with the active provider session."""
+
+    @abstractmethod
+    def observe(self) -> Optional[ContextUsageSample]:
+        """Return a newly available sample, or None if nothing new/valid exists."""
+
+    def final_poll(self) -> Optional[ContextUsageSample]:
+        """Return a sample after stdout closes, allowing for trailing writes."""
+        return self.observe()
+
+    def close(self) -> None:  # noqa: B027
+        """Release any resources opened in `setup`. No-op by default."""
+
+
 def _discover_spec_files() -> Dict[str, Path]:
     """Discover every safe spec HTML file beneath `spec/` (relative to CWD).
 
@@ -1759,6 +1797,243 @@ def _extract_kimi_code_session(workdir: Path) -> Optional[str]:
     return best_sid
 
 
+def _kimi_home() -> Path:
+    """Return the Kimi Code CLI's config/data home (`~/.kimi-code`)."""
+    return Path.home() / ".kimi-code"
+
+
+def _resolve_kimi_wire_path(
+    session_id: str,
+    *,
+    kimi_home: Optional[Path] = None,
+) -> Optional[Path]:
+    """Resolve the on-disk main-agent `wire.jsonl` file for `session_id`.
+
+    Reads the same `session_index.jsonl` index `_extract_kimi_code_session`
+    uses (there keyed by `workDir`; here by the exact `sessionId` this
+    collector is bound to) and returns the `agents/main/wire.jsonl` file
+    under that session's own `sessionDir` -- never an unscoped
+    newest-session heuristic (design.md decision 5).
+    """
+    index_file = (kimi_home or _kimi_home()) / "session_index.jsonl"
+    if not index_file.is_file():
+        return None
+    session_dir: Optional[str] = None
+    try:
+        with index_file.open(encoding="utf-8") as fh:
+            for raw in fh:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict) and record.get("sessionId") == session_id:
+                    sd = record.get("sessionDir")
+                    if isinstance(sd, str) and sd:
+                        session_dir = sd
+    except OSError:
+        return None
+    if session_dir is None:
+        return None
+    wire_path = Path(session_dir) / "agents" / "main" / "wire.jsonl"
+    return wire_path if wire_path.is_file() else None
+
+
+def _kimi_wire_usage_sample(
+    path: Path,
+    *,
+    session_id: Optional[str] = None,
+    source: str = "kimi_wire",
+    resolve_limit: Optional[Callable[[Optional[str]], Optional[int]]] = None,
+) -> Optional[ContextUsageSample]:
+    """Build a measured sample from the latest main-agent `usage.record` in a
+    Kimi Code wire.jsonl file.
+
+    Context tokens equal `inputOther + inputCacheRead + inputCacheCreation +
+    output` (design.md decision 4; confirmed live against Kimi Code CLI
+    0.29.1, including a 3-turn session where cache_read absorbed most of a
+    later turn's input -- proving each `usage.record` is already
+    per-turn/non-cumulative, never to be summed). `llm.request.maxTokens` is
+    never read here at all: the same live session showed it *decreasing*
+    turn over turn (262144 -> 238469 -> 238378) while the model's real
+    context window stayed fixed at 262144 the whole time, confirming it is
+    a remaining-completion-budget figure, not a context limit. Only
+    `usageScope="turn"` records are read, explicitly excluding any
+    hypothetical accumulated/session-scoped record as a context-size
+    source. A record still being written (a partial final line) is skipped
+    rather than failing the read.
+    """
+    latest_usage: Optional[Dict[str, Any]] = None
+    model_alias: Optional[str] = None
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                if record.get("type") != "usage.record" or record.get("usageScope") != "turn":
+                    continue
+                usage = record.get("usage")
+                if not isinstance(usage, dict):
+                    continue
+                latest_usage = usage
+                candidate_model = record.get("model")
+                model_alias = candidate_model if isinstance(candidate_model, str) else None
+    except OSError:
+        return None
+
+    if latest_usage is None:
+        return None
+    input_other = latest_usage.get("inputOther")
+    if not isinstance(input_other, (int, float)):
+        return None
+    cache_read = latest_usage.get("inputCacheRead") or 0
+    cache_creation = latest_usage.get("inputCacheCreation") or 0
+    output_tokens = latest_usage.get("output") or 0
+    context_tokens = int(input_other) + int(cache_read) + int(cache_creation) + int(output_tokens)
+
+    limit_tokens = resolve_limit(model_alias) if resolve_limit is not None else None
+
+    return ContextUsageSample(
+        status="measured",
+        source=source,
+        basis="provider_context",
+        context_tokens=context_tokens,
+        limit_tokens=limit_tokens,
+        model=model_alias,
+        session_id=session_id,
+        breakdown={
+            "input_tokens": int(input_other),
+            "cache_read_tokens": int(cache_read),
+            "cache_creation_tokens": int(cache_creation),
+            "output_tokens": int(output_tokens),
+        },
+    )
+
+
+def _kimi_provider_catalog(*, timeout: float = 5.0) -> Optional[Dict[str, Any]]:
+    """Return the Kimi Code CLI's locally configured provider/model catalog.
+
+    Runs `kimi provider list --json`, a fast local read of `config.toml`
+    with no network call (confirmed live: sub-second, unaffected by the
+    remote provider-model catalog auto-refresh that only `kimi web`
+    performs). Returns `None` on any failure -- missing CLI, non-zero exit,
+    timeout, or malformed output -- so a model limit simply stays absent
+    rather than fabricated.
+    """
+    try:
+        result = subprocess.run(
+            ["kimi", "provider", "list", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _kimi_model_context_limit(
+    catalog: Optional[Dict[str, Any]], model_alias: Optional[str]
+) -> Optional[int]:
+    """Resolve `max_input_tokens ?? max_context_tokens` for `model_alias` from
+    the provider catalog (design.md decision 4).
+
+    Every locally configured Kimi Code 0.29.1 model observed live only ever
+    populates `maxContextSize`; a distinct max-input-tokens-style key is
+    still checked first in case a future catalog exposes one, but is never
+    fabricated when absent.
+    """
+    if not catalog or not model_alias:
+        return None
+    models = catalog.get("models")
+    if not isinstance(models, dict):
+        return None
+    entry = models.get(model_alias)
+    if not isinstance(entry, dict):
+        return None
+    for key in ("maxInputTokens", "maxContextSize", "maxContextTokens"):
+        value = entry.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            return int(value)
+    return None
+
+
+class KimiWireCollector(RunnerUsageCollector):
+    """Resolves Kimi Code (v0.29.x) context usage from the CLI's own
+    per-session `wire.jsonl` and locally configured model catalog.
+
+    Kimi's session-status HTTP service (`kimi web`'s
+    `GET /api/v1/sessions/:id/status`) was investigated live and found to
+    only reflect accurate usage for sessions actively driven through that
+    same running server process. A headless `kimi -p` invocation -- how
+    AgentWeave always runs Kimi -- never registers with it: status for a
+    real session that had just used 28,915 tokens (per its own wire.jsonl)
+    was reported as 182 tokens, stable across repeated queries and even
+    with a `kimi web` server already running concurrently during the `-p`
+    call. No resume/attach/reload action exists to fix this from the
+    client side, and the endpoint itself is undocumented. That path is
+    intentionally not implemented; `wire.jsonl` plus the local provider
+    catalog is the only source confirmed accurate for a headless
+    invocation.
+    """
+
+    def __init__(self, *, kimi_home: Optional[Path] = None) -> None:
+        self._kimi_home = kimi_home
+        self._session_id: Optional[str] = None
+        self._wire_path: Optional[Path] = None
+        self._catalog: Optional[Dict[str, Any]] = None
+        self._catalog_fetched = False
+
+    def bind(self, *, session_id: str) -> None:
+        self._session_id = session_id
+        self._wire_path = None
+
+    def _resolve_path(self) -> Optional[Path]:
+        if self._session_id is None:
+            return None
+        if self._wire_path is not None and self._wire_path.is_file():
+            return self._wire_path
+        path = _resolve_kimi_wire_path(self._session_id, kimi_home=self._kimi_home)
+        self._wire_path = path
+        return path
+
+    def _model_limit(self, model_alias: Optional[str]) -> Optional[int]:
+        if not self._catalog_fetched:
+            self._catalog = _kimi_provider_catalog()
+            self._catalog_fetched = True
+        return _kimi_model_context_limit(self._catalog, model_alias)
+
+    def observe(self) -> Optional[ContextUsageSample]:
+        path = self._resolve_path()
+        if path is None:
+            return None
+        return _kimi_wire_usage_sample(
+            path,
+            session_id=self._session_id,
+            resolve_limit=self._model_limit,
+        )
+
+    def close(self) -> None:
+        self._wire_path = None
+        self._catalog = None
+        self._catalog_fetched = False
+
+
 def _get_runner_type(agent: str) -> str:
     """Return the runner type for an agent, loading from session config."""
     from .constants import AGENT_RUNNER_DEFAULTS
@@ -2599,44 +2874,6 @@ def _codex_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[Conte
             "reasoning_tokens": int(reasoning_tokens),
         },
     )
-
-
-class RunnerUsageCollector(ABC):
-    """Resolves auxiliary provider-side context usage a runner's own stdout
-    stream cannot supply on its own (design.md decision 1: "Coordinate two
-    producers at the invocation boundary").
-
-    The invocation coordinator drives exactly one collector instance per
-    runner process through this lifecycle, in order: `setup` before the
-    process spawns, `bind` once the provider session identity is known, zero
-    or more `observe` calls while stdout is still open, one `final_poll`
-    after stdout closes (so a trailing auxiliary write is not lost), then
-    `close`. Implementations must tolerate absent, partial, or malformed
-    auxiliary data and return `None` rather than raise or fabricate a
-    sample — the stdout adapter's own result always stands on its own.
-    """
-
-    def setup(self, *, agent: str, workdir: Optional[Path] = None) -> None:  # noqa: B027
-        """Prepare invocation-scoped resources before the runner process spawns.
-
-        No-op by default; only collectors that must configure something before
-        spawn (e.g. Copilot's OTel exporter path) need to override this.
-        """
-
-    @abstractmethod
-    def bind(self, *, session_id: str) -> None:
-        """Associate this collector with the active provider session."""
-
-    @abstractmethod
-    def observe(self) -> Optional[ContextUsageSample]:
-        """Return a newly available sample, or None if nothing new/valid exists."""
-
-    def final_poll(self) -> Optional[ContextUsageSample]:
-        """Return a sample after stdout closes, allowing for trailing writes."""
-        return self.observe()
-
-    def close(self) -> None:  # noqa: B027
-        """Release any resources opened in `setup`. No-op by default."""
 
 
 def _codex_home() -> Path:

@@ -11,6 +11,7 @@ from agentweave.stream_events import STREAM_EVENT_KINDS, ContextUsageSample, Par
 from agentweave.watchdog import (
     CodexRolloutCollector,
     CopilotOtelCollector,
+    KimiWireCollector,
     RunnerUsageCollector,
     _agent_ping_cmd,
     _build_codex_mcp_tool_call,
@@ -23,12 +24,15 @@ from agentweave.watchdog import (
     _copilot_otel_usage_sample,
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
+    _kimi_model_context_limit,
+    _kimi_wire_usage_sample,
     _KimiCodeParser,
     _parse_claude_stream_line,
     _parse_codex_stream_line,
     _parse_copilot_stream_line,
     _parse_opencode_stdout_line,
     _resolve_codex_rollout_path,
+    _resolve_kimi_wire_path,
     _run_agent_subprocess,
     _run_codex_mcp_turn,
     _select_codex_usage,
@@ -3483,6 +3487,541 @@ class TestCopilotOtelCollector:
         collector.close()
         assert not path.exists()
         assert collector.env == {}
+
+
+def _write_kimi_index(path: Path, entries: list) -> None:
+    """Write a minimal `session_index.jsonl` for Kimi collector tests.
+
+    Each entry is a dict merged over the defaults below; pass
+    `{"sessionId": ..., "sessionDir": ...}` at minimum.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    for entry in entries:
+        record = {"workDir": "C:/irrelevant"}
+        record.update(entry)
+        lines.append(json.dumps(record))
+    path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
+def _write_kimi_wire(
+    path: Path,
+    *,
+    usage_records: list,
+    trailing_partial: bool = False,
+) -> None:
+    """Write a minimal Kimi Code `wire.jsonl` for collector tests.
+
+    `usage_records` is a list of `(model_alias, usage_dict)` tuples, each
+    becoming one `usage.record` line with `usageScope="turn"`.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps({"type": "metadata", "protocol_version": "1.5", "created_at": 0})]
+    for model_alias, usage in usage_records:
+        lines.append(
+            json.dumps(
+                {
+                    "type": "usage.record",
+                    "model": model_alias,
+                    "usage": usage,
+                    "usageScope": "turn",
+                    "time": 0,
+                }
+            )
+        )
+    text = "\n".join(lines) + "\n"
+    if trailing_partial:
+        text += '{"type":"usage.record","model":"kimi-code/kimi-for-cod'
+    path.write_text(text, encoding="utf-8")
+
+
+# Field shapes below (usage.record's inputOther/inputCacheRead/inputCacheCreation/
+# output, llm.request.maxTokens, session_index.jsonl's sessionId/sessionDir/workDir,
+# and `kimi provider list --json`'s models.<alias>.maxContextSize) are all taken
+# from real files/output captured live against Kimi Code CLI 0.29.1.
+
+
+class TestResolveKimiWirePath:
+    """Tests for _resolve_kimi_wire_path (task 3.11)."""
+
+    def test_resolves_by_exact_session_id(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_wire(wire, usage_records=[])
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        resolved = _resolve_kimi_wire_path("session_abc", kimi_home=tmp_path)
+        assert resolved == wire
+
+    def test_no_index_file_returns_none(self, tmp_path):
+        assert _resolve_kimi_wire_path("session_abc", kimi_home=tmp_path) is None
+
+    def test_no_matching_session_id_returns_none(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        _write_kimi_index(index, [{"sessionId": "session_other", "sessionDir": "C:/nope"}])
+        assert _resolve_kimi_wire_path("session_abc", kimi_home=tmp_path) is None
+
+    def test_matching_index_entry_but_missing_wire_file_returns_none(self, tmp_path):
+        """A stale index entry (session dir listed but never actually
+        produced a main-agent wire.jsonl) must not resolve to a
+        nonexistent path."""
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        session_dir.mkdir(parents=True)
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        assert _resolve_kimi_wire_path("session_abc", kimi_home=tmp_path) is None
+
+    def test_malformed_index_lines_are_skipped(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_wire(wire, usage_records=[])
+        index.parent.mkdir(parents=True, exist_ok=True)
+        index.write_text(
+            "not json at all\n"
+            + json.dumps(
+                {
+                    "sessionId": "session_abc",
+                    "sessionDir": str(session_dir).replace("\\", "/"),
+                    "workDir": "C:/irrelevant",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        assert _resolve_kimi_wire_path("session_abc", kimi_home=tmp_path) == wire
+
+
+class TestKimiWireUsageSample:
+    """Tests for _kimi_wire_usage_sample (tasks 3.12, 3.13)."""
+
+    def test_single_turn_arithmetic(self, tmp_path):
+        """Context tokens = inputOther + inputCacheRead + inputCacheCreation
+        + output (confirmed live)."""
+        path = tmp_path / "wire.jsonl"
+        _write_kimi_wire(
+            path,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {
+                        "inputOther": 18390,
+                        "inputCacheRead": 10496,
+                        "inputCacheCreation": 0,
+                        "output": 29,
+                    },
+                )
+            ],
+        )
+        sample = _kimi_wire_usage_sample(path, session_id="session_abc")
+        assert sample is not None
+        assert sample.status == "measured"
+        assert sample.basis == "provider_context"
+        assert sample.context_tokens == 18390 + 10496 + 29
+        assert sample.model == "kimi-code/kimi-for-coding"
+        assert sample.session_id == "session_abc"
+        assert sample.limit_tokens is None  # no resolve_limit passed
+
+    def test_multi_turn_uses_latest_not_accumulated(self, tmp_path):
+        """A 3-turn session's later usage.record must win outright -- never
+        summed with earlier turns (confirmed live: turn 2 moved most of turn
+        1's input into cache_read, exactly like the OpenCode/Codex rule)."""
+        path = tmp_path / "wire.jsonl"
+        _write_kimi_wire(
+            path,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {
+                        "inputOther": 13130,
+                        "inputCacheRead": 10496,
+                        "inputCacheCreation": 0,
+                        "output": 49,
+                    },
+                ),
+                (
+                    "kimi-code/kimi-for-coding",
+                    {
+                        "inputOther": 174,
+                        "inputCacheRead": 23552,
+                        "inputCacheCreation": 0,
+                        "output": 40,
+                    },
+                ),
+                (
+                    "kimi-code/kimi-for-coding",
+                    {
+                        "inputOther": 349,
+                        "inputCacheRead": 23552,
+                        "inputCacheCreation": 0,
+                        "output": 66,
+                    },
+                ),
+            ],
+        )
+        sample = _kimi_wire_usage_sample(path, session_id="session_abc")
+        assert sample is not None
+        assert sample.context_tokens == 349 + 23552 + 66
+
+    def test_cache_creation_included_once(self, tmp_path):
+        path = tmp_path / "wire.jsonl"
+        _write_kimi_wire(
+            path,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {
+                        "inputOther": 100,
+                        "inputCacheRead": 50,
+                        "inputCacheCreation": 25,
+                        "output": 10,
+                    },
+                )
+            ],
+        )
+        sample = _kimi_wire_usage_sample(path, session_id="session_abc")
+        assert sample is not None
+        assert sample.context_tokens == 100 + 50 + 25 + 10
+        assert sample.breakdown["cache_creation_tokens"] == 25
+
+    def test_llm_request_maxtokens_never_used_as_limit(self, tmp_path):
+        """Adversarial: a huge, decreasing `llm.request.maxTokens` sits right
+        next to the real usage.record in the same file (confirmed live:
+        262144 -> 238469 -> 238378 across turns while the real context
+        window stayed fixed) -- it must never leak into limit_tokens even
+        without a resolve_limit callback."""
+        path = tmp_path / "wire.jsonl"
+        lines = [
+            json.dumps({"type": "metadata", "protocol_version": "1.5", "created_at": 0}),
+            json.dumps(
+                {
+                    "type": "llm.request",
+                    "maxTokens": 999999999,
+                    "model": "kimi-for-coding",
+                    "modelAlias": "kimi-code/kimi-for-coding",
+                    "time": 0,
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "usage.record",
+                    "model": "kimi-code/kimi-for-coding",
+                    "usage": {
+                        "inputOther": 100,
+                        "inputCacheRead": 0,
+                        "inputCacheCreation": 0,
+                        "output": 5,
+                    },
+                    "usageScope": "turn",
+                    "time": 0,
+                }
+            ),
+        ]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        sample = _kimi_wire_usage_sample(path, session_id="session_abc")
+        assert sample is not None
+        assert sample.context_tokens == 105
+        assert sample.limit_tokens is None
+        assert 999999999 not in (sample.breakdown or {}).values()
+
+    def test_non_turn_usage_scope_is_ignored(self, tmp_path):
+        """An accumulated/session-scoped usage record (hypothetical -- never
+        observed live, but explicitly excluded per task 3.13) must not
+        become the context-size source."""
+        path = tmp_path / "wire.jsonl"
+        lines = [
+            json.dumps({"type": "metadata", "protocol_version": "1.5", "created_at": 0}),
+            json.dumps(
+                {
+                    "type": "usage.record",
+                    "model": "kimi-code/kimi-for-coding",
+                    "usage": {
+                        "inputOther": 999999,
+                        "inputCacheRead": 0,
+                        "inputCacheCreation": 0,
+                        "output": 0,
+                    },
+                    "usageScope": "session",
+                    "time": 0,
+                }
+            ),
+        ]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        assert _kimi_wire_usage_sample(path, session_id="session_abc") is None
+
+    def test_resolve_limit_callback_supplies_limit_tokens(self, tmp_path):
+        path = tmp_path / "wire.jsonl"
+        _write_kimi_wire(
+            path,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 100, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        sample = _kimi_wire_usage_sample(
+            path, session_id="session_abc", resolve_limit=lambda model: 262144
+        )
+        assert sample is not None
+        assert sample.limit_tokens == 262144
+
+    def test_partial_final_line_is_skipped(self, tmp_path):
+        path = tmp_path / "wire.jsonl"
+        _write_kimi_wire(
+            path,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 200, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+            trailing_partial=True,
+        )
+        sample = _kimi_wire_usage_sample(path, session_id="session_abc")
+        assert sample is not None
+        assert sample.context_tokens == 200
+
+    def test_no_usage_record_returns_none(self, tmp_path):
+        path = tmp_path / "wire.jsonl"
+        _write_kimi_wire(path, usage_records=[])
+        assert _kimi_wire_usage_sample(path, session_id="session_abc") is None
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert _kimi_wire_usage_sample(tmp_path / "nope.jsonl", session_id="session_abc") is None
+
+
+class TestKimiModelContextLimit:
+    """Tests for _kimi_model_context_limit (task 3.12)."""
+
+    def test_resolves_max_context_size(self):
+        catalog = {"models": {"kimi-code/kimi-for-coding": {"maxContextSize": 262144}}}
+        assert _kimi_model_context_limit(catalog, "kimi-code/kimi-for-coding") == 262144
+
+    def test_prefers_max_input_tokens_when_present(self):
+        catalog = {
+            "models": {
+                "kimi-code/kimi-for-coding": {"maxInputTokens": 200000, "maxContextSize": 262144}
+            }
+        }
+        assert _kimi_model_context_limit(catalog, "kimi-code/kimi-for-coding") == 200000
+
+    def test_unknown_model_returns_none(self):
+        catalog = {"models": {"kimi-code/kimi-for-coding": {"maxContextSize": 262144}}}
+        assert _kimi_model_context_limit(catalog, "kimi-code/unknown-model") is None
+
+    def test_none_catalog_returns_none(self):
+        assert _kimi_model_context_limit(None, "kimi-code/kimi-for-coding") is None
+
+    def test_none_model_alias_returns_none(self):
+        catalog = {"models": {"kimi-code/kimi-for-coding": {"maxContextSize": 262144}}}
+        assert _kimi_model_context_limit(catalog, None) is None
+
+    def test_zero_or_negative_limit_is_rejected(self):
+        catalog = {"models": {"kimi-code/kimi-for-coding": {"maxContextSize": 0}}}
+        assert _kimi_model_context_limit(catalog, "kimi-code/kimi-for-coding") is None
+
+
+class TestKimiWireCollector:
+    """Tests for KimiWireCollector (tasks 3.11-3.14)."""
+
+    def test_is_a_runner_usage_collector(self):
+        assert issubclass(KimiWireCollector, RunnerUsageCollector)
+
+    def test_observe_before_bind_returns_none(self, tmp_path):
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        assert collector.observe() is None
+
+    def test_observe_missing_index_returns_none(self, tmp_path):
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        collector.bind(session_id="session_abc")
+        assert collector.observe() is None
+
+    def test_observe_resolves_and_reads_bound_session(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_wire(
+            wire,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 300, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        collector.bind(session_id="session_abc")
+        with patch(
+            "agentweave.watchdog._kimi_provider_catalog",
+            return_value={"models": {"kimi-code/kimi-for-coding": {"maxContextSize": 262144}}},
+        ):
+            sample = collector.observe()
+        assert sample is not None
+        assert sample.context_tokens == 300
+        assert sample.limit_tokens == 262144
+        assert sample.session_id == "session_abc"
+
+    def test_missing_model_capability_yields_token_only_sample(self, tmp_path):
+        """Unknown model limits SHALL produce a token-only sample, not zero."""
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_wire(
+            wire,
+            usage_records=[
+                (
+                    "kimi-code/some-new-model",
+                    {"inputOther": 400, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        collector.bind(session_id="session_abc")
+        with patch("agentweave.watchdog._kimi_provider_catalog", return_value={"models": {}}):
+            sample = collector.observe()
+        assert sample is not None
+        assert sample.context_tokens == 400
+        assert sample.limit_tokens is None
+        assert sample.percent is None
+
+    def test_catalog_fetched_only_once_per_collector(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_wire(
+            wire,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 100, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        collector.bind(session_id="session_abc")
+        with patch(
+            "agentweave.watchdog._kimi_provider_catalog",
+            return_value={"models": {"kimi-code/kimi-for-coding": {"maxContextSize": 262144}}},
+        ) as mock_catalog:
+            collector.observe()
+            collector.observe()
+            collector.final_poll()
+        assert mock_catalog.call_count == 1
+
+    def test_final_poll_reflects_late_write(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        collector.bind(session_id="session_abc")
+        with patch("agentweave.watchdog._kimi_provider_catalog", return_value=None):
+            assert collector.observe() is None  # nothing written yet
+            _write_kimi_wire(
+                wire,
+                usage_records=[
+                    (
+                        "kimi-code/kimi-for-coding",
+                        {
+                            "inputOther": 500,
+                            "inputCacheRead": 0,
+                            "inputCacheCreation": 0,
+                            "output": 0,
+                        },
+                    )
+                ],
+            )
+            sample = collector.final_poll()
+        assert sample is not None
+        assert sample.context_tokens == 500
+
+    def test_rebind_to_different_session_forces_reresolution(self, tmp_path):
+        """A stale wire path cached from a previous bind must not leak into a
+        different session (stale-session-directory guard)."""
+        index = tmp_path / "session_index.jsonl"
+        first_dir = tmp_path / "sessions" / "wd_x" / "session_first"
+        second_dir = tmp_path / "sessions" / "wd_x" / "session_second"
+        _write_kimi_wire(
+            first_dir / "agents" / "main" / "wire.jsonl",
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 111, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        _write_kimi_wire(
+            second_dir / "agents" / "main" / "wire.jsonl",
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 222, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        _write_kimi_index(
+            index,
+            [
+                {"sessionId": "session_first", "sessionDir": str(first_dir).replace("\\", "/")},
+                {"sessionId": "session_second", "sessionDir": str(second_dir).replace("\\", "/")},
+            ],
+        )
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        with patch("agentweave.watchdog._kimi_provider_catalog", return_value=None):
+            collector.bind(session_id="session_first")
+            assert collector.observe().context_tokens == 111
+            collector.bind(session_id="session_second")
+            assert collector.observe().context_tokens == 222
+
+    def test_close_clears_cached_state(self, tmp_path):
+        index = tmp_path / "session_index.jsonl"
+        session_dir = tmp_path / "sessions" / "wd_x" / "session_abc"
+        wire = session_dir / "agents" / "main" / "wire.jsonl"
+        _write_kimi_wire(
+            wire,
+            usage_records=[
+                (
+                    "kimi-code/kimi-for-coding",
+                    {"inputOther": 100, "inputCacheRead": 0, "inputCacheCreation": 0, "output": 0},
+                )
+            ],
+        )
+        _write_kimi_index(
+            index,
+            [{"sessionId": "session_abc", "sessionDir": str(session_dir).replace("\\", "/")}],
+        )
+        collector = KimiWireCollector(kimi_home=tmp_path)
+        collector.bind(session_id="session_abc")
+        with patch("agentweave.watchdog._kimi_provider_catalog", return_value=None):
+            assert collector.observe() is not None
+            collector.close()
+            assert collector._wire_path is None
+            assert collector._catalog is None
+            assert collector._catalog_fetched is False
+            # Still resolvable again after close (close only clears the cache).
+            assert collector.observe() is not None
 
 
 class TestPopenUsesUtf8Encoding:

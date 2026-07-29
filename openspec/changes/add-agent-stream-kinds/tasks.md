@@ -67,15 +67,26 @@
   subagents, cache fields, malformed/partial lines, absent limits, and content exclusion —
   live-verified against Copilot CLI 1.0.75 (plain reply, tool-call turn, task-tool subagent
   turn); cache_creation.input_tokens handling stays synthetic, never observed live
-- [ ] 3.10 Implement Kimi 0.29.x session-status collection when the status service is available
-- [ ] 3.11 Implement the session-bound Kimi fallback from latest main-agent completed-step usage
+- [x] 3.10 ~~Implement Kimi 0.29.x session-status collection when the status service is
+  available~~ — investigated live against Kimi Code CLI 0.29.1 and intentionally not
+  implemented: `kimi web`'s `GET /api/v1/sessions/:id/status` only reflects accurate usage for
+  sessions actively driven through that same running server process. A headless `kimi -p`
+  invocation (how AgentWeave always runs Kimi) never registers with it — confirmed with a real
+  session that had used 28,915 tokens reporting `context_tokens: 182`, stable across repeated
+  queries and even with a `kimi web` server already running concurrently during the `-p` call.
+  No resume/attach/reload action exists (`"unsupported action"` for all tried), and the endpoint
+  is undocumented. Decision confirmed with the user; the Wire fallback (3.11) is the only source
+  confirmed accurate for a headless invocation.
+- [x] 3.11 Implement the session-bound Kimi fallback from latest main-agent completed-step usage
   and active model capability metadata
-- [ ] 3.12 Compute Kimi context from inputOther + cache read + cache creation + output and use
+- [x] 3.12 Compute Kimi context from inputOther + cache read + cache creation + output and use
   `max_input_tokens ?? max_context_tokens`
-- [ ] 3.13 Explicitly reject `llm.request.maxTokens` as a context denominator and accumulated
+- [x] 3.13 Explicitly reject `llm.request.maxTokens` as a context denominator and accumulated
   `usage.record` as the context-size source
-- [ ] 3.14 Add Kimi tests for status, Wire fallback, missing capabilities, completion maxTokens,
-  accumulated usage records, partial files, and stale session directories
+- [x] 3.14 Add Kimi tests for status, Wire fallback, missing capabilities, completion maxTokens,
+  accumulated usage records, partial files, and stale session directories — live-verified against
+  Kimi Code CLI 0.29.1 (single-turn and 3-turn wire.jsonl captures, provider catalog JSON); status
+  path has no tests since it was not implemented (see 3.10)
 - [ ] 3.15 Resolve OpenCode model limits from the active model catalog/configuration, preferring
   its declared effective input limit and using the context fallback only when needed
 - [ ] 3.16 Add OpenCode limit tests for declared input limits, fallback limits, model switches,
