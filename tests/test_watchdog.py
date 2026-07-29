@@ -1933,6 +1933,33 @@ class TestParseClaudeStreamLine:
         assert parsed.events[0].kind == "error"
         assert "rate limited" in parsed.events[0].content
 
+    def test_is_error_result_with_success_like_subtype_is_not_completed(self):
+        line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": True,
+                "result": "API Error: Unable to connect to API (ConnectionRefused)",
+                "total_cost_usd": 0,
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events[0].kind == "error"
+        assert "ConnectionRefused" in parsed.events[0].content
+
+    def test_error_subtype_variant_uses_errors_list(self):
+        line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_max_turns",
+                "is_error": True,
+                "errors": ["Reached maximum number of turns"],
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events[0].kind == "error"
+        assert "maximum number of turns" in parsed.events[0].content
+
     def test_result_usage_is_not_used_as_context_sample(self):
         # Only assistant-message usage is canonical for now (see module docstring);
         # a result record's usage is not converted into a context sample.

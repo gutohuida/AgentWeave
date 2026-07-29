@@ -3276,6 +3276,34 @@ def _claude_tool_result_text(content: Any) -> str:
     return ""
 
 
+def _claude_result_error_message(data: Dict[str, Any], subtype: str) -> str:
+    """Extract the useful error text from Claude CLI result variants."""
+    result = data.get("result")
+    if isinstance(result, str) and result.strip():
+        return result.strip()
+
+    error = data.get("error")
+    if isinstance(error, dict):
+        message = error.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+        if error:
+            return str(error)
+    elif isinstance(error, str) and error.strip():
+        return error.strip()
+
+    errors = data.get("errors")
+    if isinstance(errors, list):
+        messages = [str(item).strip() for item in errors if str(item).strip()]
+        if messages:
+            return "; ".join(messages)
+
+    api_status = data.get("api_error_status")
+    if api_status:
+        return f"Claude API error: {api_status}"
+    return f"Claude run failed ({subtype or 'unknown error'})"
+
+
 def _parse_claude_stream_line(
     line: str, *, run_id: Optional[str] = None, source: str = "claude"
 ) -> ParsedRunnerLine:
@@ -3360,10 +3388,10 @@ def _parse_claude_stream_line(
 
     if msg_type == "result":
         subtype = data.get("subtype", "")
-        if subtype == "error":
+        if data.get("is_error") is True or str(subtype).startswith("error"):
             event = error_event(
                 code="claude_result_error",
-                message=str(data.get("error", "unknown error")),
+                message=_claude_result_error_message(data, str(subtype)),
                 run_id=run_id,
             )
         else:
