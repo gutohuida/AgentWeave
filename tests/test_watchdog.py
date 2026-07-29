@@ -1217,41 +1217,61 @@ class TestExtractJsonlSessionId:
 
 
 class TestParseCodexStreamLine:
-    """Tests for _parse_codex_stream_line."""
+    """Tests for _parse_codex_stream_line: the canonical Codex `exec --json` adapter.
 
-    def test_parses_turn_completed_usage(self):
-        """Extracts token counts from turn.completed event."""
+    Fixtures for agent_message/command_execution/file_change are taken from a
+    live Codex CLI 0.145.0 probe (read-only and workspace-write, 2026-07-29);
+    see the module docstring on _parse_codex_stream_line for details.
+    """
+
+    def test_parses_turn_completed_usage_as_estimated_cumulative(self):
         line = json.dumps(
             {
                 "type": "turn.completed",
                 "usage": {
                     "input_tokens": 1000,
                     "cached_input_tokens": 200,
+                    "cache_write_input_tokens": 0,
                     "output_tokens": 500,
+                    "reasoning_output_tokens": 50,
                 },
             }
         )
-        display, usage = _parse_codex_stream_line(line)
-        assert display == []
-        assert usage["input_tokens"] == 1000
-        assert usage["cached_input_tokens"] == 200
-        assert usage["output_tokens"] == 500
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events == []
+        assert parsed.usage is not None
+        assert parsed.usage.status == "estimated"
+        assert parsed.usage.basis == "cumulative_delta"
+        assert parsed.usage.context_tokens == 1500  # input + output, reasoning excluded
+        assert parsed.usage.breakdown["cached_input_tokens"] == 200
+
+    def test_turn_completed_without_usage_yields_no_sample(self):
+        parsed = _parse_codex_stream_line(json.dumps({"type": "turn.completed"}))
+        assert parsed.usage is None
 
     def test_parses_agent_message(self):
-        """Renders agent_message from item.completed."""
         line = json.dumps(
             {
                 "type": "item.completed",
                 "item": {"id": "item_1", "type": "agent_message", "text": "Hello world"},
             }
         )
-        display, usage = _parse_codex_stream_line(line)
-        assert display == ["Hello world"]
-        assert usage is None
+        parsed = _parse_codex_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "Hello world"
+        assert parsed.usage is None
 
-    def test_parses_mcp_tool_call_started(self):
-        """Renders MCP tool call from item.started."""
+    def test_agent_message_started_produces_no_event(self):
+        # agent_message only ever appears fully-formed at item.completed.
         line = json.dumps(
+            {"type": "item.started", "item": {"id": "item_0", "type": "agent_message"}}
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events == []
+
+    def test_mcp_tool_call_started_and_completed_share_call_id(self):
+        started = json.dumps(
             {
                 "type": "item.started",
                 "item": {
@@ -1263,13 +1283,26 @@ class TestParseCodexStreamLine:
                 },
             }
         )
-        display, usage = _parse_codex_stream_line(line)
-        assert len(display) == 1
-        assert "get_inbox" in display[0]
-        assert usage is None
+        completed = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item_0",
+                    "type": "mcp_tool_call",
+                    "server": "agentweave",
+                    "tool": "get_inbox",
+                },
+            }
+        )
+        use_parsed = _parse_codex_stream_line(started)
+        result_parsed = _parse_codex_stream_line(completed)
+        assert use_parsed.events[0].kind == "tool_use"
+        assert "get_inbox" in use_parsed.events[0].payload["tool"]
+        assert use_parsed.events[0].call_id == result_parsed.events[0].call_id == "item_0"
+        assert result_parsed.events[0].kind == "tool_result"
+        assert result_parsed.events[0].payload["is_error"] is False
 
-    def test_parses_mcp_tool_call_error(self):
-        """Renders MCP tool call error from item.completed."""
+    def test_mcp_tool_call_error_marks_tool_result_as_error(self):
         line = json.dumps(
             {
                 "type": "item.completed",
@@ -1281,51 +1314,200 @@ class TestParseCodexStreamLine:
                 },
             }
         )
-        display, usage = _parse_codex_stream_line(line)
-        assert len(display) == 1
-        assert "user cancelled" in display[0]
-        assert usage is None
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "tool_result"
+        assert parsed.events[0].payload["is_error"] is True
+        assert "user cancelled" in parsed.events[0].content
 
-    def test_parses_command_execution(self):
-        """Renders command execution from item.completed."""
+    def test_command_execution_started_becomes_tool_use(self):
+        line = json.dumps(
+            {
+                "type": "item.started",
+                "item": {
+                    "id": "item_1",
+                    "type": "command_execution",
+                    "command": "Get-ChildItem",
+                    "aggregated_output": "",
+                    "exit_code": None,
+                    "status": "in_progress",
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "tool_use"
+        assert parsed.events[0].call_id == "item_1"
+
+    def test_command_execution_completed_becomes_paired_tool_result(self):
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item_1",
+                    "type": "command_execution",
+                    "command": "Get-ChildItem",
+                    "aggregated_output": "file1\nfile2",
+                    "exit_code": 0,
+                    "status": "completed",
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "tool_result"
+        assert parsed.events[0].call_id == "item_1"
+        assert parsed.events[0].payload["is_error"] is False
+        assert "file1" in parsed.events[0].payload["output"]
+
+    def test_command_execution_nonzero_exit_is_error(self):
         line = json.dumps(
             {
                 "type": "item.completed",
                 "item": {
                     "id": "item_2",
                     "type": "command_execution",
-                    "command": "ls -la",
-                    "exit_code": 0,
-                    "aggregated_output": "file1\nfile2",
+                    "command": "false",
+                    "aggregated_output": "",
+                    "exit_code": 1,
                 },
             }
         )
-        display, usage = _parse_codex_stream_line(line)
-        assert len(display) == 3
-        assert "ls -la" in display[0]
-        assert "file1" in display[1]
-        assert usage is None
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].payload["is_error"] is True
 
-    def test_ignores_thread_and_turn_events(self):
-        """Returns empty for internal lifecycle events."""
+    def test_file_change_started_becomes_tool_use_with_changes_summary(self):
+        line = json.dumps(
+            {
+                "type": "item.started",
+                "item": {
+                    "id": "item_1",
+                    "type": "file_change",
+                    "changes": [{"path": "C:\\probe.txt", "kind": "add"}],
+                    "status": "in_progress",
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "tool_use"
+        assert "add" in parsed.events[0].content
+        assert "probe.txt" in parsed.events[0].content
+
+    def test_file_change_failed_completion_is_error(self):
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item_1",
+                    "type": "file_change",
+                    "changes": [{"path": "C:\\probe.txt", "kind": "add"}],
+                    "status": "failed",
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "tool_result"
+        assert parsed.events[0].payload["is_error"] is True
+
+    def test_file_change_completed_success_is_not_error(self):
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item_1",
+                    "type": "file_change",
+                    "changes": [{"path": "C:\\probe.txt", "kind": "add"}],
+                    "status": "completed",
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].payload["is_error"] is False
+
+    def test_reasoning_completed_becomes_thinking_event(self):
+        # Best-effort mapping: not observed in the live probe (see module docstring).
+        line = json.dumps(
+            {"type": "item.completed", "item": {"id": "item_5", "type": "reasoning", "text": "hmm"}}
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "thinking"
+        assert parsed.events[0].content == "hmm"
+
+    def test_reasoning_started_produces_no_event(self):
+        line = json.dumps({"type": "item.started", "item": {"id": "item_5", "type": "reasoning"}})
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events == []
+
+    def test_web_search_started_and_completed_are_paired(self):
+        # Best-effort mapping: not observed in the live probe (see module docstring).
+        started = json.dumps(
+            {
+                "type": "item.started",
+                "item": {"id": "item_6", "type": "web_search", "query": "codex cli changelog"},
+            }
+        )
+        completed = json.dumps(
+            {"type": "item.completed", "item": {"id": "item_6", "type": "web_search"}}
+        )
+        use_parsed = _parse_codex_stream_line(started)
+        result_parsed = _parse_codex_stream_line(completed)
+        assert use_parsed.events[0].kind == "tool_use"
+        assert use_parsed.events[0].call_id == result_parsed.events[0].call_id == "item_6"
+        assert result_parsed.events[0].kind == "tool_result"
+
+    def test_plan_update_becomes_status_event_with_plan_phase(self):
+        # Best-effort mapping: not observed in the live probe (see module docstring).
+        line = json.dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item_7",
+                    "type": "todo_list",
+                    "items": [{"text": "write tests"}, {"text": "run suite"}],
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "status"
+        assert parsed.events[0].payload["phase"] == "plan"
+        assert "write tests" in parsed.events[0].content
+
+    def test_unrecognized_item_type_becomes_bounded_diagnostic(self):
+        line = json.dumps(
+            {"type": "item.completed", "item": {"id": "item_9", "type": "some_future_item"}}
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "diagnostic"
+        assert "some_future_item" in parsed.events[0].content
+
+    def test_turn_failed_becomes_error_event(self):
+        line = json.dumps({"type": "turn.failed", "error": {"message": "network timeout"}})
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "error"
+        assert "network timeout" in parsed.events[0].content
+
+    def test_top_level_error_becomes_error_event(self):
+        line = json.dumps({"type": "error", "message": "Session not found for thread_id abc-123"})
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events[0].kind == "error"
+        assert "Session not found for thread_id" in parsed.events[0].content
+
+    def test_ignores_thread_and_turn_started_events(self):
         for evt in ["thread.started", "turn.started"]:
-            line = json.dumps({"type": evt})
-            display, usage = _parse_codex_stream_line(line)
-            assert display == []
-            assert usage is None
+            parsed = _parse_codex_stream_line(json.dumps({"type": evt}))
+            assert parsed.events == []
+            assert parsed.usage is None
 
-    def test_ignores_unknown_event_types(self):
-        """Returns empty for unknown events."""
-        line = json.dumps({"type": "unknown.event", "data": "something"})
-        display, usage = _parse_codex_stream_line(line)
-        assert display == []
-        assert usage is None
+    def test_ignores_unknown_top_level_event_types(self):
+        parsed = _parse_codex_stream_line(json.dumps({"type": "unknown.event", "data": "x"}))
+        assert parsed.events == []
+        assert parsed.usage is None
 
-    def test_passes_through_non_json(self):
-        """Returns non-empty non-JSON lines as display."""
-        display, usage = _parse_codex_stream_line("some plain text")
-        assert display == ["some plain text"]
-        assert usage is None
+    def test_passes_through_non_json_as_text_event(self):
+        parsed = _parse_codex_stream_line("some plain text")
+        assert len(parsed.events) == 1
+        assert parsed.events[0].content == "some plain text"
+
+    def test_blank_non_json_line_yields_no_events(self):
+        parsed = _parse_codex_stream_line("   ")
+        assert parsed.events == []
 
 
 class TestClaudeUsageSample:

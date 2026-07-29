@@ -33,6 +33,7 @@ from .spec_manifest import load_manifest
 from .stream_events import (
     ContextUsageSample,
     ParsedRunnerLine,
+    diagnostic_event,
     error_event,
     status_event,
     text_event,
@@ -2549,96 +2550,259 @@ def _extract_jsonl_session_id(line: str, runner_type: str) -> Optional[str]:
         return None
 
 
-def _parse_codex_stream_line(line: str) -> tuple:
-    """Parse one JSONL line from `codex exec --json`.
+def _codex_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
+    """Build an estimated cumulative sample from Codex stdout `turn.completed`.
 
-    Returns a tuple of (display_strings, usage_data) where:
-    - display_strings: list of human-readable strings to post as agent output
-    - usage_data: dict with usage info if this is a turn.completed message, else None
+    `turn.completed.usage` is cumulative across the whole exec invocation (confirmed
+    live against Codex CLI 0.145.0: a resumed session's totals include prior turns),
+    so this is only ever `estimated`/`cumulative_delta` here. The exact rollout-
+    derived sample (auxiliary collector, a later section of this change) supersedes
+    it whenever the matching rollout can be resolved.
+    """
+    input_tokens = usage.get("input_tokens")
+    if input_tokens is None:
+        return None
+    cached = usage.get("cached_input_tokens") or 0
+    cache_write = usage.get("cache_write_input_tokens") or 0
+    output_tokens = usage.get("output_tokens") or 0
+    reasoning_tokens = usage.get("reasoning_output_tokens") or 0
+    # cached_input_tokens is a subset of input_tokens (never added); reasoning is
+    # excluded to mirror the canonical rollout formula's total-minus-reasoning shape.
+    context_tokens = int(input_tokens) + int(output_tokens)
+    return ContextUsageSample(
+        status="estimated",
+        source=source,
+        basis="cumulative_delta",
+        context_tokens=context_tokens,
+        breakdown={
+            "input_tokens": int(input_tokens),
+            "cached_input_tokens": int(cached),
+            "cache_creation_tokens": int(cache_write),
+            "output_tokens": int(output_tokens),
+            "reasoning_tokens": int(reasoning_tokens),
+        },
+    )
 
-    Codex emits `item.started` / `item.completed` events (not `assistant`).
-    Each item has a type like `agent_message`, `mcp_tool_call`, `command_execution`.
+
+def _codex_file_change_summary(changes: Any) -> str:
+    if not isinstance(changes, list):
+        return "file change"
+    parts = [
+        f"{change.get('kind', 'change')} {change.get('path', '?')}"
+        for change in changes
+        if isinstance(change, dict)
+    ]
+    return ", ".join(parts) if parts else "file change"
+
+
+def _parse_codex_stream_line(
+    line: str, *, run_id: Optional[str] = None, source: str = "codex"
+) -> ParsedRunnerLine:
+    """Parse one JSONL line from `codex exec --json` into the canonical contract.
+
+    Codex emits `item.started`/`item.completed` events wrapping an `item` (not
+    `assistant`); tool activity is paired by the item's own `id` as `call_id`.
+
+    `agent_message`, `command_execution`, and `file_change` item shapes are
+    confirmed against a live Codex CLI 0.145.0 read-only and workspace-write probe
+    (2026-07-29). `reasoning`, `web_search`, and plan/todo items were not observed
+    in that probe (the turns never triggered them) and are mapped defensively,
+    pending a fixture that does trigger them.
     """
     try:
         data = json.loads(line)
     except Exception:
         stripped = line.strip()
-        return ([stripped] if stripped else [], None)
+        if stripped:
+            return ParsedRunnerLine(events=[text_event(stripped, run_id=run_id)])
+        return ParsedRunnerLine()
 
     msg_type = data.get("type", "")
 
-    # --- item.started: show what Codex is about to do ---
-    if msg_type == "item.started":
+    if msg_type in ("item.started", "item.completed"):
         item = data.get("item", {})
         item_type = item.get("type", "")
-        if item_type == "mcp_tool_call":
-            server = item.get("server", "?")
-            tool = item.get("tool", "?")
-            args = item.get("arguments", {})
-            try:
-                args_str = json.dumps(args, ensure_ascii=False)
-                if len(args_str) > 200:
-                    args_str = args_str[:200] + "…"
-            except Exception:
-                args_str = str(args)
-            return ([f"🔧 MCP tool: {server}.{tool}({args_str})"], None)
-        if item_type == "command_execution":
-            command = item.get("command", "")
-            if command:
-                return ([f"⚙️  $ {command}"], None)
-        return ([], None)
-
-    # --- item.completed: show results and agent messages ---
-    if msg_type == "item.completed":
-        item = data.get("item", {})
-        item_type = item.get("type", "")
+        call_id = item.get("id")
+        is_start = msg_type == "item.started"
 
         if item_type == "agent_message":
+            if is_start:
+                return ParsedRunnerLine()
             text = item.get("text", "").strip()
-            return ([text] if text else [], None)
+            return ParsedRunnerLine(events=[text_event(text, run_id=run_id)] if text else [])
 
-        if item_type == "mcp_tool_call":
-            tool = item.get("tool", "?")
-            error = item.get("error")
-            if error:
-                err_msg = (
-                    error.get("message", str(error)) if isinstance(error, dict) else str(error)
-                )
-                return ([f"❌ {tool}: {err_msg}"], None)
-            return ([], None)
+        if item_type == "reasoning":
+            if is_start:
+                return ParsedRunnerLine()
+            text = str(item.get("text") or item.get("summary") or "").strip()
+            return ParsedRunnerLine(events=[thinking_event(text, run_id=run_id)] if text else [])
 
         if item_type == "command_execution":
-            command = item.get("command", "")
+            if is_start:
+                return ParsedRunnerLine(
+                    events=[
+                        tool_use_event(
+                            tool="shell",
+                            category="command",
+                            input_data={"command": item.get("command", "")},
+                            call_id=call_id,
+                            run_id=run_id,
+                        )
+                    ]
+                )
             exit_code = item.get("exit_code")
-            output = item.get("aggregated_output", "").strip()
-            lines = []
-            if command:
-                status = "✅" if exit_code == 0 else "❌"
-                lines.append(f"{status} $ {command}")
-            if output:
-                out_lines = output.splitlines()
-                for ol in out_lines[:20]:  # cap at 20 lines
-                    lines.append(f"   {ol}")
-                if len(out_lines) > 20:
-                    lines.append(f"   … ({len(out_lines) - 20} more lines)")
-            return (lines, None)
+            return ParsedRunnerLine(
+                events=[
+                    tool_result_event(
+                        tool="shell",
+                        output=item.get("aggregated_output", ""),
+                        call_id=call_id,
+                        is_error=bool(exit_code),
+                        run_id=run_id,
+                    )
+                ]
+            )
 
-        return ([], None)
+        if item_type == "file_change":
+            summary = _codex_file_change_summary(item.get("changes"))
+            if is_start:
+                return ParsedRunnerLine(
+                    events=[
+                        tool_use_event(
+                            tool="apply_patch",
+                            category="file_change",
+                            input_data={"changes": item.get("changes", [])},
+                            summary=summary,
+                            call_id=call_id,
+                            run_id=run_id,
+                        )
+                    ]
+                )
+            return ParsedRunnerLine(
+                events=[
+                    tool_result_event(
+                        tool="apply_patch",
+                        output=summary,
+                        summary=summary,
+                        call_id=call_id,
+                        is_error=item.get("status") == "failed",
+                        run_id=run_id,
+                    )
+                ]
+            )
 
-    # --- turn.completed: extract usage for context monitoring ---
+        if item_type == "mcp_tool_call":
+            server = item.get("server", "?")
+            tool_label = f"{server}.{item.get('tool', '?')}"
+            if is_start:
+                return ParsedRunnerLine(
+                    events=[
+                        tool_use_event(
+                            tool=tool_label,
+                            category="mcp",
+                            input_data=item.get("arguments", {}),
+                            call_id=call_id,
+                            run_id=run_id,
+                        )
+                    ]
+                )
+            error = item.get("error")
+            if error:
+                message = (
+                    error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                )
+                return ParsedRunnerLine(
+                    events=[
+                        tool_result_event(
+                            tool=tool_label,
+                            output=message,
+                            summary=f"{tool_label}: {message}",
+                            call_id=call_id,
+                            is_error=True,
+                            run_id=run_id,
+                        )
+                    ]
+                )
+            return ParsedRunnerLine(
+                events=[
+                    tool_result_event(
+                        tool=tool_label, output="completed", call_id=call_id, run_id=run_id
+                    )
+                ]
+            )
+
+        if item_type == "web_search":
+            query = str(item.get("query") or item.get("text") or "")
+            if is_start:
+                return ParsedRunnerLine(
+                    events=[
+                        tool_use_event(
+                            tool="web_search",
+                            category="web_search",
+                            input_data={"query": query},
+                            call_id=call_id,
+                            run_id=run_id,
+                        )
+                    ]
+                )
+            return ParsedRunnerLine(
+                events=[
+                    tool_result_event(
+                        tool="web_search", output=query, call_id=call_id, run_id=run_id
+                    )
+                ]
+            )
+
+        if item_type in ("todo_list", "plan_update"):
+            if is_start:
+                return ParsedRunnerLine()
+            entries = item.get("items") or item.get("plan") or []
+            summary = (
+                "; ".join(
+                    str(entry.get("text", entry)) if isinstance(entry, dict) else str(entry)
+                    for entry in entries
+                )
+                or "plan updated"
+            )
+            return ParsedRunnerLine(events=[status_event("plan", summary=summary, run_id=run_id)])
+
+        # Unrecognized item type: degrade to a bounded diagnostic instead of
+        # dropping it silently or guessing at unverified fields.
+        return ParsedRunnerLine(
+            events=[
+                diagnostic_event(
+                    stream="codex",
+                    severity="info",
+                    summary=f"unrecognized item: {item_type or 'unknown'}",
+                    run_id=run_id,
+                )
+            ]
+        )
+
     if msg_type == "turn.completed":
-        usage = data.get("usage", {})
-        usage_data = None
-        if usage:
-            usage_data = {
-                "input_tokens": usage.get("input_tokens"),
-                "cached_input_tokens": usage.get("cached_input_tokens"),
-                "output_tokens": usage.get("output_tokens"),
-            }
-        return ([], usage_data)
+        usage = data.get("usage") or {}
+        usage_sample = _codex_usage_sample(usage, source=source) if usage else None
+        return ParsedRunnerLine(usage=usage_sample)
 
-    # Ignore thread.started, turn.started, and other internal events
-    return ([], None)
+    if msg_type == "turn.failed":
+        error = data.get("error") or {}
+        message = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+        return ParsedRunnerLine(
+            events=[
+                error_event(
+                    code="codex_turn_failed", message=message or "turn failed", run_id=run_id
+                )
+            ]
+        )
+
+    if msg_type == "error":
+        message = str(data.get("message", "unknown error"))
+        return ParsedRunnerLine(
+            events=[error_event(code="codex_error", message=message, run_id=run_id)]
+        )
+
+    # thread.started, turn.started, and other internal lifecycle events.
+    return ParsedRunnerLine()
 
 
 def _claude_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
@@ -3162,8 +3326,14 @@ def _do_run_agent_subprocess(
                     line, runner_type, session_id_ref
                 )
             elif is_codex:
-                readable_lines, usage_data, stale = _parse_codex_stdout_line(
+                parsed_codex_line, stale = _parse_codex_stdout_line(
                     line, runner_type, session_id_ref
+                )
+                readable_lines = [event.content for event in parsed_codex_line.events]
+                usage_data = (
+                    dict(parsed_codex_line.usage.breakdown or {})
+                    if parsed_codex_line.usage is not None
+                    else None
                 )
                 if stale:
                     stale_codex_session[0] = True
@@ -3549,18 +3719,21 @@ def _parse_opencode_stdout_line(
 
 def _parse_codex_stdout_line(
     line: str, runner_type: str, session_id_ref: List[Optional[str]]
-) -> tuple[list[str], Optional[Dict[str, Any]], bool]:
-    """Parse one line of Codex JSONL output."""
-    stale = False
+) -> Tuple[ParsedRunnerLine, bool]:
+    """Parse one line of Codex JSONL output into the canonical event/usage contract.
+
+    Returns `(parsed, stale)`; `stale` signals a "Session not found for thread_id"
+    error so the caller can clear the saved session and retry fresh.
+    """
     if session_id_ref[0] is None:
         extracted = _extract_jsonl_session_id(line, runner_type)
         if extracted:
             session_id_ref[0] = extracted
-    readable_lines, usage_data = _parse_codex_stream_line(line)
-    if any("Session not found for thread_id" in item for item in readable_lines):
-        stale = True
-        readable_lines = []
-    return readable_lines, usage_data, stale
+    parsed = _parse_codex_stream_line(line, source=runner_type)
+    stale = any("Session not found for thread_id" in event.content for event in parsed.events)
+    if stale:
+        parsed = ParsedRunnerLine(usage=parsed.usage)
+    return parsed, stale
 
 
 def _parse_copilot_stdout_line(

@@ -24,9 +24,9 @@
   constrain final-result fallback to fixture-proven shapes
 - [x] 2.3 Add Claude 2.1.x fixtures covering multiple blocks, tool correlation, completion,
   failure, usage-only data, resumed usage, cached input, and unknown events
-- [ ] 2.4 Refactor the Codex stdout parser to map agent messages, reasoning, commands, file changes,
+- [x] 2.4 Refactor the Codex stdout parser to map agent messages, reasoning, commands, file changes,
   MCP calls, web searches, plans, lifecycle, errors, and cumulative usage metadata
-- [ ] 2.5 Add Codex 0.145.x stdout fixtures covering official item/turn events, resumed cumulative
+- [x] 2.5 Add Codex 0.145.x stdout fixtures covering official item/turn events, resumed cumulative
   totals, malformed lines, and unknown events
 - [ ] 2.6 Refactor the OpenCode parser to map supported message, tool, step, lifecycle, diagnostic,
   failure, and usage data
