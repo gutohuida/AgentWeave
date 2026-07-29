@@ -29,16 +29,33 @@ export interface AgentSummary {
 }
 
 export interface ContextUsage {
-  agent?: string
-  model?: string
-  tokens_used?: number
-  tokens_limit?: number
-  percent?: number
-  warning?: boolean
-  critical?: boolean
-  threshold_warning?: number
-  threshold_critical?: number
-  updated_at?: string
+  status: ContextUsageStatus
+  source: string
+  basis?: ContextUsageBasis | null
+  context_tokens?: number | null
+  limit_tokens?: number | null
+  percent?: number | null
+  model?: string | null
+  session_id?: string | null
+  observed_at: number
+  breakdown?: ContextUsageBreakdown | null
+}
+
+export type ContextUsageStatus = 'measured' | 'estimated' | 'unsupported' | 'unavailable'
+
+export type ContextUsageBasis =
+  | 'provider_context'
+  | 'latest_request_input'
+  | 'provider_reported_ratio'
+  | 'cumulative_delta'
+
+export interface ContextUsageBreakdown {
+  input_tokens?: number
+  output_tokens?: number
+  cache_read_tokens?: number
+  cache_creation_tokens?: number
+  reasoning_tokens?: number
+  cached_input_tokens?: number
 }
 
 export interface AgentTimelineEvent {

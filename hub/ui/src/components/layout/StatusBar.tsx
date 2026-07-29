@@ -2,6 +2,7 @@ import { Icon } from '@/components/common/Icon'
 import { useStatus } from '@/api/status'
 import { useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
+import { presentContextUsage } from '@/components/context/contextPresentation'
 
 interface StatusBarProps {
   onOpenSetup: () => void
@@ -13,7 +14,7 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
   const { mode, setMode } = useConfigStore()
 
   const contextWarningCount = agents.filter(
-    (a) => a.context_usage?.warning || a.context_usage?.critical
+    (agent) => presentContextUsage(agent.context_usage)?.isPolicyWarning
   ).length
 
   const pendingMsgs = data?.message_counts?.pending ?? 0

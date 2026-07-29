@@ -6,7 +6,8 @@ import { useTasks } from '@/api/tasks'
 import { useStatus } from '@/api/status'
 import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
-import { contextBarColor, DevRoleTagList } from '@/lib/agentStatus'
+import { DevRoleTagList } from '@/lib/agentStatus'
+import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 interface OverviewPageProps {
   onNavigate: (page: string) => void
@@ -14,8 +15,6 @@ interface OverviewPageProps {
 
 function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
   const statusColor = agent.status === 'running' ? 'var(--green)' : agent.status === 'waiting' ? 'var(--amber)' : 'var(--text-3)'
-  const ctx = agent.context_usage
-  const ctxColor = ctx ? contextBarColor(ctx.percent ?? 0, !!ctx.warning) : 'var(--text-3)'
 
   return (
     <button
@@ -60,18 +59,7 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
         <span>{agent.message_count} msgs</span>
       </div>
 
-      {/* Context bar */}
-      {ctx && ctx.percent != null && (
-        <div
-          className="w-full rounded-full overflow-hidden mb-1"
-          style={{ height: 2, background: 'var(--surface-3)' }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${Math.min(100, Math.max(0, ctx.percent))}%`, background: ctxColor }}
-          />
-        </div>
-      )}
+      <ContextUsageIndicator value={agent.context_usage} compact />
 
       {/* Last seen + preview */}
       {agent.last_seen && (

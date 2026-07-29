@@ -8,7 +8,8 @@ import { AgentActivityTab } from './AgentActivityTab'
 import { AgentInfoTab } from './AgentInfoTab'
 import { EmptyState } from '@/components/common/EmptyState'
 import { StatusBadge } from '@/components/common/Badge'
-import { contextBarColor, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 interface AgentDetailPanelProps {
   agent: AgentSummary
@@ -23,10 +24,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const { data: tasks = [] } = useTasks()
   const agentTasks = tasks.filter((t) => t.assignee === agent.name)
-
-  const ctx = agent.context_usage
-  const ctxPct = ctx?.percent ?? 0
-  const ctxColor = ctx ? contextBarColor(ctxPct, !!ctx.warning) : 'var(--text-3)'
 
   async function handleCompact() {
     setCompacting(true)
@@ -82,20 +79,8 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
 
           <div className="flex-1" />
 
-          {/* Context % + bar + actions */}
-          {ctx && (
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-medium" style={{ color: ctxColor }}>
-                {ctxPct}%
-              </span>
-              <div className="w-12 rounded-full overflow-hidden" style={{ height: 4, background: 'var(--surface-3)' }}>
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${Math.min(100, Math.max(0, ctxPct))}%`, background: ctxColor }}
-                />
-              </div>
-            </div>
-          )}
+          {/* Context state + actions */}
+          <ContextUsageIndicator value={agent.context_usage} />
 
           {agent.runner === 'codex' ? (
             <span className="text-xs" style={{ color: 'var(--green)' }}>Auto-managed</span>

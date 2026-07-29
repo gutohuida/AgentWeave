@@ -6,14 +6,12 @@ import { AgentCard } from './AgentCard'
 import { AgentDetailPanel } from './AgentDetailPanel'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { EmptyState } from '@/components/common/EmptyState'
-import { contextBarColor, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 type AgentFilter = 'all' | 'active' | 'idle'
 
 function GridCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void }) {
-  const ctx = agent.context_usage
-  const ctxColor = ctx ? contextBarColor(ctx.percent ?? 0, !!ctx.warning) : 'var(--text-3)'
-
   return (
     <button
       onClick={onClick}
@@ -42,11 +40,7 @@ function GridCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void
         <span>{agent.active_task_count} tasks</span>
         <span>{agent.message_count} msgs</span>
       </div>
-      {ctx && ctx.percent != null && (
-        <div className="w-full rounded-full overflow-hidden" style={{ height: 3, background: 'var(--surface-3)' }}>
-          <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(0, ctx.percent))}%`, background: ctxColor }} />
-        </div>
-      )}
+      <ContextUsageIndicator value={agent.context_usage} compact />
       {agent.last_seen && (
         <p className="mt-1" style={{ fontSize: 11, color: 'var(--text-3)' }}>
           {formatDistanceToNow(new Date(agent.last_seen), { addSuffix: true })}

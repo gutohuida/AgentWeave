@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from 'date-fns'
 import { AgentSummary } from '@/api/agents'
-import { contextBarColor, getStatusConfig, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { getStatusConfig, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 interface AgentCardProps {
   agent: AgentSummary
@@ -10,7 +11,6 @@ interface AgentCardProps {
 
 export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
   const cfg = getStatusConfig(agent.status)
-  const ctx = agent.context_usage
 
   return (
     <button
@@ -91,18 +91,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
         )}
       </div>
 
-      {/* Context bar */}
-      {ctx && ctx.percent != null && (
-        <div className="mt-1.5 w-full rounded-full overflow-hidden" style={{ height: 2, background: 'var(--surface-3)' }}>
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: `${Math.min(100, Math.max(0, ctx.percent))}%`,
-              background: contextBarColor(ctx.percent, !!(ctx.warning || ctx.critical)),
-            }}
-          />
-        </div>
-      )}
+      <ContextUsageIndicator value={agent.context_usage} compact />
 
       {agent.latest_status_msg && (
         <p className="mt-1 truncate text-[11px]" style={{ color: 'var(--text-3)' }}>

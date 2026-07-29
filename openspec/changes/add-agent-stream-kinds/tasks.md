@@ -171,18 +171,18 @@
 
 ## 8. Context UI
 
-- [ ] 8.1 Replace the current UI context type with the canonical status, operands, percent, model,
+- [x] 8.1 Replace the current UI context type with the canonical status, operands, percent, model,
   session, source, basis, time, and breakdown fields
-- [ ] 8.2 Add one context normalization/presentation helper shared by AgentCard,
+- [x] 8.2 Add one context normalization/presentation helper shared by AgentCard,
   AgentDetailPanel, AgentsPage, OverviewPage, and StatusBar
-- [ ] 8.3 Render measured context percentages and warning/critical visual states consistently
-- [ ] 8.4 Label estimated samples and prevent them from triggering automatic warning/critical
+- [x] 8.3 Render measured context percentages and warning/critical visual states consistently
+- [x] 8.4 Label estimated samples and prevent them from triggering automatic warning/critical
   policy
-- [ ] 8.5 Render token-only samples without inventing a percentage
-- [ ] 8.6 Render unavailable and unsupported states distinctly and neutrally
-- [ ] 8.7 Ensure a new session cannot display the previous session's context bar while waiting for
+- [x] 8.5 Render token-only samples without inventing a percentage
+- [x] 8.6 Render unavailable and unsupported states distinctly and neutrally
+- [x] 8.7 Ensure a new session cannot display the previous session's context bar while waiting for
   its first sample
-- [ ] 8.8 Add UI tests for every context status, unknown limits, legacy normalization,
+- [x] 8.8 Add UI tests for every context status, unknown limits, legacy normalization,
   thresholds, estimates, and new-session replacement
 
 ## 9. Verification and documentation

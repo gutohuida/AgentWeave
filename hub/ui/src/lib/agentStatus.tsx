@@ -36,17 +36,6 @@ export function getStatusConfig(status: string): StatusConfig {
   return { ...FALLBACK_STATUS, label: status }
 }
 
-/**
- * Single source of truth for the context-bar color thresholds. Previously
- * duplicated verbatim in 3 components (AgentDetailPanel, OverviewPage,
- * AgentsPage) — Q6.
- */
-export function contextBarColor(percent: number, warning: boolean): string {
-  if (warning || percent >= 70) return 'var(--red)'
-  if (percent >= 40) return 'var(--amber)'
-  return 'var(--green)'
-}
-
 type StatusDotSize = 'sm' | 'md' | 'lg'
 
 const DOT_SIZE_CLASS: Record<StatusDotSize, string> = {

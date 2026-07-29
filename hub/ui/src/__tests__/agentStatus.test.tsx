@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import {
-  contextBarColor,
   STATUS_CONFIG,
   getStatusConfig,
   StatusDot,
@@ -20,30 +19,6 @@ function makeAgent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 }
 
 describe('Q6 / Q13 — lib/agentStatus: deduplicated helpers and components', () => {
-  describe('contextBarColor', () => {
-    it('returns var(--red) when warning is true (regardless of percent)', () => {
-      expect(contextBarColor(0, true)).toBe('var(--red)')
-      expect(contextBarColor(50, true)).toBe('var(--red)')
-      expect(contextBarColor(99, true)).toBe('var(--red)')
-    })
-
-    it('returns var(--red) when percent >= 70 and no warning', () => {
-      expect(contextBarColor(70, false)).toBe('var(--red)')
-      expect(contextBarColor(95, false)).toBe('var(--red)')
-    })
-
-    it('returns var(--amber) when percent is in the 40..69 range', () => {
-      expect(contextBarColor(40, false)).toBe('var(--amber)')
-      expect(contextBarColor(55, false)).toBe('var(--amber)')
-      expect(contextBarColor(69, false)).toBe('var(--amber)')
-    })
-
-    it('returns var(--green) when percent < 40 and no warning', () => {
-      expect(contextBarColor(0, false)).toBe('var(--green)')
-      expect(contextBarColor(39, false)).toBe('var(--green)')
-    })
-  })
-
   describe('STATUS_CONFIG and getStatusConfig', () => {
     it('covers the four known statuses with consistent shape', () => {
       for (const key of ['running', 'active', 'idle', 'waiting']) {
