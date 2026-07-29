@@ -287,6 +287,10 @@ class AgentOutput(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    sequence: Mapped[Optional[int]] = mapped_column(nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False, index=True
     )
@@ -294,6 +298,13 @@ class AgentOutput(Base):
     __table_args__ = (
         Index("ix_agent_outputs_project_agent", "project_id", "agent"),
         Index("ix_agent_outputs_project_ts", "project_id", "timestamp"),
+        Index(
+            "ix_agent_outputs_project_agent_run_sequence",
+            "project_id",
+            "agent",
+            "run_id",
+            "sequence",
+        ),
     )
 
 

@@ -998,6 +998,10 @@ async def post_agent_output(
         agent=name,
         session_id=body.session_id,
         content=body.content,
+        kind=body.kind,
+        payload=body.payload,
+        run_id=body.run_id,
+        sequence=body.sequence,
     )
     session.add(row)
     await session.commit()
@@ -1009,6 +1013,10 @@ async def post_agent_output(
             "agent": name,
             "session_id": body.session_id,
             "content": body.content,
+            "kind": body.kind,
+            "payload": body.payload,
+            "run_id": body.run_id,
+            "sequence": body.sequence,
             "timestamp": row.timestamp.isoformat(),
         },
     )
@@ -1117,15 +1125,30 @@ async def get_agent_output(
         AgentOutput.project_id == project_id,
         AgentOutput.agent == name,
     )
+    cursor_requested = False
     if since:
         try:
             since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
             q = q.where(AgentOutput.timestamp > since_dt)
+            cursor_requested = True
         except ValueError:
             pass
-    q = q.order_by(AgentOutput.timestamp.asc()).limit(limit)
+    if cursor_requested:
+        q = q.order_by(
+            AgentOutput.timestamp.asc(),
+            func.coalesce(AgentOutput.sequence, -1).asc(),
+            AgentOutput.id.asc(),
+        ).limit(limit)
+        result = await session.execute(q)
+        return result.scalars().all()
+
+    q = q.order_by(
+        AgentOutput.timestamp.desc(),
+        func.coalesce(AgentOutput.sequence, -1).desc(),
+        AgentOutput.id.desc(),
+    ).limit(limit)
     result = await session.execute(q)
-    return result.scalars().all()
+    return list(reversed(result.scalars().all()))
 
 
 @router.post("/{name}/register-session")

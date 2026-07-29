@@ -121,18 +121,18 @@
 
 ## 5. Hub stream persistence and APIs
 
-- [ ] 5.1 Add the next Alembic migration for nullable AgentOutput kind, JSON payload, run ID,
+- [x] 5.1 Add the next Alembic migration for nullable AgentOutput kind, JSON payload, run ID,
   sequence, and the run-ordering index
-- [ ] 5.2 Update SQLAlchemy models and Pydantic creation/response schemas with bounded optional
+- [x] 5.2 Update SQLAlchemy models and Pydantic creation/response schemas with bounded optional
   structured stream fields
-- [ ] 5.3 Validate allowed kinds and serialized payload size at Hub ingress and add rejection
+- [x] 5.3 Validate allowed kinds and serialized payload size at Hub ingress and add rejection
   tests
-- [ ] 5.4 Persist and serialize structured fields through agent-output REST endpoints and SSE
-- [ ] 5.5 Preserve structured fields when AgentOutput records are projected into per-agent chat
+- [x] 5.4 Persist and serialize structured fields through agent-output REST endpoints and SSE
+- [x] 5.5 Preserve structured fields when AgentOutput records are projected into per-agent chat
   history
-- [ ] 5.6 Correct the default output query to select the newest N records and return them in
+- [x] 5.6 Correct the default output query to select the newest N records and return them in
   stable chronological order
-- [ ] 5.7 Add Hub tests for migration upgrade, structured round trips, legacy rows, chat
+- [x] 5.7 Add Hub tests for migration upgrade, structured round trips, legacy rows, chat
   projection, SSE data, rejection behavior, and newest-window ordering
 
 ## 6. Hub context validation and projection

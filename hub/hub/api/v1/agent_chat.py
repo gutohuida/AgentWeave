@@ -1,7 +1,7 @@
 """Agent chat endpoints — GET /api/v1/agent/{agent}/chat/{session_id}"""
 
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -20,6 +20,12 @@ class ChatMessage(BaseModel):
     role: str  # 'user' or 'agent'
     content: str
     timestamp: datetime
+    kind: Optional[
+        Literal["text", "thinking", "tool_use", "tool_result", "status", "diagnostic", "error"]
+    ] = None
+    payload: Optional[Dict[str, Any]] = None
+    run_id: Optional[str] = None
+    sequence: Optional[int] = None
 
 
 class ChatHistoryResponse(BaseModel):
@@ -50,7 +56,11 @@ async def get_chat_history(
             AgentOutput.agent == agent,
             AgentOutput.session_id == session_id,
         )
-        .order_by(AgentOutput.timestamp.asc())
+        .order_by(
+            AgentOutput.timestamp.asc(),
+            func.coalesce(AgentOutput.sequence, -1).asc(),
+            AgentOutput.id.asc(),
+        )
     )
     output_result = await session.execute(output_q)
     session_outputs = output_result.scalars().all()
@@ -152,6 +162,10 @@ async def get_chat_history(
                 role="agent",
                 content=output.content,
                 timestamp=output.timestamp,
+                kind=output.kind,
+                payload=output.payload,
+                run_id=output.run_id,
+                sequence=output.sequence,
             )
         )
 
@@ -200,7 +214,11 @@ async def get_recent_chat(
             AgentOutput.project_id == project_id,
             AgentOutput.agent == agent,
         )
-        .order_by(AgentOutput.timestamp.desc())
+        .order_by(
+            AgentOutput.timestamp.desc(),
+            func.coalesce(AgentOutput.sequence, -1).desc(),
+            AgentOutput.id.desc(),
+        )
         .limit(limit)
     )
     output_result = await session.execute(output_q)
@@ -227,6 +245,10 @@ async def get_recent_chat(
                 role="agent",
                 content=output.content,
                 timestamp=output.timestamp,
+                kind=output.kind,
+                payload=output.payload,
+                run_id=output.run_id,
+                sequence=output.sequence,
             )
         )
 

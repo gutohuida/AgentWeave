@@ -1,9 +1,22 @@
 """Agent monitor schemas."""
 
+import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+StreamEventKind = Literal[
+    "text",
+    "thinking",
+    "tool_use",
+    "tool_result",
+    "status",
+    "diagnostic",
+    "error",
+]
+
+MAX_STREAM_PAYLOAD_BYTES = 64 * 1024
 
 
 class AgentSummary(BaseModel):
@@ -68,6 +81,23 @@ class AgentHeartbeatCreate(BaseModel):
 class AgentOutputCreate(BaseModel):
     content: str = Field(max_length=10000)
     session_id: Optional[str] = Field(default=None, max_length=128)
+    kind: Optional[StreamEventKind] = None
+    payload: Optional[Dict[str, Any]] = None
+    run_id: Optional[str] = Field(default=None, max_length=64)
+    sequence: Optional[int] = Field(default=None, ge=0, le=2_147_483_647)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_size(cls, payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if payload is None:
+            return None
+        try:
+            serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("payload must be JSON serializable") from exc
+        if len(serialized.encode("utf-8")) > MAX_STREAM_PAYLOAD_BYTES:
+            raise ValueError(f"serialized payload must be at most {MAX_STREAM_PAYLOAD_BYTES} bytes")
+        return payload
 
 
 class AgentOutputResponse(BaseModel):
@@ -75,6 +105,10 @@ class AgentOutputResponse(BaseModel):
     agent: str = Field(max_length=64)
     session_id: Optional[str] = Field(default=None, max_length=128)
     content: str = Field(max_length=10000)
+    kind: Optional[StreamEventKind] = None
+    payload: Optional[Dict[str, Any]] = None
+    run_id: Optional[str] = Field(default=None, max_length=64)
+    sequence: Optional[int] = Field(default=None, ge=0, le=2_147_483_647)
     timestamp: datetime
 
     model_config = {"from_attributes": True}

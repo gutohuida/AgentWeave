@@ -122,7 +122,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0010. The full
+    migration runs cleanly and the version lands at 0011. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -130,7 +130,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0010).
+    # Verify alembic_version is at the latest revision (0011).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -141,7 +141,33 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0010", f"expected alembic_version=0010, got {version}"
+    assert version == "0011", f"expected alembic_version=0011, got {version}"
+
+    columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
+    assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
+    assert columns["kind"]["nullable"] is True
+    assert columns["payload"]["nullable"] is True
+    assert columns["run_id"]["nullable"] is True
+    assert columns["sequence"]["nullable"] is True
+
+    async def _check_indexes() -> set[str]:
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.connect() as conn:
+                return set(
+                    await conn.run_sync(
+                        lambda sync_conn: {
+                            index["name"]
+                            for index in sa.inspect(sync_conn).get_indexes("agent_outputs")
+                        }
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    assert "ix_agent_outputs_project_agent_run_sequence" in _run(_check_indexes())
 
 
 def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
@@ -204,7 +230,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
     """For a file-based DB, _run_alembic_upgrade must actually apply migrations.
 
     Verifies the H5 fix at the unit level: a file-based URL is not skipped,
-    alembic is invoked, and the alembic_version table ends up at 0010.
+    alembic is invoked, and the alembic_version table ends up at 0011.
     """
     from hub.db.engine import _run_alembic_upgrade
 
@@ -226,7 +252,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0010", f"expected alembic_version=0010, got {version}"
+    assert version == "0011", f"expected alembic_version=0011, got {version}"
 
 
 @pytest.mark.asyncio
