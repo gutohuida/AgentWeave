@@ -18,6 +18,7 @@ from agentweave.watchdog import (
     _KimiCodeParser,
     _parse_claude_stream_line,
     _parse_codex_stream_line,
+    _parse_copilot_stream_line,
     _parse_opencode_stdout_line,
     _run_agent_subprocess,
     _run_codex_mcp_turn,
@@ -1987,6 +1988,191 @@ class TestAgentPingCmdCopilot:
         assert resume_args == ["--resume=sess-uuid-1234"]
         # Model flag is still present alongside resume.
         assert "--model" in cmd
+
+
+class TestParseCopilotStreamLine:
+    """Tests for _parse_copilot_stream_line: the canonical GitHub Copilot CLI
+    `--output-format json` adapter. Fixtures are taken from a live Copilot CLI 1.0.75
+    probe (2026-07-29): a plain reply, a successful tool call, and a failing tool call;
+    see the module docstring on _parse_copilot_stream_line for details.
+    """
+
+    def test_assistant_message_becomes_text_event(self):
+        line = json.dumps({"type": "assistant.message", "data": {"content": "hello there"}})
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "hello there"
+
+    def test_assistant_message_empty_content_emits_nothing(self):
+        line = json.dumps({"type": "assistant.message", "data": {"content": ""}})
+        parsed = _parse_copilot_stream_line(line)
+        assert parsed.events == []
+
+    def test_assistant_message_tool_requests_are_not_double_rendered(self):
+        """toolRequests on assistant.message are announcements, not the canonical tool_use
+        source — tool.execution_start/complete (which report success/failure) are — so
+        toolRequests must never produce a second tool_use event."""
+        line = json.dumps(
+            {
+                "type": "assistant.message",
+                "data": {
+                    "content": "Reading the file now.",
+                    "toolRequests": [
+                        {
+                            "toolCallId": "call_1",
+                            "name": "view",
+                            "arguments": {"path": "sample.txt"},
+                        }
+                    ],
+                },
+            }
+        )
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+
+    def test_tool_execution_start_becomes_tool_use_event(self):
+        line = json.dumps(
+            {
+                "type": "tool.execution_start",
+                "data": {
+                    "toolCallId": "call_zT36faYEOU07a12VoWjJdz8P",
+                    "toolName": "view",
+                    "arguments": {"path": "sample.txt"},
+                    "turnId": "0",
+                    "model": "gpt-5-mini",
+                },
+            }
+        )
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "tool_use"
+        assert event.call_id == "call_zT36faYEOU07a12VoWjJdz8P"
+        assert event.payload["tool"] == "view"
+
+    def test_tool_execution_complete_success_becomes_tool_result_event(self):
+        line = json.dumps(
+            {
+                "type": "tool.execution_complete",
+                "data": {
+                    "toolCallId": "call_zT36faYEOU07a12VoWjJdz8P",
+                    "success": True,
+                    "result": {"content": "1. hello from probe file\n2. "},
+                },
+            }
+        )
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "tool_result"
+        assert event.call_id == "call_zT36faYEOU07a12VoWjJdz8P"
+        assert event.payload["output"] == "1. hello from probe file\n2. "
+        assert event.payload["is_error"] is False
+
+    def test_tool_execution_complete_failure_becomes_error_tool_result_event(self):
+        """Confirmed live: a failed tool.execution_complete carries success=False plus a
+        structured error.message, unlike Kimi's flat print stream which has no such
+        indicator at all."""
+        line = json.dumps(
+            {
+                "type": "tool.execution_complete",
+                "data": {
+                    "toolCallId": "call_321pnY4E9GcBig6DPLUzoyJ8",
+                    "success": False,
+                    "error": {"message": "Path does not exist", "code": "failure"},
+                },
+            }
+        )
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "tool_result"
+        assert event.payload["output"] == "Path does not exist"
+        assert event.payload["is_error"] is True
+
+    def test_reasoning_with_empty_content_emits_nothing(self):
+        """Confirmed live: assistant.reasoning.content was empty/opaque in every probe
+        (gpt-5-mini does not expose readable reasoning by default). Only reasoningId, an
+        encrypted blob, was present — which must never be copied into content."""
+        line = json.dumps(
+            {"type": "assistant.reasoning", "data": {"reasoningId": "opaque-blob", "content": ""}}
+        )
+        parsed = _parse_copilot_stream_line(line)
+        assert parsed.events == []
+
+    def test_reasoning_with_readable_content_becomes_thinking_event(self):
+        line = json.dumps({"type": "assistant.reasoning", "data": {"content": "considering..."}})
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "thinking"
+        assert parsed.events[0].content == "considering..."
+
+    def test_result_success_becomes_completed_status_event(self):
+        line = json.dumps(
+            {
+                "type": "result",
+                "sessionId": "165446f2-1b83-4a73-9a99-0e0fa5dce8a5",
+                "exitCode": 0,
+                "usage": {"premiumRequests": 0},
+            }
+        )
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "status"
+        assert parsed.events[0].payload["phase"] == "completed"
+
+    def test_result_nonzero_exit_becomes_error_event(self):
+        line = json.dumps({"type": "result", "exitCode": 1})
+        parsed = _parse_copilot_stream_line(line)
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "error"
+        assert event.payload["exit_code"] == 1
+
+    def test_session_lifecycle_events_are_skipped(self):
+        for evt in (
+            "session.mcp_server_status_changed",
+            "session.mcp_servers_loaded",
+            "session.skills_loaded",
+            "session.tools_updated",
+            "session.auto_mode_resolved",
+            "session.usage_checkpoint",
+            "user.message",
+            "assistant.turn_start",
+            "assistant.turn_end",
+            "assistant.idle",
+            "model.call_start",
+            "assistant.message_start",
+            "assistant.message_delta",
+            "assistant.tool_call_delta",
+        ):
+            line = json.dumps({"type": evt, "data": {}})
+            parsed = _parse_copilot_stream_line(line)
+            assert parsed.events == [], f"{evt} should not produce events"
+
+    def test_no_usage_sample_is_ever_produced(self):
+        """Context/usage tracking for Copilot is OTel-only (design.md decision 4); the
+        stdout adapter must never fabricate a ContextUsageSample."""
+        for line in (
+            json.dumps({"type": "assistant.message", "data": {"content": "hi"}}),
+            json.dumps({"type": "result", "exitCode": 0, "usage": {"premiumRequests": 2}}),
+        ):
+            assert _parse_copilot_stream_line(line).usage is None
+
+    def test_malformed_json_falls_back_to_text_event(self):
+        parsed = _parse_copilot_stream_line("not-json")
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "not-json"
+
+    def test_empty_line_emits_nothing(self):
+        assert _parse_copilot_stream_line("").events == []
+
+    def test_unknown_event_type_is_skipped(self):
+        line = json.dumps({"type": "some.future.event", "data": {"foo": "bar"}})
+        assert _parse_copilot_stream_line(line).events == []
 
 
 class TestCopilotUsesPat:

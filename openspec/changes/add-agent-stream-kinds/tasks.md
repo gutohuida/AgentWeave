@@ -34,10 +34,11 @@
   separately reported reasoning
 - [x] 2.8 Add OpenCode 1.18.x fixtures covering cached resumed steps, multiple steps, reasoning,
   model identity, malformed events, and unknown variants
-- [ ] 2.9 Refactor the Copilot stream parser to map documented reasoning, message, tool, lifecycle,
+- [x] 2.9 Refactor the Copilot stream parser to map documented reasoning, message, tool, lifecycle,
   diagnostic, and error events while keeping OTel usage independent
-- [ ] 2.10 Curate versioned Copilot stream fixtures from official examples and mark them
-  documentation-derived until a current installed CLI capture is available
+- [x] 2.10 Curate versioned Copilot stream fixtures from official examples and mark them
+  documentation-derived until a current installed CLI capture is available — superseded by a
+  live Copilot CLI 1.0.75 capture (2026-07-29); fixtures are verified, not documentation-derived
 - [x] 2.11 Refactor the Kimi parser around v0.29.x sequential messages, tool IDs, results,
   lifecycle, and errors while preserving existing v1 regression behavior
 - [x] 2.12 Add Kimi 0.29.x golden fixtures plus regression coverage for retained v1 compatibility

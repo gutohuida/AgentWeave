@@ -3344,9 +3344,11 @@ def _do_run_agent_subprocess(
                     else None
                 )
             elif is_copilot:
-                readable_lines, usage_data = _parse_copilot_stdout_line(
-                    line, runner_type, session_id_ref
-                )
+                parsed_copilot_line = _parse_copilot_stdout_line(line, runner_type, session_id_ref)
+                readable_lines = [event.content for event in parsed_copilot_line.events]
+                # No context/usage field appears in this stream; Copilot's context
+                # tracking is OTel-only (design.md decision 4), never from stdout.
+                usage_data = None
             elif is_codex:
                 parsed_codex_line, stale = _parse_codex_stdout_line(
                     line, runner_type, session_id_ref
@@ -3848,66 +3850,116 @@ def _parse_codex_stdout_line(
     return parsed, stale
 
 
-def _parse_copilot_stdout_line(
-    line: str, runner_type: str, session_id_ref: List[Optional[str]]
-) -> tuple[list[str], Optional[Dict[str, Any]]]:
-    """Parse one line of GitHub Copilot CLI JSONL output (--output-format json).
+def _parse_copilot_stream_line(
+    line: str, *, run_id: Optional[str] = None, source: str = "copilot"
+) -> ParsedRunnerLine:
+    """Parse one JSONL line from `copilot --output-format json` into the canonical
+    event/usage contract.
 
-    Copilot emits one JSON object per line. Relevant event types:
-    - assistant.message: full agent response with content and tool requests
-    - result:            final event with sessionId, exitCode, and usage stats
-    - others:            session lifecycle, deltas, user echo — skipped
+    Verified live against an installed GitHub Copilot CLI 1.0.75 (2026-07-29; three
+    probes: a plain reply, a successful tool call, and a failing tool call).
+
+    Tool use and tool result are correlated from the dedicated `tool.execution_start`/
+    `tool.execution_complete` lifecycle events, not from `assistant.message.toolRequests`
+    — both describe the same call, but only the lifecycle pair reports success/failure
+    (`tool.execution_complete.success` plus `result`/`error`), which `toolRequests` never
+    does. `assistant.message.content` is still mapped to its own text event: the prose that
+    sometimes precedes a tool call (e.g. "Reading sample.txt...") is real, useful content,
+    independent of the tool call itself.
+
+    `assistant.reasoning.content` was empty/opaque in every probe (gpt-5-mini does not
+    expose readable reasoning by default); only a non-empty value is ever mapped to a
+    thinking event, matching the opaque-reasoning safety rule — an empty value is dropped,
+    never smuggled through as content.
+
+    No token/context usage field appears anywhere in this stream (`session.usage_checkpoint`
+    is aggregate billing, not context occupancy) — Copilot's context tracking comes from the
+    OTel `chat`-span auxiliary collector (design.md decision 4), never from here.
     """
-    # Extract session ID from result event
-    if session_id_ref[0] is None:
-        extracted = _extract_jsonl_session_id(line, runner_type)
-        if extracted:
-            session_id_ref[0] = extracted
-
     try:
         data = json.loads(line)
     except Exception:
         stripped = line.strip()
-        return ([stripped] if stripped else [], None)
+        if stripped:
+            return ParsedRunnerLine(events=[text_event(stripped, run_id=run_id)])
+        return ParsedRunnerLine()
 
     msg_type = data.get("type", "")
-    event_data = data.get("data", {})
+    event_data = data.get("data") or {}
 
-    # Full assistant message (streamed deltas are dropped; this is the complete version)
     if msg_type == "assistant.message":
-        results = []
-        content = event_data.get("content", "").strip()
-        if content:
-            results.append(content)
-        # Tool request summaries
-        for req in event_data.get("toolRequests", []):
-            name = req.get("name", "?")
-            summary = req.get("intentionSummary", "")
-            if summary:
-                results.append(f"🔧 {name}: {summary}")
-            else:
-                args = req.get("arguments", {})
-                try:
-                    args_str = json.dumps(args, ensure_ascii=False)
-                    if len(args_str) > 200:
-                        args_str = args_str[:200] + "…"
-                except Exception:
-                    args_str = str(args)
-                results.append(f"🔧 {name}({args_str})")
-        return (results, None)
+        content = (event_data.get("content") or "").strip()
+        return ParsedRunnerLine(events=[text_event(content, run_id=run_id)] if content else [])
 
-    # Final result event — emit a brief summary
+    if msg_type == "tool.execution_start":
+        return ParsedRunnerLine(
+            events=[
+                tool_use_event(
+                    tool=event_data.get("toolName", "unknown"),
+                    category="tool",
+                    input_data=event_data.get("arguments", {}),
+                    call_id=event_data.get("toolCallId"),
+                    run_id=run_id,
+                )
+            ]
+        )
+
+    if msg_type == "tool.execution_complete":
+        success = bool(event_data.get("success", False))
+        if success:
+            output = (event_data.get("result") or {}).get("content", "")
+        else:
+            output = (event_data.get("error") or {}).get("message", "unknown error")
+        return ParsedRunnerLine(
+            events=[
+                tool_result_event(
+                    tool="tool",
+                    output=output,
+                    call_id=event_data.get("toolCallId"),
+                    is_error=not success,
+                    run_id=run_id,
+                )
+            ]
+        )
+
+    if msg_type == "assistant.reasoning":
+        thinking = (event_data.get("content") or "").strip()
+        return ParsedRunnerLine(
+            events=[thinking_event(thinking, run_id=run_id)] if thinking else []
+        )
+
     if msg_type == "result":
         exit_code = data.get("exitCode", 0)
         if exit_code != 0:
-            return ([f"[error] copilot exited with code {exit_code}"], None)
-        usage = data.get("usage", {})
-        premium = usage.get("premiumRequests", 0)
-        display = [f"[done] {premium} premium request(s)"] if premium else []
-        return (display, None)
+            event: AgentStreamEvent = error_event(
+                code="copilot_exit_error",
+                message=f"copilot exited with code {exit_code}",
+                exit_code=exit_code,
+                run_id=run_id,
+            )
+        else:
+            usage = data.get("usage") or {}
+            premium = usage.get("premiumRequests", 0)
+            summary = f"Completed ({premium} premium request(s))" if premium else "Completed"
+            event = status_event("completed", summary=summary, run_id=run_id)
+        return ParsedRunnerLine(events=[event])
 
-    # Ignore streaming deltas, session lifecycle, user echo, MCP status, etc.
-    return ([], None)
+    # session lifecycle, streaming deltas, user echo, MCP status, turn boundaries,
+    # and any other unrecognized event: no user-relevant content.
+    return ParsedRunnerLine()
+
+
+def _parse_copilot_stdout_line(
+    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+) -> ParsedRunnerLine:
+    """Parse one line of GitHub Copilot CLI JSONL output into the canonical
+    event/usage contract.
+    """
+    if session_id_ref[0] is None:
+        extracted = _extract_jsonl_session_id(line, runner_type)
+        if extracted:
+            session_id_ref[0] = extracted
+    return _parse_copilot_stream_line(line, source=runner_type)
 
 
 def _parse_claude_stdout_line(
