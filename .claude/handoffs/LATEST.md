@@ -1,1 +1,1 @@
-.claude/handoffs/2026-07-28-2042-spec-journey-exploration.md
+.claude/handoffs/2026-07-29-1225-change4-section7-complete-section8-next.md
