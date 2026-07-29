@@ -25,6 +25,14 @@
       "status": "living",
       "parent": null,
       "order": 30
+    },
+    {
+      "path": "spec/changes/add-spec-navigation/spec.html",
+      "title": "Spec: Add Spec Navigation",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": "spec/roadmaps/agentweave-reconstruction.html",
+      "order": 10
     }
   ]
 }
