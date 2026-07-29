@@ -80,6 +80,9 @@ export default function App() {
             activePage={page}
             onNavigate={setPage}
             onOpenSetup={() => setSetupOpen(true)}
+            // The Spec workspace needs the horizontal room for its own
+            // navigation pane, so the Hub rail collapses to icons there.
+            compact={page === 'spec'}
           />
           <main className="flex-1 overflow-hidden" style={{ background: 'var(--bg)' }}>
             <div className={WRAPPER_CLASS[active.wrapper]} data-testid="active-page-wrapper">

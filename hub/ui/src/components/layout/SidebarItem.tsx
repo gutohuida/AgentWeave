@@ -13,6 +13,8 @@ export interface SidebarItemProps {
   badge?: SidebarBadge | null
   onClick: () => void
   testId?: string
+  /** Icon-only rail: the label becomes the accessible name and tooltip. */
+  compact?: boolean
 }
 
 const baseStyle: CSSProperties = {
@@ -65,7 +67,15 @@ const badgeStyle = (danger: boolean): CSSProperties => ({
  * sectioned items (and the bottom Settings button) — Sidebar groups them
  * into sections, but the per-row presentation is identical.
  */
-export function SidebarItem({ label, icon, active, badge, onClick, testId }: SidebarItemProps) {
+export function SidebarItem({
+  label,
+  icon,
+  active,
+  badge,
+  onClick,
+  testId,
+  compact = false,
+}: SidebarItemProps) {
   const [hovered, setHovered] = useState(false)
 
   const isHighlighted = active || hovered
@@ -73,6 +83,7 @@ export function SidebarItem({ label, icon, active, badge, onClick, testId }: Sid
     ...baseStyle,
     color: isHighlighted ? ACTIVE_COLOR : baseStyle.color,
     background: active ? ACTIVE_BG : hovered ? HOVER_BG : 'transparent',
+    ...(compact ? { justifyContent: 'center', padding: '6px 0', gap: 0 } : null),
   }
 
   return (
@@ -81,14 +92,30 @@ export function SidebarItem({ label, icon, active, badge, onClick, testId }: Sid
       className="group"
       style={style}
       data-testid={testId}
+      title={compact ? label : undefined}
+      aria-label={compact ? label : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <span style={activeIndicatorStyle(active)} />
       <Icon name={icon} size={18} />
-      <span className="flex-1">{label}</span>
+      {!compact && <span className="flex-1">{label}</span>}
       {badge && (
-        <span className="shrink-0" style={badgeStyle(badge.danger)}>
+        <span
+          className="shrink-0"
+          style={
+            compact
+              ? {
+                  ...badgeStyle(badge.danger),
+                  position: 'absolute',
+                  top: 2,
+                  right: 4,
+                  padding: '0 3px',
+                  fontSize: 9,
+                }
+              : badgeStyle(badge.danger)
+          }
+        >
           {badge.count}
         </span>
       )}

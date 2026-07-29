@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
@@ -182,6 +182,10 @@ describe('Spec tab — manifest drift and repair', () => {
     ]
     specListResult.data.home = 'spec/agentweave-spec.html'
     render(withQueryClient(<SpecPage />))
-    expect(screen.getByDisplayValue('spec/agentweave-spec.html')).toBeInTheDocument()
+    // The flat path selector was replaced by the document library, so home
+    // selection is now observed as the current row rather than a select value.
+    // Scoped to the library because the iframe also titles itself with the path.
+    const library = within(screen.getByTestId('spec-document-list'))
+    expect(library.getByTitle('spec/agentweave-spec.html')).toHaveAttribute('aria-current', 'true')
   })
 })

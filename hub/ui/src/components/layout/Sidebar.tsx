@@ -10,7 +10,15 @@ interface SidebarProps {
   activePage: Page
   onNavigate: (page: Page) => void
   onOpenSetup: () => void
+  /**
+   * Icon-only rail. Passed explicitly by App rather than inferred from
+   * `activePage`, so the rail never depends on hidden page state.
+   */
+  compact?: boolean
 }
+
+export const SIDEBAR_WIDTH = 220
+export const SIDEBAR_COMPACT_WIDTH = 52
 
 interface NavItem {
   id: Page
@@ -35,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
 
 const SECTION_ORDER = ['WORK', 'COMMUNICATION', 'OBSERVE']
 
-export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, onOpenSetup, compact = false }: SidebarProps) {
   const { data: questions }    = useQuestions(false)
   const { data: messages }     = useMessages()
   const { data: agents }       = useAgents()
@@ -74,16 +82,18 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
   return (
     <div
       className="flex h-full flex-col shrink-0"
+      data-testid="sidebar"
+      data-compact={compact ? 'true' : 'false'}
       style={{
-        width: 220,
+        width: compact ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_WIDTH,
         background: 'var(--surface)',
         borderRight: '1px solid var(--border)',
-        padding: '12px 8px',
+        padding: compact ? '12px 4px' : '12px 8px',
       }}
     >
       {/* Logo mark */}
       <div
-        className="px-2 mb-2"
+        className={compact ? 'mb-2 text-center' : 'px-2 mb-2'}
         style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}
       >
         AW
@@ -100,6 +110,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
             badge={getBadge(id)}
             onClick={() => onNavigate(id)}
             testId={`nav-${id}`}
+            compact={compact}
           />
         ))}
       </nav>
@@ -107,7 +118,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
       {/* Sectioned nav items */}
       {sectionedItems.map(({ section, items }) => (
         <div key={section}>
-          <div style={sectionLabelStyle}>{section}</div>
+          {!compact && <div style={sectionLabelStyle}>{section}</div>}
           <nav className="flex flex-col">
             {items.map(({ id, label, icon }) => (
               <SidebarItem
@@ -117,6 +128,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
                 active={activePage === id}
                 badge={getBadge(id)}
                 onClick={() => onNavigate(id)}
+                compact={compact}
                 testId={`nav-${id}`}
               />
             ))}
@@ -137,6 +149,7 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup }: SidebarProps) {
           active={false}
           onClick={onOpenSetup}
           testId="nav-settings"
+          compact={compact}
         />
       </div>
     </div>
