@@ -31,6 +31,7 @@ from ...schemas.agents import (
     AgentOutputResponse,
     AgentSummary,
     AgentTimelineEvent,
+    ContextUsageCreate,
 )
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -1032,20 +1033,30 @@ async def post_agent_output(
 @router.post("/{name}/context-usage", status_code=status.HTTP_201_CREATED)
 async def post_context_usage(
     name: str,
-    body: dict,
+    body: ContextUsageCreate,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Receive a context usage report from the watchdog and broadcast to Hub UI via SSE.
-
-    Expected body: {agent, model, tokens_used, tokens_limit, percent, warning,
-                    critical, threshold_warning, threshold_critical, updated_at}
-    """
+    """Store and project the latest canonical context snapshot for an agent."""
     project_id, _ = project
-    payload = {**body, "agent": name}
-    severity = "warning" if body.get("warning") else "info"
+    payload = {**body.model_dump(exclude_none=True), "agent": name}
+    latest_result = await session.execute(
+        select(EventLog)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == "context_warning",
+            EventLog.agent == name,
+        )
+        .order_by(EventLog.timestamp.desc())
+        .limit(1)
+    )
+    latest = latest_result.scalars().first()
+    if latest and isinstance(latest.data, dict):
+        latest_observed = latest.data.get("observed_at")
+        if isinstance(latest_observed, (int, float)) and body.observed_at <= latest_observed:
+            return {"status": "ignored", "agent": name, "reason": "stale"}
     await persist_event(
-        session, project_id, "context_warning", payload, agent=name, severity=severity
+        session, project_id, "context_warning", payload, agent=name, severity="info"
     )
     await sse_manager.broadcast(project_id, "context_warning", payload)
     return {"status": "ok", "agent": name}

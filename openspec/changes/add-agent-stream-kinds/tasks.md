@@ -137,18 +137,18 @@
 
 ## 6. Hub context validation and projection
 
-- [ ] 6.1 Replace the unvalidated context dictionary ingress with a typed canonical Pydantic
+- [x] 6.1 Replace the unvalidated context dictionary ingress with a typed canonical Pydantic
   request schema
-- [ ] 6.2 Validate status/basis enums, numeric ranges, percentage consistency, bounded strings,
+- [x] 6.2 Validate status/basis enums, numeric ranges, percentage consistency, bounded strings,
   observation time, and allowlisted breakdown fields
-- [ ] 6.3 Normalize accepted legacy context payloads at the Hub boundary during rolling upgrades
-- [ ] 6.4 Store the canonical latest snapshot through the existing agent-event path unless
+- [x] 6.3 Normalize accepted legacy context payloads at the Hub boundary during rolling upgrades
+- [x] 6.4 Store the canonical latest snapshot through the existing agent-event path unless
   implementation evidence requires a dedicated migration
-- [ ] 6.5 Project the canonical context object without field drift through agent summaries and
+- [x] 6.5 Project the canonical context object without field drift through agent summaries and
   real-time updates
-- [ ] 6.6 Ensure session identity and observation ordering prevent an older snapshot from
+- [x] 6.6 Ensure session identity and observation ordering prevent an older snapshot from
   replacing a newer active-session snapshot
-- [ ] 6.7 Add Hub tests for measured, estimated, token-only, unavailable, unsupported, invalid,
+- [x] 6.7 Add Hub tests for measured, estimated, token-only, unavailable, unsupported, invalid,
   legacy, stale-session, and out-of-order samples
 
 ## 7. Shared stream UI
