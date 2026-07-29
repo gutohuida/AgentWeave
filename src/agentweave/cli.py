@@ -1970,65 +1970,72 @@ def _build_agent_context(agent: str, session: "Session", version_comment: str) -
     ).context
 
 
-def _kill_stale_watchdogs() -> list:
-    """Find and terminate any running agentweave-watch processes.
-
-    Scans /proc on Linux/WSL or uses tasklist on Windows. Safe to call
-    before starting a new watchdog — cleans up stale daemons from previous
-    sessions or terminals.
-
-    Returns a list of killed PIDs.
-    """
+def _is_watchdog_process(pid: int) -> bool:
+    """Return whether ``pid`` is an AgentWeave watchdog, not a reused PID."""
     import os
-
-    killed: list = []
-    my_pid = os.getpid()
 
     if os.name == "nt":
         import subprocess as _sp
 
         result = _sp.run(
-            ["tasklist", "/FI", "IMAGENAME eq agentweave-watch.exe", "/FO", "CSV", "/NH"],
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
             capture_output=True,
             text=True,
             timeout=5,
         )
         for line in result.stdout.splitlines():
             parts = line.strip('"').split('","')
-            if len(parts) >= 2:
+            if len(parts) >= 2 and parts[0].lower() == "agentweave-watch.exe":
                 try:
-                    pid = int(parts[1])
-                    if pid != my_pid:
-                        kill_result = _sp.run(
-                            ["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=5
-                        )
-                        if kill_result.returncode == 0:
-                            killed.append(pid)
-                except (ValueError, OSError):
-                    pass
-    else:
-        proc_dir = "/proc"
-        if not os.path.isdir(proc_dir):
-            return killed
-        for entry in os.listdir(proc_dir):
-            if not entry.isdigit():
-                continue
-            pid = int(entry)
-            if pid == my_pid:
-                continue
-            try:
-                with open(f"/proc/{pid}/cmdline", "rb") as fh:
-                    cmdline = fh.read().decode("utf-8", errors="replace")
-                args = cmdline.split("\x00")
-                if any("agentweave-watch" in arg for arg in args):
-                    import signal
+                    return int(parts[1]) == pid
+                except ValueError:
+                    return False
+        return False
 
-                    os.kill(pid, signal.SIGTERM)
-                    killed.append(pid)
-            except (OSError, ProcessLookupError, PermissionError):
-                pass
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            cmdline = fh.read().decode("utf-8", errors="replace")
+        return any("agentweave-watch" in arg for arg in cmdline.split("\x00"))
+    except (OSError, ProcessLookupError, PermissionError):
+        return False
 
-    return killed
+
+def _terminate_watchdog(pid: int) -> bool:
+    """Terminate a PID already verified as an AgentWeave watchdog."""
+    import os
+
+    try:
+        if os.name == "nt":
+            import subprocess as _sp
+
+            result = _sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True, timeout=5)
+            return result.returncode == 0
+        import signal
+
+        os.kill(pid, signal.SIGTERM)
+        return True
+    except (OSError, ProcessLookupError, PermissionError):
+        return False
+
+
+def _kill_stale_watchdogs() -> list:
+    """Terminate only the watchdog recorded by the current project.
+
+    Watchdogs from other projects are independent and must remain alive. The
+    previous global process scan caused one project's ``agentweave start`` to
+    kill every other project's watchdog and leave Hub agents stuck as running.
+    """
+    from .constants import WATCHDOG_PID_FILE
+
+    if not WATCHDOG_PID_FILE.exists():
+        return []
+    try:
+        pid = int(WATCHDOG_PID_FILE.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return []
+    if not _is_watchdog_process(pid):
+        return []
+    return [pid] if _terminate_watchdog(pid) else []
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -2060,6 +2067,20 @@ def cmd_start(args: argparse.Namespace) -> int:
     # Clean up stale PID file if present
     if WATCHDOG_PID_FILE.exists():
         WATCHDOG_PID_FILE.unlink(missing_ok=True)
+
+    # Direct Hub triggers wake agents with an instruction to read their
+    # AgentWeave inbox. Ensure that MCP registration exists before launching
+    # the watchdog so `agentweave init` followed by `agentweave start` works
+    # without requiring a separate, easy-to-miss setup command.
+    try:
+        _activate_mcp()
+    except Exception as exc:
+        print_warning(f"Could not verify MCP registration before start: {exc}")
+        _emit_nonfatal_diagnostic(
+            "mcp_startup",
+            f"Could not verify MCP registration before watchdog start: {exc}",
+            hint="Run 'agentweave mcp setup' manually.",
+        )
 
     try:
         from .diagnostics import check_agents
@@ -2105,8 +2126,6 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_stop(_args: argparse.Namespace) -> int:
     """Stop the background AgentWeave watchdog."""
-    import os
-
     from .constants import WATCHDOG_PID_FILE
 
     if not WATCHDOG_PID_FILE.exists():
@@ -2121,14 +2140,12 @@ def cmd_stop(_args: argparse.Namespace) -> int:
         return 1
 
     try:
-        if os.name == "nt":
-            import subprocess as _sp2
-
-            _sp2.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
-        else:
-            import signal
-
-            os.kill(pid, signal.SIGTERM)
+        if not _is_watchdog_process(pid):
+            WATCHDOG_PID_FILE.unlink()
+            print_warning(f"PID {pid} is not an AgentWeave watchdog — stale PID file removed.")
+            return 0
+        if not _terminate_watchdog(pid):
+            raise ProcessLookupError(pid)
         WATCHDOG_PID_FILE.unlink()
         print_success(f"Watchdog stopped (PID {pid})")
     except (OSError, ProcessLookupError):

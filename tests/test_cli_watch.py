@@ -100,3 +100,59 @@ def test_cmd_start_passes_devnull_to_popen(tmp_path, monkeypatch):
     ), f"stdout should be DEVNULL, got {kw.get('stdout')!r}"
     assert kw.get("stderr") is subprocess.DEVNULL
     assert kw.get("stdin") is subprocess.DEVNULL
+
+
+def test_cmd_start_ensures_mcp_registration(tmp_path, monkeypatch):
+    from agentweave.cli import cmd_start
+    import agentweave.cli as cli_mod
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(const, "WATCHDOG_LOG_FILE", tmp_path / "wd.log")
+    monkeypatch.setattr(const, "WATCHDOG_PID_FILE", tmp_path / "wd.pid")
+    monkeypatch.setattr(cli_mod, "AGENTWEAVE_DIR", tmp_path)
+    monkeypatch.setattr(cli_mod, "_kill_stale_watchdogs", lambda: [])
+    ensure_mcp = MagicMock(return_value=0)
+    monkeypatch.setattr(cli_mod, "_activate_mcp", ensure_mcp)
+    monkeypatch.setattr(subprocess, "Popen", MagicMock(return_value=MagicMock(pid=99999)))
+
+    result = cmd_start(argparse.Namespace(retry_after=60))
+
+    assert result == 0
+    ensure_mcp.assert_called_once_with()
+
+
+def test_stale_watchdog_cleanup_targets_only_current_project_pid(tmp_path, monkeypatch):
+    import agentweave.cli as cli_mod
+
+    pid_file = tmp_path / "watchdog.pid"
+    pid_file.write_text("12345", encoding="utf-8")
+    monkeypatch.setattr(const, "WATCHDOG_PID_FILE", pid_file)
+    checked = []
+    terminated = []
+    monkeypatch.setattr(
+        cli_mod,
+        "_is_watchdog_process",
+        lambda pid: checked.append(pid) or True,
+    )
+    monkeypatch.setattr(
+        cli_mod,
+        "_terminate_watchdog",
+        lambda pid: terminated.append(pid) or True,
+    )
+
+    killed = cli_mod._kill_stale_watchdogs()
+
+    assert killed == [12345]
+    assert checked == [12345]
+    assert terminated == [12345]
+
+
+def test_stale_watchdog_cleanup_does_not_scan_without_project_pid(tmp_path, monkeypatch):
+    import agentweave.cli as cli_mod
+
+    monkeypatch.setattr(const, "WATCHDOG_PID_FILE", tmp_path / "missing.pid")
+    check = MagicMock()
+    monkeypatch.setattr(cli_mod, "_is_watchdog_process", check)
+
+    assert cli_mod._kill_stale_watchdogs() == []
+    check.assert_not_called()
