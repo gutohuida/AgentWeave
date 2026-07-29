@@ -10,9 +10,12 @@ import pytest
 from agentweave.watchdog import (
     _agent_ping_cmd,
     _build_codex_mcp_tool_call,
+    _claude_tool_result_text,
+    _claude_usage_sample,
     _codex_working_dir,
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
+    _parse_claude_stream_line,
     _parse_codex_stream_line,
     _run_agent_subprocess,
     _run_codex_mcp_turn,
@@ -1323,6 +1326,248 @@ class TestParseCodexStreamLine:
         display, usage = _parse_codex_stream_line("some plain text")
         assert display == ["some plain text"]
         assert usage is None
+
+
+class TestClaudeUsageSample:
+    """Tests for _claude_usage_sample: additive input + cache read + cache creation."""
+
+    def test_adds_cache_fields_once(self):
+        sample = _claude_usage_sample(
+            {"input_tokens": 100, "cache_read_input_tokens": 40, "cache_creation_input_tokens": 5},
+            source="claude",
+        )
+        assert sample.context_tokens == 145
+        assert sample.basis == "latest_request_input"
+        assert sample.status == "measured"
+        assert sample.breakdown == {
+            "input_tokens": 100,
+            "cache_read_tokens": 40,
+            "cache_creation_tokens": 5,
+        }
+
+    def test_missing_cache_fields_default_to_zero(self):
+        sample = _claude_usage_sample({"input_tokens": 50}, source="claude")
+        assert sample.context_tokens == 50
+
+    def test_missing_input_tokens_yields_no_sample(self):
+        assert _claude_usage_sample({"cache_read_input_tokens": 40}, source="claude") is None
+
+
+class TestClaudeToolResultText:
+    """Tests for _claude_tool_result_text content-block extraction."""
+
+    def test_string_content_passes_through(self):
+        assert _claude_tool_result_text("plain output") == "plain output"
+
+    def test_text_blocks_are_joined(self):
+        content = [{"type": "text", "text": "line one"}, {"type": "text", "text": "line two"}]
+        assert _claude_tool_result_text(content) == "line one\nline two"
+
+    def test_non_text_blocks_are_skipped(self):
+        content = [{"type": "image", "source": {}}, {"type": "text", "text": "kept"}]
+        assert _claude_tool_result_text(content) == "kept"
+
+    def test_unrecognized_shape_yields_empty_string(self):
+        assert _claude_tool_result_text(None) == ""
+
+
+class TestParseClaudeStreamLine:
+    """Tests for _parse_claude_stream_line: the canonical Claude/claude_proxy adapter."""
+
+    def test_assistant_text_becomes_text_event(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "Hello there"}]},
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "Hello there"
+        assert parsed.usage is None
+
+    def test_assistant_thinking_becomes_thinking_event(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "thinking", "thinking": "considering..."}]},
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "thinking"
+        assert parsed.events[0].content == "considering..."
+
+    def test_assistant_multiple_blocks_preserve_order(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "thinking", "thinking": "step one"},
+                        {"type": "text", "text": "the answer"},
+                    ]
+                },
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert [event.kind for event in parsed.events] == ["thinking", "text"]
+
+    def test_assistant_tool_use_block_becomes_tool_use_event(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "call_1",
+                            "name": "bash",
+                            "input": {"command": "ls"},
+                        }
+                    ]
+                },
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "tool_use"
+        assert event.call_id == "call_1"
+        assert event.payload["tool"] == "bash"
+
+    def test_assistant_usage_is_captured_as_context_sample(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "text", "text": "hi"}],
+                    "usage": {
+                        "input_tokens": 100,
+                        "cache_read_input_tokens": 20,
+                        "cache_creation_input_tokens": 0,
+                    },
+                },
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.usage is not None
+        assert parsed.usage.context_tokens == 120
+
+    def test_usage_without_displayable_content_is_not_fabricated_as_output(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [],
+                    "usage": {"input_tokens": 10, "cache_read_input_tokens": 0},
+                },
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events == []
+        assert parsed.usage is not None
+        assert parsed.usage.context_tokens == 10
+
+    def test_user_tool_result_becomes_tool_result_event_paired_by_call_id(self):
+        use_line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [{"type": "tool_use", "id": "call_9", "name": "bash", "input": {}}]
+                },
+            }
+        )
+        result_line = json.dumps(
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_9",
+                            "content": "file.txt",
+                            "is_error": False,
+                        }
+                    ]
+                },
+            }
+        )
+        use_parsed = _parse_claude_stream_line(use_line)
+        result_parsed = _parse_claude_stream_line(result_line)
+        assert use_parsed.events[0].call_id == result_parsed.events[0].call_id == "call_9"
+        assert result_parsed.events[0].kind == "tool_result"
+        assert result_parsed.events[0].payload["is_error"] is False
+
+    def test_failed_tool_result_is_marked_is_error(self):
+        line = json.dumps(
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_2",
+                            "content": "not found",
+                            "is_error": True,
+                        }
+                    ]
+                },
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events[0].payload["is_error"] is True
+
+    def test_successful_result_becomes_completed_status_event(self):
+        line = json.dumps({"type": "result", "subtype": "success", "total_cost_usd": 0.0123})
+        parsed = _parse_claude_stream_line(line)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "status"
+        assert parsed.events[0].payload["phase"] == "completed"
+        assert "0.0123" in parsed.events[0].content
+
+    def test_failed_result_becomes_error_event(self):
+        line = json.dumps({"type": "result", "subtype": "error", "error": "rate limited"})
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events[0].kind == "error"
+        assert "rate limited" in parsed.events[0].content
+
+    def test_result_usage_is_not_used_as_context_sample(self):
+        # Only assistant-message usage is canonical for now (see module docstring);
+        # a result record's usage is not converted into a context sample.
+        line = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "usage": {"input_tokens": 999},
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.usage is None
+
+    def test_system_events_are_ignored(self):
+        line = json.dumps({"type": "system", "subtype": "init"})
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events == []
+        assert parsed.usage is None
+
+    def test_non_json_line_becomes_text_event(self):
+        parsed = _parse_claude_stream_line("some plain text")
+        assert len(parsed.events) == 1
+        assert parsed.events[0].content == "some plain text"
+
+    def test_blank_non_json_line_yields_no_events(self):
+        parsed = _parse_claude_stream_line("   ")
+        assert parsed.events == []
+        assert parsed.usage is None
+
+    def test_run_id_is_propagated_to_events(self):
+        line = json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+        )
+        parsed = _parse_claude_stream_line(line, run_id="run-42")
+        assert parsed.events[0].run_id == "run-42"
 
 
 class TestAgentPingCmdCopilot:

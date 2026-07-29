@@ -30,6 +30,16 @@ from .constants import (
 )
 from .spec_manifest import discover_spec_files as _discover_spec_files_safe
 from .spec_manifest import load_manifest
+from .stream_events import (
+    ContextUsageSample,
+    ParsedRunnerLine,
+    error_event,
+    status_event,
+    text_event,
+    thinking_event,
+    tool_result_event,
+    tool_use_event,
+)
 from .utils import load_dotenv, load_json
 
 logger = logging.getLogger(__name__)
@@ -2631,21 +2641,66 @@ def _parse_codex_stream_line(line: str) -> tuple:
     return ([], None)
 
 
-def _parse_claude_stream_line(line: str) -> tuple:
-    """Parse one JSONL line from `claude --output-format stream-json`.
+def _claude_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
+    """Build the canonical Claude context sample: additive input + cache-read +
+    cache-creation tokens, per the exact-request basis (design.md decision 4).
+    """
+    input_tokens = usage.get("input_tokens")
+    if input_tokens is None:
+        return None
+    cache_read = usage.get("cache_read_input_tokens") or 0
+    cache_creation = usage.get("cache_creation_input_tokens") or 0
+    context_tokens = int(input_tokens) + int(cache_read) + int(cache_creation)
+    return ContextUsageSample(
+        status="measured",
+        source=source,
+        basis="latest_request_input",
+        context_tokens=context_tokens,
+        breakdown={
+            "input_tokens": int(input_tokens),
+            "cache_read_tokens": int(cache_read),
+            "cache_creation_tokens": int(cache_creation),
+        },
+    )
 
-    Returns a tuple of (display_strings, usage_data) where:
-    - display_strings: list of human-readable strings to post as agent output
-    - usage_data: dict with usage info if this is a result message, else None
 
-    Empty display_strings means the line carries no user-visible content.
+def _claude_tool_result_text(content: Any) -> str:
+    """Extract readable text from a Messages-API tool_result content block."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        return "\n".join(part for part in parts if part)
+    return ""
+
+
+def _parse_claude_stream_line(
+    line: str, *, run_id: Optional[str] = None, source: str = "claude"
+) -> ParsedRunnerLine:
+    """Parse one JSONL line from `claude --output-format stream-json` into the
+    canonical event/usage contract.
+
+    Tool use and tool result are Messages-API content blocks nested inside
+    `assistant`/`user` message content arrays, not synthetic top-level message
+    types — this reads them from their real location so tool activity is
+    actually captured instead of silently dropped.
+
+    Only assistant-message usage is treated as canonical; the CLI's `result`
+    usage record is not currently used as a fallback (design.md decision 4/
+    agent-context-usage spec "Claude context mapping" permits but does not
+    require it, and no fixture-proven shape needs it yet).
     """
     try:
         data = json.loads(line)
     except Exception:
-        # Non-JSON line — pass through as-is if non-empty
         stripped = line.strip()
-        return ([stripped] if stripped else [], None)
+        if stripped:
+            return ParsedRunnerLine(events=[text_event(stripped, run_id=run_id)])
+        return ParsedRunnerLine()
 
     msg_type = data.get("type", "")
 
@@ -2653,71 +2708,72 @@ def _parse_claude_stream_line(line: str) -> tuple:
         message = data.get("message", {})
         # Some CLI versions nest content under "message", others put it at the top level
         content = message.get("content", data.get("content", []))
+        events = []
         if isinstance(content, str):
-            return ([content] if content.strip() else [], None)
-        results = []
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            block_type = block.get("type", "")
-            if block_type == "thinking":
-                thinking = block.get("thinking", "").strip()
-                if thinking:
-                    # Prefix each line so it's visually distinct in the log
-                    prefixed = "\n".join(f"💭 {ln}" for ln in thinking.splitlines())
-                    results.append(prefixed)
-            elif block_type == "text":
-                text = block.get("text", "").strip()
-                if text:
-                    results.append(text)
-        return (results, None)
-
-    if msg_type == "tool_use":
-        name = data.get("name", "unknown")
-        inp = data.get("input", {})
-        try:
-            inp_str = json.dumps(inp, ensure_ascii=False)
-            if len(inp_str) > 300:
-                inp_str = inp_str[:300] + "…"
-        except Exception:
-            inp_str = str(inp)
-        return ([f"🔧 {name}({inp_str})"], None)
-
-    if msg_type == "tool_result":
-        content = data.get("content", [])
-        if isinstance(content, str):
-            stripped = content.strip()
-            return ([f"  → {stripped[:500]}"] if stripped else [], None)
-        if isinstance(content, list):
-            texts = []
+            if content.strip():
+                events.append(text_event(content.strip(), run_id=run_id))
+        else:
             for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    t = block.get("text", "").strip()
-                    if t:
-                        snippet = t[:500] + ("…" if len(t) > 500 else "")
-                        texts.append(f"  → {snippet}")
-            return (texts, None)
-        return ([], None)
+                if not isinstance(block, dict):
+                    continue
+                block_type = block.get("type", "")
+                if block_type == "thinking":
+                    thinking = block.get("thinking", "").strip()
+                    if thinking:
+                        events.append(thinking_event(thinking, run_id=run_id))
+                elif block_type == "text":
+                    text = block.get("text", "").strip()
+                    if text:
+                        events.append(text_event(text, run_id=run_id))
+                elif block_type == "tool_use":
+                    events.append(
+                        tool_use_event(
+                            tool=block.get("name", "unknown"),
+                            category="tool",
+                            input_data=block.get("input", {}),
+                            call_id=block.get("id"),
+                            run_id=run_id,
+                        )
+                    )
+        usage = message.get("usage") if isinstance(message, dict) else None
+        usage_sample = _claude_usage_sample(usage, source=source) if usage else None
+        return ParsedRunnerLine(events=events, usage=usage_sample)
+
+    if msg_type == "user":
+        message = data.get("message", {})
+        content = message.get("content", []) if isinstance(message, dict) else []
+        events = []
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict) or block.get("type") != "tool_result":
+                    continue
+                events.append(
+                    tool_result_event(
+                        tool="tool",
+                        output=_claude_tool_result_text(block.get("content")),
+                        call_id=block.get("tool_use_id"),
+                        is_error=bool(block.get("is_error")),
+                        run_id=run_id,
+                    )
+                )
+        return ParsedRunnerLine(events=events)
 
     if msg_type == "result":
         subtype = data.get("subtype", "")
         if subtype == "error":
-            return ([f"[ERROR] {data.get('error', 'unknown error')}"], None)
-        # result_text duplicates the already-streamed assistant messages — skip it
-        cost = data.get("total_cost_usd")
-        display = [f"[done] cost: ${cost:.4f}"] if cost is not None else []
-        # Extract usage data for context monitoring
-        usage = data.get("usage", {})
-        usage_data = None
-        if usage and "input_tokens" in usage:
-            usage_data = {
-                "input_tokens": usage.get("input_tokens"),
-                "output_tokens": usage.get("output_tokens"),
-            }
-        return (display, usage_data)
+            event = error_event(
+                code="claude_result_error",
+                message=str(data.get("error", "unknown error")),
+                run_id=run_id,
+            )
+        else:
+            cost = data.get("total_cost_usd")
+            summary = f"Completed (cost: ${cost:.4f})" if cost is not None else "Completed"
+            event = status_event("completed", summary=summary, run_id=run_id)
+        return ParsedRunnerLine(events=[event])
 
-    # system/init and everything else — ignore
-    return ([], None)
+    # system/init and everything else — no user-relevant content.
+    return ParsedRunnerLine()
 
 
 _KIMI_RESUME_RE = re.compile(r"kimi -r ([a-f0-9\-]{36})")
@@ -3112,8 +3168,12 @@ def _do_run_agent_subprocess(
                 if stale:
                     stale_codex_session[0] = True
             else:
-                readable_lines, usage_data = _parse_claude_stdout_line(
-                    line, runner_type, session_id_ref
+                parsed_claude_line = _parse_claude_stdout_line(line, runner_type, session_id_ref)
+                readable_lines = [event.content for event in parsed_claude_line.events]
+                usage_data = (
+                    {"input_tokens": parsed_claude_line.usage.context_tokens}
+                    if parsed_claude_line.usage is not None
+                    else None
                 )
 
             session_id = session_id_ref[0]
@@ -3567,14 +3627,15 @@ def _parse_copilot_stdout_line(
 
 def _parse_claude_stdout_line(
     line: str, runner_type: str, session_id_ref: List[Optional[str]]
-) -> tuple[list[str], Optional[Dict[str, Any]]]:
-    """Parse one line of Claude / claude_proxy JSONL output."""
+) -> ParsedRunnerLine:
+    """Parse one line of Claude / claude_proxy JSONL output into the canonical
+    event/usage contract.
+    """
     if session_id_ref[0] is None:
         extracted = _extract_jsonl_session_id(line, runner_type)
         if extracted:
             session_id_ref[0] = extracted
-    readable_lines, usage_data = _parse_claude_stream_line(line)
-    return readable_lines, usage_data
+    return _parse_claude_stream_line(line, source=runner_type)
 
 
 def _check_cli_available(agent: str) -> bool:

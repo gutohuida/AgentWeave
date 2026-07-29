@@ -18,11 +18,11 @@
 
 ## 2. Stdout adapters and fixtures
 
-- [ ] 2.1 Refactor the Claude parser to return the canonical result and map text, readable
+- [x] 2.1 Refactor the Claude parser to return the canonical result and map text, readable
   thinking, tools, lifecycle, errors, and independent assistant-message usage
-- [ ] 2.2 Implement Claude latest-request arithmetic as input + cache read + cache creation and
+- [x] 2.2 Implement Claude latest-request arithmetic as input + cache read + cache creation and
   constrain final-result fallback to fixture-proven shapes
-- [ ] 2.3 Add Claude 2.1.x fixtures covering multiple blocks, tool correlation, completion,
+- [x] 2.3 Add Claude 2.1.x fixtures covering multiple blocks, tool correlation, completion,
   failure, usage-only data, resumed usage, cached input, and unknown events
 - [ ] 2.4 Refactor the Codex stdout parser to map agent messages, reasoning, commands, file changes,
   MCP calls, web searches, plans, lifecycle, errors, and cumulative usage metadata
