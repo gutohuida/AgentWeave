@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import json
 
-from agentweave.transport.config import _ensure_spec_source_id, get_transport
+from agentweave.transport.config import (
+    _ensure_spec_source_id,
+    _find_transport_config,
+    get_transport,
+)
 from agentweave.transport.http import HttpTransport
+from agentweave.transport.local import LocalTransport
 
 
 def _write_transport_json(path, data: dict) -> None:
@@ -76,3 +81,42 @@ class TestGetTransportSpecSourceId:
         second = get_transport()
 
         assert first.source_id == second.source_id
+
+
+class TestTransportProjectBoundary:
+    def test_nested_project_does_not_inherit_parent_http_transport(self, tmp_path, monkeypatch):
+        parent = tmp_path / "parent"
+        child = parent / "child"
+        _write_transport_json(
+            parent / ".agentweave" / "transport.json",
+            {
+                "type": "http",
+                "url": "http://localhost:8000",
+                "api_key": "parent-key",
+                "project_id": "parent-project",
+            },
+        )
+        (child / ".agentweave").mkdir(parents=True)
+        monkeypatch.chdir(child)
+
+        transport = get_transport()
+
+        assert isinstance(transport, LocalTransport)
+
+    def test_subdirectory_uses_nearest_project_transport(self, tmp_path, monkeypatch):
+        project = tmp_path / "project"
+        nested = project / "src" / "package"
+        nested.mkdir(parents=True)
+        config_path = project / ".agentweave" / "transport.json"
+        _write_transport_json(
+            config_path,
+            {"type": "local"},
+        )
+        monkeypatch.chdir(nested)
+
+        found = _find_transport_config()
+
+        assert found is not None
+        config, path = found
+        assert config["type"] == "local"
+        assert path == config_path

@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -52,6 +53,54 @@ class TestInitCommand:
         # Default agents: claude, kimi
         assert "claude" in content["agents"]
         assert "kimi" in content["agents"]
+
+    def test_init_does_not_inherit_parent_hub_transport(self, tmp_path, monkeypatch):
+        """A nested project starts local until its own transport is configured."""
+        from agentweave.cli import cmd_init
+        from agentweave.transport.http import HttpTransport
+
+        parent = tmp_path / "parent"
+        project = parent / "project"
+        project.mkdir(parents=True)
+        parent_transport = parent / ".agentweave" / "transport.json"
+        parent_transport.parent.mkdir(parents=True)
+        parent_transport.write_text(
+            json.dumps(
+                {
+                    "type": "http",
+                    "url": "http://localhost:8000",
+                    "api_key": "parent-key",
+                    "project_id": "parent-project",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(project)
+
+        hub_calls = []
+        monkeypatch.setattr(
+            HttpTransport,
+            "sync_local_jobs",
+            lambda self: hub_calls.append("sync_local_jobs"),
+        )
+        monkeypatch.setattr(
+            HttpTransport,
+            "push_session",
+            lambda self, data: hub_calls.append("push_session") or True,
+        )
+
+        result = cmd_init(
+            SimpleNamespace(
+                project="Nested Project",
+                principal=None,
+                mode=None,
+                agents=None,
+                force=False,
+            )
+        )
+
+        assert result == 0
+        assert hub_calls == []
 
     def test_init_creates_gitignore_with_agentweave_runtime_state(self, tmp_path, monkeypatch):
         """Test that init creates .gitignore entries for local AgentWeave state."""

@@ -30,9 +30,14 @@ def _ensure_spec_source_id(config: dict, path: Path) -> str:
 def _find_transport_config() -> Optional[tuple]:
     """Find and load transport.json by walking up from CWD.
 
-    Searches CWD and every parent directory for .agentweave/transport.json.
-    This allows the MCP server (started by an agent from any working directory)
-    to find the project's transport config without requiring an exact CWD match.
+    Searches CWD and parent directories for the nearest AgentWeave project's
+    .agentweave/transport.json. An .agentweave directory is a project boundary:
+    if the nearest one has no transport config, do not inherit a transport from
+    an unrelated parent project.
+
+    This allows the MCP server (started from a subdirectory) to find its
+    project's transport config without leaking configuration into nested
+    AgentWeave projects.
 
     Returns (config, path) for the first match, or None if no config is
     found in any ancestor directory.
@@ -41,6 +46,8 @@ def _find_transport_config() -> Optional[tuple]:
     config = load_json(TRANSPORT_CONFIG_FILE)
     if config:
         return config, TRANSPORT_CONFIG_FILE
+    if TRANSPORT_CONFIG_FILE.parent.exists():
+        return None
 
     # Walk up the directory tree — handles MCP server CWD != project dir
     try:
@@ -56,6 +63,8 @@ def _find_transport_config() -> Optional[tuple]:
             config = load_json(candidate)
             if config:
                 return config, candidate
+            if candidate.parent.exists():
+                return None
 
     return None
 
@@ -63,9 +72,9 @@ def _find_transport_config() -> Optional[tuple]:
 def get_transport() -> BaseTransport:
     """Return the configured transport, defaulting to LocalTransport.
 
-    Searches the current directory and all ancestor directories for
-    .agentweave/transport.json, so the MCP stdio server (which may run from
-    any working directory) can still find the project's transport config.
+    Searches the current directory and ancestors for the nearest AgentWeave
+    project's .agentweave/transport.json, so the MCP stdio server (which may
+    run from a project subdirectory) can still find the correct config.
 
     If no transport.json is found anywhere, LocalTransport is returned,
     preserving 100% of existing single-machine behavior.
