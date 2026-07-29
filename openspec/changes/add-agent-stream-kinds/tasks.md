@@ -47,15 +47,15 @@
 
 ## 3. Auxiliary context collectors
 
-- [ ] 3.1 Define a `RunnerUsageCollector` interface with invocation setup, session binding,
+- [x] 3.1 Define a `RunnerUsageCollector` interface with invocation setup, session binding,
   incremental observation, final bounded poll, and cleanup
-- [ ] 3.2 Implement Codex rollout resolution by active thread/session ID and parse the latest
+- [x] 3.2 Implement Codex rollout resolution by active thread/session ID and parse the latest
   matching `token_count.info`
-- [ ] 3.3 Compute Codex context as last total minus reasoning output, use
+- [x] 3.3 Compute Codex context as last total minus reasoning output, use
   `model_context_window`, and retain cached input only as a breakdown
-- [ ] 3.4 Implement a guarded Codex cumulative-delta fallback that is always marked estimated and
+- [x] 3.4 Implement a guarded Codex cumulative-delta fallback that is always marked estimated and
   never used when exact rollout data is available
-- [ ] 3.5 Add Codex collector tests for fresh and resumed turns, multiple model calls, partial
+- [x] 3.5 Add Codex collector tests for fresh and resumed turns, multiple model calls, partial
   JSONL, missing rollouts, stale sessions, and exact-versus-estimated precedence
 - [ ] 3.6 Configure a unique bounded Copilot OTel JSONL exporter before each invocation with
   content capture disabled

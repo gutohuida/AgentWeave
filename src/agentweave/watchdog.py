@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -2597,6 +2598,266 @@ def _codex_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[Conte
             "reasoning_tokens": int(reasoning_tokens),
         },
     )
+
+
+class RunnerUsageCollector(ABC):
+    """Resolves auxiliary provider-side context usage a runner's own stdout
+    stream cannot supply on its own (design.md decision 1: "Coordinate two
+    producers at the invocation boundary").
+
+    The invocation coordinator drives exactly one collector instance per
+    runner process through this lifecycle, in order: `setup` before the
+    process spawns, `bind` once the provider session identity is known, zero
+    or more `observe` calls while stdout is still open, one `final_poll`
+    after stdout closes (so a trailing auxiliary write is not lost), then
+    `close`. Implementations must tolerate absent, partial, or malformed
+    auxiliary data and return `None` rather than raise or fabricate a
+    sample — the stdout adapter's own result always stands on its own.
+    """
+
+    def setup(self, *, agent: str, workdir: Optional[Path] = None) -> None:  # noqa: B027
+        """Prepare invocation-scoped resources before the runner process spawns.
+
+        No-op by default; only collectors that must configure something before
+        spawn (e.g. Copilot's OTel exporter path) need to override this.
+        """
+
+    @abstractmethod
+    def bind(self, *, session_id: str) -> None:
+        """Associate this collector with the active provider session."""
+
+    @abstractmethod
+    def observe(self) -> Optional[ContextUsageSample]:
+        """Return a newly available sample, or None if nothing new/valid exists."""
+
+    def final_poll(self) -> Optional[ContextUsageSample]:
+        """Return a sample after stdout closes, allowing for trailing writes."""
+        return self.observe()
+
+    def close(self) -> None:  # noqa: B027
+        """Release any resources opened in `setup`. No-op by default."""
+
+
+def _codex_home() -> Path:
+    """Return the Codex CLI's config/data home (`$CODEX_HOME`, else `~/.codex`)."""
+    override = os.environ.get("CODEX_HOME")
+    return Path(override) if override else Path.home() / ".codex"
+
+
+def _codex_sessions_dir(codex_home: Optional[Path] = None) -> Path:
+    """Return the directory Codex writes per-session rollout JSONL files under."""
+    return (codex_home or _codex_home()) / "sessions"
+
+
+def _codex_rollout_session_id(path: Path) -> Optional[str]:
+    """Read a rollout file's leading `session_meta` record to confirm its session ID.
+
+    Used only by the bounded timestamp fallback in `_resolve_codex_rollout_path`
+    to verify a candidate before accepting it — never as an unscoped
+    newest-file heuristic (design.md decision 5).
+    """
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    return None
+                if not isinstance(record, dict):
+                    return None
+                payload = record.get("payload")
+                if record.get("type") == "session_meta" and isinstance(payload, dict):
+                    sid = payload.get("session_id") or payload.get("id")
+                    return sid if isinstance(sid, str) else None
+                return None
+    except OSError:
+        return None
+    return None
+
+
+def _resolve_codex_rollout_path(
+    session_id: str,
+    *,
+    codex_home: Optional[Path] = None,
+    since: Optional[float] = None,
+) -> Optional[Path]:
+    """Resolve the on-disk Codex rollout file for `session_id`.
+
+    Primary resolution matches the session ID Codex embeds in the rollout
+    filename itself (`rollout-<timestamp>-<session_id>.jsonl`), confirmed
+    live against Codex CLI 0.145.0. Only when no filename matches does a
+    bounded fallback consider files modified at or after `since` (the
+    invocation's bind time), and even then each candidate's own
+    `session_meta.session_id` must verify before it is accepted.
+    """
+    sessions_dir = _codex_sessions_dir(codex_home)
+    if not sessions_dir.is_dir():
+        return None
+
+    suffix = f"-{session_id}.jsonl"
+    matches = sorted(
+        (p for p in sessions_dir.rglob(f"rollout-*{suffix}") if p.is_file()),
+        key=lambda p: p.stat().st_mtime,
+    )
+    if matches:
+        return matches[-1]
+
+    if since is None:
+        return None
+
+    candidates = [
+        p
+        for p in sessions_dir.rglob("rollout-*.jsonl")
+        if p.is_file() and p.stat().st_mtime >= since
+    ]
+    candidates.sort(key=lambda p: p.stat().st_mtime)
+    for path in reversed(candidates):
+        if _codex_rollout_session_id(path) == session_id:
+            return path
+    return None
+
+
+def _codex_rollout_usage_sample(
+    path: Path,
+    *,
+    session_id: Optional[str] = None,
+    source: str = "codex_rollout",
+) -> Optional[ContextUsageSample]:
+    """Build a measured sample from the latest `token_count` event in a Codex rollout file.
+
+    Context tokens equal `last_token_usage.total_tokens -
+    last_token_usage.reasoning_output_tokens`, and the limit is
+    `model_context_window` (design.md decision 4; confirmed live against
+    Codex CLI 0.145.0). `cached_input_tokens` is a subset of `input_tokens`
+    and is retained only as a breakdown, never added. A record still being
+    written (a partial final line) is skipped rather than failing the read.
+    """
+    latest_info: Optional[Dict[str, Any]] = None
+    resolved_session_id = session_id
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                payload = record.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                record_type = record.get("type")
+                if record_type == "session_meta":
+                    sid = payload.get("session_id") or payload.get("id")
+                    if isinstance(sid, str):
+                        resolved_session_id = sid
+                elif record_type == "event_msg" and payload.get("type") == "token_count":
+                    info = payload.get("info")
+                    if isinstance(info, dict):
+                        latest_info = info
+    except OSError:
+        return None
+
+    if latest_info is None:
+        return None
+    last_usage = latest_info.get("last_token_usage")
+    if not isinstance(last_usage, dict):
+        return None
+    total_tokens = last_usage.get("total_tokens")
+    if not isinstance(total_tokens, (int, float)):
+        return None
+
+    reasoning_tokens = last_usage.get("reasoning_output_tokens") or 0
+    context_tokens = max(0, int(total_tokens) - int(reasoning_tokens))
+
+    limit_tokens = latest_info.get("model_context_window")
+    resolved_limit = (
+        int(limit_tokens) if isinstance(limit_tokens, (int, float)) and limit_tokens > 0 else None
+    )
+
+    return ContextUsageSample(
+        status="measured",
+        source=source,
+        basis="provider_context",
+        context_tokens=context_tokens,
+        limit_tokens=resolved_limit,
+        session_id=resolved_session_id,
+        breakdown={
+            "input_tokens": int(last_usage.get("input_tokens") or 0),
+            "cached_input_tokens": int(last_usage.get("cached_input_tokens") or 0),
+            "cache_creation_tokens": int(last_usage.get("cache_write_input_tokens") or 0),
+            "output_tokens": int(last_usage.get("output_tokens") or 0),
+            "reasoning_tokens": int(reasoning_tokens),
+        },
+    )
+
+
+def _select_codex_usage(
+    rollout_sample: Optional[ContextUsageSample],
+    cumulative_estimate: Optional[ContextUsageSample],
+) -> Optional[ContextUsageSample]:
+    """Prefer the exact rollout-derived sample; the cumulative stdout estimate
+    (`_codex_usage_sample`) is used only when no rollout sample could be
+    resolved, and is never allowed to override an exact one (task 3.4)."""
+    return rollout_sample if rollout_sample is not None else cumulative_estimate
+
+
+class CodexRolloutCollector(RunnerUsageCollector):
+    """Resolves Codex context usage from the CLI's own on-disk rollout file.
+
+    Codex's stdout `turn.completed.usage` is cumulative across the whole exec
+    invocation (confirmed live against Codex CLI 0.145.0: a resumed session's
+    totals include prior turns), so it cannot supply a non-cumulative context
+    sample by itself. The rollout file Codex already writes to
+    `$CODEX_HOME/sessions/**/rollout-*.jsonl` carries the same
+    `token_count.info` record with correct latest-turn-only usage, keyed by
+    the session/thread ID this collector is bound to.
+    """
+
+    def __init__(self, *, codex_home: Optional[Path] = None) -> None:
+        self._codex_home = codex_home
+        self._session_id: Optional[str] = None
+        self._bound_at: Optional[float] = None
+        self._rollout_path: Optional[Path] = None
+
+    def bind(self, *, session_id: str) -> None:
+        self._session_id = session_id
+        self._bound_at = time.time()
+        self._rollout_path = None
+
+    def _resolve_path(self) -> Optional[Path]:
+        if self._session_id is None:
+            return None
+        if self._rollout_path is not None and self._rollout_path.is_file():
+            return self._rollout_path
+        path = _resolve_codex_rollout_path(
+            self._session_id, codex_home=self._codex_home, since=self._bound_at
+        )
+        self._rollout_path = path
+        return path
+
+    def observe(self) -> Optional[ContextUsageSample]:
+        path = self._resolve_path()
+        if path is None:
+            return None
+        sample = _codex_rollout_usage_sample(path, session_id=self._session_id)
+        if sample is None:
+            return None
+        if sample.session_id and sample.session_id != self._session_id:
+            # A stale/mismatched file slipped past the bounded fallback's own
+            # verification (e.g. a race with a concurrent rewrite) — reject it
+            # rather than trust an unscoped file (design.md decision 5).
+            return None
+        return sample
+
+    def close(self) -> None:
+        self._rollout_path = None
 
 
 def _codex_file_change_summary(changes: Any) -> str:

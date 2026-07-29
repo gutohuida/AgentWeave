@@ -9,10 +9,14 @@ import pytest
 
 from agentweave.stream_events import STREAM_EVENT_KINDS, ContextUsageSample, ParsedRunnerLine
 from agentweave.watchdog import (
+    CodexRolloutCollector,
+    RunnerUsageCollector,
     _agent_ping_cmd,
     _build_codex_mcp_tool_call,
     _claude_tool_result_text,
     _claude_usage_sample,
+    _codex_rollout_session_id,
+    _codex_rollout_usage_sample,
     _codex_working_dir,
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
@@ -21,8 +25,10 @@ from agentweave.watchdog import (
     _parse_codex_stream_line,
     _parse_copilot_stream_line,
     _parse_opencode_stdout_line,
+    _resolve_codex_rollout_path,
     _run_agent_subprocess,
     _run_codex_mcp_turn,
+    _select_codex_usage,
     _write_codex_context_usage,
 )
 
@@ -2499,6 +2505,472 @@ class TestWriteCodexContextUsage:
             assert result is not None
             assert result["warning"] is True
             assert result["critical"] is True
+
+
+def _write_codex_rollout(
+    path: Path,
+    *,
+    session_id: str,
+    token_count_events: list,
+    meta_session_id=None,
+    trailing_partial: bool = False,
+) -> None:
+    """Write a minimal Codex rollout JSONL file for collector tests.
+
+    `token_count_events` is a list of `info` dicts (each becomes one
+    `event_msg`/`token_count` line); the file's `session_meta` line uses
+    `meta_session_id` (defaulting to `session_id`) so tests can construct a
+    mismatched/stale file on purpose.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        json.dumps(
+            {
+                "timestamp": "2026-07-29T00:00:00.000Z",
+                "type": "session_meta",
+                "payload": {"session_id": meta_session_id or session_id},
+            }
+        )
+    ]
+    for info in token_count_events:
+        lines.append(
+            json.dumps(
+                {
+                    "timestamp": "2026-07-29T00:00:01.000Z",
+                    "type": "event_msg",
+                    "payload": {"type": "token_count", "info": info},
+                }
+            )
+        )
+    text = "\n".join(lines) + "\n"
+    if trailing_partial:
+        text += '{"timestamp":"2026-07-29T00:00:02.000Z","type":"event_msg","payl'
+    path.write_text(text, encoding="utf-8")
+
+
+class TestCodexRolloutPathResolution:
+    """Tests for _resolve_codex_rollout_path (task 3.2)."""
+
+    def test_resolves_by_filename_suffix(self, tmp_path):
+        """Primary resolution matches the session ID embedded in the filename."""
+        session_id = "019fab26-b116-7fa0-b1d1-30d53a9b4aeb"
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        rollout = day_dir / f"rollout-2026-07-29T00-54-27-{session_id}.jsonl"
+        _write_codex_rollout(rollout, session_id=session_id, token_count_events=[])
+
+        resolved = _resolve_codex_rollout_path(session_id, codex_home=tmp_path)
+        assert resolved == rollout
+
+    def test_no_sessions_dir_returns_none(self, tmp_path):
+        """Missing rollout: no sessions directory at all."""
+        assert _resolve_codex_rollout_path("some-session", codex_home=tmp_path) is None
+
+    def test_no_matching_file_returns_none(self, tmp_path):
+        """Missing rollouts: sessions dir exists but has no matching file, no fallback window."""
+        other = tmp_path / "sessions" / "2026" / "07" / "29" / "rollout-x-other-session.jsonl"
+        _write_codex_rollout(other, session_id="other-session", token_count_events=[])
+        assert _resolve_codex_rollout_path("target-session", codex_home=tmp_path) is None
+
+    def test_bounded_fallback_verifies_session_meta(self, tmp_path):
+        """When no filename matches, a recent file is accepted only if its own
+        session_meta confirms the session ID."""
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        # Filename does not carry the session ID (simulating a naming edge case),
+        # but the session_meta payload inside does.
+        rollout = day_dir / "rollout-2026-07-29T00-00-00-mismatched-name.jsonl"
+        _write_codex_rollout(
+            rollout, session_id="ignored", meta_session_id="target-session", token_count_events=[]
+        )
+
+        found = _resolve_codex_rollout_path("target-session", codex_home=tmp_path, since=0.0)
+        assert found == rollout
+
+    def test_bounded_fallback_rejects_stale_session(self, tmp_path):
+        """A file within the time window but bound to a different session is rejected."""
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        rollout = day_dir / "rollout-2026-07-29T00-00-00-mismatched-name.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="ignored",
+            meta_session_id="a-different-session",
+            token_count_events=[],
+        )
+
+        assert _resolve_codex_rollout_path("target-session", codex_home=tmp_path, since=0.0) is None
+
+    def test_bounded_fallback_without_since_does_not_scan(self, tmp_path):
+        """Without a `since` bound, the fallback never triggers (no unscoped newest-file scan)."""
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        rollout = day_dir / "rollout-2026-07-29T00-00-00-mismatched-name.jsonl"
+        _write_codex_rollout(
+            rollout, session_id="ignored", meta_session_id="target-session", token_count_events=[]
+        )
+
+        assert _resolve_codex_rollout_path("target-session", codex_home=tmp_path) is None
+
+
+class TestCodexRolloutSessionId:
+    """Tests for _codex_rollout_session_id."""
+
+    def test_reads_session_id_from_leading_meta(self, tmp_path):
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(rollout, session_id="abc-123", token_count_events=[])
+        assert _codex_rollout_session_id(rollout) == "abc-123"
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert _codex_rollout_session_id(tmp_path / "does-not-exist.jsonl") is None
+
+    def test_non_meta_first_line_returns_none(self, tmp_path):
+        rollout = tmp_path / "rollout.jsonl"
+        rollout.write_text('{"type":"event_msg","payload":{"type":"task_started"}}\n')
+        assert _codex_rollout_session_id(rollout) is None
+
+
+class TestCodexRolloutUsageSample:
+    """Tests for _codex_rollout_usage_sample (tasks 3.2, 3.3)."""
+
+    def test_fresh_turn_arithmetic(self, tmp_path):
+        """Context tokens = total - reasoning; limit = model_context_window;
+        cached input stays a breakdown only."""
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="s1",
+            token_count_events=[
+                {
+                    "last_token_usage": {
+                        "input_tokens": 15594,
+                        "cached_input_tokens": 0,
+                        "cache_write_input_tokens": 0,
+                        "output_tokens": 5,
+                        "reasoning_output_tokens": 0,
+                        "total_tokens": 15599,
+                    },
+                    "total_token_usage": {
+                        "input_tokens": 15594,
+                        "output_tokens": 5,
+                        "total_tokens": 15599,
+                    },
+                    "model_context_window": 272000,
+                }
+            ],
+        )
+        sample = _codex_rollout_usage_sample(rollout, session_id="s1")
+        assert sample is not None
+        assert sample.status == "measured"
+        assert sample.basis == "provider_context"
+        assert sample.context_tokens == 15599
+        assert sample.limit_tokens == 272000
+        assert sample.session_id == "s1"
+        assert sample.breakdown["cached_input_tokens"] == 0
+
+    def test_resumed_turn_uses_latest_not_cumulative(self, tmp_path):
+        """A resumed session's rollout has multiple token_count events; the
+        latest `last_token_usage` (non-cumulative) must win, not the aggregate
+        `total_token_usage`."""
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="s1",
+            token_count_events=[
+                {
+                    "last_token_usage": {"total_tokens": 15599, "reasoning_output_tokens": 0},
+                    "total_token_usage": {"total_tokens": 15599},
+                    "model_context_window": 272000,
+                },
+                {
+                    "last_token_usage": {"total_tokens": 15616, "reasoning_output_tokens": 0},
+                    "total_token_usage": {"total_tokens": 31215},
+                    "model_context_window": 272000,
+                },
+            ],
+        )
+        sample = _codex_rollout_usage_sample(rollout, session_id="s1")
+        assert sample is not None
+        assert sample.context_tokens == 15616
+
+    def test_reasoning_tokens_excluded_from_context(self, tmp_path):
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="s1",
+            token_count_events=[
+                {
+                    "last_token_usage": {
+                        "total_tokens": 20000,
+                        "reasoning_output_tokens": 4000,
+                        "input_tokens": 15000,
+                        "output_tokens": 1000,
+                    },
+                    "model_context_window": 128000,
+                }
+            ],
+        )
+        sample = _codex_rollout_usage_sample(rollout, session_id="s1")
+        assert sample is not None
+        assert sample.context_tokens == 16000
+        assert sample.breakdown["reasoning_tokens"] == 4000
+
+    def test_cached_input_never_added_to_context(self, tmp_path):
+        """Codex `input_tokens` already includes cached input; adding
+        `cached_input_tokens` again would double-count it."""
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="s1",
+            token_count_events=[
+                {
+                    "last_token_usage": {
+                        "input_tokens": 15610,
+                        "cached_input_tokens": 15104,
+                        "output_tokens": 6,
+                        "reasoning_output_tokens": 0,
+                        "total_tokens": 15616,
+                    },
+                    "model_context_window": 258400,
+                }
+            ],
+        )
+        sample = _codex_rollout_usage_sample(rollout, session_id="s1")
+        assert sample is not None
+        assert sample.context_tokens == 15616
+        assert sample.breakdown["cached_input_tokens"] == 15104
+
+    def test_missing_model_context_window_omits_limit(self, tmp_path):
+        """Unknown model limits SHALL produce a token-only sample, not zero."""
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="s1",
+            token_count_events=[
+                {"last_token_usage": {"total_tokens": 5000, "reasoning_output_tokens": 0}}
+            ],
+        )
+        sample = _codex_rollout_usage_sample(rollout, session_id="s1")
+        assert sample is not None
+        assert sample.limit_tokens is None
+        assert sample.percent is None
+        assert sample.context_tokens == 5000
+
+    def test_partial_final_line_is_skipped(self, tmp_path):
+        """A record still being written (partial final line) must not fail the
+        whole read — the last complete record still wins."""
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id="s1",
+            token_count_events=[
+                {
+                    "last_token_usage": {"total_tokens": 12000, "reasoning_output_tokens": 0},
+                    "model_context_window": 128000,
+                }
+            ],
+            trailing_partial=True,
+        )
+        sample = _codex_rollout_usage_sample(rollout, session_id="s1")
+        assert sample is not None
+        assert sample.context_tokens == 12000
+
+    def test_no_token_count_event_returns_none(self, tmp_path):
+        rollout = tmp_path / "rollout.jsonl"
+        _write_codex_rollout(rollout, session_id="s1", token_count_events=[])
+        assert _codex_rollout_usage_sample(rollout, session_id="s1") is None
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert _codex_rollout_usage_sample(tmp_path / "nope.jsonl", session_id="s1") is None
+
+
+class TestSelectCodexUsage:
+    """Tests for _select_codex_usage (task 3.4: guarded cumulative-delta fallback)."""
+
+    def _measured(self):
+        return ContextUsageSample(
+            status="measured", source="codex_rollout", basis="provider_context", context_tokens=100
+        )
+
+    def _estimated(self):
+        return ContextUsageSample(
+            status="estimated", source="codex", basis="cumulative_delta", context_tokens=999
+        )
+
+    def test_prefers_exact_rollout_sample(self):
+        rollout = self._measured()
+        estimate = self._estimated()
+        assert _select_codex_usage(rollout, estimate) is rollout
+
+    def test_falls_back_to_estimate_when_rollout_unavailable(self):
+        estimate = self._estimated()
+        assert _select_codex_usage(None, estimate) is estimate
+
+    def test_none_when_neither_available(self):
+        assert _select_codex_usage(None, None) is None
+
+
+class TestRunnerUsageCollectorInterface:
+    """Tests for the RunnerUsageCollector base class (task 3.1)."""
+
+    def test_cannot_instantiate_directly(self):
+        with pytest.raises(TypeError):
+            RunnerUsageCollector()  # type: ignore[abstract]
+
+    def test_final_poll_defaults_to_observe(self):
+        calls = []
+
+        class _Stub(RunnerUsageCollector):
+            def bind(self, *, session_id):
+                pass
+
+            def observe(self):
+                calls.append("observe")
+                return None
+
+        stub = _Stub()
+        stub.final_poll()
+        assert calls == ["observe"]
+
+    def test_setup_and_close_are_optional_no_ops(self):
+        class _Stub(RunnerUsageCollector):
+            def bind(self, *, session_id):
+                pass
+
+            def observe(self):
+                return None
+
+        stub = _Stub()
+        stub.setup(agent="a")  # must not raise
+        stub.close()  # must not raise
+
+
+class TestCodexRolloutCollector:
+    """Tests for CodexRolloutCollector (tasks 3.1-3.5)."""
+
+    def test_is_a_runner_usage_collector(self):
+        assert issubclass(CodexRolloutCollector, RunnerUsageCollector)
+
+    def test_observe_before_bind_returns_none(self, tmp_path):
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        assert collector.observe() is None
+
+    def test_observe_resolves_and_reads_bound_session(self, tmp_path):
+        session_id = "s-live"
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        rollout = day_dir / f"rollout-2026-07-29T00-00-00-{session_id}.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id=session_id,
+            token_count_events=[
+                {
+                    "last_token_usage": {"total_tokens": 8000, "reasoning_output_tokens": 0},
+                    "model_context_window": 128000,
+                }
+            ],
+        )
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        collector.bind(session_id=session_id)
+        sample = collector.observe()
+        assert sample is not None
+        assert sample.context_tokens == 8000
+        assert sample.session_id == session_id
+
+    def test_observe_missing_rollout_returns_none(self, tmp_path):
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        collector.bind(session_id="never-written")
+        assert collector.observe() is None
+
+    def test_final_poll_reflects_a_late_write(self, tmp_path):
+        """A trailing rollout write that lands after the process closes must
+        still be eligible for delivery through final_poll."""
+        session_id = "s-late"
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        rollout = day_dir / f"rollout-2026-07-29T00-00-00-{session_id}.jsonl"
+
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        collector.bind(session_id=session_id)
+        assert collector.observe() is None  # nothing written yet
+
+        _write_codex_rollout(
+            rollout,
+            session_id=session_id,
+            token_count_events=[
+                {
+                    "last_token_usage": {"total_tokens": 4000, "reasoning_output_tokens": 0},
+                    "model_context_window": 64000,
+                }
+            ],
+        )
+        sample = collector.final_poll()
+        assert sample is not None
+        assert sample.context_tokens == 4000
+
+    def test_rebind_forces_path_reresolution(self, tmp_path):
+        """Binding to a new session must not keep serving the previous
+        session's cached rollout path."""
+        first_id, second_id = "s-first", "s-second"
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        for sid, tokens in ((first_id, 1000), (second_id, 2000)):
+            _write_codex_rollout(
+                day_dir / f"rollout-2026-07-29T00-00-00-{sid}.jsonl",
+                session_id=sid,
+                token_count_events=[
+                    {
+                        "last_token_usage": {"total_tokens": tokens, "reasoning_output_tokens": 0},
+                        "model_context_window": 64000,
+                    }
+                ],
+            )
+
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        collector.bind(session_id=first_id)
+        assert collector.observe().context_tokens == 1000
+
+        collector.bind(session_id=second_id)
+        assert collector.observe().context_tokens == 2000
+
+    def test_rejects_mismatched_session_id_in_resolved_file(self, tmp_path):
+        """Guard against a stale/mismatched file slipping past resolution:
+        even if a path is resolved, a sample whose own session_id disagrees
+        with the bound session must be rejected."""
+        session_id = "bound-session"
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        # Filename matches the bound session, but the file's own session_meta
+        # (as would happen with a corrupted/reused file) disagrees.
+        rollout = day_dir / f"rollout-2026-07-29T00-00-00-{session_id}.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id=session_id,
+            meta_session_id="a-completely-different-session",
+            token_count_events=[
+                {
+                    "last_token_usage": {"total_tokens": 9000, "reasoning_output_tokens": 0},
+                    "model_context_window": 64000,
+                }
+            ],
+        )
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        collector.bind(session_id=session_id)
+        assert collector.observe() is None
+
+    def test_close_clears_cached_path(self, tmp_path):
+        session_id = "s-close"
+        day_dir = tmp_path / "sessions" / "2026" / "07" / "29"
+        rollout = day_dir / f"rollout-2026-07-29T00-00-00-{session_id}.jsonl"
+        _write_codex_rollout(
+            rollout,
+            session_id=session_id,
+            token_count_events=[
+                {
+                    "last_token_usage": {"total_tokens": 3000, "reasoning_output_tokens": 0},
+                    "model_context_window": 64000,
+                }
+            ],
+        )
+        collector = CodexRolloutCollector(codex_home=tmp_path)
+        collector.bind(session_id=session_id)
+        assert collector.observe() is not None
+        collector.close()
+        assert collector._rollout_path is None
+        # Still resolvable again after close (close only clears the cache).
+        assert collector.observe() is not None
 
 
 class TestPopenUsesUtf8Encoding:
