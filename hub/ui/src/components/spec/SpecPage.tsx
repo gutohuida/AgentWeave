@@ -6,6 +6,7 @@ import { useSpec, useSpecEvents, useSpecList, type SpecDiagnostic, type SpecMiss
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgentOutput, useAgentSessions, useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
+import { SharedStreamRenderer } from '@/components/stream/SharedStreamRenderer'
 
 // Bounded, deterministic instruction for the spec-repair agent — built from
 // the Hub's own computed drift set (never a client-side guess), capped so
@@ -134,13 +135,7 @@ export function SpecPage() {
   const hasSavedSession = (sessionData?.sessions?.length ?? 0) > 0
 
   const { lines } = useAgentOutput(selectedAgent || null)
-  const filteredLines = lines.filter(
-    (line) =>
-      !line.content.startsWith('[watchdog]') &&
-      !line.content.startsWith('[stderr]') &&
-      !line.content.startsWith('[session:') &&
-      !line.content.startsWith('[done] cost:')
-  )
+  const filteredLines = lines
 
   const bottomRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -495,15 +490,7 @@ export function SpecPage() {
                 Waiting for output…
               </p>
             ) : (
-              filteredLines.map((line, i) => (
-                <div
-                  key={line.id ?? i}
-                  className="font-mono text-xs leading-5 whitespace-pre-wrap break-all"
-                  style={{ color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace" }}
-                >
-                  {line.content}
-                </div>
-              ))
+              <SharedStreamRenderer lines={filteredLines} showDiagnostics={false} />
             )}
             <div ref={bottomRef} />
           </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { useAgentOutput, useAgentTimeline, AgentSummary } from '@/api/agents'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
+import { streamActivityEvents } from '@/components/stream/streamModel'
 
 interface AgentActivityTabProps {
   agent: AgentSummary
@@ -16,8 +17,6 @@ interface ActivityItem {
   summary?: string
 }
 
-const SYSTEM_PREFIXES = ['[watchdog]', '[stderr]', '[session:']
-
 export function AgentActivityTab({ agent }: AgentActivityTabProps) {
   const { lines: outputLines } = useAgentOutput(agent.name)
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
@@ -26,13 +25,13 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
   const shouldAutoScroll = useRef(true)
 
   const activityItems: ActivityItem[] = useMemo(() => {
-    const logItems: ActivityItem[] = outputLines
-      .filter(line => SYSTEM_PREFIXES.some(prefix => line.content.startsWith(prefix)))
+    const logItems: ActivityItem[] = streamActivityEvents(outputLines)
       .map(line => ({
         id: line.id,
         timestamp: line.timestamp,
         type: 'log',
         content: line.content,
+        eventType: line.kind,
       }))
 
     const eventItems: ActivityItem[] = timelineEvents.map(event => ({
@@ -159,7 +158,11 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     )
   }
 
-  const logIcon = item.content.includes('✅')
+  const logIcon = item.eventType === 'error'
+    ? 'error'
+    : item.eventType === 'tool_use' || item.eventType === 'tool_result'
+    ? 'build'
+    : item.content.includes('✅')
     ? 'check_circle'
     : item.content.includes('❌') || item.content.includes('error')
     ? 'error'
@@ -167,7 +170,11 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     ? 'terminal'
     : 'info'
 
-  const logColor = item.content.includes('✅')
+  const logColor = item.eventType === 'error'
+    ? 'var(--red)'
+    : item.eventType === 'diagnostic'
+    ? 'var(--amber)'
+    : item.content.includes('✅')
     ? 'var(--green)'
     : item.content.includes('❌') || item.content.includes('error')
     ? 'var(--red)'
@@ -193,7 +200,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
               color: logColor,
             }}
           >
-            System
+            {item.eventType ?? 'System'}
           </span>
           <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.6 }}>
             {timeAgo}

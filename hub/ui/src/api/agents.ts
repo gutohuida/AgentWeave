@@ -55,7 +55,15 @@ export interface AgentOutputLine {
   session_id?: string
   content: string
   timestamp: string
+  kind?: StreamEventKind | null
+  payload?: Record<string, unknown> | null
+  run_id?: string | null
+  sequence?: number | null
 }
+
+export type StreamEventKind =
+  | 'text' | 'thinking' | 'tool_use' | 'tool_result'
+  | 'status' | 'diagnostic' | 'error'
 
 export interface AgentSession {
   id: string
@@ -308,7 +316,7 @@ export function useAgentOutput(name: string | null) {
   const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
   handleSSE.current = (event: SSEEvent) => {
     if (event.type !== 'agent_output') return
-    const d = event.data as { id: string; agent: string; content: string; session_id?: string; timestamp: string }
+    const d = event.data as AgentOutputLine
     if (d.agent !== nameRef.current) return
 
     const agentKey = d.agent
@@ -317,7 +325,11 @@ export function useAgentOutput(name: string | null) {
       agent: d.agent,
       session_id: d.session_id,
       content: d.content,
-      timestamp: d.timestamp
+      timestamp: d.timestamp,
+      kind: d.kind,
+      payload: d.payload,
+      run_id: d.run_id,
+      sequence: d.sequence,
     }
 
     // Reset the gap timer — a fresh event means the stream is alive.

@@ -153,20 +153,20 @@
 
 ## 7. Shared stream UI
 
-- [ ] 7.1 Extend UI API types and normalization helpers for optional stream kind, payload, run ID,
+- [x] 7.1 Extend UI API types and normalization helpers for optional stream kind, payload, run ID,
   and sequence
-- [ ] 7.2 Build one shared stream renderer with a plain-text legacy adapter for null-kind records
-- [ ] 7.3 Implement per-run thinking grouping, live state, automatic collapse, manual expansion,
+- [x] 7.2 Build one shared stream renderer with a plain-text legacy adapter for null-kind records
+- [x] 7.3 Implement per-run thinking grouping, live state, automatic collapse, manual expansion,
   and timestamp-based duration labels
-- [ ] 7.4 Implement tool-use/result pairing by run ID and call ID with expandable safe inputs,
+- [x] 7.4 Implement tool-use/result pairing by run ID and call ID with expandable safe inputs,
   outputs, completion state, and failure state
-- [ ] 7.5 Implement distinct status, diagnostic, and error treatments plus diagnostic visibility
+- [x] 7.5 Implement distinct status, diagnostic, and error treatments plus diagnostic visibility
   that never hides errors
-- [ ] 7.6 Replace raw/prefix-based rendering in `AgentOutputPanel` with the shared renderer
-- [ ] 7.7 Replace stream prefix filtering and rendering in `SpecPage` with the shared renderer
-- [ ] 7.8 Replace activity prefix classification in `AgentActivityTab` with the shared renderer's
+- [x] 7.6 Replace raw/prefix-based rendering in `AgentOutputPanel` with the shared renderer
+- [x] 7.7 Replace stream prefix filtering and rendering in `SpecPage` with the shared renderer
+- [x] 7.8 Replace activity prefix classification in `AgentActivityTab` with the shared renderer's
   semantic projection
-- [ ] 7.9 Add component or deterministic renderer tests for structured events, legacy prefixes,
+- [x] 7.9 Add component or deterministic renderer tests for structured events, legacy prefixes,
   incomplete tool pairs, thinking transitions, errors, and diagnostic filtering
 
 ## 8. Context UI

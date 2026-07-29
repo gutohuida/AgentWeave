@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
 import { AgentSummary, useAgentOutput, useAgentSessions } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
+import { SharedStreamRenderer } from '@/components/stream/SharedStreamRenderer'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -172,15 +173,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
         ) : lines.length === 0 ? (
           <p className="font-mono text-xs italic" style={{ color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace" }}>Waiting for output…</p>
         ) : (
-          lines.map((line, i) => (
-            <div
-              key={line.id ?? i}
-              className="font-mono text-xs leading-5 whitespace-pre-wrap break-all"
-              style={{ color: 'var(--text)', fontFamily: "'JetBrains Mono', monospace" }}
-            >
-              {line.content}
-            </div>
-          ))
+          <SharedStreamRenderer lines={lines} />
         )}
         <div ref={bottomRef} />
       </div>
