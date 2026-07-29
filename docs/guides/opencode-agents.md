@@ -156,7 +156,8 @@ Once configured, the AgentWeave watchdog automatically pings OpenCode agents whe
 agentweave start
 ```
 
-The watchdog uses stable session IDs (`agentweave-{agent-name}`) so session continuity is maintained across pings without parsing streamed output.
+The watchdog reads OpenCode's JSON event stream, stores the real session ID returned by the first
+run, and passes that ID to later invocations so continuity is maintained across pings.
 
 ### Via Switch Command
 
@@ -170,11 +171,11 @@ This prints the ready-to-use launch command for the agent.
 
 ## Session Management
 
-OpenCode agents use **stable session IDs** managed by AgentWeave:
+OpenCode agents use provider session IDs managed by AgentWeave:
 
-- Format: `agentweave-{agent-name}` (e.g., `agentweave-opencode-dev`)
-- Session IDs are pre-saved to `.agentweave/agents/{agent}-session.json`
-- No output parsing is required — the session ID is deterministic
+- New runs use a stable AgentWeave title such as `agentweave-opencode-dev`.
+- AgentWeave captures OpenCode's returned `sessionID`.
+- The ID is saved to `.agentweave/agents/{agent}-session.json` and passed with `--session` later.
 
 To start a fresh session, simply delete the agent's session file:
 
@@ -187,8 +188,10 @@ rm .agentweave/agents/opencode-dev-session.json
 ## Limitations
 
 - **Tool-call reliability:** 7B local models may occasionally fail to invoke MCP tools correctly. If this happens, retry the task or use a larger model.
-- **No stream parsing:** AgentWeave monitors only the exit code for OpenCode agents. Output is not streamed to the Hub in real-time.
-- **No built-in context usage reporting:** Local models do not report token usage, so context monitoring is unavailable for OpenCode agents.
+- **Provider metadata varies:** If the active model catalog exposes no input or context limit,
+  AgentWeave shows a token-only context sample instead of guessing a percentage.
+- **Reasoning accounting:** OpenCode reports reasoning separately; AgentWeave subtracts it from
+  `total` when calculating the effective context observation.
 
 ---
 
@@ -198,3 +201,4 @@ rm .agentweave/agents/opencode-dev-session.json
 - [agentweave.yml Reference](../reference/agentweave-yml.md)
 - [OpenCode Documentation](https://sst.dev)
 - [Ollama Documentation](https://ollama.com)
+- [Agent stream and context contracts](../reference/agent-stream-contract.md)

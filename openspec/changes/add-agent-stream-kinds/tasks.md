@@ -187,24 +187,24 @@
 
 ## 9. Verification and documentation
 
-- [ ] 9.1 Run focused watchdog, collector, safety, legacy-normalization, and transport tests for
+- [x] 9.1 Run focused watchdog, collector, safety, legacy-normalization, and transport tests for
   all five runners
-- [ ] 9.2 Run the full CLI pytest suite plus ruff, black check, and mypy for affected Python code
-- [ ] 9.3 Run Hub backend tests including migration upgrade, structured output, typed context,
+- [x] 9.2 Run the full CLI pytest suite plus ruff, black check, and mypy for affected Python code
+- [x] 9.3 Run Hub backend tests including migration upgrade, structured output, typed context,
   ordering, and SSE coverage
-- [ ] 9.4 Run Hub UI type-check/build and all available renderer/context tests
-- [ ] 9.5 Smoke-test metadata-only fresh/resumed flows with installed Claude, Codex, OpenCode, and
+- [x] 9.4 Run Hub UI type-check/build and all available renderer/context tests
+- [x] 9.5 Smoke-test metadata-only fresh/resumed flows with installed Claude, Codex, OpenCode, and
   Kimi; document provider quota or availability failures without inspecting prompt content
-- [ ] 9.6 Record Copilot as documentation-derived until a current CLI fixture can be captured,
+- [x] 9.6 Record Copilot as documentation-derived until a current CLI fixture can be captured,
   then run the same metadata-only smoke test when available
-- [ ] 9.7 Manually verify live structured output in agent output, spec chat, and activity with at
+- [x] 9.7 Manually verify live structured output in agent output, spec chat, and activity with at
   least two installed runners
-- [ ] 9.8 Manually verify measured, token-only, unavailable, and new-session context states through
+- [x] 9.8 Manually verify measured, token-only, unavailable, and new-session context states through
   the Hub
-- [ ] 9.9 Document the seven-kind output contract, context sample schema, provider formulas,
+- [x] 9.9 Document the seven-kind output contract, context sample schema, provider formulas,
   auxiliary data sources, compatibility behavior, and payload limits
-- [ ] 9.10 Record fixture provider/CLI versions and intentionally omitted bookkeeping events
-- [ ] 9.11 Confirm context samples never become AgentOutput rows and raw provider/OTel content is
+- [x] 9.10 Record fixture provider/CLI versions and intentionally omitted bookkeeping events
+- [x] 9.11 Confirm context samples never become AgentOutput rows and raw provider/OTel content is
   never persisted
-- [ ] 9.12 Confirm the change introduces no process cancellation, message threading, automatic
+- [x] 9.12 Confirm the change introduces no process cancellation, message threading, automatic
   reset/handoff policy, cost reporting, or Kimi v1 expansion

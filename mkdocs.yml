@@ -81,6 +81,7 @@ nav:
     - reference/mcp-tools.md
     - reference/task-lifecycle.md
     - reference/hub-api.md
+    - reference/agent-stream-contract.md
     - reference/agentweave-yml.md
     - reference/env-variables.md
   - Architecture:

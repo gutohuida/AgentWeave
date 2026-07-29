@@ -128,10 +128,14 @@ For jobs with `session_mode: resume`:
 When using the Hub with HTTP transport:
 
 1. Watchdog captures agent stdout/stderr
-2. Parses JSONL stream from Claude CLI
-3. Extracts content and thinking blocks
-4. Pushes to Hub via `POST /api/v1/agents/{name}/output`
-5. Dashboard displays real-time output
+2. Normalizes Claude, Codex, OpenCode, Copilot, or Kimi output into seven provider-neutral kinds
+3. Redacts and bounds structured payloads while retaining readable compatibility text
+4. Pushes output to Hub via `POST /api/v1/agents/{name}/output`
+5. Delivers context usage separately as a latest-session snapshot
+6. Dashboard renders the same structured model in output, spec chat, and activity views
+
+See the [agent stream and context contracts](../reference/agent-stream-contract.md) for event
+kinds, provider accounting, compatibility behavior, and payload limits.
 
 ## Process Architecture
 
