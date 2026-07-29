@@ -38,9 +38,9 @@
   diagnostic, and error events while keeping OTel usage independent
 - [ ] 2.10 Curate versioned Copilot stream fixtures from official examples and mark them
   documentation-derived until a current installed CLI capture is available
-- [ ] 2.11 Refactor the Kimi parser around v0.29.x sequential messages, tool IDs, results,
+- [x] 2.11 Refactor the Kimi parser around v0.29.x sequential messages, tool IDs, results,
   lifecycle, and errors while preserving existing v1 regression behavior
-- [ ] 2.12 Add Kimi 0.29.x golden fixtures plus regression coverage for retained v1 compatibility
+- [x] 2.12 Add Kimi 0.29.x golden fixtures plus regression coverage for retained v1 compatibility
 - [ ] 2.13 Add cross-adapter conformance tests proving every adapter returns only canonical event
   kinds and keeps context samples separate
 

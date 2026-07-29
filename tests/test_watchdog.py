@@ -15,6 +15,7 @@ from agentweave.watchdog import (
     _codex_working_dir,
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
+    _KimiCodeParser,
     _parse_claude_stream_line,
     _parse_codex_stream_line,
     _parse_opencode_stdout_line,
@@ -229,129 +230,50 @@ class TestAgentPingCmdKimiCode:
 
 
 class TestKimiCodeParser:
-    """Tests for _KimiCodeParser (kimi-code v0.x stream-json events)."""
+    """Tests for _KimiCodeParser: the canonical kimi `-p ... --output-format
+    stream-json` adapter.
 
-    def test_metadata_event_is_skipped(self):
-        from agentweave.watchdog import _KimiCodeParser
+    The unprefixed tests below cover the flat role/content/tool_calls shape
+    confirmed live against an installed Kimi Code CLI 0.29.1 (2026-07-29) — this is
+    the actual, currently-shipping wire format and the primary target of task 2.11.
+    The `legacy_wrapped_`-prefixed tests cover the older `{"type":
+    "context.append_message","message":{...}}` shape: existing regression coverage
+    only, not observed in any live 0.29.1 probe (task 2.11: preserve, do not expand).
+    """
 
+    # ── flat shape confirmed live for Kimi Code 0.29.1 ──────────────────────
+
+    def test_assistant_text_becomes_text_event(self):
         parser = _KimiCodeParser()
-        out = parser.feed('{"type":"metadata","protocol_version":"1.0","created_at":12345}')
-        assert out == []
+        parsed = parser.feed('{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}')
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "Hi there"
 
-    def test_user_message_is_skipped(self):
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_think_becomes_thinking_event(self):
         parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"type":"context.append_message","message":{"role":"user",'
-            '"content":[{"type":"text","text":"hi"}]}}'
-        )
-        assert out == []
-
-    def test_assistant_text_renders_chat_line(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"type":"context.append_message","message":{"role":"assistant",'
-            '"content":[{"type":"text","text":"Hello there"}]}}'
-        )
-        assert out == ["  💬 Hello there"]
-
-    def test_assistant_think_renders_emoji(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"type":"context.append_message","message":{"role":"assistant",'
-            '"content":[{"type":"think","think":"pondering..."}]}}'
-        )
-        assert out == ["  💭 pondering..."]
-
-    def test_assistant_tool_call_renders_args(self):
-        import json as _json
-
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        args = _json.dumps({"agent": "kimi"})
-        evt = _json.dumps(
-            {
-                "type": "context.append_message",
-                "message": {
-                    "role": "assistant",
-                    "content": [],
-                    "toolCalls": [
-                        {
-                            "type": "function",
-                            "id": "call-1",
-                            "function": {"name": "get_inbox", "arguments": args},
-                        }
-                    ],
-                },
-            }
-        )
-        out = parser.feed(evt)
-        assert out == ['  🔧 get_inbox(agent="kimi")']
-
-    def test_tool_result_renders_check(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"type":"context.append_message","message":{"role":"tool",'
-            '"content":[{"type":"text","text":"done"}],"toolCallId":"call-1"}}'
-        )
-        assert out == ["     ✓ done"]
-
-    def test_malformed_json_is_skipped(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        assert parser.feed("not-json") == []
-        assert parser.feed("") == []
-
-    # ── kimi-cli v1.x (e.g. 1.47.0) format ────────────────────────────────
-    # v1.x emits bare {role, content, toolCalls, toolCallId} events with no
-    # top-level "type" field. _KimiCodeParser must accept these in addition
-    # to the v0.x wrapped format above.
-
-    def test_v1_assistant_text_renders_chat_line(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed('{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}')
-        assert out == ["  💬 Hi there"]
-
-    def test_v1_assistant_think_renders_emoji(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed(
+        parsed = parser.feed(
             '{"role":"assistant","content":[{"type":"think","think":"pondering..."}]}'
         )
-        assert out == ["  💭 pondering..."]
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "thinking"
+        assert parsed.events[0].content == "pondering..."
 
-    def test_v1_assistant_text_and_think_render_in_order(self):
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_text_and_think_render_in_order(self):
         parser = _KimiCodeParser()
-        out = parser.feed(
+        parsed = parser.feed(
             '{"role":"assistant","content":['
             '{"type":"think","think":"hmm"},'
             '{"type":"text","text":"answer"}]}'
         )
-        assert out == ["  💭 hmm", "  💬 answer"]
+        assert [e.kind for e in parsed.events] == ["thinking", "text"]
+        assert [e.content for e in parsed.events] == ["hmm", "answer"]
 
-    def test_v1_assistant_tool_calls_snake_case_renders_args(self):
-        """kimi 1.47.0 emits tool calls with snake_case key 'tool_calls'."""
-        import json as _json
-
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_tool_calls_snake_case_becomes_tool_use_event(self):
+        """Kimi Code 0.29.1 emits tool calls with the snake_case key 'tool_calls'."""
+        args = json.dumps({"agent": "kimi"})
         parser = _KimiCodeParser()
-        args = _json.dumps({"agent": "kimi"})
-        evt = _json.dumps(
+        evt = json.dumps(
             {
                 "role": "assistant",
                 "content": [],
@@ -364,18 +286,17 @@ class TestKimiCodeParser:
                 ],
             }
         )
-        out = parser.feed(evt)
-        assert out == ['  🔧 get_inbox(agent="kimi")']
+        parsed = parser.feed(evt)
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "tool_use"
+        assert event.call_id == "tool_pelW6gHcdtL5l8MURuDTqmVZ"
+        assert event.payload["tool"] == "get_inbox"
 
-    def test_v1_assistant_think_plus_tool_calls_renders_both(self):
-        """v1.x assistant message with only think + tool call (no text)."""
-        import json as _json
-
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_think_plus_tool_calls_renders_both(self):
+        args = json.dumps({"agent": "kimi"})
         parser = _KimiCodeParser()
-        args = _json.dumps({"agent": "kimi"})
-        evt = _json.dumps(
+        evt = json.dumps(
             {
                 "role": "assistant",
                 "content": [{"type": "think", "think": "calling inbox"}],
@@ -388,70 +309,51 @@ class TestKimiCodeParser:
                 ],
             }
         )
-        out = parser.feed(evt)
-        assert out == ["  💭 calling inbox", '  🔧 get_inbox(agent="kimi")']
+        parsed = parser.feed(evt)
+        assert [e.kind for e in parsed.events] == ["thinking", "tool_use"]
 
-    def test_v1_tool_result_renders_check(self):
-        """v0.x-style list content still works for tool results (legacy compat)."""
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_tool_result_string_content_becomes_tool_result_event(self):
+        """Kimi Code 0.29.1 emits tool content as a plain string, not a list."""
         parser = _KimiCodeParser()
-        out = parser.feed(
-            '{"role":"tool","content":[{"type":"text","text":"done"}],"toolCallId":"call-1"}'
-        )
-        assert out == ["     ✓ done"]
-
-    def test_v1_user_message_is_skipped(self):
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed('{"role":"user","content":[{"type":"text","text":"hello"}]}')
-        assert out == []
-
-    def test_v1_tool_result_string_content_renders_text(self):
-        """kimi 1.47.0 emits tool content as a plain string, not a list."""
-        from agentweave.watchdog import _KimiCodeParser
-
-        parser = _KimiCodeParser()
-        out = parser.feed(
+        parsed = parser.feed(
             '{"role":"tool","content":"<system>Tool output is empty.</system>",'
             '"tool_call_id":"tool_pelW6gHcdtL5l8MURuDTqmVZ"}'
         )
-        assert out == ["     ✓ <system>Tool output is empty.</system>"]
+        assert len(parsed.events) == 1
+        event = parsed.events[0]
+        assert event.kind == "tool_result"
+        assert event.call_id == "tool_pelW6gHcdtL5l8MURuDTqmVZ"
+        assert event.payload["output"] == "<system>Tool output is empty.</system>"
+        assert event.payload["is_error"] is False
 
-    def test_v1_tool_result_empty_string_falls_back_to_ok(self):
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_tool_result_empty_string_falls_back_to_ok(self):
         parser = _KimiCodeParser()
-        out = parser.feed('{"role":"tool","content":"","tool_call_id":"call-1"}')
-        assert out == ["     ✓ ok"]
+        parsed = parser.feed('{"role":"tool","content":"","tool_call_id":"call-1"}')
+        assert len(parsed.events) == 1
+        assert parsed.events[0].payload["output"] == "ok"
 
-    def test_v1_event_with_unknown_role_is_skipped(self):
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_user_message_is_skipped(self):
         parser = _KimiCodeParser()
-        out = parser.feed('{"role":"system","content":[{"type":"text","text":"sys"}]}')
-        assert out == []
+        parsed = parser.feed('{"role":"user","content":[{"type":"text","text":"hello"}]}')
+        assert parsed.events == []
 
-    def test_v1_full_inbox_flow_emits_think_call_result_and_final_text(self):
-        """End-to-end check: simulate kimi 1.47.0 get_inbox round-trip.
+    def test_event_with_unknown_role_is_skipped(self):
+        parser = _KimiCodeParser()
+        parsed = parser.feed('{"role":"system","content":[{"type":"text","text":"sys"}]}')
+        assert parsed.events == []
+
+    def test_full_inbox_flow_emits_think_call_result_and_final_text(self):
+        """End-to-end check: simulate a get_inbox round-trip.
 
         Three events arrive in order:
           1. assistant with think + tool_calls (caller)
           2. tool with string content (result)
           3. assistant with think + text (final summary)
-
-        Parser must render five readable lines so the Hub shows the
-        full chain of reasoning rather than just the tool result.
         """
-        import json as _json
-
-        from agentweave.watchdog import _KimiCodeParser
-
+        args = json.dumps({"agent": "kimi"})
         parser = _KimiCodeParser()
-        args = _json.dumps({"agent": "kimi"})
         events = [
-            _json.dumps(
+            json.dumps(
                 {
                     "role": "assistant",
                     "content": [{"type": "think", "think": "I need to check inbox"}],
@@ -464,14 +366,14 @@ class TestKimiCodeParser:
                     ],
                 }
             ),
-            _json.dumps(
+            json.dumps(
                 {
                     "role": "tool",
                     "content": "<system>Tool output is empty.</system>",
                     "tool_call_id": "call-1",
                 }
             ),
-            _json.dumps(
+            json.dumps(
                 {
                     "role": "assistant",
                     "content": [
@@ -481,80 +383,62 @@ class TestKimiCodeParser:
                 }
             ),
         ]
-        all_out = []
+        kinds = []
         for e in events:
-            all_out.extend(parser.feed(e))
-        assert all_out == [
-            "  💭 I need to check inbox",
-            '  🔧 get_inbox(agent="kimi")',
-            "     ✓ <system>Tool output is empty.</system>",
-            "  💭 inbox is empty",
-            "  💬 No new messages.",
-        ]
+            kinds.extend(event.kind for event in parser.feed(e).events)
+        assert kinds == ["thinking", "tool_use", "tool_result", "thinking", "text"]
 
-    def test_v1_assistant_string_content_renders_text(self):
-        """kimi 1.47.0 --no-thinking emits the final summary as a plain string
-        in `content` (not a list of typed parts). Parser must render it."""
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_string_content_becomes_text_event(self):
+        """Kimi Code 0.29.1 `--no-thinking` emits the final summary as a plain
+        string in `content` (not a list of typed parts)."""
         parser = _KimiCodeParser()
-        out = parser.feed('{"role":"assistant","content":"Done! I wrote helloworld.py."}')
-        assert out == ["  💬 Done! I wrote helloworld.py."]
+        parsed = parser.feed('{"role":"assistant","content":"Done! I wrote helloworld.py."}')
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "Done! I wrote helloworld.py."
 
-    def test_v1_assistant_empty_string_content_emits_nothing(self):
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_empty_string_content_emits_nothing(self):
         parser = _KimiCodeParser()
-        out = parser.feed('{"role":"assistant","content":""}')
-        assert out == []
+        parsed = parser.feed('{"role":"assistant","content":""}')
+        assert parsed.events == []
 
-    def test_v1_assistant_string_content_with_tool_call_renders_both(self):
-        """Final assistant message with a plain-string content + tool_call
-        (shouldn't normally happen, but be safe)."""
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_assistant_string_content_with_tool_call_renders_both(self):
         parser = _KimiCodeParser()
-        out = parser.feed(
+        parsed = parser.feed(
             '{"role":"assistant","content":"short answer",'
             '"tool_calls":[{"type":"function","id":"x",'
             '"function":{"name":"noop","arguments":"{}"}}]}'
         )
-        assert out == ["  💬 short answer", "  🔧 noop()"]
+        assert [e.kind for e in parsed.events] == ["text", "tool_use"]
 
-    def test_v1_tool_result_multi_part_content_renders_all_text_parts(self):
-        """Tool results with multiple text parts (e.g. <system>...</system>
-        + actual stdout) must render all parts, not just the first."""
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_tool_result_multi_part_content_renders_all_text_parts(self):
+        """Tool results with multiple text parts (e.g. <system>...</system> +
+        actual stdout) must render all parts, not just the first."""
         parser = _KimiCodeParser()
-        out = parser.feed(
+        parsed = parser.feed(
             '{"role":"tool","content":['
             '{"type":"text","text":"<system>Command executed successfully.</system>"},'
             '{"type":"text","text":"Hello, World!\\r\\n"}'
             '],"tool_call_id":"call-2"}'
         )
-        assert out == [
-            "     ✓ <system>Command executed successfully.</system>",
-            "     ✓ Hello, World!",
-        ]
+        assert len(parsed.events) == 2
+        assert (
+            parsed.events[0].payload["output"] == "<system>Command executed successfully.</system>"
+        )
+        assert parsed.events[1].payload["output"] == "Hello, World!"
 
-    def test_v1_tool_result_empty_list_falls_back_to_ok(self):
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_tool_result_empty_list_falls_back_to_ok(self):
         parser = _KimiCodeParser()
-        out = parser.feed('{"role":"tool","content":[],"tool_call_id":"x"}')
-        assert out == ["     ✓ ok"]
+        parsed = parser.feed('{"role":"tool","content":[],"tool_call_id":"x"}')
+        assert len(parsed.events) == 1
+        assert parsed.events[0].payload["output"] == "ok"
 
-    def test_v1_no_thinking_assistant_emits_tool_calls_only(self):
-        """kimi 1.47.0 --no-thinking emits assistant events with empty content
-        + tool_calls. Parser should render the tool call, no think/text lines."""
-        import json as _json
-
-        from agentweave.watchdog import _KimiCodeParser
-
+    def test_no_thinking_assistant_emits_tool_calls_only(self):
+        """`--no-thinking` emits assistant events with empty content + tool_calls.
+        Parser should render the tool call, no think/text events."""
         parser = _KimiCodeParser()
-        out = parser.feed(
-            _json.dumps(
+        parsed = parser.feed(
+            json.dumps(
                 {
                     "role": "assistant",
                     "content": [],
@@ -571,7 +455,99 @@ class TestKimiCodeParser:
                 }
             )
         )
-        assert out == ['  🔧 WriteFile(path="helloworld.py")']
+        assert [e.kind for e in parsed.events] == ["tool_use"]
+        assert parsed.events[0].payload["tool"] == "WriteFile"
+
+    def test_session_resume_hint_becomes_session_change(self):
+        """The trailing `role="meta"` event carries the real session ID (with its
+        "session_" prefix) that `--session` must be given verbatim to resume —
+        confirmed live: passing the prefixed ID back on a follow-up turn correctly
+        recalled prior-turn context."""
+        parser = _KimiCodeParser()
+        parsed = parser.feed(
+            '{"role":"meta","type":"session.resume_hint",'
+            '"session_id":"session_2b9bd712-cc0f-4d85-8b4f-6fea27c83c3b",'
+            '"command":"kimi -r session_2b9bd712-cc0f-4d85-8b4f-6fea27c83c3b",'
+            '"content":"To resume this session: kimi -r '
+            'session_2b9bd712-cc0f-4d85-8b4f-6fea27c83c3b"}'
+        )
+        assert parsed.events == []
+        assert parsed.session_change is not None
+        assert parsed.session_change.session_id == "session_2b9bd712-cc0f-4d85-8b4f-6fea27c83c3b"
+
+    def test_malformed_json_is_skipped(self):
+        parser = _KimiCodeParser()
+        assert parser.feed("not-json").events == []
+        assert parser.feed("").events == []
+
+    # ── legacy wrapped shape (not observed live; regression-only) ───────────
+
+    def test_legacy_wrapped_metadata_event_is_skipped(self):
+        parser = _KimiCodeParser()
+        parsed = parser.feed('{"type":"metadata","protocol_version":"1.0","created_at":12345}')
+        assert parsed.events == []
+
+    def test_legacy_wrapped_user_message_is_skipped(self):
+        parser = _KimiCodeParser()
+        parsed = parser.feed(
+            '{"type":"context.append_message","message":{"role":"user",'
+            '"content":[{"type":"text","text":"hi"}]}}'
+        )
+        assert parsed.events == []
+
+    def test_legacy_wrapped_assistant_text_becomes_text_event(self):
+        parser = _KimiCodeParser()
+        parsed = parser.feed(
+            '{"type":"context.append_message","message":{"role":"assistant",'
+            '"content":[{"type":"text","text":"Hello there"}]}}'
+        )
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+        assert parsed.events[0].content == "Hello there"
+
+    def test_legacy_wrapped_assistant_think_becomes_thinking_event(self):
+        parser = _KimiCodeParser()
+        parsed = parser.feed(
+            '{"type":"context.append_message","message":{"role":"assistant",'
+            '"content":[{"type":"think","think":"pondering..."}]}}'
+        )
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "thinking"
+
+    def test_legacy_wrapped_assistant_tool_call_becomes_tool_use_event(self):
+        args = json.dumps({"agent": "kimi"})
+        parser = _KimiCodeParser()
+        evt = json.dumps(
+            {
+                "type": "context.append_message",
+                "message": {
+                    "role": "assistant",
+                    "content": [],
+                    "toolCalls": [
+                        {
+                            "type": "function",
+                            "id": "call-1",
+                            "function": {"name": "get_inbox", "arguments": args},
+                        }
+                    ],
+                },
+            }
+        )
+        parsed = parser.feed(evt)
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "tool_use"
+        assert parsed.events[0].call_id == "call-1"
+
+    def test_legacy_wrapped_tool_result_becomes_tool_result_event(self):
+        parser = _KimiCodeParser()
+        parsed = parser.feed(
+            '{"type":"context.append_message","message":{"role":"tool",'
+            '"content":[{"type":"text","text":"done"}],"toolCallId":"call-1"}}'
+        )
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "tool_result"
+        assert parsed.events[0].payload["output"] == "done"
+        assert parsed.events[0].call_id == "call-1"
 
 
 class TestParseOpencodeStdoutLine:

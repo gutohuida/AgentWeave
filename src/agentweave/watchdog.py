@@ -31,8 +31,10 @@ from .constants import (
 from .spec_manifest import discover_spec_files as _discover_spec_files_safe
 from .spec_manifest import load_manifest
 from .stream_events import (
+    AgentStreamEvent,
     ContextUsageSample,
     ParsedRunnerLine,
+    SessionChange,
     diagnostic_event,
     error_event,
     status_event,
@@ -1498,99 +1500,100 @@ class _KimiWireParser:
 
 
 class _KimiCodeParser:
-    """Parser for kimi `--print --output-format stream-json` events.
+    """Parser for kimi `-p ... --output-format stream-json` (print-mode) events.
 
-    Two kimi versions emit stream-json with slightly different shapes; both
-    are handled here so the watchdog works against either install:
+    Verified live against an installed Kimi Code CLI 0.29.1 (2026-07-29; three probes: a
+    plain text reply, a successful tool call, and a failing tool call). Every message event
+    is a flat JSON object keyed by role, with no top-level "type" field and no cache/context/
+    usage data anywhere in this stream — Kimi's context tracking comes from the session-status/
+    Wire auxiliary collector (design.md decision 4), never from here:
 
-    1. kimi-code v0.x (legacy standalone, e.g. 0.16.0) — chat-history
-       persistence events with a top-level "type" field:
+        {"role":"assistant","content":"…" | [{"type":"text","text":"…"} | {"type":"think","think":"…"}],
+         "tool_calls":[{"type":"function","id":"…","function":{"name":"…","arguments":"…"}}]}
+        {"role":"tool","tool_call_id":"…","content":"…" | [{"type":"text","text":"…"}, ...]}
+        {"role":"meta","type":"session.resume_hint","session_id":"…",
+         "command":"kimi -r <session_id>","content":"To resume this session: …"}
 
-         {"type":"metadata","protocol_version":"1.0","created_at":<unix_ms>}
-         {"type":"context.append_message","message":{
-           "role": "user" | "assistant" | "tool",
-           "content": [{"type":"text","text":"…"} | {"type":"think","think":"…"}],
-           "toolCalls": [{"type":"function","id":"…","function":{"name":"…","arguments":"…"}}],
-           "toolCallId": "…"   // only for role="tool"
-         }}
+    The failing-tool probe showed no structural error indicator: a failed tool result has
+    the exact same shape as a success, just with error prose in `content`. This parser
+    therefore never fabricates `is_error=True` for a Kimi tool result. No in-stream lifecycle
+    or error event was observed in any of the three probes either — a bad-model failure exits
+    non-zero with a plain-text stderr message and no stdout at all, which the surrounding
+    invocation loop already handles — so neither is mapped here pending a fixture that
+    actually shows one.
 
-    2. kimi-cli v1.x (e.g. 1.47.0) — bare chat events with no top-level
-       "type" field; role/content/tool_calls live at the event root.
-       v1.x uses snake_case keys (tool_calls, tool_call_id) and emits tool
-       `content` as a plain string instead of a list of typed parts:
+    An older `{"type":"context.append_message","message":{"role":...}}`-wrapped shape is
+    also accepted (existing v1 regression behavior, preserved but not expanded per task
+    2.11) but was not produced by any live 0.29.1 probe.
 
-         {"role":"assistant","content":[{"type":"think","think":"…"},
-                                         {"type":"text","text":"…"}],
-          "tool_calls":[{"type":"function","id":"…",
-                        "function":{"name":"get_inbox","arguments":"…"}}]}
-         {"role":"user","content":[{"type":"text","text":"…"}]}
-         {"role":"tool","content":"<raw text>",
-          "tool_call_id":"…"}
-
-    Both shapes are normalized into (role, content, tool_calls) so the same
-    rendering helpers work. Skipped on purpose:
-      - "metadata" event (v0.x only — no useful display content)
-      - role="user" (don't re-display the prompt)
-      - events missing a recognized role or with neither top-level nor
-        wrapped "message" (forward-compat safety)
+    role="user" and "metadata" are skipped (no user-relevant content); unrecognized shapes
+    degrade to no events rather than raising.
     """
 
-    def __init__(self) -> None:
-        self._assistant_count = 0
-
-    def feed(self, line: str) -> List[str]:
+    def feed(self, line: str, *, run_id: Optional[str] = None) -> ParsedRunnerLine:
         stripped = line.strip()
         if not stripped:
-            return []
+            return ParsedRunnerLine()
         try:
             evt = json.loads(stripped)
         except json.JSONDecodeError:
-            return []
+            return ParsedRunnerLine()
 
         evt_type = evt.get("type")
         if evt_type == "metadata":
-            return []
+            return ParsedRunnerLine()
 
-        # v0.x format: message fields live under evt["message"].
+        # Legacy wrapped shape: message fields live under evt["message"].
         if evt_type == "context.append_message":
             msg = evt.get("message") or {}
             role = msg.get("role", "")
             content = msg.get("content") or []
             tool_calls = msg.get("toolCalls") or msg.get("tool_calls") or []
-        # v1.x format (kimi-cli ≥ 1.0): message fields live at the event root.
-        elif "role" in evt and evt_type is None:
+            call_id = msg.get("toolCallId") or msg.get("tool_call_id")
+        # Flat shape confirmed live for 0.29.1: role/content/tool_calls/session data
+        # live at the event root.
+        elif "role" in evt:
             role = evt.get("role", "")
+            if role == "meta":
+                session_id = evt.get("session_id")
+                return ParsedRunnerLine(
+                    session_change=SessionChange(session_id=session_id) if session_id else None
+                )
             content = evt.get("content") or []
             tool_calls = evt.get("toolCalls") or evt.get("tool_calls") or []
+            call_id = evt.get("toolCallId") or evt.get("tool_call_id")
         else:
-            return []
+            return ParsedRunnerLine()
 
         if role == "assistant":
-            self._assistant_count += 1
-            return self._render_assistant(content, tool_calls)
+            return ParsedRunnerLine(
+                events=self._render_assistant(content, tool_calls, run_id=run_id)
+            )
         if role == "tool":
-            return self._render_tool_result(content)
-        return []
+            return ParsedRunnerLine(
+                events=self._render_tool_result(content, call_id=call_id, run_id=run_id)
+            )
+        return ParsedRunnerLine()
 
     @staticmethod
-    def _render_assistant(content: Any, tool_calls: List[Any]) -> List[str]:
-        """Render an assistant message.
+    def _render_assistant(
+        content: Any, tool_calls: List[Any], *, run_id: Optional[str]
+    ) -> List[AgentStreamEvent]:
+        """Render an assistant message's think/text parts, then any tool calls.
 
         ``content`` may be:
-        - a list of typed parts (kimi thinking-mode + kimi-code v0.x), e.g.
+        - a list of typed parts, e.g.
           ``[{"type":"think","think":"…"}, {"type":"text","text":"…"}]``
-        - a plain string (kimi-cli v1.x with --no-thinking final message), e.g.
+        - a plain string (e.g. `--no-thinking` final message), e.g.
           ``"Done! I wrote the file."``
-        - ``[]`` (kimi-cli v1.x mid-task while thinking is enabled but the
-          think part was rendered separately, or --no-thinking step events)
-
-        Tool calls are appended after the text/think lines.
+        - ``[]`` (mid-task while thinking is enabled but the think part was
+          rendered separately, or `--no-thinking` step events)
         """
-        out: List[str] = []
+        events: List[AgentStreamEvent] = []
         if isinstance(content, str):
             text = content.strip()
             if text:
-                out.append(f"  💬 {text[:500]}")
+                events.append(text_event(text, run_id=run_id))
         else:
             for part in content or []:
                 if not isinstance(part, dict):
@@ -1598,14 +1601,12 @@ class _KimiCodeParser:
                 ptype = part.get("type")
                 if ptype == "think":
                     thinking = (part.get("think") or "").strip()
-                    if not thinking:
-                        continue
-                    thinking = re.sub(r"\s+", " ", thinking.replace("\n", " "))[:200]
-                    out.append(f"  💭 {thinking}")
+                    if thinking:
+                        events.append(thinking_event(thinking, run_id=run_id))
                 elif ptype == "text":
                     text = (part.get("text") or "").strip()
                     if text:
-                        out.append(f"  💬 {text[:500]}")
+                        events.append(text_event(text, run_id=run_id))
         for tc in tool_calls or []:
             if not isinstance(tc, dict):
                 continue
@@ -1616,41 +1617,53 @@ class _KimiCodeParser:
                 args = json.loads(args_str) if args_str else {}
             except (json.JSONDecodeError, ValueError):
                 args = {}
-            display = {k: v for k, v in args.items() if k not in {"content", "body", "text"}}
-            parts = []
-            for k, v in list(display.items())[:4]:
-                v_str = str(v)
-                if len(v_str) > 60:
-                    v_str = v_str[:60] + "…"
-                parts.append(f'{k}="{v_str}"')
-            out.append(f"  🔧 {name}({', '.join(parts)})")
-        return out
+            events.append(
+                tool_use_event(
+                    tool=name,
+                    category="tool",
+                    input_data=args,
+                    call_id=tc.get("id"),
+                    run_id=run_id,
+                )
+            )
+        return events
 
     @staticmethod
-    def _render_tool_result(content: Any) -> List[str]:
+    def _render_tool_result(
+        content: Any, *, call_id: Optional[str], run_id: Optional[str]
+    ) -> List[AgentStreamEvent]:
         """Render a tool result.
 
         ``content`` may be either:
-        - a list of typed parts (v0.x / kimi-code / kimi-cli v1.x), e.g.
+        - a plain string (0.29.1 flat shape), e.g. ``"<system>…</system>"``
+        - a list of typed parts (legacy wrapped shape), e.g.
           ``[{"type":"text","text":"…"}, {"type":"text","text":"…"}]`` —
           multi-part lists (e.g. ``<system>…</system>`` + actual stdout)
-          render as multiple ``✓`` lines so neither part is hidden.
-        - a plain string (kimi-cli v1.x), e.g. ``"<system>…</system>"``
+          render as multiple events so neither part is hidden.
 
-        Falls back to ``"✓ ok"`` when the input is empty or unparseable.
+        The result carries no tool name (only `tool_call_id`), so `tool="tool"` is used
+        as a generic placeholder — matching the Claude adapter's tool_result_event calls,
+        since correlation is done by call_id, not name. Falls back to `"ok"` when content
+        is empty or unparseable.
         """
         if isinstance(content, str):
             text = content.strip()
-            return [f"     ✓ {text[:200]}"] if text else ["     ✓ ok"]
-        out: List[str] = []
+            return [
+                tool_result_event(tool="tool", output=text or "ok", call_id=call_id, run_id=run_id)
+            ]
+        events: List[AgentStreamEvent] = []
         for part in content or []:
             if isinstance(part, dict) and part.get("type") == "text":
                 text = (part.get("text") or "").strip()
                 if text:
-                    out.append(f"     ✓ {text[:200]}")
-        if not out:
-            out.append("     ✓ ok")
-        return out
+                    events.append(
+                        tool_result_event(tool="tool", output=text, call_id=call_id, run_id=run_id)
+                    )
+        if not events:
+            events.append(
+                tool_result_event(tool="tool", output="ok", call_id=call_id, run_id=run_id)
+            )
+        return events
 
 
 _KIMI_VERSION_CACHE: Optional[str] = None
@@ -2940,13 +2953,16 @@ def _parse_claude_stream_line(
     return ParsedRunnerLine()
 
 
-_KIMI_RESUME_RE = re.compile(r"kimi -r ([a-f0-9\-]{36})")
+_KIMI_RESUME_RE = re.compile(r"kimi -r ([A-Za-z0-9_\-]+)")
 
 
 def _extract_kimi_session_from_stdout(stdout_lines: List[str]) -> Optional[str]:
     """Extract Kimi session ID from stdout.
 
-    Kimi prints: "To resume this session: kimi -r <UUID>" as the last line.
+    Kimi prints: "To resume this session: kimi -r <ID>" as the last line. Kimi Code
+    0.29.1's session IDs carry a "session_" prefix (e.g. "session_2b9bd712-cc0f-4d85-
+    8b4f-6fea27c83c3b") confirmed live to be the exact string `--session` expects — a
+    bare-UUID-only character class would silently fail to match the prefixed form.
     """
     for line in reversed(stdout_lines):
         m = _KIMI_RESUME_RE.search(line)
@@ -3660,7 +3676,7 @@ def _parse_kimi_stdout_line(
     was_in_compaction: bool,
     kimi_stdout_lines: List[str],
 ) -> tuple[list[str], Optional[Dict[str, Any]], bool, List[str]]:
-    """Parse one line of Kimi stdout (wire, v1.x print, or v0.x stream-json)."""
+    """Parse one line of Kimi stdout (wire, legacy print, or v0.29.x stream-json)."""
     readable_lines: list[str] = []
     usage_data: Optional[Dict[str, Any]] = None
 
@@ -3679,10 +3695,19 @@ def _parse_kimi_stdout_line(
         wire_session_id = parser.get_session_id()
         if wire_session_id:
             session_id_ref[0] = wire_session_id
-    else:
-        # v1.x print mode or v0.x stream-json
+    elif is_kimi_code:
+        # v0.29.x stream-json (_KimiCodeParser): canonical ParsedRunnerLine, bridged
+        # back to the legacy readable-lines shape the rest of the loop still expects.
         kimi_stdout_lines.append(line)
-        if not is_kimi_code and session_id_ref[0] is None:
+        parsed = parser.feed(line) if parser is not None else ParsedRunnerLine()
+        readable_lines = [event.content for event in parsed.events]
+        if parsed.session_change and parsed.session_change.session_id:
+            session_id_ref[0] = parsed.session_change.session_id
+    else:
+        # Legacy kimi-cli print mode (_KimiParser, Python-repr events) — not part of
+        # this change; only the resume-line regex fallback applies here.
+        kimi_stdout_lines.append(line)
+        if session_id_ref[0] is None:
             m = _KIMI_RESUME_RE.search(line)
             if m:
                 session_id_ref[0] = m.group(1)
