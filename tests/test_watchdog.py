@@ -17,6 +17,7 @@ from agentweave.watchdog import (
     _extract_jsonl_session_id,
     _parse_claude_stream_line,
     _parse_codex_stream_line,
+    _parse_opencode_stdout_line,
     _run_agent_subprocess,
     _run_codex_mcp_turn,
     _write_codex_context_usage,
@@ -571,6 +572,181 @@ class TestKimiCodeParser:
             )
         )
         assert out == ['  🔧 WriteFile(path="helloworld.py")']
+
+
+class TestParseOpencodeStdoutLine:
+    """Tests for _parse_opencode_stdout_line: the canonical OpenCode `run --format
+    json` adapter. Fixtures are taken from a live OpenCode CLI 1.18.5 probe
+    (2026-07-29), including a `reasoning` sample captured with `--thinking`; see
+    the module docstring on _parse_opencode_stdout_line for details.
+    """
+
+    def test_text_event(self):
+        line = json.dumps(
+            {
+                "type": "text",
+                "sessionID": "ses_1",
+                "part": {"type": "text", "text": "events.jsonl\nstderr.log\n\ndone"},
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "text"
+
+    def test_session_id_is_captured_from_any_event(self):
+        session_ref = [None]
+        line = json.dumps({"type": "step_start", "sessionID": "ses_053255", "part": {}})
+        _parse_opencode_stdout_line(line, session_ref)
+        assert session_ref[0] == "ses_053255"
+
+    def test_reasoning_event_becomes_thinking(self):
+        line = json.dumps(
+            {
+                "type": "reasoning",
+                "sessionID": "ses_1",
+                "part": {"type": "reasoning", "text": "17 * 24 = 408"},
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events[0].kind == "thinking"
+        assert parsed.events[0].content == "17 * 24 = 408"
+
+    def test_step_start_produces_no_event(self):
+        line = json.dumps(
+            {"type": "step_start", "sessionID": "ses_1", "part": {"type": "step-start"}}
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events == []
+        assert parsed.usage is None
+
+    def test_tool_use_non_terminal_status_becomes_tool_use_event(self):
+        line = json.dumps(
+            {
+                "type": "tool_use",
+                "sessionID": "ses_1",
+                "part": {
+                    "type": "tool",
+                    "tool": "read",
+                    "callID": "call_1",
+                    "state": {"status": "running", "input": {"filePath": "x.txt"}},
+                },
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events[0].kind == "tool_use"
+        assert parsed.events[0].call_id == "call_1"
+
+    def test_tool_use_completed_status_becomes_tool_result_only(self):
+        # A fast tool call can jump straight to "completed" with no separate
+        # "running" line (confirmed live); this must not fabricate a tool_use
+        # that was never independently observed.
+        line = json.dumps(
+            {
+                "type": "tool_use",
+                "sessionID": "ses_1",
+                "part": {
+                    "type": "tool",
+                    "tool": "read",
+                    "callID": "call_2",
+                    "state": {"status": "completed", "output": "<path>x.txt</path>"},
+                },
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert len(parsed.events) == 1
+        assert parsed.events[0].kind == "tool_result"
+        assert parsed.events[0].call_id == "call_2"
+        assert parsed.events[0].payload["is_error"] is False
+
+    def test_tool_use_error_status_marks_tool_result_as_error(self):
+        line = json.dumps(
+            {
+                "type": "tool_use",
+                "sessionID": "ses_1",
+                "part": {
+                    "type": "tool",
+                    "tool": "bash",
+                    "callID": "call_3",
+                    "state": {"status": "error", "output": "permission denied"},
+                },
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events[0].payload["is_error"] is True
+
+    def test_step_finish_becomes_measured_context_sample(self):
+        line = json.dumps(
+            {
+                "type": "step_finish",
+                "sessionID": "ses_1",
+                "part": {
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "tokens": {
+                        "total": 12537,
+                        "input": 217,
+                        "output": 10,
+                        "reasoning": 22,
+                        "cache": {"write": 0, "read": 12288},
+                    },
+                    "cost": 0,
+                },
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events == []
+        assert parsed.usage is not None
+        assert parsed.usage.status == "measured"
+        assert parsed.usage.basis == "provider_context"
+        assert parsed.usage.context_tokens == 12515  # total - reasoning
+        assert parsed.usage.breakdown["cache_read_tokens"] == 12288
+
+    def test_second_step_finish_would_replace_not_accumulate(self):
+        # The parser is per-line/stateless by design: each step_finish stands on
+        # its own, so the caller naturally uses only the latest sample rather
+        # than summing — there is nothing here that could accumulate.
+        first = json.dumps(
+            {
+                "type": "step_finish",
+                "part": {"tokens": {"total": 100, "input": 90, "output": 10, "reasoning": 0}},
+            }
+        )
+        second = json.dumps(
+            {
+                "type": "step_finish",
+                "part": {"tokens": {"total": 12537, "input": 217, "output": 10, "reasoning": 22}},
+            }
+        )
+        first_parsed = _parse_opencode_stdout_line(first, [None])
+        second_parsed = _parse_opencode_stdout_line(second, [None])
+        assert first_parsed.usage.context_tokens == 100
+        assert second_parsed.usage.context_tokens == 12515
+
+    def test_error_event(self):
+        line = json.dumps(
+            {
+                "type": "error",
+                "sessionID": "ses_1",
+                "error": {
+                    "name": "ProviderAuthError",
+                    "data": {"message": "invalid api key", "ref": "abc123"},
+                },
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events[0].kind == "error"
+        assert "invalid api key" in parsed.events[0].content
+        assert "abc123" in parsed.events[0].content
+
+    def test_malformed_json_yields_no_events(self):
+        parsed = _parse_opencode_stdout_line("not json {{{", [None])
+        assert parsed.events == []
+        assert parsed.usage is None
+
+    def test_unknown_event_type_is_ignored(self):
+        line = json.dumps({"type": "message_start", "sessionID": "ses_1"})
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events == []
 
 
 class TestAgentPingCmdOpencode:

@@ -3320,7 +3320,13 @@ def _do_run_agent_subprocess(
                     kimi_stdout_lines=kimi_stdout_lines,
                 )
             elif is_opencode:
-                readable_lines, usage_data = _parse_opencode_stdout_line(line, session_id_ref)
+                parsed_opencode_line = _parse_opencode_stdout_line(line, session_id_ref)
+                readable_lines = [event.content for event in parsed_opencode_line.events]
+                usage_data = (
+                    {"input_tokens": parsed_opencode_line.usage.context_tokens}
+                    if parsed_opencode_line.usage is not None
+                    else None
+                )
             elif is_copilot:
                 readable_lines, usage_data = _parse_copilot_stdout_line(
                     line, runner_type, session_id_ref
@@ -3685,36 +3691,117 @@ def _parse_kimi_stdout_line(
     return readable_lines, usage_data, was_in_compaction, kimi_stdout_lines
 
 
+def _opencode_usage_sample(tokens: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
+    """Build the canonical OpenCode context sample from one `step_finish.part.tokens`.
+
+    `tokens.total` already includes input, cache read/write, output, and reasoning;
+    context excludes reasoning (design.md decision 4). Only the latest step_finish
+    is ever used — steps replace rather than accumulate.
+    """
+    total = tokens.get("total")
+    if total is None:
+        return None
+    reasoning = tokens.get("reasoning") or 0
+    cache = tokens.get("cache") or {}
+    context_tokens = max(0, int(total) - int(reasoning))
+    return ContextUsageSample(
+        status="measured",
+        source=source,
+        basis="provider_context",
+        context_tokens=context_tokens,
+        breakdown={
+            "input_tokens": int(tokens.get("input") or 0),
+            "output_tokens": int(tokens.get("output") or 0),
+            "cache_read_tokens": int(cache.get("read") or 0),
+            "cache_creation_tokens": int(cache.get("write") or 0),
+            "reasoning_tokens": int(reasoning),
+        },
+    )
+
+
 def _parse_opencode_stdout_line(
-    line: str, session_id_ref: List[Optional[str]]
-) -> tuple[list[str], Optional[Dict[str, Any]]]:
-    """Parse one line of OpenCode JSON output."""
-    readable_lines: list[str] = []
+    line: str, session_id_ref: List[Optional[str]], *, run_id: Optional[str] = None
+) -> ParsedRunnerLine:
+    """Parse one line of OpenCode (`opencode run --format json`) output into the
+    canonical event/usage contract.
+
+    Verified live against an installed OpenCode CLI 1.18.5 (2026-07-29):
+    `step_start`/`step_finish`/`text`/`tool_use`/`reasoning` event shapes below are
+    confirmed from real output, including a `reasoning` sample captured with
+    `--thinking`. A fast tool call was observed to jump straight from unseen to
+    `state.status="completed"` in a single line with no separate "running" line,
+    so a terminal-status tool_use line becomes a `tool_result` only — this parser
+    does not fabricate a `tool_use` that was never independently observed.
+    """
     try:
         evt = json.loads(line)
     except (ValueError, TypeError):
-        return readable_lines, None
+        return ParsedRunnerLine()
 
     evt_sid = evt.get("sessionID")
     if evt_sid:
         session_id_ref[0] = evt_sid
 
     evt_type = evt.get("type")
+    part = evt.get("part") or {}
+
     if evt_type == "text":
-        text = (evt.get("part") or {}).get("text", "")
-        if text:
-            readable_lines.append(text)
-    elif evt_type == "error":
+        text = (part.get("text") or "").strip()
+        return ParsedRunnerLine(events=[text_event(text, run_id=run_id)] if text else [])
+
+    if evt_type == "reasoning":
+        text = (part.get("text") or "").strip()
+        return ParsedRunnerLine(events=[thinking_event(text, run_id=run_id)] if text else [])
+
+    if evt_type == "tool_use":
+        tool = part.get("tool", "unknown")
+        call_id = part.get("callID")
+        state = part.get("state") or {}
+        status = state.get("status", "")
+        if status in ("completed", "error"):
+            return ParsedRunnerLine(
+                events=[
+                    tool_result_event(
+                        tool=tool,
+                        output=state.get("output", ""),
+                        call_id=call_id,
+                        is_error=status == "error",
+                        run_id=run_id,
+                    )
+                ]
+            )
+        return ParsedRunnerLine(
+            events=[
+                tool_use_event(
+                    tool=tool,
+                    category="tool",
+                    input_data=state.get("input", {}),
+                    call_id=call_id,
+                    run_id=run_id,
+                )
+            ]
+        )
+
+    if evt_type == "step_finish":
+        tokens = part.get("tokens") or {}
+        usage_sample = _opencode_usage_sample(tokens, source="opencode") if tokens else None
+        return ParsedRunnerLine(usage=usage_sample)
+
+    if evt_type == "error":
         err = evt.get("error") or {}
         err_name = err.get("name", "Error")
         err_data = err.get("data") or {}
         err_msg = err_data.get("message", "opencode error")
         err_ref = err_data.get("ref", "")
-        prefix = f"[opencode error] {err_name}: {err_msg}"
+        message = f"{err_name}: {err_msg}"
         if err_ref:
-            prefix += f" (ref: {err_ref})"
-        readable_lines.append(prefix)
-    return readable_lines, None
+            message += f" (ref: {err_ref})"
+        return ParsedRunnerLine(
+            events=[error_event(code="opencode_error", message=message, run_id=run_id)]
+        )
+
+    # step_start and any other unrecognized event: no user-relevant content.
+    return ParsedRunnerLine()
 
 
 def _parse_codex_stdout_line(

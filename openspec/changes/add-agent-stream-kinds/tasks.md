@@ -28,11 +28,11 @@
   MCP calls, web searches, plans, lifecycle, errors, and cumulative usage metadata
 - [x] 2.5 Add Codex 0.145.x stdout fixtures covering official item/turn events, resumed cumulative
   totals, malformed lines, and unknown events
-- [ ] 2.6 Refactor the OpenCode parser to map supported message, tool, step, lifecycle, diagnostic,
+- [x] 2.6 Refactor the OpenCode parser to map supported message, tool, step, lifecycle, diagnostic,
   failure, and usage data
-- [ ] 2.7 Select only the latest usable OpenCode step sample and compute context as total minus
+- [x] 2.7 Select only the latest usable OpenCode step sample and compute context as total minus
   separately reported reasoning
-- [ ] 2.8 Add OpenCode 1.18.x fixtures covering cached resumed steps, multiple steps, reasoning,
+- [x] 2.8 Add OpenCode 1.18.x fixtures covering cached resumed steps, multiple steps, reasoning,
   model identity, malformed events, and unknown variants
 - [ ] 2.9 Refactor the Copilot stream parser to map documented reasoning, message, tool, lifecycle,
   diagnostic, and error events while keeping OTel usage independent
