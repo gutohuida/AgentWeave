@@ -42,7 +42,7 @@
 - [x] 2.11 Refactor the Kimi parser around v0.29.x sequential messages, tool IDs, results,
   lifecycle, and errors while preserving existing v1 regression behavior
 - [x] 2.12 Add Kimi 0.29.x golden fixtures plus regression coverage for retained v1 compatibility
-- [ ] 2.13 Add cross-adapter conformance tests proving every adapter returns only canonical event
+- [x] 2.13 Add cross-adapter conformance tests proving every adapter returns only canonical event
   kinds and keeps context samples separate
 
 ## 3. Auxiliary context collectors

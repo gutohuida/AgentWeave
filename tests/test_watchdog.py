@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agentweave.stream_events import STREAM_EVENT_KINDS, ContextUsageSample, ParsedRunnerLine
 from agentweave.watchdog import (
     _agent_ping_cmd,
     _build_codex_mcp_tool_call,
@@ -2173,6 +2174,159 @@ class TestParseCopilotStreamLine:
     def test_unknown_event_type_is_skipped(self):
         line = json.dumps({"type": "some.future.event", "data": {"foo": "bar"}})
         assert _parse_copilot_stream_line(line).events == []
+
+
+class TestStreamAdapterConformance:
+    """Cross-adapter conformance tests (task 2.13): every runner adapter must return
+    only the seven canonical event kinds, degrade safely on unrecognized or malformed
+    input, and keep stream events and context-usage samples strictly independent —
+    neither is ever fabricated to satisfy the other.
+
+    Covers all five runners migrated in this change: Claude, Codex, OpenCode, Copilot
+    (stdout adapters), and Kimi (_KimiCodeParser). Each is wrapped in a thin lambda so
+    every adapter can be driven through the same one-line-in, ParsedRunnerLine-out
+    calling convention despite their differing native signatures (OpenCode threads a
+    session_id_ref list; Kimi is a stateful parser instance; the rest are pure
+    functions).
+    """
+
+    ADAPTERS = [
+        ("claude", lambda line: _parse_claude_stream_line(line)),
+        ("codex", lambda line: _parse_codex_stream_line(line)),
+        ("opencode", lambda line: _parse_opencode_stdout_line(line, [None])),
+        ("copilot", lambda line: _parse_copilot_stream_line(line)),
+        ("kimi", lambda line: _KimiCodeParser().feed(line)),
+    ]
+
+    # Syntactically valid JSON that is not the expected object shape, plus assorted
+    # malformed/edge-case text. Every adapter parses raw JSON with `.get("type", ...)`
+    # right after `json.loads` — a bare scalar or array (e.g. "null", "42", "[]") parses
+    # successfully but has no `.get`, so this battery guards against exactly that class
+    # of crash (caught live: all five adapters raised AttributeError on these before a
+    # dict-shape check was added alongside this test).
+    GARBAGE_LINES = [
+        "",
+        "   ",
+        "not-json",
+        "{",
+        "[]",
+        "null",
+        "42",
+        "true",
+        '"just a string"',
+        "{}",
+        '{"type": "some.totally.unknown.future.event", "data": {"nested": {"deep": [1, 2, 3]}}}',
+        '{"role": "totally-unknown-role", "content": "x"}',
+        "🎉 emoji line with no structure 🎉",
+        "x" * 5000,
+    ]
+
+    @pytest.mark.parametrize("adapter_name,adapter", ADAPTERS)
+    @pytest.mark.parametrize("line", GARBAGE_LINES)
+    def test_garbage_input_never_raises_and_stays_in_taxonomy(self, adapter_name, adapter, line):
+        parsed = adapter(line)
+        assert isinstance(parsed, ParsedRunnerLine)
+        for event in parsed.events:
+            assert event.kind in STREAM_EVENT_KINDS, (
+                f"{adapter_name} produced an out-of-taxonomy kind {event.kind!r} "
+                f"for input {line!r}"
+            )
+        assert parsed.usage is None or isinstance(parsed.usage, ContextUsageSample)
+
+    @pytest.mark.parametrize("adapter_name,adapter", ADAPTERS)
+    def test_empty_line_produces_neither_events_nor_usage(self, adapter_name, adapter):
+        parsed = adapter("")
+        assert parsed.events == []
+        assert parsed.usage is None
+
+    def test_claude_usage_only_line_keeps_events_and_usage_independent(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [],
+                    "usage": {"input_tokens": 10, "cache_read_input_tokens": 0},
+                },
+            }
+        )
+        parsed = _parse_claude_stream_line(line)
+        assert parsed.events == []
+        assert isinstance(parsed.usage, ContextUsageSample)
+
+    def test_codex_usage_only_line_keeps_events_and_usage_independent(self):
+        line = json.dumps(
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 1000,
+                    "cached_input_tokens": 200,
+                    "output_tokens": 500,
+                    "reasoning_output_tokens": 50,
+                },
+            }
+        )
+        parsed = _parse_codex_stream_line(line)
+        assert parsed.events == []
+        assert isinstance(parsed.usage, ContextUsageSample)
+
+    def test_opencode_usage_only_line_keeps_events_and_usage_independent(self):
+        line = json.dumps(
+            {
+                "type": "step_finish",
+                "part": {"tokens": {"total": 12537, "input": 217, "output": 10, "reasoning": 22}},
+            }
+        )
+        parsed = _parse_opencode_stdout_line(line, [None])
+        assert parsed.events == []
+        assert isinstance(parsed.usage, ContextUsageSample)
+
+    def test_copilot_never_produces_a_usage_sample(self):
+        """Copilot's context tracking is OTel-only (design.md decision 4); the stdout
+        adapter must never populate ParsedRunnerLine.usage for any line."""
+        lines = [
+            json.dumps({"type": "assistant.message", "data": {"content": "hi"}}),
+            json.dumps({"type": "result", "exitCode": 0, "usage": {"premiumRequests": 3}}),
+            json.dumps({"type": "tool.execution_complete", "data": {"success": True}}),
+        ]
+        for line in lines:
+            assert _parse_copilot_stream_line(line).usage is None
+
+    def test_kimi_never_produces_a_usage_sample(self):
+        """Kimi's print-stream adapter carries no usage field at all (design.md decision
+        4); context tracking for Kimi is the session-status/Wire auxiliary collector."""
+        lines = [
+            '{"role":"assistant","content":"hi"}',
+            '{"role":"meta","type":"session.resume_hint","session_id":"session_abc"}',
+        ]
+        for line in lines:
+            assert _KimiCodeParser().feed(line).usage is None
+
+    def test_every_adapter_produces_a_text_event_for_its_own_fixture(self):
+        """Sanity check that the taxonomy assertions above exercise real conformant
+        output, not vacuous passes because every adapter returned nothing — each
+        adapter's plain-text fixture must yield at least one canonical `text` event."""
+        fixtures = {
+            "claude": json.dumps(
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+            ),
+            "codex": json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {"id": "1", "type": "agent_message", "text": "hi"},
+                }
+            ),
+            "opencode": json.dumps(
+                {"type": "text", "sessionID": "ses_1", "part": {"type": "text", "text": "hi"}}
+            ),
+            "copilot": json.dumps({"type": "assistant.message", "data": {"content": "hi"}}),
+            "kimi": '{"role":"assistant","content":[{"type":"text","text":"hi"}]}',
+        }
+        adapters = dict(self.ADAPTERS)
+        for name, line in fixtures.items():
+            parsed = adapters[name](line)
+            assert any(
+                e.kind == "text" for e in parsed.events
+            ), f"{name} did not produce a text event for its own fixture"
 
 
 class TestCopilotUsesPat:

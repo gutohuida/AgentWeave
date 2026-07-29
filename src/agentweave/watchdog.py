@@ -1536,7 +1536,9 @@ class _KimiCodeParser:
             return ParsedRunnerLine()
         try:
             evt = json.loads(stripped)
-        except json.JSONDecodeError:
+            if not isinstance(evt, dict):
+                raise ValueError("not a JSON object")
+        except (json.JSONDecodeError, ValueError):
             return ParsedRunnerLine()
 
         evt_type = evt.get("type")
@@ -2624,6 +2626,8 @@ def _parse_codex_stream_line(
     """
     try:
         data = json.loads(line)
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
     except Exception:
         stripped = line.strip()
         if stripped:
@@ -2873,6 +2877,8 @@ def _parse_claude_stream_line(
     """
     try:
         data = json.loads(line)
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
     except Exception:
         stripped = line.strip()
         if stripped:
@@ -3762,6 +3768,8 @@ def _parse_opencode_stdout_line(
     """
     try:
         evt = json.loads(line)
+        if not isinstance(evt, dict):
+            raise ValueError("not a JSON object")
     except (ValueError, TypeError):
         return ParsedRunnerLine()
 
@@ -3878,6 +3886,8 @@ def _parse_copilot_stream_line(
     """
     try:
         data = json.loads(line)
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
     except Exception:
         stripped = line.strip()
         if stripped:
