@@ -21,7 +21,9 @@ from agentweave.stream_events import (
     StreamEventError,
     diagnostic_event,
     error_event,
+    normalize_context_usage,
     status_event,
+    stream_event_transport_fields,
     text_event,
     thinking_event,
     tool_result_event,
@@ -222,6 +224,82 @@ class TestContextUsageSample:
             )
 
 
+class TestLegacyContextNormalization:
+    def test_tokens_used_and_tokens_limit(self):
+        sample = normalize_context_usage({"tokens_used": 2500, "tokens_limit": 10000})
+        assert sample.status == "measured"
+        assert sample.context_tokens == 2500
+        assert sample.limit_tokens == 10000
+        assert sample.percent == 25
+
+    def test_input_tokens_and_context_limit(self):
+        sample = normalize_context_usage({"input_tokens": 500, "context_limit": 2000})
+        assert sample.context_tokens == 500
+        assert sample.limit_tokens == 2000
+
+    def test_ratio_form_context_usage(self):
+        sample = normalize_context_usage({"context_usage": 0.425})
+        assert sample.basis == "provider_reported_ratio"
+        assert sample.percent == 42.5
+
+    def test_tokens_used_takes_precedence_over_codex_breakdown_input(self):
+        sample = normalize_context_usage(
+            {
+                "tokens_used": 1500,
+                "tokens_limit": 10000,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+            }
+        )
+        assert sample.context_tokens == 1500
+
+    def test_zero_without_limit_is_unavailable(self):
+        sample = normalize_context_usage({"input_tokens": 0, "percent": 0})
+        assert sample.status == "unavailable"
+        assert sample.percent is None
+
+    def test_contradictory_ratio_degrades_to_token_only(self):
+        sample = normalize_context_usage(
+            {"tokens_used": 5000, "tokens_limit": 10000, "percent": 90}
+        )
+        assert sample.status == "measured"
+        assert sample.context_tokens == 5000
+        assert sample.limit_tokens is None
+        assert sample.percent is None
+
+    def test_canonical_derived_percent_round_trips(self):
+        sample = normalize_context_usage(
+            {
+                "status": "measured",
+                "source": "claude",
+                "basis": "provider_context",
+                "context_tokens": 1000,
+                "limit_tokens": 4000,
+                "percent": 25.0,
+                "observed_at": 123.0,
+            }
+        )
+        assert sample.status == "measured"
+        assert sample.percent == 25.0
+        assert sample.observed_at == 123.0
+
+    def test_invalid_legacy_number_is_unavailable(self):
+        assert normalize_context_usage({"tokens_used": "unknown"}).status == "unavailable"
+
+    def test_contradictory_canonical_unavailable_sample_is_cleaned(self):
+        sample = normalize_context_usage(
+            {
+                "status": "unavailable",
+                "source": "legacy",
+                "context_tokens": 0,
+                "percent": 0,
+            }
+        )
+        assert sample.status == "unavailable"
+        assert sample.context_tokens is None
+        assert sample.percent is None
+
+
 class TestCacheBreakdownSemantics:
     def test_breakdown_keeps_only_allowlisted_numeric_fields(self):
         sample = ContextUsageSample(
@@ -278,3 +356,20 @@ class TestParsedRunnerLine:
         assert line.control.retry is True
         assert line.events == []
         assert line.usage is None
+
+
+class TestStreamEventTransportFields:
+    def test_redacts_content_and_nested_payload(self):
+        secret = "sk-abcdefghij1234567890abcdefghij"
+        event = AgentStreamEvent(
+            kind="text",
+            content=f"token: {secret}",
+            payload={"version": 1, "nested": {"authorization": f"Bearer {secret}"}},
+            run_id="run-1",
+            sequence=2,
+        )
+        fields = stream_event_transport_fields(event)
+        assert secret not in fields["content"]
+        assert secret not in str(fields["payload"])
+        assert fields["run_id"] == "run-1"
+        assert fields["sequence"] == 2

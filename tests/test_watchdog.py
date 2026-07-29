@@ -19,6 +19,7 @@ from agentweave.watchdog import (
     CopilotOtelCollector,
     KimiWireCollector,
     RunnerUsageCollector,
+    Watchdog,
     _agent_ping_cmd,
     _assign_sequence,
     _build_codex_mcp_tool_call,
@@ -47,6 +48,7 @@ from agentweave.watchdog import (
     _parse_copilot_stream_line,
     _parse_kimi_stdout_line,
     _parse_opencode_stdout_line,
+    _post_agent_stream_event,
     _resolve_codex_rollout_path,
     _resolve_kimi_wire_path,
     _run_agent_subprocess,
@@ -2414,6 +2416,59 @@ class TestCopilotUsesPat:
         assert self._fn({"SOME_OTHER_VAR": "SOME_OTHER_VAR"}) is False
 
 
+class TestLegacyContextUsageReader:
+    def _monitor(self, tmp_path, monkeypatch, payload):
+        usage_dir = tmp_path / "context_usage"
+        usage_dir.mkdir()
+        (usage_dir / "legacy-agent.json").write_text(json.dumps(payload))
+        monkeypatch.setattr("agentweave.watchdog.CONTEXT_USAGE_DIR", usage_dir)
+        transport = MagicMock()
+        transport.get_transport_type.return_value = "http"
+        monitor = Watchdog(transport=transport)
+        return monitor, transport
+
+    def test_posts_legacy_aliases_as_canonical_context(self, tmp_path, monkeypatch):
+        monitor, transport = self._monitor(
+            tmp_path,
+            monkeypatch,
+            {"tokens_used": 2500, "tokens_limit": 10000, "model": "legacy-model"},
+        )
+        monitor._check_context_usage()
+        posted = transport.post_context_usage.call_args.args[1]
+        assert posted["status"] == "measured"
+        assert posted["context_tokens"] == 2500
+        assert posted["limit_tokens"] == 10000
+        assert posted["percent"] == 25
+        assert "tokens_used" not in posted
+        assert "warning" not in posted
+
+    def test_contradictory_legacy_values_post_token_only(self, tmp_path, monkeypatch):
+        monitor, transport = self._monitor(
+            tmp_path,
+            monkeypatch,
+            {"tokens_used": 5000, "tokens_limit": 10000, "percent": 90},
+        )
+        monitor._check_context_usage()
+        posted = transport.post_context_usage.call_args.args[1]
+        assert posted["status"] == "measured"
+        assert posted["context_tokens"] == 5000
+        assert posted["limit_tokens"] is None
+        assert posted["percent"] is None
+
+    def test_ambiguous_zero_posts_unavailable_and_cache_is_stable(self, tmp_path, monkeypatch):
+        monitor, transport = self._monitor(
+            tmp_path,
+            monkeypatch,
+            {"input_tokens": 0, "percent": 0},
+        )
+        monitor._check_context_usage()
+        monitor._check_context_usage()
+        posted = transport.post_context_usage.call_args.args[1]
+        assert posted["status"] == "unavailable"
+        assert posted["percent"] is None
+        transport.post_context_usage.assert_called_once()
+
+
 class TestWriteCanonicalContextUsage:
     """Tests for _write_canonical_context_usage (task 4.8): one atomic writer
     for every runner, using ContextUsageSample's own canonical field names."""
@@ -4328,12 +4383,13 @@ class TestContextUsageInvocationWiring:
         )
         proc = _fake_proc([self._codex_usage_line()], [], 0)
         monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+        transport = MagicMock()
 
         _run_agent_subprocess(
             agent,
             ["codex", "exec"],
             "subject",
-            MagicMock(),
+            transport,
             True,
             known_session_id=session_id,
         )
@@ -4346,6 +4402,17 @@ class TestContextUsageInvocationWiring:
         assert usage["context_tokens"] == 7500
         assert usage["limit_tokens"] == 64000
         assert usage["session_id"] == session_id
+        structured = [
+            call.kwargs
+            for call in transport.post_agent_output.call_args_list
+            if call.kwargs.get("kind")
+        ]
+        assert [call["payload"]["phase"] for call in structured] == [
+            "started",
+            "completed",
+        ]
+        assert structured[0]["run_id"] == structured[1]["run_id"]
+        assert [call["sequence"] for call in structured] == [1, 2]
 
     def test_codex_stdout_estimate_gets_fallback_limit_without_rollout(self, tmp_path, monkeypatch):
         from agentweave import watchdog as wd
@@ -4438,6 +4505,159 @@ class TestContextUsageInvocationWiring:
         proc_env = popen.call_args.kwargs["env"]
         assert proc_env["COPILOT_OTEL_FILE_EXPORTER_PATH"].endswith(".jsonl")
         assert proc_env["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "false"
+
+    def test_final_collector_poll_is_persisted(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        session_id = "active-session"
+
+        class FinalOnlyCollector(RunnerUsageCollector):
+            def bind(self, *, session_id):
+                self.session_id = session_id
+
+            def observe(self):
+                return None
+
+            def final_poll(self):
+                return ContextUsageSample(
+                    status="measured",
+                    source="final-poll",
+                    basis="provider_context",
+                    context_tokens=321,
+                    limit_tokens=1000,
+                    session_id=self.session_id,
+                )
+
+        monkeypatch.setattr(wd, "CodexRolloutCollector", FinalOnlyCollector)
+        monkeypatch.setattr(
+            wd.subprocess,
+            "Popen",
+            MagicMock(return_value=_fake_proc([self._codex_usage_line()], [], 0)),
+        )
+        _run_agent_subprocess(
+            agent,
+            ["codex", "exec"],
+            "subject",
+            MagicMock(),
+            True,
+            known_session_id=session_id,
+        )
+        usage = json.loads(
+            (tmp_path / ".agentweave" / "shared" / "context_usage" / f"{agent}.json").read_text()
+        )
+        assert usage["source"] == "final-poll"
+        assert usage["context_tokens"] == 321
+
+    def test_late_old_session_sample_cannot_overwrite_active_session(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+
+        class StaleCollector(RunnerUsageCollector):
+            def bind(self, *, session_id):
+                pass
+
+            def observe(self):
+                return ContextUsageSample(
+                    status="measured",
+                    source="stale",
+                    basis="provider_context",
+                    context_tokens=999,
+                    limit_tokens=1000,
+                    session_id="old-session",
+                )
+
+        monkeypatch.setattr(wd, "CodexRolloutCollector", StaleCollector)
+        monkeypatch.setattr(
+            wd.subprocess,
+            "Popen",
+            MagicMock(return_value=_fake_proc([json.dumps({"type": "turn.started"})], [], 0)),
+        )
+        _run_agent_subprocess(
+            agent,
+            ["codex", "exec"],
+            "subject",
+            MagicMock(),
+            True,
+            known_session_id="active-session",
+        )
+        usage_file = tmp_path / ".agentweave" / "shared" / "context_usage" / f"{agent}.json"
+        assert not usage_file.exists()
+
+    def test_process_failure_does_not_persist_usage(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        monkeypatch.setattr(
+            wd.subprocess,
+            "Popen",
+            MagicMock(return_value=_fake_proc([self._codex_usage_line()], [], 1)),
+        )
+        transport = MagicMock()
+        _run_agent_subprocess(
+            agent,
+            ["codex", "exec"],
+            "subject",
+            transport,
+            True,
+            known_session_id="active-session",
+        )
+        usage_file = tmp_path / ".agentweave" / "shared" / "context_usage" / f"{agent}.json"
+        assert not usage_file.exists()
+        assert any(
+            call.kwargs.get("kind") == "error"
+            for call in transport.post_agent_output.call_args_list
+        )
+
+    def test_simultaneous_output_and_usage_are_both_delivered(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        agent = "claude-agent"
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=[agent])
+        session.set_runner_config(agent, "claude", {"model": "claude-sonnet-4"})
+        session.save()
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        monkeypatch.setattr("agentweave.diagnostics.launch_blockers", lambda *_a, **_k: [])
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "session_id": "claude-session",
+                "message": {
+                    "content": [{"type": "text", "text": "hello"}],
+                    "usage": {"input_tokens": 1000, "cache_read_input_tokens": 200},
+                },
+            }
+        )
+        monkeypatch.setattr(
+            wd.subprocess, "Popen", MagicMock(return_value=_fake_proc([line], [], 0))
+        )
+        transport = MagicMock()
+        _run_agent_subprocess(agent, ["claude"], "subject", transport, True)
+        assert any(
+            call.kwargs.get("kind") == "text" for call in transport.post_agent_output.call_args_list
+        )
+        usage = json.loads(
+            (tmp_path / ".agentweave" / "shared" / "context_usage" / f"{agent}.json").read_text()
+        )
+        assert usage["context_tokens"] == 1200
+
+
+def test_structured_delivery_falls_back_to_old_transport_signature():
+    calls = []
+
+    class OldTransport:
+        def post_agent_output(self, agent, content, session_id=None):
+            calls.append((agent, content, session_id))
+            return True
+
+    event = text_event("hello", run_id="run-1")
+    event.sequence = 1
+    assert _post_agent_stream_event(OldTransport(), "agent", event, session_id="session-1")
+    assert calls == [("agent", "hello", "session-1")]
 
 
 class TestLifecycleEventsCompletionAndRunError:

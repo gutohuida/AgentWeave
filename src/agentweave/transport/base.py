@@ -98,3 +98,26 @@ class BaseTransport(ABC):
     def get_agent_registration(self, agent: str) -> Optional[Dict[str, Any]]:
         """Return registration metadata for an agent (None on non-HTTP transports)."""
         return None
+
+    def post_agent_output(
+        self,
+        agent: str,
+        content: str,
+        session_id: Optional[str] = None,
+        *,
+        kind: Optional[str] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        sequence: Optional[int] = None,
+    ) -> bool:
+        """Post output with additive structured fields when supported.
+
+        The default preserves compatibility for local/git transports that do
+        not have an output sink. `content` remains required as the text-only
+        fallback for older consumers.
+        """
+        return False
+
+    def post_context_usage(self, agent: str, data: Dict[str, Any]) -> bool:
+        """Post one canonical context snapshot when supported."""
+        return False

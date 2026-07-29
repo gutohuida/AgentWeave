@@ -41,7 +41,9 @@ from .stream_events import (
     SessionChange,
     diagnostic_event,
     error_event,
+    normalize_context_usage,
     status_event,
+    stream_event_transport_fields,
     text_event,
     thinking_event,
     tool_result_event,
@@ -412,17 +414,25 @@ class Watchdog:
         for usage_file in CONTEXT_USAGE_DIR.glob("*.json"):
             raw = load_json(usage_file) or {}
             agent = raw.get("agent", usage_file.stem)
-            percent = raw.get("percent")
+            try:
+                observed_at = usage_file.stat().st_mtime
+            except OSError:
+                observed_at = None
+            sample = normalize_context_usage(
+                raw, source="legacy_context_file", observed_at=observed_at
+            )
+            canonical = _canonical_context_usage_dict(agent, sample)
+            percent = sample.percent
             # Threshold policy lives here, not in the writer (design.md decision
             # 12): only a "measured" sample auto-warns -- "estimated" samples are
             # displayable but don't trigger the warning/compact-decision flow.
             warning = False
             critical = False
-            if raw.get("status") == "measured" and isinstance(percent, (int, float)):
+            if sample.status == "measured" and isinstance(percent, (int, float)):
                 warning = percent >= 70
                 critical = percent >= 90
             data = {
-                **raw,
+                **canonical,
                 "warning": warning,
                 "critical": critical,
                 "threshold_warning": 70,
@@ -432,9 +442,9 @@ class Watchdog:
             # Always post to Hub when data changes (not just at warning threshold)
             if self.transport.get_transport_type() == "http":
                 last = self._last_context_posted.get(agent)
-                if data != last:
-                    self._last_context_posted[agent] = dict(data)
-                    self._post_context_usage_to_hub(agent, data)
+                if canonical != last:
+                    self._last_context_posted[agent] = dict(canonical)
+                    self.transport.post_context_usage(agent, canonical)
 
             if warning and not self.context_warned.get(agent):
                 self.context_warned[agent] = True
@@ -737,35 +747,6 @@ class Watchdog:
         else:
             logger.warning(
                 f"   [WARN] Could not send message to {agent}",
-                extra={"event": "watchdog_warn", "data": {}},
-            )
-
-    def _post_context_usage_to_hub(self, agent: str, data: dict) -> None:
-        """POST context usage data to the Hub so Mission Control can display it."""
-        import json as _json
-        import urllib.error as _uerr
-        import urllib.request as _req
-
-        from .constants import TRANSPORT_CONFIG_FILE
-        from .utils import load_json as _load_json
-
-        config = _load_json(TRANSPORT_CONFIG_FILE)
-        if not config:
-            return
-        url = config["url"].rstrip("/")
-        api_key = config.get("api_key", "")
-        body = _json.dumps(data).encode()
-        request = _req.Request(
-            f"{url}/api/v1/agents/{agent}/context-usage", data=body, method="POST"
-        )
-        request.add_header("Authorization", f"Bearer {api_key}")
-        request.add_header("Content-Type", "application/json")
-        try:
-            with _req.urlopen(request, timeout=5):
-                pass
-        except (_uerr.HTTPError, _uerr.URLError) as exc:
-            logger.warning(
-                f"   [WARN] Could not post context usage to Hub: {exc}",
                 extra={"event": "watchdog_warn", "data": {}},
             )
 
@@ -3477,9 +3458,10 @@ def _run_agent_subprocess(
             logger.warning(msg, extra={"event": "watchdog_skip", "data": {}})
             if is_http:
                 skip_event = status_event("skipped", summary=msg, run_id=_new_run_id())
+                skip_event.sequence = 1
                 with contextlib.suppress(Exception):
-                    transport.post_agent_output(
-                        agent, skip_event.content, session_id=known_session_id
+                    _post_agent_stream_event(
+                        transport, agent, skip_event, session_id=known_session_id
                     )
             release_lock(lock_name)
             return
@@ -3506,9 +3488,10 @@ def _run_agent_subprocess(
                 logger.warning(f"[SKIP] {msg}", extra={"event": "watchdog_skip", "data": {}})
                 if is_http:
                     skip_event = status_event("skipped", summary=msg, run_id=blocker_run_id)
+                    skip_event.sequence = 1
                     with contextlib.suppress(Exception):
-                        transport.post_agent_output(
-                            agent, skip_event.content, session_id=known_session_id
+                        _post_agent_stream_event(
+                            transport, agent, skip_event, session_id=known_session_id
                         )
                     with contextlib.suppress(Exception):
                         transport.push_log(event, agent, payload, "error")
@@ -3549,6 +3532,33 @@ def _assign_sequence(
     return contents
 
 
+def _post_agent_stream_event(
+    transport: Any,
+    agent: str,
+    event: AgentStreamEvent,
+    *,
+    session_id: Optional[str],
+) -> bool:
+    """Deliver structured output, falling back for an older transport object."""
+    fields = stream_event_transport_fields(event)
+    try:
+        return bool(
+            transport.post_agent_output(
+                agent,
+                fields["content"],
+                session_id=session_id,
+                kind=fields["kind"],
+                payload=fields["payload"],
+                run_id=fields["run_id"],
+                sequence=fields["sequence"],
+            )
+        )
+    except TypeError:
+        # Third-party/older transport implementations may still expose only
+        # (agent, content, session_id). Readable content remains mandatory.
+        return bool(transport.post_agent_output(agent, fields["content"], session_id=session_id))
+
+
 def _do_run_agent_subprocess(
     agent: str,
     cmd: list,
@@ -3575,6 +3585,8 @@ def _do_run_agent_subprocess(
     # Fresh run_id for the first process invocation; a stale-session retry
     # later gets its own (design.md decision 6: retries are new runs).
     initial_run_id = _new_run_id()
+    initial_sequence_counter = itertools.count(1)
+    current_sequence_counter_ref = [initial_sequence_counter]
 
     # Send "running" heartbeat + diagnostic start marker
     if is_http:
@@ -3592,7 +3604,8 @@ def _do_run_agent_subprocess(
             started_event = status_event(
                 "started", summary=f"[watchdog] 🚀 Starting {agent}…", run_id=initial_run_id
             )
-            transport.post_agent_output(agent, started_event.content, session_id=None)
+            started_event.sequence = next(initial_sequence_counter)
+            _post_agent_stream_event(transport, agent, started_event, session_id=None)
         except Exception as exc:
             logger.error(
                 f"[ERROR] Could not post start marker to Hub: {exc}",
@@ -3719,7 +3732,11 @@ def _do_run_agent_subprocess(
             )
 
     def _run_cmd(
-        run_cmd: list, run_session_id: Optional[str], *, run_id: Optional[str] = None
+        run_cmd: list,
+        run_session_id: Optional[str],
+        *,
+        run_id: Optional[str] = None,
+        sequence_counter: Optional["itertools.count[int]"] = None,
     ) -> int:
         """Run agent command, stream output. Returns process returncode.
 
@@ -3732,7 +3749,8 @@ def _do_run_agent_subprocess(
 
         run_id = run_id or _new_run_id()
         current_run_id_ref[0] = run_id
-        sequence_counter = itertools.count(1)
+        sequence_counter = sequence_counter or itertools.count(1)
+        current_sequence_counter_ref[0] = sequence_counter
 
         proc_env = _prepare_agent_env(env_vars)
 
@@ -3803,6 +3821,12 @@ def _do_run_agent_subprocess(
         bound_session_id: Optional[str] = None
         collector_sample: Optional[ContextUsageSample] = None
 
+        def _accept_collector_sample(sample: ContextUsageSample) -> bool:
+            active_session_id = session_id_ref[0]
+            return not (
+                active_session_id and sample.session_id and sample.session_id != active_session_id
+            )
+
         proc = subprocess.Popen(
             run_cmd,
             stdout=subprocess.PIPE,
@@ -3862,6 +3886,7 @@ def _do_run_agent_subprocess(
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.rstrip("\n")
             usage_data: ContextUsageSample | Dict[str, Any] | None
+            line_events: List[AgentStreamEvent] = []
 
             if is_kimi:
                 (
@@ -3881,17 +3906,20 @@ def _do_run_agent_subprocess(
                     kimi_stdout_lines=kimi_stdout_lines,
                     run_id=run_id,
                     sequence_counter=sequence_counter,
+                    normalized_events=line_events,
                 )
             elif is_opencode:
                 parsed_opencode_line = _parse_opencode_stdout_line(
                     line, session_id_ref, run_id=run_id
                 )
+                line_events = parsed_opencode_line.events
                 readable_lines = _assign_sequence(parsed_opencode_line.events, sequence_counter)
                 usage_data = parsed_opencode_line.usage
             elif is_copilot:
                 parsed_copilot_line = _parse_copilot_stdout_line(
                     line, runner_type, session_id_ref, run_id=run_id
                 )
+                line_events = parsed_copilot_line.events
                 readable_lines = _assign_sequence(parsed_copilot_line.events, sequence_counter)
                 # No context/usage field appears in this stream; Copilot's context
                 # tracking is OTel-only (design.md decision 4), never from stdout.
@@ -3900,6 +3928,7 @@ def _do_run_agent_subprocess(
                 parsed_codex_line, stale = _parse_codex_stdout_line(
                     line, runner_type, session_id_ref, run_id=run_id
                 )
+                line_events = parsed_codex_line.events
                 readable_lines = _assign_sequence(parsed_codex_line.events, sequence_counter)
                 # This is only the cumulative stdout estimate (design.md decision
                 # 4); _select_codex_usage below prefers the collector's exact
@@ -3911,6 +3940,7 @@ def _do_run_agent_subprocess(
                 parsed_claude_line = _parse_claude_stdout_line(
                     line, runner_type, session_id_ref, run_id=run_id
                 )
+                line_events = parsed_claude_line.events
                 readable_lines = _assign_sequence(parsed_claude_line.events, sequence_counter)
                 usage_data = parsed_claude_line.usage
 
@@ -3933,7 +3963,7 @@ def _do_run_agent_subprocess(
 
             if collector is not None:
                 observed = collector.observe()
-                if observed is not None:
+                if observed is not None and _accept_collector_sample(observed):
                     collector_sample = observed
 
             if is_wire_mode:
@@ -3944,29 +3974,53 @@ def _do_run_agent_subprocess(
 
             # Stream to Hub or local stdout
             if is_http:
-                for readable in readable_lines:
-                    output_line_count += 1
-                    try:
-                        ok = transport.post_agent_output(
-                            agent, readable, session_id=session_id_ref[0]
-                        )
-                        if not ok:
-                            logger.warning(
-                                f"[WARN] post_agent_output returned False for {agent}",
-                                extra={"event": "watchdog_warn", "data": {}},
+                if line_events:
+                    for event in line_events:
+                        output_line_count += 1
+                        try:
+                            ok = _post_agent_stream_event(
+                                transport,
+                                agent,
+                                event,
+                                session_id=session_id_ref[0],
                             )
-                    except Exception as exc:
-                        logger.warning(
-                            "watchdog_output_post_failed",
-                            extra={
-                                "event": "watchdog_output_post_failed",
-                                "data": {"agent": agent, "error": str(exc)},
-                            },
-                        )
-                        logger.error(
-                            f"[ERROR] post_agent_output failed for {agent}: {exc}",
-                            extra={"event": "watchdog_error", "data": {}},
-                        )
+                            if not ok:
+                                logger.warning(
+                                    f"[WARN] post_agent_output returned False for {agent}",
+                                    extra={"event": "watchdog_warn", "data": {}},
+                                )
+                        except Exception as exc:
+                            logger.warning(
+                                "watchdog_output_post_failed",
+                                extra={
+                                    "event": "watchdog_output_post_failed",
+                                    "data": {"agent": agent, "error": str(exc)},
+                                },
+                            )
+                else:
+                    for readable in readable_lines:
+                        output_line_count += 1
+                        try:
+                            ok = transport.post_agent_output(
+                                agent, readable, session_id=session_id_ref[0]
+                            )
+                            if not ok:
+                                logger.warning(
+                                    f"[WARN] post_agent_output returned False for {agent}",
+                                    extra={"event": "watchdog_warn", "data": {}},
+                                )
+                        except Exception as exc:
+                            logger.warning(
+                                "watchdog_output_post_failed",
+                                extra={
+                                    "event": "watchdog_output_post_failed",
+                                    "data": {"agent": agent, "error": str(exc)},
+                                },
+                            )
+                            logger.error(
+                                f"[ERROR] post_agent_output failed for {agent}: {exc}",
+                                extra={"event": "watchdog_error", "data": {}},
+                            )
             else:
                 for readable in readable_lines:
                     output_line_count += 1
@@ -3980,7 +4034,7 @@ def _do_run_agent_subprocess(
         # release the collector's invocation-scoped resources.
         if collector is not None:
             final_sample = collector.final_poll()
-            if final_sample is not None:
+            if final_sample is not None and _accept_collector_sample(final_sample):
                 collector_sample = final_sample
             collector.close()
 
@@ -4014,8 +4068,11 @@ def _do_run_agent_subprocess(
         logger.info(lifecycle_event.content, extra={"event": "watchdog_agent_done", "data": {}})
         if is_http:
             with contextlib.suppress(Exception):
-                transport.post_agent_output(
-                    agent, lifecycle_event.content, session_id=session_id_ref[0]
+                _post_agent_stream_event(
+                    transport,
+                    agent,
+                    lifecycle_event,
+                    session_id=session_id_ref[0],
                 )
 
         # Resolve this run's final context sample from whichever producer
@@ -4054,8 +4111,14 @@ def _do_run_agent_subprocess(
 
         return proc.returncode or 0
 
+    returncode = 1
     try:
-        returncode = _run_cmd(cmd, session_id)
+        returncode = _run_cmd(
+            cmd,
+            session_id,
+            run_id=initial_run_id,
+            sequence_counter=initial_sequence_counter,
+        )
 
         if is_codex and session_id and stale_codex_session[0]:
             logger.info(
@@ -4071,17 +4134,27 @@ def _do_run_agent_subprocess(
                 summary=f"[watchdog] 🔁 {agent}'s session expired — retrying with a fresh one.",
                 run_id=retry_run_id,
             )
+            retry_sequence_counter = itertools.count(1)
+            retry_event.sequence = next(retry_sequence_counter)
             if is_http:
                 with contextlib.suppress(Exception):
-                    transport.post_agent_output(
-                        agent, retry_event.content, session_id=session_id_ref[0]
+                    _post_agent_stream_event(
+                        transport,
+                        agent,
+                        retry_event,
+                        session_id=session_id_ref[0],
                     )
             _clear_agent_session(agent)
             session_id = None
             session_id_ref[0] = None
             stale_codex_session[0] = False
             fresh_cmd = _agent_ping_cmd(agent, prompt, session_id=None)
-            returncode = _run_cmd(fresh_cmd, None, run_id=retry_run_id)
+            returncode = _run_cmd(
+                fresh_cmd,
+                None,
+                run_id=retry_run_id,
+                sequence_counter=retry_sequence_counter,
+            )
 
         if returncode != 0:
             from .diagnostics import redact_secrets
@@ -4118,9 +4191,13 @@ def _do_run_agent_subprocess(
                 message=f"[watchdog] ❌ Failed to launch {agent}: {exc}",
                 run_id=current_run_id_ref[0],
             )
+            spawn_error_event.sequence = next(current_sequence_counter_ref[0])
             with contextlib.suppress(Exception):
-                transport.post_agent_output(
-                    agent, spawn_error_event.content, session_id=session_id_ref[0]
+                _post_agent_stream_event(
+                    transport,
+                    agent,
+                    spawn_error_event,
+                    session_id=session_id_ref[0],
                 )
     except Exception as exc:
         logger.error(
@@ -4140,9 +4217,13 @@ def _do_run_agent_subprocess(
                 message=f"[watchdog] ❌ Unexpected error running {agent}: {exc}",
                 run_id=current_run_id_ref[0],
             )
+            subprocess_error_event.sequence = next(current_sequence_counter_ref[0])
             with contextlib.suppress(Exception):
-                transport.post_agent_output(
-                    agent, subprocess_error_event.content, session_id=session_id_ref[0]
+                _post_agent_stream_event(
+                    transport,
+                    agent,
+                    subprocess_error_event,
+                    session_id=session_id_ref[0],
                 )
 
     session_id = _extract_session_id_post_run(
@@ -4309,6 +4390,7 @@ def _parse_kimi_stdout_line(
     kimi_stdout_lines: List[str],
     run_id: Optional[str] = None,
     sequence_counter: Optional["itertools.count[int]"] = None,
+    normalized_events: Optional[List[AgentStreamEvent]] = None,
 ) -> tuple[list[str], Optional[Dict[str, Any]], bool, List[str]]:
     """Parse one line of Kimi stdout (wire, legacy print, or v0.29.x stream-json)."""
     readable_lines: list[str] = []
@@ -4334,6 +4416,8 @@ def _parse_kimi_stdout_line(
         # back to the legacy readable-lines shape the rest of the loop still expects.
         kimi_stdout_lines.append(line)
         parsed = parser.feed(line, run_id=run_id) if parser is not None else ParsedRunnerLine()
+        if normalized_events is not None:
+            normalized_events.extend(parsed.events)
         readable_lines = (
             _assign_sequence(parsed.events, sequence_counter)
             if sequence_counter is not None

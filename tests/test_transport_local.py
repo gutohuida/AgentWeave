@@ -40,6 +40,32 @@ def test_transport_type(tmp_path, monkeypatch):
     assert t.get_transport_type() == "local"
 
 
+def test_optional_output_and_context_delivery_are_safe_no_ops(tmp_path, monkeypatch):
+    t = _transport(tmp_path, monkeypatch)
+    assert (
+        t.post_agent_output(
+            "claude",
+            "readable text",
+            kind="text",
+            payload={"version": 1, "text": "readable text"},
+            run_id="run-1",
+            sequence=1,
+        )
+        is False
+    )
+    assert (
+        t.post_context_usage(
+            "claude",
+            {
+                "status": "unavailable",
+                "source": "watchdog",
+                "observed_at": 123.0,
+            },
+        )
+        is False
+    )
+
+
 def test_send_and_receive_message(tmp_path, monkeypatch):
     t = _transport(tmp_path, monkeypatch)
     msg = _msg()

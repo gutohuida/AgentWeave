@@ -429,13 +429,40 @@ class HttpTransport(BaseTransport):
             )
             return False
 
-    def post_agent_output(self, agent: str, content: str, session_id: Optional[str] = None) -> bool:
-        """POST /api/v1/agents/{name}/output — stream one line of agent output to the Hub."""
+    def post_agent_output(
+        self,
+        agent: str,
+        content: str,
+        session_id: Optional[str] = None,
+        *,
+        kind: Optional[str] = None,
+        payload: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
+        sequence: Optional[int] = None,
+    ) -> bool:
+        """Post output with optional structure and a legacy text fallback."""
         try:
             body: Dict[str, Any] = {"content": content}
             if session_id:
                 body["session_id"] = session_id
-            self._request("POST", f"/agents/{agent}/output", body)
+            structured = any(value is not None for value in (kind, payload, run_id, sequence))
+            if kind is not None:
+                body["kind"] = kind
+            if payload is not None:
+                body["payload"] = payload
+            if run_id is not None:
+                body["run_id"] = run_id
+            if sequence is not None:
+                body["sequence"] = sequence
+            try:
+                self._request("POST", f"/agents/{agent}/output", body)
+            except HubTransportError as exc:
+                if not structured or exc.status_code not in (400, 422):
+                    raise
+                legacy_body: Dict[str, Any] = {"content": content}
+                if session_id:
+                    legacy_body["session_id"] = session_id
+                self._request("POST", f"/agents/{agent}/output", legacy_body)
             return True
         except RuntimeError as exc:
             logger.warning(

@@ -108,15 +108,15 @@
   in-memory cumulative deltas
 - [x] 4.8 Replace the generic, Codex, and Kimi context writers with one atomic canonical snapshot
   writer
-- [ ] 4.9 Add legacy context readers for `tokens_used`, `tokens_limit`, `input_tokens`,
+- [x] 4.9 Add legacy context readers for `tokens_used`, `tokens_limit`, `input_tokens`,
   `context_limit`, and ratio-form `context_usage`
-- [ ] 4.10 Normalize contradictory legacy values to unavailable or token-only state instead of
+- [x] 4.10 Normalize contradictory legacy values to unavailable or token-only state instead of
   trusted zero
-- [ ] 4.11 Extend transport interfaces to post canonical context samples and optional structured
+- [x] 4.11 Extend transport interfaces to post canonical context samples and optional structured
   stream fields while preserving old call sites
-- [ ] 4.12 Add local and HTTP transport tests for structured events, canonical context,
+- [x] 4.12 Add local and HTTP transport tests for structured events, canonical context,
   text-only fallback, legacy aliases, redacted data, and older-Hub degradation
-- [ ] 4.13 Add watchdog tests for new-session reset, late old-session writes, retries, process
+- [x] 4.13 Add watchdog tests for new-session reset, late old-session writes, retries, process
   failure, restart recovery, final collector polling, and simultaneous output/usage records
 
 ## 5. Hub stream persistence and APIs

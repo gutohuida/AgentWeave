@@ -13,6 +13,7 @@ replaceable latest-session snapshot, never an `AgentOutput` row or a stream kind
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Tuple
@@ -221,6 +222,193 @@ class ContextUsageSample:
         elif self.context_tokens is not None and self.limit_tokens is not None:
             derived = (self.context_tokens / self.limit_tokens) * 100
             self.percent = round(min(100.0, max(0.0, derived)), 2)
+
+
+def _legacy_number(data: Dict[str, Any], *names: str) -> Tuple[Optional[float], bool]:
+    """Return the first present finite numeric alias and whether it was invalid."""
+    for name in names:
+        if name not in data or data[name] is None:
+            continue
+        value = data[name]
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
+            return None, True
+        return float(value), False
+    return None, False
+
+
+def normalize_context_usage(
+    data: Any,
+    *,
+    source: str = "legacy",
+    observed_at: Optional[float] = None,
+) -> ContextUsageSample:
+    """Normalize canonical or historical context dictionaries.
+
+    Readers accept the aliases emitted by older AgentWeave versions while
+    writers remain canonical. Ambiguous zeroes and contradictory percentages
+    degrade to unavailable or token-only state instead of becoming a trusted
+    zero-percent measurement.
+    """
+
+    def unavailable() -> ContextUsageSample:
+        return ContextUsageSample(
+            status="unavailable",
+            source=str(data.get("source") or source) if isinstance(data, dict) else source,
+            session_id=data.get("session_id") if isinstance(data, dict) else None,
+            model=data.get("model") if isinstance(data, dict) else None,
+            observed_at=observed_at if observed_at is not None else time.time(),
+        )
+
+    if not isinstance(data, dict):
+        return unavailable()
+
+    sample_source = str(data.get("source") or source)
+    sample_observed_at = data.get("observed_at", observed_at)
+    if (
+        not isinstance(sample_observed_at, (int, float))
+        or isinstance(sample_observed_at, bool)
+        or not math.isfinite(sample_observed_at)
+    ):
+        sample_observed_at = observed_at if observed_at is not None else time.time()
+
+    status = data.get("status")
+    if status in CONTEXT_STATUSES:
+        try:
+            basis = data.get("basis")
+            context_tokens = data.get("context_tokens")
+            limit_tokens = data.get("limit_tokens")
+            supplied_percent = data.get("percent")
+            if status in ("unavailable", "unsupported"):
+                if any(
+                    value is not None
+                    for value in (basis, context_tokens, limit_tokens, supplied_percent)
+                ):
+                    return unavailable()
+            elif basis == "provider_reported_ratio":
+                if supplied_percent is None:
+                    return unavailable()
+            elif context_tokens is None:
+                return unavailable()
+            percent = supplied_percent if basis == "provider_reported_ratio" else None
+            sample = ContextUsageSample(
+                status=status,
+                source=sample_source,
+                basis=basis,
+                context_tokens=context_tokens,
+                limit_tokens=limit_tokens,
+                percent=percent,
+                model=data.get("model"),
+                session_id=data.get("session_id"),
+                observed_at=float(sample_observed_at),
+                breakdown=data.get("breakdown"),
+            )
+            if (
+                supplied_percent is not None
+                and sample.percent is not None
+                and (
+                    not isinstance(supplied_percent, (int, float))
+                    or isinstance(supplied_percent, bool)
+                    or abs(float(supplied_percent) - sample.percent) > 0.01
+                )
+            ):
+                return unavailable()
+            return sample
+        except (StreamEventError, TypeError, ValueError):
+            return unavailable()
+
+    used, used_invalid = _legacy_number(data, "context_tokens", "tokens_used", "input_tokens")
+    limit, limit_invalid = _legacy_number(
+        data, "limit_tokens", "tokens_limit", "context_limit", "max_context_tokens"
+    )
+    ratio, ratio_invalid = _legacy_number(data, "context_usage", "context_usage_ratio")
+    legacy_percent, percent_invalid = _legacy_number(data, "percent")
+    if used_invalid or limit_invalid or ratio_invalid or percent_invalid:
+        return unavailable()
+    if used is not None and (used < 0 or not used.is_integer()):
+        return unavailable()
+    if limit is not None and (limit <= 0 or not limit.is_integer()):
+        return unavailable()
+    if ratio is not None:
+        if not 0 <= ratio <= 1:
+            return unavailable()
+        ratio_percent = ratio * 100
+        if legacy_percent is not None and abs(legacy_percent - ratio_percent) > 1:
+            return unavailable()
+        legacy_percent = ratio_percent
+    if legacy_percent is not None and not 0 <= legacy_percent <= 100:
+        return unavailable()
+
+    context_tokens = int(used) if used is not None else None
+    limit_tokens = int(limit) if limit is not None else None
+
+    def legacy_sample(
+        *,
+        basis: ContextBasis,
+        context_tokens: Optional[int] = None,
+        limit_tokens: Optional[int] = None,
+        percent: Optional[float] = None,
+    ) -> ContextUsageSample:
+        return ContextUsageSample(
+            status="measured",
+            source=sample_source,
+            basis=basis,
+            context_tokens=context_tokens,
+            limit_tokens=limit_tokens,
+            percent=percent,
+            model=data.get("model"),
+            session_id=data.get("session_id"),
+            observed_at=float(sample_observed_at),
+        )
+
+    if context_tokens is not None:
+        if context_tokens == 0 and limit_tokens is None:
+            return unavailable()
+        if limit_tokens is not None:
+            derived_percent = round(min(100.0, (context_tokens / limit_tokens) * 100), 2)
+            if legacy_percent is not None and abs(legacy_percent - derived_percent) > 1:
+                # The token count is still useful, but the denominator/ratio pair
+                # is contradictory and must not become a trusted percentage.
+                return legacy_sample(
+                    basis="provider_context",
+                    context_tokens=context_tokens,
+                )
+        return legacy_sample(
+            basis="provider_context",
+            context_tokens=context_tokens,
+            limit_tokens=limit_tokens,
+        )
+
+    if legacy_percent is not None and legacy_percent > 0:
+        return legacy_sample(
+            basis="provider_reported_ratio",
+            percent=legacy_percent,
+        )
+    return unavailable()
+
+
+def stream_event_transport_fields(event: AgentStreamEvent) -> Dict[str, Any]:
+    """Return bounded, recursively redacted optional transport fields."""
+    safe_content = _redact(event.content)
+    if not isinstance(safe_content, str):
+        safe_content = _stringify(safe_content)
+    safe_content, content_truncated = _truncate_utf8(safe_content, MAX_PAYLOAD_BYTES)
+    safe_payload = _redact(event.payload)
+    if not isinstance(safe_payload, dict):
+        safe_payload = {"version": PAYLOAD_VERSION}
+    payload_truncated = _enforce_payload_bound(safe_payload)
+    if content_truncated or payload_truncated:
+        safe_payload["truncated"] = True
+    return {
+        "content": safe_content,
+        "kind": event.kind,
+        "payload": safe_payload,
+        "run_id": event.run_id,
+        "sequence": event.sequence,
+    }
 
 
 @dataclass

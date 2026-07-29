@@ -120,6 +120,77 @@ class TestHttpTransport(unittest.TestCase):
     def test_get_transport_type(self):
         self.assertEqual(self.transport.get_transport_type(), "http")
 
+    @patch("urllib.request.urlopen")
+    def test_post_agent_output_includes_optional_structured_fields(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response({"ok": True})
+        result = self.transport.post_agent_output(
+            "codex",
+            "hello",
+            session_id="session-1",
+            kind="text",
+            payload={"version": 1, "text": "hello"},
+            run_id="run-1",
+            sequence=3,
+        )
+        self.assertTrue(result)
+        request = mock_urlopen.call_args.args[0]
+        body = json.loads(request.data)
+        self.assertEqual(
+            body,
+            {
+                "content": "hello",
+                "session_id": "session-1",
+                "kind": "text",
+                "payload": {"version": 1, "text": "hello"},
+                "run_id": "run-1",
+                "sequence": 3,
+            },
+        )
+
+    @patch("urllib.request.urlopen")
+    def test_post_agent_output_text_only_call_is_unchanged(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response({"ok": True})
+        self.assertTrue(self.transport.post_agent_output("codex", "legacy text"))
+        request = mock_urlopen.call_args.args[0]
+        self.assertEqual(json.loads(request.data), {"content": "legacy text"})
+
+    @patch("urllib.request.urlopen")
+    def test_structured_output_degrades_for_older_hub(self, mock_urlopen):
+        mock_urlopen.side_effect = [
+            _http_error(422, b'{"detail":"extra fields not permitted"}'),
+            _make_response({"ok": True}),
+        ]
+        result = self.transport.post_agent_output(
+            "codex",
+            "readable fallback",
+            kind="status",
+            payload={"version": 1, "phase": "completed"},
+            run_id="run-1",
+            sequence=1,
+        )
+        self.assertTrue(result)
+        self.assertEqual(mock_urlopen.call_count, 2)
+        first = json.loads(mock_urlopen.call_args_list[0].args[0].data)
+        second = json.loads(mock_urlopen.call_args_list[1].args[0].data)
+        self.assertEqual(first["kind"], "status")
+        self.assertEqual(second, {"content": "readable fallback"})
+
+    @patch("urllib.request.urlopen")
+    def test_post_context_usage_preserves_canonical_fields(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response({"ok": True})
+        sample = {
+            "status": "measured",
+            "context_tokens": 1000,
+            "limit_tokens": 4000,
+            "percent": 25.0,
+            "source": "codex_rollout",
+            "basis": "provider_context",
+            "observed_at": 123.0,
+        }
+        self.assertTrue(self.transport.post_context_usage("codex", sample))
+        request = mock_urlopen.call_args.args[0]
+        self.assertEqual(json.loads(request.data), sample)
+
 
 class TestHttpTransportRetry(unittest.TestCase):
     """H3: HttpTransport must retry 5xx, 429, and URLError with backoff.
