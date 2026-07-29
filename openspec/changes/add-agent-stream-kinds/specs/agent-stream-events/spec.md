@@ -232,10 +232,15 @@ shared UI rendering behavior.
 - **WHEN** the Hub UI test or build verification executes
 - **THEN** structured and legacy records SHALL type-check and render through the shared component
 
-### Requirement: Adjacent context tracking boundary
-The canonical parser result SHALL keep context-usage data separate from display events so a later
-change can normalize usage without altering event kinds, persistence semantics, or the renderer.
+### Requirement: Independent context-usage boundary
+The canonical runner observation SHALL keep context-usage samples separate from display events.
+Context samples SHALL use the `agent-context-usage` contract and SHALL NOT be persisted as
+`AgentOutput` rows or rendered as stream event kinds.
 
 #### Scenario: Parser reports output and usage
 - **WHEN** one provider event contains both readable output and token usage
 - **THEN** the parser SHALL return output events and the usage sample in separate result fields
+
+#### Scenario: Collector reports usage without output
+- **WHEN** an auxiliary provider collector reports a context sample
+- **THEN** the invocation coordinator SHALL deliver the context snapshot without fabricating a stream event

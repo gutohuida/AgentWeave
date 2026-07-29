@@ -1,64 +1,77 @@
 ## Context
 
-Five watchdog parser paths currently return different tuple shapes and flatten provider streams
-into decorated strings. The runner loop posts each string as `AgentOutput.content`; the Hub model,
-REST schema, SSE stream, and UI type carry no semantic fields. `SpecPage`, `AgentActivityTab`, and
-`AgentOutputPanel` therefore implement different prefix-based interpretations of the same output.
+Five watchdog adapters currently flatten provider streams into strings and return incompatible
+tuple shapes. Context tracking is split among generic, Codex, and Kimi writers with incompatible
+schemas, while OpenCode and Copilot do not have reliable end-to-end reporting. The Hub accepts an
+unvalidated context dictionary, and the UI assumes a different pair of field names from some
+writers.
 
-Provider protocols already distinguish messages, readable reasoning, tools, results, lifecycle,
-errors, and usage. The stream boundary must preserve those distinctions without coupling the Hub
-to provider-specific schemas. It must also remain compatible with existing databases, older Hubs,
-and text-only output. Agent-output retention is currently unbounded, so structured payload limits
-are required before richer data is persisted.
+Provider validation against installed Claude Code 2.1.220, Codex CLI 0.145.0, OpenCode 1.18.5,
+Kimi Code 0.29.1 source/Wire data, and current Copilot/OTel documentation established that no
+single raw token field has the same semantics across all runners:
 
-This design covers Claude 2.1.x, Codex 0.145.x, OpenCode 1.18.x, documented GitHub Copilot stream
-events, and Kimi 0.29.x. Kimi v1 parsing is compatibility-only. The next planned change will repair
-and expose context usage across the same five adapters.
+- Claude exposes additive request input, cache-read, and cache-creation fields.
+- Codex stdout usage is cumulative; rollout `last_token_usage` is the current source.
+- OpenCode step samples replace rather than accumulate, and their normalized total includes output
+  and reasoning.
+- Copilot's parent OTel span aggregates calls; the latest child `chat` span is per request, and its
+  input total already includes cache breakdowns.
+- Kimi `llm.request.maxTokens` is a completion cap, not a context limit; Kimi's own context service
+  uses latest-step input/cache/output and model capability metadata.
+
+The design therefore needs a common observation boundary without imposing false arithmetic
+uniformity. Stream events and context snapshots share adapter and invocation infrastructure but
+have different persistence and rendering semantics.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Define one typed parser boundary and seven provider-neutral event kinds.
+- Define one typed runner observation boundary and seven provider-neutral stream event kinds.
+- Define one canonical context sample that records measurement status and basis.
 - Preserve exact per-run ordering and correlate tool calls with results.
-- Deliver safe structured data through storage, REST, chat history, and SSE.
-- Render stream semantics consistently on all current Hub agent-output surfaces.
-- Provide graceful degradation in both directions across CLI/Hub versions.
-- Leave an explicit, separate usage slot for the next context-tracking change.
+- Collect accurate, non-cumulative context observations from stdout or session-bound auxiliary
+  files without scanning an unscoped newest file.
+- Deliver both contracts safely through local state, transport, Hub APIs/SSE, and UI.
+- Render stream semantics and context availability consistently across current Hub surfaces.
+- Preserve rolling compatibility with existing producers, Hubs, database rows, and UI clients.
 
 **Non-Goals:**
 
 - Stopping or cancelling a running process.
-- Normalizing token windows, context percentages, cost, or compaction behavior.
+- Automatically compacting, resetting, or handing off sessions.
 - Adding message threads or changing chat-session routing.
-- Persisting complete provider wire events or hidden chain-of-thought.
+- Reporting cost, billing usage, or provider rate-limit quota.
+- Persisting complete provider wire events, OTel content, or hidden chain-of-thought.
 - Expanding Kimi v1 protocol support.
-- Replacing the existing trace/span model.
+- Replacing the existing trace/span model or building generic telemetry ingestion.
 
 ## Decisions
 
-### 1. Normalize at runner adapters
+### 1. Coordinate two producers at the invocation boundary
 
-Introduce a canonical internal result shaped conceptually as:
+The watchdog invocation coordinator owns a stdout adapter and, when needed, an auxiliary usage
+collector:
 
 ```text
-ParsedRunnerLine
-├── events: list[AgentStreamEvent]
-├── usage: optional provider usage sample
-├── session_change: optional session metadata
-└── control: parser/runner flags
+stdout adapter ───────────────┐
+                              ├─▶ RunnerObservation
+auxiliary usage collector ────┘      ├── events[]
+                                     ├── usage_samples[]
+                                     ├── session_change?
+                                     └── control?
 ```
 
-`AgentStreamEvent` contains `kind`, readable `content`, and a versioned payload. The runner assigns
-`run_id` and `sequence` after normalization, immediately before delivery. This lets one provider
-line yield multiple ordered events and lets usage exist without display output.
+An implementation may retain a `ParsedRunnerLine` type and add a `RunnerUsageCollector` protocol
+instead of materializing this exact aggregate. The invariant is that both producers return the
+same canonical `ContextUsageSample`, and raw provider dictionaries do not cross into writers,
+transport, Hub, or UI.
 
-Normalization belongs in provider adapters because they understand provider wire formats. Doing it
-in the Hub would require sending raw provider events, increase exposure of sensitive fields, and
-make the server depend on every runner version. Preserving the current tuple variants was rejected
-because it would force Change 6 to add yet another incompatible return shape.
+Combining the capabilities here avoids reopening all adapters and the invocation lifecycle.
+Keeping their result fields separate prevents context snapshots from becoming `AgentOutput` rows
+or stream events.
 
-### 2. Use a small closed taxonomy
+### 2. Use a small closed stream taxonomy
 
 The only event kinds are:
 
@@ -73,138 +86,203 @@ The only event kinds are:
 | `error` | `version`, `code`, `message`, optional `exit_code`, `retryable` | Run-level failure |
 
 Allowed status phases initially include `queued`, `started`, `plan`, `compacting`, `retrying`,
-`completed`, and `skipped`. Payload `version=1` permits additive evolution without proliferating
-database columns.
+`completed`, and `skipped`. Payload `version=1` permits additive evolution.
 
-A separate `result` kind was rejected: successful results are completion status and failed results
-are run errors. A tool failure remains `tool_result` because changing it to `error` would destroy
-tool correlation.
+A separate `result` kind is unnecessary: successful results are completion status and failed
+results are run errors. A failed tool remains `tool_result` to preserve correlation.
 
-### 3. Generate run identity in the watchdog
+### 3. Define an honest context sample
 
-Each process invocation gets a fresh opaque `run_id`; retries start a new run. Events receive
-strictly increasing integer `sequence` values in the order they are posted. Provider call IDs are
-retained as `call_id` but are not used as run IDs.
+The canonical sample is conceptually:
 
-This is more reliable than timestamps for grouping live thinking and tools, and it avoids assuming
-that provider session IDs identify a single invocation. Database record ID remains the final
-tie-breaker for legacy rows and equal timestamps.
+```text
+ContextUsageSample
+├── status: measured | estimated | unsupported | unavailable
+├── context_tokens: optional non-negative integer
+├── limit_tokens: optional positive integer
+├── percent: optional number from 0 through 100
+├── model: optional string
+├── session_id: optional string
+├── source: bounded provider/source identifier
+├── basis: provider_context | latest_request_input |
+│          provider_reported_ratio | cumulative_delta
+├── observed_at: timestamp
+└── breakdown: bounded optional token fields
+```
 
-### 4. Store additive nullable fields
+`percent` is derived from `context_tokens / limit_tokens` when both are known, clamped only for
+display safety. It is absent when either value is unknown. `provider_reported_ratio` may supply a
+percentage directly when the provider does not expose both operands. `estimated` and `measured`
+must remain distinguishable throughout the pipeline.
 
-The next Hub migration adds nullable columns to `AgentOutput`:
+The latest valid sample replaces the prior sample for that session. Samples are never summed.
+Visible/retained output is included when the provider's own context model includes it; separately
+identified transient reasoning is excluded when possible.
 
-- `kind`: bounded string
-- `payload`: JSON
-- `run_id`: bounded string
-- `sequence`: integer
+### 4. Encode provider-specific accounting explicitly
 
-It also adds an index suitable for project/agent/run ordering. The existing `content`,
-`session_id`, and timestamp remain authoritative compatibility fields. API create/response models,
-SSE serialization, and chat-history projection carry the four optional fields.
+| Runner | Canonical source | Context mapping | Limit mapping |
+|---|---|---|---|
+| Claude / Claude proxy | Latest assistant-message usage; tested final-result fallback | `input_tokens + cache_read_input_tokens + cache_creation_input_tokens` | Resolved model metadata; absent if unknown |
+| OpenCode | Latest `step_finish.part.tokens` | `total - reasoning`, equivalent to input + cache read + cache write + output | Current model `limit.input`, otherwise effective context fallback |
+| Codex | Latest session-bound rollout `token_count.info` | `last_token_usage.total_tokens - reasoning_output_tokens` | `model_context_window` |
+| Copilot | Latest top-level child OTel `chat` span | `gen_ai.usage.input_tokens` directly; cache fields are breakdowns | Resolved model metadata; absent if unknown |
+| Kimi 0.29.x | Session status, or latest matching main-agent completed-step usage | `inputOther + inputCacheRead + inputCacheCreation + output` | `max_input_tokens ?? max_context_tokens` from model capability |
 
-Nullable columns allow a rolling upgrade with no backfill. New producers always supply meaningful
-content, so an older Hub that ignores unknown fields still stores a usable line. New UI code treats
-null-kind rows as legacy text. A separate event table was rejected because output already has the
-correct ownership, session, timestamps, and SSE lifecycle.
+Codex `cached_input_tokens` is a subset of `input_tokens`; it is never added. Copilot follows the
+OTel rule that cache-read and cache-creation values are included in `input_tokens`; they are never
+added. OpenCode and Kimi cache classes are exclusive components and are added as shown.
 
-### 5. Bound and redact before transport, validate again at ingress
+Kimi `llm.request.maxTokens` must never be used as a context denominator because exact 0.29.1
+source maps it to the maximum completion budget. `usage.record` is accumulated accounting rather
+than the context-size model.
 
-Adapters construct only allowlisted fields rather than copying raw provider objects. Existing
-recursive secret redaction is applied to both summaries and nested structured values before
-transport. Serialized payloads are capped at 64 KiB; tool-result excerpts are capped at 8 KiB.
-Truncation retains a summary and marks `truncated=true`. Opaque or encrypted reasoning is discarded.
+### 5. Bind auxiliary collectors to the active invocation
 
-The Hub independently validates kind membership and serialized size. This defense-in-depth matters
-because HTTP endpoints can be called without the watchdog. Storing raw events and redacting only
-at render time was rejected because secrets would already be at rest and payload growth would be
-uncontrolled.
+Collector setup and resolution belong to the invocation coordinator:
 
-### 6. Map each runner explicitly and test with golden fixtures
+- Configure a unique bounded Copilot OTel JSONL path before spawn, leave content capture disabled,
+  and select the latest relevant top-level child `chat` span.
+- Resolve Codex rollout data by the emitted thread/session identity. A bounded timestamp lookup may
+  be used only as a guarded fallback and must verify the session before accepting a sample.
+- Resolve Kimi status or main-agent Wire data by the active Kimi session and agent. Never select an
+  unscoped newest session directory.
+- Use stdout-native samples for Claude and OpenCode, while resolving OpenCode's current model
+  capability from its own catalog/configuration rather than a primary hard-coded table.
+- Perform a final collector poll after stdout closes so a trailing file record is not lost.
 
-- **Claude:** readable thinking and text blocks map directly; `tool_use.id` pairs with
-  `tool_result.tool_use_id`; result messages produce terminal status or error; usage remains in the
-  separate slot.
-- **Codex:** support official JSONL lifecycle plus agent messages, reasoning, commands, file
-  changes, MCP calls, web searches, plan updates, `turn.failed`, and error events.
-- **OpenCode:** consume `--format json` events for messages, tools, step completion, lifecycle,
-  diagnostics, and failures. Fixtures are captured from the supported 1.18.x shape because its raw
-  event schema is less fully documented.
-- **Copilot:** map documented assistant reasoning/message, tool execution, lifecycle, diagnostic,
-  and error events. Fixtures are documentation-derived until the CLI is available in the test
-  environment.
-- **Kimi:** target the installed 0.29.x sequential assistant/tool stream and retain tool IDs.
-  Existing v1 branches remain covered only to prevent regression.
+Collectors tolerate partial writes, malformed unrelated records, and absent optional fields.
+They expose unavailable/unsupported state instead of fabricating zero.
 
-Unknown valid events do not fail the stream. User-relevant unknowns become bounded diagnostics;
-irrelevant bookkeeping can be omitted. Malformed lines retain a safe diagnostic or readable
-fallback where possible.
+### 6. Separate run identity from session identity
 
-### 7. Use one shared UI renderer
+Every process invocation receives a fresh opaque `run_id`; retries receive a new run. Stream
+events receive strictly increasing `sequence` values after normalization.
 
-A shared stream renderer accepts normalized output records and is embedded by the agent output
-panel, spec chat, and activity view. It provides:
+Context replacement is keyed by agent and active provider session, not only by run. A new session
+immediately replaces the previous snapshot with `unavailable` until its first valid sample. A
+sample carrying an old session ID, an earlier run binding, or an observation time before the
+active invocation boundary is rejected.
 
-- grouped live thinking, auto-collapsed on first text or terminal status, with elapsed duration;
-- tool-use/result pairing by `run_id` and `call_id`, compact by default and expandable;
-- prominent run errors and failed tool state;
-- a diagnostics visibility control independent from errors and tool failures;
-- a legacy adapter for null-kind records and existing prefixes.
+A watchdog restart reconstructs the active session binding before accepting auxiliary samples. It
+does not carry an in-memory cumulative delta across restarts as if it were measured.
 
-Structured records never rely on prefix sniffing. Prefix compatibility remains at a single legacy
-boundary so historical rows do not suddenly change visibility.
+### 7. Normalize storage and transport once
 
-### 8. Retrieve the newest bounded window correctly
+The local context file, HTTP request, Hub validation/storage event, SSE projection,
+`AgentSummary.context_usage`, and UI type use the canonical field names from
+`ContextUsageSample`.
 
-For a request without a cursor, the backend selects the newest N rows using descending stable keys,
-then reverses them for chronological display. Incremental cursor requests remain ascending.
-Ordering prefers timestamp, then available run sequence, then record ID. This fixes the current
-ascending-limit behavior that returns the oldest N records.
+For rolling compatibility:
 
-### 9. Emit lifecycle without implying cancellation
+- readers may accept current aliases such as `tokens_used`, `tokens_limit`, `input_tokens`,
+  `context_limit`, and ratio-form `context_usage`;
+- writers emit only the canonical schema after migration;
+- old untyped Hub event rows are normalized on read where unambiguous;
+- unknown or contradictory legacy dictionaries become `unavailable`, not zero.
 
-The watchdog emits started, retrying, completed, and failure state when those transitions are
-known. The UI does not expose a Stop control because the framework has no process registry or
-cancellation endpoint. Lifecycle semantics are useful independently and can support cancellation
-in a later change without falsely promising it now.
+The Hub uses a typed Pydantic schema and validates status/basis enums, number ranges, bounded
+strings, bounded breakdown keys, and the relationship between tokens, limit, and percentage.
+Context remains a latest snapshot carried through the existing agent-event projection unless
+implementation evidence requires a dedicated table.
+
+### 8. Store additive nullable stream fields
+
+The next Hub migration adds nullable `kind`, `payload`, `run_id`, and `sequence` columns to
+`AgentOutput`, plus an index suitable for project/agent/run ordering. Existing `content`,
+`session_id`, and timestamp remain compatibility fields. API create/response models, SSE, and chat
+history carry the four optional fields.
+
+New producers always supply meaningful readable content. Older Hubs may ignore structure while
+preserving that fallback; new UIs treat null-kind records as legacy text.
+
+### 9. Bound and redact before transport, validate at ingress
+
+Adapters construct only allowlisted fields. Existing recursive secret redaction applies to
+summaries and nested structured values before transport. Serialized stream payloads are capped at
+64 KiB; tool-result excerpts are capped at 8 KiB. Opaque or encrypted reasoning is discarded.
+
+Context breakdowns use a small allowlist of numeric fields and never contain messages or raw
+provider objects. Copilot OTel content capture remains disabled. The Hub independently validates
+stream and context bounds because endpoints can be called without the watchdog.
+
+### 10. Map runners with golden fixtures
+
+- **Claude:** map readable thinking, text, tools, lifecycle, errors, and independent per-request
+  usage.
+- **Codex:** map official item/turn events; collect exact context from the matching rollout rather
+  than cumulative stdout totals.
+- **OpenCode:** map JSON messages/tools/steps and take only the latest step usage sample.
+- **Copilot:** map documented stream events and independently collect the latest child `chat` span.
+  Documentation-derived fixtures are permitted until a current CLI fixture is available.
+- **Kimi:** target 0.29.x sequential messages and exact 0.29.1 status/Wire semantics. Existing v1
+  branches remain regression-only.
+
+Unknown valid stream events do not terminate processing. User-relevant unknowns become bounded
+diagnostics; irrelevant bookkeeping may be omitted.
+
+### 11. Use one shared stream renderer
+
+A shared renderer is embedded by agent output, spec chat, and activity. It groups live thinking,
+pairs tools by `run_id` and `call_id`, keeps errors prominent, supports diagnostic visibility, and
+uses a single legacy-prefix adapter for historical rows.
+
+### 12. Render context state explicitly
+
+Agent cards, detail, overview, and status surfaces consume the same normalized context object:
+
+- measured percentage shows normal warning/critical treatment;
+- estimated percentage is labeled as estimated;
+- token-only samples show the count with an unknown limit and no percentage;
+- unavailable and unsupported states show distinct neutral text;
+- a new session never displays the previous session's bar while awaiting its first sample.
+
+Estimated samples are displayable but do not trigger automatic warning/critical policy in this
+change. Automatic reset/handoff policy remains outside scope.
+
+### 13. Retrieve the newest output window correctly
+
+Without a cursor, the backend selects the newest N output rows using descending stable keys, then
+reverses them for chronological display. Cursor requests remain ascending. Ordering prefers
+timestamp, then run sequence, then record ID.
 
 ## Risks / Trade-offs
 
-- **[Provider schemas drift]** → Keep normalization isolated per provider, tolerate unknown events,
-  and use representative golden fixtures with explicit version notes.
-- **[Payloads leak secrets]** → Build from allowlisted fields, recursively redact before transport,
-  discard opaque reasoning, bound excerpts, and validate again in the Hub.
-- **[Structured data increases storage and SSE traffic]** → Enforce hard payload limits, avoid raw
-  events, and keep tool details collapsed in the UI.
-- **[Rolling upgrades lose structure]** → Preserve readable content on every event and make all new
-  fields optional; loss of structure degrades to current text behavior.
-- **[Tool pairing is incomplete]** → Pair only with actual provider call IDs and render unmatched
-  events independently instead of guessing.
-- **[Thinking duration is approximate]** → Derive it from persisted timestamps within one run and
-  omit a precise duration when boundaries are unavailable.
-- **[Change 6 needs provider usage details]** → Preserve usage separately in the parser result now,
-  but defer its normalized schema and persistence until that change.
+- **Provider schemas drift:** isolate normalization by provider, tolerate unknown events, and
+  version golden fixtures.
+- **Auxiliary file races:** use invocation-scoped paths/session IDs, tolerate partial records, and
+  perform a final bounded poll.
+- **A model limit is unavailable:** retain a token-only sample with absent percentage instead of
+  guessing.
+- **Structured data leaks secrets:** allowlist, recursively redact, disable telemetry content, and
+  enforce payload bounds at both producer and Hub.
+- **Rolling upgrades lose structure:** keep readable stream content and accept legacy context
+  aliases during migration.
+- **Tool pairing is incomplete:** render unmatched events independently instead of inventing IDs.
+- **Provider context bases differ:** expose `basis` and `source` rather than presenting estimates as
+  identical measurements.
 
 ## Migration Plan
 
-1. Add canonical event types, payload safety helpers, and adapter fixture tests without changing
-   transport behavior.
-2. Migrate all five adapters and the runner loop to the shared parser result while retaining
-   readable output.
-3. Add optional transport parameters and the next Hub database migration; update schemas,
-   endpoints, SSE, chat history, and backend tests.
-4. Correct recent-output query ordering.
-5. Add the shared UI types and renderer, migrate all three consumers, and retain legacy handling.
-6. Run CLI tests, Hub tests, UI type-check/build, and migration upgrade tests.
+1. Add canonical event/context types, validators, payload-safety helpers, and fixtures without
+   changing delivery.
+2. Migrate all five stdout adapters and add session-bound auxiliary collectors.
+3. Replace the three context writers with one canonical snapshot writer and normalize transport.
+4. Add optional output persistence fields and typed context ingress/projection in the Hub.
+5. Correct recent-output ordering and migrate chat/SSE projections.
+6. Add the shared stream renderer and normalized context UI states.
+7. Run provider fixtures, CLI/Hub/UI suites, migration tests, and installed-runner smoke tests.
 
-Rollback is additive: older application code can continue using `content` while the nullable
-columns remain. If the migration itself must be reversed, remove the new index and columns only
-after confirming no deployed client depends on structured fields.
+Rollback is additive. Older code can continue using readable output content and legacy context
+aliases while nullable structured columns remain. Auxiliary collectors can be disabled per runner
+without corrupting stored output.
 
 ## Open Questions
 
-- The exact current Copilot CLI JSON fixture must be confirmed in an environment with that CLI
-  installed before implementation is considered complete; official event documentation defines
-  the required semantic mapping in the meantime.
-- OpenCode fixture capture may reveal additional bookkeeping variants; they should be classified
-  as omitted or diagnostic without expanding the seven-kind taxonomy.
+- A current Copilot CLI fixture is still required before Copilot implementation is considered
+  fully verified; official GitHub and OTel field semantics define the contract in the meantime.
+- If the Kimi REST session-status service is unavailable to the watchdog, implementation must
+  choose the least invasive session-bound way to obtain model capability metadata. Missing
+  capability data yields a token-only sample; it never permits use of completion `maxTokens`.
+- Claude's final-result fallback must be accepted only for stream shapes covered by fixtures; the
+  assistant-message usage remains canonical.

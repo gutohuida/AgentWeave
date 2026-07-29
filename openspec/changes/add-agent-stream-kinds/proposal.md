@@ -1,30 +1,42 @@
 ## Why
 
-AgentWeave currently flattens every runner's structured stream into decorated text. That loses
-thinking, tool-call correlation, lifecycle, and error semantics, forces each Hub surface to infer
-meaning from string prefixes, and leaves no stable boundary for the adjacent context-usage work.
+AgentWeave currently flattens every runner's structured stream into decorated text and tracks
+context through three incompatible writer paths. The stream loss forces Hub surfaces to infer
+thinking, tools, lifecycle, and errors from prefixes. The context paths use conflicting payload
+keys and, for several runners, cumulative totals, missing data, or the wrong denominator.
+
+Both problems meet at the runner invocation boundary. Solving them separately would migrate the
+same five adapters, fixtures, session binding, and post-run file discovery twice. They should be
+implemented together while remaining separate capabilities: display events are append-only output
+records, whereas context usage is a replaceable latest-session snapshot.
 
 ## What Changes
 
 - Introduce a provider-neutral stream event contract with exactly seven kinds: `text`,
   `thinking`, `tool_use`, `tool_result`, `status`, `diagnostic`, and `error`.
-- Give each watchdog invocation a `run_id` and monotonically increasing `sequence`, and correlate
-  tool calls and results with provider call IDs.
-- Adapt Claude, Codex, OpenCode, GitHub Copilot, and Kimi v0.29.x streams into the common contract
-  while retaining readable `content` fallbacks and tolerating unknown provider events.
+- Introduce a separate canonical context-usage sample with explicit measurement status, basis,
+  source, session identity, token count, effective limit, percentage, and bounded breakdown.
+- Give each watchdog invocation a `run_id` and monotonically increasing stream `sequence`; reject
+  context samples that do not belong to the active session or invocation.
+- Adapt Claude, Codex, OpenCode, GitHub Copilot, and Kimi v0.29.x into the two contracts using
+  validated provider-specific accounting rules.
+- Support both stdout observations and invocation-scoped auxiliary collectors:
+  - Codex rollout `token_count` records;
+  - Copilot OTel child `chat` spans with content capture disabled;
+  - Kimi session status or matching main-agent Wire/model-capability data.
+- Normalize local context files, HTTP transport, Hub validation/storage/SSE, `AgentSummary`, and
+  UI types to one schema while accepting legacy aliases during rolling upgrades.
 - Add optional structured fields to Hub agent-output storage, REST responses, chat history, and SSE
   events without breaking older CLI or Hub versions.
-- Redact and bound structured payloads before transport and validate them again at the Hub; never
-  retain opaque or encrypted reasoning fields or complete raw provider events.
-- Replace prefix-sniffing UI behavior with one shared renderer used by agent output, spec chat, and
-  agent activity, including collapsible thinking and paired tool activity.
+- Redact and bound structured output payloads before transport and validate them again at the Hub;
+  never retain opaque reasoning, full provider events, or OTel prompt/response content.
+- Replace prefix-sniffing UI behavior with one shared stream renderer used by agent output, spec
+  chat, and agent activity.
+- Render measured, estimated, unavailable, and unsupported context states honestly; never show an
+  unknown limit as zero percent.
 - Correct output history retrieval so the default window returns the newest records in stable
   display order.
-- Establish a shared parser result boundary with a separate usage slot so the next
-  context-tracking change can add normalized usage samples without redesigning the stream path.
-- Add runner fixtures and contract tests for all five supported stream formats.
-- Deliberately exclude process cancellation, message threading, and context-percentage
-  normalization from this change.
+- Add provider fixtures and end-to-end contract tests for both outputs across all five runners.
 
 ## Capabilities
 
@@ -32,6 +44,8 @@ meaning from string prefixes, and leaves no stable boundary for the adjacent con
 
 - `agent-stream-events`: Normalized runner events, safe persistence and delivery, backward
   compatibility, deterministic ordering, and consistent rendering across Hub agent surfaces.
+- `agent-context-usage`: Provider-aware latest-context measurement, session-safe collection,
+  normalized delivery, honest availability states, and consistent Hub display.
 
 ### Modified Capabilities
 
@@ -39,12 +53,25 @@ None.
 
 ## Impact
 
-- **CLI/watchdog:** runner parsers, invocation lifecycle, output transport calls, redaction, and
-  parser tests in `src/agentweave/watchdog.py`, transport modules, and `tests/`.
-- **Hub backend:** an additive database migration, agent-output models/schemas/endpoints, SSE
-  serialization, chat-history projection, and backend tests.
-- **Hub UI:** agent output types and API hooks plus a shared stream renderer consumed by
-  `AgentOutputPanel`, `SpecPage`, and `AgentActivityTab`.
-- **Compatibility:** existing text-only records and clients remain valid; new fields are nullable
-  and readable content remains available as a fallback.
+- **CLI/watchdog:** runner adapters, invocation lifecycle, output transport, auxiliary usage
+  collectors, context snapshot writing, stale-session rejection, redaction, and tests in
+  `src/agentweave/watchdog.py`, transport modules, and `tests/`.
+- **Hub backend:** additive agent-output migration, typed context-usage ingress and projection,
+  REST/SSE serialization, chat-history projection, and backend tests.
+- **Hub UI:** output and context types, shared stream renderer, agent context indicators, unknown
+  and estimated states, and all current agent-output consumers.
+- **Runner integration:** per-invocation Copilot OTel configuration, Codex rollout resolution, Kimi
+  0.29.x status/Wire resolution, and OpenCode model-limit discovery.
+- **Compatibility:** existing text-only output and legacy context payloads remain readable during
+  rolling upgrades; new fields are additive and readable content remains a fallback.
 - **Dependencies:** no new CLI runtime dependency is required.
+
+## Non-Goals
+
+- Automatic compaction, handoff, or reset policy.
+- Process cancellation or a Stop control.
+- Message threading or chat-session routing.
+- Token cost, billing, or rate-limit dashboards.
+- Persisting complete provider events or telemetry content.
+- Expanding Kimi v1 support.
+- General-purpose telemetry ingestion.
