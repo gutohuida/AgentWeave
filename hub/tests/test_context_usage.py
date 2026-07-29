@@ -141,3 +141,65 @@ async def test_stale_or_old_session_context_cannot_replace_latest(app, auth_head
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["session_id"] == "new-session"
     assert sample["context_tokens"] == 90
+
+
+@pytest.mark.asyncio
+async def test_legacy_zero_percent_reset_becomes_unavailable(app, auth_headers):
+    """An older CLI posts `{"percent": 0}` on every session reset/compaction.
+
+    That is the absence of a measurement, not a measured zero, so it must not
+    surface as a trusted 0% bar.
+    """
+    agent = "context-legacy-reset"
+    await _configure(app, auth_headers, agent)
+    body = {
+        "agent": agent,
+        "percent": 0,
+        "warning": False,
+        "critical": False,
+        "updated_at": "2026-07-29T10:00:00+00:00",
+    }
+    response = await app.post(
+        f"/api/v1/agents/{agent}/context-usage", json=body, headers=auth_headers
+    )
+    assert response.status_code == 201
+    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
+    assert sample["status"] == "unavailable"
+    assert sample.get("percent") is None
+    assert sample.get("basis") is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_payloads_without_usable_operands_degrade_not_reject(app, auth_headers):
+    """A legacy payload carrying only a denominator is unusable, not invalid."""
+    agent = "context-legacy-limit-only"
+    await _configure(app, auth_headers, agent)
+    response = await app.post(
+        f"/api/v1/agents/{agent}/context-usage",
+        json={"agent": agent, "tokens_limit": 200000},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
+    assert sample["status"] == "unavailable"
+    assert sample.get("limit_tokens") is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_positive_percent_is_still_measured(app, auth_headers):
+    """The zero guard must not swallow a genuine legacy percentage."""
+    agent = "context-legacy-percent"
+    await _configure(app, auth_headers, agent)
+    response = await app.post(
+        f"/api/v1/agents/{agent}/context-usage",
+        json={"agent": agent, "percent": 75, "updated_at": "2026-07-29T10:00:00+00:00"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
+    assert sample["status"] == "measured"
+    assert sample["basis"] == "provider_reported_ratio"
+    assert sample["percent"] == 75

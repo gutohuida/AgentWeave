@@ -19,6 +19,11 @@ StreamEventKind = Literal[
 ]
 
 MAX_STREAM_PAYLOAD_BYTES = 64 * 1024
+# Matches the CLI's `stream_events.MAX_PAYLOAD_BYTES` content bound. The CLI
+# truncates to 64 KiB of UTF-8, which is never more than 64 Ki characters, so
+# anything it emits fits. A lower limit here silently 422s long text/thinking
+# events, which are the only kinds not already bounded to 8 KiB.
+MAX_STREAM_CONTENT_CHARS = 64 * 1024
 CONTEXT_BREAKDOWN_FIELDS = {
     "input_tokens",
     "output_tokens",
@@ -143,10 +148,27 @@ class ContextUsageCreate(BaseModel):
             "session_id": data.get("session_id"),
             "observed_at": observed_at,
         }
-        if used is None and percent is not None:
-            normalized.update(basis="provider_reported_ratio", percent=percent)
+
+        def degrade_to_unavailable() -> Dict[str, Any]:
+            normalized.update(
+                status="unavailable",
+                basis=None,
+                context_tokens=None,
+                limit_tokens=None,
+            )
+            normalized.pop("percent", None)
+            return normalized
+
+        if used is None:
+            # A legacy zero or absent percentage is not a measurement. Older
+            # CLIs wrote `{"percent": 0}` on every session reset/compaction, so
+            # trusting it here would paint a 0% bar for an unmeasured session.
+            if isinstance(percent, (int, float)) and not isinstance(percent, bool) and percent > 0:
+                normalized.update(basis="provider_reported_ratio", percent=percent)
+            else:
+                return degrade_to_unavailable()
         elif used == 0 and limit is None:
-            normalized.update(status="unavailable", basis=None, context_tokens=None)
+            return degrade_to_unavailable()
         elif (
             isinstance(used, (int, float))
             and not isinstance(used, bool)
@@ -200,7 +222,7 @@ class ContextUsageCreate(BaseModel):
 
 
 class AgentOutputCreate(BaseModel):
-    content: str = Field(max_length=10000)
+    content: str = Field(max_length=MAX_STREAM_CONTENT_CHARS)
     session_id: Optional[str] = Field(default=None, max_length=128)
     kind: Optional[StreamEventKind] = None
     payload: Optional[Dict[str, Any]] = None
@@ -225,7 +247,7 @@ class AgentOutputResponse(BaseModel):
     id: str = Field(max_length=128)
     agent: str = Field(max_length=64)
     session_id: Optional[str] = Field(default=None, max_length=128)
-    content: str = Field(max_length=10000)
+    content: str = Field(max_length=MAX_STREAM_CONTENT_CHARS)
     kind: Optional[StreamEventKind] = None
     payload: Optional[Dict[str, Any]] = None
     run_id: Optional[str] = Field(default=None, max_length=64)

@@ -141,6 +141,50 @@ describe('canonical context presentation', () => {
     })
   })
 
+  it('treats a legacy zero percentage as unavailable, not a measured zero', () => {
+    // Older CLIs wrote `{"percent": 0}` on every session reset and Kimi
+    // compaction. Trusting it paints a green 0% bar for an unmeasured session.
+    const legacyReset = {
+      agent: 'a',
+      percent: 0,
+      warning: false,
+      critical: false,
+      updated_at: '2026-07-29T10:00:00+00:00',
+    }
+    expect(normalizeContextUsage(legacyReset)).toMatchObject({
+      status: 'unavailable',
+      percent: null,
+      basis: null,
+      context_tokens: null,
+    })
+    expect(presentContextUsage(legacyReset)).toMatchObject({
+      label: 'Context unavailable',
+      severity: 'neutral',
+      showBar: false,
+      isPolicyWarning: false,
+    })
+
+    // A positive legacy percentage is still a real measurement.
+    expect(normalizeContextUsage({ percent: 75 })).toMatchObject({
+      status: 'measured',
+      basis: 'provider_reported_ratio',
+      percent: 75,
+    })
+
+    // A canonical sample may legitimately declare a provider-reported zero.
+    expect(normalizeContextUsage({
+      status: 'measured',
+      source: 'provider',
+      basis: 'provider_reported_ratio',
+      percent: 0,
+      observed_at: 1000,
+    })).toMatchObject({
+      status: 'measured',
+      basis: 'provider_reported_ratio',
+      percent: 0,
+    })
+  })
+
   it('replaces a previous session bar with the new-session unavailable state', () => {
     const { rerender } = render(<ContextUsageIndicator value={measured} compact />)
     expect(screen.getByTestId('context-bar')).toBeInTheDocument()

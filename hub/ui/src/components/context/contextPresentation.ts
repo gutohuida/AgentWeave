@@ -174,7 +174,11 @@ export function normalizeContextUsage(value: unknown): ContextUsage | null {
     basis ??= 'provider_context'
   } else if (contextTokens !== null) {
     basis ??= 'provider_context'
-  } else if (suppliedPercent !== null) {
+  } else if (suppliedPercent !== null && (!isLegacy || suppliedPercent > 0)) {
+    // A legacy zero percentage is not a measurement: older CLIs wrote
+    // `{"percent": 0}` on every session reset, so it must degrade to
+    // unavailable rather than paint a 0% bar. A canonical sample that
+    // explicitly declares provider_reported_ratio may still report 0.
     percent = suppliedPercent
     basis ??= 'provider_reported_ratio'
   } else {

@@ -16,7 +16,6 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -972,7 +971,15 @@ class Watchdog:
                         "data": {"agent": agent, "error": str(exc)},
                     },
                 )
-        _reset_context_usage(agent)
+        # A new session immediately replaces the previous snapshot with
+        # unavailable until its first measurement (design.md decision 6).
+        reset_data = _write_canonical_context_usage(
+            agent, ContextUsageSample(status="unavailable", source="watchdog")
+        )
+        if reset_data and self.transport.get_transport_type() == "http":
+            with contextlib.suppress(Exception):
+                self.transport.post_context_usage(agent, reset_data)
+        self._last_context_posted.pop(agent, None)
 
     def _ensure_agent_context(self, agent: str) -> bool:
         """Ensure the per-agent context file exists, generating it if needed.
@@ -2614,29 +2621,6 @@ def _run_codex_mcp_turn(
         else:
             print(f"[{agent}] {content}")
     return next_thread_id, output_count
-
-
-def _reset_context_usage(agent: str) -> None:
-    """Reset context usage to 0% (e.g., on new session detection)."""
-    usage_data = {
-        "agent": agent,
-        "percent": 0,
-        "warning": False,
-        "critical": False,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    try:
-        CONTEXT_USAGE_DIR.mkdir(parents=True, exist_ok=True)
-        usage_file = CONTEXT_USAGE_DIR / f"{agent}.json"
-        usage_file.write_text(json.dumps(usage_data, indent=2))
-    except OSError as exc:
-        logger.warning(
-            "context_usage_reset_failed",
-            extra={
-                "event": "context_usage_reset_failed",
-                "data": {"agent": agent, "error": str(exc)},
-            },
-        )
 
 
 def _kimi_wire_legacy_sample(wire_usage: Dict[str, Any]) -> ContextUsageSample:
@@ -4470,7 +4454,12 @@ def _parse_kimi_stdout_line(
             usage_data = wire_context_usage
         is_in_compaction = parser.is_in_compaction()
         if is_in_compaction and not was_in_compaction:
-            _reset_context_usage(agent)
+            # Compaction invalidates the previous measurement; the snapshot is
+            # unavailable until the compacted session reports again. The
+            # watchdog's context poller propagates this to the Hub.
+            _write_canonical_context_usage(
+                agent, ContextUsageSample(status="unavailable", source="kimi_wire")
+            )
         was_in_compaction = is_in_compaction
         wire_session_id = parser.get_session_id()
         if wire_session_id:

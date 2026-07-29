@@ -196,3 +196,41 @@ async def test_default_output_query_returns_newest_window_chronologically(app, a
     )
     assert response.status_code == 200
     assert [row["id"] for row in response.json()] == ["window-3a", "window-3b", "window-4"]
+
+
+@pytest.mark.asyncio
+async def test_content_bound_matches_the_cli_stream_contract(app, auth_headers):
+    """The CLI truncates stream content to 64 KiB, so the Hub must accept it.
+
+    `text` and `thinking` are the only kinds not already bounded to 8 KiB; a
+    lower Hub bound silently 422s them and drops the output line.
+    """
+    from agentweave.stream_events import (
+        MAX_PAYLOAD_BYTES,
+        stream_event_transport_fields,
+        text_event,
+    )
+
+    event = text_event("The quick brown fox jumps over the lazy dog. " * 500)
+    event.sequence = 1
+    fields = stream_event_transport_fields(event)
+    assert len(fields["content"]) > 10000
+
+    accepted = await app.post(
+        "/api/v1/agents/stream-bounds/output",
+        json={
+            "content": fields["content"],
+            "kind": fields["kind"],
+            "payload": fields["payload"],
+            "sequence": fields["sequence"],
+        },
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 201
+
+    over_contract = await app.post(
+        "/api/v1/agents/stream-bounds/output",
+        json={"content": "x" * (MAX_PAYLOAD_BYTES + 1), "kind": "text"},
+        headers=auth_headers,
+    )
+    assert over_contract.status_code == 422

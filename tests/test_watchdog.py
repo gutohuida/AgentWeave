@@ -12,6 +12,7 @@ from agentweave.stream_events import (
     STREAM_EVENT_KINDS,
     ContextUsageSample,
     ParsedRunnerLine,
+    normalize_context_usage,
     text_event,
 )
 from agentweave.watchdog import (
@@ -2622,6 +2623,30 @@ class TestWriteCanonicalContextUsage:
         )
         sample = ContextUsageSample(status="unavailable", source="watchdog")
         assert _write_canonical_context_usage("agent-x", sample) is None
+
+    def test_every_reset_path_writes_canonical_unavailable_not_a_zero_percent(self):
+        """No writer may emit the old `{"percent": 0}` reset shape (task 4.8).
+
+        A reset is the absence of a measurement. Writing a zero percentage
+        makes downstream readers show a trusted 0% bar for a session that has
+        not been measured yet.
+        """
+        from agentweave import watchdog as wd
+
+        assert not hasattr(wd, "_reset_context_usage")
+
+        _write_canonical_context_usage(
+            "reset-agent", ContextUsageSample(status="unavailable", source="watchdog")
+        )
+        on_disk = json.loads((self.context_usage_dir / "reset-agent.json").read_text())
+        assert on_disk["status"] == "unavailable"
+        assert on_disk["percent"] is None
+        assert "warning" not in on_disk
+        assert "critical" not in on_disk
+        assert "updated_at" not in on_disk
+
+        # And the reader agrees it carries no measurement.
+        assert normalize_context_usage(on_disk).status == "unavailable"
 
 
 class TestKimiWireLegacySample:
