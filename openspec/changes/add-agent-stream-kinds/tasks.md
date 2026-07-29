@@ -1,19 +1,19 @@
 ## 1. Canonical contracts and safety
 
-- [ ] 1.1 Add typed `AgentStreamEvent`, `ContextUsageSample`, `ParsedRunnerLine`, session-change,
+- [x] 1.1 Add typed `AgentStreamEvent`, `ContextUsageSample`, `ParsedRunnerLine`, session-change,
   and parser-control models
-- [ ] 1.2 Define and validate the seven version-1 event kinds and their kind-specific payloads
-- [ ] 1.3 Define context status and basis enums plus validation for token, limit, percent, source,
+- [x] 1.2 Define and validate the seven version-1 event kinds and their kind-specific payloads
+- [x] 1.3 Define context status and basis enums plus validation for token, limit, percent, source,
   session, model, time, and bounded breakdown fields
-- [ ] 1.4 Derive context percentage from known operands, omit it when an operand is unknown, and
+- [x] 1.4 Derive context percentage from known operands, omit it when an operand is unknown, and
   preserve directly reported provider ratios only under the provider-ratio basis
-- [ ] 1.5 Add constructors that always produce meaningful readable stream `content` fallbacks
-- [ ] 1.6 Add recursive stream-payload redaction using the existing secret-redaction behavior
-- [ ] 1.7 Add deterministic 64 KiB stream-payload and 8 KiB tool-result excerpt limits with
+- [x] 1.5 Add constructors that always produce meaningful readable stream `content` fallbacks
+- [x] 1.6 Add recursive stream-payload redaction using the existing secret-redaction behavior
+- [x] 1.7 Add deterministic 64 KiB stream-payload and 8 KiB tool-result excerpt limits with
   truncation metadata
-- [ ] 1.8 Allowlist numeric context breakdown fields and prevent raw provider objects or message
+- [x] 1.8 Allowlist numeric context breakdown fields and prevent raw provider objects or message
   content from entering context samples
-- [ ] 1.9 Add unit tests for both contracts, percentage consistency, unknown limits, nested
+- [x] 1.9 Add unit tests for both contracts, percentage consistency, unknown limits, nested
   redaction, truncation, cache semantics, and opaque-reasoning exclusion
 
 ## 2. Stdout adapters and fixtures
