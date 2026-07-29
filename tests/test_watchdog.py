@@ -27,6 +27,9 @@ from agentweave.watchdog import (
     _kimi_model_context_limit,
     _kimi_wire_usage_sample,
     _KimiCodeParser,
+    _opencode_model_context_limit,
+    _opencode_models_catalog,
+    _opencode_usage_sample,
     _parse_claude_stream_line,
     _parse_codex_stream_line,
     _parse_copilot_stream_line,
@@ -4022,6 +4025,118 @@ class TestKimiWireCollector:
             assert collector._catalog_fetched is False
             # Still resolvable again after close (close only clears the cache).
             assert collector.observe() is not None
+
+
+class TestOpencodeModelsCatalog:
+    """Tests for _opencode_models_catalog (task 3.15)."""
+
+    def test_reads_valid_catalog_file(self, tmp_path):
+        catalog = {"opencode": {"models": {"big-pickle": {"limit": {"input": 160000}}}}}
+        (tmp_path / "models.json").write_text(json.dumps(catalog), encoding="utf-8")
+        assert _opencode_models_catalog(tmp_path) == catalog
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert _opencode_models_catalog(tmp_path) is None
+
+    def test_malformed_json_returns_none(self, tmp_path):
+        (tmp_path / "models.json").write_text("{not valid json", encoding="utf-8")
+        assert _opencode_models_catalog(tmp_path) is None
+
+    def test_non_dict_json_returns_none(self, tmp_path):
+        (tmp_path / "models.json").write_text("[1, 2, 3]", encoding="utf-8")
+        assert _opencode_models_catalog(tmp_path) is None
+
+
+class TestOpencodeModelContextLimit:
+    """Tests for _opencode_model_context_limit (task 3.15).
+
+    Fixture shapes match the real `~/.cache/opencode/models.json` catalog
+    live-verified against installed OpenCode 1.18.5: `opencode/big-pickle`
+    declares `limit.input`; `minimax-coding-plan/MiniMax-M2` declares only
+    `limit.context`.
+    """
+
+    def test_prefers_declared_input_limit(self):
+        catalog = {
+            "opencode": {"models": {"big-pickle": {"limit": {"context": 200000, "input": 160000}}}}
+        }
+        assert _opencode_model_context_limit(catalog, "opencode/big-pickle") == 160000
+
+    def test_falls_back_to_context_limit_when_no_input_limit(self):
+        catalog = {
+            "minimax-coding-plan": {
+                "models": {"MiniMax-M2": {"limit": {"context": 196608, "output": 128000}}}
+            }
+        }
+        assert _opencode_model_context_limit(catalog, "minimax-coding-plan/MiniMax-M2") == 196608
+
+    def test_model_switch_resolves_the_newly_requested_model(self):
+        catalog = {
+            "opencode": {
+                "models": {
+                    "big-pickle": {"limit": {"input": 160000}},
+                    "deepseek-v4-flash-free": {"limit": {"context": 200000}},
+                }
+            }
+        }
+        assert _opencode_model_context_limit(catalog, "opencode/big-pickle") == 160000
+        assert _opencode_model_context_limit(catalog, "opencode/deepseek-v4-flash-free") == 200000
+
+    def test_model_id_containing_a_slash_splits_on_first_only(self):
+        # Confirmed live: the "anyapi" provider's model IDs can themselves contain a
+        # "/" (e.g. "google/gemini-2.5-flash"), so only the first "/" separates the
+        # provider from the model ID.
+        catalog = {"anyapi": {"models": {"google/gemini-2.5-flash": {"limit": {"input": 1000}}}}}
+        assert _opencode_model_context_limit(catalog, "anyapi/google/gemini-2.5-flash") == 1000
+
+    def test_unknown_provider_returns_none(self):
+        catalog = {"opencode": {"models": {"big-pickle": {"limit": {"input": 160000}}}}}
+        assert _opencode_model_context_limit(catalog, "unknown-provider/big-pickle") is None
+
+    def test_unknown_model_returns_none(self):
+        catalog = {"opencode": {"models": {"big-pickle": {"limit": {"input": 160000}}}}}
+        assert _opencode_model_context_limit(catalog, "opencode/unknown-model") is None
+
+    def test_none_catalog_returns_none(self):
+        assert _opencode_model_context_limit(None, "opencode/big-pickle") is None
+
+    def test_none_model_returns_none(self):
+        catalog = {"opencode": {"models": {"big-pickle": {"limit": {"input": 160000}}}}}
+        assert _opencode_model_context_limit(catalog, None) is None
+
+    def test_model_without_slash_returns_none(self):
+        catalog = {"opencode": {"models": {"big-pickle": {"limit": {"input": 160000}}}}}
+        assert _opencode_model_context_limit(catalog, "big-pickle") is None
+
+    def test_missing_limit_metadata_returns_none(self):
+        catalog = {"opencode": {"models": {"big-pickle": {}}}}
+        assert _opencode_model_context_limit(catalog, "opencode/big-pickle") is None
+
+    def test_zero_or_negative_limit_is_rejected(self):
+        catalog = {"opencode": {"models": {"big-pickle": {"limit": {"input": 0, "context": -5}}}}}
+        assert _opencode_model_context_limit(catalog, "opencode/big-pickle") is None
+
+
+class TestOpencodeUsageSampleWithLimit:
+    """Tests for _opencode_usage_sample's optional model/limit_tokens params (task 3.15)."""
+
+    def test_defaults_have_no_model_or_limit(self):
+        sample = _opencode_usage_sample(
+            {"total": 100, "input": 90, "output": 10, "reasoning": 0}, source="opencode"
+        )
+        assert sample.model is None
+        assert sample.limit_tokens is None
+
+    def test_model_and_limit_tokens_pass_through(self):
+        sample = _opencode_usage_sample(
+            {"total": 100, "input": 90, "output": 10, "reasoning": 0},
+            source="opencode",
+            model="opencode/big-pickle",
+            limit_tokens=160000,
+        )
+        assert sample.model == "opencode/big-pickle"
+        assert sample.limit_tokens == 160000
+        assert sample.context_tokens == 100
 
 
 class TestPopenUsesUtf8Encoding:

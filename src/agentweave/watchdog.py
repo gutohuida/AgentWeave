@@ -4223,12 +4223,95 @@ def _parse_kimi_stdout_line(
     return readable_lines, usage_data, was_in_compaction, kimi_stdout_lines
 
 
-def _opencode_usage_sample(tokens: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
+def _opencode_cache_dir() -> Path:
+    """Return the OpenCode CLI's cache home (`$XDG_CACHE_HOME/opencode`, else
+    `~/.cache/opencode`) -- confirmed live as the string the installed 1.18.5
+    binary itself checks (`XDG_CACHE_HOME`), and as the directory `opencode debug
+    paths` reports as `cache` even on Windows.
+    """
+    override = os.environ.get("XDG_CACHE_HOME")
+    base = Path(override) if override else Path.home() / ".cache"
+    return base / "opencode"
+
+
+def _opencode_models_catalog(cache_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """Return OpenCode's own locally cached provider/model catalog (`models.json`).
+
+    This is the same file `opencode models`/`opencode models --verbose` render and
+    `--refresh` repopulates from models.dev -- confirmed live (installed OpenCode
+    1.18.5) to hold identical `limit.input`/`limit.context` values for a given
+    provider/model to what the CLI prints. Reading it directly avoids parsing the
+    CLI's `<provider>/<model>\\n{json}\\n...` text stream, which is not itself valid
+    JSON. design.md decision 4/5: "the runner's own model catalog ... not a
+    hard-coded table". Returns None on any failure -- missing file (never run
+    `opencode`/no network yet), malformed JSON, wrong top-level shape -- so a model
+    limit simply stays absent rather than fabricated.
+    """
+    path = (cache_dir or _opencode_cache_dir()) / "models.json"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _opencode_model_context_limit(
+    catalog: Optional[Dict[str, Any]], model: Optional[str]
+) -> Optional[int]:
+    """Resolve `limit.input ?? limit.context` for `model` (`"providerID/modelID"`,
+    the same string AgentWeave passes via `--model`) from the catalog.
+
+    Prefers the declared effective input limit, falling back to the total context
+    window only when no input limit is declared (design.md decision 4) -- confirmed
+    live both cases exist: `opencode/big-pickle` declares `limit.input`;
+    `minimax-coding-plan/MiniMax-M2` declares only `limit.context`. Splits on the
+    first `/` only, since a model ID itself may contain further slashes (confirmed
+    live, e.g. `anyapi` provider's `google/gemini-2.5-flash` model ID).
+    """
+    if not catalog or not model or "/" not in model:
+        return None
+    provider_id, model_id = model.split("/", 1)
+    provider = catalog.get(provider_id)
+    if not isinstance(provider, dict):
+        return None
+    models = provider.get("models")
+    if not isinstance(models, dict):
+        return None
+    entry = models.get(model_id)
+    if not isinstance(entry, dict):
+        return None
+    limit = entry.get("limit")
+    if not isinstance(limit, dict):
+        return None
+    for key in ("input", "context"):
+        value = limit.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            return int(value)
+    return None
+
+
+def _opencode_usage_sample(
+    tokens: Dict[str, Any],
+    *,
+    source: str,
+    model: Optional[str] = None,
+    limit_tokens: Optional[int] = None,
+) -> Optional[ContextUsageSample]:
     """Build the canonical OpenCode context sample from one `step_finish.part.tokens`.
 
     `tokens.total` already includes input, cache read/write, output, and reasoning;
     context excludes reasoning (design.md decision 4). Only the latest step_finish
     is ever used — steps replace rather than accumulate.
+
+    `model` and `limit_tokens` are optional and absent by default: OpenCode's
+    step_finish events carry no provider/model identity of their own (confirmed
+    live), so a caller that knows the invocation's `--model` string resolves the
+    limit itself (e.g. via `_opencode_model_context_limit`) and passes both through
+    -- this function performs no catalog lookup on its own.
     """
     total = tokens.get("total")
     if total is None:
@@ -4241,6 +4324,8 @@ def _opencode_usage_sample(tokens: Dict[str, Any], *, source: str) -> Optional[C
         source=source,
         basis="provider_context",
         context_tokens=context_tokens,
+        limit_tokens=limit_tokens,
+        model=model,
         breakdown={
             "input_tokens": int(tokens.get("input") or 0),
             "output_tokens": int(tokens.get("output") or 0),

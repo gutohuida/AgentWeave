@@ -87,9 +87,9 @@
   accumulated usage records, partial files, and stale session directories — live-verified against
   Kimi Code CLI 0.29.1 (single-turn and 3-turn wire.jsonl captures, provider catalog JSON); status
   path has no tests since it was not implemented (see 3.10)
-- [ ] 3.15 Resolve OpenCode model limits from the active model catalog/configuration, preferring
+- [x] 3.15 Resolve OpenCode model limits from the active model catalog/configuration, preferring
   its declared effective input limit and using the context fallback only when needed
-- [ ] 3.16 Add OpenCode limit tests for declared input limits, fallback limits, model switches,
+- [x] 3.16 Add OpenCode limit tests for declared input limits, fallback limits, model switches,
   and unknown model metadata
 
 ## 4. Invocation lifecycle and canonical context delivery
