@@ -58,6 +58,39 @@ from agentweave.watchdog import (
 )
 
 
+class TestHttpStartupRecovery:
+    def test_pending_message_remains_eligible_for_first_poll(self):
+        transport = MagicMock()
+        transport.get_transport_type.return_value = "http"
+        transport.poll_interval = 0.01
+        transport.get_active_tasks.return_value = [{"id": "task-existing"}]
+        transport.get_pending_messages.return_value = [
+            {
+                "id": "msg-queued",
+                "from": "user",
+                "to": "claude",
+                "subject": "Direct message from Hub",
+                "content": "Queued while offline",
+            }
+        ]
+        observed = []
+        watchdog = Watchdog(
+            callback=lambda event, data: observed.append((event, data)),
+            transport=transport,
+        )
+        watchdog._sync_spec_files = MagicMock()
+
+        watchdog._init_http_state()
+
+        assert watchdog.known_messages == set()
+        assert watchdog.known_tasks == {"task-existing"}
+
+        watchdog._check_once_http()
+
+        assert [event for event, _data in observed] == ["new_message"]
+        assert watchdog.known_messages == {"msg-queued"}
+
+
 class TestAgentPingCmdKimi:
     """Tests for _agent_ping_cmd with kimi v1.x (kimi-cli, e.g. 1.47.0).
 

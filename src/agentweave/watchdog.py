@@ -751,12 +751,14 @@ class Watchdog:
             )
 
     def _init_http_state(self) -> None:
-        """Seed known message/task IDs from Hub so we don't re-fire on startup."""
-        messages = self.transport.get_pending_messages(self.agent or "")
-        for msg in messages:
-            msg_id = msg.get("id", "")
-            if msg_id:
-                self.known_messages.add(msg_id)
+        """Seed stable Hub state without discarding work queued while offline.
+
+        Pending messages are deliberately not copied into ``known_messages``:
+        the first normal poll must process unread work that arrived while the
+        watchdog was stopped. Direct Hub triggers have their own persisted
+        processed-ID set, so a restart still cannot execute a handled trigger
+        twice.
+        """
         tasks = self.transport.get_active_tasks(self.agent or None)
         for task in tasks:
             task_id = task.get("id", "")
