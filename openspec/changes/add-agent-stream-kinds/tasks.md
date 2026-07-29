@@ -94,10 +94,10 @@
 
 ## 4. Invocation lifecycle and canonical context delivery
 
-- [ ] 4.1 Generate a fresh opaque `run_id` for every runner process invocation, including retries
-- [ ] 4.2 Assign strictly increasing stream sequence values after adapter normalization and
+- [x] 4.1 Generate a fresh opaque `run_id` for every runner process invocation, including retries
+- [x] 4.2 Assign strictly increasing stream sequence values after adapter normalization and
   before output delivery
-- [ ] 4.3 Emit canonical started, retrying, completed, skipped, and run-error lifecycle events at
+- [x] 4.3 Emit canonical started, retrying, completed, skipped, and run-error lifecycle events at
   known runner boundaries
 - [ ] 4.4 Update the runner loop to deliver zero or more normalized events and zero or more
   independent context samples without fabricating either output

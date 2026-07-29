@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import itertools
 import json
 import logging
 import os
@@ -3541,8 +3542,11 @@ def _run_agent_subprocess(
             )
             logger.warning(msg, extra={"event": "watchdog_skip", "data": {}})
             if is_http:
+                skip_event = status_event("skipped", summary=msg, run_id=_new_run_id())
                 with contextlib.suppress(Exception):
-                    transport.post_agent_output(agent, msg, session_id=known_session_id)
+                    transport.post_agent_output(
+                        agent, skip_event.content, session_id=known_session_id
+                    )
             release_lock(lock_name)
             return
         runner_lock_held = True
@@ -3553,6 +3557,7 @@ def _run_agent_subprocess(
 
         blockers = launch_blockers(agent, Session.load())
         if blockers:
+            blocker_run_id = _new_run_id()
             for blocker in blockers:
                 event = (
                     "proxy_api_key_missing"
@@ -3566,8 +3571,11 @@ def _run_agent_subprocess(
                     msg = f"{msg} Hint: {blocker.hint}"
                 logger.warning(f"[SKIP] {msg}", extra={"event": "watchdog_skip", "data": {}})
                 if is_http:
+                    skip_event = status_event("skipped", summary=msg, run_id=blocker_run_id)
                     with contextlib.suppress(Exception):
-                        transport.post_agent_output(agent, msg, session_id=known_session_id)
+                        transport.post_agent_output(
+                            agent, skip_event.content, session_id=known_session_id
+                        )
                     with contextlib.suppress(Exception):
                         transport.push_log(event, agent, payload, "error")
             if is_http:
@@ -3581,6 +3589,30 @@ def _run_agent_subprocess(
         if runner_lock_held and runner_lock_name:
             release_lock(runner_lock_name)
         release_lock(lock_name)
+
+
+def _new_run_id() -> str:
+    """Generate a fresh opaque identifier for one runner process invocation.
+
+    design.md decision 6: every process invocation gets its own run_id,
+    including retries — a retried invocation is a new run, not a continuation.
+    """
+    return generate_id("run")
+
+
+def _assign_sequence(
+    events: List[AgentStreamEvent], sequence_counter: "itertools.count[int]"
+) -> List[str]:
+    """Assign strictly increasing `sequence` values to normalized events, in
+    order, after adapter normalization and before output delivery (design.md
+    decision 6). Returns each event's renderable content, in the same order,
+    for the existing text-delivery channel.
+    """
+    contents = []
+    for event in events:
+        event.sequence = next(sequence_counter)
+        contents.append(event.content)
+    return contents
 
 
 def _do_run_agent_subprocess(
@@ -3606,6 +3638,10 @@ def _do_run_agent_subprocess(
     # (no --print/--wire). Distinguished by the "--output-format" flag in cmd.
     is_kimi_code = is_kimi and "--output-format" in cmd
 
+    # Fresh run_id for the first process invocation; a stale-session retry
+    # later gets its own (design.md decision 6: retries are new runs).
+    initial_run_id = _new_run_id()
+
     # Send "running" heartbeat + diagnostic start marker
     if is_http:
         try:
@@ -3619,7 +3655,10 @@ def _do_run_agent_subprocess(
                 },
             )
         try:
-            transport.post_agent_output(agent, f"[watchdog] 🚀 Starting {agent}…", session_id=None)
+            started_event = status_event(
+                "started", summary=f"[watchdog] 🚀 Starting {agent}…", run_id=initial_run_id
+            )
+            transport.post_agent_output(agent, started_event.content, session_id=None)
         except Exception as exc:
             logger.error(
                 f"[ERROR] Could not post start marker to Hub: {exc}",
@@ -3629,6 +3668,9 @@ def _do_run_agent_subprocess(
     session_id: Optional[str] = known_session_id
     # Mutable container so the stderr thread can read the latest session_id
     session_id_ref: List[Optional[str]] = [known_session_id]
+    # Mutable container so the outer except/exit-code handling below can tag a
+    # run-error event with the run_id of whichever _run_cmd attempt it belongs to.
+    current_run_id_ref: List[Optional[str]] = [None]
     stale_codex_session: List[bool] = [False]
     # Copilot auth failure flag — set by _drain_stderr when the Copilot CLI reports
     # "No authentication information found" so the completion summary can show ❌.
@@ -3742,9 +3784,21 @@ def _do_run_agent_subprocess(
                 },
             )
 
-    def _run_cmd(run_cmd: list, run_session_id: Optional[str]) -> int:
-        """Run agent command, stream output. Returns process returncode."""
+    def _run_cmd(
+        run_cmd: list, run_session_id: Optional[str], *, run_id: Optional[str] = None
+    ) -> int:
+        """Run agent command, stream output. Returns process returncode.
+
+        `run_id` identifies this one process invocation (design.md decision 6);
+        a fresh one is minted if the caller doesn't supply one. Stream events
+        normalized from this invocation's output receive strictly increasing
+        `sequence` values from a counter scoped to this same invocation.
+        """
         nonlocal session_id, session_id_ref
+
+        run_id = run_id or _new_run_id()
+        current_run_id_ref[0] = run_id
+        sequence_counter = itertools.count(1)
 
         proc_env = _prepare_agent_env(env_vars)
 
@@ -3839,26 +3893,32 @@ def _do_run_agent_subprocess(
                     session_id_ref=session_id_ref,
                     was_in_compaction=was_in_compaction,
                     kimi_stdout_lines=kimi_stdout_lines,
+                    run_id=run_id,
+                    sequence_counter=sequence_counter,
                 )
             elif is_opencode:
-                parsed_opencode_line = _parse_opencode_stdout_line(line, session_id_ref)
-                readable_lines = [event.content for event in parsed_opencode_line.events]
+                parsed_opencode_line = _parse_opencode_stdout_line(
+                    line, session_id_ref, run_id=run_id
+                )
+                readable_lines = _assign_sequence(parsed_opencode_line.events, sequence_counter)
                 usage_data = (
                     {"input_tokens": parsed_opencode_line.usage.context_tokens}
                     if parsed_opencode_line.usage is not None
                     else None
                 )
             elif is_copilot:
-                parsed_copilot_line = _parse_copilot_stdout_line(line, runner_type, session_id_ref)
-                readable_lines = [event.content for event in parsed_copilot_line.events]
+                parsed_copilot_line = _parse_copilot_stdout_line(
+                    line, runner_type, session_id_ref, run_id=run_id
+                )
+                readable_lines = _assign_sequence(parsed_copilot_line.events, sequence_counter)
                 # No context/usage field appears in this stream; Copilot's context
                 # tracking is OTel-only (design.md decision 4), never from stdout.
                 usage_data = None
             elif is_codex:
                 parsed_codex_line, stale = _parse_codex_stdout_line(
-                    line, runner_type, session_id_ref
+                    line, runner_type, session_id_ref, run_id=run_id
                 )
-                readable_lines = [event.content for event in parsed_codex_line.events]
+                readable_lines = _assign_sequence(parsed_codex_line.events, sequence_counter)
                 usage_data = (
                     dict(parsed_codex_line.usage.breakdown or {})
                     if parsed_codex_line.usage is not None
@@ -3867,8 +3927,10 @@ def _do_run_agent_subprocess(
                 if stale:
                     stale_codex_session[0] = True
             else:
-                parsed_claude_line = _parse_claude_stdout_line(line, runner_type, session_id_ref)
-                readable_lines = [event.content for event in parsed_claude_line.events]
+                parsed_claude_line = _parse_claude_stdout_line(
+                    line, runner_type, session_id_ref, run_id=run_id
+                )
+                readable_lines = _assign_sequence(parsed_claude_line.events, sequence_counter)
                 usage_data = (
                     {"input_tokens": parsed_claude_line.usage.context_tokens}
                     if parsed_claude_line.usage is not None
@@ -3913,20 +3975,38 @@ def _do_run_agent_subprocess(
         stderr_thread.join(timeout=5)
 
         # Post a completion summary so we can confirm the pipeline is alive.
-        # Show ❌ with actionable guidance when copilot failed to authenticate.
-        if is_copilot and copilot_auth_failed[0]:
-            summary = (
-                f"[watchdog] ❌ {agent} failed — authentication error.\n"
-                "[watchdog]    Fix: set COPILOT_GITHUB_TOKEN in your .env (fine-grained PAT\n"
-                "[watchdog]    with 'Copilot Requests' permission). Native OAuth is not safe\n"
-                "[watchdog]    for concurrent headless use. Or run `copilot login` to refresh."
+        # A non-zero exit is a canonical run-error, not a completion — copilot's
+        # auth failure gets an actionable message; any other non-zero exit gets
+        # a generic one (design.md decision 2: failed results are run errors).
+        lifecycle_event: AgentStreamEvent
+        if proc.returncode != 0:
+            if is_copilot and copilot_auth_failed[0]:
+                message = (
+                    f"[watchdog] ❌ {agent} failed — authentication error.\n"
+                    "[watchdog]    Fix: set COPILOT_GITHUB_TOKEN in your .env (fine-grained PAT\n"
+                    "[watchdog]    with 'Copilot Requests' permission). Native OAuth is not safe\n"
+                    "[watchdog]    for concurrent headless use. Or run `copilot login` to refresh."
+                )
+                code = "copilot_auth_failed"
+            else:
+                message = f"[watchdog] ❌ {agent} exited with code {proc.returncode}"
+                code = "agent_exit_nonzero"
+            lifecycle_event = error_event(
+                code=code, message=message, exit_code=proc.returncode, run_id=run_id
             )
         else:
-            summary = f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)"
-        logger.info(summary, extra={"event": "watchdog_agent_done", "data": {}})
+            lifecycle_event = status_event(
+                "completed",
+                summary=f"[watchdog] ✅ {agent} done — {output_line_count} output line(s)",
+                run_id=run_id,
+            )
+        lifecycle_event.sequence = next(sequence_counter)
+        logger.info(lifecycle_event.content, extra={"event": "watchdog_agent_done", "data": {}})
         if is_http:
             with contextlib.suppress(Exception):
-                transport.post_agent_output(agent, summary, session_id=session_id_ref[0])
+                transport.post_agent_output(
+                    agent, lifecycle_event.content, session_id=session_id_ref[0]
+                )
 
         # Write context usage if we captured usage data (Claude/claude_proxy or Kimi wire mode)
         if not is_kimi and not is_codex and usage_data_for_context and proc.returncode == 0:
@@ -3972,12 +4052,23 @@ def _do_run_agent_subprocess(
                     "data": {"agent": agent, "session_id": session_id},
                 },
             )
+            retry_run_id = _new_run_id()
+            retry_event = status_event(
+                "retrying",
+                summary=f"[watchdog] 🔁 {agent}'s session expired — retrying with a fresh one.",
+                run_id=retry_run_id,
+            )
+            if is_http:
+                with contextlib.suppress(Exception):
+                    transport.post_agent_output(
+                        agent, retry_event.content, session_id=session_id_ref[0]
+                    )
             _clear_agent_session(agent)
             session_id = None
             session_id_ref[0] = None
             stale_codex_session[0] = False
             fresh_cmd = _agent_ping_cmd(agent, prompt, session_id=None)
-            returncode = _run_cmd(fresh_cmd, None)
+            returncode = _run_cmd(fresh_cmd, None, run_id=retry_run_id)
 
         if returncode != 0:
             from .diagnostics import redact_secrets
@@ -3989,6 +4080,7 @@ def _do_run_agent_subprocess(
                     "data": {
                         "agent": agent,
                         "runner": runner_type,
+                        "run_id": current_run_id_ref[0],
                         "exit_code": returncode,
                         "stderr_tail": redact_secrets(recent_stderr),
                     },
@@ -4007,6 +4099,16 @@ def _do_run_agent_subprocess(
             f"[ERROR] Failed to launch {agent}: {exc}",
             extra={"event": "watchdog_error", "data": {}},
         )
+        if is_http:
+            spawn_error_event = error_event(
+                code="spawn_failed",
+                message=f"[watchdog] ❌ Failed to launch {agent}: {exc}",
+                run_id=current_run_id_ref[0],
+            )
+            with contextlib.suppress(Exception):
+                transport.post_agent_output(
+                    agent, spawn_error_event.content, session_id=session_id_ref[0]
+                )
     except Exception as exc:
         logger.error(
             "watchdog_subprocess_error",
@@ -4019,6 +4121,16 @@ def _do_run_agent_subprocess(
             f"[ERROR] Unexpected error running {agent}: {exc}",
             extra={"event": "watchdog_error", "data": {}},
         )
+        if is_http:
+            subprocess_error_event = error_event(
+                code="subprocess_error",
+                message=f"[watchdog] ❌ Unexpected error running {agent}: {exc}",
+                run_id=current_run_id_ref[0],
+            )
+            with contextlib.suppress(Exception):
+                transport.post_agent_output(
+                    agent, subprocess_error_event.content, session_id=session_id_ref[0]
+                )
 
     session_id = _extract_session_id_post_run(
         agent,
@@ -4182,6 +4294,8 @@ def _parse_kimi_stdout_line(
     session_id_ref: List[Optional[str]],
     was_in_compaction: bool,
     kimi_stdout_lines: List[str],
+    run_id: Optional[str] = None,
+    sequence_counter: Optional["itertools.count[int]"] = None,
 ) -> tuple[list[str], Optional[Dict[str, Any]], bool, List[str]]:
     """Parse one line of Kimi stdout (wire, legacy print, or v0.29.x stream-json)."""
     readable_lines: list[str] = []
@@ -4206,8 +4320,12 @@ def _parse_kimi_stdout_line(
         # v0.29.x stream-json (_KimiCodeParser): canonical ParsedRunnerLine, bridged
         # back to the legacy readable-lines shape the rest of the loop still expects.
         kimi_stdout_lines.append(line)
-        parsed = parser.feed(line) if parser is not None else ParsedRunnerLine()
-        readable_lines = [event.content for event in parsed.events]
+        parsed = parser.feed(line, run_id=run_id) if parser is not None else ParsedRunnerLine()
+        readable_lines = (
+            _assign_sequence(parsed.events, sequence_counter)
+            if sequence_counter is not None
+            else [event.content for event in parsed.events]
+        )
         if parsed.session_change and parsed.session_change.session_id:
             session_id_ref[0] = parsed.session_change.session_id
     else:
@@ -4424,7 +4542,11 @@ def _parse_opencode_stdout_line(
 
 
 def _parse_codex_stdout_line(
-    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+    line: str,
+    runner_type: str,
+    session_id_ref: List[Optional[str]],
+    *,
+    run_id: Optional[str] = None,
 ) -> Tuple[ParsedRunnerLine, bool]:
     """Parse one line of Codex JSONL output into the canonical event/usage contract.
 
@@ -4435,7 +4557,7 @@ def _parse_codex_stdout_line(
         extracted = _extract_jsonl_session_id(line, runner_type)
         if extracted:
             session_id_ref[0] = extracted
-    parsed = _parse_codex_stream_line(line, source=runner_type)
+    parsed = _parse_codex_stream_line(line, run_id=run_id, source=runner_type)
     stale = any("Session not found for thread_id" in event.content for event in parsed.events)
     if stale:
         parsed = ParsedRunnerLine(usage=parsed.usage)
@@ -4544,7 +4666,11 @@ def _parse_copilot_stream_line(
 
 
 def _parse_copilot_stdout_line(
-    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+    line: str,
+    runner_type: str,
+    session_id_ref: List[Optional[str]],
+    *,
+    run_id: Optional[str] = None,
 ) -> ParsedRunnerLine:
     """Parse one line of GitHub Copilot CLI JSONL output into the canonical
     event/usage contract.
@@ -4553,7 +4679,7 @@ def _parse_copilot_stdout_line(
         extracted = _extract_jsonl_session_id(line, runner_type)
         if extracted:
             session_id_ref[0] = extracted
-    return _parse_copilot_stream_line(line, source=runner_type)
+    return _parse_copilot_stream_line(line, run_id=run_id, source=runner_type)
 
 
 def _span_end_time(span: Dict[str, Any]) -> Tuple[float, float]:
@@ -4745,7 +4871,11 @@ class CopilotOtelCollector(RunnerUsageCollector):
 
 
 def _parse_claude_stdout_line(
-    line: str, runner_type: str, session_id_ref: List[Optional[str]]
+    line: str,
+    runner_type: str,
+    session_id_ref: List[Optional[str]],
+    *,
+    run_id: Optional[str] = None,
 ) -> ParsedRunnerLine:
     """Parse one line of Claude / claude_proxy JSONL output into the canonical
     event/usage contract.
@@ -4754,7 +4884,7 @@ def _parse_claude_stdout_line(
         extracted = _extract_jsonl_session_id(line, runner_type)
         if extracted:
             session_id_ref[0] = extracted
-    return _parse_claude_stream_line(line, source=runner_type)
+    return _parse_claude_stream_line(line, run_id=run_id, source=runner_type)
 
 
 def _check_cli_available(agent: str) -> bool:

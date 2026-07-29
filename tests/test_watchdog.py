@@ -1,5 +1,6 @@
 """Tests for watchdog dispatch logic."""
 
+import itertools
 import json
 import os
 from pathlib import Path
@@ -7,13 +8,19 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentweave.stream_events import STREAM_EVENT_KINDS, ContextUsageSample, ParsedRunnerLine
+from agentweave.stream_events import (
+    STREAM_EVENT_KINDS,
+    ContextUsageSample,
+    ParsedRunnerLine,
+    text_event,
+)
 from agentweave.watchdog import (
     CodexRolloutCollector,
     CopilotOtelCollector,
     KimiWireCollector,
     RunnerUsageCollector,
     _agent_ping_cmd,
+    _assign_sequence,
     _build_codex_mcp_tool_call,
     _claude_tool_result_text,
     _claude_usage_sample,
@@ -27,12 +34,17 @@ from agentweave.watchdog import (
     _kimi_model_context_limit,
     _kimi_wire_usage_sample,
     _KimiCodeParser,
+    _new_run_id,
     _opencode_model_context_limit,
     _opencode_models_catalog,
     _opencode_usage_sample,
+    _parse_claude_stdout_line,
     _parse_claude_stream_line,
+    _parse_codex_stdout_line,
     _parse_codex_stream_line,
+    _parse_copilot_stdout_line,
     _parse_copilot_stream_line,
+    _parse_kimi_stdout_line,
     _parse_opencode_stdout_line,
     _resolve_codex_rollout_path,
     _resolve_kimi_wire_path,
@@ -4137,6 +4149,317 @@ class TestOpencodeUsageSampleWithLimit:
         assert sample.model == "opencode/big-pickle"
         assert sample.limit_tokens == 160000
         assert sample.context_tokens == 100
+
+
+class TestNewRunId:
+    """_new_run_id (task 4.1): a fresh opaque id for one runner process invocation."""
+
+    def test_returns_string(self):
+        assert isinstance(_new_run_id(), str)
+
+    def test_successive_calls_are_unique(self):
+        ids = {_new_run_id() for _ in range(100)}
+        assert len(ids) == 100
+
+    def test_uses_run_prefix_like_other_generated_ids(self):
+        # generate_id("run") -> "run-<32 hex chars>"; asserting the convention
+        # is followed, not a specific implementation, so this stays loose.
+        run_id = _new_run_id()
+        assert run_id.startswith("run-")
+
+
+class TestAssignSequence:
+    """_assign_sequence (task 4.2): strictly increasing sequence values, assigned
+    in order, after normalization and before the existing text-delivery channel."""
+
+    def test_empty_list_returns_empty_contents(self):
+        counter = itertools.count(1)
+        assert _assign_sequence([], counter) == []
+        assert next(counter) == 1  # counter untouched by an empty batch
+
+    def test_assigns_strictly_increasing_sequence_in_order(self):
+        events = [text_event("first"), text_event("second"), text_event("third")]
+        counter = itertools.count(1)
+        contents = _assign_sequence(events, counter)
+        assert contents == ["first", "second", "third"]
+        assert [e.sequence for e in events] == [1, 2, 3]
+
+    def test_shares_counter_across_calls_from_the_same_run(self):
+        counter = itertools.count(1)
+        first_batch = [text_event("a")]
+        second_batch = [text_event("b"), text_event("c")]
+        _assign_sequence(first_batch, counter)
+        _assign_sequence(second_batch, counter)
+        assert [e.sequence for e in first_batch] == [1]
+        assert [e.sequence for e in second_batch] == [2, 3]
+
+
+class TestStdoutLineWrapperRunIdThreading:
+    """The codex/copilot/claude stdout-line wrappers (task 4.1) accept an
+    optional run_id and thread it through to every normalized event, matching
+    the opencode wrapper's existing behavior and the underlying
+    _parse_*_stream_line functions' existing run_id parameter."""
+
+    def test_codex_wrapper_threads_run_id(self):
+        line = json.dumps(
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "hi"}}
+        )
+        parsed, _stale = _parse_codex_stdout_line(line, "codex", [None], run_id="run-abc")
+        assert parsed.events
+        assert all(e.run_id == "run-abc" for e in parsed.events)
+
+    def test_codex_wrapper_defaults_run_id_to_none(self):
+        line = json.dumps(
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "hi"}}
+        )
+        parsed, _stale = _parse_codex_stdout_line(line, "codex", [None])
+        assert all(e.run_id is None for e in parsed.events)
+
+    def test_copilot_wrapper_threads_run_id(self):
+        line = json.dumps({"type": "assistant.message", "data": {"content": "hi there"}})
+        parsed = _parse_copilot_stdout_line(line, "copilot", [None], run_id="run-def")
+        assert parsed.events
+        assert all(e.run_id == "run-def" for e in parsed.events)
+
+    def test_claude_wrapper_threads_run_id(self):
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "hi"}]},
+            }
+        )
+        parsed = _parse_claude_stdout_line(line, "claude", [None], run_id="run-ghi")
+        assert parsed.events
+        assert all(e.run_id == "run-ghi" for e in parsed.events)
+
+
+class TestKimiCodeStdoutLineRunIdAndSequence:
+    """_parse_kimi_stdout_line's v0.29.x (kimi_code) branch (task 4.1/4.2):
+    threads run_id into the parser and, when given a sequence counter,
+    assigns sequence numbers the same way the other four runners' branches do."""
+
+    def test_threads_run_id_and_assigns_sequence(self):
+        proc = MagicMock()
+        proc.stdin = None
+        parser = _KimiCodeParser()
+        line = json.dumps({"role": "assistant", "content": "hello"})
+        counter = itertools.count(1)
+
+        readable_lines, _usage, _compaction, _lines = _parse_kimi_stdout_line(
+            line,
+            parser,
+            proc,
+            agent="kimi-agent",
+            is_wire_mode=False,
+            is_kimi_code=True,
+            session_id_ref=[None],
+            was_in_compaction=False,
+            kimi_stdout_lines=[],
+            run_id="run-kimi",
+            sequence_counter=counter,
+        )
+        assert readable_lines == ["hello"]
+        assert next(counter) == 2  # one event consumed sequence 1
+
+    def test_without_sequence_counter_falls_back_to_content_only(self):
+        """Existing callers/tests that don't pass sequence_counter keep working."""
+        proc = MagicMock()
+        proc.stdin = None
+        parser = _KimiCodeParser()
+        line = json.dumps({"role": "assistant", "content": "hello"})
+
+        readable_lines, _usage, _compaction, _lines = _parse_kimi_stdout_line(
+            line,
+            parser,
+            proc,
+            agent="kimi-agent",
+            is_wire_mode=False,
+            is_kimi_code=True,
+            session_id_ref=[None],
+            was_in_compaction=False,
+            kimi_stdout_lines=[],
+        )
+        assert readable_lines == ["hello"]
+
+
+def _fake_proc(stdout_lines, stderr_lines, returncode):
+    """Build a MagicMock standing in for a subprocess.Popen result."""
+    proc = MagicMock()
+    proc.stdout = iter(stdout_lines)
+    proc.stderr = iter(stderr_lines)
+    proc.stdin = None
+    proc.wait.return_value = returncode
+    proc.returncode = returncode
+    return proc
+
+
+def _prepare_codex_agent(tmp_path, monkeypatch, agent="codex-agent"):
+    """Shared setup for the _run_agent_subprocess lifecycle-event tests below:
+    an isolated cwd, a codex-runner session, and locking/blocker bypasses so
+    the call reaches _do_run_agent_subprocess."""
+    from agentweave.session import Session
+
+    monkeypatch.chdir(tmp_path)
+    session = Session.create(name="Test", agents=[agent])
+    session.set_runner_config(agent, "codex", {})
+    session.save()
+    monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+    monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+    monkeypatch.setattr("agentweave.diagnostics.launch_blockers", lambda *_a, **_k: [])
+    return agent
+
+
+class TestLifecycleEventsCompletionAndRunError:
+    """task 4.3: the end-of-run summary is now backed by a canonical
+    status_event("completed", ...) on success or error_event(...) on a
+    non-zero exit, delivered through the existing text channel."""
+
+    def test_successful_run_posts_unchanged_done_summary(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        proc = _fake_proc([], [], 0)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+        transport = MagicMock()
+
+        _run_agent_subprocess(agent, ["codex", "exec"], "subject", transport, True)
+
+        posted = [c.args[1] for c in transport.post_agent_output.call_args_list]
+        assert any("done" in p and "✅" in p for p in posted)
+        assert not any("exited with code" in p for p in posted)
+
+    def test_nonzero_exit_posts_new_run_error_message(self, tmp_path, monkeypatch):
+        """Before task 4.3, a non-zero exit silently still said '✅ done' to the
+        user; this is the behavior this task fixes."""
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        proc = _fake_proc([], [], 1)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+        transport = MagicMock()
+
+        _run_agent_subprocess(agent, ["codex", "exec"], "subject", transport, True)
+
+        posted = [c.args[1] for c in transport.post_agent_output.call_args_list]
+        assert any("exited with code 1" in p and "❌" in p for p in posted)
+        assert not any("✅" in p and "done" in p for p in posted)
+
+    def test_copilot_auth_failure_posts_unchanged_actionable_message(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+        from agentweave.session import Session
+
+        agent = "copilot-agent"
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=[agent])
+        session.set_runner_config(agent, "copilot", {})
+        session.save()
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        monkeypatch.setattr("agentweave.diagnostics.launch_blockers", lambda *_a, **_k: [])
+        proc = _fake_proc([], ["No authentication information found"], 1)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(return_value=proc))
+        transport = MagicMock()
+
+        _run_agent_subprocess(agent, ["copilot"], "subject", transport, True)
+
+        posted = [c.args[1] for c in transport.post_agent_output.call_args_list]
+        assert any("authentication error" in p for p in posted)
+        assert not any("exited with code" in p for p in posted)
+
+
+class TestLifecycleEventsSkipped:
+    """task 4.3: the two already-user-visible skip points (launch blockers,
+    copilot cross-agent lock timeout) now deliver a canonical
+    status_event("skipped", ...), with unchanged visible text."""
+
+    def test_launch_blocker_skip_posts_skipped_event(self, tmp_path, monkeypatch):
+        from agentweave.diagnostics import DiagnosticResult
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("agentweave.locking.acquire_lock", lambda *_a, **_k: True)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        blocker = DiagnosticResult(
+            id="proxy_api_key_missing",
+            target="some-agent",
+            status="blocked",
+            severity="error",
+            message="API key missing",
+            hint="set it",
+        )
+        monkeypatch.setattr("agentweave.diagnostics.launch_blockers", lambda *_a, **_k: [blocker])
+        transport = MagicMock()
+
+        _run_agent_subprocess("some-agent", ["cmd"], "subject", transport, True)
+
+        posted = [c.args[1] for c in transport.post_agent_output.call_args_list]
+        assert any("Launch skipped for some-agent" in p for p in posted)
+
+    def test_copilot_lock_timeout_skip_posts_skipped_event(self, tmp_path, monkeypatch):
+        from agentweave.session import Session
+
+        agent = "copilot-agent"
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=[agent])
+        session.set_runner_config(agent, "copilot", {})
+        session.save()
+
+        def _acquire_lock(name, timeout=None):
+            return not name.startswith("spawn_runner_")
+
+        monkeypatch.setattr("agentweave.locking.acquire_lock", _acquire_lock)
+        monkeypatch.setattr("agentweave.locking.release_lock", lambda *_a, **_k: None)
+        transport = MagicMock()
+
+        _run_agent_subprocess(agent, ["copilot"], "subject", transport, True)
+
+        posted = [c.args[1] for c in transport.post_agent_output.call_args_list]
+        assert any("queued too long" in p for p in posted)
+
+
+class TestLifecycleEventRetrying:
+    """task 4.1/4.3: a Codex stale-session retry now posts a canonical
+    "retrying" status event (previously silent to the user), and the retried
+    invocation gets its own fresh run_id, not a reused one."""
+
+    def test_retry_posts_retrying_message_with_fresh_run_id(self, tmp_path, monkeypatch):
+        from agentweave import watchdog as wd
+
+        agent = _prepare_codex_agent(tmp_path, monkeypatch)
+        stale_line = json.dumps(
+            {"type": "error", "message": "Session not found for thread_id abc-123"}
+        )
+        fresh_line = json.dumps({"type": "session.info"})
+        proc1 = _fake_proc([stale_line], [], 0)
+        proc2 = _fake_proc([fresh_line], [], 0)
+        monkeypatch.setattr(wd.subprocess, "Popen", MagicMock(side_effect=[proc1, proc2]))
+        monkeypatch.setattr(wd, "_clear_agent_session", lambda *_a, **_k: None)
+
+        recorded_run_ids = []
+        real_parse = wd._parse_codex_stdout_line
+
+        def _recording_parse(line, runner_type, session_id_ref, *, run_id=None):
+            recorded_run_ids.append(run_id)
+            return real_parse(line, runner_type, session_id_ref, run_id=run_id)
+
+        monkeypatch.setattr(wd, "_parse_codex_stdout_line", _recording_parse)
+        transport = MagicMock()
+
+        _run_agent_subprocess(
+            agent,
+            ["codex", "exec"],
+            "subject",
+            transport,
+            True,
+            prompt="continue",
+            known_session_id="abc-123",
+        )
+
+        posted = [c.args[1] for c in transport.post_agent_output.call_args_list]
+        assert any("retrying" in p.lower() for p in posted)
+        assert len(recorded_run_ids) == 2
+        assert recorded_run_ids[0] is not None
+        assert recorded_run_ids[1] is not None
+        assert recorded_run_ids[0] != recorded_run_ids[1]
 
 
 class TestPopenUsesUtf8Encoding:
