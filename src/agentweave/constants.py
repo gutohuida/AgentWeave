@@ -26,6 +26,7 @@ MESSAGES_ARCHIVE_DIR = MESSAGES_DIR / "archive"
 # Context management paths
 CONTEXT_USAGE_DIR = SHARED_DIR / "context_usage"
 COMPACT_DECISION_FILE = SHARED_DIR / "compact_decision.md"
+COPILOT_OTEL_DIR = SHARED_DIR / "copilot_otel"  # per-invocation OTel JSONL scratch files
 
 # File paths
 SESSION_FILE = AGENTWEAVE_DIR / "session.json"

@@ -23,6 +23,7 @@ from .constants import (
     AGENTS_DIR,
     COMPACT_DECISION_FILE,
     CONTEXT_USAGE_DIR,
+    COPILOT_OTEL_DIR,
     MESSAGES_PENDING_DIR,
     RUNNER_CONFIGS,
     TASKS_ACTIVE_DIR,
@@ -44,7 +45,7 @@ from .stream_events import (
     tool_result_event,
     tool_use_event,
 )
-from .utils import load_dotenv, load_json
+from .utils import generate_id, load_dotenv, load_json
 
 logger = logging.getLogger(__name__)
 
@@ -4231,6 +4232,194 @@ def _parse_copilot_stdout_line(
         if extracted:
             session_id_ref[0] = extracted
     return _parse_copilot_stream_line(line, source=runner_type)
+
+
+def _span_end_time(span: Dict[str, Any]) -> Tuple[float, float]:
+    """Return an OTel file-exporter span's `endTime` as a sortable tuple.
+
+    The exporter writes `endTime` as `[seconds, nanoseconds]` (confirmed live
+    against Copilot CLI 1.0.75). A span missing or malformed `endTime` sorts
+    first so it never wins a "latest" comparison against a real one.
+    """
+    end = span.get("endTime")
+    if (
+        isinstance(end, list)
+        and len(end) == 2
+        and all(isinstance(part, (int, float)) for part in end)
+    ):
+        return (end[0], end[1])
+    return (0.0, 0.0)
+
+
+def _copilot_latest_top_level_chat_span(
+    spans: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Return the latest top-level child `chat` span of the root `invoke_agent` span.
+
+    Confirmed live against Copilot CLI 1.0.75: the root `invoke_agent` span has
+    no `parentSpanId`; its direct `chat <model>` children are the real
+    per-request LLM calls, while the aggregate `invoke_agent` span itself sums
+    every call in the invocation (wrong for a "latest" sample). A `task` tool
+    call spawns a *nested* `invoke_agent task` span, so a subagent's own
+    `chat` spans are parented to that nested span, not the root -- matching
+    only spans whose `parentSpanId` equals the root's `spanId` naturally
+    excludes them without any subagent-specific special-casing.
+    """
+    root: Optional[Dict[str, Any]] = None
+    for span in spans:
+        if span.get("name") != "invoke_agent" or span.get("parentSpanId"):
+            continue
+        if root is None or _span_end_time(span) > _span_end_time(root):
+            root = span
+    if root is None:
+        return None
+
+    root_id = root.get("spanId")
+    candidates = [
+        span
+        for span in spans
+        if isinstance(span.get("name"), str)
+        and span["name"].startswith("chat")
+        and span.get("parentSpanId") == root_id
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=_span_end_time)
+
+
+def _copilot_otel_usage_sample(
+    path: Path,
+    *,
+    session_id: Optional[str] = None,
+    source: str = "copilot_otel",
+) -> Optional[ContextUsageSample]:
+    """Build a measured sample from the latest top-level Copilot `chat` span.
+
+    Reads the JSONL file written by the Copilot CLI's OTel file exporter
+    (`COPILOT_OTEL_FILE_EXPORTER_PATH`). `gen_ai.usage.input_tokens` is used
+    directly (design.md decision 4: OTel already includes cached input in the
+    total); `gen_ai.usage.cache_read.input_tokens` and
+    `gen_ai.usage.cache_creation.input_tokens` are retained only as
+    breakdowns. Confirmed live against Copilot CLI 1.0.75 that no context
+    limit ever appears on these spans, so `limit_tokens` stays absent rather
+    than fabricated from a table. A record still being written (a partial
+    final line) is skipped rather than failing the read.
+    """
+    spans: List[Dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                try:
+                    record = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(record, dict) and record.get("type") == "span":
+                    spans.append(record)
+    except OSError:
+        return None
+
+    chat_span = _copilot_latest_top_level_chat_span(spans)
+    if chat_span is None:
+        return None
+    attrs = chat_span.get("attributes")
+    if not isinstance(attrs, dict):
+        return None
+
+    input_tokens = attrs.get("gen_ai.usage.input_tokens")
+    if not isinstance(input_tokens, (int, float)):
+        return None
+
+    model = attrs.get("gen_ai.response.model") or attrs.get("gen_ai.request.model")
+    conversation_id = attrs.get("gen_ai.conversation.id")
+    resolved_session_id = conversation_id if isinstance(conversation_id, str) else session_id
+
+    breakdown: Dict[str, int] = {"input_tokens": int(input_tokens)}
+    output_tokens = attrs.get("gen_ai.usage.output_tokens")
+    if isinstance(output_tokens, (int, float)):
+        breakdown["output_tokens"] = int(output_tokens)
+    cache_read = attrs.get("gen_ai.usage.cache_read.input_tokens")
+    if isinstance(cache_read, (int, float)):
+        breakdown["cache_read_tokens"] = int(cache_read)
+    cache_creation = attrs.get("gen_ai.usage.cache_creation.input_tokens")
+    if isinstance(cache_creation, (int, float)):
+        breakdown["cache_creation_tokens"] = int(cache_creation)
+    reasoning = attrs.get("gen_ai.usage.reasoning.output_tokens")
+    if isinstance(reasoning, (int, float)):
+        breakdown["reasoning_tokens"] = int(reasoning)
+
+    return ContextUsageSample(
+        status="measured",
+        source=source,
+        basis="latest_request_input",
+        context_tokens=int(input_tokens),
+        limit_tokens=None,
+        model=model if isinstance(model, str) else None,
+        session_id=resolved_session_id,
+        breakdown=breakdown,
+    )
+
+
+class CopilotOtelCollector(RunnerUsageCollector):
+    """Resolves Copilot context usage from a per-invocation OTel file export.
+
+    Copilot's stdout stream carries no context/usage field at all (design.md
+    decision 4); the only source is the CLI's own OpenTelemetry
+    instrumentation, activated by setting `COPILOT_OTEL_FILE_EXPORTER_PATH`
+    before spawn (confirmed live against Copilot CLI 1.0.75). `setup` picks a
+    fresh, unique path per invocation so concurrent agents never share or
+    race on one file, and `close` removes it again.
+    """
+
+    def __init__(self, *, otel_dir: Optional[Path] = None) -> None:
+        self._otel_dir = otel_dir or COPILOT_OTEL_DIR
+        self._export_path: Optional[Path] = None
+        self._session_id: Optional[str] = None
+
+    def setup(self, *, agent: str, workdir: Optional[Path] = None) -> None:
+        self._otel_dir.mkdir(parents=True, exist_ok=True)
+        self._export_path = self._otel_dir / f"{generate_id(agent)}.jsonl"
+
+    @property
+    def env(self) -> Dict[str, str]:
+        """Environment overrides the invocation coordinator must inject into
+        the Copilot subprocess before spawn.
+
+        `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set to
+        "false" explicitly (it already defaults to false) so a value
+        inherited from the user's shell can never enable prompt/response
+        content capture for this invocation.
+        """
+        if self._export_path is None:
+            return {}
+        return {
+            "COPILOT_OTEL_FILE_EXPORTER_PATH": str(self._export_path),
+            "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "false",
+        }
+
+    def bind(self, *, session_id: str) -> None:
+        self._session_id = session_id
+
+    def observe(self) -> Optional[ContextUsageSample]:
+        if self._export_path is None or not self._export_path.is_file():
+            return None
+        sample = _copilot_otel_usage_sample(self._export_path, session_id=self._session_id)
+        if sample is None:
+            return None
+        if sample.session_id and self._session_id and sample.session_id != self._session_id:
+            # A stale export slipped through (e.g. an unremoved file from a
+            # previous invocation reused by mistake) -- reject rather than
+            # trust it (design.md decision 5).
+            return None
+        return sample
+
+    def close(self) -> None:
+        if self._export_path is not None:
+            with contextlib.suppress(OSError):
+                self._export_path.unlink()
+        self._export_path = None
 
 
 def _parse_claude_stdout_line(

@@ -10,6 +10,7 @@ import pytest
 from agentweave.stream_events import STREAM_EVENT_KINDS, ContextUsageSample, ParsedRunnerLine
 from agentweave.watchdog import (
     CodexRolloutCollector,
+    CopilotOtelCollector,
     RunnerUsageCollector,
     _agent_ping_cmd,
     _build_codex_mcp_tool_call,
@@ -18,6 +19,8 @@ from agentweave.watchdog import (
     _codex_rollout_session_id,
     _codex_rollout_usage_sample,
     _codex_working_dir,
+    _copilot_latest_top_level_chat_span,
+    _copilot_otel_usage_sample,
     _extract_codex_mcp_result,
     _extract_jsonl_session_id,
     _KimiCodeParser,
@@ -2971,6 +2974,515 @@ class TestCodexRolloutCollector:
         assert collector._rollout_path is None
         # Still resolvable again after close (close only clears the cache).
         assert collector.observe() is not None
+
+
+def _otel_span(
+    name,
+    span_id,
+    *,
+    parent_span_id=None,
+    end_time=(0, 0),
+    attributes=None,
+):
+    """Build a minimal OTel file-exporter span record for collector tests."""
+    span = {
+        "type": "span",
+        "traceId": "trace-1",
+        "spanId": span_id,
+        "name": name,
+        "kind": 2,
+        "startTime": [max(0, end_time[0] - 1), end_time[1]],
+        "endTime": list(end_time),
+        "attributes": attributes or {},
+        "status": {"code": 0},
+        "events": [],
+        "resource": {},
+        "instrumentationScope": {},
+    }
+    if parent_span_id is not None:
+        span["parentSpanId"] = parent_span_id
+    return span
+
+
+def _write_otel_jsonl(path: Path, records: list, *, trailing_partial: bool = False) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps(r) for r in records]
+    text = "\n".join(lines) + ("\n" if lines else "")
+    if trailing_partial:
+        text += '{"type":"span","name":"chat","attributes":{"gen_ai.usage.inp'
+    path.write_text(text, encoding="utf-8")
+
+
+# Attribute shapes below are trimmed from real JSONL captured live against
+# GitHub Copilot CLI 1.0.75 with COPILOT_OTEL_FILE_EXPORTER_PATH set (a plain
+# reply, a tool-calling turn, and a `task`-tool subagent turn); verbose fields
+# irrelevant to context usage (gen_ai.tool.definitions, response.id, etc.) are
+# omitted for readability. `gen_ai.usage.cache_creation.input_tokens` was never
+# observed live in any probe (same caveat as the previous session's Copilot
+# reasoning-content work) so its handling below is synthetic, proven only
+# safe-when-absent, not proven-correct-on-real-data.
+
+
+class TestCopilotLatestTopLevelChatSpan:
+    """Tests for _copilot_latest_top_level_chat_span (task 3.7)."""
+
+    def test_single_chat_span(self):
+        spans = [
+            _otel_span("chat auto", "chat-1", parent_span_id="root", end_time=(100, 0)),
+            _otel_span("invoke_agent", "root", end_time=(101, 0)),
+        ]
+        selected = _copilot_latest_top_level_chat_span(spans)
+        assert selected is not None
+        assert selected["spanId"] == "chat-1"
+
+    def test_aggregate_invoke_agent_excluded_multiple_chat_spans(self):
+        """A tool-calling turn produces two top-level chat spans and one
+        aggregate invoke_agent parent (confirmed live) -- the latest chat
+        span must win, never the aggregate."""
+        spans = [
+            _otel_span("chat auto", "chat-1", parent_span_id="root", end_time=(100, 0)),
+            _otel_span("chat auto", "chat-2", parent_span_id="root", end_time=(102, 0)),
+            _otel_span("invoke_agent", "root", end_time=(103, 0)),
+        ]
+        selected = _copilot_latest_top_level_chat_span(spans)
+        assert selected is not None
+        assert selected["spanId"] == "chat-2"
+
+    def test_subagent_chat_span_excluded(self):
+        """A `task`-tool subagent nests its own invoke_agent span, so its chat
+        span's parent is the nested span, not the root -- confirmed live."""
+        spans = [
+            _otel_span("chat gpt-5-mini", "sub-chat", parent_span_id="sub-agent", end_time=(50, 0)),
+            _otel_span(
+                "invoke_agent task", "sub-agent", parent_span_id="task-tool", end_time=(51, 0)
+            ),
+            _otel_span("execute_tool task", "task-tool", parent_span_id="root", end_time=(52, 0)),
+            _otel_span("chat auto", "chat-1", parent_span_id="root", end_time=(48, 0)),
+            _otel_span("chat auto", "chat-2", parent_span_id="root", end_time=(53, 0)),
+            _otel_span("invoke_agent", "root", end_time=(54, 0)),
+        ]
+        selected = _copilot_latest_top_level_chat_span(spans)
+        assert selected is not None
+        assert selected["spanId"] == "chat-2"
+
+    def test_no_root_invoke_agent_returns_none(self):
+        spans = [_otel_span("chat auto", "chat-1", parent_span_id="root", end_time=(100, 0))]
+        assert _copilot_latest_top_level_chat_span(spans) is None
+
+    def test_no_chat_children_returns_none(self):
+        spans = [_otel_span("invoke_agent", "root", end_time=(100, 0))]
+        assert _copilot_latest_top_level_chat_span(spans) is None
+
+    def test_malformed_end_time_does_not_crash(self):
+        root = _otel_span("invoke_agent", "root", end_time=(100, 0))
+        broken = _otel_span("chat auto", "chat-1", parent_span_id="root")
+        broken["endTime"] = "not-a-list"
+        selected = _copilot_latest_top_level_chat_span([root, broken])
+        assert selected is not None
+        assert selected["spanId"] == "chat-1"
+
+
+class TestCopilotOtelUsageSample:
+    """Tests for _copilot_otel_usage_sample (tasks 3.7, 3.8)."""
+
+    def test_plain_reply_arithmetic(self, tmp_path):
+        """Single-chat-span turn; input_tokens used directly, cache_read kept
+        only as a breakdown, no limit ever reported."""
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.conversation.id": "91d4c03e-7db5-4286-b273-4e07b7d8cf1b",
+                        "gen_ai.request.model": "auto",
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 13335,
+                        "gen_ai.usage.cache_read.input_tokens": 1792,
+                        "gen_ai.usage.output_tokens": 105,
+                        "gen_ai.usage.reasoning.output_tokens": 64,
+                    },
+                ),
+                _otel_span(
+                    "invoke_agent",
+                    "root",
+                    end_time=(101, 0),
+                    attributes={"gen_ai.usage.input_tokens": 13335},
+                ),
+            ],
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert sample.status == "measured"
+        assert sample.basis == "latest_request_input"
+        assert sample.context_tokens == 13335
+        assert sample.limit_tokens is None
+        assert sample.percent is None
+        assert sample.model == "gpt-5-mini"
+        assert sample.session_id == "91d4c03e-7db5-4286-b273-4e07b7d8cf1b"
+        assert sample.breakdown["cache_read_tokens"] == 1792
+
+    def test_tool_call_turn_uses_latest_chat_not_aggregate(self, tmp_path):
+        """Two top-level chat spans (11-run and follow-up) plus the aggregate
+        invoke_agent parent -- the latest chat span's own tokens must be
+        used, not the parent's summed total (confirmed live: 13342 + 14074 =
+        27416, the wrong aggregate value)."""
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "execute_tool powershell",
+                    "tool-1",
+                    parent_span_id="root",
+                    end_time=(10, 0),
+                ),
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(11, 0),
+                    attributes={
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 13342,
+                        "gen_ai.usage.cache_read.input_tokens": 12800,
+                        "gen_ai.usage.output_tokens": 601,
+                        "gen_ai.usage.reasoning.output_tokens": 512,
+                    },
+                ),
+                _otel_span(
+                    "chat auto",
+                    "chat-2",
+                    parent_span_id="root",
+                    end_time=(12, 0),
+                    attributes={
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 14074,
+                        "gen_ai.usage.cache_read.input_tokens": 13824,
+                        "gen_ai.usage.output_tokens": 5,
+                    },
+                ),
+                _otel_span(
+                    "invoke_agent",
+                    "root",
+                    end_time=(13, 0),
+                    attributes={
+                        "gen_ai.usage.input_tokens": 27416,
+                        "gen_ai.usage.cache_read.input_tokens": 26624,
+                        "gen_ai.usage.output_tokens": 606,
+                    },
+                ),
+            ],
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert sample.context_tokens == 14074
+        assert sample.breakdown["cache_read_tokens"] == 13824
+
+    def test_subagent_turn_excludes_subagent_chat_span(self, tmp_path):
+        """A `task`-tool subagent turn: the subagent's own chat span (11584
+        tokens) must never be selected over the root's top-level chat spans."""
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat gpt-5-mini",
+                    "sub-chat",
+                    parent_span_id="sub-agent",
+                    end_time=(20, 0),
+                    attributes={
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 11584,
+                        "gen_ai.usage.output_tokens": 66,
+                    },
+                ),
+                _otel_span(
+                    "invoke_agent task", "sub-agent", parent_span_id="task-tool", end_time=(21, 0)
+                ),
+                _otel_span(
+                    "execute_tool task", "task-tool", parent_span_id="root", end_time=(22, 0)
+                ),
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(19, 0),
+                    attributes={
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 13368,
+                    },
+                ),
+                _otel_span(
+                    "chat auto",
+                    "chat-2",
+                    parent_span_id="root",
+                    end_time=(23, 0),
+                    attributes={
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 14074,
+                    },
+                ),
+                _otel_span(
+                    "invoke_agent",
+                    "root",
+                    end_time=(24, 0),
+                    attributes={"gen_ai.usage.input_tokens": 27442},
+                ),
+            ],
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert sample.context_tokens == 14074
+
+    def test_cache_creation_retained_as_breakdown_only(self, tmp_path):
+        """Synthetic: cache_creation.input_tokens was never observed live, but
+        if a provider ever reports it, it must stay a breakdown, never added
+        to context_tokens (OTel semconv: input_tokens already includes it)."""
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.usage.input_tokens": 5000,
+                        "gen_ai.usage.cache_creation.input_tokens": 200,
+                    },
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert sample.context_tokens == 5000
+        assert sample.breakdown["cache_creation_tokens"] == 200
+
+    def test_model_prefers_response_over_request(self, tmp_path):
+        """`gen_ai.request.model` can be the unresolved "auto"; the actually
+        used model is only on `gen_ai.response.model` (confirmed live)."""
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.request.model": "auto",
+                        "gen_ai.response.model": "gpt-5-mini",
+                        "gen_ai.usage.input_tokens": 100,
+                    },
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert sample.model == "gpt-5-mini"
+
+    def test_partial_final_line_is_skipped(self, tmp_path):
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={"gen_ai.usage.input_tokens": 4200},
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+            trailing_partial=True,
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert sample.context_tokens == 4200
+
+    def test_no_chat_span_returns_none(self, tmp_path):
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(path, [_otel_span("invoke_agent", "root", end_time=(100, 0))])
+        assert _copilot_otel_usage_sample(path) is None
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert _copilot_otel_usage_sample(tmp_path / "nope.jsonl") is None
+
+    def test_missing_input_tokens_returns_none(self, tmp_path):
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span("chat auto", "chat-1", parent_span_id="root", end_time=(100, 0)),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        assert _copilot_otel_usage_sample(path) is None
+
+    def test_never_surfaces_raw_content_fields(self, tmp_path):
+        """Content capture is disabled by the collector, but even if a raw
+        attribute payload somehow carried message content (e.g. a
+        misconfigured environment), the sample only ever extracts specific
+        numeric usage keys plus model/conversation id -- nothing else can
+        leak into the breakdown or the sample itself."""
+        path = tmp_path / "otel.jsonl"
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.usage.input_tokens": 100,
+                        "gen_ai.prompt": "this is sensitive user prompt content",
+                        "gen_ai.completion": "this is sensitive response content",
+                    },
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        sample = _copilot_otel_usage_sample(path)
+        assert sample is not None
+        assert "sensitive" not in json.dumps(sample.breakdown)
+        assert sample.model is None
+
+
+class TestCopilotOtelCollector:
+    """Tests for CopilotOtelCollector (tasks 3.6-3.9)."""
+
+    def test_is_a_runner_usage_collector(self):
+        assert issubclass(CopilotOtelCollector, RunnerUsageCollector)
+
+    def test_env_empty_before_setup(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        assert collector.env == {}
+
+    def test_setup_produces_unique_bounded_path(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        env = collector.env
+        assert "COPILOT_OTEL_FILE_EXPORTER_PATH" in env
+        path = Path(env["COPILOT_OTEL_FILE_EXPORTER_PATH"])
+        assert path.parent == tmp_path
+
+        other = CopilotOtelCollector(otel_dir=tmp_path)
+        other.setup(agent="copilot-dev")
+        assert (
+            other.env["COPILOT_OTEL_FILE_EXPORTER_PATH"] != env["COPILOT_OTEL_FILE_EXPORTER_PATH"]
+        )
+
+    def test_setup_disables_content_capture(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        assert collector.env["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "false"
+
+    def test_observe_before_setup_returns_none(self):
+        collector = CopilotOtelCollector()
+        assert collector.observe() is None
+
+    def test_observe_missing_export_file_returns_none(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        assert collector.observe() is None
+
+    def test_observe_reads_bound_export(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        collector.bind(session_id="conv-1")
+        path = Path(collector.env["COPILOT_OTEL_FILE_EXPORTER_PATH"])
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.conversation.id": "conv-1",
+                        "gen_ai.usage.input_tokens": 9000,
+                    },
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        sample = collector.observe()
+        assert sample is not None
+        assert sample.context_tokens == 9000
+
+    def test_final_poll_reflects_late_write(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        collector.bind(session_id="conv-2")
+        assert collector.observe() is None  # nothing written yet
+
+        path = Path(collector.env["COPILOT_OTEL_FILE_EXPORTER_PATH"])
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.conversation.id": "conv-2",
+                        "gen_ai.usage.input_tokens": 3000,
+                    },
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        sample = collector.final_poll()
+        assert sample is not None
+        assert sample.context_tokens == 3000
+
+    def test_rejects_mismatched_conversation_id(self, tmp_path):
+        """A stale/mismatched export must be rejected even if it resolves and
+        parses cleanly (design.md decision 5)."""
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        collector.bind(session_id="bound-session")
+        path = Path(collector.env["COPILOT_OTEL_FILE_EXPORTER_PATH"])
+        _write_otel_jsonl(
+            path,
+            [
+                _otel_span(
+                    "chat auto",
+                    "chat-1",
+                    parent_span_id="root",
+                    end_time=(100, 0),
+                    attributes={
+                        "gen_ai.conversation.id": "a-different-session",
+                        "gen_ai.usage.input_tokens": 9000,
+                    },
+                ),
+                _otel_span("invoke_agent", "root", end_time=(101, 0)),
+            ],
+        )
+        assert collector.observe() is None
+
+    def test_close_removes_the_export_file(self, tmp_path):
+        collector = CopilotOtelCollector(otel_dir=tmp_path)
+        collector.setup(agent="copilot-dev")
+        path = Path(collector.env["COPILOT_OTEL_FILE_EXPORTER_PATH"])
+        path.write_text("", encoding="utf-8")
+        assert path.exists()
+        collector.close()
+        assert not path.exists()
+        assert collector.env == {}
 
 
 class TestPopenUsesUtf8Encoding:

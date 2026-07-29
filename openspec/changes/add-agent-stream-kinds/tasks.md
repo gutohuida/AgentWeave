@@ -57,14 +57,16 @@
   never used when exact rollout data is available
 - [x] 3.5 Add Codex collector tests for fresh and resumed turns, multiple model calls, partial
   JSONL, missing rollouts, stale sessions, and exact-versus-estimated precedence
-- [ ] 3.6 Configure a unique bounded Copilot OTel JSONL exporter before each invocation with
+- [x] 3.6 Configure a unique bounded Copilot OTel JSONL exporter before each invocation with
   content capture disabled
-- [ ] 3.7 Select the latest relevant top-level child Copilot `chat` span, excluding aggregate
+- [x] 3.7 Select the latest relevant top-level child Copilot `chat` span, excluding aggregate
   `invoke_agent` and subagent calls
-- [ ] 3.8 Use Copilot `gen_ai.usage.input_tokens` directly and retain cache-read/cache-creation
+- [x] 3.8 Use Copilot `gen_ai.usage.input_tokens` directly and retain cache-read/cache-creation
   fields only as breakdowns
-- [ ] 3.9 Add Copilot OTel fixtures and tests for multiple chat spans, aggregate parents,
-  subagents, cache fields, malformed/partial lines, absent limits, and content exclusion
+- [x] 3.9 Add Copilot OTel fixtures and tests for multiple chat spans, aggregate parents,
+  subagents, cache fields, malformed/partial lines, absent limits, and content exclusion —
+  live-verified against Copilot CLI 1.0.75 (plain reply, tool-call turn, task-tool subagent
+  turn); cache_creation.input_tokens handling stays synthetic, never observed live
 - [ ] 3.10 Implement Kimi 0.29.x session-status collection when the status service is available
 - [ ] 3.11 Implement the session-bound Kimi fallback from latest main-agent completed-step usage
   and active model capability metadata
