@@ -49,6 +49,7 @@ from agentweave.watchdog import (
     _parse_kimi_stdout_line,
     _parse_opencode_stdout_line,
     _post_agent_stream_event,
+    _prepare_runner_env,
     _resolve_codex_rollout_path,
     _resolve_kimi_wire_path,
     _run_agent_subprocess,
@@ -56,6 +57,33 @@ from agentweave.watchdog import (
     _select_codex_usage,
     _write_canonical_context_usage,
 )
+
+
+class TestPrepareRunnerEnv:
+    def test_native_claude_ignores_inherited_proxy_base_url(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:9999")
+        monkeypatch.setenv("KEEP_ME", "yes")
+
+        proc_env = _prepare_runner_env("claude", None)
+
+        assert proc_env is not None
+        assert "ANTHROPIC_BASE_URL" not in proc_env
+        assert proc_env["KEEP_ME"] == "yes"
+
+    def test_claude_proxy_keeps_configured_base_url(self, monkeypatch):
+        monkeypatch.setenv("MINIMAX_API_KEY", "test-key")
+
+        proc_env = _prepare_runner_env(
+            "claude_proxy",
+            {
+                "ANTHROPIC_BASE_URL": "https://api.minimaxi.example",
+                "ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY",
+            },
+        )
+
+        assert proc_env is not None
+        assert proc_env["ANTHROPIC_BASE_URL"] == "https://api.minimaxi.example"
+        assert proc_env["ANTHROPIC_API_KEY"] == "test-key"
 
 
 class TestHttpStartupRecovery:

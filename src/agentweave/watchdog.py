@@ -3782,7 +3782,7 @@ def _do_run_agent_subprocess(
         sequence_counter = sequence_counter or itertools.count(1)
         current_sequence_counter_ref[0] = sequence_counter
 
-        proc_env = _prepare_agent_env(env_vars)
+        proc_env = _prepare_runner_env(runner_type, env_vars)
 
         # Wire mode requires bidirectional stdin/stdout communication
         stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
@@ -4404,6 +4404,40 @@ def _prepare_agent_env(env_vars: Optional[Dict[str, str]]) -> Optional[Dict[str,
                     f"Export it before starting the watchdog.",
                     extra={"event": "watchdog_warn", "data": {}},
                 )
+    return proc_env
+
+
+def _prepare_runner_env(
+    runner_type: str, env_vars: Optional[Dict[str, str]]
+) -> Optional[Dict[str, str]]:
+    """Prepare an invocation environment without leaking proxy endpoints.
+
+    ``agentweave switch`` and proxy runners use ``ANTHROPIC_BASE_URL``. A
+    watchdog started from that shell must not silently route a later native
+    Claude agent through the inherited proxy. Native Claude authentication and
+    endpoint selection remain owned by Claude Code itself.
+    """
+    proc_env = _prepare_agent_env(env_vars)
+    if runner_type != "claude":
+        return proc_env
+
+    inherited_base_url = (
+        proc_env.get("ANTHROPIC_BASE_URL")
+        if proc_env is not None
+        else os.environ.get("ANTHROPIC_BASE_URL")
+    )
+    if not inherited_base_url:
+        return proc_env
+    if proc_env is None:
+        proc_env = os.environ.copy()
+    proc_env.pop("ANTHROPIC_BASE_URL", None)
+    logger.info(
+        "native_claude_proxy_env_ignored",
+        extra={
+            "event": "native_claude_proxy_env_ignored",
+            "data": {"runner": runner_type},
+        },
+    )
     return proc_env
 
 
