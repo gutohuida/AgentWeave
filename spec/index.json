@@ -27,7 +27,7 @@
       "order": 30
     },
     {
-      "path": "spec/changes/add-spec-navigation/spec.html",
+      "path": "spec/changes/archive/2026-07-30-add-spec-navigation/spec.html",
       "title": "Spec: Add Spec Navigation",
       "kind": "change-spec",
       "status": "approved",

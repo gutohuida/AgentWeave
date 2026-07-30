@@ -188,6 +188,8 @@ const BRIDGE_SCRIPT = `<script ${SPEC_BRIDGE_MARKER}>
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  var currentAnchors = null;
+
   // Native navigation blanks an opaque-origin srcDoc frame, so every link is
   // handled here: same-document scrolls locally, everything else asks the shell.
   document.addEventListener('click', function (e) {
@@ -205,11 +207,13 @@ const BRIDGE_SCRIPT = `<script ${SPEC_BRIDGE_MARKER}>
     if (!d || typeof d !== 'object') return;
     if (d.channel !== CHANNEL || d.version !== VERSION) return;
     if (d.type === 'scroll-to' && typeof d.id === 'string' && d.id.length <= MAX_ID) scrollTo(d.id);
+    if (d.type === 'request-toc' && currentAnchors) post({ type: 'toc-ready', anchors: currentAnchors });
   });
 
   function init() {
     var anchors = collectToc();
     if (!anchors) return;
+    currentAnchors = anchors;
     // Hiding the in-document TOC is safe only now that the shell has a
     // working replacement for it.
     var nav = document.querySelector('nav.toc');
@@ -238,6 +242,15 @@ export function postScrollTo(frame: Window | null, id: string): void {
   if (!frame || !id || id.length > MAX_ID_LENGTH) return
   frame.postMessage(
     { channel: SPEC_BRIDGE_CHANNEL, version: SPEC_BRIDGE_VERSION, type: 'scroll-to', id },
+    '*'
+  )
+}
+
+/** Repeat the TOC handshake after the parent listener is known to be mounted. */
+export function requestToc(frame: Window | null): void {
+  if (!frame) return
+  frame.postMessage(
+    { channel: SPEC_BRIDGE_CHANNEL, version: SPEC_BRIDGE_VERSION, type: 'request-toc' },
     '*'
   )
 }

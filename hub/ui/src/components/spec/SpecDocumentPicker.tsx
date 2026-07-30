@@ -104,6 +104,9 @@ export function SpecDocumentPicker({
           <Dialog.Title style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
             Search documents
           </Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Search current and archived specification documents by title, path, or change name.
+          </Dialog.Description>
           <input
             autoFocus
             value={query}

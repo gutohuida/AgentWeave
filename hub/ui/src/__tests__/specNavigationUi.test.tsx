@@ -264,6 +264,9 @@ describe('Spec page — document search (FR-3, FR-9)', () => {
     const searchButton = screen.getByRole('button', { name: /Search documents/ })
     await user.click(searchButton)
     const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAccessibleDescription(
+      'Search current and archived specification documents by title, path, or change name.'
+    )
     expect(within(dialog).getByLabelText('Search documents')).toHaveFocus()
 
     await user.keyboard('{Escape}')

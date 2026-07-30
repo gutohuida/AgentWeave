@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react'
 import {
   postScrollTo,
+  requestToc,
   resolveSpecLink,
   validateFrameMessage,
   withSpecBridge,
@@ -81,7 +82,15 @@ export const SpecFrame = forwardRef<SpecFrameHandle, SpecFrameProps>(function Sp
 
   useEffect(() => {
     window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
+    // Defer until parent effects have cleared the previous document's outline.
+    const handshake = window.setTimeout(
+      () => requestToc(frameRef.current?.contentWindow ?? null),
+      0
+    )
+    return () => {
+      window.clearTimeout(handshake)
+      window.removeEventListener('message', handleMessage)
+    }
   }, [handleMessage])
 
   return (
@@ -93,6 +102,9 @@ export const SpecFrame = forwardRef<SpecFrameHandle, SpecFrameProps>(function Sp
       // cannot reach the Hub. Message identity replaces origin checking.
       sandbox="allow-scripts"
       srcDoc={withSpecBridge(withHubTheme(content, mode))}
+      onLoad={() =>
+        window.setTimeout(() => requestToc(frameRef.current?.contentWindow ?? null), 0)
+      }
       className="w-full h-full border-0"
       style={{ background: 'var(--bg)' }}
     />

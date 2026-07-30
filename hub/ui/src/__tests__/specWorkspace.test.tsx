@@ -84,6 +84,16 @@ describe('spec workspace — mode boundary (FR-8)', () => {
     expect(screen.getByTestId('doc-content')).toBeInTheDocument()
   })
 
+  it('lets the workspace shrink below wide child minimums', () => {
+    renderWorkspace()
+    expect(screen.getByTestId('spec-workspace')).toHaveClass(
+      'min-w-0',
+      'w-full',
+      'max-w-full',
+      'overflow-hidden'
+    )
+  })
+
   it('keeps the fixed panes within the wide budget', () => {
     renderWorkspace()
     reportWidth(SPEC_WIDE_BREAKPOINT)
@@ -136,6 +146,9 @@ describe('spec workspace — compact drawers and focus (FR-9)', () => {
 
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveAccessibleName('Documents')
+    expect(dialog).toHaveAccessibleDescription(
+      'Documents panel for the current specification workspace.'
+    )
     expect(screen.getByTestId('nav-content')).toBeInTheDocument()
 
     fireEvent.keyDown(dialog, { key: 'Escape' })

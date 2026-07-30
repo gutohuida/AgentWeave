@@ -104,6 +104,9 @@ function Drawer({
               <Icon name="close" size={16} />
             </Dialog.Close>
           </div>
+          <Dialog.Description className="sr-only">
+            {title} panel for the current specification workspace.
+          </Dialog.Description>
           <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -146,7 +149,7 @@ export function SpecWorkspace({
   return (
     <div
       ref={containerRef}
-      className="flex flex-row flex-1 min-h-0"
+      className="flex flex-row flex-1 min-w-0 w-full max-w-full min-h-0 overflow-hidden"
       data-testid="spec-workspace"
       data-mode={mode}
     >

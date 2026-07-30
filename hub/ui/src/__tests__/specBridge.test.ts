@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   SPEC_BRIDGE_CHANNEL,
   SPEC_BRIDGE_VERSION,
@@ -9,6 +9,7 @@ import {
   resolveSpecLink,
   withSpecBridge,
   SPEC_BRIDGE_MARKER,
+  requestToc,
 } from '@/components/spec/specBridge'
 
 const activeWindow = { name: 'active-frame' } as unknown as Window
@@ -230,5 +231,39 @@ describe('spec bridge — injection (FR-5, FR-7)', () => {
     const injected = withSpecBridge(html)
     expect(injected).toContain(SPEC_BRIDGE_CHANNEL)
     expect(injected).toContain(String(MAX_TOC_ANCHORS))
+    expect(injected).toContain("d.type === 'request-toc'")
+  })
+
+  it('can repeat the TOC handshake after the frame load event', () => {
+    const postMessage = vi.fn()
+    requestToc({ postMessage } as unknown as Window)
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        channel: SPEC_BRIDGE_CHANNEL,
+        version: SPEC_BRIDGE_VERSION,
+        type: 'request-toc',
+      },
+      '*'
+    )
+  })
+
+  it('executes the injected bridge and publishes a real document outline', () => {
+    document.body.innerHTML =
+      '<nav class="toc"><a href="#intro">Introduction</a></nav><section id="intro"></section>'
+    const postMessage = vi.spyOn(window, 'postMessage')
+    const injected = withSpecBridge('<html><body></body></html>')
+    const script = injected.match(/<script data-aw-spec-bridge>([\s\S]*?)<\/script>/)?.[1]
+    expect(script).toBeTruthy()
+    Function(script as string)()
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: SPEC_BRIDGE_CHANNEL,
+        version: SPEC_BRIDGE_VERSION,
+        type: 'toc-ready',
+        anchors: [{ id: 'intro', label: 'Introduction' }],
+      }),
+      '*'
+    )
+    postMessage.mockRestore()
   })
 })
