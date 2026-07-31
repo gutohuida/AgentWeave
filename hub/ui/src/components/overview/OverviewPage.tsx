@@ -144,7 +144,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
             borderRadius: 'var(--radius)',
             padding: 24,
             textAlign: 'center',
-            color: 'var(--text-3)',
+            color: 'var(--text-2)',
           }}
         >
           No agents connected. Run <code>agentweave start</code> to connect agents.
