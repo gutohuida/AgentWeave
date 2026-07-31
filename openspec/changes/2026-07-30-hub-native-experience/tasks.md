@@ -146,16 +146,28 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
         "no event yet" — `jobs.py`/`scheduler.py` already broadcast `job_created`/`job_updated`/
         `job_deleted`/`job_fired`; they were just missing from the frontend allowlist, same bug class
         as `session_synced`. Fixed in 2.2 below.
-      - **Genuinely uncovered, no backend event exists** (pure polling, needs new backend broadcasts):
-        `session-sync` (status.ts, `['session-sync']` — distinct from the `session_synced` broadcast
-        above), `agents/:name/timeline` (agents.ts, 5s poll), `agent/:name/chat/:sessionId` and
-        `agent/:name/chat/recent` (agentChat.ts, both 3s poll — this is the transcript SpecChatPane
-        reads, so it has no live-update path at all today).
-- [~] 2.2 Emit events for any uncovered entity so every live view has a corresponding event.
-      - **Done:** wired the 4 already-broadcast-but-ignored `job_*` events into `SSE_EVENT_TYPES` and
-        the central invalidation switch (`['jobs']` + `['jobs', id]`). Regression test added.
-      - **Remaining:** `session-sync`, `agents/:name/timeline`, and the two `agent/:name/chat/*`
-        entities still need new backend broadcasts — no existing event to hook into.
+      - **Second correction, after tracing the remaining three end to end:** none of them needed new
+        backend broadcasts either. Each is a *derived read model* built entirely from rows that
+        already trigger an existing event on write: `agents/:name/timeline` merges `Message`
+        (`message_created`), `EventLog` (`log_event`), and `AgentHeartbeat` (`agent_heartbeat`);
+        `agent/:name/chat/*` merges `Message` (`message_created`) and `AgentOutput` (`agent_output`);
+        `session-sync`'s GET mirrors the exact row `session_synced` already fires on write. All three
+        were pure frontend wiring gaps, same as `jobs`.
+- [x] 2.2 Emit events for any uncovered entity so every live view has a corresponding event. No new
+      backend events were needed in the end (see the corrected 2.1 findings above) — every entity's
+      source rows already had a broadcast; the gap was always frontend wiring. Done:
+      - `jobs` (agents.ts is unaffected; jobs.ts + useSSE.ts) — `job_created/updated/deleted/fired`
+        added to `SSE_EVENT_TYPES` and the central switch, invalidating `['jobs']` + `['jobs', id]`.
+      - `agent/:name/chat/*` (agentChat.ts) — new `eventTargetsAgent()` predicate matching
+        `message_created` (`to`/`recipient`) and `agent_output` (`agent`), invalidating both chat
+        query keys per-agent.
+      - `agents/:name/timeline` (agents.ts) — new `eventBelongsToTimeline()` predicate matching
+        `message_created`/`log_event`/`agent_heartbeat` for the given agent.
+      - `session-sync` (status.ts) — direct listener on `session_synced`, invalidating
+        `['session-sync']`.
+      - All four keep their existing `refetchInterval` as a backstop (2.3 removes those). Regression
+        tests: `useSSE.test.tsx` (job events), `agentChat.test.tsx` (`eventTargetsAgent`),
+        `agentTimelineEvents.test.tsx` (`eventBelongsToTimeline`). tsc clean, 192/192 tests passing.
 - [ ] 2.3 Remove all `refetchInterval` configuration; drive invalidation from events only.
 - [ ] 2.4 Add stream-health state: visible indicator on disconnect, automatic reconnect, and state
       reconciliation on resume.

@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { useSSE } from '@/hooks/useSSE'
 
 export interface StatusData {
   project_id: string
@@ -41,10 +42,20 @@ export function useStatus() {
 
 export function useSessionSync() {
   const { isConfigured } = useConfigStore()
+  const queryClient = useQueryClient()
+
+  // session_synced is broadcast by POST /api/v1/session/sync on every CLI
+  // sync — exactly the moment this data changes.
+  useSSE((event) => {
+    if (event.type === 'session_synced') {
+      queryClient.invalidateQueries({ queryKey: ['session-sync'] })
+    }
+  })
+
   return useQuery<SessionSyncData>({
     queryKey: ['session-sync'],
     queryFn: () => getJson<SessionSyncData>('/api/v1/session/sync'),
-    refetchInterval: 60_000,
+    refetchInterval: 60_000, // Backstop — SSE invalidates immediately above.
     enabled: isConfigured,
   })
 }

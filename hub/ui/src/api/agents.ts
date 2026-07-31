@@ -115,13 +115,36 @@ export function useAgents() {
   })
 }
 
+/** True if an SSE event carries one of the three source rows the timeline
+ * endpoint merges (Message, EventLog, AgentHeartbeat) for the given agent. */
+export function eventBelongsToTimeline(event: SSEEvent, name: string): boolean {
+  const d = (event.data ?? {}) as Record<string, unknown>
+  switch (event.type) {
+    case 'message_created':
+      return d.from === name || d.to === name || d.recipient === name
+    case 'log_event':
+    case 'agent_heartbeat':
+      return d.agent === name
+    default:
+      return false
+  }
+}
+
 export function useAgentTimeline(name: string | null) {
   const { isConfigured } = useConfigStore()
+  const queryClient = useQueryClient()
+
+  useSSE((event) => {
+    if (name && eventBelongsToTimeline(event, name)) {
+      queryClient.invalidateQueries({ queryKey: ['agents', name, 'timeline'] })
+    }
+  })
+
   return useQuery<AgentTimelineEvent[]>({
     queryKey: ['agents', name, 'timeline'],
     queryFn: () => getJson<AgentTimelineEvent[]>(`/api/v1/agents/${name}/timeline`),
     enabled: isConfigured && !!name,
-    refetchInterval: 5000,
+    refetchInterval: 5000, // Backstop — SSE invalidates immediately above.
   })
 }
 

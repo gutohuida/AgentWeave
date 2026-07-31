@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
-import { useAgentChatHistory } from '@/api/agentChat'
+import { useAgentChatHistory, eventTargetsAgent } from '@/api/agentChat'
 import { NEW_SESSION_ID } from '@/lib/constants'
 
 function makeWrapper() {
@@ -47,5 +47,27 @@ describe('M20 — useAgentChatHistory gates on NEW_SESSION_ID, not the literal "
     expect(disabled.result.current.fetchStatus).toBe('idle')
     expect(disabled.result.current.isLoading).toBe(false)
     expect(disabled.result.current.data).toBeUndefined()
+  })
+})
+
+describe('eventTargetsAgent — chat live-update matching (previously: no SSE coverage at all, pure 3s poll)', () => {
+  it('matches message_created via the "to" key (messages.py, agent_trigger.py)', () => {
+    expect(eventTargetsAgent('message_created', { to: 'claude' }, 'claude')).toBe(true)
+  })
+
+  it('matches message_created via the "recipient" key (agents.py system messages)', () => {
+    expect(eventTargetsAgent('message_created', { recipient: 'claude' }, 'claude')).toBe(true)
+  })
+
+  it('matches agent_output via the "agent" key', () => {
+    expect(eventTargetsAgent('agent_output', { agent: 'claude' }, 'claude')).toBe(true)
+  })
+
+  it('does not match a different agent', () => {
+    expect(eventTargetsAgent('agent_output', { agent: 'codex' }, 'claude')).toBe(false)
+  })
+
+  it('does not match an unrelated event type even with a matching agent field', () => {
+    expect(eventTargetsAgent('task_updated', { agent: 'claude' }, 'claude')).toBe(false)
   })
 })
