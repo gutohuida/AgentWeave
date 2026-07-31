@@ -124,4 +124,24 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
 
     await waitFor(() => expect(seen).toContain('session_synced'))
   })
+
+  it('dispatches job_created/job_updated/job_deleted/job_fired (broadcast by jobs.py and scheduler.py, previously dropped)', async () => {
+    const frames = ['job_created', 'job_updated', 'job_deleted', 'job_fired']
+      .map((type) => `event: ${type}\ndata: {"id":"job-1"}\n\n`)
+      .join('')
+    fetchSpy.mockResolvedValue(makeSSEResponse([frames]))
+
+    const seen: string[] = []
+    function Probe() {
+      useSSE((e) => {
+        seen.push(e.type)
+      })
+      return null
+    }
+    render(withQueryClient(<Probe />))
+
+    await waitFor(() =>
+      expect(seen).toEqual(expect.arrayContaining(['job_created', 'job_updated', 'job_deleted', 'job_fired']))
+    )
+  })
 })

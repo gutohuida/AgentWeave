@@ -142,12 +142,20 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
         was missing from `SSE_EVENT_TYPES`, so `useSSE.ts`'s dispatch loop silently dropped it before
         the listener ever ran. Fixed by adding it to the allowlist; regression test added in
         `useSSE.test.tsx`.
-      - **Uncovered, no event exists yet** (pure polling, nothing to fix without new backend events):
+      - **Correction after auditing the backend directly:** `jobs` was misclassified above as having
+        "no event yet" — `jobs.py`/`scheduler.py` already broadcast `job_created`/`job_updated`/
+        `job_deleted`/`job_fired`; they were just missing from the frontend allowlist, same bug class
+        as `session_synced`. Fixed in 2.2 below.
+      - **Genuinely uncovered, no backend event exists** (pure polling, needs new backend broadcasts):
         `session-sync` (status.ts, `['session-sync']` — distinct from the `session_synced` broadcast
-        above), `jobs` (jobs.ts, `['jobs']`), `agents/:name/timeline` (agents.ts, 5s poll),
-        `agent/:name/chat/:sessionId` and `agent/:name/chat/recent` (agentChat.ts, both 3s poll —
-        this is the transcript SpecChatPane reads, so it has no live-update path at all today).
-- [ ] 2.2 Emit events for any uncovered entity so every live view has a corresponding event.
+        above), `agents/:name/timeline` (agents.ts, 5s poll), `agent/:name/chat/:sessionId` and
+        `agent/:name/chat/recent` (agentChat.ts, both 3s poll — this is the transcript SpecChatPane
+        reads, so it has no live-update path at all today).
+- [~] 2.2 Emit events for any uncovered entity so every live view has a corresponding event.
+      - **Done:** wired the 4 already-broadcast-but-ignored `job_*` events into `SSE_EVENT_TYPES` and
+        the central invalidation switch (`['jobs']` + `['jobs', id]`). Regression test added.
+      - **Remaining:** `session-sync`, `agents/:name/timeline`, and the two `agent/:name/chat/*`
+        entities still need new backend broadcasts — no existing event to hook into.
 - [ ] 2.3 Remove all `refetchInterval` configuration; drive invalidation from events only.
 - [ ] 2.4 Add stream-health state: visible indicator on disconnect, automatic reconnect, and state
       reconciliation on resume.

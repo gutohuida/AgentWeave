@@ -25,6 +25,10 @@ const SSE_EVENT_TYPES = [
   'log_event',
   'context_warning',
   'spec_updated',
+  'job_created',
+  'job_updated',
+  'job_deleted',
+  'job_fired',
 ]
 
 const MAX_BUFFERED = 200
@@ -317,6 +321,17 @@ export function useSSE(onEvent?: SSEListener) {
           const d = event.data as { agent?: string }
           if (d?.agent) {
             queryClient.invalidateQueries({ queryKey: ['agent', d.agent, 'sessions'] })
+          }
+          break
+        }
+        case 'job_created':
+        case 'job_updated':
+        case 'job_deleted':
+        case 'job_fired': {
+          queryClient.invalidateQueries({ queryKey: ['jobs'] })
+          const d = event.data as { id?: string }
+          if (d?.id) {
+            queryClient.invalidateQueries({ queryKey: ['jobs', d.id] })
           }
           break
         }
