@@ -40,6 +40,17 @@ const SSE_EVENT_TYPES = [
 
 const MAX_BUFFERED = 200
 
+// The backend pings every 15s (events.py's EventSourceResponse(ping=15)).
+// More than 2x that plus margin before declaring a silently-dead connection.
+let IDLE_TIMEOUT_MS = 40_000
+const IDLE_CHECK_INTERVAL_MS = 5_000
+
+/** Test-only: override the idle-dead-connection threshold so reconnect
+ * tests don't need to wait out the real 40s default. */
+export function __setIdleTimeoutForTest(ms: number): void {
+  IDLE_TIMEOUT_MS = ms
+}
+
 const listeners = new Set<SSEListener>()
 /** Subscribers notified when the SSE stream reconnects after a previous
  * connection ended. The first connect (initial mount) does NOT fire this —
@@ -135,6 +146,7 @@ export function __resetSSEStateForTest(): void {
   hasEverConnected = false
   subscriberCount = 0
   eventBuffer.length = 0
+  IDLE_TIMEOUT_MS = 40_000
 }
 
 function dispatchEvent(type: string, data: unknown): void {
@@ -242,13 +254,32 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
   let cancelled = false
+  let lastActivityAt = Date.now()
 
   const cancel = () => {
     cancelled = true
+    if (idleTimer) clearInterval(idleTimer)
     reader.cancel().catch(() => {})
   }
   activeStream = { cancel }
   setConnectionState('open')
+
+  // The backend sends a `: ping` comment every 15s (EventSourceResponse's
+  // `ping=15`) precisely so a client can tell a truly dead connection from
+  // a quiet one. If the underlying TCP peer dies without closing the socket
+  // (e.g. the process is killed rather than shut down), reader.read() never
+  // rejects and never resolves `done: true` — it just hangs forever, since
+  // no FIN/RST reaches the client. Comment frames don't parse into a named
+  // event (feedSSEChunk only emits frames with a `data:` line), so activity
+  // has to be tracked at the raw-chunk level, not the event level. Cancel
+  // the reader (without setting `cancelled`) once nothing has arrived —
+  // not even a ping — for more than twice the ping interval; that failure
+  // still flows through the catch/finally below and schedules a reconnect.
+  const idleTimer = setInterval(() => {
+    if (Date.now() - lastActivityAt > IDLE_TIMEOUT_MS) {
+      reader.cancel().catch(() => {})
+    }
+  }, IDLE_CHECK_INTERVAL_MS)
 
   // Fire the reconnect hook for any connect after the first one. The first
   // connect is NOT a reconnect — it's the initial subscription. Subscribers
@@ -263,6 +294,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
     try {
       while (!cancelled) {
         const { value, done } = await reader.read()
+        lastActivityAt = Date.now()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
         const { remaining, events } = feedSSEChunk(buffer, '')
@@ -285,8 +317,9 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
         }
       }
     } catch {
-      // stream errored
+      // stream errored (includes the idle watchdog above cancelling the reader)
     } finally {
+      clearInterval(idleTimer)
       if (!cancelled) {
         // Stream ended unexpectedly → schedule reconnect
         if (activeStream && activeStream.cancel === cancel) {

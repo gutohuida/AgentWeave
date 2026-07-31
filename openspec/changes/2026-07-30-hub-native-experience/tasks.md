@@ -189,8 +189,21 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       - Regression tests in `useSSE-lifecycle.test.tsx`: state reaches `open` then `reconnecting`
         when a stream ends unexpectedly; `invalidateQueries` fires on the real second connect (not
         the first). tsc clean, 194/194 tests passing.
-- [ ] 2.5 Verify: task, message, agent-status and log views update live with polling removed; killing
-      the stream shows the indicator and recovers on restore.
+      - **Real bug found by verification, not by the unit tests:** killing the live Hub process
+        (`Stop-Process -Force`) left the indicator on "Live" forever. A killed process doesn't send
+        FIN/RST for sockets it never explicitly closes, so `reader.read()` on the client neither
+        rejects nor resolves `done: true` — it just hangs. A fresh `fetch()` to the same dead port
+        failed immediately, proving the gap was specifically in the already-open stream never
+        noticing. Fixed with a client-side idle watchdog: `events.py` already pings every 15s
+        (`EventSourceResponse(ping=15)`) exactly so clients can detect this; added a timer that
+        cancels the reader if no chunk (event *or* ping comment) arrives for 40s, which correctly
+        flows into the existing reconnect path since the cancel doesn't set the `cancelled` flag.
+        Verified twice end-to-end against the real dev server: killed the Hub process, watched the
+        indicator appear at ~40s, restarted the Hub, watched it clear automatically. Test-only
+        `__setIdleTimeoutForTest()` added so the regression test doesn't wait out the real 40s.
+- [x] 2.5 Verify: task, message, agent-status and log views update live with polling removed; killing
+      the stream shows the indicator and recovers on restore. Done as part of 2.4's verification pass
+      above — real kill/restart of the live Hub process, not just the mocked unit tests.
 - [ ] 2.6 **`/handoff`**
 
 ## 3. Native runtime, packaging, and crash recovery

@@ -7,6 +7,7 @@ import {
   useSSE,
   cancelReconnect,
   __resetSSEStateForTest,
+  __setIdleTimeoutForTest,
   getSSEConnectionState,
   onSseStateChange,
 } from '@/hooks/useSSE'
@@ -265,6 +266,47 @@ describe('stream-health: connection state and reconciliation on reconnect (task 
       // wait for the second fetch, which is the actual reconnect.
       await waitFor(() => expect(callCount).toBe(2), { timeout: 5000 })
       expect(invalidateSpy).toHaveBeenCalled()
+    },
+    8000
+  )
+
+  it(
+    'detects a silently-dead connection via the idle watchdog, not just read() rejecting or done:true',
+    async () => {
+      // Reproduces a real bug found by killing the live Hub process during
+      // manual 2.5 verification: a stream whose peer dies without closing
+      // the socket never rejects and never resolves done:true — reader.read()
+      // just hangs forever, so without this watchdog the UI stayed on
+      // "Live" indefinitely despite the server being gone.
+      __setIdleTimeoutForTest(10)
+      let cancelCalled = false
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          // One initial chunk so the reader loop begins, then nothing —
+          // simulating the peer going silent without a FIN/RST.
+          controller.enqueue(new TextEncoder().encode(': keepalive\n\n'))
+        },
+        cancel() {
+          cancelCalled = true
+        },
+      })
+      ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi
+        .fn()
+        .mockResolvedValue(
+          new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+        )
+
+      function Probe() {
+        useSSE()
+        return null
+      }
+      render(withQueryClient(<Probe />))
+
+      await waitFor(() => expect(getSSEConnectionState()).toBe('open'))
+      // The idle-check interval itself still runs on the real 5s cadence;
+      // the 10ms override just guarantees the very first tick trips it.
+      await waitFor(() => expect(cancelCalled).toBe(true), { timeout: 7000 })
+      await waitFor(() => expect(getSSEConnectionState()).toBe('reconnecting'))
     },
     8000
   )
