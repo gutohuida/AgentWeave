@@ -1,1 +1,1 @@
-.claude/handoffs/2026-07-29-1225-change4-section7-complete-section8-next.md
+.claude/handoffs/2026-07-31-2314-hub-native-phase2-streaming-complete.md

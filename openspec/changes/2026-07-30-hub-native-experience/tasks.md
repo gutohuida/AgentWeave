@@ -204,7 +204,7 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
 - [x] 2.5 Verify: task, message, agent-status and log views update live with polling removed; killing
       the stream shows the indicator and recovers on restore. Done as part of 2.4's verification pass
       above — real kill/restart of the live Hub process, not just the mocked unit tests.
-- [ ] 2.6 **`/handoff`**
+- [x] 2.6 **`/handoff`** — `.claude/handoffs/2026-07-31-2314-hub-native-phase2-streaming-complete.md`
 
 ## 3. Native runtime, packaging, and crash recovery
 
