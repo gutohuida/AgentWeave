@@ -132,8 +132,21 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
 
 *No dependencies beyond an already-working SSE channel.*
 
-- [ ] 2.1 Inventory the 9 `refetchInterval` call sites in `hub/ui/src/api/` against the 9 event kinds
-      in `hooks/useSSE.ts`; record which entities have no event coverage yet.
+- [x] 2.1 Inventory the 9 `refetchInterval` call sites in `hub/ui/src/api/` against the 12 event kinds
+      in `hooks/useSSE.ts` (the plan's "9" undercounted — `agent_output`, `context_warning`,
+      `spec_updated` were already added since this task was written). Findings:
+      - **Fully covered** (poll is a redundant backstop): `status` (status.ts), `agent/:name/sessions`
+        (agents.ts) via `agent_session_changed`, `logs` (logs.ts) via generic any-event invalidation.
+      - **Bug, now fixed:** `agents` (agents.ts) has a `session_synced` listener that was dead code —
+        `session_synced` (broadcast by `hub/hub/api/v1/session_sync.py:93-97` on every CLI roster sync)
+        was missing from `SSE_EVENT_TYPES`, so `useSSE.ts`'s dispatch loop silently dropped it before
+        the listener ever ran. Fixed by adding it to the allowlist; regression test added in
+        `useSSE.test.tsx`.
+      - **Uncovered, no event exists yet** (pure polling, nothing to fix without new backend events):
+        `session-sync` (status.ts, `['session-sync']` — distinct from the `session_synced` broadcast
+        above), `jobs` (jobs.ts, `['jobs']`), `agents/:name/timeline` (agents.ts, 5s poll),
+        `agent/:name/chat/:sessionId` and `agent/:name/chat/recent` (agentChat.ts, both 3s poll —
+        this is the transcript SpecChatPane reads, so it has no live-update path at all today).
 - [ ] 2.2 Emit events for any uncovered entity so every live view has a corresponding event.
 - [ ] 2.3 Remove all `refetchInterval` configuration; drive invalidation from events only.
 - [ ] 2.4 Add stream-health state: visible indicator on disconnect, automatic reconnect, and state

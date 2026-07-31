@@ -106,4 +106,22 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     const buffered = getBufferedEvents()
     expect(buffered.some((b) => b.type === 'message_created')).toBe(true)
   })
+
+  it('dispatches session_synced (broadcast by the CLI-roster sync endpoint, consumed by useAgents)', async () => {
+    const payload = JSON.stringify({ agents: ['alice'] })
+    fetchSpy.mockResolvedValue(
+      makeSSEResponse([`event: session_synced\ndata: ${payload}\n\n`])
+    )
+
+    const seen: string[] = []
+    function Probe() {
+      useSSE((e) => {
+        seen.push(e.type)
+      })
+      return null
+    }
+    render(withQueryClient(<Probe />))
+
+    await waitFor(() => expect(seen).toContain('session_synced'))
+  })
 })

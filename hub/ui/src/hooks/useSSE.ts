@@ -21,6 +21,7 @@ const SSE_EVENT_TYPES = [
   'agent_heartbeat',
   'agent_output',
   'agent_session_changed',
+  'session_synced',
   'log_event',
   'context_warning',
   'spec_updated',
