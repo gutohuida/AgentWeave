@@ -70,7 +70,7 @@ export function LogLine({ entry }: LogLineProps) {
         className="flex items-center gap-2 px-2 py-[3px] select-none transition-colors cursor-pointer"
         style={{ color: 'var(--text)' }}
         onClick={() => hasData && setExpanded(!expanded)}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent)' }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
         <span className="w-3 shrink-0" style={{ color: 'var(--text-3)', opacity: 0.6 }}>

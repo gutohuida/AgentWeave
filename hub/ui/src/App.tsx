@@ -2,7 +2,13 @@ import { useState, useEffect, type ComponentType } from 'react'
 import { useConfigStore } from '@/store/configStore'
 import { SetupModal } from '@/components/layout/SetupModal'
 import { StatusBar } from '@/components/layout/StatusBar'
-import { Sidebar } from '@/components/layout/Sidebar'
+import {
+  Sidebar,
+  SIDEBAR_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+} from '@/components/layout/Sidebar'
+import { PaneResizer } from '@/components/layout/PaneResizer'
 import { MessagesFeed } from '@/components/messages/MessagesFeed'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
@@ -17,6 +23,8 @@ import { SpecPage } from '@/components/spec/SpecPage'
 import { useSSE } from '@/hooks/useSSE'
 
 export type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions' | 'spec'
+
+const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 
 type PageWrapper = 'scroll' | 'flex-col'
 
@@ -49,6 +57,29 @@ export default function App() {
   const [setupOpen, setSetupOpen] = useState(false)
   const [page, setPage] = useState<Page>('overview')
 
+  // The rail width is the operator's choice and persists across sessions.
+  // Read lazily so the first paint is already at the chosen width — restoring
+  // it in an effect would make the rail visibly jump on every load.
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+      if (Number.isFinite(stored) && stored >= SIDEBAR_MIN_WIDTH && stored <= SIDEBAR_MAX_WIDTH) {
+        return stored
+      }
+    } catch {
+      // Storage unavailable (private mode, disabled). Fall through to default.
+    }
+    return SIDEBAR_WIDTH
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth))
+    } catch {
+      // Persistence is a convenience; never let it break the layout.
+    }
+  }, [sidebarWidth])
+
   useEffect(() => {
     useConfigStore.getState().bootstrap()
   }, [])
@@ -70,6 +101,8 @@ export default function App() {
 
   const active = PAGES[page]
   const ActivePage = active.Component
+  // The rail is icon-only on the Spec page, where there is nothing to resize.
+  const railResizable = page !== 'spec'
 
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -83,7 +116,17 @@ export default function App() {
             // The Spec workspace needs the horizontal room for its own
             // navigation pane, so the Hub rail collapses to icons there.
             compact={page === 'spec'}
+            width={sidebarWidth}
           />
+          {railResizable && (
+            <PaneResizer
+              width={sidebarWidth}
+              onChange={setSidebarWidth}
+              defaultWidth={SIDEBAR_WIDTH}
+              min={SIDEBAR_MIN_WIDTH}
+              max={SIDEBAR_MAX_WIDTH}
+            />
+          )}
           <main className="flex-1 overflow-hidden" style={{ background: 'var(--bg)' }}>
             <div className={WRAPPER_CLASS[active.wrapper]} data-testid="active-page-wrapper">
               <ActivePage onNavigate={(p) => setPage(p as Page)} />

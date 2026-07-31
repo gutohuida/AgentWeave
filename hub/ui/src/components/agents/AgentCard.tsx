@@ -17,7 +17,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
       onClick={onClick}
       className="w-full text-left"
       style={{
-        background: selected ? 'rgba(255,255,255,0.05)' : 'var(--surface-2)',
+        background: selected ? 'var(--accent)' : 'var(--surface-2)',
         border: `1px solid ${selected ? 'var(--border-hi)' : 'var(--border)'}`,
         borderRadius: 'var(--radius)',
         padding: 10,

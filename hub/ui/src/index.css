@@ -1,114 +1,253 @@
+/* Self-hosted variable fonts. Bundled by Vite — no third-party request on the
+   render path, so type never falls back to a system face on a slow, proxied,
+   or offline network. Replaces the former fonts.googleapis.com stylesheets. */
+@import '@fontsource-variable/dm-sans';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ══════════════════════════════════════════════════════════════
-   Linear / shadcn Design Tokens — CSS custom properties
+   Design tokens
    ══════════════════════════════════════════════════════════════ */
 
 @layer base {
   :root,
   [data-mode="dark"] {
-    /* Backgrounds */
-    --bg:          #09090b;
-    --surface:     #111113;
-    --surface-2:   #18181b;
-    --surface-3:   #27272a;
+    /* Backgrounds — one ground plane. --surface is for things that LIFT
+       (menus, popovers, dialogs, composer, content cards), not for marking
+       a region as a region. */
+    --bg:          #0b0b0d;
+    --surface:     #141417;
+    --surface-2:   #191920;
+    --surface-3:   #232329;
 
     /* Borders */
-    --border:      rgba(255,255,255,0.08);
-    --border-hi:   rgba(255,255,255,0.12);
+    --border:      rgba(255,255,255,0.07);
+    --border-hi:   rgba(255,255,255,0.13);
+    /* Region separation is deliberately lighter than any control outline. */
+    --border-region: rgba(255,255,255,0.05);
 
     /* Text */
-    --text:        #fafafa;
-    --text-2:      #a1a1aa;
-    --text-3:      #71717a;
+    --text:        #f5f5f6;
+    --text-2:      #8e8e98;
+    --text-3:      #5c5c66;
 
     /* Semantic */
-    --destructive:    #ef4444;
+    --destructive:    #f4525f;
     --destructive-fg: #ffffff;
-    --green:       #22c55e;
-    --amber:       #f59e0b;
-    --red:         #ef4444;
-    --blue:        #3b82f6;
+    --green:       #3ecf8e;
+    --amber:       #f7b955;
+    --red:         #f4525f;
+    --blue:        #5b7cfa;
     --purple:      #a855f7;
 
-    /* Radius */
-    --radius:      6px;
-    --radius-sm:   4px;
-    --radius-lg:   8px;
+    /* Elevation highlights — lit from above at rest, inverted while pressed */
+    --lift-hi:     rgba(255,255,255,0.16);
+    --press-lo:    rgba(0,0,0,0.28);
 
     /* Legacy compatibility */
-    --background:  #09090b;
-    --foreground:  #fafafa;
-    --primary:     #3b82f6;
+    --background:  #0b0b0d;
+    --foreground:  #f5f5f6;
+    --primary:     #5b7cfa;
     --primary-foreground: #ffffff;
-    --muted:       #27272a;
-    --muted-foreground: #71717a;
-    --ring:        #3b82f6;
-    --outline:     rgba(255,255,255,0.12);
-    --outline-variant: rgba(255,255,255,0.08);
+    --primary-hover: #6b89ff;
+    --primary-active: #5273ef;
+    --accent:      rgba(255,255,255,0.055);
+    --muted:       #232329;
+    --muted-foreground: #8e8e98;
+    --ring:        #5b7cfa;
+    --outline:     rgba(255,255,255,0.13);
+    --outline-variant: rgba(255,255,255,0.07);
     --scrim:       rgba(0,0,0,0.6);
-    --error-cont:  rgba(239,68,68,0.15);
-    --on-error-cont: #ef4444;
+    --error-cont:  rgba(244,82,95,0.15);
+    --on-error-cont: #f4525f;
+
+    /* Agent identity palette — authored, not reused from the status colours
+       above, which already carry meaning. Assigned by registration order. */
+    --agent-1: #7c8cff;
+    --agent-2: #2fd4c8;
+    --agent-3: #f7b955;
+    --agent-4: #f4708f;
+    --agent-5: #5ad07a;
+    --agent-6: #63b3f7;
+    --agent-7: #c084fc;
+    --agent-8: #b9d94f;
   }
 
   [data-mode="light"] {
-    /* Backgrounds */
     --bg:          #ffffff;
-    --surface:     #f4f4f5;
-    --surface-2:   #e4e4e7;
-    --surface-3:   #d4d4d8;
+    --surface:     #f7f7f8;
+    --surface-2:   #efeff1;
+    --surface-3:   #e4e4e7;
 
-    /* Borders */
-    --border:      rgba(0,0,0,0.08);
-    --border-hi:   rgba(0,0,0,0.12);
+    --border:      rgba(0,0,0,0.09);
+    --border-hi:   rgba(0,0,0,0.15);
+    --border-region: rgba(0,0,0,0.06);
 
-    /* Text */
     --text:        #18181b;
-    --text-2:      #52525b;
-    --text-3:      #a1a1aa;
+    --text-2:      #5c5c66;
+    --text-3:      #8e8e98;
 
-    /* Semantic unchanged */
-    --destructive:    #ef4444;
+    --destructive:    #dc2f3c;
     --destructive-fg: #ffffff;
-    --green:       #22c55e;
-    --amber:       #f59e0b;
-    --red:         #ef4444;
-    --blue:        #3b82f6;
-    --purple:      #a855f7;
+    --green:       #16a06a;
+    --amber:       #c47f16;
+    --red:         #dc2f3c;
+    --blue:        #4059d8;
+    --purple:      #8b3fd4;
 
-    /* Radius unchanged */
-    --radius:      6px;
-    --radius-sm:   4px;
-    --radius-lg:   8px;
+    --lift-hi:     rgba(255,255,255,0.55);
+    --press-lo:    rgba(0,0,0,0.10);
 
-    /* Legacy compatibility */
     --background:  #ffffff;
     --foreground:  #18181b;
-    --primary:     #3b82f6;
+    --primary:     #4059d8;
     --primary-foreground: #ffffff;
-    --muted:       #e4e4e7;
-    --muted-foreground: #a1a1aa;
-    --ring:        #3b82f6;
-    --outline:     rgba(0,0,0,0.12);
-    --outline-variant: rgba(0,0,0,0.08);
+    --primary-hover: #3a51c7;
+    --primary-active: #3247b0;
+    --accent:      rgba(0,0,0,0.045);
+    --muted:       #efeff1;
+    --muted-foreground: #5c5c66;
+    --ring:        #4059d8;
+    --outline:     rgba(0,0,0,0.15);
+    --outline-variant: rgba(0,0,0,0.09);
     --scrim:       rgba(0,0,0,0.4);
-    --error-cont:  rgba(239,68,68,0.10);
-    --on-error-cont: #ef4444;
+    --error-cont:  rgba(220,47,60,0.10);
+    --on-error-cont: #dc2f3c;
+
+    /* Darkened for contrast against a light ground plane */
+    --agent-1: #4f5fd6;
+    --agent-2: #0f9c92;
+    --agent-3: #b8801d;
+    --agent-4: #d1406a;
+    --agent-5: #2a9c50;
+    --agent-6: #2b7fc7;
+    --agent-7: #9040d4;
+    --agent-8: #6f8c17;
+  }
+
+  /* Radius and motion are mode-independent. One base, derived steps. */
+  :root {
+    --radius:      10px;
+    --radius-sm:   calc(var(--radius) - 4px);
+    --radius-md:   calc(var(--radius) - 2px);
+    --radius-lg:   var(--radius);
+    --radius-xl:   calc(var(--radius) + 4px);
+    /* Self-contained results are markedly softer than chrome. */
+    --radius-content: 24px;
+
+    --dur-fast:    150ms;
+    --dur-base:    250ms;
+    --dur-slow:    500ms;
+    --ease:        cubic-bezier(0.16, 1, 0.3, 1);
+
+    --side-w:      266px;
   }
 }
 
 @layer base {
   * {
     border-color: var(--border);
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
   }
+
   body {
     background-color: var(--bg);
     color: var(--text);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    transition: background-color 0.25s, color 0.25s;
+    font-family: 'DM Sans Variable', -apple-system, BlinkMacSystemFont,
+                 'Segoe UI', system-ui, sans-serif;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color var(--dur-base) var(--ease),
+                color var(--dur-base) var(--ease);
+  }
+
+  code, pre, kbd, samp, .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  /* Live numeric readouts must not shift horizontally as digits change. */
+  .tabular, [data-tabular] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Scrollbars: overlay handle, no track, no steppers. The transparent
+     border plus content-box clipping insets the handle so it reads as a
+     floating pill rather than a filled channel. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-hi) transparent;
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-hi);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    transition: background-color var(--dur-fast) var(--ease);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--text-3);
+    background-clip: content-box;
+  }
+
+  /* Baseline control treatment for buttons not yet migrated to the Button
+     primitive. Reserving a transparent border at rest is what lets a control
+     gain emphasis on hover without displacing itself or its neighbours — the
+     common alternative, adding a border on hover, shifts layout by a pixel and
+     is most of why an interface feels cheap.
+     Excludes [data-slot="button"], which carries its own full treatment. */
+  button:not([data-slot="button"]),
+  [role="button"]:not([data-slot="button"]) {
+    border: 1px solid transparent;
+    outline: none;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease),
+                opacity var(--dur-fast) var(--ease);
+  }
+  button:not([data-slot="button"]):focus-visible,
+  [role="button"]:not([data-slot="button"]):focus-visible {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+  button:not([data-slot="button"]):disabled {
+    opacity: 0.64;
+    pointer-events: none;
+    box-shadow: none;
+  }
+
+  /* On coarse pointers, guarantee a reachable target without enlarging the
+     control visually on desktop. */
+  @media (pointer: coarse) {
+    button, [role="button"], a[href] {
+      position: relative;
+    }
+    button::after, [role="button"]::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      min-width: 44px;
+      min-height: 44px;
+      width: 100%;
+      height: 100%;
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

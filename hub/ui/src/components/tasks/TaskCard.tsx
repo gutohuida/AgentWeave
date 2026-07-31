@@ -63,7 +63,7 @@ export function TaskCard({ task }: TaskCardProps) {
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
-        transition: 'border-color 0.15s',
+        transition: 'border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease)',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-hi)' }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}

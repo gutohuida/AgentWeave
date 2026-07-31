@@ -29,14 +29,23 @@ const baseStyle: CSSProperties = {
   fontWeight: 500,
   color: 'var(--text-2)',
   background: 'transparent',
-  transition: 'background 0.15s, color 0.15s',
+  transition:
+    'background-color var(--dur-fast) var(--ease), ' +
+    'border-color var(--dur-fast) var(--ease), ' +
+    'color var(--dur-fast) var(--ease)',
   cursor: 'pointer',
-  border: 'none',
+  // A transparent border is reserved at rest so gaining emphasis on hover
+  // colours it in place rather than adding a pixel and nudging the row.
+  // Previously `border: none`, which also overrode the global control base.
+  border: '1px solid transparent',
   textAlign: 'left',
 }
 
-const HOVER_BG = 'rgba(255,255,255,0.04)'
-const ACTIVE_BG = 'rgba(255,255,255,0.06)'
+// Theme tokens rather than hardcoded white — the former rgba(255,255,255,…)
+// values were invisible against a light background.
+const HOVER_BG = 'var(--accent)'
+const ACTIVE_BG = 'var(--accent)'
+const ACTIVE_BORDER = 'var(--border)'
 const ACTIVE_COLOR = 'var(--text)'
 
 const activeIndicatorStyle = (active: boolean): CSSProperties => ({
@@ -83,6 +92,7 @@ export function SidebarItem({
     ...baseStyle,
     color: isHighlighted ? ACTIVE_COLOR : baseStyle.color,
     background: active ? ACTIVE_BG : hovered ? HOVER_BG : 'transparent',
+    borderColor: isHighlighted ? ACTIVE_BORDER : 'transparent',
     ...(compact ? { justifyContent: 'center', padding: '6px 0', gap: 0 } : null),
   }
 

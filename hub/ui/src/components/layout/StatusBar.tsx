@@ -43,7 +43,10 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
   return (
     <div
       className="flex items-center gap-3 px-4 shrink-0"
-      style={{ height: 44, background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}
+      // Region boundaries are subordinate to control outlines: --border-region
+      // is lighter than the --border used on interactive elements, so the chrome
+      // does not out-shout the content.
+      style={{ height: 44, background: 'var(--bg)', borderBottom: '1px solid var(--border-region)' }}
     >
       {/* Logo / title */}
       <button

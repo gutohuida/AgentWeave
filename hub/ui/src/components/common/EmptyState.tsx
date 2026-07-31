@@ -1,5 +1,7 @@
+import { Icon } from './Icon'
+
 interface EmptyStateProps {
-  icon: string   // Material Symbols Rounded name
+  icon: string   // Icon name — see the map in ./Icon.tsx
   title: string
   description?: string
 }
@@ -11,16 +13,7 @@ export function EmptyState({ icon, title, description }: EmptyStateProps) {
         className="mb-4 flex items-center justify-center rounded-full"
         style={{ width: 64, height: 64, background: 'var(--surface-3)' }}
       >
-        <span
-          className="material-symbols-rounded select-none"
-          style={{
-            fontSize: 32,
-            fontVariationSettings: `'FILL' 0, 'wght' 400`,
-            color: 'var(--text-3)',
-          }}
-        >
-          {icon}
-        </span>
+        <Icon name={icon} size={32} style={{ color: 'var(--text-3)' }} />
       </div>
       <p className="text-lg font-normal" style={{ color: 'var(--text)' }}>{title}</p>
       {description && <p className="mt-2 text-sm" style={{ color: 'var(--text-3)' }}>{description}</p>}

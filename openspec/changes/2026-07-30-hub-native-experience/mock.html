@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgentWeave Hub — design mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   NOTE: fonts load from the CDN here only because this is a
+   single-file mock. The spec requires self-hosted .woff2.
+   ───────────────────────────────────────────────────────────── */
+
+:root{
+  /* radius — one base, derived steps (spec: base ~10px, was 6px) */
+  --radius:.625rem;
+  --radius-sm:calc(var(--radius) - 4px);
+  --radius-md:calc(var(--radius) - 2px);
+  --radius-lg:var(--radius);
+  --radius-xl:calc(var(--radius) + 4px);
+  --radius-content:24px;          /* self-contained results are soft */
+  --side-w:266px;                 /* draggable */
+
+  /* motion scale */
+  --dur-fast:150ms;
+  --dur-base:250ms;
+  --dur-slow:500ms;
+  --ease:cubic-bezier(.16,1,.3,1);
+
+  /* surfaces — ONE ground plane. sidebar and main share it; nothing
+     is "boxed". elevation is reserved for things that genuinely lift. */
+  --bg:#0b0b0d;
+  --surface:#141417;      /* lifts: composer, popovers, menus */
+  --surface-2:#191920;
+  --card:#141417;
+  --border:rgba(255,255,255,.07);
+  --border-hi:rgba(255,255,255,.13);
+  --fg:#f5f5f6;
+  --fg-muted:#8e8e98;
+  --fg-dim:#5c5c66;
+  --accent:rgba(255,255,255,.055);
+  --primary:#5b7cfa;
+  --primary-fg:#fff;
+  --ring:#5b7cfa;
+  --danger:#f4525f;
+  --ok:#3ecf8e;
+
+  /* ── agent identity palette — authored, not reused status colours ── */
+  --agent-1:#7c8cff;  /* indigo   */
+  --agent-2:#2fd4c8;  /* teal     */
+  --agent-3:#f7b955;  /* amber    */
+  --agent-4:#f4708f;  /* rose     */
+  --agent-5:#5ad07a;  /* green    */
+  --agent-6:#63b3f7;  /* sky      */
+  --agent-7:#c084fc;  /* violet   */
+  --agent-8:#b9d94f;  /* lime     */
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;
+  font-optical-sizing:auto;
+}
+.mono{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace}
+.num{font-variant-numeric:tabular-nums}
+
+/* ─── scrollbars — overlay style, no track, no buttons ───────── */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.11) transparent}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-corner{background:transparent}
+*::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,.11);
+  border-radius:99px;
+  border:3px solid transparent;      /* inset via transparent border */
+  background-clip:content-box;
+  transition:background-color var(--dur-fast) var(--ease)}
+*::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2);background-clip:content-box}
+*::-webkit-scrollbar-button{display:none;width:0;height:0}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important}
+}
+
+/* ─── the control system ───────────────────────────────────────
+   every control carries a border at rest; quiet variants make it
+   transparent. padding subtracts the border so insets match.
+   ───────────────────────────────────────────────────────────── */
+.btn{
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  height:32px;padding:0 calc(.75rem - 1px);
+  border:1px solid transparent;              /* ALWAYS present */
+  border-radius:var(--radius-lg);
+  background:transparent;color:var(--fg);
+  font:inherit;font-weight:500;font-size:13px;white-space:nowrap;cursor:pointer;
+  outline:none;
+  transition:background-color var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease),
+             box-shadow var(--dur-fast) var(--ease),
+             color var(--dur-fast) var(--ease);
+}
+.btn svg{width:16px;height:16px;opacity:.8;flex:none;margin:0 -2px} /* icons subordinate */
+.btn:focus-visible{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
+
+/* quiet — floats in nothing until touched */
+.btn-ghost:hover{background:var(--accent);border-color:var(--border)}
+.btn-ghost:active{background:var(--accent);border-color:var(--border-hi);
+  box-shadow:inset 0 1px 0 rgba(0,0,0,.28)}
+
+/* outline */
+.btn-outline{border-color:var(--border);background:var(--surface-2);
+  box-shadow:0 1px 2px rgba(0,0,0,.24)}
+.btn-outline:hover{background:#1b1b20;border-color:var(--border-hi)}
+.btn-outline:active{box-shadow:inset 0 1px 0 rgba(0,0,0,.3)}
+
+/* raised — lit from above, inverts + sits down on press */
+.btn-primary{
+  border-color:var(--primary);background:var(--primary);color:var(--primary-fg);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 1px 3px rgba(91,124,250,.34);
+}
+.btn-primary:hover{background:#6b89ff}
+.btn-primary:active{
+  box-shadow:inset 0 1px 0 rgba(0,0,0,.14);   /* highlight → shadow */
+  background:#5273ef;
+}
+.btn-danger{border-color:rgba(244,82,95,.5);background:rgba(244,82,95,.13);color:#ff8b95}
+.btn-danger:hover{background:rgba(244,82,95,.2);border-color:rgba(244,82,95,.75)}
+.btn-danger:active{box-shadow:inset 0 1px 0 rgba(0,0,0,.3)}
+
+.btn-icon{width:32px;height:32px;padding:0}
+.btn-sm{height:26px;padding:0 calc(.5rem - 1px);font-size:12px;border-radius:var(--radius-md)}
+.btn:disabled{opacity:.64;pointer-events:none;box-shadow:none}
+
+/* ─── layout — one ground plane, one hairline, draggable ─────── */
+.app{display:grid;grid-template-columns:var(--side-w) 1fr;height:100vh;position:relative}
+.app.dragging{cursor:col-resize;user-select:none}
+
+/* ONE separation signal, not two. Same fill as main (no "boxed" pane).
+   The resizer owns the line, so hover feedback comes for free. */
+.side{display:flex;flex-direction:column;min-height:0;background:transparent}
+
+.resizer{position:absolute;top:0;bottom:0;left:var(--side-w);
+  width:11px;margin-left:-5px;z-index:20;cursor:col-resize}
+.resizer::before{content:"";position:absolute;top:0;bottom:0;left:5px;width:1px;
+  background:rgba(255,255,255,.05);
+  transition:background-color var(--dur-base) var(--ease),
+             box-shadow var(--dur-base) var(--ease)}
+.resizer:hover::before,.app.dragging .resizer::before{
+  background:var(--primary);
+  box-shadow:0 0 0 1px rgba(91,124,250,.28)}
+.brand{display:flex;align-items:center;gap:.6rem;padding:15px 16px 12px;
+  font-weight:600;letter-spacing:-.012em}
+.brand .logo{width:21px;height:21px;border-radius:7px;
+  background:linear-gradient(135deg,var(--agent-1),var(--agent-7));flex:none}
+.brand .spacer{margin-left:auto}
+
+.scroll{overflow:auto;padding:0 8px;flex:1;min-height:0}
+.scroll::-webkit-scrollbar{width:7px}
+.scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:99px}
+.scroll::-webkit-scrollbar-track{background:transparent}
+
+/* ── project group ── */
+.proj{margin-bottom:3px}
+.proj-row{display:flex;align-items:center;gap:.45rem;
+  padding:calc(.42rem - 1px) calc(.5rem - 1px);
+  border:1px solid transparent;border-radius:var(--radius-md);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.proj-row:hover{background:var(--accent);border-color:var(--border)}
+.proj-row .caret{width:13px;height:13px;opacity:.45;flex:none;
+  transition:transform var(--dur-base) var(--ease)}
+.proj.open .proj-row .caret{transform:rotate(90deg)}
+.proj-row .nm{font-size:13px;font-weight:600;letter-spacing:-.005em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-row .badge{margin-left:auto;font-size:10.5px;color:var(--fg-dim);
+  font-variant-numeric:tabular-nums}
+.proj-path{padding:0 .5rem 5px 1.62rem;font-size:10.5px;color:var(--fg-dim);
+  font-family:"JetBrains Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.proj-body{display:none;padding:0 0 7px 1.05rem;margin-left:.5rem;
+  border-left:1px solid rgba(255,255,255,.055)}
+.proj.open .proj-body{display:block}
+
+/* project-level destinations live in the MAIN pane as tabs, not in the
+   sidebar. adding a sixth view adds a tab, not another sidebar row. */
+.tabs{display:flex;gap:.15rem;padding:2px 22px 0}
+.tab{display:inline-flex;align-items:center;gap:.4rem;height:30px;
+  padding:0 calc(.65rem - 1px);border:1px solid transparent;
+  border-radius:var(--radius-md);background:transparent;
+  color:var(--fg-muted);font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease)}
+.tab:hover{background:var(--accent);border-color:var(--border);color:var(--fg)}
+.tab.on{background:var(--accent);border-color:var(--border);color:var(--fg)}
+.tab svg{width:14px;height:14px;opacity:.7}
+.tab .n{font-variant-numeric:tabular-nums;font-size:11px;color:var(--fg-dim);
+  background:rgba(255,255,255,.06);border-radius:99px;padding:0 5px;line-height:16px}
+
+.pane{flex:1;overflow:auto;padding:16px 0 24px}
+.rows{max-width:860px;margin:0 auto;padding:0 22px;display:flex;flex-direction:column;gap:5px}
+.row{display:flex;align-items:center;gap:.7rem;padding:calc(.6rem - 1px) calc(.8rem - 1px);
+  border:1px solid transparent;border-radius:var(--radius-lg);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.row:hover{background:var(--accent);border-color:var(--border)}
+.row .ttl{font-size:13.5px;font-weight:500}
+.row .meta{margin-left:auto;display:flex;align-items:center;gap:.75rem;
+  font-size:11.5px;color:var(--fg-dim)}
+.pill{display:inline-flex;align-items:center;height:20px;padding:0 .45rem;border-radius:99px;
+  font-size:10.5px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.pill.wip{background:rgba(99,179,247,.14);color:#8cc6fb}
+.pill.rev{background:rgba(247,185,85,.14);color:#f7b955}
+.pill.done{background:rgba(62,207,142,.14);color:#5fdba7}
+.pill.pend{background:rgba(255,255,255,.06);color:var(--fg-dim)}
+.sect{max-width:860px;margin:0 auto;padding:14px 22px 6px;
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-dim)}
+
+.agent-row{display:flex;align-items:center;gap:.5rem;
+  padding:calc(.36rem - 1px) calc(.5rem - 1px);
+  border:1px solid transparent;border-radius:var(--radius-md);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.agent-row:hover{background:var(--accent);border-color:var(--border)}
+.agent-row.on{background:var(--accent);border-color:var(--border)}
+.dot{width:8px;height:8px;border-radius:99px;flex:none;background:var(--c)}
+.agent-row .nm{font-size:12.5px;font-weight:500}
+.agent-row .st{margin-left:auto;font-size:10.5px;color:var(--fg-dim);
+  font-variant-numeric:tabular-nums}
+.agent-row .st.run{color:var(--ok)}
+.pulse{width:6px;height:6px;border-radius:99px;background:var(--ok);
+  box-shadow:0 0 0 0 rgba(62,207,142,.6);animation:p 2s infinite}
+@keyframes p{70%{box-shadow:0 0 0 6px rgba(62,207,142,0)}100%{box-shadow:0 0 0 0 rgba(62,207,142,0)}}
+
+.side-f{margin-top:auto;padding:10px 16px 12px;
+  display:flex;align-items:center;gap:.5rem;font-size:11.5px;color:var(--fg-dim)}
+
+/* ─── main — header floats, no box, no rule ──────────────────── */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.head{display:flex;align-items:center;gap:.55rem;padding:15px 22px 6px;
+  background:transparent;border:0}
+.head .title{display:flex;align-items:center;gap:.5rem;font-weight:600;letter-spacing:-.012em}
+.head .crumb{color:var(--fg-dim);font-weight:400}
+.head .spacer{margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:.35rem;height:22px;padding:0 calc(.45rem - 1px);
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:11px;font-weight:500;color:var(--fg-muted);background:var(--surface-2)}
+
+.stream{flex:1;overflow:auto;padding:22px 0 8px}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:18px}
+
+/* entry: conversational */
+.msg{display:flex;flex-direction:column;gap:5px}
+.msg .who{display:flex;align-items:center;gap:.4rem;font-size:11.5px;font-weight:600;color:var(--fg-muted)}
+.msg .who .t{font-weight:400;color:var(--fg-dim);margin-left:.15rem}
+.bub{border:1px solid var(--border);border-radius:var(--radius-xl);
+  padding:10px 13px;background:var(--surface);line-height:1.6}
+.msg.me{align-items:flex-end}
+.msg.me .bub{background:#1c2340;border-color:rgba(124,140,255,.3);max-width:82%}
+.msg.ai .bub{background:transparent;border-color:transparent;padding-left:0;padding-right:0}
+
+/* entry: peer message — tinted by the OTHER agent's colour */
+.peer{border:1px solid color-mix(in oklab,var(--c) 34%,transparent);
+  border-radius:var(--radius-xl);
+  background:color-mix(in oklab,var(--c) 9%,var(--surface));
+  padding:10px 13px}
+.peer .hdr{display:flex;align-items:center;gap:.4rem;margin-bottom:5px;
+  font-size:11.5px;font-weight:600;color:var(--c)}
+.peer .arrow{color:var(--fg-dim);font-weight:400}
+.peer.out{background:transparent;
+  border-color:color-mix(in oklab,var(--c) 26%,transparent);
+  border-left:2px solid var(--c)}
+
+/* entry: intermediate work — collapsible, NOT a bubble */
+.work{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden}
+.work summary{display:flex;align-items:center;gap:.5rem;padding:7px 11px;cursor:pointer;
+  list-style:none;font-size:12.5px;color:var(--fg-muted);
+  transition:background-color var(--dur-fast) var(--ease)}
+.work summary::-webkit-details-marker{display:none}
+.work summary:hover{background:var(--accent)}
+.work summary .caret{transition:transform var(--dur-base) var(--ease);opacity:.6}
+.work[open] summary .caret{transform:rotate(90deg)}
+.work .body{border-top:1px solid var(--border);padding:9px 11px;
+  font-size:12.5px;color:var(--fg-muted)}
+.work .body .line{display:flex;gap:.55rem;padding:2.5px 0}
+.work .body .line b{color:var(--fg);font-weight:500;min-width:64px}
+
+/* entry: folded turn */
+.fold{display:flex;align-items:center;gap:.55rem;padding:6px 11px;
+  border:1px dashed var(--border);border-radius:var(--radius-lg);
+  color:var(--fg-dim);font-size:12.5px;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.fold:hover{background:var(--accent);border-color:var(--border-hi);color:var(--fg-muted)}
+
+/* entry: structured result — soft content surface */
+.card{border:1px solid var(--border);border-radius:var(--radius-content);
+  background:color-mix(in oklab,var(--card) 82%,transparent);padding:16px 18px;position:relative}
+.card h4{margin:0 0 3px;font-size:14px;letter-spacing:-.01em}
+.card .sub{color:var(--fg-dim);font-size:12px;margin-bottom:11px}
+.card ol{margin:0;padding-left:1.1rem;color:var(--fg-muted);font-size:13px;line-height:1.85}
+.card ol b{color:var(--fg);font-weight:500}
+.card .acts{display:flex;gap:.45rem;margin-top:14px}
+
+/* queued — visible before delivery. entries keep their normal shape;
+   only opacity and the QUEUED chip mark them as undelivered. */
+.queued{opacity:.55}
+.qtag{display:inline-flex;align-items:center;gap:.3rem;height:18px;padding:0 .4rem;
+  border-radius:var(--radius-sm);background:var(--accent);
+  font-size:10.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--fg-dim)}
+
+/* system notice */
+.notice{display:flex;align-items:flex-start;gap:.6rem;padding:10px 13px;
+  border:1px solid rgba(247,185,85,.28);border-radius:var(--radius-lg);
+  background:rgba(247,185,85,.07);font-size:12.5px;color:#f0c98a}
+.notice b{color:#f7b955}
+.notice .act{margin-left:auto}
+
+.stopped{display:flex;align-items:center;gap:.5rem;justify-content:center;
+  color:var(--fg-dim);font-size:12px;padding:3px 0}
+.stopped::before,.stopped::after{content:"";height:1px;flex:1;background:var(--border)}
+
+/* ─── composer ───────────────────────────────────────────────── */
+.composer-wrap{padding:8px 20px 18px;background:linear-gradient(to top,var(--bg) 62%,transparent)}
+.composer{max-width:760px;margin:0 auto;
+  border:1px solid var(--border);border-radius:var(--radius-content);
+  background:var(--surface);overflow:hidden;
+  transition:border-color var(--dur-base) var(--ease),box-shadow var(--dur-base) var(--ease)}
+.composer:focus-within{border-color:rgba(124,140,255,.5);
+  box-shadow:0 0 0 3px rgba(91,124,250,.12)}
+.composer textarea{width:100%;border:0;outline:0;resize:none;background:transparent;
+  color:var(--fg);font:inherit;line-height:1.6;padding:13px 15px 6px;max-height:190px}
+.composer textarea::placeholder{color:var(--fg-dim)}
+.bar{display:flex;align-items:center;gap:.35rem;padding:7px 9px 8px}
+.bar .spacer{margin-left:auto}
+.hintbar{display:flex;gap:.9rem;padding:0 15px 9px;font-size:11.5px;color:var(--fg-dim)}
+.hintbar kbd{font-family:"JetBrains Mono",monospace;font-size:10.5px;
+  border:1px solid var(--border);border-radius:4px;padding:.5px 4px;color:var(--fg-muted)}
+
+/* trigger menu */
+.menu{max-width:760px;margin:0 auto 7px;border:1px solid var(--border-hi);
+  border-radius:var(--radius-lg);background:var(--surface-2);overflow:hidden;
+  box-shadow:0 12px 34px rgba(0,0,0,.5)}
+.menu .mh{padding:5px 11px;font-size:10.5px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--fg-dim);border-bottom:1px solid var(--border)}
+.menu .it{display:flex;align-items:center;gap:.55rem;padding:6px 11px;font-size:13px;
+  border-left:2px solid transparent;cursor:pointer}
+.menu .it .d{margin-left:auto;font-size:11.5px;color:var(--fg-dim)}
+.menu .it:hover{background:var(--accent)}
+.menu .it.sel{background:var(--accent);border-left-color:var(--primary)}
+
+/* context ring */
+.ring{position:relative;width:28px;height:28px;display:grid;place-items:center;
+  border:1px solid transparent;border-radius:99px;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.ring:hover{background:var(--accent);border-color:var(--border)}
+.ring svg{transform:rotate(-90deg)}
+.ring circle.fill{transition:stroke-dashoffset var(--dur-slow) ease-out,stroke var(--dur-slow) ease-out}
+.pop{position:absolute;bottom:calc(100% + 7px);right:0;width:236px;
+  border:1px solid var(--border-hi);border-radius:var(--radius-lg);background:var(--surface-2);
+  padding:11px;box-shadow:0 12px 34px rgba(0,0,0,.55);
+  opacity:0;transform:translateY(3px);pointer-events:none;
+  transition:opacity var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease);z-index:9}
+.ring:hover .pop{opacity:1;transform:translateY(0)}
+.pop .r1{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.pop .lbl{font-size:11.5px;font-weight:500;color:var(--fg-muted)}
+.pop .v{font-size:11px;color:var(--fg-dim)}
+.pop .track{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.pop .bar2{height:100%;border-radius:99px;background:var(--fg-muted);
+  transition:width var(--dur-slow) ease-out}
+.pop .r2{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--fg-dim)}
+
+.sel-model{display:inline-flex;align-items:center;gap:.4rem}
+.sel-model .dot{width:7px;height:7px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── sidebar ────────────────────────────────────────────── -->
+  <aside class="side">
+    <div class="brand">
+      <div class="logo"></div>AgentWeave
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-icon" title="Add project" style="width:26px;height:26px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+
+    <div class="scroll">
+
+      <!-- project 1 — open -->
+      <div class="proj open">
+        <div class="proj-row">
+          <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="nm" data-proj="AgentWeave">AgentWeave</span>
+          <span class="badge">3 agents</span>
+        </div>
+        <div class="proj-path">~/projects/AgentWeave</div>
+        <div class="proj-body">
+          <div class="agent-row on" style="--c:var(--agent-1)"><span class="dot"></span><span class="nm">claude</span><span class="st run">running</span></div>
+          <div class="agent-row" style="--c:var(--agent-3)"><span class="dot"></span><span class="nm">codex</span><span class="st">idle</span></div>
+          <div class="agent-row" style="--c:var(--agent-2)"><span class="dot"></span><span class="nm">opencode</span><span class="st">2 queued</span></div>
+        </div>
+      </div>
+
+      <!-- project 2 — open, quieter -->
+      <div class="proj open">
+        <div class="proj-row">
+          <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="nm" data-proj="IFiance">IFiance</span>
+          <span class="badge">2 agents</span>
+        </div>
+        <div class="proj-path">~/projects/IFiance</div>
+        <div class="proj-body">
+          <div class="agent-row" style="--c:var(--agent-4)"><span class="dot"></span><span class="nm">reviewer</span><span class="st run">running</span></div>
+          <div class="agent-row" style="--c:var(--agent-6)"><span class="dot"></span><span class="nm">gemini</span><span class="st">idle</span></div>
+        </div>
+      </div>
+
+      <!-- project 3 — collapsed -->
+      <div class="proj">
+        <div class="proj-row">
+          <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="nm">GalaxySpec</span>
+          <span class="badge">4 agents</span>
+        </div>
+        <div class="proj-body">
+          <div class="agent-row" style="--c:var(--agent-5)"><span class="dot"></span><span class="nm">glm</span><span class="st">idle</span></div>
+        </div>
+      </div>
+
+      <!-- project 4 — collapsed -->
+      <div class="proj">
+        <div class="proj-row">
+          <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+          <span class="nm">NeocortexGCM</span>
+          <span class="badge">1 agent</span>
+        </div>
+        <div class="proj-body">
+          <div class="agent-row" style="--c:var(--agent-8)"><span class="dot"></span><span class="nm">minimax</span><span class="st">idle</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="side-f"><span class="pulse"></span>Hub · localhost:8000</div>
+  </aside>
+
+  <div class="resizer" id="rz"></div>
+
+  <!-- ── main ───────────────────────────────────────────────── -->
+  <main class="main">
+    <!-- ══ PROJECT VIEW — hidden until a project name is clicked ══ -->
+    <div id="projview" style="display:none;flex-direction:column;min-height:0;flex:1">
+      <header class="head">
+        <div class="title"><span id="pvname">AgentWeave</span></div>
+        <span class="chip mono" id="pvpath">~/projects/AgentWeave</span>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost btn-sm">Project settings</button>
+        <button class="btn btn-primary btn-sm">Add agent</button>
+      </header>
+
+      <div class="tabs">
+        <button class="tab on">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>
+          Tasks <span class="n">4</span></button>
+        <button class="tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11H4z"/><path d="M15 4v5h5"/></svg>
+          Specs <span class="n">6</span></button>
+        <button class="tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          Jobs <span class="n">3</span></button>
+        <button class="tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+          Activity</button>
+        <button class="tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+          Environment</button>
+      </div>
+
+      <div class="pane">
+        <div class="sect">In progress</div>
+        <div class="rows">
+          <div class="row"><span class="pill wip">in progress</span><span class="ttl">Wire inbound queue into trigger endpoint</span>
+            <span class="meta"><span class="dot" style="--c:var(--agent-1)"></span>claude<span class="num">T-118</span></span></div>
+          <div class="row"><span class="pill wip">in progress</span><span class="ttl">Run record + PTY spawn on Windows</span>
+            <span class="meta"><span class="dot" style="--c:var(--agent-3)"></span>codex<span class="num">T-121</span></span></div>
+        </div>
+        <div class="sect">Under review</div>
+        <div class="rows">
+          <div class="row"><span class="pill rev">under review</span><span class="ttl">Timeline read model replacing timestamp attribution</span>
+            <span class="meta"><span class="dot" style="--c:var(--agent-2)"></span>opencode<span class="num">T-119</span></span></div>
+        </div>
+        <div class="sect">Pending</div>
+        <div class="rows">
+          <div class="row"><span class="pill pend">pending</span><span class="ttl">Vendor DM Sans + JetBrains Mono as woff2</span>
+            <span class="meta">unassigned<span class="num">T-124</span></span></div>
+        </div>
+        <div class="sect">Done this week</div>
+        <div class="rows">
+          <div class="row"><span class="pill done">completed</span><span class="ttl">Remove Docker gate from hub start</span>
+            <span class="meta"><span class="dot" style="--c:var(--agent-1)"></span>claude<span class="num">T-112</span></span></div>
+          <div class="row"><span class="pill done">completed</span><span class="ttl">Ship alembic.ini in package-data</span>
+            <span class="meta"><span class="dot" style="--c:var(--agent-3)"></span>codex<span class="num">T-113</span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ AGENT CONVERSATION ══ -->
+    <div id="chatview" style="display:flex;flex-direction:column;min-height:0;flex:1">
+    <header class="head">
+      <div class="title">
+        <span class="crumb" id="crumb" style="cursor:pointer">AgentWeave</span><span class="crumb">/</span>
+        <span class="dot" style="--c:var(--agent-1);width:9px;height:9px"></span>claude
+      </div>
+      <span class="chip mono">sonnet-4.5</span>
+      <span class="chip"><span class="pulse"></span>turn 4 running</span>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm">Fold all turns</button>
+      <button class="btn btn-danger btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        Stop turn
+      </button>
+    </header>
+
+    <section class="stream">
+      <div class="wrap">
+
+        <div class="fold">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          Turns 1–3 folded · 18 messages · 4 files changed
+        </div>
+
+        <div class="msg me">
+          <div class="who">you <span class="t">14:02</span></div>
+          <div class="bub">Wire the inbound queue into the trigger endpoint. Keep the hop budget configurable — I don't want agents ping-ponging overnight.</div>
+        </div>
+
+        <div class="msg ai">
+          <div class="who"><span class="dot" style="--c:var(--agent-1)"></span>claude <span class="t">14:02</span></div>
+          <div class="bub">Starting with the queue entry model, then the scheduler. Depth lives on the entry rather than the turn so continuation turns caused by the drain cap cost no hops.</div>
+        </div>
+
+        <details class="work">
+          <summary>
+            <svg class="caret" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            Work · 7 steps · 12.4s
+          </summary>
+          <div class="body">
+            <div class="line"><b>read</b><span class="mono">hub/hub/api/v1/agent_trigger.py</span></div>
+            <div class="line"><b>read</b><span class="mono">hub/hub/db/models.py</span></div>
+            <div class="line"><b>edit</b><span class="mono">hub/hub/db/models.py</span> <span style="color:var(--ok)">+34</span> <span style="color:var(--danger)">−2</span></div>
+            <div class="line"><b>edit</b><span class="mono">hub/hub/queue/scheduler.py</span> <span style="color:var(--ok)">+118</span></div>
+            <div class="line"><b>bash</b><span class="mono">pytest hub/tests/test_queue.py -q</span></div>
+            <div class="line"><b>result</b><span style="color:var(--ok)">14 passed</span></div>
+            <div class="line"><b>edit</b><span class="mono">hub/hub/api/v1/agent_trigger.py</span> <span style="color:var(--ok)">+21</span> <span style="color:var(--danger)">−88</span></div>
+          </div>
+        </details>
+
+        <div class="peer" style="--c:var(--agent-3)">
+          <div class="hdr"><span class="dot"></span>codex <span class="arrow">→ claude</span> <span class="t" style="color:var(--fg-dim);font-weight:400">14:06 · depth 1</span></div>
+          Heads up — I've already got <span class="mono">models.py</span> open for the run record. Take the scheduler, I'll land the entry table so we don't collide on the migration.
+        </div>
+
+        <div class="msg ai">
+          <div class="who"><span class="dot" style="--c:var(--agent-1)"></span>claude <span class="t">14:06</span></div>
+          <div class="bub">Understood — dropping my <span class="mono">models.py</span> edit and rebasing onto codex's entry table. Handing the timeline read model to opencode.</div>
+        </div>
+
+        <div class="peer out" style="--c:var(--agent-2)">
+          <div class="hdr"><span class="arrow">claude →</span> <span class="dot"></span>opencode <span class="t" style="color:var(--fg-dim);font-weight:400">14:07 · depth 1</span></div>
+          Timeline read model is yours. Merge turns, output and messages — do not reuse the timestamp-window attribution in <span class="mono">agent_chat.py</span>, it's being deleted.
+        </div>
+
+        <div class="card">
+          <h4>Proposed plan · inbound queue</h4>
+          <div class="sub">4 steps · touches 6 files · awaiting your approval</div>
+          <ol>
+            <li><b>Queue entry record</b> — typed origin, arrival time, hop depth, delivery state</li>
+            <li><b>Scheduler</b> — idle + non-empty → start turn; drain atomically up to cap 10</li>
+            <li><b>Hop budget</b> — default 6, over-budget entries queue without starting a turn</li>
+            <li><b>Delete</b> — <span class="mono">execution_confidence</span>, <span class="mono">[Session:]</span> tags, watchdog trigger branch</li>
+          </ol>
+          <div class="acts">
+            <button class="btn btn-primary btn-sm">Approve plan</button>
+            <button class="btn btn-outline btn-sm">Request changes</button>
+            <button class="btn btn-ghost btn-sm">View diff</button>
+          </div>
+        </div>
+
+        <div class="stopped">turn 3 stopped by you · 14:09</div>
+
+        <div class="peer queued" style="--c:var(--agent-4)">
+          <div class="hdr"><span class="dot"></span>reviewer <span class="arrow">→ claude</span>
+            <span class="qtag" style="margin-left:auto">queued</span></div>
+          Gate failed on <span class="mono">test_hop_budget_resets</span> — a mixed batch is taking max depth, not min. Operator input isn't resetting the chain.
+        </div>
+
+        <div class="msg me queued">
+          <div class="who">you <span class="qtag" style="margin-left:.3rem">queued</span></div>
+          <div class="bub">Fix the min-depth bug first, then continue with the scheduler.</div>
+        </div>
+
+        <div class="notice">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+          <div><b>Autonomous continuation paused</b> — 2 entries from <span class="mono">opencode</span> reached hop depth 6.
+          They'll be delivered with your next message.</div>
+          <button class="btn btn-ghost btn-sm act">Deliver now</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── composer ─────────────────────────────────────────── -->
+    <div class="composer-wrap">
+
+      <div class="menu">
+        <div class="mh">Files matching “sched”</div>
+        <div class="it sel"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.6"><path d="M4 4h11l5 5v11H4z"/></svg><span class="mono">hub/hub/queue/scheduler.py</span><span class="d">modified</span></div>
+        <div class="it"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.6"><path d="M4 4h11l5 5v11H4z"/></svg><span class="mono">hub/tests/test_scheduler.py</span><span class="d">new</span></div>
+        <div class="it"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.6"><path d="M4 4h11l5 5v11H4z"/></svg><span class="mono">openspec/…/agent-inbound-queue/spec.md</span><span class="d">spec</span></div>
+      </div>
+
+      <div class="composer">
+        <textarea rows="2" placeholder="Message claude…">Also add a test that two agents halt at the budget. @sched</textarea>
+        <div class="hintbar">
+          <span><kbd>@</kbd> files</span><span><kbd>/</kbd> commands</span><span><kbd>$</kbd> skills</span>
+          <span style="margin-left:auto"><kbd>↵</kbd> queue · <kbd>⇧↵</kbd> newline</span>
+        </div>
+        <div class="bar">
+          <button class="btn btn-ghost btn-sm sel-model">
+            <span class="dot" style="--c:var(--agent-1)"></span>claude · sonnet-4.5
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15V6a2 2 0 0 0-2-2H9"/><path d="M3 9v9a2 2 0 0 0 2 2h10"/></svg>
+            Plan
+          </button>
+
+          <div class="spacer"></div>
+
+          <div class="ring" title="Context window">
+            <svg width="21" height="21" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9.75" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="3"/>
+              <circle class="fill" cx="12" cy="12" r="9.75" fill="none" stroke="rgba(255,255,255,.55)"
+                      stroke-width="3" stroke-linecap="round"
+                      stroke-dasharray="61.26" stroke-dashoffset="24.5"/>
+            </svg>
+            <div class="pop">
+              <div class="r1"><span class="lbl">Context Window</span>
+                <span class="v num">60% · 120k/200k</span></div>
+              <div class="track"><div class="bar2" style="width:60%"></div></div>
+              <div class="r2"><span>Total processed</span><span class="num">1.4m</span></div>
+            </div>
+          </div>
+
+          <button class="btn btn-danger btn-icon" title="Stop turn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
+          <button class="btn btn-primary btn-icon" title="Queue message">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// context ring drifts so the 500ms dash-offset transition is visible
+const c=document.querySelector('.ring circle.fill'),
+      b=document.querySelector('.bar2'),
+      v=document.querySelector('.pop .v'),
+      C=2*Math.PI*9.75;
+let p=60;
+setInterval(()=>{
+  p=Math.min(97,p+Math.random()*7);
+  if(p>96)p=22;
+  c.style.strokeDashoffset=C-(p/100)*C;
+  c.style.stroke = p>90 ? '#f4525f' : 'rgba(255,255,255,.55)';
+  b.style.width=p+'%';
+  b.style.backgroundColor = p>90 ? '#f4525f' : 'var(--fg-muted)';
+  v.textContent = Math.round(p)+'% · '+Math.round(p*2)+'k/200k';
+},2200);
+
+// ── draggable sidebar ──
+const app=document.querySelector('.app'), rz=document.getElementById('rz');
+let drag=false;
+rz.addEventListener('pointerdown',e=>{drag=true;app.classList.add('dragging');rz.setPointerCapture(e.pointerId)});
+rz.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  const w=Math.min(460,Math.max(190,e.clientX));
+  document.documentElement.style.setProperty('--side-w',w+'px');
+});
+rz.addEventListener('pointerup',e=>{drag=false;app.classList.remove('dragging');rz.releasePointerCapture(e.pointerId)});
+rz.addEventListener('dblclick',()=>document.documentElement.style.setProperty('--side-w','266px'));
+
+// ── project view <-> conversation ──
+const pv=document.getElementById('projview'), cv=document.getElementById('chatview');
+function showProject(name,path){
+  document.getElementById('pvname').textContent=name;
+  document.getElementById('pvpath').textContent=path;
+  pv.style.display='flex'; cv.style.display='none';
+}
+function showChat(){pv.style.display='none';cv.style.display='flex'}
+document.querySelectorAll('.proj-row .nm[data-proj]').forEach(n=>{
+  n.addEventListener('click',e=>{
+    e.stopPropagation();
+    const path=n.closest('.proj').querySelector('.proj-path');
+    showProject(n.dataset.proj, path?path.textContent:'');
+  });
+});
+document.querySelectorAll('.agent-row').forEach(a=>a.addEventListener('click',showChat));
+document.getElementById('crumb').addEventListener('click',()=>showProject('AgentWeave','~/projects/AgentWeave'));
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));t.classList.add('on');
+}));
+
+// project expand / collapse
+document.querySelectorAll('.proj-row').forEach(r=>{
+  r.addEventListener('click',()=>r.parentElement.classList.toggle('open'));
+});
+
+// textarea autosize
+const ta=document.querySelector('.composer textarea');
+const fit=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,190)+'px'};
+ta.addEventListener('input',fit);fit();
+</script>
+</body>
+</html>

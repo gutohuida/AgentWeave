@@ -33,8 +33,24 @@ describe('Q14 — <SidebarItem />', () => {
   it('applies the active background when active=true', () => {
     render(<SidebarItem label="Overview" icon="home" active={true} onClick={() => {}} />)
     const btn = screen.getByRole('button')
-    // jsdom normalizes rgba spacing — match the digits with a regex.
-    expect(btn.style.background).toMatch(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0\.06\s*\)/)
+    // Asserts the theme token rather than a literal colour. These previously
+    // asserted rgba(255,255,255,…), which only existed in dark mode and was
+    // invisible against a light ground plane.
+    expect(btn.style.background).toBe('var(--accent)')
+  })
+
+  it('reserves a transparent border at rest so emphasis never shifts layout', () => {
+    render(<SidebarItem label="Overview" icon="home" active={false} onClick={() => {}} />)
+    const btn = screen.getByRole('button')
+    // The width is what reserves the space; the colour is what changes.
+    expect(btn.style.borderWidth).toBe('1px')
+    expect(btn.style.borderColor).toBe('transparent')
+  })
+
+  it('colours the reserved border when highlighted', () => {
+    render(<SidebarItem label="Overview" icon="home" active={true} onClick={() => {}} />)
+    const btn = screen.getByRole('button')
+    expect(btn.style.borderColor).toBe('var(--border)')
   })
 
   it('applies a transparent background when inactive and not hovered', () => {
@@ -47,7 +63,7 @@ describe('Q14 — <SidebarItem />', () => {
     render(<SidebarItem label="Overview" icon="home" active={false} onClick={() => {}} />)
     const btn = screen.getByRole('button')
     fireEvent.mouseEnter(btn)
-    expect(btn.style.background).toMatch(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0\.04\s*\)/)
+    expect(btn.style.background).toBe('var(--accent)')
     fireEvent.mouseLeave(btn)
     expect(btn.style.background).toBe('transparent')
   })
@@ -56,7 +72,7 @@ describe('Q14 — <SidebarItem />', () => {
     render(<SidebarItem label="Overview" icon="home" active={true} onClick={() => {}} />)
     const btn = screen.getByRole('button')
     fireEvent.mouseEnter(btn)
-    expect(btn.style.background).toMatch(/rgba\(\s*255\s*,\s*255\s*,\s*255\s*,\s*0\.06\s*\)/)
+    expect(btn.style.background).toBe('var(--accent)')
   })
 
   it('does not render a badge when badge is omitted or null', () => {

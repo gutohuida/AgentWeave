@@ -15,10 +15,17 @@ interface SidebarProps {
    * `activePage`, so the rail never depends on hidden page state.
    */
   compact?: boolean
+  /** Current rail width in px when not compact. Owned by App so the resizer
+   *  and the rail cannot disagree. Defaults to SIDEBAR_WIDTH. */
+  width?: number
 }
 
 export const SIDEBAR_WIDTH = 220
 export const SIDEBAR_COMPACT_WIDTH = 52
+/** Clamp bounds for the draggable rail — below the minimum labels are
+ *  unreadable, above the maximum the content pane starts to suffer. */
+export const SIDEBAR_MIN_WIDTH = 180
+export const SIDEBAR_MAX_WIDTH = 420
 
 interface NavItem {
   id: Page
@@ -43,7 +50,13 @@ const NAV_ITEMS: NavItem[] = [
 
 const SECTION_ORDER = ['WORK', 'COMMUNICATION', 'OBSERVE']
 
-export function Sidebar({ activePage, onNavigate, onOpenSetup, compact = false }: SidebarProps) {
+export function Sidebar({
+  activePage,
+  onNavigate,
+  onOpenSetup,
+  compact = false,
+  width = SIDEBAR_WIDTH,
+}: SidebarProps) {
   const { data: questions }    = useQuestions(false)
   const { data: messages }     = useMessages()
   const { data: agents }       = useAgents()
@@ -85,9 +98,13 @@ export function Sidebar({ activePage, onNavigate, onOpenSetup, compact = false }
       data-testid="sidebar"
       data-compact={compact ? 'true' : 'false'}
       style={{
-        width: compact ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_WIDTH,
-        background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
+        width: compact ? SIDEBAR_COMPACT_WIDTH : width,
+        // One ground plane: the rail shares the app background rather than
+        // carrying its own fill. Previously it had BOTH a distinct fill
+        // (--surface) and a --border divider; two simultaneous boundary
+        // signals read as far heavier than either alone. The divider now
+        // lives on the resizer between the panes.
+        background: 'transparent',
         padding: compact ? '12px 4px' : '12px 8px',
       }}
     >
