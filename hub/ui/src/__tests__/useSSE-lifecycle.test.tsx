@@ -7,6 +7,8 @@ import {
   useSSE,
   cancelReconnect,
   __resetSSEStateForTest,
+  getSSEConnectionState,
+  onSseStateChange,
 } from '@/hooks/useSSE'
 import type { ReactNode } from 'react'
 
@@ -172,4 +174,98 @@ describe('M22 — useSSE reconnect lifecycle: clear on cancel, clear on unmount'
     // for the pending reconnect.
     await waitFor(() => expect(clearTimeoutSpy).toHaveBeenCalled())
   })
+})
+
+describe('stream-health: connection state and reconciliation on reconnect (task 2.4)', () => {
+  beforeEach(() => {
+    __resetSSEStateForTest()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      projectId: 'proj-test',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  afterEach(() => {
+    cancelReconnect()
+    __resetSSEStateForTest()
+  })
+
+  it('starts closed, moves to open once the stream connects, and to reconnecting when it ends unexpectedly', async () => {
+    expect(getSSEConnectionState()).toBe('closed')
+
+    const seen: string[] = []
+    const unsubscribe = onSseStateChange((s) => seen.push(s))
+
+    // A stream that yields one keepalive then closes on its own — the "ended
+    // unexpectedly" path, not a deliberate unmount/cancel.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(': keepalive\n\n'))
+        controller.close()
+      },
+    })
+    ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      )
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(withQueryClient(<Probe />))
+
+    await waitFor(() => expect(seen).toContain('open'))
+    await waitFor(() => expect(seen).toContain('reconnecting'))
+    unsubscribe()
+  })
+
+  it(
+    'invalidates all queries once the stream actually reconnects (not on the initial connect)',
+    async () => {
+      let callCount = 0
+      ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi
+        .fn()
+        .mockImplementation(async () => {
+          callCount += 1
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(': keepalive\n\n'))
+              controller.close()
+            },
+          })
+          return new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          })
+        })
+
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+      function Probe() {
+        useSSE()
+        return null
+      }
+      render(
+        <QueryClientProvider client={client}>
+          <Probe />
+        </QueryClientProvider>
+      )
+
+      // First connect: not a reconnect, must not trigger the reconciliation invalidation.
+      await waitFor(() => expect(callCount).toBe(1))
+      expect(invalidateSpy).not.toHaveBeenCalled()
+
+      // The stream closing on its own schedules a real reconnect (3000ms) —
+      // wait for the second fetch, which is the actual reconnect.
+      await waitFor(() => expect(callCount).toBe(2), { timeout: 5000 })
+      expect(invalidateSpy).toHaveBeenCalled()
+    },
+    8000
+  )
 })

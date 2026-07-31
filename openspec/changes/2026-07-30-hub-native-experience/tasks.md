@@ -169,8 +169,21 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
         tests: `useSSE.test.tsx` (job events), `agentChat.test.tsx` (`eventTargetsAgent`),
         `agentTimelineEvents.test.tsx` (`eventBelongsToTimeline`). tsc clean, 192/192 tests passing.
 - [ ] 2.3 Remove all `refetchInterval` configuration; drive invalidation from events only.
-- [ ] 2.4 Add stream-health state: visible indicator on disconnect, automatic reconnect, and state
-      reconciliation on resume.
+- [x] 2.4 Add stream-health state: visible indicator on disconnect, automatic reconnect, and state
+      reconciliation on resume. Automatic reconnect already existed (`scheduleReconnect`, 3s retry);
+      added the other two:
+      - **State machine** in `useSSE.ts`: `closed | connecting | open | reconnecting`, exposed via
+        `getSSEConnectionState()` / `onSseStateChange()` / the `useSSEConnectionState()` hook.
+      - **Indicator**: a red "Reconnecting…" chip in `StatusBar.tsx`, shown only in the
+        `reconnecting` state — quiet by default like the existing context-warning chip, not a
+        permanent "Live" badge cluttering the healthy path.
+      - **Reconciliation on resume**: `useSSE()` now calls `queryClient.invalidateQueries()` (no
+        filter — invalidate everything) on every reconnect via the existing `onSseReconnect` hook,
+        so entities that lost SSE coverage while the stream was down catch up immediately rather
+        than waiting for their next poll (or never, once 2.3 removes the poll).
+      - Regression tests in `useSSE-lifecycle.test.tsx`: state reaches `open` then `reconnecting`
+        when a stream ends unexpectedly; `invalidateQueries` fires on the real second connect (not
+        the first). tsc clean, 194/194 tests passing.
 - [ ] 2.5 Verify: task, message, agent-status and log views update live with polling removed; killing
       the stream shows the indicator and recovers on restore.
 - [ ] 2.6 **`/handoff`**

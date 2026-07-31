@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 
@@ -10,6 +10,13 @@ export interface SSEEvent {
 }
 
 type SSEListener = (event: SSEEvent) => void
+
+/** 'closed' — not configured, or the last subscriber unmounted.
+ * 'connecting' — first-ever connection attempt in flight.
+ * 'open' — actively streaming.
+ * 'reconnecting' — a previously open (or attempted) connection was lost and
+ * a retry is scheduled or in flight. */
+export type SSEConnectionState = 'closed' | 'connecting' | 'open' | 'reconnecting'
 
 const SSE_EVENT_TYPES = [
   'message_created',
@@ -49,6 +56,34 @@ let connectingUrl = ''
 let connectingKey = ''
 const eventBuffer: SSEEvent[] = []
 
+let connectionState: SSEConnectionState = 'closed'
+const stateListeners = new Set<(state: SSEConnectionState) => void>()
+
+function setConnectionState(next: SSEConnectionState): void {
+  if (next === connectionState) return
+  connectionState = next
+  stateListeners.forEach((cb) => {
+    try {
+      cb(next)
+    } catch {
+      // Swallow listener errors so one bad subscriber doesn't break the chain.
+    }
+  })
+}
+
+export function getSSEConnectionState(): SSEConnectionState {
+  return connectionState
+}
+
+/** Subscribe to connection-state transitions (closed/connecting/open/
+ * reconnecting). Returns an unsubscribe function. */
+export function onSseStateChange(cb: (state: SSEConnectionState) => void): () => void {
+  stateListeners.add(cb)
+  return () => {
+    stateListeners.delete(cb)
+  }
+}
+
 export function getBufferedEvents(): SSEEvent[] {
   return eventBuffer.slice()
 }
@@ -86,6 +121,7 @@ export function cancelReconnect(): void {
   connectedKey = ''
   connectingUrl = ''
   connectingKey = ''
+  setConnectionState('closed')
 }
 
 /**
@@ -167,6 +203,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
     activeStream.cancel()
     activeStream = null
   }
+  setConnectionState(hasEverConnected ? 'reconnecting' : 'connecting')
 
   const url = `${hubUrl}/api/v1/events`
   let response: Response
@@ -211,6 +248,7 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
     reader.cancel().catch(() => {})
   }
   activeStream = { cancel }
+  setConnectionState('open')
 
   // Fire the reconnect hook for any connect after the first one. The first
   // connect is NOT a reconnect — it's the initial subscription. Subscribers
@@ -254,10 +292,21 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
         if (activeStream && activeStream.cancel === cancel) {
           activeStream = null
         }
+        setConnectionState('reconnecting')
         scheduleReconnect(hubUrl, apiKey)
       }
     }
   })()
+}
+
+/** Live connection state for rendering a stream-health indicator. */
+export function useSSEConnectionState(): SSEConnectionState {
+  const [state, setState] = useState<SSEConnectionState>(getSSEConnectionState())
+  useEffect(() => {
+    setState(getSSEConnectionState())
+    return onSseStateChange(setState)
+  }, [])
+  return state
 }
 
 export function useSSE(onEvent?: SSEListener) {
@@ -291,6 +340,16 @@ export function useSSE(onEvent?: SSEListener) {
       cancelReconnect()
     }
   }, [isConfigured])
+
+  // On every reconnect (not the initial connect), invalidate everything so
+  // views that only update via SSE catch up on whatever happened while the
+  // stream was down — rather than staying stale until their next poll, or
+  // forever for entities with no poll left after 2.3 removes the backstop.
+  useEffect(() => {
+    return onSseReconnect(() => {
+      queryClient.invalidateQueries()
+    })
+  }, [queryClient])
 
   useEffect(() => {
     const invalidateHandler: SSEListener = (event) => {

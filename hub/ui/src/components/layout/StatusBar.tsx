@@ -3,6 +3,7 @@ import { useStatus } from '@/api/status'
 import { useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
 import { presentContextUsage } from '@/components/context/contextPresentation'
+import { useSSEConnectionState } from '@/hooks/useSSE'
 
 interface StatusBarProps {
   onOpenSetup: () => void
@@ -12,6 +13,7 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
   const { data } = useStatus()
   const { data: agents = [] } = useAgents()
   const { mode, setMode } = useConfigStore()
+  const connectionState = useSSEConnectionState()
 
   const contextWarningCount = agents.filter(
     (agent) => presentContextUsage(agent.context_usage)?.isPolicyWarning
@@ -110,6 +112,28 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
             <Icon name="memory" size={14} />
             <span style={{ fontWeight: 500 }}>{contextWarningCount}</span>
             <span>ctx!</span>
+          </div>
+        )}
+
+        {/* Stream-health indicator — quiet while live; visible the moment the
+            SSE connection is lost, since several views now rely on it rather
+            than a poll. */}
+        {connectionState === 'reconnecting' && (
+          <div
+            style={{
+              ...chipBase,
+              background: 'rgba(239,68,68,0.08)',
+              borderColor: 'rgba(239,68,68,0.25)',
+              color: 'var(--red)',
+            }}
+            role="status"
+            title="Live updates are interrupted — reconnecting automatically."
+          >
+            <span
+              className="animate-pulse"
+              style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }}
+            />
+            <span>Reconnecting…</span>
           </div>
         )}
 
