@@ -37,7 +37,6 @@ export function useLogs(opts: LogsOpts = {}) {
     queryKey: ['logs', opts.agent, opts.event_type, opts.severity],
     queryFn: () => getJson<EventLogEntry[]>(`/api/v1/logs?${params}`),
     enabled: isConfigured,
-    refetchInterval: opts.live ? 3000 : false,
     staleTime: 0,
   })
 

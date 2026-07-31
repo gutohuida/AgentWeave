@@ -101,17 +101,15 @@ export function useAgents() {
     }
   })
 
+  // Invalidated by session_synced above and by agent_heartbeat/context_warning
+  // in useSSE.ts's central switch; a lost connection is now visible (the
+  // StatusBar "Reconnecting…" indicator) and self-heals via the
+  // invalidateQueries() reconciliation on reconnect, so the poll fallback
+  // this used to need is no longer necessary.
   return useQuery<AgentSummary[]>({
     queryKey: ['agents'],
     queryFn: () => getJson<AgentSummary[]>('/api/v1/agents'),
     enabled: isConfigured,
-    // SSE normally invalidates this query immediately on heartbeat events.
-    // Keep a faster fallback while an agent is active so a missed SSE event
-    // cannot leave controls disabled until the user refreshes the page.
-    refetchInterval: (query) => {
-      const data = query.state.data
-      return data?.some((agent) => agent.status === 'running') ? 2000 : 10000
-    },
   })
 }
 
@@ -144,7 +142,6 @@ export function useAgentTimeline(name: string | null) {
     queryKey: ['agents', name, 'timeline'],
     queryFn: () => getJson<AgentTimelineEvent[]>(`/api/v1/agents/${name}/timeline`),
     enabled: isConfigured && !!name,
-    refetchInterval: 5000, // Backstop — SSE invalidates immediately above.
   })
 }
 
@@ -399,6 +396,5 @@ export function useAgentSessions(agentName: string | null) {
     queryKey: ['agent', agentName, 'sessions'],
     queryFn: () => getJson<{ sessions: AgentSession[] }>(`/api/v1/agent/sessions/${agentName}`),
     enabled: isConfigured && !!agentName,
-    refetchInterval: 10000,
   })
 }

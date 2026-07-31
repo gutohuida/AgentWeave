@@ -57,7 +57,6 @@ export function useJobs() {
     queryKey: ['jobs'],
     queryFn: () => getJson<Job[]>('/api/v1/jobs'),
     enabled: isConfigured,
-    refetchInterval: 10000,
   })
 }
 

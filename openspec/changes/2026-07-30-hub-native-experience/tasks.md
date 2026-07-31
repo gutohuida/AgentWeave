@@ -168,7 +168,12 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       - All four keep their existing `refetchInterval` as a backstop (2.3 removes those). Regression
         tests: `useSSE.test.tsx` (job events), `agentChat.test.tsx` (`eventTargetsAgent`),
         `agentTimelineEvents.test.tsx` (`eventBelongsToTimeline`). tsc clean, 192/192 tests passing.
-- [ ] 2.3 Remove all `refetchInterval` configuration; drive invalidation from events only.
+- [x] 2.3 Remove all `refetchInterval` configuration; drive invalidation from events only. Removed all
+      9 sites: `status`, `session-sync`, `logs` (the `opts.live ? 3000 : false` conditional), `jobs`,
+      `agents` (including the running-agent 2s/10s adaptive poll — its comment explained it existed
+      only as a fallback for a missed SSE event with no visible failure signal, which 2.4 now
+      provides), `agents/:name/timeline`, `agent/:name/sessions`, and both `agent/:name/chat/*` hooks.
+      `grep -rn refetchInterval hub/ui/src/` returns nothing. tsc clean, 194/194 tests passing.
 - [x] 2.4 Add stream-health state: visible indicator on disconnect, automatic reconnect, and state
       reconciliation on resume. Automatic reconnect already existed (`scheduleReconnect`, 3s retry);
       added the other two:

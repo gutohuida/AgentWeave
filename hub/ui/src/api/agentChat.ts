@@ -40,7 +40,6 @@ export function useAgentChatHistory(agent: string | null, sessionId: string | nu
     queryKey: ['agent', agent, 'chat', sessionId],
     queryFn: () => getJson<ChatHistoryResponse>(`/api/v1/agent/${agent}/chat/${sessionId}`),
     enabled: isConfigured && !!agent && !!sessionId && sessionId !== NEW_SESSION_ID,
-    refetchInterval: 3000, // Backstop — SSE invalidates immediately above.
   })
 }
 
@@ -58,6 +57,5 @@ export function useAgentRecentChat(agent: string | null, limit: number = 50) {
     queryKey: ['agent', agent, 'chat', 'recent', limit],
     queryFn: () => getJson<ChatMessage[]>(`/api/v1/agent/${agent}/chat?limit=${limit}`),
     enabled: isConfigured && !!agent,
-    refetchInterval: 3000, // Backstop — SSE invalidates immediately above.
   })
 }

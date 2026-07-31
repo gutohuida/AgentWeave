@@ -32,10 +32,11 @@ export interface SessionSyncData {
 
 export function useStatus() {
   const { isConfigured } = useConfigStore()
+  // Invalidated by message/task/question SSE events in useSSE.ts's central
+  // switch, plus the reconciliation invalidateQueries() on every reconnect.
   return useQuery<StatusData>({
     queryKey: ['status'],
     queryFn: () => getJson<StatusData>('/api/v1/status'),
-    refetchInterval: 30_000,
     enabled: isConfigured,
   })
 }
@@ -55,7 +56,6 @@ export function useSessionSync() {
   return useQuery<SessionSyncData>({
     queryKey: ['session-sync'],
     queryFn: () => getJson<SessionSyncData>('/api/v1/session/sync'),
-    refetchInterval: 60_000, // Backstop — SSE invalidates immediately above.
     enabled: isConfigured,
   })
 }
