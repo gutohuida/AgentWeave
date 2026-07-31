@@ -10,6 +10,13 @@ interface ChatAgent {
   status?: string
 }
 
+interface TriggerResponse {
+  message?: string
+  execution_confidence?: string
+}
+
+const QUEUED_START_TIMEOUT_MS = 15_000
+
 interface SpecChatPaneProps {
   agents: ChatAgent[] | undefined
   selectedAgent: string
@@ -49,11 +56,29 @@ export function SpecChatPane({
   const [isSending, setIsSending] = useState(false)
   const [triggerState, setTriggerState] = useState<'idle' | 'queued' | 'running'>('idle')
   const [sendError, setSendError] = useState<string | null>(null)
+  const [sendWarning, setSendWarning] = useState<string | null>(null)
 
   useEffect(() => {
     if (triggerState === 'queued' && isRunning) setTriggerState('running')
     if (triggerState === 'running' && !isRunning) setTriggerState('idle')
   }, [triggerState, isRunning])
+
+  useEffect(() => {
+    if (triggerState !== 'queued') return
+    const timeoutId = window.setTimeout(() => {
+      setTriggerState((current) => (current === 'queued' ? 'idle' : current))
+      setSendWarning(
+        'Message is queued, but the agent did not start within 15 seconds. Check the watchdog.'
+      )
+    }, QUEUED_START_TIMEOUT_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [triggerState])
+
+  useEffect(() => {
+    setTriggerState('idle')
+    setSendError(null)
+    setSendWarning(null)
+  }, [selectedAgent])
 
   const inputDisabled = !selectedAgent || isRunning || isSending || triggerState !== 'idle'
 
@@ -61,6 +86,7 @@ export function SpecChatPane({
     if (!message.trim() || !apiKey || !selectedAgent) return
     setIsSending(true)
     setSendError(null)
+    setSendWarning(null)
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), 15000)
     try {
@@ -82,10 +108,22 @@ export function SpecChatPane({
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`)
       }
+      const triggerResponse = (await res.json()) as TriggerResponse
       // The trigger response confirms queueing, but the status/output stream
       // may arrive later. Refresh immediately so the running state is not
       // dependent on an agent_heartbeat SSE event.
-      setTriggerState('queued')
+      if (
+        triggerResponse.execution_confidence &&
+        triggerResponse.execution_confidence !== 'queued_watchdog_healthy'
+      ) {
+        setTriggerState('idle')
+        setSendWarning(
+          triggerResponse.message ||
+            'Message queued, but automatic execution could not be confirmed.'
+        )
+      } else {
+        setTriggerState('queued')
+      }
       // Consumed — the next message resumes the session this one creates.
       onStartNewSessionChange(false)
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
@@ -202,6 +240,11 @@ export function SpecChatPane({
         style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
         {sendError && <span style={{ fontSize: 11, color: 'var(--red)' }}>{sendError}</span>}
+        {sendWarning && (
+          <span role="status" style={{ fontSize: 11, color: 'var(--amber)' }}>
+            {sendWarning}
+          </span>
+        )}
         {selectedAgent && (
           <span
             data-testid="session-continuity"

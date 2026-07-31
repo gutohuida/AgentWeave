@@ -14,6 +14,7 @@ export interface StatusConfig {
 
 export const STATUS_CONFIG: Record<string, StatusConfig> = {
   running: { dotColor: 'var(--green)', label: 'Running', pulse: true,  labelColor: 'var(--green)' },
+  stalled: { dotColor: 'var(--amber)', label: 'Stalled', pulse: false, labelColor: 'var(--amber)' },
   active:  { dotColor: 'var(--green)', label: 'Active',  pulse: false, labelColor: 'var(--green)' },
   idle:    { dotColor: 'var(--text-3)', label: 'Idle',    pulse: false, labelColor: 'var(--text-3)' },
   waiting: { dotColor: 'var(--amber)',  label: 'Waiting', pulse: false, labelColor: 'var(--amber)' },

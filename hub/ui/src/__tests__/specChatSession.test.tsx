@@ -78,7 +78,14 @@ describe('Spec tab chat — session resume', () => {
     cleanup()
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     fetchWithAuth.mockReset()
-    fetchWithAuth.mockResolvedValue({ ok: true, status: 200 })
+    fetchWithAuth.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        message: 'Message queued',
+        execution_confidence: 'queued_watchdog_healthy',
+      }),
+    })
     sessionsResult = { sessions: [{ id: 'ses_prior' }] }
     agentStatus = 'idle'
     useConfigStore.setState({
@@ -147,6 +154,22 @@ describe('Spec tab chat — session resume', () => {
     await sendMessage('hi other')
     expect(triggerBody().session_mode).toBe('resume')
     expect(triggerBody().agent).toBe('other')
+  })
+
+  it('unlocks and shows the Hub warning when the watchdog is stale', async () => {
+    fetchWithAuth.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        message: 'Message queued, but the latest watchdog heartbeat is stale.',
+        execution_confidence: 'queued_watchdog_stale',
+      }),
+    })
+    render(withQueryClient(<SpecPage />))
+    await sendMessage('are you there?')
+
+    await waitFor(() => expect(screen.getByPlaceholderText(/^Message /)).not.toBeDisabled())
+    expect(screen.getByRole('status')).toHaveTextContent('latest watchdog heartbeat is stale')
   })
 
   describe('continuity indicator', () => {

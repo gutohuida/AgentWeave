@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AgentHeartbeat, Task
@@ -20,10 +21,9 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 def _task_response(task: Task, heartbeat: Optional[AgentHeartbeat] = None) -> TaskResponse:
     response = TaskResponse.model_validate(task)
-    response.assignee_status = (
-        heartbeat.status if heartbeat else ("idle" if task.assignee else None)
-    )
-    response.assignee_status_msg = heartbeat.message if heartbeat else None
+    effective_status, effective_message = effective_heartbeat_status(heartbeat)
+    response.assignee_status = effective_status if task.assignee else None
+    response.assignee_status_msg = effective_message
     response.assignee_last_seen = heartbeat.timestamp if heartbeat else None
     return response
 

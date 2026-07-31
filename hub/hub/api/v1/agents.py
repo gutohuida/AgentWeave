@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
@@ -315,6 +316,7 @@ async def list_agents(
             agent_meta = {**(agent_row.config or {}), **agent_meta}
 
         hb = latest_hbs.get(agent_name)
+        effective_status, effective_status_message = effective_heartbeat_status(hb)
         msg_count = msg_counts.get(agent_name, 0)
         task_count = active_task_counts.get(agent_name, 0)
         context_usage = context_usage_map.get(agent_name)
@@ -375,16 +377,15 @@ async def list_agents(
             ts = hb.timestamp
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
-            age = now - ts
-            _liveness = "online" if age <= timedelta(minutes=2) else "offline"
+            _liveness = "offline" if heartbeat_is_stale(hb, now=now) else "online"
         elif _self_registered:
             _liveness = "offline"
 
         summaries.append(
             AgentSummary(
                 name=agent_name,
-                status=hb.status if hb else "idle",
-                latest_status_msg=hb.message if hb else None,
+                status=effective_status,
+                latest_status_msg=effective_status_message,
                 last_seen=hb.timestamp if hb else None,
                 message_count=msg_count,
                 active_task_count=task_count,

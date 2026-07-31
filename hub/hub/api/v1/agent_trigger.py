@@ -12,13 +12,14 @@ Flow:
 5. Output streams back to Hub via HTTP transport
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_status import heartbeat_is_stale
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, Message
@@ -112,17 +113,11 @@ async def trigger_agent(
         .limit(1)
     )
     latest_hb = hb_result.scalars().first()
-    now = datetime.now(timezone.utc)
-    stale_cutoff = now - timedelta(seconds=120)
     if latest_hb is None:
         execution_confidence = "queued_no_watchdog_heartbeat"
         watchdog_status = "missing"
-    else:
-        hb_ts = latest_hb.timestamp
-        if hb_ts.tzinfo is None:
-            hb_ts = hb_ts.replace(tzinfo=timezone.utc)
 
-    if latest_hb is not None and hb_ts < stale_cutoff:
+    if latest_hb is not None and heartbeat_is_stale(latest_hb):
         execution_confidence = "queued_watchdog_stale"
         watchdog_status = "stale"
     elif latest_hb is not None:

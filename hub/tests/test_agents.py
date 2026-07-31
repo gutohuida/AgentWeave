@@ -1,5 +1,7 @@
 """Tests for agent endpoints and input validation."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 
@@ -162,3 +164,35 @@ async def test_list_agents_avoids_n_plus_one(app, auth_headers):
     assert (
         len(statements) <= 15
     ), f"list_agents issued {len(statements)} SQL queries for {len(agents)} agents"
+
+
+@pytest.mark.asyncio
+async def test_list_agents_marks_expired_running_heartbeat_as_stalled(app, auth_headers):
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AgentHeartbeat
+
+    sync_resp = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"stale-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync_resp.status_code == 200
+
+    async with async_session_factory() as session:
+        session.add(
+            AgentHeartbeat(
+                id="hb-stale-running",
+                project_id="proj-test",
+                agent="stale-agent",
+                status="running",
+                message="Responding",
+                timestamp=datetime.now(timezone.utc) - timedelta(minutes=3),
+            )
+        )
+        await session.commit()
+
+    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    stale_agent = next(agent for agent in resp.json() if agent["name"] == "stale-agent")
+    assert stale_agent["status"] == "stalled"
+    assert "restart the host watchdog" in stale_agent["latest_status_msg"]

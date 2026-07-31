@@ -20,8 +20,8 @@ function makeAgent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 describe('Q6 / Q13 — lib/agentStatus: deduplicated helpers and components', () => {
   describe('STATUS_CONFIG and getStatusConfig', () => {
-    it('covers the four known statuses with consistent shape', () => {
-      for (const key of ['running', 'active', 'idle', 'waiting']) {
+    it('covers the known statuses with consistent shape', () => {
+      for (const key of ['running', 'stalled', 'active', 'idle', 'waiting']) {
         expect(STATUS_CONFIG[key]).toBeDefined()
         expect(STATUS_CONFIG[key].dotColor).toMatch(/^var\(--/)
         expect(typeof STATUS_CONFIG[key].pulse).toBe('boolean')
@@ -31,6 +31,7 @@ describe('Q6 / Q13 — lib/agentStatus: deduplicated helpers and components', ()
 
     it('marks running as the only pulsing status', () => {
       expect(STATUS_CONFIG.running.pulse).toBe(true)
+      expect(STATUS_CONFIG.stalled.pulse).toBe(false)
       expect(STATUS_CONFIG.active.pulse).toBe(false)
       expect(STATUS_CONFIG.idle.pulse).toBe(false)
       expect(STATUS_CONFIG.waiting.pulse).toBe(false)
