@@ -16,7 +16,14 @@ import time
 
 import pytest
 
-from hub.pty_runner import IS_WINDOWS, PtySession, pid_alive, resolve_executable, strip_ansi_escapes
+from hub.pty_runner import (
+    IS_WINDOWS,
+    PtySession,
+    pid_alive,
+    resolve_executable,
+    strip_ansi_escapes,
+    terminate_process_tree,
+)
 
 
 class TestStripAnsiEscapes:
@@ -135,6 +142,33 @@ class TestPidAlive:
                 break
             time.sleep(0.1)
         assert pid_alive(pid) is False
+
+
+class TestTerminateProcessTree:
+    def test_kills_a_long_running_process(self):
+        session = PtySession.spawn([sys.executable, "-c", "import time; time.sleep(30)"])
+        pid = session.pid
+        try:
+            assert pid_alive(pid) is True
+            terminate_process_tree(pid, force=True)
+            for _ in range(50):
+                if not pid_alive(pid):
+                    break
+                time.sleep(0.1)
+            assert pid_alive(pid) is False
+        finally:
+            if session.isalive():
+                session.terminate(force=True)
+
+    def test_already_dead_pid_does_not_raise(self):
+        session = PtySession.spawn([sys.executable, "-c", "pass"])
+        pid = session.pid
+        session.wait()
+        for _ in range(50):
+            if not session.isalive():
+                break
+            time.sleep(0.1)
+        terminate_process_tree(pid, force=True)  # must not raise
 
 
 @pytest.mark.skipif(not IS_WINDOWS, reason="Windows .cmd shim resolution only applies on Windows")

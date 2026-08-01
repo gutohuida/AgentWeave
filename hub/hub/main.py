@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .api.v1 import v1_router
+from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
 from .db.engine import init_db
 from .run_reconciliation import reconcile_interrupted_runs
@@ -73,6 +74,7 @@ async def lifespan(app: FastAPI):
     await reconcile_interrupted_runs()
     await init_scheduler()
     yield
+    await terminate_all_active_runs()
     await shutdown_scheduler()
 
 

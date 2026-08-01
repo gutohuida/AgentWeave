@@ -446,3 +446,63 @@ async def test_stop_with_no_run_in_progress_returns_404(app, auth_headers):
     resp = await app.post("/api/v1/agent/idle-claude/stop", headers=auth_headers)
     assert resp.status_code == 404
     assert "no run in progress" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_terminates_all_active_runs(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"shutdown-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    import threading
+
+    released = threading.Event()
+
+    def _blocking_read(size=4096):
+        released.wait()
+        return ""
+
+    fake_session = MagicMock()
+    fake_session.pid = 7777
+    fake_session.read.side_effect = _blocking_read
+    fake_session.wait.return_value = 0
+
+    terminated_pids = []
+
+    def _fake_terminate_process_tree(pid, force=True):
+        terminated_pids.append(pid)
+        released.set()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch(
+                "hub.api.v1.agent_trigger.terminate_process_tree",
+                side_effect=_fake_terminate_process_tree,
+            ):
+                trigger = await app.post(
+                    "/api/v1/agent/trigger",
+                    json={"agent": "shutdown-claude", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert trigger.status_code == 200
+
+                await _wait_for_active_pty(trigger.json()["run_id"])
+
+                count = await agent_trigger.terminate_all_active_runs()
+                assert count == 1
+                assert terminated_pids == [7777]
+
+                await _await_background_run()
+
+    assert trigger.json()["run_id"] not in agent_trigger._active_ptys
+
+
+@pytest.mark.asyncio
+async def test_terminate_all_active_runs_with_nothing_running_returns_zero(app, auth_headers):
+    count = await agent_trigger.terminate_all_active_runs()
+    assert count == 0

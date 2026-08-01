@@ -648,7 +648,49 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       (the thing that would hold such entries) doesn't exist in this codebase yet; that half
       is explicitly deferred to task 6.5, which already says "pairs with 3.8" in its own
       text.
-- [ ] 3.9 Terminate the process group on Hub shutdown so no agent process is orphaned.
+- [x] 3.9 Terminate the process group on Hub shutdown so no agent process is orphaned. New
+      `terminate_process_tree(pid, force=True)` in `pty_runner.py`: unlike
+      `PtySession.terminate()` (which — checked by reading pywinpty's own source this
+      session — only signals the *direct* child it wraps, no process-group/tree awareness
+      at all), this reaches grandchildren the agent CLI itself spawned (e.g. a Bash-tool
+      subprocess), which is what "no agent process is orphaned" actually requires. POSIX:
+      `os.killpg(os.getpgid(pid), SIGKILL)` — a PTY child from `ptyprocess.PtyProcessUnicode
+      .spawn()` is a session leader (`pty.fork()` calls `setsid()`), so its pgid equals its
+      own pid, and `killpg` reaches the whole group. Windows has no process-group
+      equivalent; used `taskkill /F /T /PID` instead (walks the OS-recorded parent-child
+      tree) — the standard Windows idiom for this, not something pywinpty exposes. New
+      `terminate_all_active_runs()` in `agent_trigger.py`: walks `_active_ptys` (from 3.7)
+      and calls `terminate_process_tree` on each tracked run's pid; called from `main.py`'s
+      `lifespan()` teardown, before `shutdown_scheduler()`. Deliberately does **not** touch
+      any `Run` row's DB status — a shutdown-then-restart is picked up by 3.8's
+      `reconcile_interrupted_runs()` on the *next* boot, which is the single place that
+      owns transitioning persisted run status; duplicating that here would risk the two
+      disagreeing about *when* a run's status actually changes (documented in both
+      functions' docstrings). 6 new tests across three files:
+      `test_pty_runner.py::TestTerminateProcessTree` (kills a real spawned long-running
+      subprocess; already-dead pid doesn't raise), `test_agent_trigger.py` (walks
+      `_active_ptys` and calls the patched `terminate_process_tree` with the right pid,
+      releasing a blocking-read fake PTY exactly like the process actually exiting would;
+      zero-active-runs returns 0), and a new `test_lifespan_shutdown.py` — the one test in
+      this whole suite that exercises the **real** ASGI lifespan via Starlette's
+      `TestClient` (which, unlike `conftest.py`'s `httpx.ASGITransport`-based `app` fixture,
+      actually runs `lifespan()` on `__enter__`/`__exit__`) against a real spawned OS
+      subprocess: populates `_active_ptys` directly with a genuine long-running process,
+      enters and exits a `TestClient` context, confirms the process is actually dead
+      afterward. Chosen deliberately as the live-verification method for this task instead
+      of restarting the user's live dev Hub (as 3.7/3.8 did) — it exercises the exact same
+      `main.py` wiring end-to-end, is repeatable and automated rather than one-off manual
+      confirmation, and doesn't require disrupting an instance the user was actively using.
+      330/330 Hub tests pass (was 325 after the static-UI-bundle fix and before this task
+      started, then 329 with this task's first 4 tests, 330 with the lifespan test added
+      last); ruff/black clean on the first pass this time. No frontend changes this task, so
+      no `tsc`/`vitest`/static-bundle-rebuild needed.
+      **Deliberately not done here:** no change to 3.7's `PtySession.terminate(force=True)`
+      call in the stop endpoint — the task's own wording scopes tree-kill to Hub *shutdown*
+      specifically (design.md Decision 8: "On shutdown the Hub terminates the process
+      *group*"), distinct from a deliberate mid-session stop, which stays a single-process
+      terminate as 3.7 shipped it. Revisit only if a stopped run is later found to leave
+      orphaned grandchildren in practice — not something this session had evidence of.
 - [ ] 3.10 Route scheduled jobs through the direct execution path; remove the watchdog's
       message-scanning trigger branch, keeping only timer duties.
 - [ ] 3.11 Remove `agentweave switch` and `agentweave agent set-session` from the Hub-managed path;

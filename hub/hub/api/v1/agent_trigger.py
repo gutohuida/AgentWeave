@@ -35,7 +35,7 @@ from ...db.engine import async_session_factory, get_session
 from ...db.models import Run
 from ...launchability import get_agent_config, probe_agent
 from ...output_recording import record_agent_output, record_context_usage
-from ...pty_runner import PtySession, strip_ansi_escapes
+from ...pty_runner import PtySession, strip_ansi_escapes, terminate_process_tree
 from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_command
 from ...runner_parsing import parse_claude_line, parse_codex_line
 from ...sse import sse_manager
@@ -273,6 +273,25 @@ async def stop_agent_run(
         run_id=run.id,
         status="stopping",
     )
+
+
+async def terminate_all_active_runs() -> int:
+    """Terminate every currently-tracked run's process tree (task 3.9: a clean Hub
+    shutdown must not leave an agent process, or anything it spawned, orphaned).
+
+    Called from `main.py`'s `lifespan()` teardown. Deliberately does not touch any `Run`
+    row's DB status — a shutdown-then-restart is picked up by `run_reconciliation.py`'s
+    `reconcile_interrupted_runs()` on the next boot (task 3.8), which is the single place
+    that owns transitioning a run's persisted status; duplicating that here risks the two
+    disagreeing about *when* a run's status actually changes.
+
+    Returns the number of runs terminated.
+    """
+    loop = asyncio.get_running_loop()
+    ptys = list(_active_ptys.values())
+    for pty in ptys:
+        await loop.run_in_executor(None, lambda p=pty: terminate_process_tree(p.pid, force=True))
+    return len(ptys)
 
 
 _RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")

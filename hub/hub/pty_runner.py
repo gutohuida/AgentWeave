@@ -102,6 +102,39 @@ def pid_alive(pid: int) -> bool:
         return True
 
 
+def terminate_process_tree(pid: int, force: bool = True) -> None:
+    """Terminate *pid* and its entire process tree so nothing is left orphaned.
+
+    Used for task 3.9 (Hub shutdown): unlike `PtySession.terminate()`, which only signals
+    the direct child pywinpty/ptyprocess wraps, this also reaches any grandchildren the
+    agent CLI itself spawned (e.g. a Bash-tool subprocess) — exactly what a Hub shutting
+    down cleanly must not leave running behind it.
+
+    POSIX: a PTY child spawned via `ptyprocess.PtyProcessUnicode.spawn()` is a session
+    leader (`pty.fork()` calls `setsid()`), so its process group ID equals its own pid —
+    `os.killpg` reaches every process in that group. Windows has no equivalent process-group
+    primitive here, so `taskkill /T` (walks the OS-recorded parent-child tree) is used
+    instead — the standard idiom for this on Windows, not something pywinpty exposes itself.
+    Silently no-ops if *pid* no longer exists (already dead) on either platform.
+    """
+    if IS_WINDOWS:
+        import subprocess
+
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        import signal
+
+        try:
+            pgid = os.getpgid(pid)
+            os.killpg(pgid, signal.SIGKILL if force else signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+
 class PtySession:
     """A spawned process attached to a pseudo-terminal.
 
