@@ -392,6 +392,7 @@
         <a href="#requirements-index">§13</a> into per-requirement links.</td></tr>
       <tr><td>2026-07-27</td><td>CLI v0.42.0 · Hub v0.35.0</td><td>Rebuildability review: replaced the unsupported guarantee that the HTML alone can recreate the project with an evidence-based reconstruction model. Added explicit limits for test coverage and required supporting evidence (contracts, migrations, fixtures, configuration, operations, and security review), and clarified the deliberate living-spec reconciliation process.</td></tr>
       <tr><td>2026-07-28</td><td>CLI v0.42.0 · Hub v0.35.0 (unreleased)</td><td>Added the <strong>spec manifest and multi-machine reconciliation</strong>, superseding the two-glob discovery this document previously described (FR-CLI-004, FR-TR-002, FR-HUB-006, FR-HUB-007, FR-HUB-008, FR-ROLE-002, FR-UI-002): recursive, manifest-independent discovery of every safe <code>spec/**/*.html</code> file (stdlib-only <code>spec_manifest.py</code>, mirrored independently in the Hub as its own security boundary); the optional, agent-maintained <code>spec/index.json</code> manifest (home document, parent/order relationships, kind-aware <code>living</code>/<code>draft</code>/<code>approved</code> status); a per-source reconciliation snapshot (<code>project_spec_snapshots</code>, migration <strong>0010</strong>) so the Hub can detect drift and deletion across multiple syncing checkouts without one stale machine deleting another's content; the <code>POST /project/specs/reconcile</code> endpoint and non-destructive-by-default, explicit-<code>--prune</code>-only pruning; an enriched <code>GET /project/specs</code> response (<code>home</code>, <code>manifest</code>, <code>missing</code>, <code>diagnostics</code>) and a compact drift summary + one-click <strong>Repair manifest</strong> action in the Hub UI's <a href="#hub-ui">Spec page</a>; and the <code>/aw-spec-reindex</code> skill for mechanical manifest repair. No version bump — not yet released.</td></tr>
+      <tr><td>2026-08-01</td><td>CLI v0.42.0 · Hub v0.35.0 (unreleased)</td><td>Removed <strong>pilot mode</strong> (glossary entry deleted) and its session-registration mechanism, superseded by the Hub owning agent execution directly: the CLI's <code>--pilot</code>/<code>--no-pilot</code> flag and <code>session register</code> command; the Hub's <code>POST /agents/{name}/pilot</code> and <code>POST /agents/{name}/register-session</code> endpoints and the <code>register_session</code> MCP tool; the <code>Agent.pilot</code>/<code>registered_session_id</code> DB columns (migration <strong>0013</strong>); the two watchdog skip-guards; and the Hub UI's pilot badge/toggle (<code>useRegisterSession</code>, <code>useSetPilotMode</code>). Also removed the now-dangling <code>pilot</code> keys from the <code>Session.agents</code>/<code>Agent</code> domain model, <code>agentweave.yml</code> schema and example, and the traceability matrix's now-deleted <code>test_cli_pilot.py</code>/<code>test_pilot_mode.py</code> references. No version bump — not yet released. <strong>Known residual drift, out of scope for this pass:</strong> §7.4's <code>POST /agent/trigger</code> row still describes the pre-Decision-2 <code>execution_confidence</code>/<code>watchdog_status</code> response shape (removed from the actual schema) and the message-tag trigger protocol; <code>hub start</code>'s row still says Docker-by-default when native is now the default (<a href="#dev-order">§14</a> task 3.1); <code>/agents/launchability</code> and <code>/agent/{agent}/stop</code> are undocumented. These predate this pass and need a dedicated reconciliation against the Phase 2/3 direct-execution implementation.</td></tr>
     </tbody>
   </table>
 </section>
@@ -492,8 +493,6 @@
     pasted into an agent to hand off control (manual-relay mode).</p>
     <p><dfn id="dfn-proxy">Proxy agent</dfn> — An OpenAI/Anthropic-compatible model (e.g. MiniMax, GLM) run through
     the Claude CLI by overriding its base URL and API key (<code>claude_proxy</code> runner).</p>
-    <p><dfn id="dfn-pilot">Pilot mode</dfn> — A per-agent flag that disables auto-triggering so a human controls
-    that agent's sessions manually.</p>
     <p><dfn id="dfn-yolo">Yolo mode</dfn> — A per-agent flag allowing the agent to act without confirmation prompts.</p>
   </dl>
 </section>
@@ -521,7 +520,7 @@
       <tr><td><code>created</code>, <code>updated</code></td><td>ISO-8601</td><td>Timestamps.</td></tr>
       <tr><td><code>mode</code></td><td>enum</td><td>One of <code>hierarchical</code>, <code>peer</code>, <code>review</code>. Default <code>hierarchical</code>.</td></tr>
       <tr><td><code>principal</code></td><td>string</td><td>Principal agent name. Default <code>claude</code>.</td></tr>
-      <tr><td><code>agents</code></td><td>map</td><td>Map of agent name → <code>{role, since, runner?, model?, env_vars?, yolo?, pilot?, runner_options?}</code>.</td></tr>
+      <tr><td><code>agents</code></td><td>map</td><td>Map of agent name → <code>{role, since, runner?, model?, env_vars?, yolo?, runner_options?}</code>.</td></tr>
       <tr><td><code>active_tasks</code>, <code>completed_tasks</code></td><td>list</td><td>Task-ID references.</td></tr>
       <tr><td><code>discussions</code></td><td>list</td><td>Discussion references.</td></tr>
     </tbody>
@@ -536,7 +535,7 @@
   <h3 id="entity-agent"><span class="sec-num">3.2</span>Agent<a class="anchor" href="#entity-agent">#</a></h3>
   <p>An <span class="term-link">Agent</span> is a named participant. Per-agent configuration keys are:
   <code>role</code>, <code>since</code>, <code>runner</code>, <code>env_vars</code>, <code>model</code>,
-  <code>yolo</code>, <code>pilot</code>, <code>runner_options</code>.</p>
+  <code>yolo</code>, <code>runner_options</code>.</p>
   <div class="block requirement" id="FR-AGT-001"><span class="label">Requirement</span><span class="req-id">FR-AGT-001</span> Agent names <span class="rfc must">must</span> be validated against
     <code>^[a-zA-Z0-9_-]{1,32}$</code>. A cluster-prefixed form <code>&lt;cluster&gt;.&lt;agent&gt;</code> (used by
     the git transport) <span class="rfc must">must</span> validate the segment after the final dot.</div>
@@ -701,7 +700,6 @@ agents:
     model: &lt;claude-model&gt;
     roles: [tech_lead, backend_dev]
     yolo: false
-    pilot: false
     principal: true
   minimax:
     runner: claude_proxy
@@ -733,7 +731,7 @@ quality:
       <tr><td><code>agents.&lt;n&gt;.model</code></td><td>string</td><td>runner default</td></tr>
       <tr><td><code>agents.&lt;n&gt;.roles</code></td><td>list of role IDs</td><td><code>[]</code></td></tr>
       <tr><td><code>agents.&lt;n&gt;.env</code></td><td>list of var <em>names</em></td><td><code>[]</code></td></tr>
-      <tr><td><code>agents.&lt;n&gt;.yolo</code> / <code>.pilot</code> / <code>.principal</code></td><td>bool</td><td><code>false</code></td></tr>
+      <tr><td><code>agents.&lt;n&gt;.yolo</code> / <code>.principal</code></td><td>bool</td><td><code>false</code></td></tr>
       <tr><td><code>agents.&lt;n&gt;.base_url</code></td><td>string</td><td>unset</td></tr>
       <tr><td><code>agents.&lt;n&gt;.cli</code></td><td>absolute path override</td><td>unset (use PATH)</td></tr>
       <tr><td><code>agents.&lt;n&gt;.runner_options</code></td><td>mapping (e.g. <code>memory: false</code>)</td><td>unset</td></tr>
@@ -770,7 +768,6 @@ quality:
       <tr><td><code>status</code></td><td>Full session status including watchdog state.</td></tr>
       <tr><td><code>summary</code></td><td>Quick overview for relay decisions: tasks by status, unread counts, action items.</td></tr>
       <tr><td><code>doctor [--json] [--no-network]</code></td><td>Runtime readiness checks (session, transport, watchdog, agent context files, Hub connectivity) each reporting <code>ok|warn|error</code>. <code>--json</code> emits machine-readable diagnostics; <code>--no-network</code> skips network reachability checks.</td></tr>
-      <tr><td><code>session register --agent/-a &lt;n&gt; --session/-s &lt;id&gt;</code></td><td>Register a pilot agent's CLI session ID.</td></tr>
       <tr><td><code>checkpoint --agent/-a &lt;n&gt; [--reason token_threshold|phase_complete|pre_handoff|pre_sleep|manual] [--note "..."]</code></td><td>Write a context checkpoint markdown to <code>.agentweave/shared/checkpoints/</code>. <code>--reason</code> default <code>manual</code>.</td></tr>
     </tbody>
   </table>
@@ -797,7 +794,7 @@ quality:
   <table>
     <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
     <tbody>
-      <tr><td><code>agent configure &lt;agent_name&gt; [--runner r] [--base-url u] [--api-key-var V] [--model m] [--pilot | --no-pilot]</code></td><td>Configure a runner for an existing session agent; <code>--runner</code> defaults to auto-detected from known providers; built-in defaults for <code>minimax</code>/<code>glm</code>. <code>--pilot</code>/<code>--no-pilot</code> default unset (unchanged); <code>--no-pilot</code> is the effective default.</td></tr>
+      <tr><td><code>agent configure &lt;agent_name&gt; [--runner r] [--base-url u] [--api-key-var V] [--model m]</code></td><td>Configure a runner for an existing session agent; <code>--runner</code> defaults to auto-detected from known providers; built-in defaults for <code>minimax</code>/<code>glm</code>.</td></tr>
       <tr><td><code>agent set-session &lt;agent_name&gt; &lt;session_id&gt;</code></td><td>Register a resume session ID (positional args, from <code>claude --list</code> or similar).</td></tr>
       <tr><td><code>agent set-model &lt;agent_name&gt; &lt;model&gt;</code></td><td>Set the model for a runner (positional args).</td></tr>
       <tr><td><code>switch &lt;agent&gt;</code></td><td>Output eval-able <code>export</code> commands to switch shell to a proxy agent.</td></tr>
@@ -1093,7 +1090,6 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
       <tr><td><code>update_task</code></td><td>CLI: <code>task_id, status, agent=""</code>. Hub: <code>task_id, status</code> (no <code>agent</code> param).</td><td>Updates status (validated against the lifecycle set); on <code>approved</code>/<code>rejected</code> the CLI moves the local task file to the completed directory.</td></tr>
       <tr><td><code>get_status</code></td><td>—</td><td>Session/task summary. CLI computes counts client-side from local session + active tasks; Hub calls <code>GET /status</code> directly.</td></tr>
       <tr><td><code>list_agents</code></td><td>—</td><td>Returns <code>{name, session_role, runner, dev_roles, is_principal}</code> per agent. CLI's runner set includes CLI-specific runners (<code>native/claude_proxy/manual/kimi/opencode/codex/codex_mcp</code>); the Hub reshapes <code>GET /agents</code> and only distinguishes <code>native/claude_proxy/manual</code>.</td></tr>
-      <tr><td><code>register_session</code></td><td><code>from_agent, session_id</code></td><td>Registers a <code>--resume</code> session ID for pilot mode. The CLI does substantially more locally: also registers with the Hub under HTTP transport, writes <code>.agentweave/agents/{agent}-session.json</code>, sets pilot mode, regenerates agent context markdown, and returns a ready-to-run <code>launch_command</code>. The Hub tool is a thin POST to <code>/agents/{from_agent}/register-session</code>.</td></tr>
       <tr><td><code>ask_user</code></td><td><code>from_agent, question, blocking=False</code></td><td>Posts a question for the human. Requires Hub/HTTP transport — CLI posts to <code>/questions</code> when HTTP transport is active, otherwise falls back to a local message to the <code>"user"</code> agent (does not error).</td></tr>
       <tr><td><code>get_answer</code></td><td><code>question_id</code></td><td>Polls whether a question was answered; <code>{answered, answer, pending}</code>. CLI under non-HTTP transport returns <code>{pending:true}</code> with a note rather than erroring.</td></tr>
       <tr><td><code>register_agent</code></td><td><code>name, contact_mode, role_request?, mcp_endpoint?, spawn_cmd?, config?</code></td><td>Self-registers an external agent; <code>contact_mode ∈ {poll, mcp-push, watchdog-spawn}</code>. Requires Hub/HTTP transport (CLI errors otherwise) and rejects names already reserved in the local session roster.</td></tr>
@@ -1195,7 +1191,7 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
     <tbody>
       <tr><td><code>projects</code></td><td><code>id</code> PK(64), <code>name</code>(256), <code>created_at</code>.</td></tr>
       <tr><td><code>api_keys</code></td><td><code>id</code> PK(128, the <code>aw_live_…</code> key), <code>project_id</code> FK, <code>label</code>(128) def "", <code>revoked</code> bool def false, <code>created_at</code>.</td></tr>
-      <tr><td><code>agents</code></td><td><code>id</code> PK, <code>name</code>(64, indexed), <code>pilot</code> bool, <code>registered_session_id</code>(128?), <code>contact_mode</code>(32?), <code>self_registered</code> bool, <code>mcp_endpoint</code>(256?), <code>spawn_cmd</code> JSON?, <code>config</code> JSON?, <code>created_at</code>, <code>updated</code>. Index <code>(project_id,name)</code>.</td></tr>
+      <tr><td><code>agents</code></td><td><code>id</code> PK, <code>name</code>(64, indexed), <code>contact_mode</code>(32?), <code>self_registered</code> bool, <code>mcp_endpoint</code>(256?), <code>spawn_cmd</code> JSON?, <code>config</code> JSON?, <code>created_at</code>, <code>updated</code>. Index <code>(project_id,name)</code>.</td></tr>
       <tr><td><code>messages</code></td><td><code>id</code> PK, <code>sender</code>(64), <code>recipient</code>(64, idx), <code>subject</code>(256?), <code>content</code> Text def "", <code>type</code>(32) def "message", <code>timestamp</code>, <code>read</code> bool(idx), <code>read_at</code>?, <code>task_id</code>(64?), <code>session_id</code>(128?). Indexes <code>(project,recipient)</code>, <code>(project,read)</code>. (<code>session_id</code> is stored but is <em>not</em> separately indexed in the reference implementation.)</td></tr>
       <tr><td><code>tasks</code></td><td><code>id</code> PK, <code>title</code>(256), <code>description</code> Text, <code>status</code>(32, idx) def "pending", <code>priority</code>(16) def "medium", <code>assignee</code>(64?, idx), <code>assigner</code>(64?), <code>created_at</code>, <code>updated</code>, JSON <code>requirements/acceptance_criteria/deliverables/notes</code>. Indexes <code>(project,status)</code>, <code>(project,assignee)</code>.</td></tr>
       <tr><td><code>questions</code></td><td><code>id</code> PK, <code>from_agent</code>(64), <code>question</code> Text, <code>answer</code> Text?, <code>answered</code> bool(idx), <code>blocking</code> bool, <code>created_at</code>, <code>answered_at</code>?.</td></tr>
@@ -1257,8 +1253,6 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
       <tr><td><code>GET /agents/{name}/output</code></td><td><code>List[AgentOutputResponse]</code>. Query <code>limit(1–1000,200), since?</code> (ISO string; silently ignored if unparsable).</td></tr>
       <tr><td><code>POST /agents/{name}/context-usage</code></td><td>Body raw dict (documented shape: <code>agent, model, tokens_used, tokens_limit, percent, warning, critical, threshold_warning, threshold_critical, updated_at</code>) → 201; broadcast <code>context_warning</code>.</td></tr>
       <tr><td><code>POST /agents/{name}/compact</code> · <code>/new-session</code></td><td>No body; enqueue a message to the agent and persist an event (201). <code>/new-session</code> broadcasts <code>new_session_request</code> over SSE; <code>/compact</code> persists a <code>compact_request</code> event but does <em>not</em> broadcast it (see the Open Issue in <a href="#hub-sse">§7.5</a>).</td></tr>
-      <tr><td><code>POST /agents/{name}/register-session</code></td><td>Body raw dict, requires <code>session_id</code> (400 if absent); 409 on reserved name.</td></tr>
-      <tr><td><code>POST /agents/{name}/pilot</code></td><td>Body raw dict, <code>enabled</code> default <code>true</code>.</td></tr>
     </tbody>
   </table>
 
@@ -1266,7 +1260,7 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
   <table>
     <thead><tr><th>Method &amp; path</th><th>Behavior</th></tr></thead>
     <tbody>
-      <tr><td><code>POST /agent/trigger</code></td><td>Body <code>TriggerAgentRequest</code>: <code>agent</code> required ≤64; <code>message</code> required ≤10,000; <code>session_mode</code> default <code>"new"</code>, must be <code>new|resume</code> else 400; <code>session_id?</code>≤128; <code>work_dir?</code>≤4,096, rejected 400 if it contains <code>..</code>, <code>~</code>, or control chars &lt;0x20 (path-traversal guard). → <code>TriggerAgentResponse</code> including <code>execution_confidence</code> (<code>queued_watchdog_healthy|stale|no_watchdog_heartbeat|queued_manual</code>, derived from heartbeat freshness — 120s staleness cutoff — and pilot/manual-runner state) and <code>watchdog_status</code>.</td></tr>
+      <tr><td><code>POST /agent/trigger</code></td><td>Body <code>TriggerAgentRequest</code>: <code>agent</code> required ≤64; <code>message</code> required ≤10,000; <code>session_mode</code> default <code>"new"</code>, must be <code>new|resume</code> else 400; <code>session_id?</code>≤128; <code>work_dir?</code>≤4,096, rejected 400 if it contains <code>..</code>, <code>~</code>, or control chars &lt;0x20 (path-traversal guard). → <code>TriggerAgentResponse</code> including <code>execution_confidence</code> (<code>queued_watchdog_healthy|stale|no_watchdog_heartbeat|queued_manual</code>, derived from heartbeat freshness — 120s staleness cutoff — and manual-runner state) and <code>watchdog_status</code>.</td></tr>
       <tr><td><code>GET /agent/sessions/{agent}</code></td><td>No query params. <code>{sessions:[{id,type,path,last_active,started_at}]}</code> grouped from <code>AgentOutput</code> rows.</td></tr>
       <tr><td><code>GET /agent/{agent}/chat/{session_id}</code></td><td>No query params. <code>ChatHistoryResponse{session_id, agent, messages: ChatMessage[]}</code>; reconstructs a session's chat from messages + outputs using a 3-tier heuristic to attribute untagged user messages to the right session window.</td></tr>
       <tr><td><code>GET /agent/{agent}/chat</code></td><td>Query <code>limit(1–500,50)</code>. Recent mixed chat across sessions.</td></tr>
@@ -1283,7 +1277,7 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
       <tr><td><code>GET /events/ticket</code></td><td>Issue SSE ticket <code>{token, expires_at}</code> (HMAC-signed, short-lived).</td></tr>
       <tr><td><code>GET /events</code></td><td>SSE stream (<code>text/event-stream</code>); first frame <code>connected</code>; keepalive ping every 15s. <strong>Auth quirk:</strong> uses <code>get_project_for_sse</code> — accepts the Bearer header <em>or</em> <code>?token=&lt;aw_ticket_...&gt;</code> from <code>/events/ticket</code>; a raw API key passed via <code>?token=</code> is explicitly rejected.</td></tr>
       <tr><td><code>GET /events/history</code></td><td>Query <code>limit(1–500,100), severity?("all"=no filter)</code>. Historical events oldest-first: <code>{type, data, timestamp, agent, severity}</code>.</td></tr>
-      <tr><td><code>POST /session/sync</code></td><td>Body <code>SessionSyncRequest{data: Dict[str,Any]}</code> (untyped passthrough of <code>session.json</code>). Upserts <code>ProjectSession</code>; syncs <code>pilot</code> flags into <code>Agent</code> rows; <strong>deletes</strong> <code>Agent</code> rows for names no longer present in <code>data.agents</code>; broadcast <code>session_synced</code>.</td></tr>
+      <tr><td><code>POST /session/sync</code></td><td>Body <code>SessionSyncRequest{data: Dict[str,Any]}</code> (untyped passthrough of <code>session.json</code>). Upserts <code>ProjectSession</code>; ensures an <code>Agent</code> row exists for every synced agent name; <strong>deletes</strong> <code>Agent</code> rows for names no longer present in <code>data.agents</code>; broadcast <code>session_synced</code>.</td></tr>
       <tr><td><code>GET /session/sync</code></td><td>No query params. <code>{synced, synced_at?, data}</code>.</td></tr>
       <tr><td><code>POST /jobs</code></td><td>Body <code>JobCreate{name(≤256), agent(≤64), message(≤10,000), cron(≤128), session_mode(default "new", new|resume), enabled(default true), source(default "hub")}</code> (<code>extra="forbid"</code>). Cron validated via <code>croniter</code> → 400 <code>Invalid cron expression</code> if malformed. → 201; schedule if enabled; broadcast <code>job_created</code>. 409 on (rare) id collision.</td></tr>
       <tr><td><code>GET /jobs</code></td><td>Query <code>agent?</code>.</td></tr>
@@ -1379,7 +1373,7 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
     <code>useLogs</code>, <code>useInstructions</code>) have <em>no</em> refetch interval and rely on SSE-driven
     cache invalidation. <code>useAgentOutput</code> uses REST seed + SSE append + gap poll. Mutation/side-effect
     hooks also exist (e.g. <code>useMarkRead</code>, <code>useUpdateTask</code>, <code>useAnswerQuestion</code>,
-    the job mutations, <code>useSaveInstructions</code>, <code>useRegisterSession</code>, <code>useSetPilotMode</code>).
+    the job mutations, <code>useSaveInstructions</code>).
     Query keys mirror the resource, e.g. <code>['agents']</code>, <code>['tasks']</code>,
     <code>['agent',name,'chat',sessionId]</code>.</div>
 
@@ -1387,7 +1381,7 @@ Resume: copilot --output-format json --no-ask-user [--model &lt;model&gt;] [--yo
   <table>
     <thead><tr><th>Area</th><th>Component → responsibility</th></tr></thead>
     <tbody>
-      <tr><td>Agents</td><td><code>AgentsPage</code> (list + detail, active/idle filter), <code>AgentCard</code> (status dot, dev-role badges, model, EXT/PILOT tags, context bar), <code>AgentDetailPanel</code> (tabs Output/Tasks/Messages/Info), <code>AgentOutputPanel</code> &amp; <code>AgentPromptPanel</code> (chat + session selector), <code>AgentInfoTab</code>, <code>AgentActivityTab</code>, <code>AgentTimeline</code>, <code>AgentMessageSender</code>.</td></tr>
+      <tr><td>Agents</td><td><code>AgentsPage</code> (list + detail, active/idle filter), <code>AgentCard</code> (status dot, dev-role badges, model, EXT tag, context bar), <code>AgentDetailPanel</code> (tabs Output/Tasks/Messages/Info), <code>AgentOutputPanel</code> &amp; <code>AgentPromptPanel</code> (chat + session selector), <code>AgentInfoTab</code>, <code>AgentActivityTab</code>, <code>AgentTimeline</code>, <code>AgentMessageSender</code>.</td></tr>
       <tr><td>Tasks</td><td><code>TasksBoard</code> (kanban by status, assignee filter, rejected accordion), <code>TaskCard</code> (badges, assignee status, details).</td></tr>
       <tr><td>Messages</td><td><code>MessagesFeed</code> (inbox/history toggle, filters, group-by-conversation), <code>ConversationGroup</code>, <code>MessageCard</code>.</td></tr>
       <tr><td>Questions</td><td><code>QuestionsPanel</code> (blocking/non-blocking split), <code>QuestionInterruptCard</code>, <code>AnswerForm</code>.</td></tr>
@@ -1708,7 +1702,7 @@ mkdocs serve                                 # http://localhost:8000</pre>
     <thead><tr><th>ID</th><th>Task</th><th>Depends on</th><th>Satisfies</th><th>Acceptance check</th></tr></thead>
     <tbody>
       <tr><td>T-010</td><td>Runner registry + dispatch (<code>claude, native, claude_proxy, kimi, opencode, codex, codex_mcp, copilot, manual</code>) incl. proxy providers.</td><td>T-009</td><td>FR-CLI-004 (§4.3)</td><td><code>pytest tests/test_runner.py tests/test_opencode_cli_override.py</code></td></tr>
-      <tr><td>T-011 <code>[P]</code></td><td>Agent config/mode commands (<code>agent configure/set-session/set-model</code>, <code>switch</code>, <code>run</code>, <code>yolo</code>).</td><td>T-010</td><td>FR-CLI-004</td><td><code>pytest tests/test_cli.py tests/test_cli_pilot.py</code></td></tr>
+      <tr><td>T-011 <code>[P]</code></td><td>Agent config/mode commands (<code>agent configure/set-session/set-model</code>, <code>switch</code>, <code>run</code>, <code>yolo</code>).</td><td>T-010</td><td>FR-CLI-004</td><td><code>pytest tests/test_cli.py</code></td></tr>
       <tr><td>T-012</td><td>Watchdog daemon: poll, auto-trigger, new-session rule (no resume fallback), heartbeat + PID files.</td><td>T-010</td><td>FR-CLI-005</td><td><code>pytest tests/test_watchdog.py tests/test_watchdog_session.py tests/test_cli_watch.py</code></td></tr>
       <tr><td>T-013 <code>[P]</code></td><td>Multi-role system: <code>roles.json</code>, guide copy to <code>roles/&lt;role&gt;.md</code>, <code>roles</code> CLI.</td><td>T-008</td><td>FR-ROLE-001, FR-ROLE-002</td><td><code>pytest tests/test_roles.py</code></td></tr>
       <tr><td>T-014 <code>[P]</code></td><td>Logging: rotating JSONL handler + Hub-forward handler; <code>AW_LOG_LEVEL</code>/<code>AW_LOG_FILE</code>.</td><td>T-008</td><td>FR-LOG-001, FR-LOG-002</td><td><code>pytest tests/test_logging_handlers.py tests/test_eventlog.py</code></td></tr>
@@ -1733,7 +1727,7 @@ mkdocs serve                                 # http://localhost:8000</pre>
       <tr><td>T-019</td><td>Auth: bearer <code>aw_live_</code> + 401 + project scope; SSE ticket; localhost/Docker <code>setup/token</code>.</td><td>T-018</td><td>FR-HUB-003, FR-HUB-004, FR-HUB-005</td><td><code>pytest hub/tests/test_auth.py hub/tests/test_setup.py hub/tests/test_bola.py</code></td></tr>
       <tr><td>T-020 <code>[P]</code></td><td>SSE manager: per-project bounded queues + exact event vocabulary.</td><td>T-018</td><td>FR-HUB-008</td><td><code>pytest hub/tests/test_sse.py</code></td></tr>
       <tr><td>T-021</td><td>REST: messages, tasks, questions, status (201/204/404/409; persist + broadcast).</td><td>T-019, T-020</td><td>FR-HUB-007, FR-QST-001</td><td><code>pytest hub/tests/test_messages.py hub/tests/test_tasks.py hub/tests/test_questions.py hub/tests/test_status.py</code></td></tr>
-      <tr><td>T-022 <code>[P]</code></td><td>REST: agents, agent trigger, agent chat.</td><td>T-019, T-020</td><td>FR-HUB-007</td><td><code>pytest hub/tests/test_agents.py hub/tests/test_agent_chat.py hub/tests/test_agents_self_registered.py hub/tests/test_pilot_mode.py</code></td></tr>
+      <tr><td>T-022 <code>[P]</code></td><td>REST: agents, agent trigger, agent chat.</td><td>T-019, T-020</td><td>FR-HUB-007</td><td><code>pytest hub/tests/test_agents.py hub/tests/test_agent_chat.py hub/tests/test_agents_self_registered.py</code></td></tr>
       <tr><td>T-023 <code>[P]</code></td><td>REST: logs, events (+ ticket/history), session-sync, project instructions, setup.</td><td>T-019, T-020</td><td>FR-HUB-007</td><td><code>pytest hub/tests/test_instructions.py hub/tests/test_agents.py</code></td></tr>
       <tr><td>T-024</td><td>Scheduler (async singleton + persistent jobstore, UTC, misfire/coalesce) + jobs endpoints; fire/failure behavior.</td><td>T-021</td><td>FR-HUB-009, FR-JOB-001</td><td><code>pytest hub/tests/test_jobs.py hub/tests/test_jobs_crud.py</code></td></tr>
       <tr><td>T-025</td><td>HTTP transport (stdlib <code>urllib</code> only — no new runtime dep) targeting the Hub API.</td><td>T-021, T-005</td><td>FR-TR-005, FR-PKG-001</td><td><code>pytest tests/test_http_transport.py</code></td></tr>
