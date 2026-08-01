@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-01-1730-hub-native-phase3-t3-11-complete-watchdog-cleanup.md
+.claude/handoffs/2026-08-01-1735-hub-native-idle-checkpoint-awaiting-user.md
