@@ -4,9 +4,10 @@ These tools are available to agents in **local MCP mode** (`agentweave-mcp`) and
 
 ## Messaging
 
-### `send_message(from, to, subject, content)`
+### `send_message(to, subject, content)`
 
-Send a message to another agent.
+Send a message to another agent. The sender is always the identity the Hub or watchdog
+bound to this process at spawn (`AW_AGENT_IDENTITY`) — it cannot be passed as an argument.
 
 ### `get_inbox(agent)`
 
@@ -32,7 +33,7 @@ Update task status. Valid statuses: `pending`, `assigned`, `in_progress`, `compl
 
 ### `create_task(title, ...)`
 
-Create and assign a new task. Supports description, assignee, priority, requirements, and acceptance criteria.
+Create and assign a new task. Supports description, assignee, priority, requirements, and acceptance criteria. The assigner is always the bound identity (see `send_message` above), not a caller-supplied argument.
 
 ## Session
 
@@ -75,9 +76,9 @@ Useful for orchestrators that need a fresh, in-memory context snapshot without t
 
 ## Human Interaction (Hub only)
 
-### `ask_user(from_agent, question)`
+### `ask_user(question)`
 
-Post a question to the human. Returns a question ID.
+Post a question to the human. Returns a question ID. The asker is always the bound identity (see `send_message` above).
 
 ### `get_answer(question_id)`
 

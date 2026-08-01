@@ -31,3 +31,17 @@ async def app():
 @pytest.fixture
 def auth_headers():
     return {"Authorization": "Bearer aw_live_testkey_abcdefgh"}
+
+
+@pytest.fixture(autouse=True)
+def _no_real_mcp_probe(monkeypatch):
+    """Every agent trigger calls launchability.resolve_access_path, which (for
+    claude/claude_proxy/native/codex) shells out to ``<cli> mcp list`` to check whether
+    the agentweave MCP server is actually registered. The suite must not depend on a real
+    CLI being installed/authenticated on the machine running it — default the probe to
+    "not registered" (deterministic, no subprocess) so every test gets the "cli" access
+    path unless it explicitly overrides this fixture's patch.
+    """
+    import hub.launchability as launchability
+
+    monkeypatch.setattr(launchability, "probe_mcp_registered", lambda cli: False)

@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import Any, Dict, Optional
+import subprocess
+import time
+from typing import Any, Dict, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -162,6 +164,77 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
     return proc_env
 
 
+# ---------------------------------------------------------------------------
+# Access path: tool-protocol (MCP) vs. plain CLI commands
+#
+# Independent mirror of agentweave.tool_surface's probing logic (same reason this whole
+# module is independent of agentweave.constants.RUNNER_CONFIGS — see module docstring).
+# Native runtime spawns agents on the Hub host itself, so probing "<cli> mcp list" here
+# checks the same CLI installation the Hub is about to launch.
+# ---------------------------------------------------------------------------
+
+PROBEABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex"}
+
+_PROBE_TTL_SECONDS = 300.0
+_probe_cache: Dict[str, Tuple[bool, float]] = {}
+
+
+def probe_mcp_registered(cli: str) -> bool:
+    """Best-effort check: is the ``agentweave`` MCP server actually registered for
+    *cli* on the Hub host, as opposed to merely theoretically supported?
+    """
+    now = time.monotonic()
+    cached = _probe_cache.get(cli)
+    if cached is not None and now - cached[1] < _PROBE_TTL_SECONDS:
+        return cached[0]
+
+    if not cli or shutil.which(cli) is None:
+        _probe_cache[cli] = (False, now)
+        return False
+
+    try:
+        result = subprocess.run(
+            [cli, "mcp", "list"],
+            capture_output=True,
+            text=True,
+            shell=(os.name == "nt"),
+            timeout=10,
+        )
+        available = result.returncode == 0 and "agentweave" in (result.stdout or "").lower()
+    except Exception:
+        available = False
+
+    _probe_cache[cli] = (available, now)
+    return available
+
+
+def resolve_access_path(runner: str, cli: str, override: Optional[str] = None) -> str:
+    """Return ``"mcp"`` or ``"cli"`` for an agent of *runner*, using *override*
+    (the operator's explicit ``hub_client`` setting) when given, else a probe.
+    """
+    if override in ("cli", "mcp"):
+        return override
+    if runner not in PROBEABLE_RUNNERS:
+        return "cli"
+    return "mcp" if probe_mcp_registered(cli) else "cli"
+
+
+def access_path_notice(access_path: str) -> str:
+    """One line telling the agent which access path is in use this turn."""
+    if access_path == "mcp":
+        return (
+            "[AgentWeave] Tool access: the `agentweave` MCP tools are available — call "
+            "send_message / create_task / update_task / ask_user directly."
+        )
+    return (
+        "[AgentWeave] Tool access: MCP tools are not available in this environment. Use "
+        "`agentweave` CLI commands instead — e.g. `agentweave msg send --to <agent> -m "
+        '"..."`, `agentweave task create --title "..."`, `agentweave task update <id> '
+        '--status <status>`, `agentweave question ask -q "..."`, `agentweave inbox '
+        "--agent <you> --mark-read`."
+    )
+
+
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 
@@ -173,8 +246,13 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
 
     result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
     row = result.scalars().first()
-    session_agents_meta = (row.data.get("agents", {}) if row else {}) or {}
+    session_data = row.data if row else {}
+    session_agents_meta = (session_data.get("agents", {})) or {}
     meta = dict(session_agents_meta.get(agent, {}))
+    if "hub_client" not in meta and session_data.get("hub_client"):
+        # Session-wide default (session.json's top-level `hub_client`), same fallback
+        # order as the CLI's Session.get_agent_hub_client — a per-agent override wins.
+        meta["hub_client"] = session_data["hub_client"]
 
     agent_result = await db.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)

@@ -1013,6 +1013,24 @@ def cmd_relay(args: argparse.Namespace) -> int:
     return 0
 
 
+def _require_bound_identity() -> Optional[str]:
+    """Return the identity bound to this process, or None (having already printed why).
+
+    Task 4.2: these commands are the agent-facing verb set — the ones an agent's own turn
+    invokes to cause an attributed effect (create a task, send a message, ask a question).
+    Identity comes from AW_AGENT_IDENTITY, set by whoever spawned this process (the Hub,
+    the watchdog, or `agentweave switch`) — never from a `--from-agent`/`--assigner` flag,
+    which would let the caller assert any identity it likes.
+    """
+    from .tool_surface import UnboundIdentityError, bound_identity
+
+    try:
+        return bound_identity()
+    except UnboundIdentityError as e:
+        print_error(str(e))
+        return None
+
+
 def cmd_quick(args: argparse.Namespace) -> int:
     """Quick mode - single command for task delegation."""
     ensure_dirs()
@@ -1022,8 +1040,9 @@ def cmd_quick(args: argparse.Namespace) -> int:
         print_error("No session found. Run: agentweave init")
         return 1
 
-    # Default sender is "user" (the human) unless explicitly specified
-    sender = args.from_agent or "user"
+    sender = _require_bound_identity()
+    if sender is None:
+        return 1
     recipient = args.to
     task_desc = args.task
 
@@ -1105,12 +1124,16 @@ def cmd_task_create(args: argparse.Namespace) -> int:
     ensure_dirs()
     output_json: bool = getattr(args, "json", False)
 
+    assigner = _require_bound_identity()
+    if assigner is None:
+        return 1
+
     try:
         task = Task.create(
             title=args.title,
             description=args.description or "",
             assignee=args.assignee,
-            assigner=args.assigner,
+            assigner=assigner,
             priority=args.priority or "medium",
             requirements=args.requirements,
             acceptance_criteria=args.criteria,
@@ -1369,9 +1392,13 @@ def cmd_msg_send(args: argparse.Namespace) -> int:
     """Send a message."""
     ensure_dirs()
 
+    sender = _require_bound_identity()
+    if sender is None:
+        return 1
+
     try:
         message = Message.create(
-            sender=args.from_agent or "unknown",
+            sender=sender,
             recipient=args.to,
             content=args.message,
             subject=args.subject or "",
@@ -1564,8 +1591,12 @@ def cmd_question_ask(args: argparse.Namespace) -> int:
         print_info("Use 'agentweave msg send --to user ...' for local/git transport.")
         return 1
 
+    asker = _require_bound_identity()
+    if asker is None:
+        return 1
+
     question_id = transport.ask_question(  # type: ignore[attr-defined]
-        from_agent=args.from_agent, question=args.question
+        from_agent=asker, question=args.question
     )
     if not question_id:
         print_error("Failed to submit question to Hub.")
@@ -1610,7 +1641,6 @@ def cmd_delegate(args: argparse.Namespace) -> int:
     """Quick delegation command."""
 
     quick_args = argparse.Namespace(
-        from_agent=args.from_agent,
         to=args.to,
         task=args.task,
         priority=args.priority,
@@ -5016,6 +5046,11 @@ def cmd_switch(args: argparse.Namespace) -> int:
         print(
             f"  {_build_opencode_launch_command(agent, model=model, session_id='', cli=cli_override)}"
         )
+        print()
+        print(
+            f"Tip: export AW_AGENT_IDENTITY={agent} first so tool calls are attributed "
+            "to you rather than refused for lacking a bound identity."
+        )
         return 0
 
     if runner == "copilot":
@@ -5043,6 +5078,11 @@ def cmd_switch(args: argparse.Namespace) -> int:
         print()
         print("Note: Copilot CLI automatically reads AGENTS.md for project context.")
         print(f"  Register MCP server first:  agentweave mcp setup --agent {agent}")
+        print()
+        print(
+            f"Tip: export AW_AGENT_IDENTITY={agent} first so tool calls are attributed "
+            "to you rather than refused for lacking a bound identity."
+        )
         return 0
 
     if runner == "codex":
@@ -5058,10 +5098,18 @@ def cmd_switch(args: argparse.Namespace) -> int:
             )
         )
         print()
+        print(
+            f"Tip: export AW_AGENT_IDENTITY={agent} first so tool calls are attributed "
+            "to you rather than refused for lacking a bound identity."
+        )
         return 0
 
     if runner != "claude_proxy":
         print_info(f"{agent} uses runner '{runner}' — " f"no env var switch needed")
+        print_info(
+            f"Tip: export AW_AGENT_IDENTITY={agent} first so tool calls are attributed "
+            "to you rather than refused for lacking a bound identity."
+        )
         return 0
 
     missing = get_missing_api_key_var(session, agent)
@@ -5076,6 +5124,9 @@ def cmd_switch(args: argparse.Namespace) -> int:
     for key, value in env_vars.items():
         # Print eval-able export statements
         print(f"export {key}={value}")
+    # Task 4.1: bind this shell's identity so agent-verb commands (msg send, task create,
+    # question ask) are attributed to `agent` instead of refusing for lacking one.
+    print(f"export AW_AGENT_IDENTITY={agent}")
     return 0
 
 
@@ -5158,7 +5209,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     cmd = build_claude_proxy_cmd(agent, prompt, session_id=session_id, model=model)
 
-    proc_env = {**os.environ, **env_overrides}
+    # Task 4.1: bind this process's identity so tool calls it makes are attributed to
+    # `agent` rather than refusing for lacking one.
+    proc_env = {**os.environ, **env_overrides, "AW_AGENT_IDENTITY": agent}
 
     print_info(
         f"Running {agent} via claude proxy "
@@ -5349,11 +5402,6 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Delegate to (any agent name)",
     )
     quick_parser.add_argument(
-        "--from-agent",
-        "-f",
-        help="Delegate from (any agent name)",
-    )
-    quick_parser.add_argument(
         "--priority",
         choices=["low", "medium", "high", "critical"],
         default="medium",
@@ -5376,10 +5424,6 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--assignee",
         "-a",
         help="Assign to agent (any agent name, e.g. kimi, gemini)",
-    )
-    task_create.add_argument(
-        "--assigner",
-        help="Assigned by agent",
     )
     task_create.add_argument(
         "--priority",
@@ -5453,11 +5497,6 @@ For more help: https://github.com/gutohuida/AgentWeave
         required=True,
         help="Recipient (any agent name)",
     )
-    msg_send.add_argument(
-        "--from-agent",
-        "-f",
-        help="Sender (any agent name)",
-    )
     msg_send.add_argument("--subject", "-s", help="Message subject")
     msg_send.add_argument(
         "--message",
@@ -5521,11 +5560,6 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Delegate to (any agent name)",
     )
     delegate_parser.add_argument(
-        "--from-agent",
-        "-f",
-        help="Delegate from (any agent name)",
-    )
-    delegate_parser.add_argument(
         "--task",
         required=True,
         help="Task description",
@@ -5555,7 +5589,6 @@ For more help: https://github.com/gutohuida/AgentWeave
     question_subparsers = question_parser.add_subparsers(dest="question_command")
 
     q_ask = question_subparsers.add_parser("ask", help="Ask the human user a question via the Hub")
-    q_ask.add_argument("--from", "-f", dest="from_agent", required=True, help="Asking agent name")
     q_ask.add_argument("--question", "-q", required=True, help="Question text")
     q_ask.add_argument("--json", action="store_true", default=False, help="Output as JSON")
 

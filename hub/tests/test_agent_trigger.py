@@ -134,6 +134,102 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app, auth_headers):
+    """Task 4.1: the Hub — not the agent — establishes identity at spawn, as an env var
+    the tool surface reads rather than a caller-supplied parameter. Task 4.5: the agent is
+    told, in its very first prompt, which access path (MCP vs. CLI commands) is in use.
+    conftest.py's autouse fixture defaults the probe to False, so this agent (probeable,
+    no override) gets the "cli" path.
+    """
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"identity-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-identity-1"}\n']
+    )
+    captured_kwargs = {}
+    real_build_command = agent_trigger.build_command
+
+    def _capturing_build_command(**kwargs):
+        captured_kwargs.update(kwargs)
+        return real_build_command(**kwargs)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
+                resp = await app.post(
+                    "/api/v1/agent/trigger",
+                    json={
+                        "agent": "identity-claude",
+                        "message": "do the thing",
+                        "session_mode": "new",
+                    },
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                run_id = resp.json()["run_id"]
+                await _await_background_run()
+
+    spawned_env = fake_spawn.call_args.kwargs["env"]
+    assert spawned_env["AW_AGENT_IDENTITY"] == "identity-claude"
+    assert spawned_env["AW_RUN_ID"] == run_id
+    # The Hub's own environment must be inherited, not replaced, by adding these keys.
+    assert "PATH" in spawned_env or "Path" in spawned_env
+
+    prompt = captured_kwargs["prompt"]
+    assert "do the thing" in prompt
+    assert "MCP tools are not available" in prompt
+
+
+@pytest.mark.asyncio
+async def test_trigger_respects_explicit_mcp_override_without_probing(
+    app, auth_headers, monkeypatch
+):
+    """An operator's explicit `hub_client: "mcp"` override must be honored even though
+    conftest's autouse fixture defaults the probe to False — the override skips probing
+    entirely rather than merely outvoting it."""
+
+    def _boom(cli):
+        raise AssertionError("override must skip probing entirely")
+
+    monkeypatch.setattr("hub.launchability.probe_mcp_registered", _boom)
+
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"override-claude": {"runner": "claude", "hub_client": "mcp"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-override-1"}\n']
+    )
+    captured_kwargs = {}
+    real_build_command = agent_trigger.build_command
+
+    def _capturing_build_command(**kwargs):
+        captured_kwargs.update(kwargs)
+        return real_build_command(**kwargs)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
+                resp = await app.post(
+                    "/api/v1/agent/trigger",
+                    json={"agent": "override-claude", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
+
+    assert "the `agentweave` MCP tools are available" in captured_kwargs["prompt"]
+
+
+@pytest.mark.asyncio
 async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers):
     sync = await app.post(
         "/api/v1/session/sync",

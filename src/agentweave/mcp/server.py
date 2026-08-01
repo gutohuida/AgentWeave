@@ -31,6 +31,7 @@ from ..constants import CONTACT_MODES, MESSAGE_TYPES, PRIORITIES, TASK_STATUSES,
 from ..locking import LockError, lock
 from ..messaging import Message, MessageBus
 from ..task import Task
+from ..tool_surface import UnboundIdentityError, bound_identity
 from ..transport import get_transport
 from ..validator import validate_task
 
@@ -50,17 +51,19 @@ mcp = FastMCP(
 
 @mcp.tool()
 def send_message(
-    from_agent: str,
     to_agent: str,
     subject: str,
     content: str,
     message_type: str = "message",
     task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Send a message from one agent to another agent.
+    """Send a message from you to another agent.
+
+    The sender is always the identity the Hub/watchdog bound to this process when it was
+    started — it cannot be spoofed by passing a different name here (agent-tool-surface
+    spec: "identity comes from the run, not the request").
 
     Args:
-        from_agent: Name of the sending agent (e.g. "claude")
         to_agent: Name of the receiving agent (e.g. "kimi")
         subject: Short summary of the message
         content: Full message body
@@ -70,6 +73,11 @@ def send_message(
     Returns:
         Dict with 'success' bool and 'message_id' on success, or 'error' on failure.
     """
+    try:
+        from_agent = bound_identity()
+    except UnboundIdentityError as e:
+        return {"success": False, "error": str(e)}
+
     if message_type not in MESSAGE_TYPES:
         message_type = "message"
 
@@ -167,22 +175,29 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: str, agent: str = "") -> Dict[str, Any]:
+def update_task(task_id: str, status: str) -> Dict[str, Any]:
     """Update a task's status.
 
     Valid statuses: pending, assigned, in_progress, completed,
     under_review, revision_needed, approved, rejected.
 
+    The change is attributed to the identity the Hub/watchdog bound to this process — not
+    a caller-supplied name.
+
     Args:
         task_id: Task ID to update — use the 'id' field from list_tasks().
         status: New status value
-        agent: Your agent name (e.g. "kimi"). Used for activity logging.
 
     Returns:
         Updated task dict, or {'error': '...'} on failure.
     """
     if status not in TASK_STATUSES:
         return {"error": f"Invalid status '{status}'. Valid: {', '.join(TASK_STATUSES)}"}
+
+    try:
+        agent = bound_identity()
+    except UnboundIdentityError as e:
+        return {"error": str(e)}
 
     transport = get_transport()
     if transport.get_transport_type() == TransportType.HTTP:
@@ -216,18 +231,19 @@ def create_task(
     title: str,
     description: str = "",
     assignee: Optional[str] = None,
-    assigner: Optional[str] = None,
     priority: str = "medium",
     requirements: Optional[List[str]] = None,
     acceptance_criteria: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Create a new task and save it.
 
+    The task's assigner is always the identity the Hub/watchdog bound to this process —
+    it cannot be spoofed by passing a different name.
+
     Args:
         title: Short task title
         description: Full task description
         assignee: Agent to assign the task to (optional)
-        assigner: Agent creating the task (optional)
         priority: One of: low, medium, high, critical
         requirements: List of requirement strings (optional)
         acceptance_criteria: List of acceptance criteria strings (optional)
@@ -235,6 +251,11 @@ def create_task(
     Returns:
         Created task dict with generated ID.
     """
+    try:
+        assigner = bound_identity()
+    except UnboundIdentityError as e:
+        return {"error": str(e)}
+
     if priority not in PRIORITIES:
         priority = "medium"
 
@@ -483,7 +504,6 @@ def save_checkpoint(
 
 @mcp.tool()
 def ask_user(
-    from_agent: str,
     question: str,
     blocking: bool = False,
 ) -> Dict[str, Any]:
@@ -494,14 +514,21 @@ def ask_user(
     If local/git transport is active, a message is sent to the 'user' agent as
     a fallback (the human must check their inbox manually).
 
+    The asker is always the identity the Hub/watchdog bound to this process — it cannot
+    be spoofed by passing a different name.
+
     Args:
-        from_agent: Name of the agent asking the question
         question: The question text
         blocking: If True, signals that the agent cannot continue until answered
 
     Returns:
         Dict with 'question_id' on success (http), or 'message_id' (local fallback).
     """
+    try:
+        from_agent = bound_identity()
+    except UnboundIdentityError as e:
+        return {"success": False, "error": str(e)}
+
     transport = get_transport()
     if transport.get_transport_type() == "http":
         import json as _json

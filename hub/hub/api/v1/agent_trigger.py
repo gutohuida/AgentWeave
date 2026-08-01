@@ -26,6 +26,7 @@ involved).
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -37,7 +38,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run
-from ...launchability import get_agent_config, probe_agent, resolve_agent_env
+from ...launchability import (
+    access_path_notice,
+    get_agent_config,
+    probe_agent,
+    resolve_access_path,
+    resolve_agent_env,
+)
 from ...output_recording import record_agent_output, record_context_usage
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
@@ -178,11 +185,16 @@ async def trigger_agent_directly(
     resume_session_id = session_id if session_mode == "resume" else None
     env = resolve_agent_env(runner, config)
 
+    # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
+    # one that isn't actually available in this environment.
+    access_path = resolve_access_path(runner, probe["cli"] or agent, config.get("hub_client"))
+    prompt = f"{access_path_notice(access_path)}\n\n{message}"
+
     try:
         cmd = build_command(
             runner=runner,
             cli=probe["cli"],
-            prompt=message,
+            prompt=prompt,
             model=model,
             context_file=context_file,
             session_id=resume_session_id,
@@ -192,6 +204,16 @@ async def trigger_agent_directly(
         raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
 
     run_id = f"run-{short_id()}"
+
+    # Task 4.1: identity is established here, once, by the Hub — never asserted by the
+    # agent itself. Every tool call this run makes reads AW_AGENT_IDENTITY from its own
+    # process environment; no tool accepts a caller-supplied identity. `env=None` meant
+    # "inherit the Hub's own environment unchanged" (resolve_agent_env's contract) — that
+    # base must be preserved, not replaced, when adding these two keys.
+    env = dict(env) if env is not None else dict(os.environ)
+    env["AW_AGENT_IDENTITY"] = agent
+    env["AW_RUN_ID"] = run_id
+
     run = Run(
         id=run_id,
         project_id=project_id,

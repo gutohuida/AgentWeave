@@ -2,7 +2,14 @@
 
 import pytest
 
-from hub.launchability import probe_agent, resolve_agent_env
+from hub.launchability import (
+    access_path_notice,
+    get_agent_config,
+    probe_agent,
+    probe_mcp_registered,
+    resolve_access_path,
+    resolve_agent_env,
+)
 
 
 class TestProbeAgent:
@@ -179,3 +186,120 @@ class TestResolveAgentEnv:
         env = resolve_agent_env("codex", {})
         # No env_vars configured and not the "claude" runner -> no override needed at all.
         assert env is None
+
+
+class TestAccessPath:
+    """Task 4.3: the access path (MCP tool-protocol server vs. plain CLI commands) is
+    probed per runner rather than assumed — `hub_client` becomes the operator's explicit
+    override, honored ahead of any probe."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_probe_cache(self):
+        # probe_mcp_registered caches by CLI name for _PROBE_TTL_SECONDS — several tests
+        # here probe "claude"/"codex" with conflicting fake results, so each test must
+        # start from an empty cache rather than observing a previous test's result.
+        import hub.launchability as launchability
+
+        launchability._probe_cache.clear()
+        yield
+        launchability._probe_cache.clear()
+
+    def test_explicit_override_wins_without_probing(self, monkeypatch):
+        def _boom(cli):
+            raise AssertionError("probe should not run when an override is given")
+
+        monkeypatch.setattr("hub.launchability.probe_mcp_registered", _boom)
+        assert resolve_access_path("claude", "claude", override="mcp") == "mcp"
+        assert resolve_access_path("claude", "claude", override="cli") == "cli"
+
+    def test_unprobeable_runner_defaults_to_cli(self, monkeypatch):
+        def _boom(cli):
+            raise AssertionError("kimi is not in PROBEABLE_RUNNERS — must not probe")
+
+        monkeypatch.setattr("hub.launchability.probe_mcp_registered", _boom)
+        assert resolve_access_path("kimi", "kimi", override=None) == "cli"
+
+    def test_auto_override_is_treated_as_unset_and_probes(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: True)
+        assert resolve_access_path("claude", "claude", override="auto") == "mcp"
+
+    def test_probeable_runner_uses_probe_result(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: True)
+        assert resolve_access_path("codex", "codex", override=None) == "mcp"
+        monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: False)
+        assert resolve_access_path("codex", "codex", override=None) == "cli"
+
+    def test_probe_mcp_registered_false_when_cli_not_on_path(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
+        assert probe_mcp_registered("claude") is False
+
+    def test_probe_mcp_registered_reads_mcp_list_output(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+
+        class _FakeResult:
+            returncode = 0
+            stdout = "agentweave: connected\nother-server: connected\n"
+
+        seen_cmd = {}
+
+        def _fake_run(cmd, **kwargs):
+            seen_cmd["cmd"] = cmd
+            return _FakeResult()
+
+        monkeypatch.setattr("hub.launchability.subprocess.run", _fake_run)
+        assert probe_mcp_registered("claude") is True
+        assert seen_cmd["cmd"] == ["claude", "mcp", "list"]
+
+    def test_probe_mcp_registered_false_when_not_in_list_output(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+
+        class _FakeResult:
+            returncode = 0
+            stdout = "some-other-server: connected\n"
+
+        monkeypatch.setattr("hub.launchability.subprocess.run", lambda cmd, **kw: _FakeResult())
+        assert probe_mcp_registered("claude") is False
+
+    def test_probe_mcp_registered_swallows_subprocess_errors(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
+
+        def _raise(cmd, **kwargs):
+            raise OSError("boom")
+
+        monkeypatch.setattr("hub.launchability.subprocess.run", _raise)
+        assert probe_mcp_registered("claude") is False
+
+    def test_access_path_notice_names_the_available_tools(self):
+        assert "send_message" in access_path_notice("mcp")
+        assert "agentweave msg send" in access_path_notice("cli")
+        assert "not available" in access_path_notice("cli")
+
+
+@pytest.mark.asyncio
+async def test_get_agent_config_falls_back_to_session_wide_hub_client(app, auth_headers):
+    """Task 4.3: a per-agent `hub_client` override wins; when absent, the session-wide
+    default (session.json's top-level `hub_client`) applies — mirroring the CLI's
+    Session.get_agent_hub_client fallback order."""
+    from hub.db.engine import async_session_factory
+
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={
+            "data": {
+                "hub_client": "cli",
+                "agents": {
+                    "session-default-agent": {"runner": "claude"},
+                    "overridden-agent": {"runner": "claude", "hub_client": "mcp"},
+                },
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    async with async_session_factory() as db:
+        default_config = await get_agent_config("proj-test", "session-default-agent", db)
+        override_config = await get_agent_config("proj-test", "overridden-agent", db)
+
+    assert default_config["hub_client"] == "cli"
+    assert override_config["hub_client"] == "mcp"

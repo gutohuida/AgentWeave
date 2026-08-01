@@ -3555,6 +3555,13 @@ def _do_run_agent_subprocess(
         current_sequence_counter_ref[0] = sequence_counter
 
         proc_env = _prepare_runner_env(runner_type, env_vars)
+        # Task 4.1: identity is established here, once, by whoever spawns the agent's
+        # process — never asserted by the agent itself via a tool-call parameter or CLI
+        # flag. Set unconditionally (not folded into env_vars above) so it's present even
+        # when no other env override applies.
+        if proc_env is None:
+            proc_env = os.environ.copy()
+        proc_env["AW_AGENT_IDENTITY"] = agent
 
         # Wire mode requires bidirectional stdin/stdout communication
         stdin_config = subprocess.PIPE if is_wire_mode else subprocess.DEVNULL
@@ -4925,8 +4932,16 @@ def _make_ping_callback(
         sender = data.get("from", "another agent")
         runner_config = _sess.get_runner_config(recipient) if _sess else {}
         runner_type = runner_config.get("runner")
-        # Determine hub_client mode for the recipient agent
-        hub_client_mode = _sess.get_agent_hub_client(recipient) if _sess else "auto"
+        # Task 4.3: the access path is probed (or, if the operator set an explicit
+        # per-agent/session `hub_client` override, honored) rather than assumed — replaces
+        # the old "auto == always MCP" behavior, which never actually checked anything.
+        from .tool_surface import access_path_notice, resolve_access_path
+
+        runner_cli = (RUNNER_CONFIGS.get(runner_type, {}) or {}).get("cli") or recipient
+        hub_client_override = _sess.get_agent_hub_client(recipient) if _sess else None
+        if hub_client_override == "auto":
+            hub_client_override = None
+        access_path = resolve_access_path(runner_type or "native", runner_cli, hub_client_override)
 
         if runner_type in ("codex", "codex_mcp"):
             content = data.get("content", "")
@@ -4940,22 +4955,24 @@ def _make_ping_callback(
                     "",
                     "Message:",
                     content.strip() or "Continue.",
+                    "",
+                    access_path_notice(access_path),
                 ]
             )
             if transport is not None:
                 with contextlib.suppress(Exception):
                     transport.archive_message(msg_id)
-        elif hub_client_mode == "cli":
-            # CLI mode: agent cannot use MCP tools — instruct it to use CLI commands
+        elif access_path == "cli":
             prompt = (
                 f"You have a new AgentWeave message from {sender}. "
-                f"Run: agentweave inbox --agent {recipient} --mark-read"
+                f"Run: agentweave inbox --agent {recipient} --mark-read\n\n"
+                f"{access_path_notice(access_path)}"
             )
         else:
-            # auto/mcp: default — agent uses MCP get_inbox() tool
             prompt = (
                 f"You have a new AgentWeave message from {sender}. "
-                f"Call get_inbox('{recipient}') to retrieve it and respond."
+                f"Call get_inbox('{recipient}') to retrieve it and respond.\n\n"
+                f"{access_path_notice(access_path)}"
             )
         session_id = _load_agent_session(recipient)
         cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)

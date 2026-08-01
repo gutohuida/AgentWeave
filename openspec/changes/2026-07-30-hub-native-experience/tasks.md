@@ -1037,19 +1037,71 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
 *Moved ahead of the queue. Every queue entry stamps an origin; building that on a self-declared
 field means reworking the queue's core record later.*
 
-- [ ] 4.1 Inject a per-run agent identity at spawn; bind identity to the connection on the
-      tool-protocol path.
-- [ ] 4.2 Remove `--from-agent` and every caller-supplied sender (`cli.py:1519`); refuse
-      unattributed effects rather than falling back to `"unknown"`.
-- [ ] 4.3 Probe tool-protocol availability per runner per environment; replace `hub_client_mode`
-      with probed capability plus operator override. **Claude Code and Codex first; Copilot after.**
-- [ ] 4.4 Split the agent surface from the operator CLI: a small identity-bound verb set for agents,
+- [x] 4.1 Inject a per-run agent identity at spawn; bind identity to the connection on the
+      tool-protocol path. New `AW_AGENT_IDENTITY` env var, set once by whoever spawns an agent's
+      process — `agent_trigger.py`'s `trigger_agent_directly` (native runtime; also stamps
+      `AW_RUN_ID`), `watchdog.py`'s `_run_cmd` (ping-spawned local/git processes), `cmd_switch`
+      (prints `export AW_AGENT_IDENTITY=<agent>` for the claude_proxy eval path; a printed tip for
+      other runners' copy-paste launch commands), and `cmd_run`. Since `agentweave-mcp`
+      (`src/agentweave/mcp/server.py`) is a stdio subprocess spawned by the agent's own CLI, it
+      inherits this env var — "the connection" is 1:1 with the process for the life of that env,
+      so binding at spawn *is* binding to the connection. New module
+      `src/agentweave/tool_surface.py` holds `bound_identity()`/`UnboundIdentityError`.
+- [x] 4.2 Remove `--from-agent` and every caller-supplied sender; refuse unattributed effects rather
+      than falling back to `"unknown"`. Removed the `from_agent`/`assigner` parameters from
+      `send_message`/`create_task`/`ask_user`/`update_task` in `mcp/server.py` — identity is read
+      from `tool_surface.bound_identity()`, never accepted as a tool argument, so it cannot be
+      reintroduced by a prompt-injected caller either. Removed `--from-agent`/`--assigner`/`--from`
+      from the `quick`/`msg send`/`delegate`/`task create`/`question ask` CLI subcommands
+      (`cli.py`); each now calls a new `_require_bound_identity()` helper and refuses (exit 1) with
+      no bound identity, rather than the old `args.from_agent or "unknown"`/`"user"` fallback.
+- [x] 4.3 Probe tool-protocol availability per runner per environment; replace `hub_client_mode`
+      with probed capability plus operator override. `hub_client` in session.json is now purely the
+      operator override (`"cli"`/`"mcp"`; `"auto"` is treated as unset) — when unset,
+      `tool_surface.resolve_access_path()` (CLI/watchdog) and `hub.launchability.resolve_access_path()`
+      (Hub, independent mirror per that module's existing no-CLI-dependency convention) shell out to
+      `<cli> mcp list` for claude/claude_proxy/native/codex and check for `"agentweave"` in the
+      output, cached 5 minutes per CLI binary. This closes a real defect: the old "auto" branch in
+      `watchdog.py` never probed anything and unconditionally assumed MCP was available. Runners not
+      yet probeable (kimi, opencode, copilot, manual) default to `"cli"` — the guaranteed-available
+      path — rather than assuming an unverified server. Copilot is explicitly deferred per this
+      task's own text.
+- [x] 4.4 Split the agent surface from the operator CLI: a small identity-bound verb set for agents,
       injected and configured by the Hub, separate from the operator's Hub-management and
-      diagnostic commands.
-- [ ] 4.5 Tell the agent at turn start which access path is in use; never offer an unavailable one.
-- [ ] 4.6 Verify the identity and access-path scenarios of `agent-tool-surface`, including that an
-      agent cannot cause an effect attributed to another agent.
-- [ ] 4.7 **`/handoff`**
+      diagnostic commands. Scoped as: the existing `quick`/`msg send`/`delegate`/`task create`/
+      `question ask` subcommands *are* that verb set — they now refuse to run without
+      `AW_AGENT_IDENTITY` bound (task 4.2), which is exactly what "separate from the operator's
+      commands" cashes out to today, since the Hub/watchdog/`switch` are the only things that set
+      that env var. **Scope decision, not literally in the task's wording:** did not fork a second
+      console-script binary (e.g. `agentweave-agent`) — the operator's diagnostic/management verbs
+      (`hub start`, `roles`, `agent configure`, `doctor`, …) need no identity and are unaffected, so
+      a second binary would duplicate argument parsing for no behavioural gain; revisit only if a
+      concrete need for a narrower agent-facing surface (e.g. hiding operator verbs from an agent's
+      `--help`) appears.
+- [x] 4.5 Tell the agent at turn start which access path is in use; never offer an unavailable one.
+      `tool_surface.access_path_notice()` / `hub.launchability.access_path_notice()` produce one line
+      naming either the MCP tools or the equivalent CLI commands; prepended to every Hub-triggered
+      run's initial prompt (`agent_trigger.py`) and to every watchdog ping prompt (`watchdog.py`,
+      replacing the old unconditional "Call get_inbox(...)" text) — the only two places a turn
+      starts today.
+- [x] 4.6 Verify the identity and access-path scenarios of `agent-tool-surface`, including that an
+      agent cannot cause an effect attributed to another agent. New tests: `tests/test_mcp_server.py`
+      (`TestBoundIdentity` — refusal without a bound identity, attribution to the bound identity,
+      and `test_send_message_signature_has_no_from_agent_parameter` proving impersonation is
+      structurally impossible, not just discouraged), `tests/test_watchdog_session.py` (codex/
+      non-probeable-runner ping prompts), `hub/tests/test_launchability.py` (`TestAccessPath` +
+      `get_agent_config`'s session-wide `hub_client` fallback), `hub/tests/test_agent_trigger.py`
+      (identity env injection, access-path notice in the first prompt, explicit override skips
+      probing). Full suites green: CLI 987 passed/4 skipped, Hub 357 passed/4 skipped (+12 from this
+      session). `ruff`/`black` clean on every touched file. Manually smoke-tested the CLI end-to-end
+      (`msg send`/`task create`/`quick` refuse without `AW_AGENT_IDENTITY` and succeed with it;
+      `switch` prints the export/tip). **Not fully verifiable this phase:** the spec's
+      "coordination state cannot be read around the Hub" and "cannot alter its own
+      configuration/scope" scenarios depend on the queue (phase 6) and charter (phase 13) existing
+      first — `get_inbox`/`register_agent`/etc. are unchanged until task 7.1 removes them; this
+      session verified only the identity- and access-path-specific scenarios that are actually
+      implemented so far.
+- [x] 4.7 **`/handoff`** — written after this phase, per the working protocol.
 
 ## 5. Workspace isolation
 

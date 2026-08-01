@@ -288,15 +288,15 @@ Available to agents in both local MCP mode and via Hub MCP:
 
 | Tool | What it does |
 |------|-------------|
-| `send_message(from, to, subject, content)` | Send a message to another agent |
+| `send_message(to, subject, content)` | Send a message to another agent (sender is the bound identity) |
 | `get_inbox(agent)` | Read unread messages (auto-marked as read) |
 | `mark_read(message_id)` | Manually archive a message (optional) |
 | `list_tasks(agent?)` | List active tasks |
 | `get_task(task_id)` | Get full task details |
 | `update_task(task_id, status)` | Update task status |
-| `create_task(title, ...)` | Create and assign a new task |
+| `create_task(title, ...)` | Create and assign a new task (assigner is the bound identity) |
 | `get_status()` | Session-wide summary + task counts |
-| `ask_user(from_agent, question)` | Post a question to the human (Hub only) |
+| `ask_user(question)` | Post a question to the human (Hub only; asker is the bound identity) |
 | `get_answer(question_id)` | Check if the human answered (Hub only) |
 | `create_job(name, agent, message, cron)` | Create a scheduled recurring job |
 | `list_jobs(agent?)` | List scheduled jobs |

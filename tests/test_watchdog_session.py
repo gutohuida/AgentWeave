@@ -60,6 +60,10 @@ def _make_ping_callback_and_fire(
 
 
 def test_agent_message_to_codex_uses_message_as_prompt(tmp_path, monkeypatch):
+    from agentweave import tool_surface
+
+    monkeypatch.setattr(tool_surface, "probe_mcp_registered", lambda cli: True)
+
     captured = _make_ping_callback_and_fire(
         runner="codex",
         tmp_path=tmp_path,
@@ -78,12 +82,17 @@ def test_agent_message_to_codex_uses_message_as_prompt(tmp_path, monkeypatch):
             "",
             "Message:",
             "Please execute task-123",
+            "",
+            tool_surface.access_path_notice("mcp"),
         ]
     )
     captured["transport"].archive_message.assert_called_once_with("msg-agent-001")
 
 
-def test_agent_message_to_non_codex_uses_inbox_prompt(tmp_path, monkeypatch):
+def test_agent_message_to_non_probeable_runner_uses_cli_prompt(tmp_path, monkeypatch):
+    """kimi has no `mcp list` probe (task 4.3 scopes probing to Claude Code and Codex
+    first) — it must default to the guaranteed-available CLI path, not silently assume
+    MCP is registered the way the old unconditional "auto" behavior did."""
     captured = _make_ping_callback_and_fire(
         runner="kimi",
         tmp_path=tmp_path,
@@ -91,5 +100,6 @@ def test_agent_message_to_non_codex_uses_inbox_prompt(tmp_path, monkeypatch):
         recipient="kimi-dev",
     )
 
-    assert "Call get_inbox('kimi-dev')" in captured["prompt"]
+    assert "Run: agentweave inbox --agent kimi-dev --mark-read" in captured["prompt"]
+    assert "MCP tools are not available" in captured["prompt"]
     captured["transport"].archive_message.assert_not_called()

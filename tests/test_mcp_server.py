@@ -467,12 +467,12 @@ class TestCreateTask:
         mock_get_transport.return_value = mock_transport
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "codex")
 
         result = create_task(
             title="Sample MCP task",
             description="A test task created via MCP.",
             priority="low",
-            assigner="codex",
             assignee=None,
         )
 
@@ -487,7 +487,7 @@ class TestCreateTask:
         assert task_file.exists()
 
     @patch("agentweave.mcp.server.get_transport")
-    def test_create_task_http_success(self, mock_get_transport):
+    def test_create_task_http_success(self, mock_get_transport, monkeypatch):
         from agentweave.mcp.server import create_task
 
         mock_transport = MagicMock()
@@ -495,24 +495,26 @@ class TestCreateTask:
         mock_transport.send_task.return_value = True
         mock_get_transport.return_value = mock_transport
 
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
+
         result = create_task(
             title="Hub task",
             description="A test task created via MCP on HTTP transport.",
             priority="medium",
-            assigner="claude",
             assignee="kimi",
         )
 
         assert "error" not in result
         assert result["title"] == "Hub task"
         assert result["assignee"] == "kimi"
+        assert result["assigner"] == "claude"
         mock_transport.send_task.assert_called_once()
         sent = mock_transport.send_task.call_args[0][0]
         assert sent["title"] == "Hub task"
         assert "id" in sent
 
     @patch("agentweave.mcp.server.get_transport")
-    def test_create_task_http_failure(self, mock_get_transport):
+    def test_create_task_http_failure(self, mock_get_transport, monkeypatch):
         from agentweave.mcp.server import create_task
 
         def _send_task(data, error=None):
@@ -525,6 +527,8 @@ class TestCreateTask:
         mock_transport.send_task.side_effect = _send_task
         mock_get_transport.return_value = mock_transport
 
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
+
         result = create_task(title="Failing task", priority="high")
 
         assert "error" in result
@@ -536,6 +540,7 @@ class TestCreateTask:
         from agentweave.mcp.server import create_task
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
 
         result = create_task(title="Bad priority task", priority="super-high")
 
@@ -551,6 +556,7 @@ class TestCreateTask:
         mock_get_transport.return_value = mock_transport
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
         # Create a file where the tasks/active directory should be so mkdir fails
         tasks_active = tmp_path / ".agentweave" / "tasks" / "active"
         tasks_active.parent.mkdir(parents=True, exist_ok=True)
@@ -562,3 +568,110 @@ class TestCreateTask:
         assert "Failed to save task locally" in result["error"]
         err_lower = result["error"].lower()
         assert "not a directory" in err_lower or "cannot" in err_lower or "file exists" in err_lower
+
+    def test_create_task_refuses_without_bound_identity(self, tmp_path, monkeypatch):
+        """agent-tool-surface spec: no caller-supplied identity is accepted, and there is
+        no unattributed effect — a process with no bound identity must be refused, not
+        default to a placeholder assigner."""
+        from agentweave.mcp.server import create_task
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AW_AGENT_IDENTITY", raising=False)
+
+        result = create_task(title="Unbound task")
+
+        assert "error" in result
+        assert "AW_AGENT_IDENTITY" in result["error"]
+        # Nothing should have been written.
+        tasks_active = tmp_path / ".agentweave" / "tasks" / "active"
+        assert not tasks_active.exists() or not list(tasks_active.iterdir())
+
+
+class TestBoundIdentity:
+    """Task 4.1/4.2: identity comes from AW_AGENT_IDENTITY (set by whoever spawned this
+    process), never from a tool-call parameter. Covers send_message, ask_user, and
+    update_task — create_task is covered above in TestCreateTask."""
+
+    def test_send_message_uses_bound_identity(self, tmp_path, monkeypatch):
+        from agentweave.mcp.server import send_message
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
+
+        result = send_message(to_agent="kimi", subject="hi", content="hello")
+
+        assert result["success"] is True
+        assert "message_id" in result
+
+    def test_send_message_refuses_without_bound_identity(self, tmp_path, monkeypatch):
+        from agentweave.mcp.server import send_message
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AW_AGENT_IDENTITY", raising=False)
+
+        result = send_message(to_agent="kimi", subject="hi", content="hello")
+
+        assert result["success"] is False
+        assert "AW_AGENT_IDENTITY" in result["error"]
+
+    def test_send_message_signature_has_no_from_agent_parameter(self):
+        """The identity-assertion parameter must not exist at all — an agent cannot
+        merely be told to omit it, since a prompt-injected caller could still supply it
+        if it were accepted."""
+        import inspect
+
+        from agentweave.mcp.server import send_message
+
+        assert "from_agent" not in inspect.signature(send_message).parameters
+
+    @patch("agentweave.mcp.server.get_transport")
+    def test_ask_user_uses_bound_identity(self, mock_get_transport, monkeypatch):
+        from agentweave.mcp.server import ask_user
+
+        mock_transport = MagicMock()
+        mock_transport.get_transport_type.return_value = "local"
+        mock_get_transport.return_value = mock_transport
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
+
+        with patch("agentweave.mcp.server.MessageBus.send", return_value=True) as mock_send:
+            result = ask_user(question="What next?")
+
+        assert result["success"] is True
+        sent_message = mock_send.call_args[0][0]
+        assert sent_message.sender == "claude"
+
+    def test_ask_user_refuses_without_bound_identity(self, monkeypatch):
+        from agentweave.mcp.server import ask_user
+
+        monkeypatch.delenv("AW_AGENT_IDENTITY", raising=False)
+
+        result = ask_user(question="What next?")
+
+        assert result["success"] is False
+        assert "AW_AGENT_IDENTITY" in result["error"]
+
+    def test_update_task_attributes_to_bound_identity(self, tmp_path, monkeypatch):
+        from agentweave.mcp.server import create_task, update_task
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
+        created = create_task(title="Track me", assignee="kimi")
+
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "kimi")
+        result = update_task(created["id"], status="in_progress")
+
+        assert "error" not in result
+        assert result["status"] == "in_progress"
+
+    def test_update_task_refuses_without_bound_identity(self, tmp_path, monkeypatch):
+        from agentweave.mcp.server import create_task, update_task
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_AGENT_IDENTITY", "claude")
+        created = create_task(title="Track me")
+
+        monkeypatch.delenv("AW_AGENT_IDENTITY", raising=False)
+        result = update_task(created["id"], status="in_progress")
+
+        assert "error" in result
+        assert "AW_AGENT_IDENTITY" in result["error"]
