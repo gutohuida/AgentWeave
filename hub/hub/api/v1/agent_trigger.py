@@ -39,7 +39,12 @@ from ...db.engine import async_session_factory, get_session
 from ...db.models import Run
 from ...launchability import get_agent_config, probe_agent, resolve_agent_env
 from ...output_recording import record_agent_output, record_context_usage
-from ...pty_runner import PtySession, strip_ansi_escapes, terminate_process_tree
+from ...pty_runner import (
+    STRUCTURED_OUTPUT_DIMENSIONS,
+    PtySession,
+    strip_ansi_escapes,
+    terminate_process_tree,
+)
 from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_command
 from ...runner_parsing import parse_claude_line, parse_codex_line
 from ...sse import sse_manager
@@ -384,7 +389,15 @@ async def _execute_run(
     loop = asyncio.get_running_loop()
 
     try:
-        pty = await loop.run_in_executor(None, lambda: PtySession.spawn(cmd, cwd=work_dir, env=env))
+        pty = await loop.run_in_executor(
+            None,
+            lambda: PtySession.spawn(
+                cmd,
+                cwd=work_dir,
+                env=env,
+                dimensions=STRUCTURED_OUTPUT_DIMENSIONS,
+            ),
+        )
     except FileNotFoundError as exc:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)

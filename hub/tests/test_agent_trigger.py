@@ -130,6 +130,7 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers):
     rows = output_resp.json()
     assert any(row["content"] == "Hi there" for row in rows)
     assert any(row["run_id"] == run_id for row in rows)
+    assert fake_spawn.call_args.kwargs["dimensions"] == (24, 32_767)
 
 
 @pytest.mark.asyncio

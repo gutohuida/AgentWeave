@@ -965,9 +965,33 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       mode table and watchdog FAQ so they no longer contradict the new runtime, and aligned the
       README's environment, source-development, package-layout, and native-database descriptions
       with tasks 3.1/3.12–3.16.
-- [ ] 3.18 Verify: trigger starts a process and streams output with no watchdog running; a missing
+- [x] 3.18 Verify: trigger starts a process and streams output with no watchdog running; a missing
       binary fails with a stated reason; killing the Hub mid-run leaves no orphan and marks the run
-      interrupted.
+      interrupted. **Verified end to end on Windows against an isolated source Hub** (port 18188,
+      throwaway SQLite database/project/API key, no watchdog started or consulted by the harness):
+      real Claude spawned directly, obtained typed session
+      `ca6b3401-75d2-46e7-b00b-cc56faaf2efc`, and streamed its actual account-limit response via
+      `run_started` + two `agent_output` events + `run_failed` (exit 1; the external account was out
+      of credits until 19:10, so a success response was not available); real Codex spawned directly,
+      returned `PHASE3_CODEX_OK`, persisted its output/session, and streamed `run_started` +
+      `agent_output` + `run_completed` (exit 0). A Codex config pinned to an absent executable was
+      rejected at preflight with HTTP 409 and the exact missing path/reason. A second Codex run was
+      kept active, then the isolated Hub received a controlled shutdown: its recorded child PID
+      24908 was absent afterward (no orphan); restarting against the same database reconciled run
+      `run-9e5f3857` from `running` to `interrupted` with an `ended_at` timestamp.
+
+      **Two real ConPTY defects surfaced and were fixed before accepting the task.** First, the
+      default 80-column PTY materialized visual wraps inside multi-kilobyte newline-delimited JSON,
+      causing one Claude record to be persisted as dozens of invalid text fragments. Direct agent
+      runs now use a named `(24, 32767)` structured-output dimension, with a Windows regression test
+      proving a 2,000-character JSON record remains one intact line. Second, pywinpty's blocking
+      native reader could remain stuck after a fast CLI exited, leaving the Run forever `running`;
+      switching pywinpty itself to nonblocking was investigated and rejected because it dropped
+      final output. The adapter instead places a 100 ms timeout on pywinpty's local reader socket:
+      buffered bytes are preserved, while timeout polls return EOF once the child is dead. A delayed-
+      output regression test prevents mistaking a temporary quiet period for EOF. Focused final
+      result: 36 trigger/PTY tests pass; the complete verification commands and counts are recorded
+      in the Phase 3 handoff.
 - [ ] 3.19 **`/handoff`**
 
 ## 4. Identity, runner capability, and surface split

@@ -17,11 +17,19 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import socket
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 IS_WINDOWS = sys.platform == "win32"
+
+# Agent CLIs emit newline-delimited JSON records that can be several kilobytes long. ConPTY
+# materializes visual line wrapping in its output stream: an 80-column terminal therefore turns
+# one JSON record into dozens of invalid fragments before the parser sees it. Use the largest
+# signed-16-bit-safe width for structured-output sessions so only the CLI's real newline separates
+# records. Kept as a named value because ordinary interactive PTYs may still want a normal width.
+STRUCTURED_OUTPUT_DIMENSIONS: Tuple[int, int] = (24, 32_767)
 
 # Matches CSI sequences (ESC [ ... final-byte, e.g. cursor moves, mode toggles like the
 # ConPTY handshake `\x1b[?9001h`) and OSC sequences (ESC ] ... BEL or ESC ] ... ST, e.g. the
@@ -146,6 +154,11 @@ class PtySession:
 
     def __init__(self, proc: Any) -> None:
         self._proc = proc
+        if IS_WINDOWS:
+            # pywinpty's native reader reliably captures fast-process output in blocking
+            # mode, but can remain stuck after the child exits and never close this local
+            # socket. A timeout lets read() poll liveness without discarding buffered data.
+            self._proc.fileobj.settimeout(0.1)
 
     @classmethod
     def spawn(
@@ -185,11 +198,16 @@ class PtySession:
         normalizes both to an empty-string return so callers need one loop shape:
         ``while (chunk := session.read()): ...``.
         """
-        try:
-            chunk = self._proc.read(size)
-        except EOFError:
-            return ""
-        return chunk or ""
+        while True:
+            try:
+                chunk = self._proc.read(size)
+            except EOFError:
+                return ""
+            except (socket.timeout, TimeoutError):
+                if IS_WINDOWS and self._proc.isalive():
+                    continue
+                return ""
+            return chunk or ""
 
     def write(self, data: str) -> None:
         self._proc.write(data)

@@ -18,6 +18,7 @@ import pytest
 
 from hub.pty_runner import (
     IS_WINDOWS,
+    STRUCTURED_OUTPUT_DIMENSIONS,
     PtySession,
     pid_alive,
     resolve_executable,
@@ -72,6 +73,44 @@ class TestResolveExecutable:
 
 
 class TestPtySessionSpawn:
+    @pytest.mark.skipif(not IS_WINDOWS, reason="pywinpty socket polling is Windows-only")
+    def test_delayed_output_is_not_mistaken_for_eof(self):
+        session = PtySession.spawn(
+            [sys.executable, "-c", "import time; time.sleep(0.2); print('delayed output')"]
+        )
+        try:
+            captured = ""
+            while True:
+                chunk = session.read()
+                if not chunk:
+                    break
+                captured += chunk
+            assert "delayed output" in captured
+            assert session.wait() == 0
+        finally:
+            if session.isalive():
+                session.terminate(force=True)
+
+    @pytest.mark.skipif(not IS_WINDOWS, reason="ConPTY materializes terminal-width wrapping")
+    def test_structured_output_width_does_not_split_long_json_record(self):
+        payload = '{"type":"result","content":"' + ("x" * 2_000) + '"}'
+        session = PtySession.spawn(
+            [sys.executable, "-c", f"print({payload!r})"],
+            dimensions=STRUCTURED_OUTPUT_DIMENSIONS,
+        )
+        try:
+            captured = ""
+            while True:
+                chunk = session.read()
+                if not chunk:
+                    break
+                captured += chunk
+            assert strip_ansi_escapes(captured).strip() == payload
+            assert session.wait() == 0
+        finally:
+            if session.isalive():
+                session.terminate(force=True)
+
     def test_captures_stdout_and_exit_code(self):
         session = PtySession.spawn([sys.executable, "-c", "print('hello from pty')"])
         try:
