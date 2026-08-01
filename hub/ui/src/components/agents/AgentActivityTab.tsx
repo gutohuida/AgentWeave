@@ -133,6 +133,8 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         ? 'var(--green)'
         : item.eventType === 'run_stopped'
         ? 'var(--amber)'
+        : item.eventType === 'run_interrupted'
+        ? 'var(--purple)'
         : 'var(--blue)'
     const eventBg =
       item.eventType === 'run_failed'
@@ -141,6 +143,8 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         ? 'rgba(34,197,94,0.1)'
         : item.eventType === 'run_stopped'
         ? 'rgba(245,158,11,0.1)'
+        : item.eventType === 'run_interrupted'
+        ? 'rgba(168,85,247,0.1)'
         : 'rgba(59,130,246,0.1)'
     const eventIcon =
       item.eventType === 'run_started'
@@ -151,6 +155,8 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         ? 'error'
         : item.eventType === 'run_stopped'
         ? 'stop'
+        : item.eventType === 'run_interrupted'
+        ? 'warning'
         : 'event_note'
 
     return (

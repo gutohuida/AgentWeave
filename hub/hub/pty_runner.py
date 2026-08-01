@@ -14,6 +14,7 @@ platform-specific import happens only inside `PtySession.spawn()`, never at modu
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import sys
@@ -59,6 +60,46 @@ def resolve_executable(cmd: List[str]) -> List[str]:
     if not resolved:
         raise FileNotFoundError(f"{cmd[0]!r} was not found in PATH")
     return [resolved, *cmd[1:]]
+
+
+def pid_alive(pid: int) -> bool:
+    """Return whether *pid* still identifies a live process.
+
+    Used for crash reconciliation (task 3.8): a Hub process restarted after a crash has no
+    in-memory `PtySession` handle for a run that was mid-flight when it died — only the bare
+    `pid` int persisted on the `Run` row — so liveness has to be checked against the OS
+    directly rather than via `PtySession.isalive()`, which only works for a live handle.
+
+    Known limitation, not solved here: this is a pid-existence check only, not a pid+identity
+    check — if the Hub is down long enough for the OS to recycle *pid* onto an unrelated
+    process before the Hub restarts, this returns a false "still alive." Narrow window in
+    practice (pid reuse takes many process spawns), and closing it fully would need tracking
+    process start time or command line, which the `Run` row doesn't carry.
+    """
+    if IS_WINDOWS:
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        handle = ctypes.windll.kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            return False
+        try:
+            exit_code = ctypes.c_ulong()
+            if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == still_active
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    else:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # Alive but owned by another user — still alive, just not signalable by us.
+            return True
+        return True
 
 
 class PtySession:

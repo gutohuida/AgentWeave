@@ -126,6 +126,7 @@ export function eventBelongsToTimeline(event: SSEEvent, name: string): boolean {
     case 'run_completed':
     case 'run_failed':
     case 'run_stopped':
+    case 'run_interrupted':
       return d.agent === name
     default:
       return false

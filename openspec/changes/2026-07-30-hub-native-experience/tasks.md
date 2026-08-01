@@ -576,7 +576,78 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       legacy `.eslintrc.*` exists either). Not something this session's changes touched or
       broke; `tsc --noEmit` and `vitest run` remain the meaningful gates per every prior task's
       verification in this chain. Worth a future look, not blocking.
-- [ ] 3.8 Reconcile on Hub start: a run whose process is absent becomes `interrupted`.
+- [x] 3.8 Reconcile on Hub start: a run whose process is absent becomes `interrupted`. New
+      `hub/hub/run_reconciliation.py`, `reconcile_interrupted_runs()`, called from
+      `main.py`'s `lifespan()` right after `init_db()` (before the scheduler starts, before
+      the app accepts requests). Queries every `Run` row still `status == "running"`
+      Hub-wide (not project-scoped — a restart can affect any project) and, for each,
+      checks OS-level process liveness by the persisted `pid`; anything not alive (or
+      `pid IS NULL`, e.g. a crash between Run-row creation and pid assignment) becomes
+      `status="interrupted"`, `ended_at` stamped, a `run_interrupted` event persisted and
+      broadcast — same persist+broadcast shape 3.6/3.7 already used, not reused via
+      `agent_trigger.py`'s `_broadcast_run_lifecycle` helper since that's a request-handler
+      concern and this runs at startup with no request in flight. A restarted Hub process
+      has **no in-memory `PtySession`** for any run that was mid-flight when it died — only
+      the bare `pid` int the row already carried — so `PtySession.isalive()` (which only
+      works for a live in-process handle) can't be reused; added a new `pid_alive(pid)` to
+      `pty_runner.py` instead, branching on `IS_WINDOWS` the same way the rest of that file
+      does (POSIX: `os.kill(pid, 0)`; Windows: `OpenProcess`/`GetExitCodeProcess` via
+      `ctypes`, no new dependency). Documented, not solved, limitation in `pid_alive`'s own
+      docstring: this is existence-only, not identity — a sufficiently long Hub outage could
+      see the OS recycle a dead run's pid onto an unrelated process before the Hub restarts,
+      producing a false "still alive"; closing that fully would need the `Run` row to carry
+      process start-time or command line, which it doesn't. `RUN_STATUSES`'s `"interrupted"`
+      value (reserved since 3.3) is used by real code for the first time here.
+      `list_agents()`'s existing `agents_with_active_run` query (3.6) needed no change —
+      it already only matches `status == "running"`, so a reconciled row is automatically
+      excluded, and `POST /agent/trigger`'s "already has a run in progress" guard (same
+      query shape) is unblocked for that agent the moment reconciliation runs. Frontend:
+      `run_interrupted` wired through `useSSE.ts` (allowlist + `['agents']` invalidation,
+      grouped with the other four lifecycle events), `agents.ts`'s
+      `eventBelongsToTimeline()`, and `AgentActivityTab.tsx`'s event-row coloring — purple
+      (`var(--purple)`, previously only used for the session-ID chip, not any run-lifecycle
+      event) with the existing `warning` icon (`AlertTriangle`), distinct from
+      red/failed, green/completed, amber/stopped, blue/started. `agents.py`'s
+      `_run_lifecycle_summary()` renders `"Run interrupted (Hub restarted)"`. 6 new backend
+      tests: `test_run_reconciliation.py` (no-pid → interrupted with SSE assertion,
+      implausible-large-pid → interrupted, live pid (the test process's own) → left
+      running, and a reconcile-twice idempotency check — the last one deliberately does
+      *not* assert `reconciled == 0` on a fresh call, since the shared in-memory test DB
+      persists "running" rows other test modules deliberately leave behind across the whole
+      pytest session; asserts idempotency instead, which holds regardless of what ran
+      earlier) and `test_pty_runner.py::TestPidAlive` (current process alive; a real
+      spawned-and-reaped subprocess not alive — exercises `pid_alive`'s actual OS-level
+      behavior, which the reconciliation tests deliberately don't re-test). 325/325 Hub
+      tests pass (was 319; +6), ruff/black clean (two lowercase-local-variable renames
+      needed for `N806` in the Windows branch), `tsc --noEmit` clean, 196/196 UI tests pass
+      (one extended, not added, mirroring the run_stopped precedent). Live-verified against
+      the real dev Hub: inserted a `Run` row directly into the persistent dev DB with
+      `status="running"` and an implausible pid, restarted the Hub process, confirmed via
+      direct DB query the row flipped to `"interrupted"`, confirmed
+      `GET /agents/claude/timeline` returned `"Run interrupted (Hub restarted)"`, confirmed
+      `GET /agents` showed `"idle"` (not stuck), and confirmed in the actual browser
+      (against the now-rebuilt static UI bundle, see below) that the Activity tab renders
+      the row with the purple border/badge and correct summary text. The Hub restart for
+      this verification was done only after asking the user first, since the user was
+      actively using this exact dev Hub instance at the time.
+      **Unplanned, adjacent fix in the same session, before this task started:** the Hub's
+      checked-in `hub/hub/static/ui/` bundle (served at :8000 for non-Docker/local use,
+      per `main.py`'s `UI_DIST` static mount) was stale since before task 3.5 — the user
+      reported a stuck "active" badge after a response and no Stop button, both explained by
+      that bundle predating all of 3.5-3.7's frontend work (confirmed by grepping the
+      bundle's JS for `run_started`/`run_stopped` — neither string was present). Rebuilt via
+      `npm run build` + manual copy into `hub/hub/static/ui/`, twice this session (once for
+      the report, once more after this task's own frontend changes so the bundle doesn't
+      immediately go stale again). This is the general problem already tracked as unchecked
+      task 3.20 ("Stop the Hub silently serving a stale UI") — still not systemically fixed,
+      only manually refreshed. **Deliberately not done here** (belongs to 3.9/6.5): no
+      process-group termination on Hub shutdown (3.9 — this task only handles the Hub *not
+      being there* when a run's process is still around; 3.9 handles the reverse, the
+      process still being around when the Hub goes away cleanly). No "entries returned to
+      the queue" behavior from Decision 8's second half — Phase 6's inbound-queue system
+      (the thing that would hold such entries) doesn't exist in this codebase yet; that half
+      is explicitly deferred to task 6.5, which already says "pairs with 3.8" in its own
+      text.
 - [ ] 3.9 Terminate the process group on Hub shutdown so no agent process is orphaned.
 - [ ] 3.10 Route scheduled jobs through the direct execution path; remove the watchdog's
       message-scanning trigger branch, keeping only timer duties.

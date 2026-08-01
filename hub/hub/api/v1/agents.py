@@ -501,8 +501,8 @@ def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[st
     """Human-readable summary for a run-lifecycle EventLog row.
 
     Falls back to the bare event_type (existing behavior for every other
-    EventLog-derived timeline entry) when the type isn't one of these three
-    or the expected fields are missing.
+    EventLog-derived timeline entry) when the type isn't one of these or
+    the expected fields are missing.
     """
     data = data or {}
     if event_type == "run_started":
@@ -521,6 +521,8 @@ def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[st
     if event_type == "run_stopped":
         exit_code = data.get("exit_code")
         return f"Run stopped (exit {exit_code})" if exit_code is not None else "Run stopped"
+    if event_type == "run_interrupted":
+        return "Run interrupted (Hub restarted)"
     return None
 
 

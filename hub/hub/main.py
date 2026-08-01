@@ -14,6 +14,7 @@ from . import __version__
 from .api.v1 import v1_router
 from .config import settings
 from .db.engine import init_db
+from .run_reconciliation import reconcile_interrupted_runs
 from .scheduler import init_scheduler, shutdown_scheduler
 
 UI_DIST = Path(__file__).parent / "static" / "ui"
@@ -69,6 +70,7 @@ class ContentSizeLimitMiddleware:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await reconcile_interrupted_runs()
     await init_scheduler()
     yield
     await shutdown_scheduler()

@@ -40,6 +40,7 @@ const SSE_EVENT_TYPES = [
   'run_completed',
   'run_failed',
   'run_stopped',
+  'run_interrupted',
 ]
 
 const MAX_BUFFERED = 200
@@ -414,6 +415,7 @@ export function useSSE(onEvent?: SSEListener) {
         case 'run_completed':
         case 'run_failed':
         case 'run_stopped':
+        case 'run_interrupted':
           // Run status is folded into the agents list response (agents.py's
           // agents_with_active_run), and a Hub-triggered run never posts a
           // heartbeat — without this, the running/idle badge would never

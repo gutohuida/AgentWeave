@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from hub.pty_runner import IS_WINDOWS, PtySession, resolve_executable, strip_ansi_escapes
+from hub.pty_runner import IS_WINDOWS, PtySession, pid_alive, resolve_executable, strip_ansi_escapes
 
 
 class TestStripAnsiEscapes:
@@ -120,6 +120,21 @@ class TestPtySessionSpawn:
     def test_missing_executable_raises_before_spawning(self):
         with pytest.raises(FileNotFoundError):
             PtySession.spawn(["definitely-not-a-real-cli-xyz"])
+
+
+class TestPidAlive:
+    def test_current_process_is_alive(self):
+        assert pid_alive(os.getpid()) is True
+
+    def test_exited_and_reaped_process_is_not_alive(self):
+        session = PtySession.spawn([sys.executable, "-c", "pass"])
+        pid = session.pid
+        session.wait()
+        for _ in range(50):
+            if not session.isalive():
+                break
+            time.sleep(0.1)
+        assert pid_alive(pid) is False
 
 
 @pytest.mark.skipif(not IS_WINDOWS, reason="Windows .cmd shim resolution only applies on Windows")
