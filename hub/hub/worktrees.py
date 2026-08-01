@@ -143,6 +143,25 @@ def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> None:
             continue
 
 
+def _registered_worktree_branch(repo_root: Path, path: Path) -> Optional[str]:
+    """Return the branch registered at *path*, without following path aliases."""
+    result = _run_git(repo_root, "worktree", "list", "--porcelain")
+    expected_path = path.absolute()
+    record: Dict[str, str] = {}
+
+    for raw_line in [*result.stdout.splitlines(), ""]:
+        line = raw_line.strip()
+        if line:
+            key, _, value = line.partition(" ")
+            record[key] = value
+            continue
+        registered_path = record.get("worktree")
+        if registered_path and Path(registered_path).absolute() == expected_path:
+            return record.get("branch")
+        record = {}
+    return None
+
+
 def ensure_worktree(repo_root: Path, agent: str) -> Path:
     """Provision *agent*'s isolated checkout, creating it if absent. Idempotent.
 
@@ -153,6 +172,12 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
     """
     path = worktree_path(repo_root, agent)
     if path.exists():
+        expected_ref = f"refs/heads/{branch_name(agent)}"
+        if path.is_symlink() or _registered_worktree_branch(repo_root, path) != expected_ref:
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is not the registered git worktree "
+                f"for {expected_ref}"
+            )
         return path
 
     # A worktree directory can be gone (manually deleted, or removed by something

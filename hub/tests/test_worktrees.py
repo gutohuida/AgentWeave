@@ -81,6 +81,15 @@ def test_ensure_worktree_is_idempotent(repo):
     assert first.is_dir()
 
 
+def test_ensure_worktree_rejects_unregistered_existing_directory(repo):
+    path = worktrees.worktree_path(repo, "occupied")
+    path.mkdir(parents=True)
+    (path / "untrusted.txt").write_text("not a linked worktree\n")
+
+    with pytest.raises(worktrees.IsolationUnavailableError, match="registered git worktree"):
+        worktrees.ensure_worktree(repo, "occupied")
+
+
 def test_resolve_agent_workspace_isolates_writing_agent(repo):
     path = resolve_agent_workspace(repo, "carol", {})
     assert path == worktrees.worktree_path(repo, "carol")
