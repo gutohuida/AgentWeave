@@ -265,8 +265,34 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       here rather than solved now — solving it requires the working-directory tracking that is
       explicitly out of this task's scope.
       UI wiring (the composer's launchability indicators) is Phase 12 (`12.1`), not this task.
-- [ ] 3.3 Introduce a run record — identity, agent, session identity as a typed field, start time,
-      status, exit outcome, **process identity and heartbeat**.
+- [x] 3.3 Introduce a run record — identity, agent, session identity as a typed field, start time,
+      status, exit outcome, **process identity and heartbeat**. Added `Run` to
+      `hub/hub/db/models.py` (`runs` table) with exactly those fields: `id`, `agent`,
+      `session_id`, `started_at`/`ended_at`, `status` (`RUN_STATUSES`: running / completed /
+      failed / interrupted / stopped — "stopped" for 3.7's deliberate-interrupt, "interrupted"
+      for 3.8's crash reconciliation), `exit_code` + `error` (exit outcome), `pid` +
+      `last_heartbeat_at` (process identity/heartbeat, the fields Decision 8's crash-reconciliation
+      needs on Hub restart). `AgentOutput.run_id` already existed pointing at nothing — this table
+      is what it was always meant to reference (left as a loose reference, no FK constraint, since
+      3.5/3.6 haven't wired real run_ids through the output pipeline yet). Migration
+      `0012_add_runs_table.py`, following the existing fresh-install-guard pattern. Bumped the two
+      hardcoded `"0011"` version assertions in `test_migrations.py` to `"0012"`; added a migration
+      test simulating an existing (pre-0012) deployment and a Run-model ORM round-trip test. 259/259
+      Hub tests pass. Live-verified: migration applied cleanly to the real persistent Hub DB
+      (`sqlite3` query confirmed `alembic_version=0012` and the `runs` table's columns).
+      **Deliberately not done here** (belongs to 3.5/3.6): nothing creates, updates, or queries a
+      `Run` row yet — `agent_trigger.py` is untouched, still on the message-tag protocol. This task
+      is schema-only, matching its own scope ("introduce a run record"), not wiring.
+      **Unrelated finding, not fixed (out of scope):** `agentweave hub start`'s detached-mode health
+      check intermittently times out at 60s even though the server actually starts and serves
+      traffic correctly within seconds (confirmed via `--no-detach`, which succeeds every time) —
+      first observed once during 3.1's testing, before any of this session's other code changes, so
+      it predates this work. Also surfaced a harmless, already-swallowed, pre-existing warning
+      (`_run_alembic_upgrade`'s `alembic.ini` `script_location` resolves relative to CWD, not to the
+      ini file, so the Hub's own redundant migration-on-boot silently no-ops when started from
+      outside `hub/` — harmless because `_hub_native_start` already ran migrations correctly via an
+      absolute path before spawning). Both worth a future look but are pre-existing Hub-lifecycle
+      issues, not run-record issues.
 - [ ] 3.4 Implement process spawn and output capture with a PTY. **Prototype on Windows first**;
       account for `.cmd` shims (`cli.py:2341`).
 - [ ] 3.5 Rewrite `POST /api/v1/agent/trigger` to spawn directly and return a run identifier; delete

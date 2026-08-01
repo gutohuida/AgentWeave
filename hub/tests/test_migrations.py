@@ -122,7 +122,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0011. The full
+    migration runs cleanly and the version lands at 0012. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -130,7 +130,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0011).
+    # Verify alembic_version is at the latest revision (0012).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -141,7 +141,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0011", f"expected alembic_version=0011, got {version}"
+    assert version == "0012", f"expected alembic_version=0012, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -230,7 +230,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
     """For a file-based DB, _run_alembic_upgrade must actually apply migrations.
 
     Verifies the H5 fix at the unit level: a file-based URL is not skipped,
-    alembic is invoked, and the alembic_version table ends up at 0011.
+    alembic is invoked, and the alembic_version table ends up at 0012.
     """
     from hub.db.engine import _run_alembic_upgrade
 
@@ -252,7 +252,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0011", f"expected alembic_version=0011, got {version}"
+    assert version == "0012", f"expected alembic_version=0012, got {version}"
 
 
 @pytest.mark.asyncio
@@ -282,6 +282,83 @@ async def test_init_db_alembic_failure_does_not_raise(tmp_path, monkeypatch) -> 
     # If we got here, the exception was caught. Verify the patch target
     # was actually invoked (defense against a missed patch).
     assert True, "Alembic upgrade failed silently — exception was caught"
+
+
+# ---------------------------------------------------------------------------
+# 3.3: runs table
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0012_creates_runs_table_on_existing_deployment(tmp_path) -> None:
+    """Migration 0012 must add the `runs` table to a pre-existing (0011) deployment.
+
+    Simulates an upgrade rather than a fresh install: create_all() has already run
+    (as init_db always does before migrations), so `runs` doesn't exist yet but every
+    other table does. Migration 0012's fresh-install guard must not skip it here.
+    """
+    db_file = tmp_path / "pre_0012.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _seed_pre_0012() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+                await conn.execute(sa.text("DROP TABLE runs"))
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0011')")
+                )
+        finally:
+            await engine.dispose()
+
+    _run(_seed_pre_0012())
+    _run_alembic_with(db_url)
+
+    columns = {column["name"]: column for column in _inspect_columns(db_url, "runs")}
+    assert {
+        "id",
+        "project_id",
+        "agent",
+        "session_id",
+        "status",
+        "pid",
+        "exit_code",
+        "error",
+        "started_at",
+        "ended_at",
+        "last_heartbeat_at",
+    } <= columns.keys()
+    assert columns["session_id"]["nullable"] is True
+    assert columns["pid"]["nullable"] is True
+    assert columns["ended_at"]["nullable"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_model_round_trips_through_the_orm(app) -> None:
+    """Sanity check: a Run row can be created and read back with its fields intact."""
+    from hub.db.models import Project, Run
+
+    async with async_session_factory() as session:
+        session.add(Project(id="proj-run-test", name="Run Model Test"))
+        run = Run(
+            id="run-test-0001",
+            project_id="proj-run-test",
+            agent="claude",
+            session_id="sess-abc",
+            pid=12345,
+        )
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+
+        assert run.status == "running"
+        assert run.pid == 12345
+        assert run.exit_code is None
+        assert run.ended_at is None
+        assert run.started_at is not None
 
 
 # ---------------------------------------------------------------------------

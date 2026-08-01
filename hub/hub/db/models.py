@@ -279,6 +279,45 @@ class ProjectSpecSnapshot(Base):
     )
 
 
+# Terminal statuses distinguish *why* a run stopped: "stopped" is a deliberate operator
+# action (task 3.7), "interrupted" is crash reconciliation finding the process gone
+# (task 3.8, Decision 8), "failed"/"completed" are the process's own exit outcome.
+RUN_STATUSES = ("running", "completed", "failed", "interrupted", "stopped")
+
+
+class Run(Base):
+    """A single agent process execution — the Hub's record of owning a spawned run.
+
+    Central to Decision 2 (direct execution replaces the message-tag protocol: session
+    identity lives here as a typed field, never text embedded in a message body) and
+    Decision 8 (crash recovery: `pid` + `last_heartbeat_at` are what let the Hub tell, on
+    its own restart, whether a run still marked "running" actually still is).
+    """
+
+    __tablename__ = "runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="running", nullable=False, index=True)
+    pid: Mapped[Optional[int]] = mapped_column(nullable=True)
+    exit_code: Mapped[Optional[int]] = mapped_column(nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_runs_project_agent", "project_id", "agent"),
+        Index("ix_runs_project_status", "project_id", "status"),
+    )
+
+
 class AgentOutput(Base):
     __tablename__ = "agent_outputs"
 
@@ -289,6 +328,8 @@ class AgentOutput(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    # Loose reference to Run.id (no FK constraint — AgentOutput predates the runs table
+    # and existing rows may carry ad hoc run_id values from before Run existed).
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     sequence: Mapped[Optional[int]] = mapped_column(nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
