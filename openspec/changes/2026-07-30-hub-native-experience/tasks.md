@@ -1137,7 +1137,7 @@ before concurrency does.*
       branch reuse, and dependency sharing. Full verification: CLI `991 passed, 4 skipped`; Hub
       `396 passed, 4 skipped`. Ruff and Black checks pass; focused mypy passes for the new worktree
       module/endpoints (the wider Hub type-check still has pre-existing errors).**
-- [ ] 5.6 **`/handoff`**
+- [x] 5.6 **`/handoff`** — `.claude/handoffs/2026-08-01-2151-phase5-workspace-isolation-complete.md`.
 
 ## 6. Inbound queue and turn scheduling
 
