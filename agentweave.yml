@@ -76,6 +76,20 @@ agents:
     roles: [implementer]
     yolo: false
 
+  writer_a:
+    runner: claude
+    model: haiku
+    roles: [implementer]
+    read_only: false
+    yolo: true
+
+  writer_b:
+    runner: claude
+    model: haiku
+    roles: [implementer]
+    read_only: false
+    yolo: true
+
   # -- Additional agent examples -- uncomment and adapt ------------
 
   # -- Claude (Anthropic Claude Code CLI) --
