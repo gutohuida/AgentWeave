@@ -992,7 +992,9 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       output regression test prevents mistaking a temporary quiet period for EOF. Focused final
       result: 36 trigger/PTY tests pass; the complete verification commands and counts are recorded
       in the Phase 3 handoff.
-- [ ] 3.19 **`/handoff`**
+- [x] 3.19 **`/handoff`** — Phase 3 completion checkpoint written to
+      `.claude/handoffs/2026-08-01-1818-phase3-native-runtime-complete.md` after all implementation,
+      live Claude/Codex verification, full Hub tests, and static checks completed.
 
 ## 4. Identity, runner capability, and surface split
 
