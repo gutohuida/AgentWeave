@@ -4576,6 +4576,7 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
 def cmd_agent_set_session(args: argparse.Namespace) -> int:
     """Manually register a Claude session ID for an agent."""
     from .runner import save_claude_session_id
+    from .transport import get_transport
 
     agent = args.agent_name
     session_id = args.session_id
@@ -4587,6 +4588,15 @@ def cmd_agent_set_session(args: argparse.Namespace) -> int:
     if agent not in session.agent_names:
         print_error(f"Agent {agent!r} is not in the current session")
         return 1
+
+    if get_transport().get_transport_type() == "http":
+        print_warning(
+            f"This project uses the Hub (http transport) — session continuity for {agent} "
+            "is tracked by the Hub itself now (pick a conversation from the agent's session "
+            "list in the Hub UI). `agentweave agent set-session` is not needed for "
+            "Hub-managed agents."
+        )
+        return 0
 
     save_claude_session_id(agent, session_id)
     print_success(f"Session ID saved for {agent}: {session_id}")
@@ -5111,6 +5121,7 @@ def cmd_switch(args: argparse.Namespace) -> int:
     Usage: eval $(agentweave switch minimax)
     """
     from .runner import get_agent_env, get_missing_api_key_var
+    from .transport import get_transport
 
     agent = args.agent
     session = Session.load()
@@ -5120,6 +5131,14 @@ def cmd_switch(args: argparse.Namespace) -> int:
     if agent not in session.agent_names:
         print_error(f"Agent {agent!r} is not in the current session")
         return 1
+
+    if get_transport().get_transport_type() == "http":
+        print_warning(
+            f"This project uses the Hub (http transport) — {agent} is triggered and its "
+            "provider environment resolved directly by the Hub now. `agentweave switch` "
+            "is not needed for Hub-managed agents; trigger from the Hub UI instead."
+        )
+        return 0
 
     runner_config = session.get_runner_config(agent)
     runner = runner_config.get("runner", "native")

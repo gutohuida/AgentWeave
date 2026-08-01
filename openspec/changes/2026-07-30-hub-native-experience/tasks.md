@@ -772,8 +772,79 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       code still requires two separate lookups by agent+time rather than a direct join;
       out of scope for "route through direct execution," which this task's own wording is
       about the *trigger mechanism*, not job/run observability parity.
-- [ ] 3.11 Remove `agentweave switch` and `agentweave agent set-session` from the Hub-managed path;
+- [x] 3.11 Remove `agentweave switch` and `agentweave agent set-session` from the Hub-managed path;
       resolve provider environment and session continuity inside the Hub.
+      **Hub side (the concrete architectural fix):** new `resolve_agent_env(runner, config)`
+      in `hub/hub/launchability.py`, mirroring `agentweave.watchdog._prepare_agent_env`/
+      `_prepare_runner_env`'s exact semantics (`ANTHROPIC_API_KEY_VAR` indirection, generic
+      self-referencing placeholder resolution, native-Claude proxy-URL-leak stripping) —
+      deliberately reimplemented rather than imported from the CLI package, matching this
+      module's own stated principle (the Hub must stay probeable/runnable without the
+      `agentweave-ai` package installed at all, e.g. a Docker-only deployment). Wired into
+      `trigger_agent_directly()`: computes `env = resolve_agent_env(runner, config)` and
+      threads it through `_execute_run()` (new `env` parameter) into
+      `PtySession.spawn(cmd, cwd=work_dir, env=env)` — previously **no env override was ever
+      passed to spawn at all**, so a Hub-triggered `claude_proxy` agent (Minimax, GLM) only
+      ever worked if the operator had *already* exported the right key into the Hub
+      process's own shell before starting it — i.e. exactly the `eval $(agentweave switch
+      ...)` ceremony this task exists to remove, just aimed at the Hub's shell instead of a
+      normal one. **Session continuity was already solved** by tasks 3.5–3.7's existing
+      work — the agent detail panel's conversation picker (`GET /agent/sessions/{agent}`,
+      `AgentOutputPanel.tsx`'s session dropdown) already lets the operator choose which
+      session to resume; no gap found there, nothing changed.
+      **CLI side:** `cmd_switch` and `cmd_agent_set_session` (`src/agentweave/cli.py`) now
+      check `get_transport().get_transport_type() == "http"` first and, if so, print a
+      short note steering the operator to the Hub UI instead of performing their old
+      behavior (eval-able exports; writing a local session-id file) — a deliberate `return
+      0`, not a hard failure, since running the command isn't wrong, just superseded.
+      Scoped to exactly the two commands the task names; `cmd_run` (a related but
+      unnamed command, still useful for local/git-transport claude_proxy runs) was
+      deliberately left untouched. Local/git-transport behavior for both commands is
+      unchanged — verified by a same-shaped test with no `transport.json` present
+      confirming the old eval/write behavior still fires.
+      **Found and fixed in the same task, not separately requested:** `agent_trigger.py`'s
+      501 response for an unsupported runner (Kimi/OpenCode/Copilot) still said "This agent
+      can still be triggered via the watchdog's own message-based path" — a claim task
+      3.10 made false by removing that exact path. Confirmed via re-reading 3.10's own
+      change that even *before* 3.10, this fallback only ever applied to job-triggered runs
+      (a manual `POST /agent/trigger` for these runners has 501'd since task 3.5, since
+      that endpoint never created a message for any runner); 3.10 additionally routed job
+      firing through the same 501-raising function, so as of 3.10 these three runners have
+      **no Hub-triggered execution path at all over HTTP transport** — local/git transport
+      is unaffected (the watchdog's own `_check_jobs`/`_fire_job` "timer duties" still spawn
+      them directly). Corrected both the module docstring and the 501 detail message to
+      state this accurately instead of pointing at a path that no longer exists. Not
+      otherwise fixed — extending `SUPPORTED_RUNNERS` to cover every runner is explicitly
+      future work per the module's own docstring, predating this session.
+      **Also discovered, not a bug, just documented for the record:** `launchability.py`'s
+      `probe_agent()` *already* factored pilot mode into its `runnable` computation before
+      this session started (`"runnable": present and authorized and not pilot`) — meaning
+      the 3.10 handoff's claim that "the manual-trigger endpoint has never enforced pilot
+      mode" was incomplete: `trigger_agent_directly()` doesn't mention "pilot" as a literal
+      string, but it calls `probe_agent()`, which does check it. 3.10's `_job_agent_skip_reason`
+      addition wasn't a redundant no-op because of this, though — it still meaningfully
+      changes a pilot-skipped job's `JobRun.status` to `"skipped"` (not `"failed"`) and
+      avoids wasted `build_command`/launchability work; and its self-registered-poll-agent
+      half remains the only guard for that case, since `probe_agent()` never checked it.
+      Noted here rather than amending 3.10's already-committed handoff.
+      7 new tests: `test_launchability.py::TestResolveAgentEnv` (6 cases covering the env
+      resolution matrix — no env_vars, named-var resolution, missing-var clears the
+      inherited key without raising, self-referencing placeholder, native-Claude
+      base-url stripping, non-claude runner keeps an intentionally-set base url),
+      `test_agent_trigger.py::test_trigger_resolves_claude_proxy_env_at_spawn_time`
+      (asserts the real spawn call's `env=` kwarg end-to-end through
+      `trigger_agent_directly`/`_execute_run`), and `test_cli.py`'s new
+      `TestSwitchAndSetSessionRemovedFromHubManagedPath` (4 cases: both commands steer to
+      the Hub UI under http transport, both still work unchanged with no transport.json).
+      342/342 Hub tests pass (was 335; +7), 995/995 CLI-side tests pass (was 991; +4).
+      ruff/black clean on both sides. No frontend changes this task, so no
+      `tsc`/`vitest`/static-bundle-rebuild needed.
+      **Not live-verified against the running dev Hub this session** — that instance has
+      been up since before task 3.9 and would need a restart to pick up 3.9/3.10/3.11's
+      combined changes; deferred rather than restarting the user's active session
+      unprompted again this session (see 3.8/3.9's own notes on asking first). The
+      automated integration test above exercises the exact same `trigger_agent_directly`
+      → `_execute_run` → `PtySession.spawn` call graph a live trigger would.
 - [ ] 3.12 Ship `alembic.ini` in `package-data` — a pip install currently logs
       *"alembic.ini not found … skipping migrations"* and runs unmigrated.
 - [x] 3.13 Bind `127.0.0.1` by default, not `0.0.0.0`; honour the documented port variable, currently

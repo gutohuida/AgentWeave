@@ -13,10 +13,14 @@ on the run record (`Run.session_id`), never text embedded in a message body.
 
 Only claude/claude_proxy/native and codex are wired to an actual spawn path today —
 `runner_commands.py`'s scope. Kimi, OpenCode, and Copilot are refused with a stated 501
-rather than silently mishandled; they still work via the watchdog's own trigger path
-(unaffected — `agentweave` watchdog's message-tag construction, `[Session:]`/`[NewSession]`
-tags included, is untouched by this file's rewrite. That entire path is removed only once
-every runner has a direct-spawn equivalent, which is future work, not this task).
+rather than silently mishandled. There is no fallback path left for them over HTTP
+transport: task 3.10 removed the watchdog's message-scanning auto-trigger (the thing
+that used to pick these runners up indirectly, for job-triggered runs only — a manual
+`POST /agent/trigger` for one of these runners has 501'd since task 3.5, before this
+file ever created a message for any runner). Extending this list to cover every runner
+is future work, not this task; local/git transport is unaffected (the watchdog's own
+`_check_jobs`/`_fire_job` "timer duties" still spawn these runners directly, no Hub
+involved).
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run
-from ...launchability import get_agent_config, probe_agent
+from ...launchability import get_agent_config, probe_agent, resolve_agent_env
 from ...output_recording import record_agent_output, record_context_usage
 from ...pty_runner import PtySession, strip_ansi_escapes, terminate_process_tree
 from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_command
@@ -144,7 +148,8 @@ async def trigger_agent_directly(
             status.HTTP_501_NOT_IMPLEMENTED,
             f"Direct spawn for runner {runner!r} is not implemented yet "
             f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
-            "This agent can still be triggered via the watchdog's own message-based path.",
+            "This runner has no Hub-triggered execution path over HTTP transport — "
+            "use local/git transport, where the watchdog's own timer duties still spawn it.",
         )
 
     if not probe["runnable"]:
@@ -164,6 +169,7 @@ async def trigger_agent_directly(
     context_file = Path.cwd() / ".agentweave" / "context" / f"{agent}.md"
     yolo = bool(config.get("yolo"))
     resume_session_id = session_id if session_mode == "resume" else None
+    env = resolve_agent_env(runner, config)
 
     try:
         cmd = build_command(
@@ -207,6 +213,7 @@ async def trigger_agent_directly(
             model=model,
             work_dir=work_dir,
             known_session_id=resume_session_id,
+            env=env,
         )
     )
     _background_runs.add(task)
@@ -371,12 +378,13 @@ async def _execute_run(
     model: Optional[str],
     work_dir: Optional[str],
     known_session_id: Optional[str],
+    env: Optional[Dict[str, str]] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE."""
     loop = asyncio.get_running_loop()
 
     try:
-        pty = await loop.run_in_executor(None, lambda: PtySession.spawn(cmd, cwd=work_dir))
+        pty = await loop.run_in_executor(None, lambda: PtySession.spawn(cmd, cwd=work_dir, env=env))
     except FileNotFoundError as exc:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)

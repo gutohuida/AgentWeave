@@ -2,7 +2,7 @@
 
 import pytest
 
-from hub.launchability import probe_agent
+from hub.launchability import probe_agent, resolve_agent_env
 
 
 class TestProbeAgent:
@@ -134,3 +134,56 @@ async def test_launchability_endpoint_reports_configured_agents(app, auth_header
     assert agents["claude"]["present"] is False
     assert agents["backup"]["runnable"] is False
     assert agents["backup"]["reason"] == "Runner is set to manual — no CLI to launch automatically."
+
+
+class TestResolveAgentEnv:
+    """Task 3.11: the Hub resolves provider environment itself at spawn time, mirroring
+    `agentweave.watchdog._prepare_agent_env`/`_prepare_runner_env`'s exact semantics —
+    closing the gap that used to require `eval $(agentweave switch <agent>)`."""
+
+    def test_no_env_vars_returns_none(self):
+        assert resolve_agent_env("claude_proxy", {}) is None
+
+    def test_resolves_anthropic_api_key_from_named_var(self, monkeypatch):
+        monkeypatch.setenv("MINIMAX_API_KEY", "sk-minimax-secret")
+        config = {
+            "env_vars": {
+                "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
+                "ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY",
+            }
+        }
+        env = resolve_agent_env("claude_proxy", config)
+        assert env["ANTHROPIC_API_KEY"] == "sk-minimax-secret"
+        assert env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
+        # The Hub's own environment is inherited, not replaced.
+        assert "PATH" in env or "Path" in env
+
+    def test_missing_named_var_clears_inherited_key_without_raising(self, monkeypatch):
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "leftover-from-a-different-agent")
+        config = {
+            "env_vars": {
+                "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
+                "ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY",
+            }
+        }
+        env = resolve_agent_env("claude_proxy", config)
+        assert "ANTHROPIC_API_KEY" not in env
+
+    def test_self_referencing_placeholder_is_resolved(self, monkeypatch):
+        monkeypatch.setenv("GLM_API_KEY", "glm-secret")
+        config = {"env_vars": {"GLM_API_KEY": "GLM_API_KEY"}}
+        env = resolve_agent_env("claude_proxy", config)
+        assert env["GLM_API_KEY"] == "glm-secret"
+
+    def test_native_claude_strips_inherited_proxy_base_url(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://leaked-proxy.example.com")
+        env = resolve_agent_env("claude", {})
+        assert env is not None
+        assert "ANTHROPIC_BASE_URL" not in env
+
+    def test_non_claude_runner_keeps_inherited_base_url(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://intentional.example.com")
+        env = resolve_agent_env("codex", {})
+        # No env_vars configured and not the "claude" runner -> no override needed at all.
+        assert env is None

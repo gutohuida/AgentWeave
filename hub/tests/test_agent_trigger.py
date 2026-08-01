@@ -506,3 +506,49 @@ async def test_shutdown_terminates_all_active_runs(app, auth_headers):
 async def test_terminate_all_active_runs_with_nothing_running_returns_zero(app, auth_headers):
     count = await agent_trigger.terminate_all_active_runs()
     assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_trigger_resolves_claude_proxy_env_at_spawn_time(app, auth_headers, monkeypatch):
+    """Task 3.11: the Hub resolves a claude_proxy agent's provider env at spawn time —
+    no `eval $(agentweave switch <agent>)` needed first."""
+    monkeypatch.setenv("MINIMAX_API_KEY", "sk-minimax-secret")
+
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={
+            "data": {
+                "agents": {
+                    "minimax-env-agent": {
+                        "runner": "claude_proxy",
+                        "env_vars": {
+                            "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
+                            "ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY",
+                        },
+                    }
+                }
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-env-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "minimax-env-agent", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            await _await_background_run()
+
+    assert fake_spawn.call_count == 1
+    _, kwargs = fake_spawn.call_args
+    spawned_env = kwargs["env"]
+    assert spawned_env is not None
+    assert spawned_env["ANTHROPIC_API_KEY"] == "sk-minimax-secret"
+    assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"

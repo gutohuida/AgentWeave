@@ -111,6 +111,60 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Build the subprocess environment for spawning *runner*, resolving provider
+    credentials from the Hub's own process environment (task 3.11).
+
+    Closes the gap that used to require `eval $(agentweave switch <agent>)` in a
+    terminal before a `claude_proxy` agent could actually authenticate — the Hub now
+    resolves the same `env_vars` indirection (`ANTHROPIC_API_KEY_VAR` names an env var
+    to read, plain values are passed through, and a value equal to its own key name is
+    treated as another env-var-name placeholder) itself, at spawn time.
+
+    Deliberately reimplemented rather than imported from `agentweave.watchdog`'s
+    `_prepare_agent_env`/`_prepare_runner_env` (which this mirrors exactly) — see this
+    module's own docstring on why the Hub never hard-depends on the CLI package.
+
+    Returns `None` when no override is needed at all (`PtySession.spawn` then inherits
+    the Hub process's own environment unchanged); otherwise a full environment dict —
+    the Hub's own `os.environ`, merged with the agent's resolved `env_vars`.
+    """
+    env_vars = config.get("env_vars") or {}
+    proc_env: Optional[Dict[str, str]] = None
+    if env_vars:
+        proc_env = dict(os.environ)
+        proc_env.update(env_vars)
+        api_key_var = env_vars.get("ANTHROPIC_API_KEY_VAR")
+        if api_key_var:
+            resolved = os.environ.get(api_key_var, "")
+            if resolved:
+                proc_env["ANTHROPIC_API_KEY"] = resolved
+            else:
+                # Key var declared but not set in the Hub's own environment — clear any
+                # inherited key so the failure is an explicit 401, not a silent wrong key.
+                proc_env.pop("ANTHROPIC_API_KEY", None)
+        for var_name, value in env_vars.items():
+            if var_name in ("ANTHROPIC_API_KEY_VAR", "ANTHROPIC_BASE_URL"):
+                continue
+            if value == var_name:
+                resolved = os.environ.get(var_name)
+                if resolved:
+                    proc_env[var_name] = resolved
+                else:
+                    proc_env.pop(var_name, None)
+
+    # Native Claude must not silently inherit a proxy's ANTHROPIC_BASE_URL from
+    # whatever shell the Hub itself happened to be started from — its own auth and
+    # endpoint selection are Claude Code's to make, not the Hub's.
+    if runner == "claude":
+        base = proc_env if proc_env is not None else os.environ
+        if base.get("ANTHROPIC_BASE_URL"):
+            proc_env = dict(base)
+            proc_env.pop("ANTHROPIC_BASE_URL", None)
+
+    return proc_env
+
+
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 

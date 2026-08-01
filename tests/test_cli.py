@@ -12,6 +12,8 @@ from agentweave.cli import (
     _write_opencode_config_from_yml,
     _write_opencode_mcp_config,
     cmd_agent_set_model,
+    cmd_agent_set_session,
+    cmd_switch,
 )
 
 
@@ -682,3 +684,95 @@ class TestDownloadWithSha256:
         assert result is False
         # Destination should not exist — the corrupted file must be cleaned up
         assert not dest.exists()
+
+
+class TestSwitchAndSetSessionRemovedFromHubManagedPath:
+    """Task 3.11: `agentweave switch` / `agent set-session` are no longer the supported
+    path once a project is Hub-managed (http transport) — the Hub resolves provider
+    environment and session continuity itself now. Both commands detect http transport
+    and steer the operator to the Hub UI instead of performing their old local behavior."""
+
+    def _write_http_transport(self, tmp_path):
+        agentweave_dir = tmp_path / ".agentweave"
+        agentweave_dir.mkdir(parents=True, exist_ok=True)
+        (agentweave_dir / "transport.json").write_text(
+            json.dumps(
+                {
+                    "type": "http",
+                    "url": "http://127.0.0.1:8000",
+                    "api_key": "aw_live_testkey",
+                    "project_id": "proj-test",
+                }
+            )
+        )
+
+    def test_switch_steers_to_hub_ui_when_http_transport(self, tmp_path, monkeypatch, capsys):
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=["minimax"])
+        session.agents["minimax"]["runner"] = "claude_proxy"
+        session.save()
+        self._write_http_transport(tmp_path)
+
+        result = cmd_switch(argparse.Namespace(agent="minimax"))
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Hub" in captured.out
+        assert "export" not in captured.out.lower()
+
+    def test_switch_still_works_for_non_http_transport(self, tmp_path, monkeypatch, capsys):
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("MINIMAX_API_KEY", "sk-test")
+        session = Session.create(name="Test", agents=["minimax"])
+        session.agents["minimax"]["runner"] = "claude_proxy"
+        session.agents["minimax"]["env_vars"] = {
+            "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
+            "ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY",
+        }
+        session.save()
+        # No transport.json -> defaults to LocalTransport, not http.
+
+        result = cmd_switch(argparse.Namespace(agent="minimax"))
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "export ANTHROPIC_API_KEY=sk-test" in captured.out
+
+    def test_set_session_steers_to_hub_ui_when_http_transport(self, tmp_path, monkeypatch, capsys):
+        from agentweave.runner import get_claude_session_id
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=["claude"])
+        session.save()
+        self._write_http_transport(tmp_path)
+
+        result = cmd_agent_set_session(
+            argparse.Namespace(agent_name="claude", session_id="sess-manual-123")
+        )
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Hub" in captured.out
+        # Must not have actually written the session file — the Hub is the source of
+        # truth for session continuity on this path now.
+        assert get_claude_session_id("claude") is None
+
+    def test_set_session_still_works_for_non_http_transport(self, tmp_path, monkeypatch, capsys):
+        from agentweave.runner import get_claude_session_id
+        from agentweave.session import Session
+
+        monkeypatch.chdir(tmp_path)
+        session = Session.create(name="Test", agents=["claude"])
+        session.save()
+
+        result = cmd_agent_set_session(
+            argparse.Namespace(agent_name="claude", session_id="sess-manual-123")
+        )
+
+        assert result == 0
+        assert get_claude_session_id("claude") == "sess-manual-123"
