@@ -79,6 +79,7 @@ agents:
   writer_a:
     runner: claude
     model: haiku
+    cli: 'C:\Users\huida\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe'
     roles: [implementer]
     read_only: false
     yolo: true
@@ -86,6 +87,7 @@ agents:
   writer_b:
     runner: claude
     model: haiku
+    cli: 'C:\Users\huida\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe'
     roles: [implementer]
     read_only: false
     yolo: true
