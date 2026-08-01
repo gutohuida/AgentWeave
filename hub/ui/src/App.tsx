@@ -99,6 +99,43 @@ export default function App() {
     )
   }
 
+  if (bootstrapState === 'unreachable') {
+    return (
+      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg)' }}>
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="text-sm" style={{ color: 'var(--text)' }}>
+            Can&apos;t reach the Hub
+          </div>
+          <div className="text-xs opacity-70" style={{ maxWidth: 320 }}>
+            The dashboard couldn&apos;t connect to the Hub server. Make sure it&apos;s running,
+            then retry.
+          </div>
+          <button
+            type="button"
+            onClick={() => useConfigStore.getState().bootstrap()}
+            className="mt-1"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 32,
+              borderRadius: 'var(--radius)',
+              padding: '0 16px',
+              background: 'var(--blue)',
+              color: '#fff',
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const active = PAGES[page]
   const ActivePage = active.Component
   // The rail is icon-only on the Spec page, where there is nothing to resize.

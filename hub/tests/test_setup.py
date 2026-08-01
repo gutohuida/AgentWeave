@@ -6,8 +6,10 @@ import pytest
 @pytest.mark.asyncio
 async def test_setup_token_from_localhost(app):
     """Test that /setup/token returns API key when called from localhost."""
-    # Use the test client which simulates requests from the test server
-    resp = await app.get("/api/v1/setup/token")
+    # Use the test client which simulates requests from the test server.
+    # The ASGITransport fixture's base_url is "http://test", so a loopback
+    # Host header must be supplied explicitly to pass the Host check.
+    resp = await app.get("/api/v1/setup/token", headers={"Host": "localhost"})
     assert resp.status_code == 200
     data = resp.json()
     assert "api_key" in data
@@ -88,8 +90,39 @@ async def test_spa_does_not_leak_api_key_in_html(app) -> None:
 @pytest.mark.asyncio
 async def test_setup_token_still_works_for_localhost(app) -> None:
     """After the fix, /api/v1/setup/token must still be the bootstrap path."""
-    resp = await app.get("/api/v1/setup/token")
+    resp = await app.get("/api/v1/setup/token", headers={"Host": "localhost"})
     assert resp.status_code == 200
     data = resp.json()
     assert "api_key" in data
     assert data["api_key"].startswith("aw_live_")
+
+
+@pytest.mark.asyncio
+async def test_setup_token_rejects_rebound_host(app) -> None:
+    """A DNS-rebinding attacker's page resolves to 127.0.0.1 but keeps its own
+    Host header — the client socket check alone would let this through."""
+    resp = await app.get("/api/v1/setup/token", headers={"Host": "evil.example.com"})
+    assert resp.status_code == 403
+    assert "Host" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_setup_token_rejects_cross_origin(app) -> None:
+    """A cross-site page's fetch() sends Origin even though CORS is silent
+    about this endpoint (no ACAO header), so it must be checked explicitly."""
+    resp = await app.get(
+        "/api/v1/setup/token",
+        headers={"Host": "localhost", "Origin": "http://evil.example.com"},
+    )
+    assert resp.status_code == 403
+    assert "origin" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_setup_token_allows_same_origin(app) -> None:
+    """A same-origin fetch() (matching Origin and Host) is a normal dashboard call."""
+    resp = await app.get(
+        "/api/v1/setup/token",
+        headers={"Host": "localhost", "Origin": "http://localhost"},
+    )
+    assert resp.status_code == 200

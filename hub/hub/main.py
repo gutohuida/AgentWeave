@@ -1,9 +1,13 @@
 """FastAPI application factory + lifespan."""
 
+import functools
+import logging
 import os
+import subprocess
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +22,56 @@ from .db.engine import init_db
 from .run_reconciliation import reconcile_interrupted_runs
 from .scheduler import init_scheduler, shutdown_scheduler
 
+logger = logging.getLogger(__name__)
+
 UI_DIST = Path(__file__).parent / "static" / "ui"
+UI_SRC = Path(__file__).parent.parent / "ui" / "src"
+
+
+def _git_last_commit_iso(path: Path) -> Optional[str]:
+    """Return the ISO-8601 commit date of the most recent commit touching `path`."""
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI", "--", "."],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def _compute_ui_staleness_warning(ui_dist: Path, ui_src: Path) -> Optional[str]:
+    """Compare git history of the built UI against its source to catch a stale bundle.
+
+    `hub/hub/static/ui` is a committed build artefact — nothing rebuilds it
+    automatically in a source checkout, so it silently drifts behind `hub/ui/src`
+    if a contributor edits the UI without rebuilding and recopying. `ui_src` only
+    exists in a source checkout (not in an installed package), so this is a no-op
+    for end users.
+    """
+    if not ui_src.exists() or not ui_dist.exists():
+        return None
+    src_date = _git_last_commit_iso(ui_src)
+    dist_date = _git_last_commit_iso(ui_dist)
+    if not src_date or not dist_date:
+        return None
+    if datetime.fromisoformat(src_date) <= datetime.fromisoformat(dist_date):
+        return None
+    return (
+        f"hub/hub/static/ui was last rebuilt {dist_date}, but hub/ui/src has commits "
+        f"as recent as {src_date}. Run `cd hub/ui && npm run build` and copy dist/ "
+        f"into hub/hub/static/ui to refresh it."
+    )
+
+
+@functools.lru_cache(maxsize=1)
+def _ui_staleness_warning() -> Optional[str]:
+    return _compute_ui_staleness_warning(UI_DIST, UI_SRC)
 
 
 class ContentSizeLimitMiddleware:
@@ -73,6 +126,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     await reconcile_interrupted_runs()
     await init_scheduler()
+    warning = _ui_staleness_warning()
+    if warning:
+        logger.warning(warning)
     yield
     await terminate_all_active_runs()
     await shutdown_scheduler()
@@ -108,7 +164,12 @@ def create_app() -> FastAPI:
 
     @app.get("/health", include_in_schema=False)
     async def health():
-        return JSONResponse({"status": "ok"})
+        payload: Dict[str, Any] = {"status": "ok"}
+        warning = _ui_staleness_warning()
+        if warning:
+            payload["ui_stale"] = True
+            payload["ui_stale_detail"] = warning
+        return JSONResponse(payload)
 
     app.include_router(v1_router)
 

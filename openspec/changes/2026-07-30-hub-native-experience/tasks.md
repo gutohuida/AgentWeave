@@ -909,20 +909,32 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       than relying on `getattr` defaults against auto-vivifying mock attributes). Full CLI suite:
       993 passed, 4 skipped (same skip count as before this task — no new skips introduced);
       `ruff`/`black`/`mypy` clean.
-- [ ] 3.20 **Stop the Hub silently serving a stale UI.** `hub/hub/static/ui/` is a committed build
-      artefact that no dev step refreshes, so the Hub served a bundle from 2026-07-20 while the
-      source had moved on — the change looked like it had not applied. Either build the UI as part
-      of the Hub's build/packaging, or have the Hub report the bundle's build stamp so staleness is
-      visible rather than silent.
-- [ ] 3.21 **Validate `Host` and `Origin` on `GET /api/v1/setup/token`.** It currently guards only
-      on client IP (`_is_local_address`), so it hands a live API key to any caller from a loopback
-      or Docker-bridge address. That admits any local process, and a browser-based DNS-rebinding
-      attack, since CORS does not protect against a rebound `Host`. Require `Host` to be a loopback
-      allowlist entry and `Origin` to be absent or same-origin.
-- [ ] 3.22 **An unreachable Hub must not present the API-key prompt.** `bootstrapState === 'failed'`
-      currently falls through to `SetupModal`, asking the operator to paste a key — which cannot fix
-      "the server is not running". Report the connection failure and offer a retry; reserve the key
-      prompt for a genuinely unconfigured remote Hub.
+- [x] 3.23 **Stop the Hub silently serving a stale UI.** *(Renumbered from 3.20, which collided with
+      the already-completed 3.20 below — see that task's own note.)* `hub/hub/static/ui/` is a
+      committed build artefact that no dev step refreshes, so the Hub served a bundle from
+      2026-07-20 while the source had moved on. Implemented the build-stamp option: `hub/hub/main.py`
+      compares the last git-commit date of `hub/ui/src` against `hub/hub/static/ui` (both via
+      `git log -1 --format=%cI`); `hub/ui/src` only exists in a source checkout, so this is a no-op
+      for an installed package. A stale bundle now logs a warning at Hub startup and is reported as
+      `ui_stale`/`ui_stale_detail` on `GET /health`; `agentweave hub status` (`cli.py`) prints it.
+      5 new tests in `hub/tests/test_ui_staleness.py` using throwaway git repos (not this repo's own
+      history, to stay deterministic).
+- [x] 3.24 **Validate `Host` and `Origin` on `GET /api/v1/setup/token`.** *(Renumbered from 3.21,
+      same collision.)* It previously guarded only on client IP (`_is_local_address`), handing a live
+      API key to any caller from a loopback or Docker-bridge address — vulnerable to a browser-based
+      DNS-rebinding attack, since CORS does not protect against a rebound `Host`. `hub/hub/api/v1/
+      setup.py` now also requires `Host` to resolve to a loopback/Docker-internal allowlist entry
+      (`_is_allowed_host`) and `Origin`, if present, to match `Host` (`_origin_is_same_or_absent`).
+      4 new tests in `hub/tests/test_setup.py`.
+- [x] 3.25 **An unreachable Hub must not present the API-key prompt.** *(Renumbered from 3.22 to stay
+      unique within this phase.)* `bootstrapState === 'failed'` previously fell through to
+      `SetupModal` even when the Hub process itself was unreachable, asking the operator to paste a
+      key — which cannot fix "the server is not running". `hub/ui/src/api/setup.ts`'s
+      `fetchSetupToken` now returns a discriminated `SetupTokenResult` (`ok` / `unreachable` /
+      `unavailable`) instead of collapsing every failure to `null`; `configStore.ts` adds a new
+      `unreachable` `BootstrapState`; `App.tsx` renders a distinct "Can't reach the Hub" screen with
+      a Retry button, reserving `SetupModal` for a genuinely unconfigured/remote Hub. 3 new tests in
+      `hub/ui/src/__tests__/configStore-bootstrap.test.ts`.
 - [x] 3.16 Update `hub/tests/` for direct execution; delete tests asserting the message-tag
       protocol. **The task as literally stated was already satisfied by tasks 3.5–3.11's own
       rewrites** — `hub/tests/` has no stale `execution_confidence`/message-tag assertions left

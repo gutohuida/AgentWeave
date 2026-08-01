@@ -6,7 +6,7 @@ const PREFS_STORAGE_KEY = 'agentweave-prefs'
 
 export type ThemeId = 'ocean' | 'cosmic' | 'solar' | 'forest' | 'rose'
 export type ModeId  = 'light' | 'dark'
-export type BootstrapState = 'pending' | 'ready' | 'failed'
+export type BootstrapState = 'pending' | 'ready' | 'failed' | 'unreachable'
 
 interface StoredSession {
   apiKey: string
@@ -130,13 +130,19 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
     // For a local Hub, reconcile stale sessionStorage with the Hub's current
     // setup token. This prevents normal browser sessions from getting stuck
     // on an old project/key while private mode appears to work.
-    const token = localHub ? await fetchSetupToken() : null
-    if (token?.apiKey && token.apiKey !== get().apiKey) {
-      get().setConfig(token.apiKey, get().hubUrl || window.location.origin, token.projectId)
-    } else if (!get().apiKey && token) {
-      get().setConfig(token.apiKey, get().hubUrl || window.location.origin, token.projectId)
+    const result = localHub ? await fetchSetupToken() : null
+    if (result?.status === 'ok' && result.apiKey !== get().apiKey) {
+      get().setConfig(result.apiKey, get().hubUrl || window.location.origin, result.projectId)
     }
 
-    set({ bootstrapState: get().apiKey ? 'ready' : 'failed' })
+    if (get().apiKey) {
+      set({ bootstrapState: 'ready' })
+    } else if (result?.status === 'unreachable') {
+      // The Hub process itself didn't respond — asking the operator to paste
+      // an API key can't fix that. Report the connection failure instead.
+      set({ bootstrapState: 'unreachable' })
+    } else {
+      set({ bootstrapState: 'failed' })
+    }
   },
 }))

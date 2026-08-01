@@ -3467,6 +3467,10 @@ def cmd_hub_status(args: argparse.Namespace) -> int:
                 print(f"   URL:    {hub_url}")
                 if pid is not None:
                     print(f"   PID:    {pid}")
+                with contextlib.suppress(ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                    body = json.loads(resp.read().decode("utf-8"))
+                    if body.get("ui_stale"):
+                        print_warning(f"   {body.get('ui_stale_detail', 'UI bundle is stale.')}")
                 return 0
     except _uerr.HTTPError as exc:
         print(f"[HUB] Status: error (HTTP {exc.code})")
