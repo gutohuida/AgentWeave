@@ -6,11 +6,13 @@ handling, pre-flight checks, and background execution/recording loop, not the re
 fixtures, which use real captured output).
 """
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import hub.api.v1.agent_trigger as agent_trigger
+from hub.sse import sse_manager
 
 
 async def _await_background_run():
@@ -200,3 +202,136 @@ async def test_spawn_failure_marks_run_failed(app, auth_headers):
         run = await db.get(Run, run_id)
         assert run.status == "failed"
         assert "not found in PATH" in run.error
+
+
+def _drain(queue):
+    """Collect every SSE event currently queued as (event_type, parsed_data)."""
+    events = []
+    while True:
+        try:
+            item = queue.get_nowait()
+        except Exception:  # asyncio.QueueEmpty
+            break
+        events.append((item.event, json.loads(item.data)))
+    return events
+
+
+@pytest.mark.asyncio
+async def test_successful_run_broadcasts_started_and_completed_lifecycle_events(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"lifecycle-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
+    queue = sse_manager.subscribe(project_id)
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-lc-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "lifecycle-claude", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    events = _drain(queue)
+    started = [d for t, d in events if t == "run_started"]
+    completed = [d for t, d in events if t == "run_completed"]
+    assert len(started) == 1
+    assert started[0]["agent"] == "lifecycle-claude"
+    assert started[0]["run_id"] == run_id
+    assert started[0]["runner"] == "claude"
+    assert len(completed) == 1
+    assert completed[0]["exit_code"] == 0
+    assert completed[0]["session_id"] == "sess-lc-1"
+    assert not [d for t, d in events if t == "run_failed"]
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import EventLog
+
+    async with async_session_factory() as db:
+        from sqlalchemy import select
+
+        rows = (
+            (
+                await db.execute(
+                    select(EventLog).where(
+                        EventLog.project_id == project_id, EventLog.agent == "lifecycle-claude"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert any(r.event_type == "run_started" for r in rows)
+    assert any(r.event_type == "run_completed" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"failing-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
+    queue = sse_manager.subscribe(project_id)
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"error","is_error":true,"session_id":"sess-fail-1"}\n'],
+        exit_code=1,
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "failing-claude", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            await _await_background_run()
+
+    events = _drain(queue)
+    failed = [d for t, d in events if t == "run_failed"]
+    assert len(failed) == 1
+    assert failed[0]["exit_code"] == 1
+    assert not [d for t, d in events if t == "run_completed"]
+
+
+@pytest.mark.asyncio
+async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"missing-claude-2": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
+    queue = sse_manager.subscribe(project_id)
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn",
+        MagicMock(side_effect=FileNotFoundError("claude was not found in PATH")),
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "missing-claude-2", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            await _await_background_run()
+
+    events = _drain(queue)
+    failed = [d for t, d in events if t == "run_failed"]
+    assert len(failed) == 1
+    assert "not found in PATH" in failed[0]["error"]
+    assert not [d for t, d in events if t == "run_started"]

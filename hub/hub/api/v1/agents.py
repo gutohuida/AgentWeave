@@ -24,6 +24,7 @@ from ...db.models import (
     ProjectInstructions,
     ProjectRolesConfig,
     ProjectSession,
+    Run,
     Task,
 )
 from ...launchability import get_agent_config, probe_agent
@@ -261,6 +262,18 @@ async def list_agents(
     for hb in hb_res.scalars().all():
         latest_hbs.setdefault(hb.agent, hb)
 
+    # Bulk fetch agents with a direct-spawn run in progress. A Hub-triggered
+    # run (agent_trigger.py) never posts a heartbeat, so without this the
+    # heartbeat-only effective_status below would show "idle" for the whole
+    # duration of a live direct spawn.
+    running_run_q = select(Run.agent).where(
+        Run.project_id == project_id,
+        Run.agent.in_(agent_names),
+        Run.status == "running",
+    )
+    running_run_res = await session.execute(running_run_q)
+    agents_with_active_run = {name for (name,) in running_run_res}
+
     # Bulk fetch message counts (last 24h) per agent
     sender_counts_q = (
         select(Message.sender, func.count())
@@ -349,6 +362,8 @@ async def list_agents(
 
         hb = latest_hbs.get(agent_name)
         effective_status, effective_status_message = effective_heartbeat_status(hb)
+        if agent_name in agents_with_active_run:
+            effective_status, effective_status_message = "running", None
         msg_count = msg_counts.get(agent_name, 0)
         task_count = active_task_counts.get(agent_name, 0)
         context_usage = context_usage_map.get(agent_name)
@@ -482,6 +497,30 @@ async def get_roles_config(
     return row.data
 
 
+def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[str]:
+    """Human-readable summary for a run-lifecycle EventLog row.
+
+    Falls back to the bare event_type (existing behavior for every other
+    EventLog-derived timeline entry) when the type isn't one of these three
+    or the expected fields are missing.
+    """
+    data = data or {}
+    if event_type == "run_started":
+        runner = data.get("runner")
+        model = data.get("model")
+        detail = " (" + ", ".join(x for x in (runner, model) if x) + ")" if runner or model else ""
+        return f"Run started{detail}"
+    if event_type == "run_completed":
+        return f"Run completed (exit {data.get('exit_code', 0)})"
+    if event_type == "run_failed":
+        error = data.get("error")
+        exit_code = data.get("exit_code")
+        if error:
+            return f"Run failed: {error}"
+        return f"Run failed (exit {exit_code})" if exit_code is not None else "Run failed"
+    return None
+
+
 @router.get("/{name}/timeline", response_model=List[AgentTimelineEvent])
 async def agent_timeline(
     name: str,
@@ -537,7 +576,7 @@ async def agent_timeline(
                 id=entry.id,
                 event_type=entry.event_type,
                 timestamp=entry.timestamp,
-                summary=entry.event_type,
+                summary=_run_lifecycle_summary(entry.event_type, entry.data) or entry.event_type,
                 data=entry.data or {},
             )
         )

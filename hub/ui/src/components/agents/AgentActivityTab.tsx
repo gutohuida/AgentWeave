@@ -126,22 +126,43 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   const timeAgo = formatDistanceToNow(new Date(item.timestamp), { addSuffix: true })
 
   if (item.type === 'event') {
+    const eventColor =
+      item.eventType === 'run_failed'
+        ? 'var(--red)'
+        : item.eventType === 'run_completed'
+        ? 'var(--green)'
+        : 'var(--blue)'
+    const eventBg =
+      item.eventType === 'run_failed'
+        ? 'rgba(239,68,68,0.1)'
+        : item.eventType === 'run_completed'
+        ? 'rgba(34,197,94,0.1)'
+        : 'rgba(59,130,246,0.1)'
+    const eventIcon =
+      item.eventType === 'run_started'
+        ? 'play_arrow'
+        : item.eventType === 'run_completed'
+        ? 'check_circle'
+        : item.eventType === 'run_failed'
+        ? 'error'
+        : 'event_note'
+
     return (
       <div
         className="flex items-start gap-3 p-3 rounded-lg"
         style={{
           background: 'var(--surface-2)',
-          borderLeft: '3px solid var(--blue)',
+          borderLeft: `3px solid ${eventColor}`,
         }}
       >
-        <Icon name="event_note" size={18} style={{ color: 'var(--blue)', marginTop: '2px' }} />
+        <Icon name={eventIcon} size={18} style={{ color: eventColor, marginTop: '2px' }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span
               className="text-[10px] font-medium px-1.5 py-0.5 rounded uppercase"
               style={{
-                background: 'rgba(59,130,246,0.1)',
-                color: 'var(--blue)',
+                background: eventBg,
+                color: eventColor,
               }}
             >
               {item.eventType}

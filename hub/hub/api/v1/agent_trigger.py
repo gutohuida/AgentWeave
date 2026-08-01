@@ -204,6 +204,38 @@ async def trigger_agent(
     )
 
 
+_RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed")
+
+
+async def _broadcast_run_lifecycle(
+    db: AsyncSession,
+    project_id: str,
+    event_type: str,
+    *,
+    agent: str,
+    run_id: str,
+    **fields,
+) -> None:
+    """Persist + SSE-broadcast one of the typed run-lifecycle events.
+
+    A distinct, named event per phase (rather than folding everything into the
+    generic `agent_output` stream) is what lets the UI render "run started" /
+    "run failed" as first-class states instead of grepping status text out of
+    output lines — see design.md's Typed activity stream section.
+    """
+    assert event_type in _RUN_LIFECYCLE_EVENTS
+    payload = {"agent": agent, "run_id": run_id, **fields}
+    await persist_event(
+        db,
+        project_id,
+        event_type,
+        payload,
+        agent=agent,
+        severity="warn" if event_type == "run_failed" else "info",
+    )
+    await sse_manager.broadcast(project_id, event_type, payload)
+
+
 async def _execute_run(
     *,
     project_id: str,
@@ -228,6 +260,9 @@ async def _execute_run(
                 run.error = str(exc)
                 run.ended_at = datetime.now(timezone.utc)
                 await db.commit()
+            await _broadcast_run_lifecycle(
+                db, project_id, "run_failed", agent=agent, run_id=run_id, error=str(exc)
+            )
         return
 
     async with async_session_factory() as db:
@@ -235,6 +270,9 @@ async def _execute_run(
         if run:
             run.pid = pty.pid
             await db.commit()
+        await _broadcast_run_lifecycle(
+            db, project_id, "run_started", agent=agent, run_id=run_id, runner=runner, model=model
+        )
 
     parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
 
@@ -292,6 +330,8 @@ async def _execute_run(
 
     exit_code = await loop.run_in_executor(None, pty.wait)
 
+    lifecycle_event = "run_completed" if exit_code == 0 else "run_failed"
+
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
         if run:
@@ -299,14 +339,20 @@ async def _execute_run(
             run.exit_code = exit_code
             run.ended_at = datetime.now(timezone.utc)
             await db.commit()
-        await persist_event(
+        await _broadcast_run_lifecycle(
             db,
             project_id,
-            "run_completed",
-            {"agent": agent, "run_id": run_id, "exit_code": exit_code, "session_id": session_id},
+            lifecycle_event,
             agent=agent,
-            severity="info" if exit_code == 0 else "warn",
+            run_id=run_id,
+            session_id=session_id,
+            exit_code=exit_code,
         )
+        # Kept alongside the typed lifecycle event above rather than replaced by it:
+        # the "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning
+        # for this exact kind="status"/phase="completed" line in the output stream
+        # (useAgentOutput's `lines`), not via a separate SSE listener. Removing this
+        # would silently break that feature.
         await sse_manager.broadcast(
             project_id,
             "agent_output",

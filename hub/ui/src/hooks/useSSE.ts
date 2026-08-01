@@ -36,6 +36,9 @@ const SSE_EVENT_TYPES = [
   'job_updated',
   'job_deleted',
   'job_fired',
+  'run_started',
+  'run_completed',
+  'run_failed',
 ]
 
 const MAX_BUFFERED = 200
@@ -404,6 +407,15 @@ export function useSSE(onEvent?: SSEListener) {
           break
         case 'agent_heartbeat':
           queryClient.invalidateQueries({ queryKey: ['tasks'] })
+          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          break
+        case 'run_started':
+        case 'run_completed':
+        case 'run_failed':
+          // Run status is folded into the agents list response (agents.py's
+          // agents_with_active_run), and a Hub-triggered run never posts a
+          // heartbeat — without this, the running/idle badge would never
+          // update for a direct-spawn run.
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break
         case 'context_warning':

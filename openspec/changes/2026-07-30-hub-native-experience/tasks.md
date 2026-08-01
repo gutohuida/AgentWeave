@@ -449,7 +449,87 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       the existing `agent_output` event (reused, not new), and a plain-text "Run
       completed/failed" status line is appended to the output stream as a stopgap, but
       there's no dedicated typed lifecycle event yet, and no frontend rendering work at all.
-- [ ] 3.6 Emit run lifecycle and output events on the SSE channel; render them in the agent view.
+- [x] 3.6 Emit run lifecycle and output events on the SSE channel; render them in the agent view.
+      Added three typed SSE events — `run_started`, `run_completed`, `run_failed` — broadcast
+      from `agent_trigger.py`'s `_broadcast_run_lifecycle()` helper, which both persists to
+      `EventLog` (so they show up in the existing timeline endpoint) and broadcasts over SSE
+      (so they show up live), matching the existing `context_warning` persist+broadcast
+      pattern rather than inventing a new one. `run_started` fires once the PTY spawn succeeds
+      and a pid is recorded (not at trigger-accept time — `run_triggered`, already emitted by
+      3.5, covers that); `run_failed` fires both on a spawn-time `FileNotFoundError` and on a
+      nonzero exit code; `run_completed` fires only on exit code 0. **Kept alongside, not
+      replacing,** the existing plain-text `agent_output`/`kind="status"` stopgap broadcast from
+      3.5 — `AgentOutputPanel.tsx`'s Handoff-completion detection scans `lines` for
+      `kind==="status" && payload.phase==="completed"`, and removing that broadcast would have
+      silently broken it. The new typed events are additive.
+
+      **A second, unplanned bug found and fixed in the same task, via the same "verify against
+      the real running Hub" discipline flagged repeatedly in the 3.4/3.5 entries:** a
+      Hub-triggered direct-spawn run never posted an `AgentHeartbeat` (that's the watchdog's
+      mechanism, unused by this path), and `GET /api/v1/agents`'s `status` field was computed
+      from heartbeats only (`effective_heartbeat_status`) — so a live direct-spawn run was
+      invisible as "running" everywhere the UI reads `agent.status`: the AgentCard badge, the
+      Overview page, and `AgentOutputPanel.tsx`'s `isRunning` gate (which locks the message box
+      and shows the pulsing badge). Confirmed live: triggered a run, polled `GET
+      /api/v1/agents` mid-run, saw `"status":"idle"` the whole time even while output was
+      streaming. Fixed by bulk-fetching agents with an active (`status="running"`) `Run` row in
+      `list_agents()` and overriding `effective_status` to `"running"` for them — Run-table
+      state now takes precedence over heartbeat state, since it's strictly more current for a
+      direct-spawn agent. Live-verified after the fix: `GET /api/v1/agents` correctly reported
+      `"running"` mid-run and `"idle"` immediately after completion. This wasn't in 3.6's
+      one-line task text, but without it "render [lifecycle events] in the agent view" would
+      have had no visible effect on the one piece of UI (the status badge) users actually look
+      at to answer "is this agent busy right now" — the gap was found by literally trying to
+      answer that question against the real Hub, not derived from the task description.
+
+      Frontend: `useSSE.ts`'s `SSE_EVENT_TYPES` allowlist extended with the three new event
+      names (the exact "broadcast but not allowlisted → silently dropped" bug class flagged in
+      the Phase-2 handoffs — checked explicitly this time) plus an `invalidateQueries(['agents'])`
+      case so the status-badge fix above actually reaches the UI live, not just on next poll.
+      `agents.ts`'s `eventBelongsToTimeline()` extended so the Activity tab's timeline query also
+      invalidates live on these events (it previously only invalidated on `log_event`, which is
+      only broadcast by the CLI→Hub log-bridge endpoint, never by `agent_trigger.py`'s direct
+      `persist_event` calls — meaning `run_triggered`/`run_completed` from 3.5 already had this
+      same live-update gap, silently, since 3.5 landed; fixed as a side effect of fixing it for
+      the three new event types). `AgentActivityTab.tsx`'s event-timeline branch (previously a
+      single fixed blue treatment for every `EventLog`-sourced entry) now colors `run_failed`
+      red, `run_completed` green, `run_started` blue, with matching icons
+      (`error`/`check_circle`/`play_arrow` — confirmed each name resolves in the lucide-react
+      `Icon` map before using it; `play_circle` does not exist there and would have silently
+      rendered nothing). Backend's `agent_timeline()` endpoint given a small
+      `_run_lifecycle_summary()` helper so these three event types render as "Run started
+      (claude)" / "Run completed (exit 0)" / "Run failed: <error>" instead of the bare enum
+      string every other `EventLog`-derived timeline entry falls back to.
+
+      4 new backend tests (`test_agent_trigger.py`: successful-run lifecycle broadcast
+      assertions via `sse_manager.subscribe()` + queue draining, matching
+      `test_context_usage.py`'s existing pattern; nonzero-exit → `run_failed` not
+      `run_completed`; spawn-failure → `run_failed`) plus 1 new `test_agents.py` test
+      (Run-active agent reports `"running"` with zero heartbeat rows). 1 new frontend test
+      (`useSSE.test.tsx`, mirroring its existing `job_created`/etc. allowlist test). 317/317
+      Hub tests pass (was 313), 196/196 frontend tests pass (was 195). `ruff check hub/`,
+      `black --check hub/` (after one reformat), `tsc --noEmit` all clean.
+
+      **Live-verified end-to-end against the real running dev Hub** (restarted to pick up the
+      backend changes first): triggered a real Claude run via `curl`, captured the live SSE
+      stream with a backgrounded `curl -sN`, confirmed `run_started` (with `runner`/`model`
+      fields) then `run_completed` (with `exit_code`/`session_id`) arrived in order, confirmed
+      `GET /api/v1/agents` showed `"running"` mid-run and `"idle"` after, confirmed
+      `GET /api/v1/agents/claude/timeline` returned readable summaries. Then opened the actual
+      Vite dev server in a real browser, navigated to the claude agent's "Messages" tab (the
+      button is labelled "Messages" but renders `AgentActivityTab` — pre-existing, not
+      renamed here, out of scope) via DOM-level clicks, and read the rendered rows directly:
+      confirmed `run_started`/`run_completed` entries render with the correct
+      blue/green `border-left` color and correct summary text, sourced live off the real running
+      Hub, not a mock.
+
+      **Deliberately not done here** (out of scope for this task's own text): no dedicated
+      lifecycle-specific UI surface beyond the existing Activity-tab timeline (e.g. no toast, no
+      run-duration timer, no distinct "run card" in the Output tab) — the task said "render them
+      in the agent view," and the timeline plus the now-correct running/idle badge satisfy that;
+      a richer run-lifecycle UI is 3.7+ territory (interrupt/stop needs *some* visible
+      "this is the run you'd be stopping" affordance, which doesn't exist yet). No work on 3.7's
+      interrupt/stop, 3.8's crash reconciliation, or 3.9's process-group cleanup.
 - [ ] 3.7 Implement interrupt and stop for an owned run.
 - [ ] 3.8 Reconcile on Hub start: a run whose process is absent becomes `interrupted`.
 - [ ] 3.9 Terminate the process group on Hub shutdown so no agent process is orphaned.

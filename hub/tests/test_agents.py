@@ -196,3 +196,35 @@ async def test_list_agents_marks_expired_running_heartbeat_as_stalled(app, auth_
     stale_agent = next(agent for agent in resp.json() if agent["name"] == "stale-agent")
     assert stale_agent["status"] == "stalled"
     assert "restart the host watchdog" in stale_agent["latest_status_msg"]
+
+
+@pytest.mark.asyncio
+async def test_list_agents_shows_running_for_active_direct_spawn_run(app, auth_headers):
+    """A Hub direct-spawn run (agent_trigger.py) never posts a heartbeat — the
+    agents list must still report "running" by consulting the Run table,
+    not only AgentHeartbeat, or a live direct-spawn run is invisible in the UI."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    sync_resp = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"direct-spawn-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync_resp.status_code == 200
+
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-active-test",
+                project_id="proj-test",
+                agent="direct-spawn-agent",
+                status="running",
+            )
+        )
+        await session.commit()
+
+    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    agent = next(a for a in resp.json() if a["name"] == "direct-spawn-agent")
+    assert agent["status"] == "running"
