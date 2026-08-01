@@ -956,7 +956,15 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       replace the `sender == "user"` magic-string discrimination pattern more broadly — Decision 4
       has no tasks scheduled yet and is a real design effort, not a deletion; this task only
       removed the one branch that had become fully unreachable.
-- [ ] 3.17 Rewrite the README quick start to the actual one-command flow.
+- [x] 3.17 Rewrite the README quick start to the actual one-command flow. Replaced the stale
+      three-step `hub start` → `init` → `activate`/watchdog path with the native
+      `agentweave hub start --app` entry point. The prerequisite now installs the CLI and Hub in
+      one shared `uv tool` environment (`uv tool install agentweave-ai --with agentweave-hub`),
+      with pipx and pip fallbacks; the result explains that the Hub runs migrations, obtains the
+      local API key, opens app mode, and owns Claude/Codex execution directly. Also corrected the
+      mode table and watchdog FAQ so they no longer contradict the new runtime, and aligned the
+      README's environment, source-development, package-layout, and native-database descriptions
+      with tasks 3.1/3.12–3.16.
 - [ ] 3.18 Verify: trigger starts a process and streams output with no watchdog running; a missing
       binary fails with a stated reason; killing the Hub mid-run leaves no orphan and marks the run
       interrupted.
