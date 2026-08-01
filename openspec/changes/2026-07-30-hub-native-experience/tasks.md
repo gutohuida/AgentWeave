@@ -1171,7 +1171,7 @@ before concurrency does.*
       passes for the three new queue/scheduler/API modules. Repository-wide Ruff retains one
       pre-existing import-order finding in `tests/test_cli_watch.py`; the existing ESLint 9 script
       has no flat config.**
-- [ ] 6.13 **`/handoff`**
+- [x] 6.13 **`/handoff`** — `.claude/handoffs/2026-08-01-2239-phase6-inbound-queue-complete.md`.
 
 ## 7. Tool surface reconciliation
 
