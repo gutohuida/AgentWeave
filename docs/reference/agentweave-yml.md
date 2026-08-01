@@ -136,6 +136,7 @@ Map of agent name to agent configuration.
 | `base_url` | string | unset | Custom HTTP(S) endpoint for compatible proxy runner setup |
 | `runner_options` | mapping | unset | Runner-specific options, such as `memory: false` for Codex |
 | `cli` | string | unset | Absolute path to the agent CLI binary. When set, AgentWeave uses this path instead of looking up the runner on `PATH`. Useful when multiple versions of the same binary are installed (e.g., on WSL). |
+| `read_only` | boolean | `false` | Mark this agent as read-only. A Hub-native run shares the project's primary checkout instead of provisioning an isolated git worktree — only correct for an agent that never writes files. |
 
 **Example:**
 ```yaml

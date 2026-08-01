@@ -1108,14 +1108,35 @@ field means reworking the queue's core record later.*
 *Moved ahead of the queue. The scheduler is what causes concurrent turns; isolation must exist
 before concurrency does.*
 
-- [ ] 5.1 Provision a git worktree per writing agent, on its own branch, sharing the object database;
-      prepare it before the agent's first turn.
-- [ ] 5.2 Let read-only agents share the primary checkout; share dependency directories by symlink to
-      avoid per-worktree install cost.
-- [ ] 5.3 Surface merge conflicts with the diverging agents identified.
-- [ ] 5.4 Release worktrees on agent removal, reporting unmerged work rather than discarding it.
-- [ ] 5.5 Verify the isolation scenarios of `hub-native-runtime` — two agents modifying the same file
-      during overlapping turns lose nothing.
+- [x] 5.1 Provision a git worktree per writing agent, on its own branch, sharing the object database;
+      prepare it before the agent's first turn. **Implemented in `hub/worktrees.py` and the direct
+      trigger path: each validated writing-agent name maps to `.agentweave/worktrees/<agent>` on
+      `agentweave/<agent>`, provisioned synchronously before spawn and passed as the process cwd.
+      Provisioning fails closed (HTTP 409) when Git/isolation is unavailable; an explicit
+      `work_dir` cannot bypass isolation. Released branches with retained work are reused, while a
+      branch already merged into the primary checkout fast-forwards before reuse.**
+- [x] 5.2 Let read-only agents share the primary checkout; share dependency directories by symlink to
+      avoid per-worktree install cost. **Added the typed `read_only` agent setting end-to-end
+      (`AgentConfig`, YAML validation/serialization, activation/session sync, generated config, and
+      reference docs). Read-only agents use the primary checkout; new worktrees link existing
+      `node_modules`, `.venv`, and `venv` directories where the host permits directory symlinks.**
+- [x] 5.3 Surface merge conflicts with the diverging agents identified. **Runs snapshot dirty
+      worktree state to the agent branch using an internal Git identity, then pairwise
+      `git merge-tree --write-tree` checks expose conflicting paths and both agent names through
+      authenticated `GET /api/v1/worktrees/conflicts`; `GET /api/v1/worktrees` lists only active
+      isolated checkouts, not retained branches from removed agents.**
+- [x] 5.4 Release worktrees on agent removal, reporting unmerged work rather than discarding it.
+      **Session roster reconciliation snapshots any dirty state, removes only the linked checkout,
+      preserves the agent branch, computes commits absent from primary HEAD, and emits persisted +
+      SSE `worktree_released` events with the branch and unmerged-work signal.**
+- [x] 5.5 Verify the isolation scenarios of `hub-native-runtime` — two agents modifying the same file
+      during overlapping turns lose nothing. **Disposable-repository integration tests cover
+      distinct writer cwd values prepared before spawn, read-only checkout sharing, conflicting
+      same-file snapshots retaining both versions and identifying both agents, release with dirty
+      work preserved, invalid-name path containment, failure-closed behavior, endpoint responses,
+      branch reuse, and dependency sharing. Full verification: CLI `991 passed, 4 skipped`; Hub
+      `396 passed, 4 skipped`. Ruff and Black checks pass; focused mypy passes for the new worktree
+      module/endpoints (the wider Hub type-check still has pre-existing errors).**
 - [ ] 5.6 **`/handoff`**
 
 ## 6. Inbound queue and turn scheduling

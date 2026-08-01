@@ -8,13 +8,34 @@ fixtures, which use real captured output).
 
 import asyncio
 import json
+import subprocess
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import hub.api.v1.agent_trigger as agent_trigger
+from hub import worktrees
 from hub.sse import sse_manager
+
+_REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
+
+
+def _git(repo: Path, *args: str) -> None:
+    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+
+
+def _init_repo(path: Path) -> Path:
+    path.mkdir(parents=True)
+    _git(path, "init", "-q", "-b", "main")
+    _git(path, "config", "user.email", "test@example.com")
+    _git(path, "config", "user.name", "test")
+    (path / "README.md").write_text("base\n")
+    _git(path, "add", "README.md")
+    _git(path, "commit", "-q", "-m", "base")
+    return path
 
 
 async def _await_background_run():
@@ -131,6 +152,117 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers):
     assert any(row["content"] == "Hi there" for row in rows)
     assert any(row["run_id"] == run_id for row in rows)
     assert fake_spawn.call_args.kwargs["dimensions"] == (24, 32_767)
+
+
+@pytest.mark.asyncio
+async def test_writing_agent_worktree_exists_before_first_spawn(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
+    )
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            response = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "writer", "message": "write"},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200
+            await _await_background_run()
+
+    expected = worktrees.worktree_path(repo, "writer")
+    assert expected.is_dir()
+    assert Path(fake_spawn.call_args.kwargs["cwd"]) == expected
+
+
+@pytest.mark.asyncio
+async def test_read_only_agent_spawns_in_primary_checkout(app, auth_headers, tmp_path, monkeypatch):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"reader": {"runner": "claude", "read_only": True}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
+    )
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            response = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "reader", "message": "inspect"},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200
+            await _await_background_run()
+
+    assert Path(fake_spawn.call_args.kwargs["cwd"]) == repo
+    assert not worktrees.worktree_path(repo, "reader").exists()
+
+
+@pytest.mark.asyncio
+async def test_writing_agent_cannot_bypass_isolation_with_work_dir(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        response = await app.post(
+            "/api/v1/agent/trigger",
+            json={"agent": "writer", "message": "write", "work_dir": str(repo)},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 400
+    assert "isolation" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
+    app, auth_headers, tmp_path, monkeypatch
+):
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    monkeypatch.chdir(plain)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        response = await app.post(
+            "/api/v1/agent/trigger",
+            json={"agent": "writer", "message": "write"},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 409
+    assert "isolated worktree" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

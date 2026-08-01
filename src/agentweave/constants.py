@@ -112,6 +112,7 @@ VALID_AGENT_CONFIG_KEYS = [
     "model",
     "yolo",
     "runner_options",
+    "read_only",
 ]
 
 # Runtime roles directory and config file paths

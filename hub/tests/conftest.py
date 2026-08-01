@@ -45,3 +45,20 @@ def _no_real_mcp_probe(monkeypatch):
     import hub.launchability as launchability
 
     monkeypatch.setattr(launchability, "probe_mcp_registered", lambda cli: False)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_worktree_provision(monkeypatch):
+    """Every agent trigger calls worktrees.resolve_agent_workspace, which (for a
+    writing agent) shells out to real `git worktree` commands against `Path.cwd()` —
+    during this suite that's wherever `pytest` was invoked from, i.e. a real checkout,
+    not a disposable fixture. Default to "no isolation" (return repo_root unchanged) so
+    the suite never mutates real git state; `test_worktrees.py` and the dedicated
+    integration tests in `test_agent_trigger.py`/`test_session_sync.py` restore the real
+    function explicitly (via `monkeypatch.setattr`) against a `tmp_path` git repo instead.
+    """
+    import hub.worktrees as worktrees
+
+    monkeypatch.setattr(
+        worktrees, "resolve_agent_workspace", lambda repo_root, agent, config: repo_root
+    )

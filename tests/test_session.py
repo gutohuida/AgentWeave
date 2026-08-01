@@ -109,6 +109,17 @@ def test_session_sync_agents_updates_runner_options(tmp_path, monkeypatch):
     assert sess.agents["codex"]["runner_options"] == {"memory": True}
 
 
+def test_session_sync_agents_can_clear_read_only(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sess = Session.create(name="Test", agents=["reader"])
+    sess.sync_agents({"reader": {"runner": "claude", "read_only": True}})
+    assert sess.agents["reader"]["read_only"] is True
+
+    sess.sync_agents({"reader": {"runner": "claude", "read_only": False}})
+
+    assert sess.agents["reader"]["read_only"] is False
+
+
 def test_session_sync_agents_updates_model(tmp_path, monkeypatch):
     """sync_agents persists model from declared config."""
     monkeypatch.chdir(tmp_path)

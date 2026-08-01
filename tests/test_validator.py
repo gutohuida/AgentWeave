@@ -235,6 +235,7 @@ def test_validate_agent_config_invalid_types():
         "env_vars": "not_a_dict",
         "model": 123,
         "role": 456,
+        "read_only": "not_a_boolean",
     }
     ok, errors = validate_agent_config(data)
     assert not ok
@@ -242,6 +243,7 @@ def test_validate_agent_config_invalid_types():
     assert any("env_vars" in e for e in errors)
     assert any("model" in e for e in errors)
     assert any("role" in e for e in errors)
+    assert any("read_only" in e for e in errors)
 
 
 def test_validate_agent_config_empty():

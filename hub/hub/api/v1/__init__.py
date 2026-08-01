@@ -16,6 +16,7 @@ from .setup import router as setup_router
 from .spec import router as spec_router
 from .status import router as status_router
 from .tasks import router as tasks_router
+from .worktrees import router as worktrees_router
 
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(messages_router)
@@ -32,3 +33,4 @@ v1_router.include_router(jobs_router)
 v1_router.include_router(setup_router)
 v1_router.include_router(instructions_router)
 v1_router.include_router(spec_router)
+v1_router.include_router(worktrees_router)

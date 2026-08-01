@@ -321,6 +321,40 @@ class TestConfigDataclasses:
         assert "roles" not in result
         assert "env" not in result
 
+    def test_agent_config_read_only_to_dict(self):
+        config = AgentConfig(runner="claude", read_only=True)
+
+        assert config.to_dict()["read_only"] is True
+
+    def test_load_agent_read_only(self, tmp_path):
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+agents:
+  reader:
+    runner: claude
+    read_only: true
+""")
+
+        config = load_agentweave_yml(config_file)
+
+        assert config.agents["reader"].read_only is True
+
+    def test_load_agent_rejects_non_boolean_read_only(self, tmp_path):
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("""
+project:
+  name: Test
+agents:
+  reader:
+    runner: claude
+    read_only: sometimes
+""")
+
+        with pytest.raises(ConfigValidationError, match="read_only.*boolean"):
+            load_agentweave_yml(config_file)
+
     def test_job_config_to_dict(self):
         """Test JobConfig.to_dict()."""
         config = JobConfig(
@@ -533,6 +567,25 @@ class TestGenerateAgentweaveYml:
         assert "docs_threshold" in content
         assert "echo_chamber_guard" in content
         assert "dependency_check" in content
+
+    def test_generated_file_preserves_read_only_agent(self, tmp_path):
+        from agentweave.config import generate_agentweave_yml
+        from agentweave.session import Session
+
+        session = Session(
+            data={
+                "name": "Test Project",
+                "mode": "hierarchical",
+                "principal": "reader",
+                "agents": {"reader": {"runner": "claude", "read_only": True}},
+            }
+        )
+        out_path = tmp_path / "agentweave.yml"
+
+        generate_agentweave_yml(session, path=out_path)
+        loaded = load_agentweave_yml(out_path)
+
+        assert loaded.agents["reader"].read_only is True
 
 
 class TestOpencodeConfig:

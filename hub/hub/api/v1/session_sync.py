@@ -9,19 +9,24 @@ The CLI calls this automatically on every Session.save(); the watchdog also
 calls it on startup as a safety net.
 """
 
+import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Tuple
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import worktrees
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, ProjectSession
 from ...sse import sse_manager
-from ...utils import short_id
+from ...utils import persist_event, short_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -35,7 +40,7 @@ async def sync_session(
     body: SessionSyncRequest,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
-):
+) -> Dict[str, Any]:
     """Upsert the session.json configuration for this project.
 
     Called automatically by the CLI on every session save and by the
@@ -43,10 +48,10 @@ async def sync_session(
     """
     project_id, _ = project
 
-    result = await session.execute(
+    session_result = await session.execute(
         select(ProjectSession).where(ProjectSession.project_id == project_id)
     )
-    row = result.scalars().first()
+    row = session_result.scalars().first()
 
     if row:
         row.data = body.data
@@ -64,6 +69,11 @@ async def sync_session(
     # the Hub knows about it, independent of self-registration) and remove rows
     # for agents no longer in the session.
     agents_data = body.data.get("agents", {})
+    for agent_name in agents_data:
+        try:
+            worktrees.validate_agent_name(agent_name)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     current_agent_names = set(agents_data.keys())
     all_agents_result = await session.execute(select(Agent).where(Agent.project_id == project_id))
     existing_agents = {row.name: row for row in all_agents_result.scalars().all()}
@@ -78,11 +88,51 @@ async def sync_session(
                 )
             )
 
-    for agent_name, agent_row in existing_agents.items():
-        if agent_name not in current_agent_names:
-            await session.delete(agent_row)
+    removed_agent_names = [
+        agent_name
+        for agent_name, agent_row in existing_agents.items()
+        if agent_name not in current_agent_names
+    ]
+    for agent_name in removed_agent_names:
+        await session.delete(existing_agents[agent_name])
 
     await session.commit()
+
+    # Task 5.4: an agent no longer in the synced roster is "removed from the project" —
+    # release its isolated worktree (if any), never discarding unmerged work silently.
+    # Best-effort and after the DB commit above: a git failure here must not roll back
+    # the roster sync itself, which is the thing this endpoint actually exists for.
+    repo_root = Path.cwd()
+    for agent_name in removed_agent_names:
+        try:
+            release_result = worktrees.release_worktree(repo_root, agent_name)
+        except (ValueError, worktrees.GitCommandError):
+            logger.warning("Could not release %r's worktree on removal", agent_name, exc_info=True)
+            continue
+        if not release_result.released:
+            continue
+        await persist_event(
+            session,
+            project_id,
+            "worktree_released",
+            {
+                "agent": agent_name,
+                "branch": release_result.branch,
+                "had_unmerged_work": release_result.has_unmerged_work,
+                "unmerged_commits": release_result.unmerged_commits,
+            },
+            agent=agent_name,
+            severity="warn" if release_result.has_unmerged_work else "info",
+        )
+        await sse_manager.broadcast(
+            project_id,
+            "worktree_released",
+            {
+                "agent": agent_name,
+                "branch": release_result.branch,
+                "had_unmerged_work": release_result.has_unmerged_work,
+            },
+        )
 
     # Broadcast so the UI refreshes agent list immediately
     await sse_manager.broadcast(
@@ -98,7 +148,7 @@ async def sync_session(
 async def get_synced_session(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
-):
+) -> Dict[str, Any]:
     """Return the last synced session configuration for this project."""
     project_id, _ = project
 

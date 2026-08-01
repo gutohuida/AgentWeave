@@ -26,6 +26,7 @@ involved).
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import worktrees
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run
@@ -57,6 +59,8 @@ from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_
 from ...runner_parsing import parse_claude_line, parse_codex_line
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 
@@ -132,6 +136,11 @@ async def trigger_agent_directly(
     """
     from sqlalchemy import select
 
+    try:
+        worktrees.validate_agent_name(agent)
+    except ValueError as exc:
+        raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
     if session_mode not in ("new", "resume"):
         raise TriggerAgentError(
             status.HTTP_400_BAD_REQUEST, "session_mode must be 'new' or 'resume'"
@@ -180,10 +189,33 @@ async def trigger_agent_directly(
         raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
 
     model = config.get("model")
-    context_file = Path.cwd() / ".agentweave" / "context" / f"{agent}.md"
+    repo_root = Path.cwd()
+    context_file = repo_root / ".agentweave" / "context" / f"{agent}.md"
     yolo = bool(config.get("yolo"))
     resume_session_id = session_id if session_mode == "resume" else None
     env = resolve_agent_env(runner, config)
+
+    # Task 5.1/5.2: a writing agent gets its own git worktree, isolated from every other
+    # agent's (Decision 7). A custom cwd cannot override that isolation. Read-only
+    # agents may retain the existing explicit-cwd behavior.
+    if work_dir and worktrees.is_writing_agent(config):
+        raise TriggerAgentError(
+            status.HTTP_400_BAD_REQUEST,
+            "work_dir cannot override workspace isolation for a writing agent",
+        )
+    if work_dir:
+        effective_work_dir = work_dir
+        isolated_workspace: Optional[Path] = None
+    else:
+        try:
+            workspace = worktrees.resolve_agent_workspace(repo_root, agent, config)
+        except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                f"Could not prepare isolated worktree for {agent}: {exc}",
+            ) from exc
+        effective_work_dir = str(workspace)
+        isolated_workspace = workspace if workspace != repo_root else None
 
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
     # one that isn't actually available in this environment.
@@ -240,9 +272,10 @@ async def trigger_agent_directly(
             runner=runner,
             cmd=cmd,
             model=model,
-            work_dir=work_dir,
+            work_dir=effective_work_dir,
             known_session_id=resume_session_id,
             env=env,
+            worktree=isolated_workspace,
         )
     )
     _background_runs.add(task)
@@ -408,8 +441,15 @@ async def _execute_run(
     work_dir: Optional[str],
     known_session_id: Optional[str],
     env: Optional[Dict[str, str]] = None,
+    worktree: Optional[Path] = None,
 ) -> None:
-    """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE."""
+    """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
+
+    *worktree*, when given, is this run's isolated git worktree (task 5.1) — its
+    working directory *is* `work_dir` here, but `_execute_run` needs the fact that it's
+    an isolated worktree specifically (not just "some cwd") to know whether to snapshot
+    it once the run ends (task 5.3's conflict detection needs real commits to compare).
+    """
     loop = asyncio.get_running_loop()
 
     try:
@@ -517,6 +557,20 @@ async def _execute_run(
             await _flush_line(buffer)
 
         exit_code = await loop.run_in_executor(None, pty.wait)
+
+        if worktree is not None:
+            # Task 5.3 needs real commits to compare branches with `git merge-tree` —
+            # an agent's turn just ends with dirty files in its worktree otherwise, which
+            # a conflict check has nothing to diff against. Best-effort: a git failure here
+            # must not turn a completed/failed run into something worse than it already is.
+            try:
+                await loop.run_in_executor(
+                    None, lambda: worktrees.snapshot_worktree(worktree, agent)
+                )
+            except worktrees.GitCommandError:
+                logger.warning(
+                    "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
+                )
 
         # A deliberate stop (task 3.7) also exits the read loop and reaches this same
         # point — force-terminating a process rarely yields exit code 0, so without this

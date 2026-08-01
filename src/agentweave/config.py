@@ -69,6 +69,7 @@ class AgentConfig:
     roles: List[str] = field(default_factory=list)
     env: List[str] = field(default_factory=list)
     yolo: bool = False
+    read_only: bool = False
     principal: bool = False
     base_url: Optional[str] = None
     runner_options: Optional[Dict[str, Any]] = None
@@ -85,6 +86,8 @@ class AgentConfig:
             result["env"] = self.env
         if self.yolo:
             result["yolo"] = True
+        if self.read_only:
+            result["read_only"] = True
         if self.principal:
             result["principal"] = True
         if self.base_url:
@@ -273,12 +276,20 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
                 line_map.get(f"agents.{name}.cli"),
             )
 
+    read_only = data.get("read_only", False)
+    if not isinstance(read_only, bool):
+        raise ConfigValidationError(
+            f"agents.{name}.read_only: must be a boolean, got {type(read_only).__name__}",
+            line_map.get(f"agents.{name}.read_only"),
+        )
+
     return AgentConfig(
         runner=runner,
         model=data.get("model"),
         roles=data.get("roles", []),
         env=env_list,
         yolo=data.get("yolo", False),
+        read_only=read_only,
         principal=bool(data.get("principal", False)),
         base_url=base_url,
         runner_options=data.get("runner_options"),
@@ -506,6 +517,7 @@ def _format_agent_block(
     model: Optional[str],
     env_vars: List[str],
     yolo: bool,
+    read_only: bool,
     is_principal: bool,
     cli: Optional[str],
     runner_options: Optional[Dict[str, Any]] = None,
@@ -523,6 +535,8 @@ def _format_agent_block(
         lines.append(f"    env: [{env_str}]")
     if yolo:
         lines.append("    yolo: true")
+    if read_only:
+        lines.append("    read_only: true")
     if cli:
         lines.append(f"    cli: {cli}")
     if runner_options:
@@ -568,6 +582,7 @@ def generate_agentweave_yml(
                 model=runner_cfg.get("model"),
                 env_vars=env_vars,
                 yolo=session.get_agent_yolo(agent_name),
+                read_only=bool(runner_cfg.get("read_only", False)),
                 is_principal=(agent_name == session.principal),
                 cli=runner_cfg.get("cli"),
                 runner_options=runner_cfg.get("runner_options"),
@@ -644,6 +659,7 @@ hub:
 #   roles:          Developer role list -- adds behavioral guides at session start
 #   env:            Env var NAMES (not values) to forward to the subprocess
 #   yolo:           true = skip confirmation prompts (autonomous mode). Default: false
+#   read_only:      true = share the primary checkout; only for agents that never write
 #   principal:      true = marks the lead/orchestrator; at most one agent. Default: false
 #   cli:            Absolute path to the binary (overrides PATH lookup; useful on WSL)
 #   base_url:       Custom HTTP endpoint (claude_proxy custom providers only)

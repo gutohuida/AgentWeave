@@ -85,7 +85,7 @@ class Session:
         """Return runner config for an agent.
 
         Falls back to AGENT_RUNNER_DEFAULTS if not explicitly configured.
-        Returns dict with 'runner', 'env_vars', 'model', and 'cli' keys.
+        Returns dict with 'runner', 'env_vars', 'model', 'cli', and 'read_only' keys.
         """
         from .constants import CLAUDE_PROXY_PROVIDERS
 
@@ -94,12 +94,19 @@ class Session:
         env_vars = agent_cfg.get("env_vars", {})
         model = agent_cfg.get("model")
         cli = agent_cfg.get("cli")
+        read_only = bool(agent_cfg.get("read_only", False))
 
         # If no model specified, use provider default
         if not model and runner == "claude_proxy" and agent in CLAUDE_PROXY_PROVIDERS:
             model = CLAUDE_PROXY_PROVIDERS[agent].get("model")
 
-        return {"runner": runner, "env_vars": env_vars, "model": model, "cli": cli}
+        return {
+            "runner": runner,
+            "env_vars": env_vars,
+            "model": model,
+            "cli": cli,
+            "read_only": read_only,
+        }
 
     def get_runner_options(self, agent: str) -> dict:
         """Return runner-specific options for an agent, defaulting to {}."""
@@ -263,7 +270,8 @@ class Session:
 
         Args:
             declared_agents: Dict mapping agent name to agent config dict.
-                Each config dict may contain: runner, model, roles, yolo, env, base_url
+                Each config dict may contain: runner, model, roles, yolo, read_only, env,
+                base_url
 
         Returns:
             Tuple of (added_agents, updated_agents, orphaned_agents)
@@ -323,6 +331,11 @@ class Session:
                 new_yolo = bool(config["yolo"])
                 if agent_data.get("yolo") != new_yolo:
                     agent_data["yolo"] = new_yolo
+                    was_updated = True
+            if "read_only" in config:
+                new_read_only = bool(config["read_only"])
+                if agent_data.get("read_only") != new_read_only:
+                    agent_data["read_only"] = new_read_only
                     was_updated = True
             if "env" in config and config["env"]:
                 if config.get("base_url"):

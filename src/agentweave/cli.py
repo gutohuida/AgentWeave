@@ -3936,6 +3936,7 @@ def _activate_agents(config: "AgentWeaveConfig") -> int:
             "model": agent.model,
             "roles": agent.roles,
             "yolo": agent.yolo,
+            "read_only": agent.read_only,
             "env": agent.env,
             "base_url": agent.base_url,
             "runner_options": agent.runner_options,
