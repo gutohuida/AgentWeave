@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-01-1839-fresh-codex-hub-scaffolded.md
+.claude/handoffs/2026-08-01-1905-codex-headless-resume-fixed.md
