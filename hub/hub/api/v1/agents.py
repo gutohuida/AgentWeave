@@ -26,6 +26,7 @@ from ...db.models import (
     ProjectSession,
     Task,
 )
+from ...launchability import probe_agent
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -95,6 +96,39 @@ async def get_configured_agents(
         "agents": [],
         "can_modify": False,
     }
+
+
+@router.get("/launchability")
+async def get_agents_launchability(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Probe every configured agent's launchability: CLI present, authorized, runnable.
+
+    Read-only and side-effect-free — this checks PATH and environment variables visible
+    to the Hub process; it never spawns anything. Feeds launchability indicators in the
+    agent/runner selector.
+    """
+    project_id, _ = project
+
+    session_data = await _get_session_data(project_id, session)
+    session_agents_meta: dict = dict(session_data.get("agents", {})) if session_data else {}
+
+    agent_q = select(Agent).where(Agent.project_id == project_id)
+    agent_res = await session.execute(agent_q)
+    db_agents: dict[str, Agent] = {row.name: row for row in agent_res.scalars().all()}
+    for name in db_agents:
+        session_agents_meta.setdefault(name, {})
+
+    results = {}
+    for name, meta in session_agents_meta.items():
+        agent_row = db_agents.get(name)
+        merged = (
+            {**(agent_row.config or {}), **meta} if agent_row and agent_row.config else dict(meta)
+        )
+        results[name] = probe_agent(name, merged)
+
+    return {"agents": results}
 
 
 @router.get("", response_model=List[AgentSummary])

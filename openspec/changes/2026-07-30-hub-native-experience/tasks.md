@@ -240,8 +240,31 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       - **3.14** (remove the Docker gate from `cmd_hub_start`) — done as part of the same flip:
         `_docker_available()` is now only consulted on the explicit `--docker`/`--local` path,
         never on the default.
-- [ ] 3.2 Add a launchability probe: for each configured agent, report whether its CLI is present,
-      authorized, and runnable, with a stated reason when it is not.
+- [x] 3.2 Add a launchability probe: for each configured agent, report whether its CLI is present,
+      authorized, and runnable, with a stated reason when it is not. **The CLI side of this
+      already existed** (`agentweave.diagnostics.check_agent_readiness`/`launch_blockers`,
+      consumed only by the host watchdog before spawning) — but the Hub had nothing equivalent,
+      and per Decision 1 the Hub now runs natively and can check PATH/env directly itself.
+      Added `hub/hub/launchability.py` (`probe_agent`): a small, deliberately independent
+      reimplementation (Hub has zero dependency on the `agentweave-ai` package, so it cannot
+      import the CLI's diagnostics module) covering CLI presence (`shutil.which`, respecting a
+      pinned absolute-path `cli:` override), `claude_proxy` API-key-env-var authorization, and
+      `copilot` GitHub-token authorization, plus pilot/manual-runner blocking — each returning a
+      stated `reason` when not runnable. Exposed as `GET /api/v1/agents/launchability`
+      (`hub/hub/api/v1/agents.py`), merging the session-synced per-agent config with any
+      self-registered `Agent.config` the same way the existing agent-list endpoint already does.
+      Read-only, side-effect-free, no spawning. 12 new tests (`hub/tests/test_launchability.py`);
+      257/257 Hub tests pass. Live-verified against the running Hub: synced `claude`
+      (present/runnable — the real CLI is on this machine's PATH), a `kimi`-runner agent
+      (present/runnable), and a `manual`-runner agent (correctly not runnable, stated reason) —
+      then reverted the sync to leave the dev Hub's state as found.
+      **Scope note:** "authorized" only reflects what the Hub process's own environment can see
+      today (e.g. `os.environ`), not a project's `.env` file — the Hub does not yet load or even
+      track a project's working directory (that lands in Phase 10's `Project.working_dir`, and
+      matters more concretely once 3.4/3.5 actually spawn processes in that directory). Noted
+      here rather than solved now — solving it requires the working-directory tracking that is
+      explicitly out of this task's scope.
+      UI wiring (the composer's launchability indicators) is Phase 12 (`12.1`), not this task.
 - [ ] 3.3 Introduce a run record — identity, agent, session identity as a typed field, start time,
       status, exit outcome, **process identity and heartbeat**.
 - [ ] 3.4 Implement process spawn and output capture with a PTY. **Prototype on Windows first**;
