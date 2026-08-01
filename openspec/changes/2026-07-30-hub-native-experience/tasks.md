@@ -892,7 +892,23 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       ignored. Done alongside 3.1 above — see its entry for detail.
 - [x] 3.14 Remove the Docker gate from `cmd_hub_start` (`cli.py:3316`, `_docker_available()`). Done
       alongside 3.1 above — see its entry for detail.
-- [ ] 3.15 Add `--app` to open a chromeless browser app-mode window at the Hub URL.
+- [x] 3.15 Add `--app` to open a chromeless browser app-mode window at the Hub URL. Added
+      `hub start --app` (`cli.py`): once the Hub is confirmed healthy — in the native detached
+      path, the native foreground path (via a daemon thread polling health so it doesn't block
+      `uvicorn.run`), the Docker path, and every "already running" early-return across all three —
+      it launches an installed Chromium-based browser (Chrome, Edge, or Chromium; checked by
+      known install path on Windows/macOS, `shutil.which` on Linux, since none of these ship on
+      PATH from a standard installer on Windows/macOS) with `--app=<hub_url>` for a chromeless
+      window. Falls back to `webbrowser.open()` (a normal tab) if no such browser is found — this
+      environment's Windows machine had none at any of the checked paths, so the fallback is what
+      actually exercised end-to-end here; the app-mode branch itself was verified by mocking
+      `_find_app_mode_browser` and asserting the `subprocess.Popen` call shape
+      (`[browser, "--app=<url>"]`). 5 new tests in `tests/test_hub_commands.py` (existing
+      `TestHubStartCommand` tests updated to set `args.app = False` explicitly, matching this
+      suite's established convention of setting every flag a `MagicMock` args object needs rather
+      than relying on `getattr` defaults against auto-vivifying mock attributes). Full CLI suite:
+      993 passed, 4 skipped (same skip count as before this task — no new skips introduced);
+      `ruff`/`black`/`mypy` clean.
 - [ ] 3.20 **Stop the Hub silently serving a stale UI.** `hub/hub/static/ui/` is a committed build
       artefact that no dev step refreshes, so the Hub served a bundle from 2026-07-20 while the
       source had moved on — the change looked like it had not applied. Either build the UI as part

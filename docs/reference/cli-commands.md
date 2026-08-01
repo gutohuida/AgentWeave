@@ -82,6 +82,7 @@ agentweave hub-heartbeat         # publish agent status to Hub (HTTP transport o
 agentweave hub start             # start the Hub natively (no Docker needed)
 agentweave hub start --port 8001 # start on a custom port
 agentweave hub start --docker    # start in a Docker container instead
+agentweave hub start --app       # also open the Hub in a chromeless app-mode browser window
 agentweave hub stop              # stop the Hub
 agentweave hub status            # show Hub status
 ```

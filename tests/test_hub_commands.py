@@ -90,10 +90,11 @@ class TestHubStartCommand:
         args.docker = False
         args.local = False
         args.no_detach = False
+        args.app = False
         with patch("agentweave.cli._hub_native_start", return_value=0) as mock_native:
             result = cmd_hub_start(args)
             assert result == 0
-            mock_native.assert_called_once_with(port=args.port, detach=True)
+            mock_native.assert_called_once_with(port=args.port, detach=True, app=False)
 
     def test_hub_start_docker_flag_no_docker(self, capsys):
         """Test that hub start --docker fails gracefully when Docker is not available."""
@@ -101,6 +102,7 @@ class TestHubStartCommand:
         args.docker = True
         args.local = False
         args.no_detach = False
+        args.app = False
         with patch("agentweave.cli._docker_available", return_value=False):
             result = cmd_hub_start(args)
             assert result == 1
@@ -118,6 +120,7 @@ class TestHubStartCommand:
         args.docker = True
         args.local = False
         args.no_detach = False
+        args.app = False
         # Kept nested: parenthesized multi-context `with` is a syntax error on
         # Python 3.8/3.9, which this suite still runs against in CI.
         with patch("agentweave.cli._docker_available", return_value=True):  # noqa: SIM117
@@ -133,11 +136,80 @@ class TestHubStartCommand:
         args.docker = False
         args.local = True
         args.no_detach = False
+        args.app = False
         with patch("agentweave.cli._docker_available", return_value=False):
             result = cmd_hub_start(args)
             assert result == 1
             captured = capsys.readouterr()
             assert "Docker is not available" in captured.out
+
+    def test_hub_start_app_flag_passed_to_native(self, capsys):
+        """Test that --app is forwarded to the native start path."""
+        args = MagicMock()
+        args.docker = False
+        args.local = False
+        args.no_detach = False
+        args.app = True
+        with patch("agentweave.cli._hub_native_start", return_value=0) as mock_native:
+            result = cmd_hub_start(args)
+            assert result == 0
+            mock_native.assert_called_once_with(port=args.port, detach=True, app=True)
+
+    def test_hub_start_docker_already_running_opens_app(self, capsys):
+        """Test that --app opens the app window even when the Hub is already running."""
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=None)
+
+        args = MagicMock()
+        args.docker = True
+        args.local = False
+        args.no_detach = False
+        args.app = True
+        with patch("agentweave.cli._docker_available", return_value=True):  # noqa: SIM117
+            with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
+                with patch("agentweave.cli._open_app_window") as mock_open:
+                    result = cmd_hub_start(args)
+                    assert result == 0
+                    mock_open.assert_called_once()
+
+
+class TestAppModeBrowser:
+    """Tests for the --app chromeless browser window helper."""
+
+    def test_find_app_mode_browser_none_found(self):
+        """Test that no candidate path existing returns None."""
+        from agentweave.cli import _find_app_mode_browser
+
+        # Kept nested: parenthesized multi-context `with` is a syntax error on
+        # Python 3.8/3.9, which this suite still runs against in CI.
+        with patch("agentweave.cli.Path.exists", return_value=False):  # noqa: SIM117
+            with patch("agentweave.cli.shutil.which", return_value=None):
+                assert _find_app_mode_browser() is None
+
+    def test_open_app_window_launches_found_browser(self):
+        """Test that a found browser is launched with --app=<url>."""
+        from agentweave.cli import _open_app_window
+
+        with patch(  # noqa: SIM117
+            "agentweave.cli._find_app_mode_browser", return_value="/usr/bin/chromium"
+        ):
+            with patch("agentweave.cli.subprocess.Popen") as mock_popen:
+                _open_app_window("http://localhost:8000")
+                mock_popen.assert_called_once()
+                call_args = mock_popen.call_args[0][0]
+                assert call_args[0] == "/usr/bin/chromium"
+                assert call_args[1] == "--app=http://localhost:8000"
+
+    def test_open_app_window_falls_back_to_webbrowser(self):
+        """Test that no browser found falls back to the stdlib webbrowser module."""
+        from agentweave.cli import _open_app_window
+
+        with patch("agentweave.cli._find_app_mode_browser", return_value=None):  # noqa: SIM117
+            with patch("webbrowser.open") as mock_open:
+                _open_app_window("http://localhost:8000")
+                mock_open.assert_called_once_with("http://localhost:8000")
 
 
 class TestHubStopCommand:

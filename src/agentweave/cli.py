@@ -3027,7 +3027,75 @@ def _hub_load_env_into(env: dict, env_path: Path) -> None:
         pass
 
 
-def _hub_native_start(port: int, detach: bool = True) -> int:
+def _find_app_mode_browser() -> Optional[str]:
+    """Locate an installed Chromium-based browser binary supporting `--app=<url>`.
+
+    None of these ship on PATH from a standard installer on Windows/macOS, so this checks
+    known install locations directly rather than relying solely on `shutil.which`.
+    """
+    candidates: List[str] = []
+    if sys.platform == "win32":
+        roots = [
+            os.environ.get("PROGRAMFILES", r"C:\Program Files"),
+            os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
+            os.environ.get("LOCALAPPDATA", ""),
+        ]
+        relative_paths = [
+            r"Google\Chrome\Application\chrome.exe",
+            r"Microsoft\Edge\Application\msedge.exe",
+            r"Chromium\Application\chromium.exe",
+        ]
+        candidates.extend(str(Path(root) / rel) for root in roots if root for rel in relative_paths)
+    elif sys.platform == "darwin":
+        candidates.extend(
+            [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            ]
+        )
+    else:
+        for name in (
+            "google-chrome",
+            "google-chrome-stable",
+            "chromium",
+            "chromium-browser",
+            "microsoft-edge",
+        ):
+            found = shutil.which(name)
+            if found:
+                candidates.append(found)
+
+    return next((c for c in candidates if Path(c).exists()), None)
+
+
+def _open_app_window(url: str) -> None:
+    """Open `url` in a chromeless app-mode browser window; fall back to a normal tab."""
+    browser = _find_app_mode_browser()
+    if browser:
+        try:
+            subprocess.Popen(
+                [browser, f"--app={url}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+            )
+            return
+        except OSError:
+            pass
+
+    import webbrowser
+
+    webbrowser.open(url)
+
+
+def _wait_and_open_app(port: int) -> None:
+    """Poll for Hub health, then open the app-mode window. Runs off the main thread."""
+    if _hub_health_check(port=port, timeout=60):
+        _open_app_window(_hub_url(port))
+
+
+def _hub_native_start(port: int, detach: bool = True, app: bool = False) -> int:
     """Start the Hub natively using uvicorn (no Docker).
 
     Handles scaffolding, migrations, and process management.
@@ -3050,6 +3118,9 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
         with _req.urlopen(health_url, timeout=2) as resp:
             if resp.status == 200:
                 print_info(f"Hub is already running at {_hub_url(port)}")
+                if app:
+                    print_info("Opening Hub in app mode...")
+                    _open_app_window(_hub_url(port))
                 return 0
     except Exception:
         pass
@@ -3143,11 +3214,18 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
             if is_first_run and api_key:
                 print_info(f"API key: {api_key}")
                 print_info(f"(Saved to {HUB_DIR / '.env'})")
+            if app:
+                print_info("Opening Hub in app mode...")
+                _open_app_window(_hub_url(port))
         else:
             # Foreground mode — block until Ctrl+C
             if is_first_run and api_key:
                 print_info(f"API key: {api_key}  (saved to {HUB_DIR / '.env'})")
             print_info(f"Starting Hub (native, foreground) on port {port} — press Ctrl+C to stop")
+            if app:
+                import threading
+
+                threading.Thread(target=_wait_and_open_app, args=(port,), daemon=True).start()
             try:
                 import uvicorn  # type: ignore[import]
 
@@ -3174,9 +3252,10 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
     local = getattr(args, "local", False)
     docker = getattr(args, "docker", False) or local
     no_detach = getattr(args, "no_detach", False)
+    app = getattr(args, "app", False)
 
     if not docker:
-        return _hub_native_start(port=port, detach=not no_detach)
+        return _hub_native_start(port=port, detach=not no_detach, app=app)
 
     import subprocess as _sp
     import urllib.request as _req
@@ -3196,6 +3275,9 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         with _req.urlopen(health_url, timeout=2) as resp:
             if resp.status == 200:
                 print_info(f"Hub is already running at {hub_url}")
+                if app:
+                    print_info("Opening Hub in app mode...")
+                    _open_app_window(hub_url)
                 return 0
     except Exception:
         pass
@@ -3285,6 +3367,9 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         return 1
 
     print_success(f"Hub ready at {hub_url}")
+    if app:
+        print_info("Opening Hub in app mode...")
+        _open_app_window(hub_url)
     return 0
 
 
@@ -5695,6 +5780,12 @@ For more help: https://github.com/gutohuida/AgentWeave
         action="store_true",
         default=False,
         help="Build and run from ./hub/ via Docker (for Hub development; implies --docker)",
+    )
+    hub_start.add_argument(
+        "--app",
+        action="store_true",
+        default=False,
+        help="Open the Hub in a chromeless app-mode browser window once it's ready",
     )
 
     hub_stop = hub_subparsers.add_parser(
