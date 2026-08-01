@@ -518,6 +518,9 @@ def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[st
         if error:
             return f"Run failed: {error}"
         return f"Run failed (exit {exit_code})" if exit_code is not None else "Run failed"
+    if event_type == "run_stopped":
+        exit_code = data.get("exit_code")
+        return f"Run stopped (exit {exit_code})" if exit_code is not None else "Run stopped"
     return None
 
 

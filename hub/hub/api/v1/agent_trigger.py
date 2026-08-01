@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -47,6 +47,16 @@ router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 # asyncio mid-execution (a well-documented footgun) — this set keeps each run's task alive
 # until it finishes, regardless of the triggering request's own lifecycle.
 _background_runs: set = set()
+
+# Live PtySession per in-progress run_id, so a stop request (task 3.7) can reach the actual
+# process — `_execute_run` populates/clears this around its own read/wait loop, since that's
+# the only place the PtySession instance exists.
+_active_ptys: Dict[str, PtySession] = {}
+# run_ids whose stop was requested via the endpoint below. `_execute_run`'s own completion
+# handling reads this once the process exits to tell "stopped deliberately" (final status
+# "stopped") apart from "crashed/exited non-zero on its own" (final status "failed") — the
+# exit code alone can't distinguish the two once a forced terminate is involved.
+_stop_requested: set = set()
 
 
 class TriggerAgentRequest(BaseModel):
@@ -204,7 +214,68 @@ async def trigger_agent(
     )
 
 
-_RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed")
+class StopAgentResponse(BaseModel):
+    success: bool
+    message: str
+    agent: str
+    run_id: str
+    status: str
+
+
+@router.post("/{agent}/stop", response_model=StopAgentResponse)
+async def stop_agent_run(
+    agent: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Interrupt the agent's in-progress direct-spawn run, if any.
+
+    Force-terminates the owned PTY process. `_execute_run`'s own read/wait loop observes
+    the exit and does the actual status/broadcast bookkeeping (see `_stop_requested` above)
+    — this endpoint only signals intent and terminates the process, it does not itself mark
+    the Run row, since that must happen only after the process has actually exited.
+    """
+    from sqlalchemy import select
+
+    project_id, _ = project
+
+    result = await session.execute(
+        select(Run)
+        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .order_by(Run.started_at.desc())
+        .limit(1)
+    )
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{agent} has no run in progress.",
+        )
+
+    pty = _active_ptys.get(run.id)
+    if pty is None:
+        # Spawned but not yet registered, or already past its read/wait loop — either way
+        # there's nothing left to terminate; the run's own completion handling will settle
+        # its final status shortly.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{agent}'s run is not in a stoppable state right now.",
+        )
+
+    _stop_requested.add(run.id)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, lambda: pty.terminate(force=True))
+
+    return StopAgentResponse(
+        success=True,
+        message=f"Stop signal sent to {agent} (run {run.id}).",
+        agent=agent,
+        run_id=run.id,
+        status="stopping",
+    )
+
+
+_RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")
 
 
 async def _broadcast_run_lifecycle(
@@ -265,109 +336,135 @@ async def _execute_run(
             )
         return
 
-    async with async_session_factory() as db:
-        run = await db.get(Run, run_id)
-        if run:
-            run.pid = pty.pid
-            await db.commit()
-        await _broadcast_run_lifecycle(
-            db, project_id, "run_started", agent=agent, run_id=run_id, runner=runner, model=model
-        )
+    _active_ptys[run_id] = pty
+    try:
+        async with async_session_factory() as db:
+            run = await db.get(Run, run_id)
+            if run:
+                run.pid = pty.pid
+                await db.commit()
+            await _broadcast_run_lifecycle(
+                db,
+                project_id,
+                "run_started",
+                agent=agent,
+                run_id=run_id,
+                runner=runner,
+                model=model,
+            )
 
-    parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
+        parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
 
-    session_id = known_session_id
-    sequence = 0
-    buffer = ""
+        session_id = known_session_id
+        sequence = 0
+        buffer = ""
 
-    async def _flush_line(raw_line: str) -> None:
-        nonlocal session_id, sequence
-        # ConPTY output is control-sequence-laden, not plain text (live-verified — see
-        # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
-        # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
-        # sequence ConPTY appends after the child exits arrives as its own line).
-        line = strip_ansi_escapes(raw_line.rstrip("\r"))
-        if not line.strip():
-            return
-        parsed = parse_line(line) if parse_line is not None else parse_codex_line(line, model=model)
-        # Resolve session_id from *this* line before writing its own events, so the row
-        # that establishes the session carries it too, not just subsequent rows.
-        if parsed.session_id and not session_id:
-            session_id = parsed.session_id
-            async with async_session_factory() as db:
-                run = await db.get(Run, run_id)
-                if run:
-                    run.session_id = session_id
-                    await db.commit()
-        for event in parsed.events:
-            sequence += 1
-            async with async_session_factory() as db:
-                await record_agent_output(
-                    db,
-                    project_id,
-                    agent,
-                    content=event.content,
-                    session_id=session_id,
-                    kind=event.kind,
-                    payload=event.payload,
-                    run_id=run_id,
-                    sequence=sequence,
-                )
-        if parsed.usage is not None:
-            async with async_session_factory() as db:
-                await record_context_usage(db, project_id, agent, parsed.usage.to_payload(agent))
+        async def _flush_line(raw_line: str) -> None:
+            nonlocal session_id, sequence
+            # ConPTY output is control-sequence-laden, not plain text (live-verified — see
+            # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
+            # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
+            # sequence ConPTY appends after the child exits arrives as its own line).
+            line = strip_ansi_escapes(raw_line.rstrip("\r"))
+            if not line.strip():
+                return
+            parsed = (
+                parse_line(line) if parse_line is not None else parse_codex_line(line, model=model)
+            )
+            # Resolve session_id from *this* line before writing its own events, so the row
+            # that establishes the session carries it too, not just subsequent rows.
+            if parsed.session_id and not session_id:
+                session_id = parsed.session_id
+                async with async_session_factory() as db:
+                    run = await db.get(Run, run_id)
+                    if run:
+                        run.session_id = session_id
+                        await db.commit()
+            for event in parsed.events:
+                sequence += 1
+                async with async_session_factory() as db:
+                    await record_agent_output(
+                        db,
+                        project_id,
+                        agent,
+                        content=event.content,
+                        session_id=session_id,
+                        kind=event.kind,
+                        payload=event.payload,
+                        run_id=run_id,
+                        sequence=sequence,
+                    )
+            if parsed.usage is not None:
+                async with async_session_factory() as db:
+                    await record_context_usage(
+                        db, project_id, agent, parsed.usage.to_payload(agent)
+                    )
 
-    while True:
-        chunk = await loop.run_in_executor(None, pty.read)
-        if not chunk:
-            break
-        buffer += chunk
-        while "\n" in buffer:
-            raw_line, buffer = buffer.split("\n", 1)
-            await _flush_line(raw_line)
-    if buffer.strip():
-        await _flush_line(buffer)
+        while True:
+            chunk = await loop.run_in_executor(None, pty.read)
+            if not chunk:
+                break
+            buffer += chunk
+            while "\n" in buffer:
+                raw_line, buffer = buffer.split("\n", 1)
+                await _flush_line(raw_line)
+        if buffer.strip():
+            await _flush_line(buffer)
 
-    exit_code = await loop.run_in_executor(None, pty.wait)
+        exit_code = await loop.run_in_executor(None, pty.wait)
 
-    lifecycle_event = "run_completed" if exit_code == 0 else "run_failed"
+        # A deliberate stop (task 3.7) also exits the read loop and reaches this same
+        # point — force-terminating a process rarely yields exit code 0, so without this
+        # check a stop would be misreported as "failed". Checked before the exit-code
+        # branch below so a stop always wins regardless of what the process happened to
+        # exit with.
+        if run_id in _stop_requested:
+            final_status, lifecycle_event = "stopped", "run_stopped"
+        elif exit_code == 0:
+            final_status, lifecycle_event = "completed", "run_completed"
+        else:
+            final_status, lifecycle_event = "failed", "run_failed"
 
-    async with async_session_factory() as db:
-        run = await db.get(Run, run_id)
-        if run:
-            run.status = "completed" if exit_code == 0 else "failed"
-            run.exit_code = exit_code
-            run.ended_at = datetime.now(timezone.utc)
-            await db.commit()
-        await _broadcast_run_lifecycle(
-            db,
-            project_id,
-            lifecycle_event,
-            agent=agent,
-            run_id=run_id,
-            session_id=session_id,
-            exit_code=exit_code,
-        )
-        # Kept alongside the typed lifecycle event above rather than replaced by it:
-        # the "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning
-        # for this exact kind="status"/phase="completed" line in the output stream
-        # (useAgentOutput's `lines`), not via a separate SSE listener. Removing this
-        # would silently break that feature.
-        await sse_manager.broadcast(
-            project_id,
-            "agent_output",
-            {
-                "id": f"status-{run_id}",
-                "agent": agent,
-                "session_id": session_id,
-                "content": f"Run {'completed' if exit_code == 0 else 'failed'} (exit {exit_code}).",
-                "kind": "status",
-                "payload": {"phase": "completed", "exit_code": exit_code},
-                "run_id": run_id,
-                "sequence": sequence + 1,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            },
-        )
+        async with async_session_factory() as db:
+            run = await db.get(Run, run_id)
+            if run:
+                run.status = final_status
+                run.exit_code = exit_code
+                run.ended_at = datetime.now(timezone.utc)
+                await db.commit()
+            await _broadcast_run_lifecycle(
+                db,
+                project_id,
+                lifecycle_event,
+                agent=agent,
+                run_id=run_id,
+                session_id=session_id,
+                exit_code=exit_code,
+            )
+            # Kept alongside the typed lifecycle event above rather than replaced by it:
+            # the "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning
+            # for this exact kind="status"/phase="completed" line in the output stream
+            # (useAgentOutput's `lines`), not via a separate SSE listener. Removing this
+            # would silently break that feature. `phase` stays "completed" even for a
+            # stopped/failed run — it means "the run has ended", not "it succeeded".
+            await sse_manager.broadcast(
+                project_id,
+                "agent_output",
+                {
+                    "id": f"status-{run_id}",
+                    "agent": agent,
+                    "session_id": session_id,
+                    "content": f"Run {final_status} (exit {exit_code}).",
+                    "kind": "status",
+                    "payload": {"phase": "completed", "exit_code": exit_code},
+                    "run_id": run_id,
+                    "sequence": sequence + 1,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+    finally:
+        _active_ptys.pop(run_id, None)
+        _stop_requested.discard(run_id)
 
 
 @router.get("/sessions/{agent}")

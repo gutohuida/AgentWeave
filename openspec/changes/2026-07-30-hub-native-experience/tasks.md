@@ -530,7 +530,52 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       a richer run-lifecycle UI is 3.7+ territory (interrupt/stop needs *some* visible
       "this is the run you'd be stopping" affordance, which doesn't exist yet). No work on 3.7's
       interrupt/stop, 3.8's crash reconciliation, or 3.9's process-group cleanup.
-- [ ] 3.7 Implement interrupt and stop for an owned run.
+- [x] 3.7 Implement interrupt and stop for an owned run. Added `POST /api/v1/agent/{agent}/stop`
+      to `agent_trigger.py`: looks up the agent's in-progress `Run` row, force-terminates its
+      tracked `PtySession` (`_active_ptys`, a new module dict populated/cleared around
+      `_execute_run`'s own read/wait loop — the only place the PtySession instance exists), and
+      returns immediately with `status: "stopping"` rather than blocking until the process is
+      confirmed dead (that confirmation happens asynchronously, same as every other run-ending
+      path). A new `_stop_requested` set of run_ids lets `_execute_run`'s own completion handling
+      (unchanged in shape from 3.6, just now branching three ways instead of two) tell a
+      deliberate stop apart from a crash/nonzero-exit: a forced kill rarely exits 0, so without
+      this a stop would misreport as `run_failed`. Final status `"stopped"`, broadcast event
+      `run_stopped` — both already reserved by 3.3's `RUN_STATUSES`/anticipated by 3.6's own
+      wording, not newly invented here. Frontend: a red "Stop" button in
+      `AgentOutputPanel.tsx`'s header (visible only while `isRunning`, with a local `isStopping`
+      lock against double-submits, cleared once `agent.status` leaves `"running"`) posts to the
+      new endpoint. `useSSE.ts`, `agents.ts`'s `eventBelongsToTimeline()`, and
+      `AgentActivityTab.tsx`'s event-row coloring all extended for `run_stopped` the same way
+      3.6 wired the first three lifecycle events (amber border/badge/icon, distinct from
+      red-failed and green-completed — new `stop` icon added to `Icon.tsx`'s map, mapped to
+      lucide's `Square`). `agents.py`'s `_run_lifecycle_summary()` renders "Run stopped (exit
+      N)". 8 new tests (2 backend in `test_agent_trigger.py` — a real force-terminate via a
+      blocking-read fake PTY released only by `.terminate()`, and a 404 when no run is in
+      progress; extended the existing `useSSE.test.tsx` lifecycle-events test rather than adding
+      a new one). 319/319 Hub tests pass (was 317+the 2 new; +2), 196/196 UI tests pass (count
+      unchanged — extended not added). Live-verified twice: once via curl (triggered a
+      long-running Claude prompt, called `/stop` mid-run, confirmed the OS process actually
+      exited via `tasklist`, `Run.status` became `"stopped"` with a nonzero `exit_code`, the
+      `run_stopped` SSE event arrived in order, `GET /api/v1/agents` flipped back to `"idle"`,
+      and the timeline showed the human-readable summary), and again through the real browser
+      (localhost:5175) driving the actual Stop button via `preview_evaluate`'s
+      `document.querySelector(...).click()` workaround (same MCP schema-validation issue on
+      `preview_click`/`preview_navigate` noted in 3.6's handoff, still present this session) —
+      confirmed the button appears only while running, disappears once stopped, and the
+      Activity tab's two `run_stopped` rows both render with the amber border/badge/`stop` icon
+      and "Run stopped (exit 2)" summary text.
+      **Deliberately not done here** (belongs to 3.8/3.9, per 3.6's own scoping note): no crash
+      reconciliation (a run whose process dies without a stop request or clean exit — e.g. the
+      Hub itself restarting mid-run — is still 3.8's `"interrupted"` status, not touched by this
+      task), no process-group termination on Hub shutdown (3.9). No run-duration timer, toast, or
+      dedicated "run card" UI beyond the existing Activity timeline and the status chip/Stop
+      button pairing — matches the task's own text ("implement interrupt and stop"), not a
+      broader run-lifecycle UI redesign.
+      **Unrelated, pre-existing, not fixed:** `npm run lint` (hub/ui) fails outright —
+      `eslint.config.js` doesn't exist anywhere in the repo (ESLint v9 requires flat config; no
+      legacy `.eslintrc.*` exists either). Not something this session's changes touched or
+      broke; `tsc --noEmit` and `vitest run` remain the meaningful gates per every prior task's
+      verification in this chain. Worth a future look, not blocking.
 - [ ] 3.8 Reconcile on Hub start: a run whose process is absent becomes `interrupted`.
 - [ ] 3.9 Terminate the process group on Hub shutdown so no agent process is orphaned.
 - [ ] 3.10 Route scheduled jobs through the direct execution path; remove the watchdog's

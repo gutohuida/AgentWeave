@@ -44,6 +44,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string>('')
   const [handoffState, setHandoffState] = useState<HandoffState>('idle')
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
+  const [isStopping, setIsStopping] = useState(false)
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
   const pendingNewSessionRef = useRef<PendingNewSession | null>(null)
@@ -54,10 +55,15 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     setSelectedSessionId('')
     setHandoffState('idle')
     setSessionNotice(null)
+    setIsStopping(false)
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
     pendingNewSessionRef.current = null
   }, [agent.name])
+
+  useEffect(() => {
+    if (agent.status !== 'running') setIsStopping(false)
+  }, [agent.status])
 
   useEffect(() => {
     if (sessions.length > 0 && !selectedSessionId) {
@@ -145,6 +151,27 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     })
     if (!response.ok) {
       throw new Error(`Trigger failed with status ${response.status}`)
+    }
+  }
+
+  const handleStop = async () => {
+    if (!apiKey || !isRunning || isStopping) return
+    setIsStopping(true)
+    try {
+      const response = await fetch(`/api/v1/agent/${agent.name}/stop`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      })
+      if (!response.ok) {
+        throw new Error(`Stop failed with status ${response.status}`)
+      }
+      // Left true: the status chip flips away from "running" once the process actually
+      // exits (via the run_stopped SSE event's agents-query invalidation), and the effect
+      // above clears isStopping at that point. Clearing it here instead would let the
+      // button be clicked again mid-shutdown.
+    } catch (err) {
+      console.error('Failed to stop run:', err)
+      setIsStopping(false)
     }
   }
 
@@ -257,6 +284,31 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
           )}
           {agent.status}
         </span>
+
+        {/* Stop control */}
+        {isRunning && (
+          <button
+            onClick={handleStop}
+            disabled={isStopping}
+            title="Terminate the in-progress run"
+            className="transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              borderRadius: 'var(--radius-sm)',
+              padding: '2px 8px',
+              fontSize: 11,
+              fontWeight: 500,
+              background: 'rgba(239,68,68,0.1)',
+              color: 'var(--red)',
+              cursor: isStopping ? 'default' : 'pointer',
+            }}
+          >
+            <Icon name="stop" size={12} />
+            {isStopping ? 'Stopping…' : 'Stop'}
+          </button>
+        )}
 
         {/* Autoscroll toggle */}
         <button

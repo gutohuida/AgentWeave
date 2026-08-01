@@ -131,12 +131,16 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         ? 'var(--red)'
         : item.eventType === 'run_completed'
         ? 'var(--green)'
+        : item.eventType === 'run_stopped'
+        ? 'var(--amber)'
         : 'var(--blue)'
     const eventBg =
       item.eventType === 'run_failed'
         ? 'rgba(239,68,68,0.1)'
         : item.eventType === 'run_completed'
         ? 'rgba(34,197,94,0.1)'
+        : item.eventType === 'run_stopped'
+        ? 'rgba(245,158,11,0.1)'
         : 'rgba(59,130,246,0.1)'
     const eventIcon =
       item.eventType === 'run_started'
@@ -145,6 +149,8 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         ? 'check_circle'
         : item.eventType === 'run_failed'
         ? 'error'
+        : item.eventType === 'run_stopped'
+        ? 'stop'
         : 'event_note'
 
     return (

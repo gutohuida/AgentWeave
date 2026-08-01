@@ -6,7 +6,9 @@ handling, pre-flight checks, and background execution/recording loop, not the re
 fixtures, which use real captured output).
 """
 
+import asyncio
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,6 +22,23 @@ async def _await_background_run():
     tasks = list(agent_trigger._background_runs)
     for task in tasks:
         await task
+
+
+async def _wait_for_active_pty(run_id, timeout=2.0):
+    """Poll until `_execute_run` has registered *run_id*'s PtySession.
+
+    The stop endpoint can only reach a run's process via `agent_trigger._active_ptys`,
+    which the background task populates asynchronously after `trigger_agent`'s HTTP
+    response has already returned (unlike the Run row's "running" status, which is
+    committed synchronously in the request handler itself) — so a test calling stop
+    right after trigger must wait for this, not assume it's already there.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if run_id in agent_trigger._active_ptys:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"run {run_id} never registered an active pty")
 
 
 def _fake_pty(lines, exit_code=0, pid=4242):
@@ -335,3 +354,95 @@ async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers):
     assert len(failed) == 1
     assert "not found in PATH" in failed[0]["error"]
     assert not [d for t, d in events if t == "run_started"]
+
+
+def _stoppable_pty(pid=555, exit_code=15):
+    """A fake PtySession whose `.read()` blocks until `.terminate()` is called.
+
+    Mirrors `test_second_trigger_while_first_is_running_is_rejected`'s blocking-read
+    pattern, but here `.terminate()` itself is what releases the block — simulating a
+    stop request actually reaching and killing the real process. `exit_code` defaults
+    non-zero (a forced kill rarely exits 0) specifically to prove the stop endpoint's
+    "stopped" classification wins over the exit-code-based "failed" classification.
+    """
+    import threading
+
+    released = threading.Event()
+
+    def _blocking_read(size=4096):
+        released.wait()
+        return ""
+
+    def _terminate(force=False):
+        released.set()
+
+    session = MagicMock()
+    session.pid = pid
+    session.read.side_effect = _blocking_read
+    session.terminate.side_effect = _terminate
+    session.wait.return_value = exit_code
+    return session
+
+
+@pytest.mark.asyncio
+async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"stoppable-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
+    queue = sse_manager.subscribe(project_id)
+
+    fake_session = _stoppable_pty()
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            trigger = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "stoppable-claude", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert trigger.status_code == 200
+            run_id = trigger.json()["run_id"]
+
+            await _wait_for_active_pty(run_id)
+
+            stop = await app.post("/api/v1/agent/stoppable-claude/stop", headers=auth_headers)
+            assert stop.status_code == 200
+            assert stop.json()["run_id"] == run_id
+            assert stop.json()["status"] == "stopping"
+
+            await _await_background_run()
+
+    fake_session.terminate.assert_called_once_with(force=True)
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "stopped"
+        assert run.exit_code == 15
+
+    events = _drain(queue)
+    stopped = [d for t, d in events if t == "run_stopped"]
+    assert len(stopped) == 1
+    assert stopped[0]["run_id"] == run_id
+    assert not [d for t, d in events if t in ("run_completed", "run_failed")]
+
+
+@pytest.mark.asyncio
+async def test_stop_with_no_run_in_progress_returns_404(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"idle-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    resp = await app.post("/api/v1/agent/idle-claude/stop", headers=auth_headers)
+    assert resp.status_code == 404
+    assert "no run in progress" in resp.json()["detail"]

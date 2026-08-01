@@ -145,8 +145,8 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     )
   })
 
-  it('dispatches run_started/run_completed/run_failed (broadcast by agent_trigger.py, task 3.6)', async () => {
-    const frames = ['run_started', 'run_completed', 'run_failed']
+  it('dispatches run_started/run_completed/run_failed/run_stopped (broadcast by agent_trigger.py, tasks 3.6/3.7)', async () => {
+    const frames = ['run_started', 'run_completed', 'run_failed', 'run_stopped']
       .map((type) => `event: ${type}\ndata: {"agent":"claude","run_id":"run-1"}\n\n`)
       .join('')
     fetchSpy.mockResolvedValue(makeSSEResponse([frames]))
@@ -162,7 +162,7 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
 
     await waitFor(() =>
       expect(seen).toEqual(
-        expect.arrayContaining(['run_started', 'run_completed', 'run_failed'])
+        expect.arrayContaining(['run_started', 'run_completed', 'run_failed', 'run_stopped'])
       )
     )
   })
