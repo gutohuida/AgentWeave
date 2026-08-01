@@ -4,8 +4,9 @@ Mirrors `agentweave.watchdog._agent_ping_cmd`'s `claude`/`claude_proxy`/`native`
 branches, reimplemented here for the same reason as `launchability.py` and
 `runner_events.py`: the Hub has no dependency on the `agentweave-ai` package. Every flag
 below was verified live against the CLIs actually installed on this machine (Claude Code
-2.1.220, codex-cli 0.146.0) — new-session and `--resume` invocations for both, spawned
-through the real `PtySession` (see `pty_runner.py`), not just a plain shell.
+2.1.220, codex-cli 0.146.0) — new-session and resume invocations for both. Claude runs
+through `PtySession`; Codex's non-interactive JSONL mode runs through `PipeSession` (see
+`pty_runner.py`).
 
 Kimi, OpenCode, and Copilot are explicitly out of scope for this task (per-runner command
 construction for them is deferred) — `build_command` raises `UnsupportedRunnerError` for
@@ -108,8 +109,6 @@ def _build_codex_command(
     yolo: bool,
 ) -> List[str]:
     cmd = [cli, "exec"]
-    if session_id:
-        cmd += ["resume", session_id]
     cmd += ["--json", "--skip-git-repo-check"]
     if context_file is not None and context_file.exists():
         cmd += ["-c", f"model_instructions_file={context_file}"]
@@ -119,5 +118,10 @@ def _build_codex_command(
         cmd += ["--dangerously-bypass-approvals-and-sandbox"]
     else:
         cmd += ["--sandbox", "workspace-write"]
+    # `--sandbox` belongs to `codex exec`, not its `resume` subcommand. Keep all
+    # exec-level options before `resume`; newer Codex releases reject a sandbox
+    # flag placed after the subcommand with "unexpected argument '--sandbox'".
+    if session_id:
+        cmd += ["resume", session_id]
     cmd += [prompt]
     return cmd

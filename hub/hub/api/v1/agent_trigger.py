@@ -1,10 +1,10 @@
 """Agent trigger endpoint — POST /api/v1/agent/trigger
 
-Spawns the target agent's CLI directly (Claude Code, Codex) attached to a pseudo-terminal
-(`pty_runner.PtySession`) and returns a real run identifier immediately; output streams
-live over the existing SSE channel (`agent_output`, `context_warning`) as the process
-produces it, through the same recording path a self-reporting agent already uses
-(`output_recording.py`).
+Spawns the target agent's CLI directly and returns a real run identifier immediately.
+Claude Code uses a pseudo-terminal (`pty_runner.PtySession`); Codex's non-interactive
+``exec --json`` uses a hidden pipe process (`pty_runner.PipeSession`). Output streams live
+over the existing SSE channel (`agent_output`, `context_warning`) through the same recording
+path a self-reporting agent already uses (`output_recording.py`).
 
 This replaces the message-tag protocol (Decision 2): no synthetic `Message` row, no
 `[Session: ...]` / `[NewSession]` text tags, no `execution_confidence` guess about whether
@@ -41,6 +41,7 @@ from ...launchability import get_agent_config, probe_agent, resolve_agent_env
 from ...output_recording import record_agent_output, record_context_usage
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
+    PipeSession,
     PtySession,
     strip_ansi_escapes,
     terminate_process_tree,
@@ -57,10 +58,11 @@ router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 # until it finishes, regardless of the triggering request's own lifecycle.
 _background_runs: set = set()
 
-# Live PtySession per in-progress run_id, so a stop request (task 3.7) can reach the actual
-# process — `_execute_run` populates/clears this around its own read/wait loop, since that's
-# the only place the PtySession instance exists.
-_active_ptys: Dict[str, PtySession] = {}
+# Live process session per in-progress run_id, so a stop request can reach the actual
+# process. `_execute_run` populates/clears this around its own read/wait loop, since that is
+# the only place the PTY-or-pipe session instance exists. The legacy internal name remains
+# to avoid churning lifecycle code that does not depend on the transport type.
+_active_ptys: Dict[str, PipeSession | PtySession] = {}
 # run_ids whose stop was requested via the endpoint below. `_execute_run`'s own completion
 # handling reads this once the process exits to tell "stopped deliberately" (final status
 # "stopped") apart from "crashed/exited non-zero on its own" (final status "failed") — the
@@ -389,15 +391,21 @@ async def _execute_run(
     loop = asyncio.get_running_loop()
 
     try:
-        pty = await loop.run_in_executor(
-            None,
-            lambda: PtySession.spawn(
-                cmd,
-                cwd=work_dir,
-                env=env,
-                dimensions=STRUCTURED_OUTPUT_DIMENSIONS,
-            ),
-        )
+        if runner == "codex":
+            pty = await loop.run_in_executor(
+                None,
+                lambda: PipeSession.spawn(cmd, cwd=work_dir, env=env),
+            )
+        else:
+            pty = await loop.run_in_executor(
+                None,
+                lambda: PtySession.spawn(
+                    cmd,
+                    cwd=work_dir,
+                    env=env,
+                    dimensions=STRUCTURED_OUTPUT_DIMENSIONS,
+                ),
+            )
     except FileNotFoundError as exc:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)

@@ -11,14 +11,17 @@ tests are written to run meaningfully on whichever platform executes them.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
+from unittest.mock import MagicMock
 
 import pytest
 
 from hub.pty_runner import (
     IS_WINDOWS,
     STRUCTURED_OUTPUT_DIMENSIONS,
+    PipeSession,
     PtySession,
     pid_alive,
     resolve_executable,
@@ -90,6 +93,46 @@ class TestPtySessionSpawn:
         finally:
             if session.isalive():
                 session.terminate(force=True)
+
+
+class TestProcessSessionSpawn:
+    def test_captures_stdout_stderr_and_exit_code(self):
+        session = PipeSession.spawn(
+            [
+                sys.executable,
+                "-c",
+                "import sys; print('stdout line'); print('stderr line', file=sys.stderr)",
+            ]
+        )
+        try:
+            captured = ""
+            while True:
+                chunk = session.read()
+                if not chunk:
+                    break
+                captured += chunk
+            assert "stdout line" in captured
+            assert "stderr line" in captured
+            assert session.wait() == 0
+        finally:
+            if session.isalive():
+                session.terminate(force=True)
+
+    @pytest.mark.skipif(not IS_WINDOWS, reason="CREATE_NO_WINDOW is Windows-only")
+    def test_windows_spawn_is_hidden_and_noninteractive(self, monkeypatch):
+        fake_process = MagicMock()
+        fake_process.stdout = MagicMock()
+        fake_process.pid = 1234
+        popen = MagicMock(return_value=fake_process)
+        monkeypatch.setattr("hub.pty_runner.subprocess.Popen", popen)
+
+        PipeSession.spawn([sys.executable, "-c", "pass"])
+
+        kwargs = popen.call_args.kwargs
+        assert kwargs["creationflags"] & subprocess.CREATE_NO_WINDOW
+        assert kwargs["stdin"] is subprocess.DEVNULL
+        assert kwargs["stdout"] is subprocess.PIPE
+        assert kwargs["stderr"] is subprocess.STDOUT
 
     @pytest.mark.skipif(not IS_WINDOWS, reason="ConPTY materializes terminal-width wrapping")
     def test_structured_output_width_does_not_split_long_json_record(self):
@@ -232,6 +275,25 @@ class TestWindowsCmdShim:
             assert "hello from fakecli.cmd" in captured
             assert "arg1=x" in captured
             assert session.wait() == 3
+        finally:
+            if session.isalive():
+                session.terminate(force=True)
+
+    def test_pipe_session_runs_cmd_shim_without_visible_console(self, tmp_path, monkeypatch):
+        shim = tmp_path / "fakepipecli.cmd"
+        shim.write_text("@echo off\necho pipe-arg=%1\nexit /b 4\n")
+        monkeypatch.setenv("PATH", str(tmp_path) + ";" + os.environ["PATH"])
+
+        session = PipeSession.spawn(["fakepipecli", "value"])
+        try:
+            captured = ""
+            while True:
+                chunk = session.read()
+                if not chunk:
+                    break
+                captured += chunk
+            assert "pipe-arg=value" in captured
+            assert session.wait() == 4
         finally:
             if session.isalive():
                 session.terminate(force=True)

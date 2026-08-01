@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import json
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -62,7 +63,13 @@ async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]
     if row:
         return row.data
 
-    # Filesystem fallback (local dev without Docker)
+    # Filesystem state has no project_id, so it can only represent the local bootstrap
+    # project. Falling back for any other API-key project leaks the bootstrap project's
+    # configured agents and roles across the project boundary.
+    if project_id != os.environ.get("AW_BOOTSTRAP_PROJECT_ID"):
+        return None
+
+    # Filesystem fallback for the local bootstrap project (development without Docker).
     for path in [
         Path(".agentweave") / "session.json",
         Path("..") / ".agentweave" / "session.json",

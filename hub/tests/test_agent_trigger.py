@@ -134,6 +134,38 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"trigger-codex": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    fake_spawn = _fake_pty(
+        [
+            '{"type":"thread.started","thread_id":"thread-codex-1"}\n',
+            '{"type":"item.completed","item":{"id":"item-1",'
+            '"type":"agent_message","text":"headless"}}\n',
+            '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\n',
+        ]
+    )
+    with patch("hub.api.v1.agent_trigger.PipeSession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.api.v1.agent_trigger.PtySession.spawn") as pty_spawn:
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+                resp = await app.post(
+                    "/api/v1/agent/trigger",
+                    json={"agent": "trigger-codex", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
+
+    fake_spawn.assert_called_once()
+    pty_spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_second_trigger_while_first_is_running_is_rejected(app, auth_headers):
     sync = await app.post(
         "/api/v1/session/sync",

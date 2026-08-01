@@ -1,4 +1,4 @@
-"""Cross-platform PTY process spawn and output capture (Phase 3 task 3.4, prototype).
+"""Cross-platform agent process spawning and output capture.
 
 Decision 1 makes the Hub own agent execution directly. Spawning under a pseudo-terminal —
 rather than a plain `subprocess.PIPE` — matches what T3 does (`proposal.md`: "its server
@@ -10,6 +10,10 @@ separate libraries behind one small interface: `pywinpty` (Windows, wraps ConPTY
 `ptyprocess` (POSIX, wraps `pty.fork()`). Neither is importable on the other platform —
 `ptyprocess` unconditionally imports `fcntl`, which does not exist on Windows — so the
 platform-specific import happens only inside `PtySession.spawn()`, never at module level.
+
+Codex is different: ``codex exec --json`` is an explicitly non-interactive JSONL interface.
+`PipeSession` therefore runs it with redirected streams and no visible Windows console instead
+of attaching a ConPTY. Both adapters expose the lifecycle surface used by the Hub run manager.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ import os
 import re
 import shutil
 import socket
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -226,3 +231,97 @@ class PtySession:
 
     def terminate(self, force: bool = False) -> None:
         self._proc.terminate(force=force)
+
+
+class PipeSession:
+    """A non-interactive child process with hidden, redirected standard streams.
+
+    Codex's ``exec --json`` command is explicitly headless and emits JSONL without a
+    terminal. Giving it a ConPTY is counterproductive on Windows: it can create visible
+    console chrome and turns terminal-width wrapping/control sequences into protocol
+    concerns. This adapter deliberately closes stdin, merges stderr into stdout, and uses
+    ``CREATE_NO_WINDOW`` on Windows while retaining the lifecycle surface used by
+    ``PtySession``.
+    """
+
+    def __init__(self, proc: Any) -> None:
+        self._proc = proc
+
+    @classmethod
+    def spawn(
+        cls,
+        cmd: List[str],
+        *,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> "PipeSession":
+        resolved_cmd = resolve_executable(cmd)
+        launch_cmd = resolved_cmd
+        popen_options: Dict[str, Any] = {}
+
+        if IS_WINDOWS:
+            # Some Codex installations expose an npm .cmd/.bat shim. Invoke that shim
+            # through the system command processor without shell=True and hide the
+            # resulting console process. Native codex.exe installations take the direct
+            # branch and avoid cmd.exe entirely.
+            if Path(resolved_cmd[0]).suffix.lower() in (".cmd", ".bat"):
+                command_processor = os.environ.get("COMSPEC") or shutil.which("cmd.exe")
+                if not command_processor:
+                    raise FileNotFoundError("Windows command processor was not found")
+                launch_cmd = [
+                    command_processor,
+                    "/d",
+                    "/s",
+                    "/c",
+                    subprocess.list2cmdline(resolved_cmd),
+                ]
+            popen_options["creationflags"] = subprocess.CREATE_NO_WINDOW
+        else:
+            # Gives the child its own process group so terminate_process_tree can stop
+            # commands Codex launched as well as the direct Codex process.
+            popen_options["start_new_session"] = True
+
+        proc = subprocess.Popen(
+            launch_cmd,
+            cwd=cwd,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            **popen_options,
+        )
+        return cls(proc)
+
+    @property
+    def pid(self) -> int:
+        return int(self._proc.pid)
+
+    def read(self, size: int = 4096) -> str:
+        if self._proc.stdout is None:
+            return ""
+        # JSONL producers flush at record boundaries. readline() preserves live
+        # streaming; TextIO.read(size) can wait for the whole buffer before returning.
+        return self._proc.stdout.readline(size) or ""
+
+    def write(self, data: str) -> None:
+        raise RuntimeError("headless pipe sessions do not accept interactive input")
+
+    def isalive(self) -> bool:
+        return self._proc.poll() is None
+
+    @property
+    def exitstatus(self) -> Optional[int]:
+        return self._proc.poll()
+
+    def wait(self) -> int:
+        return int(self._proc.wait())
+
+    def terminate(self, force: bool = False) -> None:
+        if force:
+            terminate_process_tree(self.pid, force=True)
+        else:
+            self._proc.terminate()

@@ -68,7 +68,18 @@ class TestBuildCommandCodex:
 
     def test_resume_uses_positional_subcommand(self):
         cmd = build_command(runner="codex", cli="codex", prompt="hi", session_id="thread-abc")
-        assert cmd[:4] == ["codex", "exec", "resume", "thread-abc"]
+        resume_index = cmd.index("resume")
+        assert cmd[resume_index : resume_index + 2] == ["resume", "thread-abc"]
+
+    def test_resume_keeps_exec_only_sandbox_before_subcommand(self):
+        cmd = build_command(runner="codex", cli="codex", prompt="hi", session_id="thread-abc")
+        assert cmd.index("--sandbox") < cmd.index("resume")
+
+    def test_resume_keeps_yolo_bypass_before_subcommand(self):
+        cmd = build_command(
+            runner="codex", cli="codex", prompt="hi", session_id="thread-abc", yolo=True
+        )
+        assert cmd.index("--dangerously-bypass-approvals-and-sandbox") < cmd.index("resume")
 
     def test_yolo_bypasses_sandbox(self):
         cmd = build_command(runner="codex", cli="codex", prompt="hi", yolo=True)

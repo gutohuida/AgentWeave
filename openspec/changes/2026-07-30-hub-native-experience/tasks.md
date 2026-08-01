@@ -995,6 +995,30 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
 - [x] 3.19 **`/handoff`** — Phase 3 completion checkpoint written to
       `.claude/handoffs/2026-08-01-1818-phase3-native-runtime-complete.md` after all implementation,
       live Claude/Codex verification, full Hub tests, and static checks completed.
+- [x] 3.20 Correct the Codex resume grammar and Windows headless process integration after manual
+      acceptance exposed two regressions: `codex exec resume ... --sandbox workspace-write` failed
+      because `--sandbox` is an `exec` option rather than a `resume` option, and pywinpty/ConPTY
+      created unintended terminal chrome for Codex's explicitly non-interactive `exec --json`
+      protocol. Exec-level options now precede the `resume` subcommand, while Codex runs through a
+      new `PipeSession` with closed stdin, merged JSONL/error output, and Windows
+      `CREATE_NO_WINDOW`; Claude remains on `PtySession`. T3 Code's installed source and the current
+      official Codex manual were reviewed: T3 likewise uses hidden stdio child processes and now
+      uses `codex app-server` for rich conversation sessions, reserving `codex exec` for one-shot
+      work. A full app-server migration is deliberately not folded into this compatibility fix: it
+      requires persistent JSON-RPC request correlation, typed approval/user-input handling, a new
+      event mapper, and process/session ownership beyond a one-turn run. Regression coverage proves
+      resume option ordering, Codex pipe selection, hidden/noninteractive Windows flags, merged
+      output, and lifecycle behavior. Live verification on Codex CLI 0.146.0 passed both a direct
+      PipeSession new/resume pair (`PIPE_NEW_OK`, `PIPE_RESUME_OK`) and restarted-Hub runs
+      `run-16ed2f4d` / `run-23f767c8` (`HUB_PIPE_NEW_OK`, `HUB_PIPE_RESUME_OK`) on the same typed
+      session, returning the agent to idle with exit 0.
+- [x] 3.21 Restrict the local filesystem session fallback to the bootstrap project. The fresh
+      scaffold caused the full Hub suite's BOLA test to expose that a second project with no
+      `ProjectSession` row could inherit the host checkout's unscoped `.agentweave/session.json`
+      and see its configured Codex agent. `_get_session_data` now returns filesystem state only
+      when the authenticated `project_id` equals `AW_BOOTSTRAP_PROJECT_ID`; synchronized DB rows
+      remain authoritative for every project. The focused BOLA regression passes and the complete
+      Hub suite returns to 337 passed / 4 skipped.
 
 ## 4. Identity, runner capability, and surface split
 
