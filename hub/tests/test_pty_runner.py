@@ -16,7 +16,28 @@ import time
 
 import pytest
 
-from hub.pty_runner import IS_WINDOWS, PtySession, resolve_executable
+from hub.pty_runner import IS_WINDOWS, PtySession, resolve_executable, strip_ansi_escapes
+
+
+class TestStripAnsiEscapes:
+    def test_leading_osc_title_sequence_is_removed(self):
+        # Live-captured: ConPTY emits this before a spawned claude process's first output.
+        line = '\x1b]0;claude\x1b\\{"type":"system","subtype":"init"}'
+        assert strip_ansi_escapes(line) == '{"type":"system","subtype":"init"}'
+
+    def test_leading_csi_handshake_sequences_are_removed(self):
+        line = "\x1b[1t\x1b[c\x1b[?1004h\x1b[?9001h" + '{"type":"assistant"}'
+        assert strip_ansi_escapes(line) == '{"type":"assistant"}'
+
+    def test_trailing_cursor_restore_is_removed_to_empty(self):
+        assert strip_ansi_escapes("\x1b[?25h") == ""
+
+    def test_plain_text_is_unaffected(self):
+        assert strip_ansi_escapes("hello world") == "hello world"
+
+    def test_escape_sequences_inside_the_line_are_also_removed(self):
+        line = "before\x1b[?7ltext\x1b[?7hafter"
+        assert strip_ansi_escapes(line) == "beforetextafter"
 
 
 class TestResolveExecutable:

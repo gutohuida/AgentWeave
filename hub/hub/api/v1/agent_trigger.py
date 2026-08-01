@@ -1,51 +1,63 @@
 """Agent trigger endpoint — POST /api/v1/agent/trigger
 
-This endpoint creates a message/task that the host-side watchdog will pick up
-and execute. This allows the Hub to run in Docker without needing the AI CLIs
-installed - the CLIs run on the host machine via the watchdog.
+Spawns the target agent's CLI directly (Claude Code, Codex) attached to a pseudo-terminal
+(`pty_runner.PtySession`) and returns a real run identifier immediately; output streams
+live over the existing SSE channel (`agent_output`, `context_warning`) as the process
+produces it, through the same recording path a self-reporting agent already uses
+(`output_recording.py`).
 
-Flow:
-1. UI calls /api/v1/agent/trigger
-2. Hub creates a message in the database (like a "virtual" incoming message)
-3. Watchdog (running on host) polls for messages, sees the new one
-4. Watchdog executes the CLI on the host machine
-5. Output streams back to Hub via HTTP transport
+This replaces the message-tag protocol (Decision 2): no synthetic `Message` row, no
+`[Session: ...]` / `[NewSession]` text tags, no `execution_confidence` guess about whether
+some other process might eventually pick the request up. Session identity is a typed field
+on the run record (`Run.session_id`), never text embedded in a message body.
+
+Only claude/claude_proxy/native and codex are wired to an actual spawn path today —
+`runner_commands.py`'s scope. Kimi, OpenCode, and Copilot are refused with a stated 501
+rather than silently mishandled; they still work via the watchdog's own trigger path
+(unaffected — `agentweave` watchdog's message-tag construction, `[Session:]`/`[NewSession]`
+tags included, is untouched by this file's rewrite. That entire path is removed only once
+every runner has a direct-spawn equivalent, which is future work, not this task).
 """
 
+from __future__ import annotations
+
+import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...agent_status import heartbeat_is_stale
 from ...auth import get_project
-from ...db.engine import get_session
-from ...db.models import Agent, AgentHeartbeat, Message
+from ...db.engine import async_session_factory, get_session
+from ...db.models import Run
+from ...launchability import get_agent_config, probe_agent
+from ...output_recording import record_agent_output, record_context_usage
+from ...pty_runner import PtySession, strip_ansi_escapes
+from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_command
+from ...runner_parsing import parse_claude_line, parse_codex_line
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 
+# A running background task with no other strong reference can be garbage-collected by
+# asyncio mid-execution (a well-documented footgun) — this set keeps each run's task alive
+# until it finishes, regardless of the triggering request's own lifecycle.
+_background_runs: set = set()
+
 
 class TriggerAgentRequest(BaseModel):
-    agent: str = Field(..., max_length=64, description="Target agent name (e.g., 'claude', 'kimi')")
-    message: str = Field(..., max_length=10000, description="Message/prompt to send to the agent")
-    session_mode: str = Field(
-        default="new",
-        max_length=64,
-        description="Session mode: 'new' for new session, 'resume' for existing session",
-    )
+    agent: str = Field(..., max_length=64, description="Target agent name (e.g., 'claude')")
+    message: str = Field(..., max_length=10000, description="Prompt to send to the agent")
+    session_mode: str = Field(default="new", max_length=64, description="'new' or 'resume'")
     session_id: Optional[str] = Field(
-        default=None,
-        max_length=128,
-        description="Session ID to resume (required when session_mode='resume')",
+        default=None, max_length=128, description="Required when session_mode='resume'"
     )
     work_dir: Optional[str] = Field(
-        default=None,
-        max_length=4096,
-        description="Working directory for the agent (defaults to project root)",
+        default=None, max_length=4096, description="Working directory for the agent process"
     )
 
 
@@ -53,10 +65,9 @@ class TriggerAgentResponse(BaseModel):
     success: bool
     message: str
     agent: str
-    message_id: str
+    run_id: str
+    status: str
     session_id: Optional[str] = None
-    execution_confidence: str = "unknown"
-    watchdog_status: Optional[str] = None
 
 
 @router.post("/trigger", response_model=TriggerAgentResponse)
@@ -65,182 +76,252 @@ async def trigger_agent(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Trigger an agent to run with a message.
-
-    This creates a message in the database that the host-side watchdog
-    will pick up and execute on the host machine (where the CLIs are installed).
-
-    If the agent is in pilot mode, the message is created but no execution
-    will occur — the pilot agent must manually check their inbox.
+    """Spawn an agent directly and return its run identifier.
 
     Examples:
     - New session: `{"agent": "claude", "message": "Hello", "session_mode": "new"}`
-    - Resume session: `{"agent": "claude", "message": "Continue", "session_mode": "resume", "session_id": "sess-abc"}`
+    - Resume: `{"agent": "claude", "message": "Continue", "session_mode": "resume", "session_id": "..."}`
     """
     from sqlalchemy import select
 
     project_id, _ = project
 
-    # Validate session_mode
     if body.session_mode not in ("new", "resume"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_mode must be 'new' or 'resume'",
         )
-
-    # Validate work_dir
+    if body.session_mode == "resume" and not body.session_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="session_id is required when session_mode='resume'",
+        )
     if body.work_dir and (
         ".." in body.work_dir or "~" in body.work_dir or any(ord(c) < 32 for c in body.work_dir)
     ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid work_dir")
+
+    config = await get_agent_config(project_id, body.agent, session)
+    probe = probe_agent(body.agent, config)
+    runner = probe["runner"]
+
+    # "manual" is a permanent, deliberate no-CLI declaration, not an unimplemented runner —
+    # give it probe_agent's specific reason rather than the generic "not implemented yet"
+    # 501 below, which would misleadingly suggest support is just missing today.
+    if runner == "manual":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=probe["reason"])
+
+    # Checked before launchability: whether we know how to spawn this runner at all is a
+    # more fundamental, permanent gate than whether its CLI happens to be on PATH right
+    # now, and keeps the response deterministic regardless of what's installed on the Hub
+    # host (an unimplemented runner is still unimplemented even if its CLI is present).
+    if runner not in SUPPORTED_RUNNERS:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid work_dir",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=(
+                f"Direct spawn for runner {runner!r} is not implemented yet "
+                f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
+                "This agent can still be triggered via the watchdog's own message-based path."
+            ),
         )
 
-    # Check if agent is in pilot mode and inspect recent heartbeat state.
-    agent_result = await session.execute(
-        select(Agent).where(Agent.project_id == project_id, Agent.name == body.agent)
-    )
-    agent_row = agent_result.scalars().first()
-    is_pilot = agent_row.pilot if agent_row else False
-    agent_config = agent_row.config if agent_row and isinstance(agent_row.config, dict) else {}
-    is_manual = agent_config.get("runner") == "manual"
+    if not probe["runnable"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=probe["reason"] or f"{body.agent} is not currently launchable.",
+        )
 
-    hb_result = await session.execute(
-        select(AgentHeartbeat)
-        .where(AgentHeartbeat.project_id == project_id, AgentHeartbeat.agent == body.agent)
-        .order_by(AgentHeartbeat.timestamp.desc())
+    existing = await session.execute(
+        select(Run.id)
+        .where(Run.project_id == project_id, Run.agent == body.agent, Run.status == "running")
         .limit(1)
     )
-    latest_hb = hb_result.scalars().first()
-    if latest_hb is None:
-        execution_confidence = "queued_no_watchdog_heartbeat"
-        watchdog_status = "missing"
+    if existing.scalar() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{body.agent} already has a run in progress.",
+        )
 
-    if latest_hb is not None and heartbeat_is_stale(latest_hb):
-        execution_confidence = "queued_watchdog_stale"
-        watchdog_status = "stale"
-    elif latest_hb is not None:
-        execution_confidence = "queued_watchdog_healthy"
-        watchdog_status = latest_hb.status
+    model = config.get("model")
+    context_file = Path.cwd() / ".agentweave" / "context" / f"{body.agent}.md"
+    yolo = bool(config.get("yolo"))
+    resume_session_id = body.session_id if body.session_mode == "resume" else None
 
-    if is_pilot or is_manual:
-        execution_confidence = "queued_manual"
-        watchdog_status = "manual"
+    try:
+        cmd = build_command(
+            runner=runner,
+            cli=probe["cli"],
+            prompt=body.message,
+            model=model,
+            context_file=context_file,
+            session_id=resume_session_id,
+            yolo=yolo,
+        )
+    except UnsupportedRunnerError as exc:
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)) from exc
 
-    # Build message content with session info.
-    # The watchdog parses these tags to determine session handling:
-    #   [Session: <id>]  → resume the specified session
-    #   [NewSession]     → explicitly start a new session
-    #   (no tag)         → fall back to the agent's last saved session
-    content_parts = [body.message]
-    if body.session_mode == "resume" and body.session_id:
-        content_parts.append(f"\n\n[Session: {body.session_id}]")
-    elif body.session_mode == "new":
-        content_parts.append("\n\n[NewSession]")
-
-    # Create a message that looks like it's from "user" to the agent
-    # The watchdog will detect this and trigger the agent
-    msg_id = f"msg-{short_id()}"
-    msg = Message(
-        id=msg_id,
+    run_id = f"run-{short_id()}"
+    run = Run(
+        id=run_id,
         project_id=project_id,
-        sender="user",  # Indicates this is from the human user via Hub
-        recipient=body.agent,
-        subject="Direct message from Hub",
-        content="\n".join(content_parts),
-        type="message",  # Use standard message type (direct_trigger caused validation issues)
-        timestamp=datetime.now(timezone.utc),
-        read=False,  # Mark as unread so watchdog picks it up
-        session_id=body.session_id if body.session_mode == "resume" else None,
+        agent=body.agent,
+        session_id=resume_session_id,
+        status="running",
     )
-
-    session.add(msg)
+    session.add(run)
     await session.commit()
-    await session.refresh(msg)
-
-    # Broadcast to SSE so UI updates immediately
-    await sse_manager.broadcast(
-        project_id,
-        "message_created",
-        {
-            "id": msg.id,
-            "from": msg.sender,
-            "to": msg.recipient,
-            "subject": msg.subject,
-            "type": "direct_trigger",  # Tell UI this is a direct trigger
-            "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-        },
-    )
 
     await persist_event(
         session,
         project_id,
-        "agent_triggered",
-        {
-            "agent": body.agent,
-            "session_mode": body.session_mode,
-            "session_id": body.session_id,
-            "message_id": msg_id,
-            "execution_confidence": execution_confidence,
-            "watchdog_status": watchdog_status,
-        },
+        "run_triggered",
+        {"agent": body.agent, "run_id": run_id, "session_mode": body.session_mode},
         agent=body.agent,
-    )
-    await persist_event(
-        session,
-        project_id,
-        "agent_trigger_confidence",
-        {
-            "agent": body.agent,
-            "message_id": msg_id,
-            "execution_confidence": execution_confidence,
-            "watchdog_status": watchdog_status,
-        },
-        agent=body.agent,
-        severity="warn" if execution_confidence != "queued_watchdog_healthy" else "info",
     )
 
-    if is_pilot or is_manual:
-        if is_pilot:
-            manual_reason = "the agent is in pilot mode and requires manual control"
-        else:
-            manual_reason = "the agent runner is set to manual"
-        return TriggerAgentResponse(
-            success=True,
-            message=f"Message created for {body.agent}, but {manual_reason}. The message will appear in their inbox.",
+    task = asyncio.create_task(
+        _execute_run(
+            project_id=project_id,
             agent=body.agent,
-            message_id=msg_id,
-            session_id=body.session_id,
-            execution_confidence=execution_confidence,
-            watchdog_status=watchdog_status,
+            run_id=run_id,
+            runner=runner,
+            cmd=cmd,
+            model=model,
+            work_dir=body.work_dir,
+            known_session_id=resume_session_id,
         )
-
-    if execution_confidence == "queued_watchdog_stale":
-        message = (
-            f"Message queued for {body.agent}, but the latest watchdog heartbeat is stale. "
-            "Start or restart the host watchdog if it does not execute shortly."
-        )
-    elif execution_confidence == "queued_no_watchdog_heartbeat":
-        message = (
-            f"Message queued for {body.agent}, but no watchdog heartbeat has been seen. "
-            "Run agentweave start on the host to enable automatic execution."
-        )
-    else:
-        message = (
-            f"Message queued for {body.agent}. "
-            "The watchdog on your host will execute it shortly."
-        )
+    )
+    _background_runs.add(task)
+    task.add_done_callback(_background_runs.discard)
 
     return TriggerAgentResponse(
         success=True,
-        message=message,
+        message=f"{body.agent} started (run {run_id}).",
         agent=body.agent,
-        message_id=msg_id,
-        session_id=body.session_id,
-        execution_confidence=execution_confidence,
-        watchdog_status=watchdog_status,
+        run_id=run_id,
+        status="running",
+        session_id=resume_session_id,
     )
+
+
+async def _execute_run(
+    *,
+    project_id: str,
+    agent: str,
+    run_id: str,
+    runner: str,
+    cmd: list,
+    model: Optional[str],
+    work_dir: Optional[str],
+    known_session_id: Optional[str],
+) -> None:
+    """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE."""
+    loop = asyncio.get_running_loop()
+
+    try:
+        pty = await loop.run_in_executor(None, lambda: PtySession.spawn(cmd, cwd=work_dir))
+    except FileNotFoundError as exc:
+        async with async_session_factory() as db:
+            run = await db.get(Run, run_id)
+            if run:
+                run.status = "failed"
+                run.error = str(exc)
+                run.ended_at = datetime.now(timezone.utc)
+                await db.commit()
+        return
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        if run:
+            run.pid = pty.pid
+            await db.commit()
+
+    parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
+
+    session_id = known_session_id
+    sequence = 0
+    buffer = ""
+
+    async def _flush_line(raw_line: str) -> None:
+        nonlocal session_id, sequence
+        # ConPTY output is control-sequence-laden, not plain text (live-verified — see
+        # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
+        # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
+        # sequence ConPTY appends after the child exits arrives as its own line).
+        line = strip_ansi_escapes(raw_line.rstrip("\r"))
+        if not line.strip():
+            return
+        parsed = parse_line(line) if parse_line is not None else parse_codex_line(line, model=model)
+        # Resolve session_id from *this* line before writing its own events, so the row
+        # that establishes the session carries it too, not just subsequent rows.
+        if parsed.session_id and not session_id:
+            session_id = parsed.session_id
+            async with async_session_factory() as db:
+                run = await db.get(Run, run_id)
+                if run:
+                    run.session_id = session_id
+                    await db.commit()
+        for event in parsed.events:
+            sequence += 1
+            async with async_session_factory() as db:
+                await record_agent_output(
+                    db,
+                    project_id,
+                    agent,
+                    content=event.content,
+                    session_id=session_id,
+                    kind=event.kind,
+                    payload=event.payload,
+                    run_id=run_id,
+                    sequence=sequence,
+                )
+        if parsed.usage is not None:
+            async with async_session_factory() as db:
+                await record_context_usage(db, project_id, agent, parsed.usage.to_payload(agent))
+
+    while True:
+        chunk = await loop.run_in_executor(None, pty.read)
+        if not chunk:
+            break
+        buffer += chunk
+        while "\n" in buffer:
+            raw_line, buffer = buffer.split("\n", 1)
+            await _flush_line(raw_line)
+    if buffer.strip():
+        await _flush_line(buffer)
+
+    exit_code = await loop.run_in_executor(None, pty.wait)
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        if run:
+            run.status = "completed" if exit_code == 0 else "failed"
+            run.exit_code = exit_code
+            run.ended_at = datetime.now(timezone.utc)
+            await db.commit()
+        await persist_event(
+            db,
+            project_id,
+            "run_completed",
+            {"agent": agent, "run_id": run_id, "exit_code": exit_code, "session_id": session_id},
+            agent=agent,
+            severity="info" if exit_code == 0 else "warn",
+        )
+        await sse_manager.broadcast(
+            project_id,
+            "agent_output",
+            {
+                "id": f"status-{run_id}",
+                "agent": agent,
+                "session_id": session_id,
+                "content": f"Run {'completed' if exit_code == 0 else 'failed'} (exit {exit_code}).",
+                "kind": "status",
+                "payload": {"phase": "completed", "exit_code": exit_code},
+                "run_id": run_id,
+                "sequence": sequence + 1,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
 
 @router.get("/sessions/{agent}")
@@ -291,7 +372,3 @@ async def get_agent_sessions(
     ]
 
     return {"sessions": sessions}
-
-
-# NOTE: The trigger logic uses the message system.
-# The watchdog on the host will poll for messages and execute the appropriate CLI command.

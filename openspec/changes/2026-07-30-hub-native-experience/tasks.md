@@ -329,9 +329,126 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       **Deliberately not done here** (belongs to 3.5/3.6): nothing wires `PtySession` into
       `agent_trigger.py` or the `Run` record yet, and there's no output-streaming loop feeding
       SSE — this task is the spawn primitive only, proven working, not yet load-bearing.
-- [ ] 3.5 Rewrite `POST /api/v1/agent/trigger` to spawn directly and return a run identifier; delete
+- [x] 3.5 Rewrite `POST /api/v1/agent/trigger` to spawn directly and return a run identifier; delete
       the synthetic-message construction, the `[Session: …]` / `[NewSession]` body tags, and
-      `execution_confidence` (`agent_trigger.py:133-161`).
+      `execution_confidence` (`agent_trigger.py:133-161`). **Scoped per explicit user
+      direction to full Claude Code + Codex CLI parity** ("I want a full integration of
+      claude and codex... all the possible flags etc... no problems being a full
+      re-implement of the watchdog"; kimi/opencode/copilot explicitly deferred — "ignore
+      the others for now"). Context-window/token-usage tracking scope was resolved by
+      checking what T3 itself does (per the user: "what does T3 do? ... if it gets the full
+      tracking then we get that as well") — T3's own context meter is stdout-native only
+      (design.md's Context-window-meter section: derived from the newest provider-emitted
+      event, nothing else), so that's the bar met here; the CLI's *additional*
+      rollout-file-cross-referencing collectors (`CodexRolloutCollector` etc.) are
+      AgentWeave's own enhancement beyond T3 and were deliberately not ported (see below).
+
+      **New modules**, all reimplemented rather than imported for the same reason as
+      `launchability.py` (Hub has zero dependency on `agentweave-ai`):
+      - `hub/hub/runner_commands.py` (`build_command`) — full flag construction for
+        claude/claude_proxy/native and codex, mirroring `watchdog._agent_ping_cmd`'s
+        branches for those runners exactly (model, `--resume`/`resume <id>`,
+        `--append-system-prompt-file`/`-c model_instructions_file=`, codex's
+        `--sandbox workspace-write` vs `--dangerously-bypass-approvals-and-sandbox`).
+        **One deliberate divergence, not a reproduction**: `_agent_ping_cmd` never passes a
+        permission-bypass flag for claude even when yolo is enabled (confirmed by reading
+        the whole function — only codex/copilot/kimi apply yolo), despite
+        `cli.py:4407`'s yolo-enable hint claiming `--dangerously-skip-permissions` "will be
+        used" for claude. That gap is harmless for the watchdog (a human is usually nearby)
+        but fatal for a headless Hub-spawned run (it would hang on a permission prompt with
+        nobody to answer it) — fixed here since this is new code with no regression risk to
+        existing watchdog users.
+      - `hub/hub/runner_parsing.py` (`parse_claude_line`, `parse_codex_line`) — full JSONL
+        event parsing mirroring `_parse_claude_stream_line`/`_parse_codex_stream_line`
+        (text/thinking/tool_use/tool_result/error/status, exact payload shapes) plus their
+        inline usage-sample extraction (`_claude_usage_sample`/`_codex_usage_sample`).
+        **Claude's context-window limit is read directly from the CLI's own `result` event**
+        (`modelUsage.<model>.contextWindow`) rather than porting the CLI's
+        `CLAUDE_CONTEXT_LIMITS` substring table — that table is stale (no entry for Sonnet
+        5, silently falls back to a wrong 200K default; live-verified Sonnet 5 actually
+        reports 1,000,000). Self-reported beats hardcoded, and is the literal T3 principle
+        cited above. Codex has no equivalent self-report, so `CODEX_MODEL_CONTEXT_LIMITS` is
+        a small local fallback table (ported as-is, not verified further).
+      - `hub/hub/runner_events.py` — event/payload construction + `redact_secrets`, mirroring
+        `stream_events.py`'s constructors so output shape is identical to what a
+        self-reporting agent already produces.
+      - `hub/hub/output_recording.py` (`record_agent_output`, `record_context_usage`) — the
+        DB-write + SSE-broadcast logic factored out of `agents.py`'s existing
+        `POST .../output` and `POST .../context-usage` (both refactored to call it, behavior
+        preserved, verified by the existing test suite staying green) so a Hub-spawned run's
+        output flows through the exact same path a self-reporting agent's already does — one
+        path, not two that can drift.
+      - `hub/hub/launchability.py` gained `get_agent_config()` — factored out of (and now
+        used by) both this endpoint and 3.2's launchability endpoint. Discovered a real,
+        previously-unnoticed bug while writing this task's tests: `register-session` and
+        `POST /agents/{name}/pilot` set pilot mode by writing `Agent.pilot` (a DB column)
+        directly, never `Agent.config` or session.json — neither 3.2's launchability endpoint
+        nor this endpoint's first draft ever read that column, so a self-registered pilot
+        agent would never have been recognized as one. Fixed in the shared helper (both
+        endpoints now correct).
+      - `pty_runner.py` gained `strip_ansi_escapes()` — a real bug caught by live end-to-end
+        testing (not the mocked unit tests): ConPTY prefixes real output with terminal-
+        handshake control sequences (OSC title-set, CSI mode toggles) and can inject more
+        (e.g. a cursor-restore sequence) at any later chunk boundary, not just the first. An
+        unstripped leading sequence broke JSON parsing of the *entire first line* (silently
+        degrading to a raw-text fallback event, including leaking session_id extraction), and
+        an unstripped trailing sequence produced a spurious garbage output row after
+        completion. Fixed by stripping CSI+OSC sequences from every line before parsing, not
+        just leading ones on the first line.
+
+      **`agent_trigger.py` rewrite**: pre-flight via `probe_agent()` (409 with its stated
+      reason for pilot/manual/missing-CLI/unauthorized — manual gets its own precise 409
+      rather than the generic "unimplemented runner" 501, since it's a permanent structural
+      state, not a not-yet-built runner); runner-support check (501, listing what *is*
+      supported, before the launchability check, so it's deterministic regardless of what
+      happens to be installed on the Hub host — kimi/opencode/copilot/codex_mcp/manual all
+      correctly 501 or 409 regardless of local CLI presence); a DB-based concurrency guard
+      (reject a second trigger while a `Run` for that agent is still `status="running"` —
+      simpler than the watchdog's file-lock, accepted as a known small race window rather
+      than building equivalent locking, since this is human-driven UI triggering, not a
+      hot path); spawns via `PtySession` in an `asyncio.create_task` background job (kept
+      alive via a module-level set — a task with no other strong reference can be garbage-
+      collected by asyncio mid-execution); records output/context-usage through
+      `output_recording.py`; updates the `Run` row's `pid`/`session_id`/`status`/`exit_code`/
+      `ended_at` throughout. Returns immediately with `run_id` + `status: "running"` — the
+      run's eventual outcome is observable via the run record and `AgentOutput`/SSE, not
+      blocking the response (matches "spawn directly, return an identifier").
+      **Known limitation, not solved here**: the spawned process's working directory
+      currently comes from the request's own `work_dir` field (validated, unchanged from the
+      old endpoint) or the Hub's own CWD — the Hub still has no `Project.working_dir` (that's
+      Phase 10), so multi-project correctness for this isn't solved, matching the same gap
+      already noted in task 3.2.
+
+      **Extensive live verification against the real installed CLIs on this machine**
+      (Claude Code 2.1.220, codex-cli 0.146.0), per explicit user instruction to "spawn
+      headless operations to test": real headless invocations (both direct and through a
+      real `PtySession.spawn`) for new-session and `--resume`/`resume <id>` for both
+      runners, confirming actual conversational continuity (asked codex/claude to recall a
+      fact from a prior turn after resuming — both correctly did); confirmed
+      `--dangerously-skip-permissions` alone is sufficient for claude (no companion
+      `--allow-...` flag needed); confirmed codex's PTY-attached stdin does *not* trigger
+      its "reading from stdin" prompt-append behavior the way a plain pipe does (codex
+      detects the PTY as a real tty). **Then the full live loop end-to-end through the
+      actual running Hub** (not just direct PtySession calls): triggered real claude and
+      codex agents via `curl` against `POST /api/v1/agent/trigger` on the actual dev Hub
+      instance, watched output arrive via `GET /agents/{name}/output`, confirmed `Run` rows
+      reached `status="completed"`/`exit_code=0`/correct `session_id`, confirmed a real
+      `context_warning` event was recorded for the codex run with real token counts. This is
+      what caught the `strip_ansi_escapes` bug above — the mocked test suite's synthetic
+      JSONL fixtures don't carry real ConPTY control sequences, so only a real spawn could
+      have found it.
+
+      44 new tests across `test_runner_parsing.py` (34, using JSONL fixtures trimmed from
+      the real captured live output above), `test_agent_trigger.py` (6), and
+      `test_pty_runner.py`'s new `TestStripAnsiEscapes` (5, retroactively covering the
+      ANSI-stripping fix); `test_pilot_mode.py` and `test_runtime_diagnostics.py`'s
+      obsolete `execution_confidence`/watchdog-heartbeat/message-queueing tests
+      rewritten to assert the new direct-outcome behavior. 313/313 Hub tests pass.
+      **Deliberately not done here** (belongs to 3.6): no new SSE event *types* for run
+      lifecycle (`run_started`/`run_completed` equivalents) — output already broadcasts via
+      the existing `agent_output` event (reused, not new), and a plain-text "Run
+      completed/failed" status line is appended to the output stream as a stopgap, but
+      there's no dedicated typed lifecycle event yet, and no frontend rendering work at all.
 - [ ] 3.6 Emit run lifecycle and output events on the SSE channel; render them in the agent view.
 - [ ] 3.7 Implement interrupt and stop for an owned run.
 - [ ] 3.8 Reconcile on Hub start: a run whose process is absent becomes `interrupted`.

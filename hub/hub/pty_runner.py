@@ -14,12 +14,28 @@ platform-specific import happens only inside `PtySession.spawn()`, never at modu
 
 from __future__ import annotations
 
+import re
 import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 IS_WINDOWS = sys.platform == "win32"
+
+# Matches CSI sequences (ESC [ ... final-byte, e.g. cursor moves, mode toggles like the
+# ConPTY handshake `\x1b[?9001h`) and OSC sequences (ESC ] ... BEL or ESC ] ... ST, e.g. the
+# window-title-set `\x1b]0;claude\x1b\\` ConPTY emits before a child's first output). Live-
+# verified against real ConPTY sessions: a spawned process's stdout is not plain text, it is
+# terminal-control-sequence-laden text, and any consumer expecting to parse structured output
+# (JSON lines, etc.) from it needs to strip these first, not just leading ones on the first
+# chunk — control sequences can appear at any chunk boundary, e.g. a cursor-restore sequence
+# ConPTY appends after a child process exits.
+_ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\))")
+
+
+def strip_ansi_escapes(text: str) -> str:
+    """Remove terminal control sequences (CSI and OSC) from PTY output."""
+    return _ANSI_ESCAPE_RE.sub("", text)
 
 
 def resolve_executable(cmd: List[str]) -> List[str]:

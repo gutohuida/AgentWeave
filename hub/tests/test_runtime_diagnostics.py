@@ -4,38 +4,23 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_agent_trigger_reports_missing_watchdog_heartbeat(app, auth_headers):
+async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers):
+    """Decision 2: the trigger endpoint reports what actually happened, not a guess about
+    whether some other process (the watchdog) might eventually notice a queued message.
+    An agent with no configured runner (defaults to "native", CLI = the agent's own name)
+    and no matching binary on PATH is refused with a stated reason — execution_confidence
+    and watchdog-heartbeat staleness no longer factor into the response at all.
+    """
     resp = await app.post(
         "/api/v1/agent/trigger",
-        json={"agent": "diag-no-hb", "message": "hello", "session_mode": "new"},
+        json={"agent": "diag-no-such-cli", "message": "hello", "session_mode": "new"},
         headers=auth_headers,
     )
 
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["execution_confidence"] == "queued_no_watchdog_heartbeat"
-    assert "no watchdog heartbeat" in data["message"].lower()
-
-
-@pytest.mark.asyncio
-async def test_agent_trigger_reports_healthy_watchdog_heartbeat(app, auth_headers):
-    hb = await app.post(
-        "/api/v1/agents/diag-hb/heartbeat",
-        json={"status": "idle", "message": "ready"},
-        headers=auth_headers,
-    )
-    assert hb.status_code == 201
-
-    resp = await app.post(
-        "/api/v1/agent/trigger",
-        json={"agent": "diag-hb", "message": "hello", "session_mode": "new"},
-        headers=auth_headers,
-    )
-
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["execution_confidence"] == "queued_watchdog_healthy"
-    assert data["watchdog_status"] == "idle"
+    assert resp.status_code == 409
+    assert "not found in PATH" in resp.json()["detail"]
+    assert "execution_confidence" not in resp.json()
+    assert "watchdog" not in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

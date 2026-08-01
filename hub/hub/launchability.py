@@ -13,6 +13,9 @@ import os
 import shutil
 from typing import Any, Dict, Optional
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 # Runner -> CLI binary name. Mirrors the "cli" field of RUNNER_CONFIGS in
 # agentweave.constants (kept independent — see module docstring).
 RUNNER_CLI: Dict[str, Optional[str]] = {
@@ -106,3 +109,36 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
         "runnable": present and authorized and not pilot,
         "reason": reason,
     }
+
+
+async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
+    """Return the merged runner config `probe_agent` expects for one agent.
+
+    Merges three sources, in increasing priority: the session-synced `agents.<name>` entry
+    (session.json, pushed by the CLI — has `runner`/`model`/`cli`/`env_vars`/`yolo`/`pilot`
+    for CLI-configured agents), any self-registered `Agent.config` JSON, and — separately,
+    since it lives in its own column rather than either JSON blob — `Agent.pilot`. That last
+    merge matters: `register-session` and `POST /agents/{name}/pilot` set pilot mode by
+    writing `Agent.pilot` directly, never `Agent.config` or session.json, so an agent that
+    became a pilot only through those two endpoints would otherwise never be recognized as
+    one here.
+    """
+    from .db.models import Agent, ProjectSession
+
+    result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
+    row = result.scalars().first()
+    session_agents_meta = (row.data.get("agents", {}) if row else {}) or {}
+    meta = dict(session_agents_meta.get(agent, {}))
+
+    agent_result = await db.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    agent_row = agent_result.scalars().first()
+    if agent_row:
+        if agent_row.config:
+            meta = {**agent_row.config, **meta}
+        # OR'd rather than overridden either way: treating an agent as a pilot when either
+        # source says so is the safe default — the wrong direction to get wrong is running
+        # a pilot agent automatically, not the reverse.
+        meta["pilot"] = bool(meta.get("pilot")) or bool(agent_row.pilot)
+    return meta

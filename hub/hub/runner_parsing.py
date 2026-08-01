@@ -1,0 +1,424 @@
+"""JSONL output parsing for Hub-spawned Claude Code and Codex CLI runs.
+
+Mirrors `agentweave.watchdog._parse_claude_stream_line` / `_parse_codex_stream_line` and
+their usage-sample helpers, reimplemented for the same reason as the rest of this module
+group (see `runner_commands.py`'s docstring) — event shapes verified live against real
+`claude --output-format stream-json` / `codex exec --json` output on this machine.
+
+Session-ID extraction is the data-driven strategy the CLI's `_extract_jsonl_session_id`
+uses: for Claude, the first JSONL line carrying a top-level `session_id` field (live-
+verified: every event type — `system`, `rate_limit_event`, `assistant`, `result` — carries
+it); for Codex, the `thread_id` field specifically on a `thread.started` event.
+
+Context-window limits: Claude's own `result` event reports each model's actual context
+window directly (`modelUsage.<model>.contextWindow`) — live-verified against Sonnet 5
+(1,000,000) and Haiku 4.5 (200,000). This is used directly instead of porting the CLI's
+`CLAUDE_CONTEXT_LIMITS` substring table, which is stale (has no entry for Sonnet 5's actual
+1M window and silently falls back to a wrong 200K default) — self-reported beats hardcoded,
+and matches the T3-derived principle in design.md: "the meter never computes context itself
+— it renders the newest event the provider emitted." Codex has no equivalent self-report in
+`turn.completed`, so `CODEX_MODEL_CONTEXT_LIMITS` below is a small local fallback table.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from .runner_events import (
+    ContextUsageSample,
+    RunEvent,
+    error_event,
+    status_event,
+    text_event,
+    thinking_event,
+    tool_result_event,
+    tool_use_event,
+)
+
+# Fallback only — Codex's own stdout carries no self-reported context-window size the way
+# Claude's `result.modelUsage` does. Update as new models ship.
+CODEX_MODEL_CONTEXT_LIMITS: Dict[str, int] = {
+    "gpt-5.5": 272000,
+    "gpt-4o": 128000,
+}
+CODEX_DEFAULT_CONTEXT_LIMIT = 128000
+
+
+@dataclass
+class ParsedLine:
+    events: List[RunEvent] = field(default_factory=list)
+    usage: Optional[ContextUsageSample] = None
+    session_id: Optional[str] = None
+
+
+def _claude_tool_result_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        return "\n".join(part for part in parts if part)
+    return ""
+
+
+def _claude_result_error_message(data: Dict[str, Any], subtype: str) -> str:
+    result = data.get("result")
+    if isinstance(result, str) and result.strip():
+        return result.strip()
+    error = data.get("error")
+    if isinstance(error, dict):
+        message = error.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+        if error:
+            return str(error)
+    elif isinstance(error, str) and error.strip():
+        return error.strip()
+    errors = data.get("errors")
+    if isinstance(errors, list):
+        messages = [str(item).strip() for item in errors if str(item).strip()]
+        if messages:
+            return "; ".join(messages)
+    return f"Claude run failed ({subtype or 'unknown error'})"
+
+
+def _claude_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
+    input_tokens = usage.get("input_tokens")
+    if input_tokens is None:
+        return None
+    cache_read = usage.get("cache_read_input_tokens") or 0
+    cache_creation = usage.get("cache_creation_input_tokens") or 0
+    context_tokens = int(input_tokens) + int(cache_read) + int(cache_creation)
+    return ContextUsageSample(
+        status="measured",
+        source=source,
+        basis="latest_request_input",
+        context_tokens=context_tokens,
+        breakdown={
+            "input_tokens": int(input_tokens),
+            "cache_read_tokens": int(cache_read),
+            "cache_creation_tokens": int(cache_creation),
+        },
+    )
+
+
+def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
+    """Parse one JSONL line from `claude --output-format stream-json`."""
+    try:
+        data = json.loads(line)
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
+    except Exception:
+        stripped = line.strip()
+        if stripped:
+            return ParsedLine(events=[text_event(stripped)])
+        return ParsedLine()
+
+    session_id = data.get("session_id") if isinstance(data.get("session_id"), str) else None
+    msg_type = data.get("type", "")
+
+    if msg_type == "assistant":
+        message = data.get("message", {})
+        content = message.get("content", data.get("content", []))
+        events: List[RunEvent] = []
+        if isinstance(content, str):
+            if content.strip():
+                events.append(text_event(content.strip()))
+        else:
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                block_type = block.get("type", "")
+                if block_type == "thinking":
+                    thinking = block.get("thinking", "").strip()
+                    if thinking:
+                        events.append(thinking_event(thinking))
+                elif block_type == "text":
+                    text = block.get("text", "").strip()
+                    if text:
+                        events.append(text_event(text))
+                elif block_type == "tool_use":
+                    events.append(
+                        tool_use_event(
+                            tool=block.get("name", "unknown"),
+                            category="tool",
+                            input_data=block.get("input", {}),
+                            call_id=block.get("id"),
+                        )
+                    )
+        usage = message.get("usage") if isinstance(message, dict) else None
+        usage_sample = _claude_usage_sample(usage, source=source) if usage else None
+        if usage_sample is not None:
+            usage_sample.session_id = session_id
+        return ParsedLine(events=events, usage=usage_sample, session_id=session_id)
+
+    if msg_type == "user":
+        message = data.get("message", {})
+        content = message.get("content", []) if isinstance(message, dict) else []
+        events = []
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict) or block.get("type") != "tool_result":
+                    continue
+                events.append(
+                    tool_result_event(
+                        tool="tool",
+                        output=_claude_tool_result_text(block.get("content")),
+                        call_id=block.get("tool_use_id"),
+                        is_error=bool(block.get("is_error")),
+                    )
+                )
+        return ParsedLine(events=events, session_id=session_id)
+
+    if msg_type == "result":
+        subtype = data.get("subtype", "")
+        usage_sample = None
+        model_usage = data.get("modelUsage")
+        if isinstance(model_usage, dict):
+            # Self-reported context window per model — see module docstring. Pick the
+            # entry with the largest contextWindow (the primary model, not a cheap
+            # auxiliary one Claude Code may also report, e.g. haiku for subagent calls).
+            best_model, best_entry = None, None
+            for model_name, entry in model_usage.items():
+                if not isinstance(entry, dict):
+                    continue
+                if best_entry is None or (entry.get("contextWindow") or 0) > (
+                    best_entry.get("contextWindow") or 0
+                ):
+                    best_model, best_entry = model_name, entry
+            if best_entry is not None:
+                limit_tokens = best_entry.get("contextWindow")
+                usage_sample = ContextUsageSample(
+                    status="measured",
+                    source=source,
+                    basis="latest_request_input",
+                    limit_tokens=int(limit_tokens) if limit_tokens else None,
+                    model=best_model,
+                    session_id=session_id,
+                )
+        if data.get("is_error") is True or str(subtype).startswith("error"):
+            event = error_event(
+                code="claude_result_error",
+                message=_claude_result_error_message(data, str(subtype)),
+            )
+        else:
+            cost = data.get("total_cost_usd")
+            summary = f"Completed (cost: ${cost:.4f})" if cost is not None else "Completed"
+            event = status_event("completed", summary=summary)
+        return ParsedLine(events=[event], usage=usage_sample, session_id=session_id)
+
+    return ParsedLine(session_id=session_id)
+
+
+def _codex_file_change_summary(changes: Any) -> str:
+    if not isinstance(changes, list):
+        return "file changes"
+    paths = [c.get("path", "?") for c in changes if isinstance(c, dict)]
+    return ", ".join(paths) if paths else "file changes"
+
+
+def _codex_usage_sample(
+    usage: Dict[str, Any], *, source: str, model: Optional[str]
+) -> Optional[ContextUsageSample]:
+    input_tokens = usage.get("input_tokens")
+    if input_tokens is None:
+        return None
+    cached = usage.get("cached_input_tokens") or 0
+    cache_write = usage.get("cache_write_input_tokens") or 0
+    output_tokens = usage.get("output_tokens") or 0
+    reasoning_tokens = usage.get("reasoning_output_tokens") or 0
+    context_tokens = int(input_tokens) + int(output_tokens)
+    limit = CODEX_MODEL_CONTEXT_LIMITS.get(model or "", CODEX_DEFAULT_CONTEXT_LIMIT)
+    return ContextUsageSample(
+        status="estimated",
+        source=source,
+        basis="cumulative_delta",
+        context_tokens=context_tokens,
+        limit_tokens=limit,
+        model=model,
+        breakdown={
+            "input_tokens": int(input_tokens),
+            "cached_input_tokens": int(cached),
+            "cache_creation_tokens": int(cache_write),
+            "output_tokens": int(output_tokens),
+            "reasoning_tokens": int(reasoning_tokens),
+        },
+    )
+
+
+def parse_codex_line(
+    line: str, *, source: str = "codex", model: Optional[str] = None
+) -> ParsedLine:
+    """Parse one JSONL line from `codex exec --json`."""
+    try:
+        data = json.loads(line)
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
+    except Exception:
+        stripped = line.strip()
+        if stripped:
+            return ParsedLine(events=[text_event(stripped)])
+        return ParsedLine()
+
+    msg_type = data.get("type", "")
+
+    if msg_type == "thread.started":
+        thread_id = data.get("thread_id")
+        return ParsedLine(session_id=thread_id if isinstance(thread_id, str) else None)
+
+    if msg_type in ("item.started", "item.completed"):
+        item = data.get("item", {})
+        item_type = item.get("type", "")
+        call_id = item.get("id")
+        is_start = msg_type == "item.started"
+
+        if item_type == "agent_message":
+            if is_start:
+                return ParsedLine()
+            text = item.get("text", "").strip()
+            return ParsedLine(events=[text_event(text)] if text else [])
+
+        if item_type == "reasoning":
+            if is_start:
+                return ParsedLine()
+            text = str(item.get("text") or item.get("summary") or "").strip()
+            return ParsedLine(events=[thinking_event(text)] if text else [])
+
+        if item_type == "command_execution":
+            if is_start:
+                return ParsedLine(
+                    events=[
+                        tool_use_event(
+                            tool="shell",
+                            category="command",
+                            input_data={"command": item.get("command", "")},
+                            call_id=call_id,
+                        )
+                    ]
+                )
+            exit_code = item.get("exit_code")
+            return ParsedLine(
+                events=[
+                    tool_result_event(
+                        tool="shell",
+                        output=item.get("aggregated_output", ""),
+                        call_id=call_id,
+                        is_error=bool(exit_code),
+                    )
+                ]
+            )
+
+        if item_type == "file_change":
+            summary = _codex_file_change_summary(item.get("changes"))
+            if is_start:
+                return ParsedLine(
+                    events=[
+                        tool_use_event(
+                            tool="apply_patch",
+                            category="file_change",
+                            input_data={"changes": item.get("changes", [])},
+                            summary=summary,
+                            call_id=call_id,
+                        )
+                    ]
+                )
+            return ParsedLine(
+                events=[
+                    tool_result_event(
+                        tool="apply_patch",
+                        output=summary,
+                        summary=summary,
+                        call_id=call_id,
+                        is_error=item.get("status") == "failed",
+                    )
+                ]
+            )
+
+        if item_type == "mcp_tool_call":
+            server = item.get("server", "?")
+            tool_label = f"{server}.{item.get('tool', '?')}"
+            if is_start:
+                return ParsedLine(
+                    events=[
+                        tool_use_event(
+                            tool=tool_label,
+                            category="mcp",
+                            input_data=item.get("arguments", {}),
+                            call_id=call_id,
+                        )
+                    ]
+                )
+            error = item.get("error")
+            if error:
+                message = (
+                    error.get("message", str(error)) if isinstance(error, dict) else str(error)
+                )
+                return ParsedLine(
+                    events=[
+                        tool_result_event(
+                            tool=tool_label,
+                            output=message,
+                            summary=f"{tool_label}: {message}",
+                            call_id=call_id,
+                            is_error=True,
+                        )
+                    ]
+                )
+            return ParsedLine(
+                events=[tool_result_event(tool=tool_label, output="completed", call_id=call_id)]
+            )
+
+        if item_type == "web_search":
+            query = str(item.get("query") or item.get("text") or "")
+            if is_start:
+                return ParsedLine(
+                    events=[
+                        tool_use_event(
+                            tool="web_search",
+                            category="web_search",
+                            input_data={"query": query},
+                            call_id=call_id,
+                        )
+                    ]
+                )
+            return ParsedLine(
+                events=[tool_result_event(tool="web_search", output=query, call_id=call_id)]
+            )
+
+        if item_type in ("todo_list", "plan_update"):
+            if is_start:
+                return ParsedLine()
+            entries = item.get("items") or item.get("plan") or []
+            summary = (
+                "; ".join(
+                    str(entry.get("text", entry)) if isinstance(entry, dict) else str(entry)
+                    for entry in entries
+                )
+                or "plan updated"
+            )
+            return ParsedLine(events=[status_event("plan", summary=summary)])
+
+        return ParsedLine()
+
+    if msg_type == "turn.completed":
+        usage = data.get("usage") or {}
+        usage_sample = _codex_usage_sample(usage, source=source, model=model) if usage else None
+        return ParsedLine(usage=usage_sample)
+
+    if msg_type == "turn.failed":
+        error = data.get("error") or {}
+        message = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+        return ParsedLine(
+            events=[error_event(code="codex_turn_failed", message=message or "turn failed")]
+        )
+
+    if msg_type == "error":
+        message = str(data.get("message", "unknown error"))
+        return ParsedLine(events=[error_event(code="codex_error", message=message)])
+
+    return ParsedLine()

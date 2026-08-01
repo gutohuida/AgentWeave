@@ -26,7 +26,8 @@ from ...db.models import (
     ProjectSession,
     Task,
 )
-from ...launchability import probe_agent
+from ...launchability import get_agent_config, probe_agent
+from ...output_recording import record_agent_output, record_context_usage
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -121,11 +122,8 @@ async def get_agents_launchability(
         session_agents_meta.setdefault(name, {})
 
     results = {}
-    for name, meta in session_agents_meta.items():
-        agent_row = db_agents.get(name)
-        merged = (
-            {**(agent_row.config or {}), **meta} if agent_row and agent_row.config else dict(meta)
-        )
+    for name in session_agents_meta:
+        merged = await get_agent_config(project_id, name, session)
         results[name] = probe_agent(name, merged)
 
     return {"agents": results}
@@ -1015,53 +1013,17 @@ async def post_agent_output(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
-
-    # Detect if this is the first output for this session_id (new session)
-    is_new_session = False
-    if body.session_id:
-        count_result = await session.execute(
-            select(func.count(AgentOutput.id)).where(
-                AgentOutput.project_id == project_id,
-                AgentOutput.agent == name,
-                AgentOutput.session_id == body.session_id,
-            )
-        )
-        is_new_session = (count_result.scalar() or 0) == 0
-
-    row = AgentOutput(
-        id=f"out-{short_id()}",
-        project_id=project_id,
-        agent=name,
-        session_id=body.session_id,
+    row = await record_agent_output(
+        session,
+        project_id,
+        name,
         content=body.content,
+        session_id=body.session_id,
         kind=body.kind,
         payload=body.payload,
         run_id=body.run_id,
         sequence=body.sequence,
     )
-    session.add(row)
-    await session.commit()
-    await sse_manager.broadcast(
-        project_id,
-        "agent_output",
-        {
-            "id": row.id,
-            "agent": name,
-            "session_id": body.session_id,
-            "content": body.content,
-            "kind": body.kind,
-            "payload": body.payload,
-            "run_id": body.run_id,
-            "sequence": body.sequence,
-            "timestamp": row.timestamp.isoformat(),
-        },
-    )
-    if is_new_session:
-        await sse_manager.broadcast(
-            project_id,
-            "agent_session_changed",
-            {"agent": name, "session_id": body.session_id},
-        )
     return {"id": row.id}
 
 
@@ -1074,26 +1036,10 @@ async def post_context_usage(
 ):
     """Store and project the latest canonical context snapshot for an agent."""
     project_id, _ = project
-    payload = {**body.model_dump(exclude_none=True), "agent": name}
-    latest_result = await session.execute(
-        select(EventLog)
-        .where(
-            EventLog.project_id == project_id,
-            EventLog.event_type == "context_warning",
-            EventLog.agent == name,
-        )
-        .order_by(EventLog.timestamp.desc())
-        .limit(1)
-    )
-    latest = latest_result.scalars().first()
-    if latest and isinstance(latest.data, dict):
-        latest_observed = latest.data.get("observed_at")
-        if isinstance(latest_observed, (int, float)) and body.observed_at <= latest_observed:
-            return {"status": "ignored", "agent": name, "reason": "stale"}
-    await persist_event(
-        session, project_id, "context_warning", payload, agent=name, severity="info"
-    )
-    await sse_manager.broadcast(project_id, "context_warning", payload)
+    payload = body.model_dump(exclude_none=True)
+    result = await record_context_usage(session, project_id, name, payload)
+    if result == "ignored":
+        return {"status": "ignored", "agent": name, "reason": "stale"}
     return {"status": "ok", "agent": name}
 
 

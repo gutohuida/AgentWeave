@@ -4,20 +4,20 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_trigger_returns_pilot_mode_response(app, auth_headers):
-    """Test that trigger endpoint returns pilot-mode response without executing."""
-    # First register an agent with pilot mode
+async def test_trigger_rejects_pilot_mode_agent(app, auth_headers):
+    """A pilot-mode agent cannot be direct-spawned — the whole point of pilot mode is that
+    a human drives it manually. The trigger endpoint now refuses with a stated reason
+    (Decision 2: an observable outcome, not a message quietly queued for someone else to
+    notice) instead of silently creating a message as it did under the old protocol.
+    """
     resp = await app.post(
         "/api/v1/agents/claude-pilot-test/register-session",
         json={"session_id": "sess-pilot-123"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["pilot"] is True
+    assert resp.json()["pilot"] is True
 
-    # Now trigger the agent - should return pilot mode response
     resp = await app.post(
         "/api/v1/agent/trigger",
         json={
@@ -27,33 +27,33 @@ async def test_trigger_returns_pilot_mode_response(app, auth_headers):
         },
         headers=auth_headers,
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert "pilot mode" in data["message"].lower()
-    assert data["agent"] == "claude-pilot-test"
-    assert data["message_id"].startswith("msg-")
+    assert resp.status_code == 409
+    assert "pilot mode" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
-async def test_trigger_non_pilot_agent(app, auth_headers):
-    """Test that trigger works normally for non-pilot agents."""
-    # Trigger an agent that is NOT in pilot mode
+async def test_trigger_unsupported_runner_reports_501(app, auth_headers):
+    """Kimi isn't wired to direct spawn yet (task 3.5 scoped to claude/codex only) — the
+    endpoint must say so clearly rather than silently misbehaving or pretending to queue it.
+    """
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"kimi-agent": {"runner": "kimi"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
     resp = await app.post(
         "/api/v1/agent/trigger",
         json={
-            "agent": "kimi",
+            "agent": "kimi-agent",
             "message": "Hello from test",
             "session_mode": "new",
         },
         headers=auth_headers,
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    # Should NOT mention pilot mode
-    assert "pilot mode" not in data["message"].lower()
-    assert "watchdog" in data["message"].lower()
+    assert resp.status_code == 501
+    assert "kimi" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
