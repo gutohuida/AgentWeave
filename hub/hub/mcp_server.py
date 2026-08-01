@@ -111,6 +111,7 @@ def send_message(
                 "content": content,
                 "type": message_type,
                 "task_id": task_id,
+                "run_id": os.environ.get("AW_RUN_ID") or None,
             },
         )
         return {"success": True, "message_id": result.get("id")}

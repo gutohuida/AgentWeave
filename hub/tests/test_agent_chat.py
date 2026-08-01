@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AgentOutput, Message
+from hub.db.models import AgentOutput, InboundQueueEntry, Run
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,16 +55,32 @@ async def _add_message(
     user→agent messages).
     """
     async with async_session_factory() as session:
+        run_id = f"run-{msg_id}" if session_id else None
+        if run_id:
+            session.add(
+                Run(
+                    id=run_id,
+                    project_id=project_id,
+                    agent=recipient,
+                    session_id=session_id,
+                    status="completed",
+                    started_at=timestamp or datetime.now(timezone.utc),
+                    turn_depth=0,
+                )
+            )
         session.add(
-            Message(
+            InboundQueueEntry(
                 id=msg_id,
                 project_id=project_id,
-                sender="user",
-                recipient=recipient,
+                agent=recipient,
+                origin_type="operator",
+                origin_agent=None,
                 content=content,
-                type="message",
-                session_id=session_id,
-                timestamp=timestamp or datetime.now(timezone.utc),
+                arrived_at=timestamp or datetime.now(timezone.utc),
+                hop_depth=0,
+                state="delivered" if run_id else "queued",
+                delivered_in_run_id=run_id,
+                delivered_at=(timestamp or datetime.now(timezone.utc)) if run_id else None,
             )
         )
         await session.commit()
@@ -133,8 +149,8 @@ async def test_tier1_exact_session_id_match(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_tier2_content_tag_fallback(app, auth_headers):
-    """A pre-migration message with [Session: sess-B] in content shows up."""
+async def test_content_tag_does_not_create_session_attribution(app, auth_headers):
+    """Literal session-looking prose is not a routing protocol."""
     project_id = await _project_id(app, auth_headers)
     agent = "agent_t2"
     await _add_message(
@@ -155,11 +171,7 @@ async def test_tier2_content_tag_fallback(app, auth_headers):
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-B", headers=auth_headers)
     assert resp.status_code == 200
     ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-tier2" in ids
-    # And the tag is stripped from the displayed content.
-    msg = next(m for m in resp.json()["messages"] if m["id"] == "m-tier2")
-    assert "[Session:" not in msg["content"]
-    assert msg["content"].startswith("pre-migration body")
+    assert "m-tier2" not in ids
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +180,7 @@ async def test_tier2_content_tag_fallback(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_tier3_untagged_message_in_time_window(app, auth_headers):
+async def test_undelivered_entry_is_not_inferred_from_time_window(app, auth_headers):
     """An untagged message (session_id=None) that falls inside the agent-output
     time window is included via the heuristic."""
     project_id = await _project_id(app, auth_headers)
@@ -196,7 +208,7 @@ async def test_tier3_untagged_message_in_time_window(app, auth_headers):
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-C", headers=auth_headers)
     assert resp.status_code == 200
     ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-tier3" in ids
+    assert "m-tier3" not in ids
 
 
 @pytest.mark.asyncio
@@ -295,7 +307,7 @@ async def test_agent_output_always_included(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_message_with_session_tag_strips_tag_from_displayed_content(app, auth_headers):
+async def test_literal_session_tag_is_preserved_as_content(app, auth_headers):
     """A Tier-2 message's content is split on the \\n\\n[Session: tag and only
     the prefix is returned to the client."""
     project_id = await _project_id(app, auth_headers)
@@ -304,7 +316,7 @@ async def test_message_with_session_tag_strips_tag_from_displayed_content(app, a
         project_id,
         msg_id="m-strip",
         recipient=agent,
-        session_id=None,
+        session_id="sess-strip",
         content="user-visible\n\n[Session: sess-strip]",
     )
     # Anchor the session so the Tier-2 message is eligible.
@@ -319,7 +331,7 @@ async def test_message_with_session_tag_strips_tag_from_displayed_content(app, a
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-strip", headers=auth_headers)
     assert resp.status_code == 200
     msg = next(m for m in resp.json()["messages"] if m["id"] == "m-strip")
-    assert msg["content"] == "user-visible"
+    assert msg["content"] == "user-visible\n\n[Session: sess-strip]"
 
 
 @pytest.mark.asyncio

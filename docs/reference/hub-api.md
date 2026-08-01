@@ -63,6 +63,26 @@ http://localhost:8000/api/v1
 | `GET` | `/agent/{agent}/chat` | Get agent chat history |
 | `GET` | `/agent/{agent}/chat/{session_id}` | Get a specific chat session |
 
+`POST /agent/trigger` writes operator input to the target agent's durable inbound queue. If the
+agent is idle and launchable, the response has `status: "running"` and a `run_id`; otherwise it has
+`status: "queued"` and an inspectable `waiting_reason`. Input arriving during a run is queued for
+the following turn rather than rejected.
+
+### Inbound Queue
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/queue/{agent}` | List queue entries; optionally filter with `?state=queued` |
+| `GET` | `/queue/{agent}/status` | Inspect waiting count, running state, and waiting reason |
+| `DELETE` | `/queue/entries/{id}` | Withdraw an entry that has not been delivered |
+| `GET` | `/queue/settings` | Inspect the effective project queue limits |
+| `PATCH` | `/queue/settings` | Set the positive integer queue limits |
+
+The default `hop_budget` is **6** and the default `turn_delivery_cap` is **10**. Updating the
+settings requires no source change and immediately re-evaluates waiting queues. Entries beyond the
+delivery cap remain queued for following turns. Peer messages created by a Hub-owned run include
+that run's `run_id`; their hop depth is derived from the run rather than trusted from request data.
+
 ### Logs
 
 | Method | Path | Description |
@@ -176,7 +196,9 @@ Non-SSE endpoints do **not** accept `?token=` query parameters — all REST call
 GET /api/v1/events
 ```
 
-Connect using the ticket flow above to receive live task, message, and log events.
+Connect using the ticket flow above to receive live task, message, log, run, and queue events. Queue
+transitions use `queue_entry_queued`, `queue_entry_delivered`, `queue_entry_withdrawn`, and
+`queue_chain_suspended`.
 
 ### Event History
 

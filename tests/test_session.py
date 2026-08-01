@@ -1,5 +1,7 @@
 """Tests for agentweave.session."""
 
+import pytest
+
 from agentweave.session import Session
 
 
@@ -18,6 +20,12 @@ def test_create_session_custom_agents(tmp_path, monkeypatch):
     sess = Session.create(name="Multi", principal="gemini", agents=["gemini", "codex"])
     assert sess.principal == "gemini"
     assert set(sess.agent_names) == {"gemini", "codex"}
+
+
+@pytest.mark.parametrize("name", ["user", "USER"])
+def test_create_session_rejects_reserved_user_agent(name):
+    with pytest.raises(ValueError, match="Invalid"):
+        Session.create(name="Reserved", principal=name, agents=[name])
 
 
 def test_session_save_and_load(tmp_path, monkeypatch):

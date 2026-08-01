@@ -3657,10 +3657,7 @@ def _do_run_agent_subprocess(
             wire_prompt = (
                 prompt
                 if prompt
-                else (
-                    "You have a new AgentWeave message. "
-                    "Call get_inbox to retrieve it and respond."
-                )
+                else ("Continue with the AgentWeave content delivered in this turn.")
             )
             jsonrpc_request = {
                 "jsonrpc": "2.0",
@@ -4962,18 +4959,23 @@ def _make_ping_callback(
             if transport is not None:
                 with contextlib.suppress(Exception):
                     transport.archive_message(msg_id)
-        elif access_path == "cli":
-            prompt = (
-                f"You have a new AgentWeave message from {sender}. "
-                f"Run: agentweave inbox --agent {recipient} --mark-read\n\n"
-                f"{access_path_notice(access_path)}"
-            )
         else:
-            prompt = (
-                f"You have a new AgentWeave message from {sender}. "
-                f"Call get_inbox('{recipient}') to retrieve it and respond.\n\n"
-                f"{access_path_notice(access_path)}"
+            prompt = "\n".join(
+                [
+                    "AgentWeave message",
+                    "",
+                    f"From: {sender}",
+                    f"To: {recipient}",
+                    f"Subject: {data.get('subject', '(no subject)')}",
+                    "",
+                    data.get("content", "").strip() or "Continue.",
+                    "",
+                    access_path_notice(access_path),
+                ]
             )
+            if transport is not None:
+                with contextlib.suppress(Exception):
+                    transport.archive_message(msg_id)
         session_id = _load_agent_session(recipient)
         cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
         subject = data.get("subject", "(no subject)")

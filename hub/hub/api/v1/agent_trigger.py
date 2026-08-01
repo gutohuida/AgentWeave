@@ -30,7 +30,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -40,6 +40,7 @@ from ... import worktrees
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run
+from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
     get_agent_config,
@@ -97,9 +98,11 @@ class TriggerAgentResponse(BaseModel):
     success: bool
     message: str
     agent: str
-    run_id: str
+    run_id: Optional[str] = None
     status: str
     session_id: Optional[str] = None
+    queue_entry_id: Optional[str] = None
+    waiting_reason: Optional[str] = None
 
 
 class TriggerAgentError(Exception):
@@ -125,6 +128,8 @@ async def trigger_agent_directly(
     session_id: Optional[str] = None,
     work_dir: Optional[str] = None,
     session: AsyncSession,
+    queue_entry_ids: Optional[List[str]] = None,
+    turn_depth: Optional[int] = None,
 ) -> TriggerAgentResponse:
     """Validate and spawn *agent* directly, returning its run identifier.
 
@@ -245,6 +250,8 @@ async def trigger_agent_directly(
     env = dict(env) if env is not None else dict(os.environ)
     env["AW_AGENT_IDENTITY"] = agent
     env["AW_RUN_ID"] = run_id
+    if turn_depth is not None:
+        env["AW_TURN_DEPTH"] = str(turn_depth)
 
     run = Run(
         id=run_id,
@@ -252,18 +259,24 @@ async def trigger_agent_directly(
         agent=agent,
         session_id=resume_session_id,
         status="running",
+        turn_depth=turn_depth,
     )
-    session.add(run)
-    await session.commit()
+    delivered = []
+    if queue_entry_ids:
+        delivered = await deliver_entries_with_run(
+            session,
+            project_id=project_id,
+            agent=agent,
+            entry_ids=queue_entry_ids,
+            run=run,
+        )
+    else:
+        session.add(run)
+        await session.commit()
 
-    await persist_event(
-        session,
-        project_id,
-        "run_triggered",
-        {"agent": agent, "run_id": run_id, "session_mode": session_mode},
-        agent=agent,
-    )
-
+    # Register execution immediately after the atomic Run + delivery commit. Event rows are
+    # observability; a transient failure while writing one must never strand a running Run
+    # whose queue entries are already marked delivered but which has no process task.
     task = asyncio.create_task(
         _execute_run(
             project_id=project_id,
@@ -280,6 +293,28 @@ async def trigger_agent_directly(
     )
     _background_runs.add(task)
     task.add_done_callback(_background_runs.discard)
+
+    try:
+        await persist_event(
+            session,
+            project_id,
+            "run_triggered",
+            {"agent": agent, "run_id": run_id, "session_mode": session_mode},
+            agent=agent,
+        )
+        for entry in delivered:
+            payload = {
+                "entry_id": entry.id,
+                "agent": agent,
+                "run_id": run_id,
+                "hop_depth": entry.hop_depth,
+            }
+            await persist_event(session, project_id, "queue_entry_delivered", payload, agent=agent)
+            await sse_manager.broadcast(project_id, "queue_entry_delivered", payload)
+    except Exception:
+        logger.exception(
+            "Run %s started but its trigger/delivery events could not be persisted", run_id
+        )
 
     return TriggerAgentResponse(
         success=True,
@@ -305,17 +340,65 @@ async def trigger_agent(
     """
     project_id, _ = project
     try:
-        return await trigger_agent_directly(
-            project_id=project_id,
-            agent=body.agent,
-            message=body.message,
-            session_mode=body.session_mode,
-            session_id=body.session_id,
-            work_dir=body.work_dir,
-            session=session,
+        worktrees.validate_agent_name(body.agent)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if body.session_mode not in ("new", "resume"):
+        raise HTTPException(status_code=400, detail="session_mode must be 'new' or 'resume'")
+    if body.session_mode == "resume" and not body.session_id:
+        raise HTTPException(
+            status_code=400, detail="session_id is required when session_mode='resume'"
         )
-    except TriggerAgentError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    if body.work_dir and (
+        ".." in body.work_dir
+        or "~" in body.work_dir
+        or any(ord(char) < 32 for char in body.work_dir)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid work_dir")
+
+    config = await get_agent_config(project_id, body.agent, session)
+    if body.work_dir and worktrees.is_writing_agent(config):
+        raise HTTPException(
+            status_code=400,
+            detail="work_dir cannot override workspace isolation for a writing agent",
+        )
+
+    entry = new_entry(
+        project_id=project_id,
+        agent=body.agent,
+        origin_type="operator",
+        content=body.message,
+        hop_depth=0,
+        session_mode=body.session_mode,
+        session_id=body.session_id,
+        work_dir=body.work_dir,
+    )
+    session.add(entry)
+    await session.commit()
+    payload = {
+        "entry_id": entry.id,
+        "agent": body.agent,
+        "origin_type": "operator",
+        "hop_depth": 0,
+    }
+    await persist_event(session, project_id, "queue_entry_queued", payload, agent=body.agent)
+    await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+
+    from ...turn_scheduler import schedule_agent
+
+    scheduled = await schedule_agent(project_id, body.agent)
+    if scheduled.response is not None:
+        response = scheduled.response
+        response.queue_entry_id = entry.id
+        return response
+    return TriggerAgentResponse(
+        success=True,
+        message=f"Input queued for {body.agent}.",
+        agent=body.agent,
+        status="queued",
+        queue_entry_id=entry.id,
+        waiting_reason=scheduled.waiting_reason,
+    )
 
 
 class StopAgentResponse(BaseModel):
@@ -475,10 +558,15 @@ async def _execute_run(
                 run.status = "failed"
                 run.error = str(exc)
                 run.ended_at = datetime.now(timezone.utc)
-                await db.commit()
+            returned = await return_run_entries(db, run_id)
+            await db.commit()
             await _broadcast_run_lifecycle(
                 db, project_id, "run_failed", agent=agent, run_id=run_id, error=str(exc)
             )
+            for entry_id in returned:
+                payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
         return
 
     _active_ptys[run_id] = pty
@@ -621,6 +709,12 @@ async def _execute_run(
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
+
+        # A turn ending with queued entries starts the next turn without waiting for
+        # operator input. The scheduler itself applies the hop budget and drain cap.
+        from ...turn_scheduler import schedule_agent
+
+        await schedule_agent(project_id, agent)
     finally:
         _active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)

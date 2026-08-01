@@ -16,6 +16,7 @@ class MessageCreate(BaseModel):
     content: str = Field(max_length=10000)
     type: str = Field(default="message", max_length=64)
     task_id: Optional[str] = Field(default=None, max_length=128)
+    run_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"populate_by_name": True, "extra": "forbid"}
 

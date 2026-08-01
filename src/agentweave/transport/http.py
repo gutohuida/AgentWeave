@@ -13,6 +13,7 @@ Expected transport.json:
 
 import json
 import logging
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -241,6 +242,7 @@ class HttpTransport(BaseTransport):
                 "content": message_data.get("content", ""),
                 "type": message_data.get("type", "message"),
                 "task_id": message_data.get("task_id"),
+                "run_id": os.environ.get("AW_RUN_ID") or None,
             }
             self._request("POST", "/messages", body)
             return True

@@ -1,6 +1,6 @@
 """Agent chat endpoints — GET /api/v1/agent/{agent}/chat/{session_id}"""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentOutput, Message
+from ...db.models import AgentOutput, InboundQueueEntry, Run
 
 router = APIRouter(prefix="/agent", tags=["agent-chat"])
 
@@ -65,94 +65,33 @@ async def get_chat_history(
     output_result = await session.execute(output_q)
     session_outputs = output_result.scalars().all()
 
-    # Build time window for this session (used for untagged messages)
-    session_first_ts = min((o.timestamp for o in session_outputs), default=None)
-    session_last_ts = max((o.timestamp for o in session_outputs), default=None)
-
-    # Get all user messages to this agent
+    # Operator input is a typed queue origin, never a magic sender name. A delivered
+    # entry's run gives exact session attribution, replacing the old timestamp heuristic.
     msg_q = (
-        select(Message)
+        select(InboundQueueEntry)
+        .join(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
         .where(
-            Message.project_id == project_id,
-            Message.recipient == agent,
-            Message.sender == "user",
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.agent == agent,
+            InboundQueueEntry.origin_type == "operator",
+            Run.session_id == session_id,
         )
-        .order_by(Message.timestamp.asc())
+        .order_by(InboundQueueEntry.sequence)
     )
     msg_result = await session.execute(msg_q)
     user_messages = msg_result.scalars().all()
 
-    # Get first-output timestamps for all OTHER sessions (used for Tier 3 attribution)
-    other_starts_q = (
-        select(func.min(AgentOutput.timestamp))
-        .where(
-            AgentOutput.project_id == project_id,
-            AgentOutput.agent == agent,
-            AgentOutput.session_id.isnot(None),
-            AgentOutput.session_id != session_id,
-        )
-        .group_by(AgentOutput.session_id)
-    )
-    other_starts_result = await session.execute(other_starts_q)
-    other_first_timestamps = [row[0] for row in other_starts_result.all() if row[0] is not None]
-
     messages: List[ChatMessage] = []
 
     for msg in user_messages:
-        content = msg.content or ""
-
-        # 1. Exact match by session_id column (post-migration resume messages)
-        if msg.session_id == session_id:
-            messages.append(
-                ChatMessage(
-                    id=msg.id,
-                    role="user",
-                    content=(
-                        content.split("\n\n[Session:")[0] if "[Session:" in content else content
-                    ),
-                    timestamp=msg.timestamp,
-                )
+        messages.append(
+            ChatMessage(
+                id=msg.id,
+                role="user",
+                content=msg.content,
+                timestamp=msg.arrived_at,
             )
-            continue
-
-        # 2. Fallback: content tag match (pre-migration resume messages)
-        if f"[Session: {session_id}]" in content:
-            messages.append(
-                ChatMessage(
-                    id=msg.id,
-                    role="user",
-                    content=(
-                        content.split("\n\n[Session:")[0] if "[Session:" in content else content
-                    ),
-                    timestamp=msg.timestamp,
-                )
-            )
-            continue
-
-        # 3. Untagged messages (new-session messages with session_id=None).
-        #    Only include if they fall within this session's time window AND no other
-        #    session started closer to the message (nearest-session wins, prevents
-        #    messages from previous new-sessions bleeding into the current one).
-        if (
-            msg.session_id is None
-            and "[Session:" not in content
-            and session_first_ts is not None
-            and session_last_ts is not None
-        ):
-            in_window = session_first_ts - timedelta(minutes=5) <= msg.timestamp <= session_last_ts
-            # Exclude if another session started between this message and the current session
-            closer_session_exists = any(
-                msg.timestamp <= other_ts < session_first_ts for other_ts in other_first_timestamps
-            )
-            if in_window and not closer_session_exists:
-                messages.append(
-                    ChatMessage(
-                        id=msg.id,
-                        role="user",
-                        content=content,
-                        timestamp=msg.timestamp,
-                    )
-                )
+        )
 
     # Add agent outputs for this session
     for output in session_outputs:
@@ -193,15 +132,15 @@ async def get_recent_chat(
     """
     project_id, _ = project
 
-    # Get recent messages from user to agent
+    # Get recent typed operator queue entries for this agent.
     msg_q = (
-        select(Message)
+        select(InboundQueueEntry)
         .where(
-            Message.project_id == project_id,
-            Message.recipient == agent,
-            Message.sender == "user",
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.agent == agent,
+            InboundQueueEntry.origin_type == "operator",
         )
-        .order_by(Message.timestamp.desc())
+        .order_by(InboundQueueEntry.sequence.desc())
         .limit(limit)
     )
     msg_result = await session.execute(msg_q)
@@ -234,7 +173,7 @@ async def get_recent_chat(
                 id=msg.id,
                 role="user",
                 content=content.split("\n\n[Session:")[0] if "[Session:" in content else content,
-                timestamp=msg.timestamp,
+                timestamp=msg.arrived_at,
             )
         )
 

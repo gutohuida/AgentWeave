@@ -1141,28 +1141,36 @@ before concurrency does.*
 
 ## 6. Inbound queue and turn scheduling
 
-- [ ] 6.1 Add the queue entry record: typed origin, content, arrival time, hop depth, delivery state,
+- [x] 6.1 Add the queue entry record: typed origin, content, arrival time, hop depth, delivery state,
       delivered-in-turn reference.
-- [ ] 6.2 Reserve `user` as an agent name; delete every `sender == "user"` comparison
+- [x] 6.2 Reserve `user` as an agent name; delete every `sender == "user"` comparison
       (`watchdog.py:802`, `agent_chat.py:78,202`) and the subject-text discriminator.
-- [ ] 6.3 Implement the scheduler: idle + non-empty queue → start turn; arrivals during a turn →
+- [x] 6.3 Implement the scheduler: idle + non-empty queue → start turn; arrivals during a turn →
       queue; turn end with entries remaining → start the next turn.
-- [ ] 6.4 Implement atomic drain — select up to the cap in arrival order and mark delivered in the
+- [x] 6.4 Implement atomic drain — select up to the cap in arrival order and mark delivered in the
       same transaction that starts the turn.
-- [ ] 6.5 Return entries to the queue when their run is interrupted (pairs with 3.8).
-- [ ] 6.6 Build the turn prompt by inlining entry content with per-entry attribution. Delete the
+- [x] 6.5 Return entries to the queue when their run is interrupted (pairs with 3.8).
+- [x] 6.6 Build the turn prompt by inlining entry content with per-entry attribution. Delete the
       *"You have a new AgentWeave message … call `get_inbox()`"* indirection
       (`watchdog.py:3866,5178,5184,5370,5375`).
-- [ ] 6.7 Implement hop depth: operator entries at 0, emitted messages at `min(drained depths) + 1`;
+- [x] 6.7 Implement hop depth: operator entries at 0, emitted messages at `min(drained depths) + 1`;
       over-budget entries queue without starting a turn.
-- [ ] 6.8 Add configuration for hop budget and per-turn cap, with defaults, inspection, and visible
+- [x] 6.8 Add configuration for hop budget and per-turn cap, with defaults, inspection, and visible
       rejection of invalid values.
-- [ ] 6.9 Emit stream events for entry queued, delivered, withdrawn, and chain suspended.
-- [ ] 6.10 Implement withdrawal of undelivered entries.
-- [ ] 6.11 Implement stop-the-running-turn: terminate the process, record the turn as stopped
+- [x] 6.9 Emit stream events for entry queued, delivered, withdrawn, and chain suspended.
+- [x] 6.10 Implement withdrawal of undelivered entries.
+- [x] 6.11 Implement stop-the-running-turn: terminate the process, record the turn as stopped
       (distinct from completed and failed), preserve queued entries, do not redeliver.
-- [ ] 6.12 Verify against `agent-inbound-queue` — two agents messaging each other halt at the budget
+- [x] 6.12 Verify against `agent-inbound-queue` — two agents messaging each other halt at the budget
       and resume on operator input; stopping a turn loses no queued work.
+      **Implemented a typed durable queue, atomic capped delivery with Run creation, per-agent turn
+      scheduling, hop-depth suspension/reset, withdrawal, interruption recovery, stop semantics,
+      inline attributed prompts, settings/status endpoints, stream events, and production UI event
+      invalidation. Verification: CLI `995 passed, 4 skipped`; Hub `407 passed, 4 skipped`; UI
+      `200 passed`; production UI build passes; Phase 6 Ruff and Black checks pass; focused mypy
+      passes for the three new queue/scheduler/API modules. Repository-wide Ruff retains one
+      pre-existing import-order finding in `tests/test_cli_watch.py`; the existing ESLint 9 script
+      has no flat config.**
 - [ ] 6.13 **`/handoff`**
 
 ## 7. Tool surface reconciliation

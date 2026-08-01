@@ -41,6 +41,10 @@ const SSE_EVENT_TYPES = [
   'run_failed',
   'run_stopped',
   'run_interrupted',
+  'queue_entry_queued',
+  'queue_entry_delivered',
+  'queue_entry_withdrawn',
+  'queue_chain_suspended',
 ]
 
 const MAX_BUFFERED = 200
@@ -422,6 +426,17 @@ export function useSSE(onEvent?: SSEListener) {
           // update for a direct-spawn run.
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break
+        case 'queue_entry_queued':
+        case 'queue_entry_delivered':
+        case 'queue_entry_withdrawn':
+        case 'queue_chain_suspended': {
+          const d = event.data as { agent?: string }
+          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          if (d?.agent) {
+            queryClient.invalidateQueries({ queryKey: ['queue', d.agent] })
+          }
+          break
+        }
         case 'context_warning':
           queryClient.invalidateQueries({ queryKey: ['agents'] })
           break

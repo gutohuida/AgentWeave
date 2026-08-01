@@ -13,6 +13,7 @@ import pytest
 
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
+from hub.inbound_queue import deliver_entries_with_run, new_entry, queued_entries
 from hub.run_reconciliation import reconcile_interrupted_runs
 from hub.sse import sse_manager
 
@@ -34,16 +35,29 @@ async def test_run_with_no_pid_becomes_interrupted(app, auth_headers):
     # run.pid only after PtySession.spawn() succeeds) leaves pid=None — there is nothing
     # to check liveness of, so this must always be reconciled.
     async with async_session_factory() as db:
-        db.add(
-            Run(
+        entry = new_entry(
+            project_id="proj-test",
+            agent="recon-nopid",
+            origin_type="operator",
+            content="recover me",
+            hop_depth=0,
+        )
+        db.add(entry)
+        await db.commit()
+        await deliver_entries_with_run(
+            db,
+            project_id="proj-test",
+            agent="recon-nopid",
+            entry_ids=[entry.id],
+            run=Run(
                 id="run-recon-nopid",
                 project_id="proj-test",
                 agent="recon-nopid",
                 status="running",
                 pid=None,
-            )
+                turn_depth=0,
+            ),
         )
-        await db.commit()
 
     queue = sse_manager.subscribe("proj-test")
 
@@ -54,6 +68,8 @@ async def test_run_with_no_pid_becomes_interrupted(app, auth_headers):
         run = await db.get(Run, "run-recon-nopid")
         assert run.status == "interrupted"
         assert run.ended_at is not None
+        waiting = await queued_entries(db, "proj-test", "recon-nopid")
+        assert [row.content for row in waiting] == ["recover me"]
 
     events = _drain(queue)
     interrupted = [

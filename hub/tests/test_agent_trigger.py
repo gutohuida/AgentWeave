@@ -40,9 +40,10 @@ def _init_repo(path: Path) -> Path:
 
 async def _await_background_run():
     """Wait for whatever background run task(s) the last trigger call started."""
-    tasks = list(agent_trigger._background_runs)
-    for task in tasks:
-        await task
+    while agent_trigger._background_runs:
+        tasks = list(agent_trigger._background_runs)
+        for task in tasks:
+            await task
 
 
 async def _wait_for_active_pty(run_id, timeout=2.0):
@@ -72,7 +73,7 @@ def _fake_pty(lines, exit_code=0, pid=4242):
 
 
 @pytest.mark.asyncio
-async def test_manual_runner_is_rejected_with_409(app, auth_headers):
+async def test_manual_runner_accumulates_queue_with_visible_reason(app, auth_headers):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"offline-agent": {"runner": "manual"}}}},
@@ -85,8 +86,9 @@ async def test_manual_runner_is_rejected_with_409(app, auth_headers):
         json={"agent": "offline-agent", "message": "hi", "session_mode": "new"},
         headers=auth_headers,
     )
-    assert resp.status_code == 409
-    assert "manual" in resp.json()["detail"].lower()
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "queued"
+    assert "manual" in resp.json()["waiting_reason"].lower()
 
 
 @pytest.mark.asyncio
@@ -261,8 +263,9 @@ async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
             headers=auth_headers,
         )
 
-    assert response.status_code == 409
-    assert "isolated worktree" in response.json()["detail"].lower()
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert "isolated worktree" in response.json()["waiting_reason"].lower()
 
 
 @pytest.mark.asyncio
@@ -394,7 +397,7 @@ async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_second_trigger_while_first_is_running_is_rejected(app, auth_headers):
+async def test_second_trigger_while_first_is_running_is_queued(app, auth_headers):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"busy-claude": {"runner": "claude"}}}},
@@ -439,8 +442,9 @@ async def test_second_trigger_while_first_is_running_is_rejected(app, auth_heade
                     json={"agent": "busy-claude", "message": "again", "session_mode": "new"},
                     headers=auth_headers,
                 )
-                assert second.status_code == 409
-                assert "already has a run in progress" in second.json()["detail"]
+                assert second.status_code == 200
+                assert second.json()["status"] == "queued"
+                assert "already running" in second.json()["waiting_reason"]
             finally:
                 release.set()
                 await _await_background_run()
@@ -482,6 +486,24 @@ async def test_spawn_failure_marks_run_failed(app, auth_headers):
         run = await db.get(Run, run_id)
         assert run.status == "failed"
         assert "not found in PATH" in run.error
+        from sqlalchemy import select
+
+        from hub.db.models import InboundQueueEntry
+
+        returned = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.delivered_in_run_id.is_(None),
+                        InboundQueueEntry.agent == "missing-claude",
+                        InboundQueueEntry.state == "queued",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [entry.content for entry in returned] == ["hi"]
 
 
 def _drain(queue):
@@ -671,6 +693,14 @@ async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(app, a
 
             await _wait_for_active_pty(run_id)
 
+            queued = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "stoppable-claude", "message": "survive the stop"},
+                headers=auth_headers,
+            )
+            assert queued.json()["status"] == "queued"
+            queued_entry_id = queued.json()["queue_entry_id"]
+
             stop = await app.post("/api/v1/agent/stoppable-claude/stop", headers=auth_headers)
             assert stop.status_code == 200
             assert stop.json()["run_id"] == run_id
@@ -681,18 +711,42 @@ async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(app, a
     fake_session.terminate.assert_called_once_with(force=True)
 
     from hub.db.engine import async_session_factory
-    from hub.db.models import Run
+    from hub.db.models import InboundQueueEntry, Run
 
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
         assert run.status == "stopped"
+        from sqlalchemy import select
+
+        delivered = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.delivered_in_run_id == run_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(delivered) == 1
+        assert delivered[0].state == "delivered"
         assert run.exit_code == 15
+        queued_entry = (
+            await db.execute(
+                select(InboundQueueEntry).where(InboundQueueEntry.id == queued_entry_id)
+            )
+        ).scalar_one()
+        assert queued_entry.state == "delivered"
+        assert queued_entry.delivered_in_run_id != run_id
 
     events = _drain(queue)
     stopped = [d for t, d in events if t == "run_stopped"]
     assert len(stopped) == 1
     assert stopped[0]["run_id"] == run_id
-    assert not [d for t, d in events if t in ("run_completed", "run_failed")]
+    assert not [
+        data
+        for event_type, data in events
+        if event_type in ("run_completed", "run_failed") and data["run_id"] == run_id
+    ]
 
 
 @pytest.mark.asyncio
@@ -816,9 +870,9 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_trigger_unsupported_runner_reports_501(app, auth_headers):
+async def test_trigger_unsupported_runner_accumulates_queue(app, auth_headers):
     """Kimi isn't wired to direct spawn yet (task 3.5 scoped to claude/codex only) — the
-    endpoint must say so clearly rather than silently misbehaving or pretending to queue it.
+    queue must retain its entry and explain why it cannot launch.
     """
     sync = await app.post(
         "/api/v1/session/sync",
@@ -836,5 +890,6 @@ async def test_trigger_unsupported_runner_reports_501(app, auth_headers):
         },
         headers=auth_headers,
     )
-    assert resp.status_code == 501
-    assert "kimi" in resp.json()["detail"].lower()
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "queued"
+    assert "kimi" in resp.json()["waiting_reason"].lower()

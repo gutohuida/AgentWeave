@@ -118,10 +118,7 @@ async def test_job_for_self_registered_poll_agent_is_skipped(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_job_fire_failure_is_recorded_with_the_real_reason(app, auth_headers):
-    # An agent that already has a run in progress makes trigger_agent_directly raise
-    # TriggerAgentError deterministically (no CLI-availability mocking needed) — proves
-    # the JobRun now records the *actual* rejection reason, not an assumed success.
+async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"busy-job-claude": {"runner": "claude"}}}},
@@ -145,9 +142,23 @@ async def test_job_fire_failure_is_recorded_with_the_real_reason(app, auth_heade
         fresh_job = await db.get(AIJob, job.id)
         success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
 
-    assert success is False
+    assert success is True
 
     async with async_session_factory() as db:
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
-        assert run.status == "failed"
-        assert "already has a run in progress" in run.error_summary
+        assert run.status == "fired"
+        from hub.db.models import InboundQueueEntry
+
+        queued = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.agent == "busy-job-claude",
+                        InboundQueueEntry.state == "queued",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [entry.content for entry in queued] == ["hello from a scheduled job"]

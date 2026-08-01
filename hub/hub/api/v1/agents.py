@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import worktrees
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
 from ...db.engine import get_session
@@ -861,6 +862,10 @@ async def register_agent(
 
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
+    try:
+        worktrees.validate_agent_name(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if contact_mode not in _CONTACT_MODES:
         raise HTTPException(

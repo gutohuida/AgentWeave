@@ -76,6 +76,12 @@ GIT_SEEN_DIR = AGENTWEAVE_DIR / ".git_seen"  # local seen-set for git transport 
 # Agent name validation: alphanumeric / hyphen / underscore, 1-32 chars.
 # Replaces the old hardcoded two-item list — any name matching this is accepted.
 AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+RESERVED_AGENT_NAMES = frozenset({"user"})
+
+
+def is_valid_agent_name(name: str) -> bool:
+    return bool(AGENT_NAME_RE.fullmatch(name)) and name.lower() not in RESERVED_AGENT_NAMES
+
 
 # Known agents — used for documentation, suggestions, and default role assignments.
 # NOT a validation gate: any name matching AGENT_NAME_RE is accepted.

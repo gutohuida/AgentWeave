@@ -122,6 +122,6 @@ def access_path_notice(access_path: str) -> str:
         "[AgentWeave] Tool access: MCP tools are not available in this environment. Use "
         "`agentweave` CLI commands instead — e.g. `agentweave msg send --to <agent> -m "
         '"..."`, `agentweave task create --title "..."`, `agentweave task update <id> '
-        '--status <status>`, `agentweave question ask -q "..."`, `agentweave inbox '
-        "--agent <you> --mark-read`."
+        '--status <status>`, `agentweave question ask -q "..."`. Inbound content is already '
+        "included in this turn; no retrieval command is needed."
     )

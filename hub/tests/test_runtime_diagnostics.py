@@ -17,10 +17,11 @@ async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers):
         headers=auth_headers,
     )
 
-    assert resp.status_code == 409
-    assert "not found in PATH" in resp.json()["detail"]
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "queued"
+    assert "not found in PATH" in resp.json()["waiting_reason"]
     assert "execution_confidence" not in resp.json()
-    assert "watchdog" not in resp.json()["detail"].lower()
+    assert "watchdog" not in resp.json()["waiting_reason"].lower()
 
 
 @pytest.mark.asyncio

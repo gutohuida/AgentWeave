@@ -255,7 +255,8 @@ class JobScheduler:
         old message-based protocol, which could only ever record "fired" and never learned
         whether the watchdog actually managed to trigger anything.
         """
-        from .api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
+        from .inbound_queue import new_entry
+        from .turn_scheduler import schedule_agent
 
         try:
             fired_at = datetime.now(timezone.utc)
@@ -313,39 +314,30 @@ class JobScheduler:
                 logger.info(f"Job {job.id} fire skipped: {skip_reason}")
                 return False
 
-            try:
-                await trigger_agent_directly(
-                    project_id=job.project_id,
-                    agent=job.agent,
-                    message=job.message,
-                    session_mode=job.session_mode,
-                    session_id=resume_session_id,
-                    session=session,
-                )
-            except TriggerAgentError as exc:
-                error_summary = _safe_error_summary(Exception(exc.detail))
-                run.status = "failed"
-                run.error_summary = error_summary
-                await session.commit()
-                await persist_event(
-                    session,
-                    job.project_id,
-                    "job_run_failed",
-                    {
-                        "job_id": job.id,
-                        "job_name": job.name,
-                        "agent": job.agent,
-                        "trigger": trigger,
-                        "run_id": run_id,
-                        "error_summary": error_summary,
-                    },
-                    agent=job.agent,
-                    severity="error",
-                )
-                logger.warning(f"Job {job.id} fire failed: {error_summary}")
-                return False
-
+            entry = new_entry(
+                project_id=job.project_id,
+                agent=job.agent,
+                origin_type="operator",
+                content=job.message,
+                hop_depth=0,
+                session_mode=job.session_mode,
+                session_id=resume_session_id,
+            )
+            session.add(entry)
             await session.commit()
+
+            queue_payload = {
+                "entry_id": entry.id,
+                "agent": job.agent,
+                "origin_type": "operator",
+                "hop_depth": 0,
+                "job_id": job.id,
+            }
+            await persist_event(
+                session, job.project_id, "queue_entry_queued", queue_payload, agent=job.agent
+            )
+            await sse_manager.broadcast(job.project_id, "queue_entry_queued", queue_payload)
+            await schedule_agent(job.project_id, job.agent)
 
             await sse_manager.broadcast(
                 job.project_id,

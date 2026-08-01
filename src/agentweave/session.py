@@ -3,12 +3,12 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 from .constants import (
-    AGENT_NAME_RE,
     AGENT_RUNNER_DEFAULTS,
     DEFAULT_AGENTS,
     RUNNER_TYPES,
     SESSION_FILE,
     VALID_MODES,
+    is_valid_agent_name,
 )
 from .utils import generate_id, load_json, now_iso, save_json
 
@@ -178,7 +178,7 @@ class Session:
         if principal is None:
             principal = agent_list[0]
 
-        if not AGENT_NAME_RE.match(principal):
+        if not is_valid_agent_name(principal):
             raise ValueError(f"Invalid principal name: {principal!r}")
         # Ensure principal is included
         if principal not in agent_list:
@@ -186,7 +186,7 @@ class Session:
 
         # Validate each agent name
         for ag in agent_list:
-            if not AGENT_NAME_RE.match(ag):
+            if not is_valid_agent_name(ag):
                 raise ValueError(f"Invalid agent name: {ag!r}")
 
         agent_map = {}

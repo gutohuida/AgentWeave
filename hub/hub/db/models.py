@@ -6,9 +6,11 @@ from typing import Any, List, Optional
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
 )
@@ -31,6 +33,10 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
+    hop_budget: Mapped[int] = mapped_column(Integer, default=6, server_default="6", nullable=False)
+    turn_delivery_cap: Mapped[int] = mapped_column(
+        Integer, default=10, server_default="10", nullable=False
+    )
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
@@ -38,6 +44,7 @@ class Project(Base):
     questions: Mapped[List["Question"]] = relationship(back_populates="project")
     jobs: Mapped[List["AIJob"]] = relationship(back_populates="project")
     agents: Mapped[List["Agent"]] = relationship(back_populates="project")
+    queue_entries: Mapped[List["InboundQueueEntry"]] = relationship(back_populates="project")
 
 
 class Agent(Base):
@@ -102,6 +109,61 @@ class Message(Base):
     __table_args__ = (
         Index("ix_messages_project_recipient", "project_id", "recipient"),
         Index("ix_messages_project_read", "project_id", "read"),
+    )
+
+
+QUEUE_ENTRY_STATES = ("queued", "delivered", "withdrawn")
+QUEUE_ORIGIN_TYPES = ("operator", "agent")
+
+
+class InboundQueueEntry(Base):
+    """One durable item in an agent's ordered inbound queue."""
+
+    __tablename__ = "inbound_queue_entries"
+
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    origin_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    arrived_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    hop_depth: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
+    delivered_in_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    session_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    work_dir: Mapped[Optional[str]] = mapped_column(String(4096), nullable=True)
+
+    project: Mapped["Project"] = relationship(back_populates="queue_entries")
+
+    __table_args__ = (
+        CheckConstraint(
+            "origin_type IN ('operator', 'agent')", name="ck_inbound_queue_origin_type"
+        ),
+        CheckConstraint(
+            "state IN ('queued', 'delivered', 'withdrawn')", name="ck_inbound_queue_state"
+        ),
+        CheckConstraint("hop_depth >= 0", name="ck_inbound_queue_hop_depth"),
+        CheckConstraint(
+            "(origin_type = 'operator' AND origin_agent IS NULL) OR "
+            "(origin_type = 'agent' AND origin_agent IS NOT NULL)",
+            name="ck_inbound_queue_origin_agent",
+        ),
+        Index(
+            "ix_inbound_queue_project_agent_state_arrival",
+            "project_id",
+            "agent",
+            "state",
+            "sequence",
+        ),
+        Index("ix_inbound_queue_delivered_run", "delivered_in_run_id"),
     )
 
 
@@ -309,6 +371,7 @@ class Run(Base):
     last_heartbeat_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    turn_depth: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
         Index("ix_runs_project_agent", "project_id", "agent"),

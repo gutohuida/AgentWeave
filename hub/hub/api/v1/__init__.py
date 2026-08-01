@@ -6,6 +6,7 @@ from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
 from .events import router as events_router
+from .inbound_queue import router as inbound_queue_router
 from .instructions import router as instructions_router
 from .jobs import router as jobs_router
 from .logs import router as logs_router
@@ -34,3 +35,4 @@ v1_router.include_router(setup_router)
 v1_router.include_router(instructions_router)
 v1_router.include_router(spec_router)
 v1_router.include_router(worktrees_router)
+v1_router.include_router(inbound_queue_router)

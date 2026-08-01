@@ -100,6 +100,7 @@ def test_agent_message_to_non_probeable_runner_uses_cli_prompt(tmp_path, monkeyp
         recipient="kimi-dev",
     )
 
-    assert "Run: agentweave inbox --agent kimi-dev --mark-read" in captured["prompt"]
+    assert "Please execute task-123" in captured["prompt"]
+    assert "no retrieval command is needed" in captured["prompt"]
     assert "MCP tools are not available" in captured["prompt"]
-    captured["transport"].archive_message.assert_not_called()
+    captured["transport"].archive_message.assert_called_once_with("msg-agent-001")

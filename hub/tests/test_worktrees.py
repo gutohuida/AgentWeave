@@ -222,7 +222,7 @@ def test_ensure_worktree_fast_forwards_merged_released_branch(repo):
     assert (path / "new.txt").read_text() == "new primary content\n"
 
 
-@pytest.mark.parametrize("agent", ["../escape", "nested/name", "", "x" * 33])
+@pytest.mark.parametrize("agent", ["../escape", "nested/name", "", "x" * 33, "user", "USER"])
 def test_agent_name_cannot_escape_worktree_namespace(repo, agent):
     with pytest.raises(ValueError, match="agent name"):
         worktrees.ensure_worktree(repo, agent)

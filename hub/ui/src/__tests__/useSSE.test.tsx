@@ -163,4 +163,28 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
 
     await waitFor(() => expect(seen).toEqual(expect.arrayContaining(types)))
   })
+
+  it('dispatches inbound queue lifecycle events', async () => {
+    const types = [
+      'queue_entry_queued',
+      'queue_entry_delivered',
+      'queue_entry_withdrawn',
+      'queue_chain_suspended',
+    ]
+    const frames = types
+      .map((type) => `event: ${type}\ndata: {"agent":"claude","entry_id":"entry-1"}\n\n`)
+      .join('')
+    fetchSpy.mockResolvedValue(makeSSEResponse([frames]))
+
+    const seen: string[] = []
+    function Probe() {
+      useSSE((e) => {
+        seen.push(e.type)
+      })
+      return null
+    }
+    render(withQueryClient(<Probe />))
+
+    await waitFor(() => expect(seen).toEqual(expect.arrayContaining(types)))
+  })
 })

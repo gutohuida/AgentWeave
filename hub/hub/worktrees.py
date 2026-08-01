@@ -93,9 +93,10 @@ def is_git_repo(path: Path) -> bool:
 
 def validate_agent_name(agent: str) -> None:
     """Reject names that cannot safely become both a path component and git ref suffix."""
-    if not _AGENT_NAME_RE.fullmatch(agent):
+    if not _AGENT_NAME_RE.fullmatch(agent) or agent.lower() == "user":
         raise ValueError(
-            "invalid agent name; expected 1-32 letters, digits, underscores, or hyphens"
+            "invalid or reserved agent name; expected 1-32 letters, digits, underscores, "
+            "or hyphens (except 'user')"
         )
 
 

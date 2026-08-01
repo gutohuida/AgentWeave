@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from .db.engine import async_session_factory
 from .db.models import Run
+from .inbound_queue import return_run_entries
 from .pty_runner import pid_alive
 from .sse import sse_manager
 from .utils import persist_event
@@ -31,6 +32,7 @@ async def reconcile_interrupted_runs() -> int:
     Returns the number of runs reconciled.
     """
     reconciled = 0
+    agents_to_schedule = set()
     async with async_session_factory() as db:
         result = await db.execute(select(Run).where(Run.status == "running"))
         for run in result.scalars().all():
@@ -40,8 +42,15 @@ async def reconcile_interrupted_runs() -> int:
             run.status = "interrupted"
             run.ended_at = datetime.now(timezone.utc)
             reconciled += 1
+            returned_entry_ids = await return_run_entries(db, run.id)
+            agents_to_schedule.add((run.project_id, run.agent))
 
-            payload = {"agent": run.agent, "run_id": run.id, "pid": run.pid}
+            payload = {
+                "agent": run.agent,
+                "run_id": run.id,
+                "pid": run.pid,
+                "returned_entry_ids": returned_entry_ids,
+            }
             await persist_event(
                 db,
                 run.project_id,
@@ -59,4 +68,8 @@ async def reconcile_interrupted_runs() -> int:
         logger.warning(
             "Reconciled %d orphaned run(s) to status=interrupted on Hub start", reconciled
         )
+        from .turn_scheduler import schedule_agent
+
+        for project_id, agent in agents_to_schedule:
+            await schedule_agent(project_id, agent)
     return reconciled

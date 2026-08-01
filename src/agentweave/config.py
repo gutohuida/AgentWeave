@@ -14,7 +14,13 @@ try:
 except ImportError:
     yaml = None  # type: ignore
 
-from .constants import RUNNER_TYPES, VALID_DOC_THRESHOLDS, VALID_ECHO_GUARD, VALID_MODES
+from .constants import (
+    RUNNER_TYPES,
+    VALID_DOC_THRESHOLDS,
+    VALID_ECHO_GUARD,
+    VALID_MODES,
+    is_valid_agent_name,
+)
 
 # Path to agentweave.yml at project root
 AGENTWEAVE_YML_PATH = Path("agentweave.yml")
@@ -221,6 +227,10 @@ def _validate_env_field(value: Any, path: str) -> List[str]:
 
 def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> AgentConfig:
     """Validate and parse an agent configuration section."""
+    if not is_valid_agent_name(name):
+        raise ConfigValidationError(
+            f"agents.{name}: invalid or reserved agent name", line_map.get(f"agents.{name}")
+        )
     if not isinstance(data, dict):
         raise ConfigValidationError(
             f"agents.{name}: must be a mapping", line_map.get(f"agents.{name}")

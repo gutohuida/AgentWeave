@@ -101,6 +101,13 @@ agents:
         assert config.agents["claude"].runner == "claude"
         assert config.agents["kimi"].runner == "kimi"
 
+    def test_reserved_user_agent_is_rejected(self, tmp_path):
+        config_file = tmp_path / "agentweave.yml"
+        config_file.write_text("agents:\n  user:\n    runner: claude\n")
+
+        with pytest.raises(ConfigValidationError, match="reserved agent name"):
+            load_agentweave_yml(config_file)
+
     def test_load_full_config(self, tmp_path):
         """Test loading a configuration with all fields."""
         config_file = tmp_path / "agentweave.yml"
