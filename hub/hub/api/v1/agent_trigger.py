@@ -80,6 +80,148 @@ class TriggerAgentResponse(BaseModel):
     session_id: Optional[str] = None
 
 
+class TriggerAgentError(Exception):
+    """Raised by `trigger_agent_directly` on any pre-flight rejection.
+
+    Deliberately not `HTTPException` — this function has no FastAPI-request coupling so
+    task 3.10's scheduled-job caller (`scheduler.py`) can call it directly. The `/trigger`
+    route below catches this and converts it back to an `HTTPException` for HTTP callers.
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)
+
+
+async def trigger_agent_directly(
+    *,
+    project_id: str,
+    agent: str,
+    message: str,
+    session_mode: str = "new",
+    session_id: Optional[str] = None,
+    work_dir: Optional[str] = None,
+    session: AsyncSession,
+) -> TriggerAgentResponse:
+    """Validate and spawn *agent* directly, returning its run identifier.
+
+    The core of what `POST /agent/trigger` does (see that route below), factored out so a
+    scheduled job (`scheduler.py`, task 3.10) goes through the exact same direct-execution
+    path a manual trigger does — no synthetic `Message` for the watchdog to later detect and
+    re-trigger, which is the same class of indirection Decision 2 already removed from the
+    manual-trigger path in task 3.5. Raises `TriggerAgentError` on any rejection.
+    """
+    from sqlalchemy import select
+
+    if session_mode not in ("new", "resume"):
+        raise TriggerAgentError(
+            status.HTTP_400_BAD_REQUEST, "session_mode must be 'new' or 'resume'"
+        )
+    if session_mode == "resume" and not session_id:
+        raise TriggerAgentError(
+            status.HTTP_400_BAD_REQUEST, "session_id is required when session_mode='resume'"
+        )
+    if work_dir and (".." in work_dir or "~" in work_dir or any(ord(c) < 32 for c in work_dir)):
+        raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, "Invalid work_dir")
+
+    config = await get_agent_config(project_id, agent, session)
+    probe = probe_agent(agent, config)
+    runner = probe["runner"]
+
+    # "manual" is a permanent, deliberate no-CLI declaration, not an unimplemented runner —
+    # give it probe_agent's specific reason rather than the generic "not implemented yet"
+    # 501 below, which would misleadingly suggest support is just missing today.
+    if runner == "manual":
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, probe["reason"])
+
+    # Checked before launchability: whether we know how to spawn this runner at all is a
+    # more fundamental, permanent gate than whether its CLI happens to be on PATH right
+    # now, and keeps the response deterministic regardless of what's installed on the Hub
+    # host (an unimplemented runner is still unimplemented even if its CLI is present).
+    if runner not in SUPPORTED_RUNNERS:
+        raise TriggerAgentError(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            f"Direct spawn for runner {runner!r} is not implemented yet "
+            f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
+            "This agent can still be triggered via the watchdog's own message-based path.",
+        )
+
+    if not probe["runnable"]:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT, probe["reason"] or f"{agent} is not currently launchable."
+        )
+
+    existing = await session.execute(
+        select(Run.id)
+        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .limit(1)
+    )
+    if existing.scalar() is not None:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
+
+    model = config.get("model")
+    context_file = Path.cwd() / ".agentweave" / "context" / f"{agent}.md"
+    yolo = bool(config.get("yolo"))
+    resume_session_id = session_id if session_mode == "resume" else None
+
+    try:
+        cmd = build_command(
+            runner=runner,
+            cli=probe["cli"],
+            prompt=message,
+            model=model,
+            context_file=context_file,
+            session_id=resume_session_id,
+            yolo=yolo,
+        )
+    except UnsupportedRunnerError as exc:
+        raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
+
+    run_id = f"run-{short_id()}"
+    run = Run(
+        id=run_id,
+        project_id=project_id,
+        agent=agent,
+        session_id=resume_session_id,
+        status="running",
+    )
+    session.add(run)
+    await session.commit()
+
+    await persist_event(
+        session,
+        project_id,
+        "run_triggered",
+        {"agent": agent, "run_id": run_id, "session_mode": session_mode},
+        agent=agent,
+    )
+
+    task = asyncio.create_task(
+        _execute_run(
+            project_id=project_id,
+            agent=agent,
+            run_id=run_id,
+            runner=runner,
+            cmd=cmd,
+            model=model,
+            work_dir=work_dir,
+            known_session_id=resume_session_id,
+        )
+    )
+    _background_runs.add(task)
+    task.add_done_callback(_background_runs.discard)
+
+    return TriggerAgentResponse(
+        success=True,
+        message=f"{agent} started (run {run_id}).",
+        agent=agent,
+        run_id=run_id,
+        status="running",
+        session_id=resume_session_id,
+    )
+
+
 @router.post("/trigger", response_model=TriggerAgentResponse)
 async def trigger_agent(
     body: TriggerAgentRequest,
@@ -92,126 +234,19 @@ async def trigger_agent(
     - New session: `{"agent": "claude", "message": "Hello", "session_mode": "new"}`
     - Resume: `{"agent": "claude", "message": "Continue", "session_mode": "resume", "session_id": "..."}`
     """
-    from sqlalchemy import select
-
     project_id, _ = project
-
-    if body.session_mode not in ("new", "resume"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_mode must be 'new' or 'resume'",
-        )
-    if body.session_mode == "resume" and not body.session_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="session_id is required when session_mode='resume'",
-        )
-    if body.work_dir and (
-        ".." in body.work_dir or "~" in body.work_dir or any(ord(c) < 32 for c in body.work_dir)
-    ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid work_dir")
-
-    config = await get_agent_config(project_id, body.agent, session)
-    probe = probe_agent(body.agent, config)
-    runner = probe["runner"]
-
-    # "manual" is a permanent, deliberate no-CLI declaration, not an unimplemented runner —
-    # give it probe_agent's specific reason rather than the generic "not implemented yet"
-    # 501 below, which would misleadingly suggest support is just missing today.
-    if runner == "manual":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=probe["reason"])
-
-    # Checked before launchability: whether we know how to spawn this runner at all is a
-    # more fundamental, permanent gate than whether its CLI happens to be on PATH right
-    # now, and keeps the response deterministic regardless of what's installed on the Hub
-    # host (an unimplemented runner is still unimplemented even if its CLI is present).
-    if runner not in SUPPORTED_RUNNERS:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=(
-                f"Direct spawn for runner {runner!r} is not implemented yet "
-                f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
-                "This agent can still be triggered via the watchdog's own message-based path."
-            ),
-        )
-
-    if not probe["runnable"]:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=probe["reason"] or f"{body.agent} is not currently launchable.",
-        )
-
-    existing = await session.execute(
-        select(Run.id)
-        .where(Run.project_id == project_id, Run.agent == body.agent, Run.status == "running")
-        .limit(1)
-    )
-    if existing.scalar() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"{body.agent} already has a run in progress.",
-        )
-
-    model = config.get("model")
-    context_file = Path.cwd() / ".agentweave" / "context" / f"{body.agent}.md"
-    yolo = bool(config.get("yolo"))
-    resume_session_id = body.session_id if body.session_mode == "resume" else None
-
     try:
-        cmd = build_command(
-            runner=runner,
-            cli=probe["cli"],
-            prompt=body.message,
-            model=model,
-            context_file=context_file,
-            session_id=resume_session_id,
-            yolo=yolo,
-        )
-    except UnsupportedRunnerError as exc:
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)) from exc
-
-    run_id = f"run-{short_id()}"
-    run = Run(
-        id=run_id,
-        project_id=project_id,
-        agent=body.agent,
-        session_id=resume_session_id,
-        status="running",
-    )
-    session.add(run)
-    await session.commit()
-
-    await persist_event(
-        session,
-        project_id,
-        "run_triggered",
-        {"agent": body.agent, "run_id": run_id, "session_mode": body.session_mode},
-        agent=body.agent,
-    )
-
-    task = asyncio.create_task(
-        _execute_run(
+        return await trigger_agent_directly(
             project_id=project_id,
             agent=body.agent,
-            run_id=run_id,
-            runner=runner,
-            cmd=cmd,
-            model=model,
+            message=body.message,
+            session_mode=body.session_mode,
+            session_id=body.session_id,
             work_dir=body.work_dir,
-            known_session_id=resume_session_id,
+            session=session,
         )
-    )
-    _background_runs.add(task)
-    task.add_done_callback(_background_runs.discard)
-
-    return TriggerAgentResponse(
-        success=True,
-        message=f"{body.agent} started (run {run_id}).",
-        agent=body.agent,
-        run_id=run_id,
-        status="running",
-        session_id=resume_session_id,
-    )
+    except TriggerAgentError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 class StopAgentResponse(BaseModel):

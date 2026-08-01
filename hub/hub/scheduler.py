@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.engine import async_session_factory
-from .db.models import AIJob, JobRun
+from .db.models import Agent, AIJob, JobRun
 from .sse import sse_manager
 from .utils import persist_event, short_id
 
@@ -24,6 +24,35 @@ _SECRET_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9
 
 def _safe_error_summary(exc: Exception) -> str:
     return _SECRET_RE.sub("<redacted>", str(exc))[:500]
+
+
+async def _job_agent_skip_reason(
+    session: AsyncSession, project_id: str, agent: str
+) -> Optional[str]:
+    """Return why *agent*'s scheduled jobs should not auto-fire, or `None` if they should.
+
+    Mirrors two of the guards the old watchdog message-trigger path used to enforce
+    (`_trigger_agent_from_message`, removed from `src/agentweave/watchdog.py` in task 3.10):
+    pilot mode ("manual control, don't auto-execute") and self-registered poll-mode agents
+    (which manage their own inbox polling and would double-execute if the Hub also spawned
+    them directly). Checked here, against the Hub's own `Agent` table, rather than ported
+    into `trigger_agent_directly` itself — that function also backs the manual-trigger
+    endpoint, which has never enforced either guard; adding them there would change manual
+    trigger behavior too, which nothing asked for.
+    """
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    agent_row = result.scalars().first()
+    if agent_row is None:
+        return None
+    if agent_row.pilot:
+        return f"{agent} is in pilot mode (manual control)"
+    if agent_row.self_registered and agent_row.contact_mode == "poll":
+        return f"{agent} is a self-registered poll agent and manages its own execution"
+    return None
 
 
 # Singleton scheduler instance
@@ -204,10 +233,10 @@ class JobScheduler:
         trigger: str = "scheduled",
         session: Optional[AsyncSession] = None,
     ) -> bool:
-        """Fire a job - create message for watchdog to pick up.
+        """Fire a job through the Hub's direct execution path (task 3.10).
 
-        This creates a message in the DB that the host-side watchdog will
-        detect and execute using the agent's CLI.
+        Delegates to `_do_fire_job`, which spawns the agent directly — no synthetic
+        `Message` for the watchdog to detect and re-trigger.
         """
         # If session provided, use it; otherwise create our own
         if session is not None:
@@ -222,8 +251,14 @@ class JobScheduler:
         trigger: str,
         session: AsyncSession,
     ) -> bool:
-        """Internal: actually fire the job with a given session."""
-        from .db.models import Message
+        """Fire *job* through the Hub's direct execution path (task 3.10).
+
+        No synthetic `Message`, no watchdog message-scanning round trip — the outcome
+        (fired, skipped, or a concrete failure reason) is known synchronously, unlike the
+        old message-based protocol, which could only ever record "fired" and never learned
+        whether the watchdog actually managed to trigger anything.
+        """
+        from .api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
 
         try:
             fired_at = datetime.now(timezone.utc)
@@ -241,6 +276,8 @@ class JobScheduler:
             except Exception:
                 job.next_run = None
 
+            resume_session_id = job.last_session_id if job.session_mode == "resume" else None
+
             # Create run record
             run_id = f"run-{short_id()}"
             run = JobRun(
@@ -250,39 +287,69 @@ class JobScheduler:
                 fired_at=fired_at,
                 status="fired",
                 trigger=trigger,
-                session_id=job.last_session_id if job.session_mode == "resume" else None,
+                session_id=resume_session_id,
             )
             session.add(run)
 
             # Prune old history (keep last 100 runs per job)
             await self._prune_job_history(session, job.id)
 
-            # Build message content with session info
-            content_parts = [job.message]
-            if job.session_mode == "resume" and job.last_session_id:
-                content_parts.append(f"\n\n[Session: {job.last_session_id}]")
-            elif job.session_mode == "new":
-                content_parts.append("\n\n[NewSession]")
+            skip_reason = await _job_agent_skip_reason(session, job.project_id, job.agent)
+            if skip_reason:
+                run.status = "skipped"
+                run.error_summary = skip_reason
+                await session.commit()
+                await persist_event(
+                    session,
+                    job.project_id,
+                    "job_run_skipped",
+                    {
+                        "job_id": job.id,
+                        "job_name": job.name,
+                        "agent": job.agent,
+                        "trigger": trigger,
+                        "run_id": run_id,
+                        "reason": skip_reason,
+                    },
+                    agent=job.agent,
+                )
+                logger.info(f"Job {job.id} fire skipped: {skip_reason}")
+                return False
 
-            # Create message for watchdog to pick up
-            msg_id = f"msg-{short_id()}"
-            msg = Message(
-                id=msg_id,
-                project_id=job.project_id,
-                sender="user",  # Indicates job-triggered message
-                recipient=job.agent,
-                subject=f"Scheduled job: {job.name}",
-                content="\n".join(content_parts),
-                type="message",
-                timestamp=fired_at,
-                read=False,
-                session_id=job.last_session_id if job.session_mode == "resume" else None,
-            )
-            session.add(msg)
+            try:
+                await trigger_agent_directly(
+                    project_id=job.project_id,
+                    agent=job.agent,
+                    message=job.message,
+                    session_mode=job.session_mode,
+                    session_id=resume_session_id,
+                    session=session,
+                )
+            except TriggerAgentError as exc:
+                error_summary = _safe_error_summary(Exception(exc.detail))
+                run.status = "failed"
+                run.error_summary = error_summary
+                await session.commit()
+                await persist_event(
+                    session,
+                    job.project_id,
+                    "job_run_failed",
+                    {
+                        "job_id": job.id,
+                        "job_name": job.name,
+                        "agent": job.agent,
+                        "trigger": trigger,
+                        "run_id": run_id,
+                        "error_summary": error_summary,
+                    },
+                    agent=job.agent,
+                    severity="error",
+                )
+                logger.warning(f"Job {job.id} fire failed: {error_summary}")
+                return False
 
             await session.commit()
 
-            # Broadcast events
             await sse_manager.broadcast(
                 job.project_id,
                 "job_fired",
@@ -292,18 +359,6 @@ class JobScheduler:
                     "agent": job.agent,
                     "trigger": trigger,
                     "run_id": run_id,
-                },
-            )
-
-            await sse_manager.broadcast(
-                job.project_id,
-                "message_created",
-                {
-                    "id": msg_id,
-                    "from": "user",
-                    "to": job.agent,
-                    "subject": f"Scheduled job: {job.name}",
-                    "type": "job_trigger",
                 },
             )
 

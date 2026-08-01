@@ -36,10 +36,25 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
         >
           <div className="flex items-center gap-2">
             <Icon
-              name={run.status === 'completed' ? 'check_circle' : run.status === 'failed' ? 'error' : 'schedule'}
+              name={
+                run.status === 'completed'
+                  ? 'check_circle'
+                  : run.status === 'failed'
+                  ? 'error'
+                  : run.status === 'skipped'
+                  ? 'pause'
+                  : 'schedule'
+              }
               size={16}
               style={{
-                color: run.status === 'completed' ? 'var(--green)' : run.status === 'failed' ? 'var(--red)' : 'var(--text-3)'
+                color:
+                  run.status === 'completed'
+                    ? 'var(--green)'
+                    : run.status === 'failed'
+                    ? 'var(--red)'
+                    : run.status === 'skipped'
+                    ? 'var(--amber)'
+                    : 'var(--text-3)',
               }}
             />
             <span className="text-[11px]" style={{ color: 'var(--text)' }}>
@@ -49,10 +64,10 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
           <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
             {formatDistanceToNow(new Date(run.fired_at), { addSuffix: true })}
           </span>
-          {run.status === 'failed' && run.error_summary && (
+          {(run.status === 'failed' || run.status === 'skipped') && run.error_summary && (
             <span
               className="ml-2 flex-1 min-w-0 truncate text-[11px]"
-              style={{ color: 'var(--red)' }}
+              style={{ color: run.status === 'skipped' ? 'var(--amber)' : 'var(--red)' }}
               title={run.error_summary}
             >
               {run.error_summary}

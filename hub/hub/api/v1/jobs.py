@@ -372,25 +372,6 @@ async def run_job(
 
         # Pass the session to avoid duplicate work
         success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
-        if not success:
-            await persist_event(
-                session,
-                project_id,
-                "job_run_failed",
-                {
-                    "job_id": job.id,
-                    "job_name": job.name,
-                    "agent": job.agent,
-                    "trigger": "manual",
-                    "error_summary": "Failed to fire job",
-                },
-                agent=job.agent,
-                severity="error",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to fire job",
-            )
 
         # Get the run_id from the most recent run we just created
         # (scheduler creates it within the same session)
@@ -403,6 +384,25 @@ async def run_job(
         )
         latest_run = result.scalar_one_or_none()
         run_id = latest_run.id if latest_run else "unknown"
+
+        if not success:
+            # `_fire_job_internal` already persisted the right event (job_run_skipped or
+            # job_run_failed) and set the JobRun's own status/error_summary — this branch
+            # only translates that into the right HTTP response, it must not persist a
+            # second, duplicate event on top of what was already recorded.
+            if latest_run and latest_run.status == "skipped":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=latest_run.error_summary or "Job was skipped.",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=(
+                    latest_run.error_summary
+                    if latest_run and latest_run.error_summary
+                    else "Failed to fire job"
+                ),
+            )
 
     except HTTPException:
         raise

@@ -691,8 +691,87 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       *group*"), distinct from a deliberate mid-session stop, which stays a single-process
       terminate as 3.7 shipped it. Revisit only if a stopped run is later found to leave
       orphaned grandchildren in practice — not something this session had evidence of.
-- [ ] 3.10 Route scheduled jobs through the direct execution path; remove the watchdog's
-      message-scanning trigger branch, keeping only timer duties.
+- [x] 3.10 Route scheduled jobs through the direct execution path; remove the watchdog's
+      message-scanning trigger branch, keeping only timer duties. First task in this
+      session's Phase 3 chain to touch both sides of the CLI/Hub split.
+      **Hub side:** `agent_trigger.py`'s `trigger_agent()` route handler had its entire body
+      extracted into a new `trigger_agent_directly()` function (raises a new
+      `TriggerAgentError` instead of `HTTPException`, so it has no FastAPI-request coupling)
+      — the route is now a 10-line wrapper that calls it and converts the exception back.
+      `scheduler.py`'s `_do_fire_job()` (the function every job fire — scheduled *and*
+      manual "run now" — goes through) rewritten to call `trigger_agent_directly()` instead
+      of writing a synthetic `Message` row for the watchdog to later scan and re-trigger
+      from (the exact `[Session:]`/`[NewSession]` text-tag indirection proposal.md's
+      finding #3 already fixed for manual triggers in task 3.5 — this closes the same gap
+      for scheduled jobs). New `_job_agent_skip_reason()` helper ports two guards the
+      removed watchdog function used to enforce (pilot mode; self-registered poll-mode
+      agents) by querying the Hub's own `Agent` table directly, rather than the CLI's
+      session.json — deliberately **not** added to `trigger_agent_directly()` itself, since
+      that also backs the manual-trigger endpoint, which has never enforced either guard;
+      adding them there would silently change manual-trigger behavior too, which nothing
+      asked for. `JobRun.status` gained a third value, `"skipped"` (previously only
+      `"fired"`/`"failed"` per the model's own comment) — a job skipped for pilot/poll
+      reasons is not a failure, and conflating the two would misreport why nothing ran.
+      **Found and fixed in the same task, not separately requested:** `jobs.py`'s
+      `POST /{job_id}/run` endpoint treated any non-`True` return from `_do_fire_job` as a
+      generic 500 "Failed to fire job" and additionally persisted its own duplicate
+      `job_run_failed` event on top of the one `_do_fire_job` already persists internally —
+      a pre-existing wart that would have made a manually-triggered "run now" on a
+      pilot-mode agent surface as a confusing server error instead of the correct 409
+      "skipped" outcome once `"skipped"` became a real return value. Fixed by reading back
+      the just-written `JobRun` row's actual `status` instead of branching on the bare
+      boolean, and removing the endpoint's now-redundant duplicate persist call.
+      **Watchdog side:** removed the `if sender == "user" and ...:
+      self._trigger_agent_from_message(recipient, msg)` auto-trigger block from
+      `_check_once_http()`, and deleted `_trigger_agent_from_message()` itself (147 lines,
+      `src/agentweave/watchdog.py`) — confirmed via grep it had exactly one call site before
+      removal. `_check_jobs()`/`_fire_job()`/`_run_agent_subprocess()` (the local/git-
+      transport "timer duties" the task's own wording says to keep) are untouched — they
+      never routed through the removed function, confirmed by reading `_check_once_local`
+      before touching anything (`_check_jobs` is gated on
+      `transport_type in ("local", "git")` only). Two CLI-side tests
+      (`tests/test_watchdog_pilot.py`, all 3 tests; 2 of 3 tests in
+      `tests/test_watchdog_self_registered.py`) exercised the removed method directly and
+      were deleted; the third test in the self-registered file (`_fire_job`'s own, separate
+      self-registered-poll guard for local/git timer duties) is untouched and still passes,
+      confirming that code path's independence from what was removed.
+      **New tests:** `hub/tests/test_scheduler.py` (new file, 5 tests) — a fired job creates
+      a `Run` row via direct execution and **zero** `Message` rows (the core architectural
+      claim of this task, asserted directly against the DB); pilot-mode and self-registered-
+      poll agents are skipped, not fired, with the real reason recorded; a job that hits a
+      real `TriggerAgentError` (a same-agent run already in progress, chosen because it's
+      deterministic with no CLI-availability mocking needed) records `"failed"` with the
+      actual rejection detail, not an assumed success; `POST /jobs/{id}/run` returns 409 with
+      the real reason for a skipped pilot-mode agent, not a generic 500. 335/335 Hub tests
+      pass (was 330; +5), 991/991 CLI-side tests pass, 4 skipped (5 tests removed this task —
+      3 in the deleted `test_watchdog_pilot.py`, 2 of 3 in `test_watchdog_self_registered.py`
+      — not replaced 1:1 since the Hub-side equivalents in `test_scheduler.py` cover the same
+      guards more directly, against real DB state instead of mocked watchdog internals).
+      ruff/black clean on both `hub/` and `src/agentweave/`.
+      `tsc --noEmit` clean; 196/196 UI tests pass (small `JobCard.tsx` polish for the new
+      `"skipped"` status — amber `pause` icon/text, distinct from red/failed and
+      gray/pending — no dedicated JobCard test existed before or after).
+      **Live verification for this task relied on the automated test suite above, not a
+      dev-Hub restart** (departing from 3.7/3.8's pattern) — `test_scheduler.py`'s tests call
+      `JobScheduler._fire_job_internal` directly, the exact method both the real APScheduler
+      cron callback (`_scheduled_job_runner` → `_fire_job_by_id` → `_fire_job_internal`,
+      untouched by this task) and the manual "run now" HTTP endpoint actually invoke, using
+      the same mocked-`PtySession.spawn` pattern already live-verified for the manual
+      trigger endpoint in task 3.5's own live verification. Judged sufficient without a
+      restart given how directly the tests exercise the real call graph; the user was not
+      asked this time since no live instance needed to be touched.
+      **Deliberately not done here:** no live-SSE push for a job that ends up `"skipped"` or
+      synchronously `"failed"` via `TriggerAgentError` — only the success path broadcasts
+      `job_fired` over SSE (`job_run_failed`/`job_run_skipped` are persisted to `EventLog`
+      only). This is not a regression: the pre-existing exception-handling branch never
+      broadcast anything either, for the same reason (no code path did before this task).
+      Worth fixing in a future pass on job observability, not required by this task's own
+      wording. No changes to `AIJob`/`JobRun`'s schema (no new columns, no migration) —
+      `JobRun` still has no FK link to the `Run` table (task 3.3) a fired job actually
+      creates, so cross-referencing a job's fire history with its run's live output/exit
+      code still requires two separate lookups by agent+time rather than a direct join;
+      out of scope for "route through direct execution," which this task's own wording is
+      about the *trigger mechanism*, not job/run observability parity.
 - [ ] 3.11 Remove `agentweave switch` and `agentweave agent set-session` from the Hub-managed path;
       resolve provider environment and session continuity inside the Hub.
 - [ ] 3.12 Ship `alembic.ini` in `package-data` — a pip install currently logs
