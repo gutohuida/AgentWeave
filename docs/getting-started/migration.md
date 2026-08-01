@@ -63,7 +63,6 @@ agents:
     yolo: false
   kimi:
     runner: kimi
-    pilot: false
 ```
 
 ### 4. Add Any Missing Configuration

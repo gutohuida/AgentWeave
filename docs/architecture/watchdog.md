@@ -91,16 +91,6 @@ When starting, the watchdog:
 
 This prevents multiple watchdogs from conflicting.
 
-## Pilot Mode Handling
-
-When an agent is in **pilot mode**, the watchdog:
-
-- Skips auto-triggering
-- Still tracks pending work
-- Logs that manual intervention is required
-
-The agent can be triggered manually via the Hub UI or CLI.
-
 ## Session Routing
 
 ### New Sessions

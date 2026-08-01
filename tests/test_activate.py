@@ -170,7 +170,6 @@ class TestActivateUnit:
             "claude": {
                 "runner": "claude",
                 "yolo": True,
-                "pilot": True,
                 "env": ["ANTHROPIC_API_KEY"],
             },
         }
@@ -180,7 +179,6 @@ class TestActivateUnit:
         # Verify configuration was applied
         agent_data = session.agents["claude"]
         assert agent_data.get("yolo") is True
-        assert agent_data.get("pilot") is True
         assert "env_vars" in agent_data
         assert "ANTHROPIC_API_KEY" in agent_data["env_vars"]
 

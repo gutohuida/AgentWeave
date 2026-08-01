@@ -206,7 +206,6 @@ def test_validate_agent_config_valid():
         "env_vars": {},
         "model": "claude-3-5-sonnet",
         "yolo": True,
-        "pilot": False,
     }
     ok, errors = validate_agent_config(data)
     assert ok, errors
@@ -233,7 +232,6 @@ def test_validate_agent_config_invalid_types():
     """Test that invalid types for known keys are rejected."""
     data = {
         "yolo": "not_a_boolean",
-        "pilot": "not_a_boolean",
         "env_vars": "not_a_dict",
         "model": 123,
         "role": 456,
@@ -241,7 +239,6 @@ def test_validate_agent_config_invalid_types():
     ok, errors = validate_agent_config(data)
     assert not ok
     assert any("yolo" in e for e in errors)
-    assert any("pilot" in e for e in errors)
     assert any("env_vars" in e for e in errors)
     assert any("model" in e for e in errors)
     assert any("role" in e for e in errors)

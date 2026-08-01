@@ -17,39 +17,6 @@ async def test_get_role_context_rejects_path_traversal_role(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_register_session_rejects_configured_agent_collision(app, auth_headers):
-    # Mark an agent as configured via session sync
-    sync_resp = await app.post(
-        "/api/v1/session/sync",
-        json={"data": {"agents": {"claude": {}}}},
-        headers=auth_headers,
-    )
-    assert sync_resp.status_code == 200
-
-    # M16: registering a session for a configured agent must be rejected
-    resp = await app.post(
-        "/api/v1/agents/claude/register-session",
-        json={"session_id": "sess-abc123"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 409
-    assert "reserved for a configured agent" in resp.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_register_session_allows_unconfigured_agent(app, auth_headers):
-    resp = await app.post(
-        "/api/v1/agents/kimi/register-session",
-        json={"session_id": "sess-xyz789"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["success"] is True
-    assert data["session_id"] == "sess-xyz789"
-
-
-@pytest.mark.asyncio
 async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_headers):
     resp = await app.post(
         "/api/v1/agent/trigger",

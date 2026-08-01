@@ -63,10 +63,6 @@ class AgentSummary(BaseModel):
         None  # {percent, warning, model, threshold_warning, updated_at}
     )
     session_started_at: Optional[datetime] = None  # When the current session started
-    pilot: bool = False  # Pilot mode: manual control, disables auto-execution
-    registered_session_id: Optional[str] = Field(
-        default=None, max_length=128
-    )  # Registered --resume session ID for pilot agents
     self_registered: bool = False  # True if agent joined via self-registration
     liveness: Optional[str] = Field(
         default=None, max_length=64

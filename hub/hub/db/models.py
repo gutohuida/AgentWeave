@@ -41,15 +41,13 @@ class Project(Base):
 
 
 class Agent(Base):
-    """Agent configuration and pilot mode status."""
+    """Agent configuration and self-registration status."""
 
     __tablename__ = "agents"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    pilot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    registered_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     contact_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     self_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     mcp_endpoint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)

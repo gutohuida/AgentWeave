@@ -26,7 +26,7 @@ The system SHALL generate a concise project operating profile from validated Age
 
 #### Scenario: Profile includes project and team facts
 - **WHEN** generated context is built
-- **THEN** the project operating profile includes project name, collaboration mode, principal agent, agents, runners, configured models, assigned roles, pilot/yolo markers, and safe environment variable names without secret values
+- **THEN** the project operating profile includes project name, collaboration mode, principal agent, agents, runners, configured models, assigned roles, yolo markers, and safe environment variable names without secret values
 
 #### Scenario: Profile includes quality gates
 - **WHEN** `agentweave.yml` or session state contains `quality` settings

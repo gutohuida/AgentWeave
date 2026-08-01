@@ -106,8 +106,6 @@ def _agent_flags(session: Any, agent: str) -> list[str]:
     flags: list[str] = []
     if agent == data.get("principal") or agent_data.get("role") == "principal":
         flags.append("principal")
-    if agent_data.get("pilot"):
-        flags.append("pilot")
     if agent_data.get("yolo"):
         flags.append("yolo")
     return flags

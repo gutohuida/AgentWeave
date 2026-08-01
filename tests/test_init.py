@@ -250,7 +250,7 @@ class TestInitCommand:
             "principal": "claude",
             "agents": {
                 "claude": {"role": "principal", "runner": "claude", "yolo": True},
-                "kimi": {"role": "delegate", "runner": "kimi", "pilot": True},
+                "kimi": {"role": "delegate", "runner": "kimi"},
             },
             "created": "2026-01-01T00:00:00Z",
             "updated": "2026-01-01T00:00:00Z",
@@ -282,7 +282,6 @@ class TestInitCommand:
         assert content["project"]["name"] == "Existing Project"
         assert content["project"]["mode"] == "peer"
         assert content["agents"]["claude"]["yolo"] is True
-        assert content["agents"]["kimi"]["pilot"] is True
 
     def test_init_creates_yaml_with_header_comment(self, tmp_path, monkeypatch):
         """Test that created agentweave.yml includes header comment."""
@@ -436,7 +435,6 @@ class TestInitUnit:
             agents=["claude", "kimi"],
         )
         session._data["agents"]["claude"]["yolo"] = True
-        session._data["agents"]["kimi"]["pilot"] = True
 
         # Generate YAML
         yml_path = generate_agentweave_yml(session)
@@ -447,7 +445,6 @@ class TestInitUnit:
         assert content["project"]["name"] == "Unit Test Project"
         assert content["project"]["mode"] == "peer"
         assert content["agents"]["claude"]["yolo"] is True
-        assert content["agents"]["kimi"]["pilot"] is True
 
     def test_agentweave_yml_default_values(self, tmp_path, monkeypatch):
         """Test that agentweave.yml has correct default values."""

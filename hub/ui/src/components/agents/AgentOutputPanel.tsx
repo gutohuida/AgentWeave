@@ -123,7 +123,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const sessionId = [...lines].reverse().find((l) => l.session_id)?.session_id
   const isRunning = agent.status === 'running'
   const isBindingNewSession = pendingNewSessionRef.current !== null
-  const handoffUnavailable = agent.pilot || agent.runner === 'manual'
+  const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
     isRunning || isSending || handoffState === 'preparing' || isBindingNewSession
   const currentSessionId =

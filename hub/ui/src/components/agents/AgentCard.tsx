@@ -69,14 +69,6 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
               EXT
             </span>
           )}
-          {agent.pilot && (
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(236,72,153,0.1)', color: '#ec4899' }}
-            >
-              PILOT
-            </span>
-          )}
         </div>
       )}
 

@@ -68,8 +68,7 @@ commands under `.agentweave/shared/checkpoints/`.
 
 #### Scenario: Agent cannot be triggered automatically
 
-- **WHEN** the agent is in pilot mode
-- **OR** its runner is configured as manual
+- **WHEN** the agent's runner is configured as manual
 - **THEN** the `Handoff` action MUST be disabled
 - **AND** the UI MUST explain that handoff requires an automatically managed runner
 

@@ -83,23 +83,13 @@ Post a question to the human. Returns a question ID.
 
 Check if the human has answered the question.
 
-### `register_session(from_agent, session_id)`
-
-Register a session ID for a pilot agent. This enables the Hub to track which session an agent is using.
-
-**Parameters:**
-- `from_agent` — Your agent name
-- `session_id` — The session ID to register
-
-**Returns:** Object with `success` boolean and `launch_command` string.
-
 ## Agent Configuration (Hub only)
 
 ### `get_agent_config(agent)`
 
 Get configuration for a specific agent including runner type, base URL, and API key environment variable name. Useful for orchestrators that need to understand proxy agent setup.
 
-**Returns:** Object with `runner`, `base_url`, `api_key_var`, and `pilot` fields.
+**Returns:** Object with `runner`, `base_url`, and `api_key_var` fields.
 
 ## Self-Registration
 

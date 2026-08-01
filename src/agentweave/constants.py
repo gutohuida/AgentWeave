@@ -113,7 +113,6 @@ VALID_AGENT_CONFIG_KEYS = [
     "env_vars",
     "model",
     "yolo",
-    "pilot",
     "runner_options",
 ]
 

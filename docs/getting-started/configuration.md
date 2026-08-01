@@ -25,7 +25,6 @@ agents:
 
   kimi:
     runner: kimi
-    pilot: true
 
   minimax:
     runner: claude_proxy

@@ -68,7 +68,6 @@ Connected agents are auto-discovered from your session. Each card shows:
 - Agent name and roles (as badges)
 - Runner type (native, claude_proxy, or manual)
 - Yolo mode status
-- Pilot mode indicator
 - Quick actions: Chat, View Activity
 
 ## Tips

@@ -191,11 +191,11 @@ class TestAgentSetModel:
         assert loaded.get_runner_config("manual-agent")["model"] is None
 
 
-class TestPilotLaunchCommands:
-    """Tests for generated pilot launch commands."""
+class TestManualLaunchCommands:
+    """Tests for generated manual launch commands."""
 
     def test_codex_launch_command_includes_model_context_and_yolo(self, tmp_path, monkeypatch):
-        """Codex pilot command should include the same context/model flags as watchdog runs."""
+        """Codex launch command should include the same context/model flags as watchdog runs."""
         monkeypatch.chdir(tmp_path)
         context_dir = tmp_path / ".agentweave" / "context"
         context_dir.mkdir(parents=True)

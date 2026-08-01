@@ -177,10 +177,6 @@ def validate_agent_config(data: Dict[str, Any]) -> Tuple[bool, List[str]]:
     if "yolo" in data and not isinstance(data["yolo"], bool):
         errors.append("yolo must be a boolean")
 
-    # Validate pilot is boolean if present
-    if "pilot" in data and not isinstance(data["pilot"], bool):
-        errors.append("pilot must be a boolean")
-
     # Validate model is string if present
     if "model" in data and not isinstance(data["model"], str):
         errors.append("model must be a string")

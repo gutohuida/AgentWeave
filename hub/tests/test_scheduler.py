@@ -2,10 +2,10 @@
 
 `JobScheduler._do_fire_job` no longer creates a synthetic `Message` for the watchdog to
 detect and re-trigger — it calls `agent_trigger.trigger_agent_directly` directly, the same
-function `POST /agent/trigger` uses. `_job_agent_skip_reason` ports the pilot-mode and
-self-registered-poll-agent guards the removed watchdog function
-(`_trigger_agent_from_message`, deleted from `src/agentweave/watchdog.py`) used to enforce,
-checked here against the Hub's own `Agent` table instead of the CLI's session.json.
+function `POST /agent/trigger` uses. `_job_agent_skip_reason` ports the self-registered-poll-
+agent guard the removed watchdog function (`_trigger_agent_from_message`, deleted from
+`src/agentweave/watchdog.py`) used to enforce, checked here against the Hub's own `Agent`
+table instead of the CLI's session.json.
 """
 
 from unittest.mock import MagicMock, patch
@@ -91,38 +91,6 @@ async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(app, a
 
 
 @pytest.mark.asyncio
-async def test_job_for_pilot_agent_is_skipped_not_fired(app, auth_headers):
-    async with async_session_factory() as db:
-        db.add(
-            Agent(
-                id="agent-pilot-sched",
-                project_id="proj-test",
-                name="pilot-job-agent",
-                pilot=True,
-            )
-        )
-        job = await _make_job(db, suffix="pilot", agent="pilot-job-agent")
-
-    scheduler = JobScheduler()
-    async with async_session_factory() as db:
-        fresh_job = await db.get(AIJob, job.id)
-        success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
-
-    assert success is False
-
-    async with async_session_factory() as db:
-        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
-        assert run.status == "skipped"
-        assert "pilot" in run.error_summary
-
-        # No Run row (task 3.3's table) should exist — the agent was never spawned.
-        agent_runs = (
-            (await db.execute(select(Run).where(Run.agent == "pilot-job-agent"))).scalars().all()
-        )
-        assert agent_runs == []
-
-
-@pytest.mark.asyncio
 async def test_job_for_self_registered_poll_agent_is_skipped(app, auth_headers):
     async with async_session_factory() as db:
         db.add(
@@ -183,40 +151,3 @@ async def test_job_fire_failure_is_recorded_with_the_real_reason(app, auth_heade
         run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
         assert run.status == "failed"
         assert "already has a run in progress" in run.error_summary
-
-
-@pytest.mark.asyncio
-async def test_run_job_endpoint_returns_409_for_a_skipped_pilot_agent(app, auth_headers):
-    import hub.scheduler as scheduler_module
-
-    create_resp = await app.post(
-        "/api/v1/jobs",
-        json={
-            "name": "Pilot Run Now Job",
-            "agent": "pilot-run-now-agent",
-            "message": "hi",
-            "cron": "0 9 * * *",
-        },
-        headers=auth_headers,
-    )
-    assert create_resp.status_code == 201
-    job_id = create_resp.json()["id"]
-
-    async with async_session_factory() as db:
-        db.add(
-            Agent(
-                id="agent-pilot-run-now",
-                project_id="proj-test",
-                name="pilot-run-now-agent",
-                pilot=True,
-            )
-        )
-        await db.commit()
-
-    scheduler_module._scheduler_instance = JobScheduler()
-    try:
-        resp = await app.post(f"/api/v1/jobs/{job_id}/run", headers=auth_headers)
-        assert resp.status_code == 409
-        assert "pilot" in resp.json()["detail"]
-    finally:
-        scheduler_module._scheduler_instance = None

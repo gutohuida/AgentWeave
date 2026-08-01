@@ -234,7 +234,7 @@ async def list_agents(
         if name and name not in session_agents_meta:
             session_agents_meta[name] = {}
 
-    # Also include agents from the Agent table (pilot mode and self-registered agents)
+    # Also include agents from the Agent table (self-registered agents)
     agent_q = select(Agent).where(Agent.project_id == project_id)
     agent_res = await session.execute(agent_q)
     db_agents: dict[str, Agent] = {}
@@ -413,8 +413,6 @@ async def list_agents(
             "codex_mcp": agent_meta.get("model", "Codex MCP"),
         }.get(_runner, agent_meta.get("model", _runner.replace("_", " ").title()))
 
-        _pilot = agent_row.pilot if agent_row else False
-        _registered_session_id = agent_row.registered_session_id if agent_row else None
         _self_registered = agent_row.self_registered if agent_row else False
 
         # Liveness: online if heartbeat within 2 minutes (only for self-registered agents)
@@ -446,8 +444,6 @@ async def list_agents(
                 dev_role_labels=dev_role_labels,
                 context_usage=context_usage,
                 session_started_at=session_started_at,
-                pilot=_pilot,
-                registered_session_id=_registered_session_id,
                 self_registered=_self_registered,
                 liveness=_liveness,
                 runner_options=agent_meta.get("runner_options"),
@@ -699,8 +695,6 @@ def _runner_summary(agent_meta: dict) -> str:
     if agent_meta.get("model"):
         parts.append(f"model={agent_meta['model']}")
     flags = []
-    if agent_meta.get("pilot"):
-        flags.append("pilot")
     if agent_meta.get("yolo"):
         flags.append("yolo")
     if flags:
@@ -1185,100 +1179,3 @@ async def get_agent_output(
     ).limit(limit)
     result = await session.execute(q)
     return list(reversed(result.scalars().all()))
-
-
-@router.post("/{name}/register-session")
-async def register_session(
-    name: str,
-    body: dict,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Register a session ID for a pilot agent.
-
-    Creates or updates the agent record with pilot=true and the registered session ID.
-    """
-    project_id, _ = project
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
-
-    # Reject collision with configured agents
-    session_data = await _get_session_data(project_id, session)
-    if session_data and name in session_data.get("agents", {}):
-        raise HTTPException(
-            status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
-        )
-
-    # Check if agent exists
-    result = await session.execute(
-        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
-    )
-    agent_row = result.scalars().first()
-
-    if agent_row:
-        # Update existing agent
-        agent_row.registered_session_id = session_id
-        agent_row.pilot = True
-        agent_row.updated = datetime.now(timezone.utc)
-    else:
-        # Create new agent with pilot=true
-        agent_row = Agent(
-            id=f"agent-{short_id()}",
-            project_id=project_id,
-            name=name,
-            pilot=True,
-            registered_session_id=session_id,
-        )
-        session.add(agent_row)
-
-    await session.commit()
-
-    return {
-        "success": True,
-        "agent": name,
-        "session_id": session_id,
-        "pilot": True,
-    }
-
-
-@router.post("/{name}/pilot")
-async def set_agent_pilot(
-    name: str,
-    body: dict,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Enable or disable pilot mode for an agent.
-
-    Creates the agent record if it doesn't exist.
-    """
-    project_id, _ = project
-    enabled = body.get("enabled", True)
-
-    # Check if agent exists
-    result = await session.execute(
-        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
-    )
-    agent_row = result.scalars().first()
-
-    if agent_row:
-        agent_row.pilot = enabled
-        agent_row.updated = datetime.now(timezone.utc)
-    else:
-        agent_row = Agent(
-            id=f"agent-{short_id()}",
-            project_id=project_id,
-            name=name,
-            pilot=enabled,
-            registered_session_id=None,
-        )
-        session.add(agent_row)
-
-    await session.commit()
-
-    return {
-        "success": True,
-        "agent": name,
-        "pilot": enabled,
-    }

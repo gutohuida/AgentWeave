@@ -45,14 +45,12 @@ agents:
       - tech_lead
       - backend_dev
     yolo: false
-    pilot: false
 
   kimi:
     runner: kimi
     model: kimi-k2
     roles:
       - frontend_dev
-    pilot: true
 
   minimax:
     runner: claude_proxy
@@ -134,7 +132,6 @@ Map of agent name to agent configuration.
 | `roles` | list | `[]` | List of role IDs for this agent |
 | `env` | list | `[]` | List of environment variable names to pass to the agent |
 | `yolo` | boolean | `false` | Enable yolo mode (auto-execute without confirmations) |
-| `pilot` | boolean | `false` | Enable pilot mode (human controls execution) |
 | `principal` | boolean | `false` | Mark this agent as the principal agent; at most one agent may set this |
 | `base_url` | string | unset | Custom HTTP(S) endpoint for compatible proxy runner setup |
 | `runner_options` | mapping | unset | Runner-specific options, such as `memory: false` for Codex |
@@ -151,7 +148,6 @@ agents:
   kimi:
     runner: kimi
     model: kimi-k2
-    pilot: true
 
   minimax:
     runner: claude_proxy
@@ -332,7 +328,7 @@ The generated project operating profile includes:
 
 - `project.name` and `project.mode`
 - the principal agent from synced session state
-- each declared agent's runner, model, roles, pilot/yolo flags, and safe
+- each declared agent's runner, model, roles, yolo flag, and safe
   environment variable names
 - `quality` settings translated into concrete definition-of-done rules
 - a compact `jobs` summary with job name, target agent, schedule, and enabled state

@@ -141,7 +141,6 @@ agents:
     roles: [tech_lead]
     env: [COPILOT_GITHUB_TOKEN]
     yolo: true
-    pilot: false
     hub_client: cli
 
   copilot-backend:
@@ -149,7 +148,6 @@ agents:
     roles: [backend_dev]
     env: [COPILOT_GITHUB_TOKEN]
     yolo: true
-    pilot: false
     hub_client: cli
 
   copilot-frontend:
@@ -157,7 +155,6 @@ agents:
     roles: [frontend_dev]
     env: [COPILOT_GITHUB_TOKEN]
     yolo: true
-    pilot: false
     hub_client: cli
 "@
 ```

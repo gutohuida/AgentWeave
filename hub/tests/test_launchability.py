@@ -51,14 +51,6 @@ class TestProbeAgent:
         assert result["present"] is False
         assert "not an executable file" in result["reason"]
 
-    def test_pilot_mode_blocks_runnable_even_when_present_and_authorized(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
-        result = probe_agent("claude", {"runner": "claude", "pilot": True})
-        assert result["present"] is True
-        assert result["authorized"] is True
-        assert result["runnable"] is False
-        assert "pilot mode" in result["reason"]
-
     def test_claude_proxy_requires_base_url_and_api_key_var(self, monkeypatch):
         monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
         result = probe_agent("minimax", {"runner": "claude_proxy"})

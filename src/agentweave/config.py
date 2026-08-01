@@ -69,7 +69,6 @@ class AgentConfig:
     roles: List[str] = field(default_factory=list)
     env: List[str] = field(default_factory=list)
     yolo: bool = False
-    pilot: bool = False
     principal: bool = False
     base_url: Optional[str] = None
     runner_options: Optional[Dict[str, Any]] = None
@@ -86,8 +85,6 @@ class AgentConfig:
             result["env"] = self.env
         if self.yolo:
             result["yolo"] = True
-        if self.pilot:
-            result["pilot"] = True
         if self.principal:
             result["principal"] = True
         if self.base_url:
@@ -282,7 +279,6 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
         roles=data.get("roles", []),
         env=env_list,
         yolo=data.get("yolo", False),
-        pilot=data.get("pilot", False),
         principal=bool(data.get("principal", False)),
         base_url=base_url,
         runner_options=data.get("runner_options"),
@@ -510,7 +506,6 @@ def _format_agent_block(
     model: Optional[str],
     env_vars: List[str],
     yolo: bool,
-    pilot: bool,
     is_principal: bool,
     cli: Optional[str],
     runner_options: Optional[Dict[str, Any]] = None,
@@ -528,8 +523,6 @@ def _format_agent_block(
         lines.append(f"    env: [{env_str}]")
     if yolo:
         lines.append("    yolo: true")
-    if pilot:
-        lines.append("    pilot: true")
     if cli:
         lines.append(f"    cli: {cli}")
     if runner_options:
@@ -575,7 +568,6 @@ def generate_agentweave_yml(
                 model=runner_cfg.get("model"),
                 env_vars=env_vars,
                 yolo=session.get_agent_yolo(agent_name),
-                pilot=session.get_agent_pilot(agent_name),
                 is_principal=(agent_name == session.principal),
                 cli=runner_cfg.get("cli"),
                 runner_options=runner_cfg.get("runner_options"),
@@ -652,7 +644,6 @@ hub:
 #   roles:          Developer role list -- adds behavioral guides at session start
 #   env:            Env var NAMES (not values) to forward to the subprocess
 #   yolo:           true = skip confirmation prompts (autonomous mode). Default: false
-#   pilot:          true = human controls session start/resume. Default: false
 #   principal:      true = marks the lead/orchestrator; at most one agent. Default: false
 #   cli:            Absolute path to the binary (overrides PATH lookup; useful on WSL)
 #   base_url:       Custom HTTP endpoint (claude_proxy custom providers only)
@@ -671,16 +662,12 @@ agents:
   #   roles: [tech_lead, backend_dev]
   #   principal: true                 # this agent delegates to others
   #   yolo: false                     # true = no confirmation prompts
-  #   pilot: false                    # true = you trigger sessions manually
 
   # -- Kimi (Kimi Code CLI) --
   # kimi:
   #   runner: kimi
   #   model: kimi-k2                  # optional; defaults to kimi-k2
   #   roles: [frontend_dev]
-  #   pilot: true                     # recommended for Kimi -- session IDs must be registered
-  #   # After activating, register the session ID:
-  #   #   agentweave session register --agent kimi --session <id>
 
   # -- OpenAI Codex CLI --
   # codex:

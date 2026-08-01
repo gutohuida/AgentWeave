@@ -77,7 +77,6 @@ def test_agent_configure_warns_for_missing_proxy_key(tmp_path, monkeypatch, caps
             base_url=None,
             api_key_var=None,
             model=None,
-            pilot=None,
         )
     )
 

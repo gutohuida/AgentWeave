@@ -39,11 +39,10 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
     shape the CLI's ``session.get_runner_config()`` returns.
 
     Returns a dict with ``runner``, ``cli``, ``present`` (binary found), ``authorized``
-    (known auth requirements satisfied), ``runnable`` (both, and not blocked by pilot/manual
+    (known auth requirements satisfied), ``runnable`` (both, and not blocked by manual
     mode), and ``reason`` (stated cause when not runnable, else ``None``).
     """
     runner = config.get("runner", "native")
-    pilot = bool(config.get("pilot", False))
 
     if runner == "manual":
         return {
@@ -92,9 +91,7 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
                 "No GitHub auth token found (COPILOT_GITHUB_TOKEN / GH_TOKEN / GITHUB_TOKEN)."
             )
 
-    if pilot:
-        reason = "Agent is in pilot mode; automatic execution is disabled."
-    elif not present:
+    if not present:
         reason = missing_reason
     elif not authorized:
         reason = auth_reason
@@ -106,7 +103,7 @@ def probe_agent(name: str, config: Dict[str, Any]) -> Dict[str, Any]:
         "cli": cli,
         "present": present,
         "authorized": authorized,
-        "runnable": present and authorized and not pilot,
+        "runnable": present and authorized,
         "reason": reason,
     }
 
@@ -168,14 +165,9 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 
-    Merges three sources, in increasing priority: the session-synced `agents.<name>` entry
-    (session.json, pushed by the CLI — has `runner`/`model`/`cli`/`env_vars`/`yolo`/`pilot`
-    for CLI-configured agents), any self-registered `Agent.config` JSON, and — separately,
-    since it lives in its own column rather than either JSON blob — `Agent.pilot`. That last
-    merge matters: `register-session` and `POST /agents/{name}/pilot` set pilot mode by
-    writing `Agent.pilot` directly, never `Agent.config` or session.json, so an agent that
-    became a pilot only through those two endpoints would otherwise never be recognized as
-    one here.
+    Merges two sources, in increasing priority: the session-synced `agents.<name>` entry
+    (session.json, pushed by the CLI — has `runner`/`model`/`cli`/`env_vars`/`yolo` for
+    CLI-configured agents) and any self-registered `Agent.config` JSON.
     """
     from .db.models import Agent, ProjectSession
 
@@ -188,11 +180,6 @@ async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dic
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
     )
     agent_row = agent_result.scalars().first()
-    if agent_row:
-        if agent_row.config:
-            meta = {**agent_row.config, **meta}
-        # OR'd rather than overridden either way: treating an agent as a pilot when either
-        # source says so is the safe default — the wrong direction to get wrong is running
-        # a pilot agent automatically, not the reverse.
-        meta["pilot"] = bool(meta.get("pilot")) or bool(agent_row.pilot)
+    if agent_row and agent_row.config:
+        meta = {**agent_row.config, **meta}
     return meta

@@ -182,7 +182,7 @@ Scheduled recurring agent tasks with cron expressions.
 
 ---
 
-### Phase 11 — Pilot Mode (DONE, v0.21.0)
+### Phase 11 — Pilot Mode (DONE, v0.21.0; REMOVED)
 
 Manual session management for long-running agents.
 
@@ -190,6 +190,9 @@ Manual session management for long-running agents.
 - Session registration (`agentweave session register`)
 - Kimi agent-file auto-generation
 - Dashboard pilot badges
+
+Removed after `hub-native-experience`: the Hub's own session picker (Phase 3, tasks 3.5–3.7)
+superseded manual session registration for Hub-managed agents.
 
 ---
 
@@ -217,7 +220,7 @@ Phase 7 (DONE):   Claude-proxy agents (minimax, glm, custom providers)
 Phase 8 (DONE):   Multi-role support
 Phase 9 (DONE):   AgentWeave skills + AW-Spec workflow + session chat
 Phase 10 (DONE):  AI Jobs — scheduled recurring tasks
-Phase 11 (DONE):  Pilot Mode — manual session management
+Phase 11 (DONE, removed): Pilot Mode — manual session management
 Phase 12 (DONE):  Declarative configuration (agentweave.yml + activate)
 
 Phase 13 (planned):  Official hosted Hub at hub.agentweave.dev

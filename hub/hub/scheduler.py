@@ -31,14 +31,13 @@ async def _job_agent_skip_reason(
 ) -> Optional[str]:
     """Return why *agent*'s scheduled jobs should not auto-fire, or `None` if they should.
 
-    Mirrors two of the guards the old watchdog message-trigger path used to enforce
+    Mirrors a guard the old watchdog message-trigger path used to enforce
     (`_trigger_agent_from_message`, removed from `src/agentweave/watchdog.py` in task 3.10):
-    pilot mode ("manual control, don't auto-execute") and self-registered poll-mode agents
-    (which manage their own inbox polling and would double-execute if the Hub also spawned
-    them directly). Checked here, against the Hub's own `Agent` table, rather than ported
-    into `trigger_agent_directly` itself — that function also backs the manual-trigger
-    endpoint, which has never enforced either guard; adding them there would change manual
-    trigger behavior too, which nothing asked for.
+    self-registered poll-mode agents manage their own inbox polling and would double-execute
+    if the Hub also spawned them directly. Checked here, against the Hub's own `Agent` table,
+    rather than ported into `trigger_agent_directly` itself — that function also backs the
+    manual-trigger endpoint, which has never enforced this guard; adding it there would change
+    manual trigger behavior too, which nothing asked for.
     """
     from sqlalchemy import select
 
@@ -48,8 +47,6 @@ async def _job_agent_skip_reason(
     agent_row = result.scalars().first()
     if agent_row is None:
         return None
-    if agent_row.pilot:
-        return f"{agent} is in pilot mode (manual control)"
     if agent_row.self_registered and agent_row.contact_mode == "poll":
         return f"{agent} is a self-registered poll agent and manages its own execution"
     return None

@@ -162,7 +162,7 @@ def _context_injection_for(runner: str) -> str:
     if runner == "opencode":
         return "--file"
     if runner == "kimi":
-        return "pilot agent YAML system_prompt_path when pilot"
+        return "no automatic context injection"
     return "runner-specific"
 
 
@@ -647,16 +647,6 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
         )
     )
 
-    if session.get_agent_pilot(agent):
-        results.append(
-            warn(
-                "agent_pilot_mode",
-                agent,
-                "Agent is in pilot mode; automatic execution is disabled.",
-                hint="Disable pilot mode if watchdog execution is expected.",
-                category="agent",
-            )
-        )
     if runner in ("codex", "codex_mcp") and not session.get_agent_yolo(agent):
         # Without yolo, codex runs in `--sandbox workspace-write` mode
         # which still prompts for MCP tool calls. The watchdog is

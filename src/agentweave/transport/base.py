@@ -87,10 +87,6 @@ class BaseTransport(ABC):
         """Push a log event to the backend (no-op on non-HTTP transports)."""
         return
 
-    def register_session(self, agent: str, session_id: str) -> Optional[Dict[str, Any]]:
-        """Register a session ID for a pilot agent (no-op on non-HTTP transports)."""
-        raise NotImplementedError("Session registration not supported by this transport")
-
     def is_agent_registered(self, agent: str) -> bool:
         """Check whether an agent exists in the backend (always False on non-HTTP transports)."""
         return False

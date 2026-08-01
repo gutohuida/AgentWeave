@@ -53,8 +53,6 @@ http://localhost:8000/api/v1
 | `POST` | `/agents/register` | Self-register or re-register an agent |
 | `PATCH` | `/agents/{name}` | Update self-registered agent metadata/config |
 | `GET` | `/agents/context?role=...` | Fetch a role guide |
-| `POST` | `/agents/{name}/register-session` | Register a pilot-mode session ID |
-| `POST` | `/agents/{name}/pilot` | Enable or disable pilot mode |
 
 ### Agent Chat and Trigger
 

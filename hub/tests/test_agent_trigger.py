@@ -552,3 +552,28 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(app, auth_headers
     assert spawned_env is not None
     assert spawned_env["ANTHROPIC_API_KEY"] == "sk-minimax-secret"
     assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
+
+
+@pytest.mark.asyncio
+async def test_trigger_unsupported_runner_reports_501(app, auth_headers):
+    """Kimi isn't wired to direct spawn yet (task 3.5 scoped to claude/codex only) — the
+    endpoint must say so clearly rather than silently misbehaving or pretending to queue it.
+    """
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"kimi-agent": {"runner": "kimi"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    resp = await app.post(
+        "/api/v1/agent/trigger",
+        json={
+            "agent": "kimi-agent",
+            "message": "Hello from test",
+            "session_mode": "new",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 501
+    assert "kimi" in resp.json()["detail"].lower()

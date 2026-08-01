@@ -7,7 +7,6 @@ agentweave init --project "Name"
 agentweave activate                        # reconcile agentweave.yml with runtime state
 agentweave status                          # show full session status with watchdog state
 agentweave summary                         # quick overview for relay decisions
-agentweave session register --agent <name> --session <id>   # register pilot agent session
 ```
 
 ### Summary Output
@@ -53,16 +52,6 @@ agentweave agent set-model kimi <model-name>
 agentweave switch minimax        # output eval-able export commands
 agentweave run --agent minimax   # set env vars + launch Claude with relay prompt
 ```
-
-### Pilot Mode
-
-```bash
-agentweave agent configure kimi --pilot                 # enable pilot mode
-agentweave agent configure kimi --no-pilot              # disable pilot mode
-agentweave session register --agent kimi --session <id> # register session ID
-```
-
-Pilot mode disables auto-triggering, giving you manual control over agent sessions. See [Pilot Mode Guide](../guides/pilot-mode.md) for details.
 
 ## Tasks
 

@@ -446,31 +446,6 @@ def test_get_agent_config_for_unknown_agent(hub):
     assert "ghost" in result["error"]
 
 
-def test_register_session_posts_session_id(hub):
-    """register_session must POST /agents/{agent}/register-session."""
-    from hub.mcp_server import register_session
-
-    hub.set_response(b'{"success": true, "launch_command": "claude --resume sess-1"}')
-    result = register_session("claude", "sess-1")
-    assert result["success"] is True
-    body = _parse_body(hub.calls[0])
-    assert body["session_id"] == "sess-1"
-    assert hub.calls[0]["url"].endswith("/api/v1/agents/claude/register-session")
-
-
-def test_register_session_returns_error_dict_on_failure(hub):
-    """A Hub failure on register_session returns {success: False, error: ...}."""
-    from hub.mcp_server import register_session
-
-    err = urllib.error.HTTPError(
-        url="x", code=409, msg="conflict", hdrs={}, fp=MagicMock(read=lambda: b"conflict")
-    )
-    hub.set_error(err)
-    result = register_session("claude", "sess-1")
-    assert result["success"] is False
-    assert "error" in result
-
-
 # ---------------------------------------------------------------------------
 # Human-interaction tools
 # ---------------------------------------------------------------------------

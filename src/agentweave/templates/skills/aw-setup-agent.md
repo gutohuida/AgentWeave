@@ -1,6 +1,6 @@
 ---
 name: aw-setup-agent
-description: Add a new agent or reconfigure an existing one in agentweave.yml — runner choice (claude, kimi, codex, opencode, copilot, claude_proxy, manual, native), model, roles, env vars, yolo/pilot. Use whenever the agent roster changes. For full project setup use aw-setup; for claude_proxy specifics use aw-setup-proxy.
+description: Add a new agent or reconfigure an existing one in agentweave.yml — runner choice (claude, kimi, codex, opencode, copilot, claude_proxy, manual, native), model, roles, env vars, yolo. Use whenever the agent roster changes. For full project setup use aw-setup; for claude_proxy specifics use aw-setup-proxy.
 ---
 
 Add or reconfigure a single agent in this AgentWeave project.
@@ -29,7 +29,6 @@ Ask (or infer from the request):
 - **Model** — always ask which model to use, even when the runner has a built-in default (e.g. `claude_proxy` providers). Passed to the CLI when supported.
 - **Roles** — pick from `agentweave roles available` (or invoke `aw-setup-roles`).
 - **yolo** — auto-approve all tool prompts (autonomous loops only).
-- **pilot** — human drives the CLI session manually; auto-execution is disabled.
 - **env** — list of environment variable **names** the runner needs (e.g. `[MINIMAX_API_KEY]`). Values live in `.env`, never in the yml.
 
 ## 2. Edit agentweave.yml
@@ -44,7 +43,6 @@ agents:
     roles: [backend_dev]      # from the role catalog
     env: [SOME_API_KEY]       # variable NAMES, not values
     yolo: false
-    pilot: false
     # principal: true         # at most ONE agent may be principal
     # base_url: https://...   # claude_proxy custom endpoint (must be http/https)
     # cli: /abs/path/to/cli   # pin a binary (e.g. WSL with several opencode installs)
@@ -68,7 +66,6 @@ Other useful commands:
 
 ```bash
 agentweave agent set-model <name> <model>     # change model later
-agentweave agent configure <name> --pilot     # toggle pilot mode
 ```
 
 ## 3. Apply and verify

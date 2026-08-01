@@ -95,8 +95,8 @@ The Hub SHALL distinguish queued agent triggers by execution confidence based on
 - **WHEN** the user triggers an agent from the Hub and the latest watchdog heartbeat is stale or missing
 - **THEN** the response indicates that the message was queued but execution may not happen until the watchdog is started or reconnected
 
-#### Scenario: Trigger queued for pilot or manual agent
-- **WHEN** the user triggers an agent that is pilot-controlled or manual
+#### Scenario: Trigger queued for manual agent
+- **WHEN** the user triggers an agent whose runner is configured as manual
 - **THEN** the response indicates that the message was queued for manual handling and does not imply automatic execution
 
 ---

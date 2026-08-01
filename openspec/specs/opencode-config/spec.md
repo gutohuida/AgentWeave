@@ -20,16 +20,12 @@ The system SHALL accept `runner: opencode` as a valid value in an agent's config
 
 ---
 
-### Requirement: agentweave.yml opencode agents support roles, env, yolo, pilot
+### Requirement: agentweave.yml opencode agents support roles, env, yolo
 The system SHALL accept the same optional fields for opencode agents as for all other runner types.
 
 #### Scenario: opencode agent with roles and env
 - **WHEN** `agentweave.yml` contains an opencode agent with `roles: [developer]` and `env: [SOME_VAR]`
 - **THEN** `load_agentweave_yml()` SHALL return an `AgentConfig` with `roles=["developer"]` and `env=["SOME_VAR"]`
-
-#### Scenario: opencode agent with pilot mode
-- **WHEN** `agentweave.yml` contains an opencode agent with `pilot: true`
-- **THEN** the agent SHALL be treated as pilot (watchdog skips auto-execution) identically to other runner types
 
 ---
 

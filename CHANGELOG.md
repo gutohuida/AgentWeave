@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [Unreleased]
+
+### Removed (CLI + Hub)
+- **Pilot mode removed entirely.** The per-agent `pilot` flag (manual control, disables
+  auto-execution) and its session-registration mechanism are gone: `agentweave agent configure
+  --pilot`/`--no-pilot`, `agentweave session register`, the MCP `register_session` tool, the
+  Hub's `POST /agents/{name}/pilot` and `POST /agents/{name}/register-session` endpoints, the
+  `Agent.pilot`/`Agent.registered_session_id` DB columns (dropped via migration `0013`), and the
+  Hub UI's pilot badge/toggle on the agent detail panel. Session continuity for Hub-managed
+  agents is already covered by the existing session picker; kimi's pilot-only agent-YAML
+  generation is removed along with it.
+
+---
 ## [0.42.0] - 2026-07-24
 
 ### Added (CLI)

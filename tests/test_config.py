@@ -120,14 +120,12 @@ agents:
       - tech_lead
       - backend_dev
     yolo: true
-    pilot: false
   minimax:
     runner: claude_proxy
     model: MiniMax-M2.7
     env:
       - MINIMAX_API_KEY
     yolo: false
-    pilot: true
 
 jobs:
   daily-report:
@@ -272,7 +270,6 @@ class TestSaveAgentweaveYml:
                 ),
                 "kimi": AgentConfig(
                     runner="kimi",
-                    pilot=True,
                 ),
             },
             jobs={
@@ -296,7 +293,6 @@ class TestSaveAgentweaveYml:
         assert "claude" in loaded.agents
         assert "kimi" in loaded.agents
         assert loaded.agents["claude"].yolo is True
-        assert loaded.agents["kimi"].pilot is True
 
     def test_save_includes_header_comment(self, tmp_path):
         """Test that saved file includes the header comment."""
@@ -324,7 +320,6 @@ class TestConfigDataclasses:
         # Empty/default fields should be omitted
         assert "roles" not in result
         assert "env" not in result
-        assert "pilot" not in result
 
     def test_job_config_to_dict(self):
         """Test JobConfig.to_dict()."""
@@ -524,7 +519,7 @@ class TestGenerateAgentweaveYml:
                 "name": "Test Project",
                 "mode": "hierarchical",
                 "agents": {
-                    "claude": {"runner": "claude", "yolo": False, "pilot": False},
+                    "claude": {"runner": "claude", "yolo": False},
                 },
             }
         )
@@ -610,22 +605,6 @@ agents:
         config = load_agentweave_yml(config_file)
         assert config.agents["opencode-dev"].roles == ["developer"]
         assert config.agents["opencode-dev"].env == ["SOME_VAR"]
-
-    def test_load_opencode_with_pilot(self, tmp_path):
-        """opencode agents support pilot mode."""
-        config_file = tmp_path / "agentweave.yml"
-        config_file.write_text("""
-project:
-  name: Test Project
-  mode: hierarchical
-
-agents:
-  opencode-dev:
-    runner: opencode
-    pilot: true
-""")
-        config = load_agentweave_yml(config_file)
-        assert config.agents["opencode-dev"].pilot is True
 
     def test_generate_roundtrips_opencode(self, tmp_path):
         """generate_agentweave_yml preserves opencode runner and model."""

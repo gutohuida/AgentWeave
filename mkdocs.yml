@@ -68,7 +68,6 @@ nav:
     - guides/session-modes.md
     - guides/aw-spec-workflow.md
     - guides/claude-proxy-agents.md
-    - guides/pilot-mode.md
     - guides/opencode-agents.md
     - guides/opencode-models.md
     - guides/ai-jobs.md

@@ -27,7 +27,6 @@ def _session() -> Session:
         },
         model="kimi-k2",
     )
-    session.set_agent_pilot("kimi", True)
     session.set_agent_yolo("kimi", True)
     session._data["quality"] = {
         "review_required": True,
@@ -58,7 +57,7 @@ def test_project_operating_profile_lists_safe_team_facts(tmp_path, monkeypatch):
     assert "Project: Context Test" in profile
     assert "Mode: hierarchical" in profile
     assert "`kimi`: runner=claude_proxy; model=kimi-k2; roles=backend_dev" in profile
-    assert "flags=pilot,yolo" in profile
+    assert "flags=yolo" in profile
     assert "KIMI_API_KEY" in profile
     assert "https://api.example.test" not in profile
 

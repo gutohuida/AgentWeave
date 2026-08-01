@@ -4982,21 +4982,6 @@ def _make_ping_callback(
             )
             return
 
-        # Check if agent is in pilot mode - skip auto-execution
-        if _sess and _sess.get_agent_pilot(recipient):
-            logger.debug(
-                "agent_ping_skipped_pilot",
-                extra={
-                    "event": "agent_ping_skipped_pilot",
-                    "data": {"agent": recipient, "msg_id": msg_id, "reason": "pilot mode"},
-                },
-            )
-            logger.info(
-                f"[PILOT] Skipping ping for pilot agent {recipient} (manual control)",
-                extra={"event": "watchdog_pilot", "data": {}},
-            )
-            return
-
         sender = data.get("from", "another agent")
         runner_config = _sess.get_runner_config(recipient) if _sess else {}
         runner_type = runner_config.get("runner")
@@ -5134,23 +5119,9 @@ def _make_direct_trigger_callback(
             )
             return
 
-        # Check if agent is in pilot mode - skip auto-execution
         from .session import Session as _Session
 
         _sess = _Session.load()
-        if _sess and _sess.get_agent_pilot(recipient):
-            logger.debug(
-                "agent_trigger_skipped_pilot",
-                extra={
-                    "event": "agent_trigger_skipped_pilot",
-                    "data": {"agent": recipient, "reason": "pilot mode (manual control)"},
-                },
-            )
-            logger.info(
-                f"[PILOT] Skipping direct trigger for pilot agent {recipient} (manual control)",
-                extra={"event": "watchdog_pilot", "data": {}},
-            )
-            return
 
         # Extract optional session ID from content tags. Most runners keep the
         # inbox-driven flow so they can retrieve the unread message themselves.

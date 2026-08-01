@@ -40,8 +40,8 @@ It includes:
 
 Runner launch paths inject or reference this file where supported: Claude uses
 `--append-system-prompt-file`, Codex uses `model_instructions_file`, OpenCode
-uses `--file`, Codex MCP passes it as developer instructions, and Kimi pilot
-mode points its generated agent YAML at the same context file.
+uses `--file`, and Codex MCP passes it as developer instructions. Kimi has no
+automatic context injection mechanism.
 
 ## Root Bootstrap Files
 

@@ -55,7 +55,7 @@ AgentWeave uses file-based locking with automatic timeout. Only one agent can mo
 
 - Project name and collaboration mode
 - Hub connection settings
-- Agent configurations (runner, roles, yolo, pilot, env vars)
+- Agent configurations (runner, roles, yolo, env vars)
 - Scheduled jobs
 
 After editing `agentweave.yml`, run `agentweave activate` to apply changes. This file should be committed to version control.

@@ -59,32 +59,27 @@ async def sync_session(
         )
         session.add(row)
 
-    # Sync pilot flags from session data to the Agent table
+    # Ensure an Agent row exists for every synced agent (drives the "registered"
+    # flag in GET /agents/agent-context — a declared agent is "registered" once
+    # the Hub knows about it, independent of self-registration) and remove rows
+    # for agents no longer in the session.
     agents_data = body.data.get("agents", {})
     current_agent_names = set(agents_data.keys())
+    all_agents_result = await session.execute(select(Agent).where(Agent.project_id == project_id))
+    existing_agents = {row.name: row for row in all_agents_result.scalars().all()}
 
-    for agent_name, agent_cfg in agents_data.items():
-        pilot_flag = bool(agent_cfg.get("pilot", False))
-        agent_result = await session.execute(
-            select(Agent).where(Agent.project_id == project_id, Agent.name == agent_name)
-        )
-        agent_row = agent_result.scalars().first()
-        if agent_row:
-            agent_row.pilot = pilot_flag
-        else:
+    for agent_name in agents_data:
+        if agent_name not in existing_agents:
             session.add(
                 Agent(
                     id=f"agent-{short_id()}",
                     project_id=project_id,
                     name=agent_name,
-                    pilot=pilot_flag,
                 )
             )
 
-    # Remove Agent rows for agents no longer in the session
-    all_agents_result = await session.execute(select(Agent).where(Agent.project_id == project_id))
-    for agent_row in all_agents_result.scalars().all():
-        if agent_row.name not in current_agent_names:
+    for agent_name, agent_row in existing_agents.items():
+        if agent_name not in current_agent_names:
             await session.delete(agent_row)
 
     await session.commit()
