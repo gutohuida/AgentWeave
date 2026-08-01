@@ -21,7 +21,7 @@ install:
 	cd ui && npm install
 
 dev:
-	alembic upgrade head
+	alembic -c hub/alembic.ini upgrade head
 	uvicorn hub.main:app --host 0.0.0.0 --port 8000 --reload
 
 ui-dev:

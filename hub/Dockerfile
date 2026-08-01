@@ -13,7 +13,6 @@ WORKDIR /app
 # Install package
 COPY pyproject.toml ./
 COPY hub/ ./hub/
-COPY alembic.ini ./
 
 RUN pip install --no-cache-dir .
 
@@ -26,5 +25,7 @@ RUN mkdir -p /app/data
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${AW_PORT:-8000}/health')"
 
-# Run migrations then start server
-CMD ["sh", "-c", "alembic upgrade head && uvicorn hub.main:app --host 0.0.0.0 --port ${AW_PORT:-8000}"]
+# Run migrations then start server. alembic.ini ships inside the installed
+# `hub` package (task 3.12), so this works the same whether run from this
+# source checkout or a bare pip install.
+CMD ["sh", "-c", "alembic -c hub/alembic.ini upgrade head && uvicorn hub.main:app --host 0.0.0.0 --port ${AW_PORT:-8000}"]

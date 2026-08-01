@@ -27,8 +27,9 @@ from hub.config import settings
 from hub.db.engine import async_session_factory, init_db
 from hub.db.models import AIJob, ApiKey, Base, JobRun, Project
 
-# hub/tests/test_migrations.py → hub/tests/ → hub/ (where alembic.ini lives)
-ALEMBIC_INI = Path(__file__).parent.parent / "alembic.ini"
+# hub/tests/test_migrations.py → hub/tests/ → hub/ → hub/hub/ (where alembic.ini
+# is packaged, task 3.12, so it ships with a plain pip install too)
+ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 
 
 # ---------------------------------------------------------------------------

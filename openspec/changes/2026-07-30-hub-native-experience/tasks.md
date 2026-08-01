@@ -845,8 +845,49 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       unprompted again this session (see 3.8/3.9's own notes on asking first). The
       automated integration test above exercises the exact same `trigger_agent_directly`
       → `_execute_run` → `PtySession.spawn` call graph a live trigger would.
-- [ ] 3.12 Ship `alembic.ini` in `package-data` — a pip install currently logs
-      *"alembic.ini not found … skipping migrations"* and runs unmigrated.
+- [x] 3.12 Ship `alembic.ini` in `package-data` — a pip install currently logs
+      *"alembic.ini not found … skipping migrations"* and runs unmigrated. Moved
+      `alembic.ini` from the repo/distribution root (`hub/alembic.ini`, outside the
+      packaged `hub` module entirely) into the package itself (`hub/hub/alembic.ini`),
+      added it to `[tool.setuptools.package-data]`, and set `script_location =
+      %(here)s/migrations` (Alembic's config-relative token, not a CWD-relative path —
+      the old `script_location = hub/migrations` only ever worked because every
+      invocation happened to be run from a specific CWD, which a bare `pip install
+      agentweave-hub && agentweave-hub` from an arbitrary directory would not
+      guarantee). Updated `hub/hub/db/engine.py`'s `_run_alembic_upgrade()` path
+      calculation (`Path(__file__).parent.parent`, one level up from three), the
+      Dockerfile/Dockerfile.dev (dropped the now-redundant separate `COPY alembic.ini
+      ./` — it ships automatically via `COPY hub/ ./hub/` — and pointed their `CMD`s at
+      `-c hub/alembic.ini`), the Makefile's `dev` target, and
+      `hub/tests/test_migrations.py`'s `ALEMBIC_INI` constant.
+
+      **Found and fixed a second, previously-undiscovered bug that directly blocked
+      this task's own goal:** `migrations/versions/0001_add_agent_outputs.py` was the
+      only migration (0002 onward all already guard this) that ran an unconditional
+      `op.create_table("agent_outputs", ...)` with no existence check. Any database
+      whose tables were created via `Base.metadata.create_all()` before alembic ever
+      ran against it (true of literally every real deployment, dev or production, per
+      `init_db()`'s own `create_all()`-then-`_run_alembic_upgrade()` sequence) hits
+      `table agent_outputs already exists` on migration 0001, and
+      `_run_alembic_upgrade()`'s try/except silently swallows that failure — meaning
+      `alembic_version` never gets stamped, and *every* migration, including all future
+      ones, silently never applies. Confirmed this was live and current: the actual
+      local dev Hub's own `data/agentweave.db` had an empty `alembic_version` table
+      despite the DB otherwise having the fully-current schema (via `create_all()`
+      alone). Fixed by adding the same `inspector.get_table_names()` guard every
+      migration from 0004 onward already uses.
+
+      **Verified end-to-end**, not just via the existing test suite: built a real wheel
+      (`py -m build --wheel`), confirmed `hub/alembic.ini` and the full
+      `migrations/versions/*.py` tree are present inside it, installed it into a
+      throwaway venv, and ran `init_db()` against a brand-new SQLite file from a
+      directory containing no source checkout at all — `alembic_version` landed at
+      `0013` (current head), with no "alembic.ini not found" warning. Also confirmed
+      the CLI-style invocation matching Docker/Makefile (`alembic -c hub/alembic.ini
+      upgrade head`, run from the repo's `hub/` directory) runs the full 0001→0013
+      chain cleanly against a fresh file. Restarted the actual local dev Hub afterward;
+      its long-broken `data/agentweave.db` finally stamped to `0013` for the first time
+      this whole session's history.
 - [x] 3.13 Bind `127.0.0.1` by default, not `0.0.0.0`; honour the documented port variable, currently
       ignored. Done alongside 3.1 above — see its entry for detail.
 - [x] 3.14 Remove the Docker gate from `cmd_hub_start` (`cli.py:3316`, `_docker_available()`). Done

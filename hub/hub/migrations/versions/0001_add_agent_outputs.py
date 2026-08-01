@@ -4,6 +4,13 @@ Revision ID: 0001
 Revises:
 Create Date: 2026-03-14 00:00:00.000000
 
+Guards `create_table`/`create_index` with an existence check (task 3.12) — without
+it, any deployment where `Base.metadata.create_all()` already created the full
+current schema (e.g. a fresh `init_db()` on a brand-new database) hits `table
+agent_outputs already exists` here, and the exception is silently swallowed by
+`_run_alembic_upgrade()`, leaving `alembic_version` permanently unstamped so no
+migration — including future ones — ever actually applies. Every migration from
+0004 onward already guards this way; 0001 was the one gap.
 """
 
 import sqlalchemy as sa
@@ -17,25 +24,31 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "agent_outputs",
-        sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("project_id", sa.String(64), sa.ForeignKey("projects.id"), nullable=False),
-        sa.Column("agent", sa.String(64), nullable=False, index=True),
-        sa.Column("session_id", sa.String(128), nullable=True),
-        sa.Column("content", sa.Text, nullable=False),
-        sa.Column(
-            "timestamp",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-    )
-    op.create_index("ix_agent_outputs_project_agent", "agent_outputs", ["project_id", "agent"])
-    op.create_index("ix_agent_outputs_project_ts", "agent_outputs", ["project_id", "timestamp"])
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if "agent_outputs" not in inspector.get_table_names():
+        op.create_table(
+            "agent_outputs",
+            sa.Column("id", sa.String(64), primary_key=True),
+            sa.Column("project_id", sa.String(64), sa.ForeignKey("projects.id"), nullable=False),
+            sa.Column("agent", sa.String(64), nullable=False, index=True),
+            sa.Column("session_id", sa.String(128), nullable=True),
+            sa.Column("content", sa.Text, nullable=False),
+            sa.Column(
+                "timestamp",
+                sa.DateTime(timezone=True),
+                nullable=False,
+                server_default=sa.func.now(),
+            ),
+        )
+        op.create_index("ix_agent_outputs_project_agent", "agent_outputs", ["project_id", "agent"])
+        op.create_index("ix_agent_outputs_project_ts", "agent_outputs", ["project_id", "timestamp"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_agent_outputs_project_ts", table_name="agent_outputs")
-    op.drop_index("ix_agent_outputs_project_agent", table_name="agent_outputs")
-    op.drop_table("agent_outputs")
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if "agent_outputs" in inspector.get_table_names():
+        op.drop_index("ix_agent_outputs_project_ts", table_name="agent_outputs")
+        op.drop_index("ix_agent_outputs_project_agent", table_name="agent_outputs")
+        op.drop_table("agent_outputs")

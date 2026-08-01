@@ -79,9 +79,10 @@ async def _run_alembic_upgrade() -> None:
         from alembic import command
         from alembic.config import Config
 
-        # hub/hub/db/engine.py → hub/hub/db/ → hub/hub/ → hub/
-        # The alembic.ini lives at the hub/ root.
-        alembic_cfg_path = Path(__file__).parent.parent.parent / "alembic.ini"
+        # hub/hub/db/engine.py → hub/hub/db/ → hub/hub/
+        # alembic.ini is packaged inside the `hub` package (task 3.12) so it ships
+        # with a plain `pip install agentweave-hub`, not just a source checkout.
+        alembic_cfg_path = Path(__file__).parent.parent / "alembic.ini"
         if not alembic_cfg_path.exists():
             logger.warning("alembic.ini not found at %s; skipping migrations", alembic_cfg_path)
             return
