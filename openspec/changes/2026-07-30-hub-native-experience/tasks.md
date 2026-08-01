@@ -293,8 +293,42 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       outside `hub/` — harmless because `_hub_native_start` already ran migrations correctly via an
       absolute path before spawning). Both worth a future look but are pre-existing Hub-lifecycle
       issues, not run-record issues.
-- [ ] 3.4 Implement process spawn and output capture with a PTY. **Prototype on Windows first**;
-      account for `.cmd` shims (`cli.py:2341`).
+- [x] 3.4 Implement process spawn and output capture with a PTY. **Prototype on Windows first**;
+      account for `.cmd` shims (`cli.py:2341`). Added `hub/hub/pty_runner.py`
+      (`resolve_executable`, `PtySession`): a thin adapter over `pywinpty` (Windows, wraps
+      ConPTY) / `ptyprocess` (POSIX, wraps `pty.fork()`) — the two libraries expose a
+      near-identical surface by the Windows library's own design, so one small adapter covers
+      both, normalizing their different EOF signaling (`ptyprocess` raises `EOFError`;
+      `pywinpty` returns `""`) to one shape. New Hub dependencies, platform-gated:
+      `pywinpty>=2.0; sys_platform == 'win32'`, `ptyprocess>=0.7; sys_platform != 'win32'` —
+      chosen over hand-rolled ConPTY ctypes after discussing the tradeoff (mature/maintained
+      libraries vs. more from-scratch Windows API surface).
+      **`.cmd` shims**: resolved by mirroring the watchdog's own existing fix
+      (`watchdog.py`, "Resolve the CLI binary to an absolute path") — `shutil.which()` first
+      (PATHEXT-aware), then hand the resolved absolute path to the PTY spawn call. Proven
+      end-to-end against a synthetic `.cmd` shim (argument passing + exit code both correct);
+      no `shell=True` needed anywhere, avoiding that injection surface entirely — this is the
+      cleaner pattern `cli.py:2341`'s `shell=True` comment predates and should eventually be
+      reconciled to (not done here — out of this task's scope, `cmd_mcp_setup` untouched).
+      **Live-verified by hand on this repo's actual Windows dev environment** (this task's own
+      instruction — "prototype on Windows first, since that is the primary development
+      platform"): spawned real `python -c "print(...)"` and captured output including ConPTY's
+      terminal-handshake escape sequences (`\x1b[1t\x1b[c...`) prefixing real output — expected
+      ConPTY behavior, noted for whoever wires this into 3.6's SSE output rendering, not a bug;
+      spawned a synthetic `fakecli.cmd` by bare name and confirmed output + argument + exit code
+      (3) all correct; confirmed `FileNotFoundError` on a nonexistent binary before any spawn
+      attempt; confirmed `terminate(force=True)` stops a 30s-sleeping process.
+      10 new tests (`hub/tests/test_pty_runner.py`) — written to run meaningfully on whichever
+      platform executes them (the `.cmd`-shim test is Windows-only via `skipif`; everything else
+      is cross-platform using `sys.executable` so it exercises whichever backend is active).
+      **CI will only ever exercise the POSIX/`ptyprocess` path** — `hub-test` in
+      `.github/workflows/ci.yml` runs on `ubuntu-latest` only, not the 3-OS matrix the CLI's
+      `test` job uses — so the Windows path's only verification is what was done by hand here;
+      worth noting for anyone changing this module later without Windows access.
+      269/269 Hub tests pass.
+      **Deliberately not done here** (belongs to 3.5/3.6): nothing wires `PtySession` into
+      `agent_trigger.py` or the `Run` record yet, and there's no output-streaming loop feeding
+      SSE — this task is the spawn primitive only, proven working, not yet load-bearing.
 - [ ] 3.5 Rewrite `POST /api/v1/agent/trigger` to spawn directly and return a run identifier; delete
       the synthetic-message construction, the `[Session: …]` / `[NewSession]` body tags, and
       `execution_confidence` (`agent_trigger.py:133-161`).

@@ -19,6 +19,8 @@ dependencies = [
     "sse-starlette>=2.0",
     "croniter>=2.0",
     "apscheduler>=3.10",
+    "pywinpty>=2.0; sys_platform == 'win32'",
+    "ptyprocess>=0.7; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]
