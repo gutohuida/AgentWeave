@@ -84,10 +84,22 @@ class TestFetchSetupToken:
 class TestHubStartCommand:
     """Tests for cmd_hub_start."""
 
-    def test_hub_start_no_docker(self, capsys):
-        """Test that hub start fails gracefully when Docker is not available."""
+    def test_hub_start_defaults_to_native(self, capsys):
+        """Test that hub start with no flags dispatches to the native path, not Docker."""
         args = MagicMock()
-        args.native = False
+        args.docker = False
+        args.local = False
+        args.no_detach = False
+        with patch("agentweave.cli._hub_native_start", return_value=0) as mock_native:
+            result = cmd_hub_start(args)
+            assert result == 0
+            mock_native.assert_called_once_with(port=args.port, detach=True)
+
+    def test_hub_start_docker_flag_no_docker(self, capsys):
+        """Test that hub start --docker fails gracefully when Docker is not available."""
+        args = MagicMock()
+        args.docker = True
+        args.local = False
         args.no_detach = False
         with patch("agentweave.cli._docker_available", return_value=False):
             result = cmd_hub_start(args)
@@ -95,15 +107,16 @@ class TestHubStartCommand:
             captured = capsys.readouterr()
             assert "Docker is not available" in captured.out
 
-    def test_hub_start_already_running(self, capsys):
-        """Test that hub start reports success when Hub is already running."""
+    def test_hub_start_docker_already_running(self, capsys):
+        """Test that hub start --docker reports success when Hub is already running."""
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=None)
 
         args = MagicMock()
-        args.native = False
+        args.docker = True
+        args.local = False
         args.no_detach = False
         # Kept nested: parenthesized multi-context `with` is a syntax error on
         # Python 3.8/3.9, which this suite still runs against in CI.
@@ -113,6 +126,18 @@ class TestHubStartCommand:
                 assert result == 0
                 captured = capsys.readouterr()
                 assert "already running" in captured.out
+
+    def test_hub_start_local_implies_docker(self, capsys):
+        """Test that --local (without --docker) still takes the Docker path."""
+        args = MagicMock()
+        args.docker = False
+        args.local = True
+        args.no_detach = False
+        with patch("agentweave.cli._docker_available", return_value=False):
+            result = cmd_hub_start(args)
+            assert result == 1
+            captured = capsys.readouterr()
+            assert "Docker is not available" in captured.out
 
 
 class TestHubStopCommand:

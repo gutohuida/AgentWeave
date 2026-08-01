@@ -11,24 +11,24 @@ Set up Hub connectivity for this project.
 
 Ask the user (or infer):
 
-- **A. Local Hub, Docker** (recommended) — needs Docker + docker compose.
-- **B. Local Hub, native** — no Docker; runs uvicorn directly (needs `pip install agentweave-hub`).
+- **A. Local Hub, native** (recommended) — no Docker; runs uvicorn directly (needs `pip install agentweave-hub`).
+- **B. Local Hub, Docker** — for coordination-only/remote deployments; needs Docker + docker compose.
 - **C. Remote Hub** — already running on another machine; just connect.
 - **D. No Hub** — stop here; suggest `aw-setup-transport` for local/git instead.
 
 ## 2A/2B. Start a local Hub
 
 ```bash
-agentweave hub start                # Docker, port 8000
+agentweave hub start                # scenario A: native, no Docker, port 8000
 agentweave hub start --port 9000    # different port
-agentweave hub start --native       # scenario B: uvicorn, no Docker
+agentweave hub start --docker       # scenario B: Docker instead
 ```
 
 Notes:
 - Config and data live in `~/.agentweave/hub/` (compose file, `.env`, database) — not in the project.
 - On first start an API key `aw_live_<hex32>` is generated, printed, and saved to `~/.agentweave/hub/.env`. Record it; agents authenticate with it.
-- Useful env vars (in `~/.agentweave/hub/.env`): `AW_PORT`, `AW_BOOTSTRAP_API_KEY`, `AW_BOOTSTRAP_PROJECT_ID`, `DATABASE_URL` (default SQLite; set a PostgreSQL DSN for production), `AW_CORS_ORIGINS`.
-- `--local` builds from `./hub/` — Hub development only, not for normal projects.
+- Useful env vars (in `~/.agentweave/hub/.env`): `AW_HOST` (native only, default `127.0.0.1`), `AW_PORT`, `AW_BOOTSTRAP_API_KEY`, `AW_BOOTSTRAP_PROJECT_ID`, `DATABASE_URL` (default SQLite; set a PostgreSQL DSN for production), `AW_CORS_ORIGINS`.
+- `--local` builds from `./hub/` via Docker — Hub development only, not for normal projects.
 
 ## 2C. Connect to a remote Hub
 

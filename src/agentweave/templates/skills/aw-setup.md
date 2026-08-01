@@ -72,7 +72,7 @@ Set via `project.mode` in `agentweave.yml`.
 
 ### b. Hub or no Hub?
 - **No Hub** — single machine (local transport, the default) or cross-machine via git (`aw-setup-transport` covers both).
-- **Local Hub** — web dashboard on this machine. Docker: `agentweave hub start`. No Docker: `agentweave hub start --native` (needs `pip install agentweave-hub`).
+- **Local Hub** — web dashboard on this machine. `agentweave hub start` runs natively (needs `pip install agentweave-hub`), no Docker required. Use `agentweave hub start --docker` for a containerized instance.
 - **Remote Hub** — an existing Hub elsewhere: `agentweave transport setup --type http --url <url> --api-key <aw_live_...> --project-id <proj-...>`.
 
 If a Hub is used, set `hub.url` in `agentweave.yml`. Details: invoke `aw-setup-hub`.

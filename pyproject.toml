@@ -97,7 +97,7 @@ disallow_untyped_defs = true
 exclude = ["src/agentweave/mcp"]
 
 # alembic is an optional, lazily-imported dependency (only needed for
-# `agentweave hub start --native`, provided by the separate agentweave-hub
+# `agentweave hub start`'s native mode, provided by the separate agentweave-hub
 # package) and ships no type stubs for mypy to resolve.
 [[tool.mypy.overrides]]
 module = "alembic.*"

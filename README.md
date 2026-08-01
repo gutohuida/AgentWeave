@@ -19,7 +19,7 @@ The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time vis
 ### Prerequisites
 
 - Python 3.10+ and pip for the recommended MCP/Hub workflow (the core CLI supports Python 3.8+)
-- Docker and Docker Compose
+- `pip install agentweave-hub` for the Hub itself (native by default — no Docker required; pass `--docker` if you'd rather run it in a container)
 
 ### Step 1 — Start the Hub
 
@@ -27,7 +27,7 @@ The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time vis
 agentweave hub start
 ```
 
-This downloads the configuration, starts the Hub, and fetches the API key automatically. The dashboard is now at **http://localhost:8000**.
+This starts the Hub natively (no Docker needed — requires `pip install agentweave-hub`) and fetches the API key automatically. The dashboard is now at **http://localhost:8000**.
 
 ---
 

@@ -3316,16 +3316,16 @@ def _hub_native_start(port: int, detach: bool = True) -> int:
 def cmd_hub_start(args: argparse.Namespace) -> int:
     """Start the AgentWeave Hub."""
     port = getattr(args, "port", 8000)
-    native = getattr(args, "native", False)
+    local = getattr(args, "local", False)
+    docker = getattr(args, "docker", False) or local
     no_detach = getattr(args, "no_detach", False)
 
-    if native:
+    if not docker:
         return _hub_native_start(port=port, detach=not no_detach)
 
     import subprocess as _sp
     import urllib.request as _req
 
-    local = getattr(args, "local", False)
     hub_url = _hub_url(port)
     health_url = _hub_health_url(port)
 
@@ -3333,7 +3333,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         print_error("Docker is not available")
         print_info("Please install Docker: https://docs.docker.com/get-docker/")
         print_info("Docker Desktop is recommended for Windows/Mac users.")
-        print_info("Alternatively, run without Docker: agentweave hub start --native")
+        print_info("Alternatively, run without --docker to start natively (no Docker needed).")
         return 1
 
     # Check if Hub is already running on this port
@@ -3536,7 +3536,6 @@ def cmd_hub_status(args: argparse.Namespace) -> int:
 
     print("[HUB] Status: stopped")
     print("       Run 'agentweave hub start' to start the Hub")
-    print("       Run 'agentweave hub start --native' to start without Docker")
     return 0
 
 
@@ -5907,7 +5906,7 @@ For more help: https://github.com/gutohuida/AgentWeave
 
     hub_start = hub_subparsers.add_parser(
         "start",
-        help="Start the Hub (Docker by default; use --native to run without Docker)",
+        help="Start the Hub (native by default; use --docker to run in a container)",
     )
     hub_start.add_argument(
         "--port",
@@ -5917,10 +5916,10 @@ For more help: https://github.com/gutohuida/AgentWeave
         help="Port to expose the Hub on (default: 8000)",
     )
     hub_start.add_argument(
-        "--native",
+        "--docker",
         action="store_true",
         default=False,
-        help="Run the Hub natively via uvicorn without Docker (requires pip install agentweave-hub)",
+        help="Run the Hub in Docker instead of natively (for coordination-only/remote deployments)",
     )
     hub_start.add_argument(
         "--no-detach",
@@ -5933,7 +5932,7 @@ For more help: https://github.com/gutohuida/AgentWeave
         "--local",
         action="store_true",
         default=False,
-        help="Build and run from ./hub/ (for Hub development)",
+        help="Build and run from ./hub/ via Docker (for Hub development; implies --docker)",
     )
 
     hub_stop = hub_subparsers.add_parser(

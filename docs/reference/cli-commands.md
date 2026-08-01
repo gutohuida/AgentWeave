@@ -90,10 +90,11 @@ agentweave hub-heartbeat         # publish agent status to Hub (HTTP transport o
 ## Hub
 
 ```bash
-agentweave hub start             # start the local Hub container
+agentweave hub start             # start the Hub natively (no Docker needed)
 agentweave hub start --port 8001 # start on a custom port
-agentweave hub stop              # stop the local Hub container
-agentweave hub status            # show Hub container/API status
+agentweave hub start --docker    # start in a Docker container instead
+agentweave hub stop              # stop the Hub
+agentweave hub status            # show Hub status
 ```
 
 ## Spec

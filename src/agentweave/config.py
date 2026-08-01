@@ -621,8 +621,8 @@ hub:
   url: http://localhost:8000
 
   # Start the Hub (choose one):
-  #   agentweave hub start            # Docker (recommended)
-  #   agentweave hub start --native   # no Docker -- needs: pip install agentweave-hub uvicorn
+  #   agentweave hub start            # native, no Docker -- needs: pip install agentweave-hub
+  #   agentweave hub start --docker   # Docker, for coordination-only/remote deployments
 
 # -- AGENTS -----------------------------------------------------
 # Runner types:

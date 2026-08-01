@@ -134,7 +134,7 @@ def run() -> None:
     """Entry point for `agentweave-hub` CLI command."""
     import uvicorn
 
-    uvicorn.run("hub.main:app", host="0.0.0.0", port=settings.aw_port, reload=False)
+    uvicorn.run("hub.main:app", host=settings.aw_host, port=settings.aw_port, reload=False)
 
 
 if __name__ == "__main__":

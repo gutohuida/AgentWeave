@@ -210,8 +210,36 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
 
 *Crash recovery moved here from Phase 5b: the moment the Hub owns processes, orphans are possible.*
 
-- [ ] 3.1 Add a host-native start path for the Hub, keeping the Docker image building for
-      coordination-only deployments.
+- [x] 3.1 Add a host-native start path for the Hub, keeping the Docker image building for
+      coordination-only deployments. **The native path itself (`_hub_native_start`: PID
+      tracking, health checks, migrations, scaffolding) already existed pre-branch (`a69f04e`),
+      but only as an opt-in `--native` flag — Docker was the default this task's own wording
+      contradicted.** Flipped: `agentweave hub start` now runs native by default; `--docker`
+      (renamed from `--native`, sense inverted) opts into the container path for
+      coordination-only/remote deployments; `--local` (Docker dev flow from `./hub/`) now implies
+      `--docker` rather than being unreachable once native is default. Folded in 3.13 and 3.14
+      (see below) since both are edits to this same code path. `tests/test_hub_commands.py`
+      updated for the new flag semantics (996/996 CLI tests, 245/245 Hub tests pass). Live-verified:
+      killed a stale dev-server Hub process, ran bare `agentweave hub start` (no flags) — native,
+      bound `127.0.0.1`, `hub status`/`hub stop` correctly PID-tracked it; `--docker` still gates
+      on Docker daemon availability. Docs/skill templates updated (README, docs/index.md,
+      docs/getting-started/{quickstart,installation}.md, docs/reference/cli-commands.md,
+      aw-setup.md, aw-setup-hub.md, config.py's generated-yml comment, pyproject.toml's mypy
+      comment).
+      - **3.13** (bind `127.0.0.1` not `0.0.0.0`; honour the port var) — the CLI's own native
+        launcher (`_hub_native_start`) already correctly hardcoded `--host 127.0.0.1`, and `AW_PORT`
+        was already honoured via `settings.aw_port`. The actual defect was the separate
+        `agentweave-hub` console-script entry point (`hub/hub/main.py:run()`, `pyproject.toml`
+        `[project.scripts]`), which hardcoded `host="0.0.0.0"` — reachable by running
+        `agentweave-hub` directly (bypassing the CLI's scaffolding/migrations entirely), which is
+        exactly the invocation the design doc's verification step used. Added `AW_HOST` setting
+        (default `127.0.0.1`) and wired it into `run()`. Docker's `Dockerfile` CMD hardcodes
+        `--host 0.0.0.0` independently of `run()` and is correctly unaffected — a container must
+        bind all interfaces to be reachable through its port mapping. Documented `AW_HOST` in
+        `docs/reference/env-variables.md` and `docs/getting-started/configuration.md`.
+      - **3.14** (remove the Docker gate from `cmd_hub_start`) — done as part of the same flip:
+        `_docker_available()` is now only consulted on the explicit `--docker`/`--local` path,
+        never on the default.
 - [ ] 3.2 Add a launchability probe: for each configured agent, report whether its CLI is present,
       authorized, and runnable, with a stated reason when it is not.
 - [ ] 3.3 Introduce a run record — identity, agent, session identity as a typed field, start time,
@@ -231,9 +259,10 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       resolve provider environment and session continuity inside the Hub.
 - [ ] 3.12 Ship `alembic.ini` in `package-data` — a pip install currently logs
       *"alembic.ini not found … skipping migrations"* and runs unmigrated.
-- [ ] 3.13 Bind `127.0.0.1` by default, not `0.0.0.0`; honour the documented port variable, currently
-      ignored.
-- [ ] 3.14 Remove the Docker gate from `cmd_hub_start` (`cli.py:3316`, `_docker_available()`).
+- [x] 3.13 Bind `127.0.0.1` by default, not `0.0.0.0`; honour the documented port variable, currently
+      ignored. Done alongside 3.1 above — see its entry for detail.
+- [x] 3.14 Remove the Docker gate from `cmd_hub_start` (`cli.py:3316`, `_docker_available()`). Done
+      alongside 3.1 above — see its entry for detail.
 - [ ] 3.15 Add `--app` to open a chromeless browser app-mode window at the Hub URL.
 - [ ] 3.20 **Stop the Hub silently serving a stale UI.** `hub/hub/static/ui/` is a committed build
       artefact that no dev step refreshes, so the Hub served a bundle from 2026-07-20 while the

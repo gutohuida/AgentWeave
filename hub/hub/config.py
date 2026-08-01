@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "sqlite+aiosqlite:///data/agentweave.db"
+    aw_host: str = "127.0.0.1"
     aw_port: int = 8000
 
     # Bootstrap key inserted on first startup

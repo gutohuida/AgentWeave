@@ -75,6 +75,7 @@ Configure the Hub via `.env` in the same directory as `docker-compose.yml`:
 | `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key created on first start (`aw_live_…`) |
 | `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
 | `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
+| `AW_HOST` | `127.0.0.1` | Interface the Hub binds to in native/host mode (Docker always binds `0.0.0.0`) |
 | `AW_PORT` | `8000` | Port the Hub listens on |
 | `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/agentweave.db` | SQLite path inside the container |

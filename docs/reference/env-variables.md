@@ -9,6 +9,7 @@ Set these in the Hub's `.env` file:
 | `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key for Hub authentication. Format: `aw_live_{32 hex chars}` |
 | `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
 | `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
+| `AW_HOST` | `127.0.0.1` | Interface the Hub binds to when started via the `agentweave-hub` console script (native/host mode). Docker always binds `0.0.0.0` inside the container regardless of this variable |
 | `AW_PORT` | `8000` | Port the Hub listens on |
 | `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS. Leave empty in production if UI is served from same origin |
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/agentweave.db` | Database URL. SQLite default; PostgreSQL supported |

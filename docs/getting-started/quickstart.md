@@ -5,11 +5,10 @@ Get started with AgentWeave in **3 commands**. No manual configuration needed.
 ## Prerequisites
 
 - Python 3.10+ installed for the recommended MCP/Hub workflow (the core CLI supports Python 3.8+)
-- Docker and Docker Compose installed
-- The AgentWeave CLI installed:
+- The AgentWeave CLI and Hub installed:
 
   ```bash
-  pip install "agentweave-ai[mcp]"
+  pip install "agentweave-ai[mcp]" agentweave-hub
   ```
 
 - A project directory you want agents to collaborate on
@@ -24,7 +23,7 @@ The Hub manages agent communication and provides a web dashboard.
 agentweave hub start
 ```
 
-This downloads the Hub configuration, starts the Docker container, and fetches the API key automatically. The Hub will be available at **http://localhost:8000**.
+This starts the Hub natively (no Docker needed) and fetches the API key automatically. The Hub will be available at **http://localhost:8000**. Pass `--docker` instead if you'd rather run it in a container (useful for coordination-only/remote deployments).
 
 ---
 

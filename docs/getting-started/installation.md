@@ -1,6 +1,6 @@
 # Installation
 
-AgentWeave consists of two parts: the **CLI** (Python package) and the **Hub** (self-hosted Docker server).
+AgentWeave consists of two parts: the **CLI** (Python package) and the **Hub** (self-hosted server, native by default with optional Docker support).
 
 ## CLI Installation
 
@@ -32,21 +32,33 @@ pip install -e ".[dev]"
 
 ## Hub Installation
 
-The Hub requires **Docker** and **Docker Compose**.
+The Hub runs **natively** by default — no Docker required. Docker remains supported for
+coordination-only or remote deployments.
 
 ### Automatic Setup (Recommended)
 
-The CLI handles Hub setup automatically:
-
 ```bash
+pip install agentweave-hub
 agentweave hub start
 ```
 
-This downloads the configuration, starts the container, and fetches the API key.
+This runs the Hub via uvicorn on the host, scaffolds `~/.agentweave/hub/` (database, `.env`),
+runs migrations, and fetches the API key.
 
 The Hub will be available at **http://localhost:8000**.
 
-### Manual Setup (Advanced)
+### Docker Setup (Advanced)
+
+For a containerized instance instead — e.g. a coordination-only or remote deployment:
+
+```bash
+agentweave hub start --docker
+```
+
+This requires **Docker** and **Docker Compose**, downloads the configuration, starts the
+container, and fetches the API key.
+
+#### Manual Docker Setup
 
 If you prefer manual control:
 
@@ -65,7 +77,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-### Build from Source
+#### Build from Source
 
 ```bash
 git clone https://github.com/gutohuida/AgentWeave.git
