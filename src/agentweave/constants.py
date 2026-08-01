@@ -33,7 +33,6 @@ SESSION_FILE = AGENTWEAVE_DIR / "session.json"
 WATCHDOG_PID_FILE = AGENTWEAVE_DIR / "watchdog.pid"  # gitignored, machine-local
 WATCHDOG_LOG_FILE = AGENTWEAVE_DIR / "watchdog.log"  # gitignored, machine-local
 WATCHDOG_HEARTBEAT_FILE = AGENTWEAVE_DIR / "watchdog.heartbeat"  # gitignored
-TRIGGERED_DIRECT_FILE = AGENTWEAVE_DIR / "triggered_direct.json"  # gitignored, machine-local
 
 # Event log
 LOGS_DIR = AGENTWEAVE_DIR / "logs"
@@ -54,7 +53,6 @@ AGENTWEAVE_GITIGNORE_PATTERNS = [
     ".agentweave/watchdog.pid",
     ".agentweave/watchdog.log",
     ".agentweave/watchdog.heartbeat",
-    ".agentweave/triggered_direct.json",
     ".agentweave/project_instructions.md",
     ".env",
     "kimichanges.md",

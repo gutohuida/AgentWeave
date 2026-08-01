@@ -923,7 +923,39 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
       currently falls through to `SetupModal`, asking the operator to paste a key — which cannot fix
       "the server is not running". Report the connection failure and offer a retry; reserve the key
       prompt for a genuinely unconfigured remote Hub.
-- [ ] 3.16 Update `hub/tests/` for direct execution; delete tests asserting the message-tag protocol.
+- [x] 3.16 Update `hub/tests/` for direct execution; delete tests asserting the message-tag
+      protocol. **The task as literally stated was already satisfied by tasks 3.5–3.11's own
+      rewrites** — `hub/tests/` has no stale `execution_confidence`/message-tag assertions left
+      (329/329 Hub tests pass; the only remaining `[Session: ...]` references are
+      `agent_chat.py`'s intentional backward-compat parsing of pre-migration message content, and
+      `test_runtime_diagnostics.py`'s regression assertion that `execution_confidence` is gone —
+      both correct as-is, not stale).
+      **Found during this task's own audit, not separately requested:** `src/agentweave/
+      watchdog.py`'s `_make_direct_trigger_callback` (~200 lines) — the CLI-side counterpart of
+      the same message-tag protocol, on the Hub-UI-trigger side rather than the scheduled-job
+      side task 3.10 already fixed — was still unconditionally registered for every HTTP-
+      transport watchdog run, polling for messages with subject `"Direct message from Hub"` and
+      parsing `[Session:]`/`[NewSession]` tags from their content. Confirmed dead via `git log -S
+      "Direct message from Hub"` across the whole repo history (never created by any Hub UI or
+      backend source, only ever checked for in the watchdog); task 3.10's own commit diff
+      (removing the *other* watchdog branch that used to special-case this exact string) shows it
+      was deliberately kept at the time, under the assumption the Hub UI still used it; and task
+      3.5's own docstring already states unsupported runners get a 501 with "no fallback path
+      left for them over HTTP transport" — directly contradicting the callback's comment claiming
+      it "allows Hub UI 'Send Message' to work." `AgentOutputPanel.tsx` (the only place the Hub UI
+      prompts an agent) calls `/agent/trigger` directly and has no message-based fallback.
+      Removed: `_make_direct_trigger_callback` and its registration; `_load_triggered_ids`/
+      `_save_triggered_id` (used only by it); the `TRIGGERED_DIRECT_FILE` constant and its
+      `.gitignore`-pattern entry (both now write nothing, since the callback that wrote them is
+      gone). Left `_make_ping_callback` (the unrelated, still-live agent-to-agent ping callback in
+      the same file) untouched — it shares this module but not this dead code. 14 dependent tests
+      removed (13 in `tests/test_watchdog_session.py`, 1 in `tests/test_diagnostics.py`); that
+      file's unrelated `_make_ping_callback` tests were kept as-is. 979/979 CLI tests pass (was
+      993; -14, all accounted for above); `ruff`/`black`/`mypy` clean. **Not done here:** this is
+      narrower than design.md's Decision 4 ("one uniform inbound queue per agent"), which would
+      replace the `sender == "user"` magic-string discrimination pattern more broadly — Decision 4
+      has no tasks scheduled yet and is a real design effort, not a deletion; this task only
+      removed the one branch that had become fully unreachable.
 - [ ] 3.17 Rewrite the README quick start to the actual one-command flow.
 - [ ] 3.18 Verify: trigger starts a process and streams output with no watchdog running; a missing
       binary fails with a stated reason; killing the Hub mid-run leaves no orphan and marks the run

@@ -28,7 +28,6 @@ from .constants import (
     MESSAGES_PENDING_DIR,
     RUNNER_CONFIGS,
     TASKS_ACTIVE_DIR,
-    TRIGGERED_DIRECT_FILE,
     _get_context_limit,
 )
 from .spec_manifest import discover_spec_files as _discover_spec_files_safe
@@ -2513,65 +2512,6 @@ def _build_agent_context(agent: str, session: Any) -> str:
     ).context
 
 
-def _load_triggered_ids(max_age_hours: int = 24) -> Set[str]:
-    """Load recently-triggered direct-trigger message IDs from disk.
-
-    Returns IDs whose timestamp is within max_age_hours. Also rewrites the file
-    without expired entries so it doesn't grow unboundedly.
-    """
-    if not TRIGGERED_DIRECT_FILE.exists():
-        return set()
-    try:
-        data: Dict[str, str] = json.loads(TRIGGERED_DIRECT_FILE.read_text(encoding="utf-8"))
-        cutoff = time.time() - max_age_hours * 3600
-        recent: Dict[str, str] = {}
-        result: Set[str] = set()
-        for msg_id, ts_str in data.items():
-            try:
-                # Parse ISO timestamp
-                import datetime as _dt
-
-                ts = _dt.datetime.fromisoformat(ts_str).timestamp()
-            except Exception:
-                continue
-            if ts >= cutoff:
-                recent[msg_id] = ts_str
-                result.add(msg_id)
-        # Rewrite without expired entries
-        if len(recent) != len(data):
-            with contextlib.suppress(Exception):
-                TRIGGERED_DIRECT_FILE.write_text(json.dumps(recent))
-        return result
-    except Exception:
-        return set()
-
-
-def _save_triggered_id(msg_id: str) -> None:
-    """Persist a triggered direct-trigger message ID to disk.
-
-    Appends to TRIGGERED_DIRECT_FILE. Suppresses all exceptions and logs a
-    warning on failure so the caller is never blocked.
-    """
-    from datetime import datetime, timezone
-
-    ts_str = datetime.now(timezone.utc).isoformat()
-    try:
-        existing: Dict[str, str] = {}
-        if TRIGGERED_DIRECT_FILE.exists():
-            with contextlib.suppress(Exception):
-                existing = json.loads(TRIGGERED_DIRECT_FILE.read_text(encoding="utf-8"))
-        existing[msg_id] = ts_str
-        TRIGGERED_DIRECT_FILE.write_text(json.dumps(existing))
-    except Exception as exc:
-        logger.warning(
-            "triggered_direct_write_failed",
-            extra={
-                "event": "triggered_direct_write_failed",
-                "data": {"msg_id": msg_id, "error": str(exc)},
-            },
-        )
-
-
 def _extract_jsonl_session_id(line: str, runner_type: str) -> Optional[str]:
     """Parse a JSONL line and extract session ID using runner config fields.
 
@@ -4938,8 +4878,8 @@ def _make_ping_callback(
             return
         recipient = data.get("to", "")
 
-        # Direct trigger messages (from Hub UI) are handled by _make_direct_trigger_callback
-        # which also uses get_inbox flow.  Skip here to avoid launching a second process.
+        # Messages from "user" (operator input, e.g. job triggers) are not peer
+        # agent-to-agent messages — skip so this ping callback doesn't fire for them.
         if data.get("from", "") == "user":
             return
         msg_id = data.get("id", "")
@@ -5065,191 +5005,6 @@ def _make_ping_callback(
     return callback
 
 
-def _make_direct_trigger_callback(
-    transport: Any = None,
-    watchdog_instance: Optional["Watchdog"] = None,
-) -> Callable:
-    """Return a callback that polls for and executes direct trigger messages from Hub UI.
-
-    These are messages created by the Hub UI's "Send Message" feature that need
-    to be executed on the host machine (where the CLIs are installed).
-
-    Args:
-        transport: The transport instance to use for communication
-        watchdog_instance: Optional Watchdog instance for accessing state (e.g., message counts)
-    """
-    is_http = transport is not None and transport.get_transport_type() == "http"
-    # Pre-populate from disk so restarts don't re-trigger already-processed messages.
-    seen: Set[str] = _load_triggered_ids()
-
-    if not is_http:
-        # Direct triggers only work with HTTP transport (Hub)
-        return lambda event_type, data: None
-
-    def callback(event_type: str, data: Dict[str, Any]) -> None:
-        if event_type != "new_message":
-            return
-
-        # Check for direct trigger messages (from user via Hub UI)
-        sender = data.get("from", "")
-        subject = data.get("subject", "")
-        if sender != "user" or "Direct message from Hub" not in subject:
-            return
-
-        recipient = data.get("to", "")
-        msg_id = data.get("id", "")
-
-        if msg_id in seen:
-            return
-        seen.add(msg_id)
-        _save_triggered_id(msg_id)
-
-        # Skip if CLI is not available
-        if not _check_cli_available(recipient):
-            logger.warning(
-                "direct_trigger_skipped",
-                extra={
-                    "event": "direct_trigger_skipped",
-                    "data": {
-                        "agent": recipient,
-                        "msg_id": msg_id,
-                        "reason": "CLI not found in PATH",
-                    },
-                },
-            )
-            return
-
-        from .session import Session as _Session
-
-        _sess = _Session.load()
-
-        # Extract optional session ID from content tags. Most runners keep the
-        # inbox-driven flow so they can retrieve the unread message themselves.
-        # Codex runners work better when the direct Hub message is the top-level
-        # prompt. Otherwise they can complete the turn after only retrieving and
-        # acknowledging the inbox message.
-        content = data.get("content", "")
-        session_id = None
-        is_new_session = False
-        if "[Session:" in content:
-            import re as _re
-
-            match = _re.search(r"\[Session:\s*([^\]]+)\]", content)
-            if match:
-                session_id = match.group(1).strip()
-        elif "[NewSession]" in content:
-            # Hub UI explicitly requested a new session — leave session_id as None.
-            is_new_session = True
-        else:
-            # No session tag present: fall back to the agent's last saved session.
-            # This prevents unnecessary new sessions when the Hub UI sends a message
-            # before its session-selector has finished loading.
-            session_id = _load_agent_session(recipient)
-
-        # Reset context usage and message count when starting a new session
-        # (design.md decision 6: a new session immediately replaces the
-        # previous snapshot with unavailable until its first measurement).
-        if is_new_session:
-            reset_data = _write_canonical_context_usage(
-                recipient, ContextUsageSample(status="unavailable", source="watchdog")
-            )
-            # Immediately notify Hub to clear the context bar in Mission Control
-            if is_http and transport is not None and reset_data:
-                with contextlib.suppress(Exception):
-                    transport.post_context_usage(recipient, reset_data)
-            # Clear context usage cache on watchdog instance if available
-            if watchdog_instance is not None:
-                watchdog_instance._last_context_posted.pop(recipient, None)
-
-        runner_config = _sess.get_runner_config(recipient) if _sess else {}
-        runner_type = runner_config.get("runner")
-        hub_client_mode = _sess.get_agent_hub_client(recipient) if _sess else "auto"
-        if runner_type in ("codex", "codex_mcp"):
-            cleaned_content = re.sub(r"\[Session:\s*[^\]]+\]\n?\n?", "", content)
-            cleaned_content = re.sub(r"\[NewSession\]\n?\n?", "", cleaned_content).strip()
-            if not cleaned_content:
-                cleaned_content = "Continue."
-            prompt = "\n".join(
-                [
-                    "AgentWeave direct message",
-                    "",
-                    f"From: {sender}",
-                    f"To: {recipient}",
-                    f"Subject: {subject}",
-                    "",
-                    "Message:",
-                    cleaned_content,
-                ]
-            )
-            if transport is not None:
-                with contextlib.suppress(Exception):
-                    transport.archive_message(msg_id)
-        elif hub_client_mode == "cli":
-            prompt = (
-                f"You have a new AgentWeave message from user. "
-                f"Run: agentweave inbox --agent {recipient} --mark-read"
-            )
-        else:
-            prompt = (
-                f"You have a new AgentWeave message from user. "
-                f"Call get_inbox('{recipient}') to retrieve it and respond."
-            )
-
-        cmd = _agent_ping_cmd(recipient, prompt, session_id=session_id)
-
-        # Load env_vars from session config for claude_proxy agents
-        env_vars = None
-        # opencode runners also forward env_vars (e.g. MINIMAX_API_KEY for
-        # the minimax provider). Other runners (kimi, codex, claude, native)
-        # are NOT yet enabled — see TODO at the env-resolution block.
-        if runner_config.get("runner") in (
-            "claude_proxy",
-            "opencode",
-            "copilot",
-        ) and runner_config.get("env_vars"):
-            env_vars = runner_config.get("env_vars")
-
-        logger.info(
-            "direct_trigger_executing",
-            extra={
-                "event": "direct_trigger_executing",
-                "data": {"agent": recipient, "msg_id": msg_id, "session_id": session_id},
-            },
-        )
-        logger.info(
-            f"[TRIGGER] Executing direct trigger for {recipient}",
-            extra={"event": "trigger_event", "data": {}},
-        )
-        logger.info(
-            f"[TRIGGER] Command: {' '.join(cmd)}", extra={"event": "trigger_event", "data": {}}
-        )
-        if session_id:
-            logger.info(
-                f"[TRIGGER] Resuming session: {session_id}",
-                extra={"event": "trigger_event", "data": {}},
-            )
-
-        # Execute in background thread. Non-Codex-MCP direct messages are
-        # intentionally left unread so the agent can read them via get_inbox.
-        t = threading.Thread(
-            target=_run_agent_subprocess,
-            args=(
-                recipient,
-                cmd,
-                "Direct trigger from Hub",
-                transport,
-                is_http,
-                env_vars,
-                prompt,
-                session_id,
-            ),
-            daemon=True,
-        )
-        t.start()
-
-    return callback
-
-
 def main() -> None:
     """CLI entry point for watchdog."""
     from .logging_handlers import _configure_logging
@@ -5331,16 +5086,6 @@ def main() -> None:
                 f"[PING] Retry after: {int(args.retry_after)}s",
                 extra={"event": "ping_event", "data": {}},
             )
-
-    # Always enable direct trigger callback for HTTP transport
-    # This allows Hub UI "Send Message" to work
-    callbacks.append(
-        _make_direct_trigger_callback(transport=watchdog.transport, watchdog_instance=watchdog)
-    )
-    logger.info(
-        "[TRIGGER] Direct trigger handler enabled (for Hub UI messages)",
-        extra={"event": "trigger_event", "data": {}},
-    )
 
     # On HTTP transport: push session config to the Hub so it knows the full
     # agent configuration (names, roles, yolo flags) without filesystem access.

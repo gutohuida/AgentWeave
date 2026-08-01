@@ -126,42 +126,6 @@ def test_watchdog_skips_proxy_launch_when_key_missing(tmp_path, monkeypatch):
     transport.push_log.assert_called()
 
 
-def test_direct_trigger_missing_cli_preserves_unread_message(tmp_path, monkeypatch):
-    from agentweave import watchdog as wd
-    from agentweave.session import Session
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(wd, "TRIGGERED_DIRECT_FILE", tmp_path / "triggered_direct.json")
-    monkeypatch.setattr(wd, "_load_triggered_ids", lambda max_age_hours=24: set())
-    monkeypatch.setattr(wd, "_save_triggered_id", lambda msg_id: None)
-    monkeypatch.setattr(wd, "_check_cli_available", lambda agent: False)
-    session = Session(
-        {
-            "id": "test-session",
-            "name": "Test",
-            "mode": "hierarchical",
-            "agents": {"codex": {"runner": "codex"}},
-        }
-    )
-    monkeypatch.setattr(Session, "load", staticmethod(lambda: session))
-    transport = MagicMock()
-    transport.get_transport_type.return_value = "http"
-
-    callback = wd._make_direct_trigger_callback(transport=transport)
-    callback(
-        "new_message",
-        {
-            "from": "user",
-            "to": "codex",
-            "subject": "Direct message from Hub",
-            "id": "msg-retryable",
-            "content": "hello",
-        },
-    )
-
-    transport.archive_message.assert_not_called()
-
-
 def test_http_transport_classifies_auth_failure():
     import urllib.error
 
