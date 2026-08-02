@@ -1,20 +1,49 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# Project context — shown to AI when creating artifacts.
+context: |
+  This repository IS the AgentWeave framework's source code. It is not a project that uses
+  AgentWeave. Never run `agentweave init`/`switch`/`watch`, start a Hub, or invoke `aw-*` skills
+  against this repo — use `testbed/`. There is no `.agentweave/`, `agentweave.yml`, or `spec/`
+  here, and none should be created.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Product direction (decided 2026-08-02, full record in
+  explorations/2026-08-02-product-direction.md):
+
+  - AgentWeave is becoming a LOCALLY-INSTALLED APP and that is the only way to use it. Modelled on
+    T3 Code: install it, run it, it owns the agent processes on your machine.
+  - There is no no-Hub product. The CLI-as-collaboration-substrate, the watchdog, local/git
+    transports, Zero-relay MCP mode, and manual relay are all being REMOVED, not preserved. Do not
+    propose keeping them or preserving backward compatibility — there is no external install base
+    to protect.
+  - Remote/multi-user deployment is out of scope. A federated "connect to other users' local
+    agents" story returns much later, once the local experience is good. Do not build for it; do
+    not make it impossible either.
+  - "Hub" is being retired as a name — it is just AgentWeave. Defer the rename until the
+    architecture settles, to avoid doubling churn.
+
+  What differentiates the product and must stay integrated into one experience:
+  multi-agent collaboration with inter-agent communication, spec-driven development with the
+  agents (requirements, tasks, runs, evidence connected to the conversation), and governance and
+  quality gates.
+
+  The organising constraint is EASE OF USE. The change programme exists because AgentWeave had too
+  many barriers. Check every slice against that: does it remove a barrier or add one?
+
+  Tech stack: Python 3.8+ CLI (`src/agentweave/`, zero runtime deps), FastAPI + SQLAlchemy async
+  backend (`hub/`), React + Vite + TypeScript + Tailwind + React Query + Zustand dashboard
+  (`hub/ui/`), MkDocs Material docs (`docs/`). SSE for live state — never polling.
+
+rules:
+  proposal:
+    - State explicit Non-Goals; do not rely on omission.
+    - Ground claims in the code. Cite file paths for anything asserted about current behaviour.
+  tasks:
+    - Never mark a task complete on the strength of a plan existing — only verified implementation
+      closes a task.
+    - Open each phase with the test task for the behaviour it adds. Several defects have survived
+      "complete" phases because no test asserted the scenario.
+  spec:
+    - Requirements use `### Requirement:` with `#### Scenario:` blocks and MUST/SHALL language.
+    - Every requirement must be falsifiable — rewrite anything that cannot become a passing or
+      failing test.
