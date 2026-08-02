@@ -2,6 +2,45 @@
 
 This file provides guidance to Claude Code when working on the **AgentWeave Framework** codebase itself.
 
+## You develop AgentWeave here — you do not use it here
+
+This repository is the framework's **source code**, not a project that runs the framework. The
+distinction governs almost every decision in this file, so read it before anything else.
+
+**This repo has no AgentWeave session, and must not acquire one.** There is no `agentweave.yml`, no
+`.agentweave/`, no `spec/`, and no generated `.claude/skills/aw-*`. They were removed on 2026-08-02
+because they were test output that read as project state. Do not recreate them at the repository
+root.
+
+| Don't | Do |
+|---|---|
+| Run `agentweave init`, `switch`, `watch`, `roles`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
+| Invoke `aw-*` skills (`aw-spec-propose`, `aw-status`, `aw-delegate`, …) | Use the `openspec-*` skills — see "Specifications" below |
+| Delegate to agents via AgentWeave messaging | Do the work directly, or use Claude Code subagents |
+| Write to `spec/` | Write to `openspec/changes/<date>-<name>/` |
+| Treat `agentweave.yml` / `.agentweave/` as configuration to read | Treat them as *product surfaces you implement* |
+
+The `aw-*` skills and the aw-spec workflow are **features AgentWeave ships to its users**
+(`openspec/specs/aw-spec-workflow/spec.md`, `src/agentweave/spec_manifest.py`,
+`hub/hub/api/v1/spec.py`, `hub/ui/src/components/spec/`, `src/agentweave/templates/skills/`). Change
+that code when the feature needs changing; never run it against this repo.
+
+## Specifications — this repo uses openspec
+
+All planned work lives in `openspec/`:
+
+- `openspec/specs/<capability>/spec.md` — current behaviour of shipped capabilities.
+- `openspec/changes/<date>-<name>/` — one in-flight change: `proposal.md`, `design.md`,
+  `tasks.md`, and `specs/<capability>/spec.md` deltas.
+- `openspec/changes/archive/` — completed changes.
+
+Use the `openspec-propose`, `openspec-apply-change`, `openspec-sync-specs`, and
+`openspec-archive-change` skills. Requirements use `### Requirement:` with `#### Scenario:` blocks
+and MUST/SHALL language.
+
+**Never mark a task complete on the strength of a plan existing.** Only real, verified
+implementation closes a task.
+
 ## Project Context
 
 You are working on the **AgentWeave Framework** — a multi-agent AI collaboration platform consisting of:
@@ -20,12 +59,12 @@ single source of truth; version numbers repeated in prose go stale.
 # CLI (editable install)
 pip install -e ".[dev,mcp]"
 
-# Verify
+# Verify the editable install resolves (safe at the repo root — reads no project state)
 agentweave --help
 aw --help
 
-# Runtime readiness check
-agentweave doctor
+# Anything that touches project state belongs in the testbed, never the repo root
+cd testbed/scratch && agentweave doctor
 
 # Hub (Docker)
 cd hub && docker compose up -d
@@ -146,7 +185,16 @@ hub/
 └── Dockerfile
 ```
 
-## Key Features (v0.15.0)
+## Shipped features and their user-facing commands
+
+The commands below are the **product surface you implement and test**, not a workflow to run in this
+repo. When you need to exercise one, do it in `testbed/`. Read them as "this is what a user types."
+
+> **Planned removal:** the multi-role system (`agentweave roles`, `roles.py`, `roles.json`,
+> `VALID_ROLE_IDS`, and the 21 guides under `templates/roles/`) is slated for replacement by
+> runner/agent/charter separation. See the slice table in
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Don't build new work on
+> roles without checking that first.
 
 ### Multi-Role Agent System
 
@@ -272,10 +320,11 @@ pending → assigned → in_progress → completed → under_review → approved
 - ALL task modifications use `with lock("name"):`
 - Templates via `get_template("name")` — never hardcode in `cli.py`
 - `is_locked()` is read-only — never delete files
-- NEVER commit `.agentweave/tasks/`, `messages/`, `agents/`, `session.json`, `transport.json`
+- NEVER create `.agentweave/`, `agentweave.yml`, or `spec/` at the repository root — use `testbed/`
 - NEVER commit `kimichanges.md`, `kimiwork.md`
 - Hub API key format: `aw_live_{random32}`
 - HttpTransport uses stdlib `urllib.request` only
+- Stage paths explicitly; `git add -A` sweeps in untracked `.claude/handoffs/` scratch
 
 ## Common Tasks
 
@@ -305,18 +354,23 @@ pending → assigned → in_progress → completed → under_review → approved
 2. Use TypeScript + functional components
 3. Use Tailwind CSS + CSS variables for theming
 4. Use React Query for data, Zustand for global state
-5. Use `Icon` component for Material Symbols
+5. Use the `Icon` component — it wraps `lucide-react` SVGs. The Material Symbols webfont was
+   removed (it loaded `display=block` from a CDN and held every icon invisible until the request
+   completed). The `name` API was kept so call sites did not change. **Do not reintroduce a second
+   icon system.**
 
 ## When Compacting
 
 Keep in context:
-- Current task IDs being worked on
-- Session mode (hierarchical/peer/review)
-- Principal agent name
-- Active transport type (local/git/http)
-- Pending messages in `.agentweave/messages/pending/`
-- Which CLI command or UI component is being modified
-- Any proxy agents (minimax, glm) and their runner config
+- The openspec change being implemented, and which phase/task number
+- Which CLI command, API route, or UI component is being modified
+- Test status: what passed, what is failing, what has not been run
+- Any decision made this session that is not yet written into `openspec/`
+- Uncommitted work in progress
+
+Do **not** carry AgentWeave session state (task IDs, session mode, principal agent, transport type,
+pending messages). This repo has no session — if that seems relevant, something was run at the repo
+root that should have run in `testbed/`.
 
 ## Resources
 

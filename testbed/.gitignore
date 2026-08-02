@@ -1,0 +1,5 @@
+# Everything in the testbed is disposable scratch output.
+# Only this file and the README are tracked.
+*
+!.gitignore
+!README.md

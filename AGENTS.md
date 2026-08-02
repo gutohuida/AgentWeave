@@ -11,6 +11,35 @@ This repository contains the framework source code — NOT a project using Agent
 - **Hub server** (`hub/`) — FastAPI backend + React dashboard for web-based collaboration
 - **Documentation site** (`docs/`) — MkDocs with Material theme
 
+### You develop AgentWeave here — you do not use it here
+
+**This repo has no AgentWeave session, and must not acquire one.** There is no `agentweave.yml`, no
+`.agentweave/`, no `spec/`, and no generated `aw-*` skills. They were removed on 2026-08-02 because
+they were test output that read as project state.
+
+| Don't | Do |
+|---|---|
+| Run `agentweave init`, `switch`, `watch`, `roles`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
+| Invoke `aw-*` skills (`aw-spec-propose`, `aw-status`, `aw-delegate`, …) | Use the `openspec-*` skills |
+| Delegate work through AgentWeave messaging | Do the work directly |
+| Write to `spec/` | Write to `openspec/changes/<date>-<name>/` |
+
+The `aw-*` skills and the aw-spec workflow are **features AgentWeave ships to its users**
+(`openspec/specs/aw-spec-workflow/spec.md`, `src/agentweave/spec_manifest.py`,
+`hub/hub/api/v1/spec.py`, `hub/ui/src/components/spec/`, `src/agentweave/templates/skills/`). Change
+that code when the feature needs changing; never run it against this repo.
+
+### Specifications — this repo uses openspec
+
+- `openspec/specs/<capability>/spec.md` — current behaviour of shipped capabilities.
+- `openspec/changes/<date>-<name>/` — one in-flight change: `proposal.md`, `design.md`, `tasks.md`,
+  and `specs/<capability>/spec.md` deltas.
+- `openspec/changes/archive/` — completed changes.
+
+Requirements use `### Requirement:` with `#### Scenario:` blocks and MUST/SHALL language. **Never
+mark a task complete on the strength of a plan existing** — only verified implementation closes a
+task.
+
 ### Three Operation Modes
 
 | Mode | How it works | Best for |
@@ -185,6 +214,15 @@ mkdocs gh-deploy
 ```
 
 ## Key Architectural Concepts
+
+The CLI commands shown below are the **product surface you implement and test**, not a workflow to
+run in this repo. Read them as "this is what a user types." To exercise one, use `testbed/`.
+
+> **Planned removal:** the multi-role system (`agentweave roles`, `roles.py`, `roles.json`,
+> `VALID_ROLE_IDS`, and the 21 guides under `templates/roles/`) is slated for replacement by
+> runner/agent/charter separation. See the slice table in
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md` before building new work on
+> roles.
 
 ### 1. Multi-Role Agent System (v0.15.0)
 
@@ -459,25 +497,23 @@ const currentMode = sessionModeRef.current
 
 ## Files to Never Commit
 
-Gitignored and must never be committed:
+**Nothing under `.agentweave/`, `agentweave.yml`, or `spec/` should exist at the repository root at
+all.** If you find them, a command was run in the wrong directory — delete them rather than deciding
+whether they are safe to commit. The paths below describe what those directories look like *in a
+user's project*, which is what you implement.
 
-- `.agentweave/tasks/*/`
-- `.agentweave/messages/*/`
-- `.agentweave/agents/*.json`
-- `.agentweave/session.json`
+- `.agentweave/tasks/*/`, `messages/*/`, `agents/*.json`, `session.json`
 - `.agentweave/transport.json` (may contain secrets)
-- `.agentweave/.git_seen/`
-- `.agentweave/logs/`
-- `.agentweave/project_instructions.md`
+- `.agentweave/.git_seen/`, `logs/`, `project_instructions.md`
 - `kimichanges.md`, `kimiwork.md`
+- Anything under `testbed/` except its `README.md` and `.gitignore`
+
+Also: stage paths explicitly. `git add -A` sweeps in untracked `.claude/handoffs/` scratch.
 
 Safe to commit:
-- `.agentweave/README.md`
-- `.agentweave/protocol.md`
-- `.agentweave/roles.json`
-- `.agentweave/roles/*.md`
-- `.agentweave/ai_context.md`
 - `CLAUDE.md`, `AGENTS.md`
+- `openspec/**`
+- `testbed/README.md`, `testbed/.gitignore`
 
 ## Resources
 
