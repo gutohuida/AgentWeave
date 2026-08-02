@@ -4,6 +4,7 @@ import { useSSEConnectionState } from '@/hooks/useSSE'
 import { AgentSummary, useAgentOutput, useAgents, useAgentTimeline } from '@/api/agents'
 import { useAgentChatHistory, useAgentConversations, useAgentRecentChat } from '@/api/agentChat'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
+import { useWorkspacePaths } from '@/api/workspace'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
@@ -137,6 +138,7 @@ export function AgentOutputPanel({
   const { data: roster = [] } = useAgents()
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
+  const { data: workspacePaths = [] } = useWorkspacePaths()
   const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
@@ -436,6 +438,7 @@ export function AgentOutputPanel({
           conversationId={currentConversationId ?? null}
           isRunning={isRunning}
           onSubmit={handleComposerSubmit}
+          workspacePaths={workspacePaths}
         />
       </div>
     </div>

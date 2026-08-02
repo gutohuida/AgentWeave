@@ -59,25 +59,25 @@
 
 ## 3. Trigger menu
 
-- [ ] 3.1 Write tests for the menu: arrow-key navigation changes the active result without
+- [x] 3.1 Write tests for the menu: arrow-key navigation changes the active result without
       inserting anything, Enter/Tab accepts the active result, Escape dismisses while leaving text
       and focus untouched.
-- [ ] 3.2 Build the trigger menu component and wire it into
+- [x] 3.2 Build the trigger menu component and wire it into
       `hub/ui/src/components/agents/Composer.tsx`, opened/closed by `detectComposerTrigger`'s
       result.
-- [ ] 3.3 Verify against `agent-composer`'s "Keyboard-navigable trigger menu" requirement.
+- [x] 3.3 Verify against `agent-composer`'s "Keyboard-navigable trigger menu" requirement.
 
 ## 4. Result sources
 
-- [ ] 4.1 Write tests for source wiring: `@` results come from the path-listing endpoint
+- [x] 4.1 Write tests for source wiring: `@` results come from the path-listing endpoint
       unfiltered; `$` results come from the same endpoint filtered to `.claude/skills/` paths with
       the prefix and `.md` suffix stripped for display, and are empty (not an error) when no such
       directory exists; `/` results come from a static list requiring no network call.
-- [ ] 4.2 Add a frontend API hook for the new path-listing endpoint (React Query, matching the
+- [x] 4.2 Add a frontend API hook for the new path-listing endpoint (React Query, matching the
       pattern in `hub/ui/src/api/`).
-- [ ] 4.3 Implement the three source adapters (path, skill, command) feeding the menu built in
+- [x] 4.3 Implement the three source adapters (path, skill, command) feeding the menu built in
       phase 3.
-- [ ] 4.4 Verify against `agent-composer`'s "Trigger result sources" requirement.
+- [x] 4.4 Verify against `agent-composer`'s "Trigger result sources" requirement.
 
 ## 5. In-place agent selector
 
