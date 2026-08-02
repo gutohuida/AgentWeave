@@ -1294,9 +1294,10 @@ before concurrency does.*
 
 ## 9. Accounting and budgets
 
-> **SUPERSEDED (2026-08-02)** by roadmap row **H4** in
-> `spec/roadmaps/hub-native-experience.html`. Ready to specify; carries no dependency on H1 and
-> may be picked up in parallel. Do not implement from this list.
+> **SUPERSEDED (2026-08-02).** Re-cut as its own change; see the slice table in
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Ready to propose, and
+> independent of the conversation slice, so it may be picked up in parallel. Do not implement from
+> this list — these items stay unchecked until the successor change closes them.
 
 - [ ] 9.1 Parse runner token usage — Claude Code `result.usage` / `modelUsage` from stream-json,
       Codex `event_msg.payload.type == "token_count"` under `~/.codex`, OpenCode step telemetry —
@@ -1313,13 +1314,11 @@ before concurrency does.*
 *New phase. `Project` is already a table and all five tables carry `project_id`, but there is no
 projects API and no UI. `hub-visual-language` depends on this.*
 
-> **SUPERSEDED — split across two roadmap rows (2026-08-02).** See
-> `spec/roadmaps/hub-native-experience.html`. Items 10.3–10.7 belong to row **H1**
-> (`spec/changes/agent-conversation-workspace/spec.html`). Items 10.1–10.2 belong to row **H3**,
-> which is **blocked** on research prerequisite RP-1: authentication binds one API key to one
-> `project_id` and the SSE ticket is signed per project, so a project switcher is not a frontend
-> task. Do not implement from this list — implement from the child spec. These items stay
-> unchecked until the real work lands there.
+> **SUPERSEDED (2026-08-02) — split across two changes.** Items 10.3–10.7 belong to
+> `openspec/changes/2026-08-02-agent-conversation-workspace/`. Items 10.1–10.2 belong to a
+> multi-project change that is **blocked on research question RQ-1** (see that change's
+> `design.md`): `_project_from_api_key` binds one API key to one `project_id` and the SSE ticket is
+> signed per project, so a project switcher is not a frontend task. Do not implement from this list.
 
 - [ ] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
       agent, and token budgets.
@@ -1335,15 +1334,14 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 ## 11. Composer, first cut
 
-> **SUPERSEDED — split across two roadmap rows (2026-08-02).** See
-> `spec/roadmaps/hub-native-experience.html`. Item 11.1 belongs to row **H1**
-> (`spec/changes/agent-conversation-workspace/spec.html`). Items 11.2–11.5 belong to row **H2**,
-> which additionally requires a workspace path-listing endpoint that does not exist yet.
-> Items 11.6–11.7 are **already implemented** but were never checked off: `record_context_usage`
-> in `hub/hub/output_recording.py`, `context_usage` on the agent summary, and
+> **SUPERSEDED (2026-08-02) — split across two changes.** Item 11.1 belongs to
+> `openspec/changes/2026-08-02-agent-conversation-workspace/`. Items 11.2–11.5 belong to a composer
+> intelligence change, which additionally needs a workspace path-listing endpoint that does not
+> exist yet. Items 11.6–11.7 are **already implemented** but were never checked off:
+> `record_context_usage` in `hub/hub/output_recording.py`, `context_usage` on the agent summary, and
 > `hub/ui/src/components/context/ContextUsageIndicator.tsx` with a compact variant, covered by
-> `contextPresentation.test.tsx`. What remains of them is placement in the composer, which is H1
-> task T15. Do not implement from this list.
+> `contextPresentation.test.tsx`. Only placement in the composer remains, which is task 3.8 of the
+> conversation change. Do not implement from this list.
 
 - [ ] 11.1 Replace the chat input with an autosizing composer: bounded growth then scroll, submit vs.
       newline gestures, persisted per-conversation draft.
@@ -1364,12 +1362,11 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 ## 12. Composer controls
 
-> **SUPERSEDED — split across two roadmap rows (2026-08-02).** See
-> `spec/roadmaps/hub-native-experience.html`. Items 12.2–12.3 (inline controls with overflow
-> collapse, banner stack) belong to row **H1**
-> (`spec/changes/agent-conversation-workspace/spec.html`). Item 12.1 (the searchable in-place
-> agent selector) belongs to row **H2** — H1 shows which agent is active but does not reassign an
-> in-flight conversation. Do not implement from this list.
+> **SUPERSEDED (2026-08-02) — split across two changes.** Items 12.2–12.3 (inline controls with
+> overflow collapse, banner stack) belong to
+> `openspec/changes/2026-08-02-agent-conversation-workspace/`. Item 12.1 (the searchable in-place
+> agent selector) belongs to the composer intelligence change — the conversation change shows which
+> agent is active but does not reassign an in-flight conversation. Do not implement from this list.
 
 - [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
@@ -1380,9 +1377,9 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 ## 13. Agent identity, charters, and skills
 
-> **SUPERSEDED (2026-08-02)** by roadmap row **H5** in
-> `spec/roadmaps/hub-native-experience.html`. Ready to specify; independent of H1.
-> Do not implement from this list.
+> **SUPERSEDED (2026-08-02).** Re-cut as its own change; see the slice table in
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Ready to propose, and
+> independent of the conversation slice. Do not implement from this list.
 
 - [ ] 13.1 Introduce the runner record — CLI, model, environment — reusable across projects and
       independent of agent identity.
@@ -1413,12 +1410,12 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 ## 14. Specification traceability and authoring
 
-> **SUPERSEDED (2026-08-02)** by roadmap row **H6** in
-> `spec/roadmaps/hub-native-experience.html`. **Blocked** on research prerequisite RP-2: two
-> specification systems currently coexist (Markdown under `openspec/`, authoritative portable HTML
-> under `spec/` with `spec/index.json`), and stable requirement identifiers, evidence, and
-> proposals need one unambiguous home before any of this is built. H6 will be split into its own
-> sub-roadmap. Do not implement from this list.
+> **SUPERSEDED (2026-08-02) — blocked on research question RQ-2.** See
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Stable requirement
+> identifiers, evidence, and proposals need one unambiguous home before any of this is built, and
+> AgentWeave currently ships two specification systems: this repository's own `openspec/` workflow
+> and the `aw-spec-workflow` capability it provides to user projects. That authority question must
+> be answered first. The slice will need its own decomposition. Do not implement from this list.
 
 - [ ] 14.1 Add stable, visible requirement identifiers; report unidentified requirements; never
       reissue a retired identifier; keep identifiers stable across rewording, reordering, relocation.
@@ -1460,9 +1457,10 @@ projects API and no UI. `hub-visual-language` depends on this.*
 *Moved after specifications so gates cover both task lifecycle and specification gates, rather than
 being built twice.*
 
-> **SUPERSEDED (2026-08-02)** by roadmap row **H7** in
-> `spec/roadmaps/hub-native-experience.html`. Blocked on H1 and H6.
-> Do not implement from this list.
+> **SUPERSEDED (2026-08-02).** Re-cut as its own change; blocked on the conversation change and on
+> the specification slice. See
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Do not implement from this
+> list.
 
 - [ ] 15.1 Surface pending task-lifecycle and specification-gate decisions as an inline approval
       panel in the composer, actionable without leaving the conversation.
@@ -1473,12 +1471,14 @@ being built twice.*
 
 ## 16. Closeout
 
-> **REDEFINED (2026-08-02).** This umbrella is archived only when every row H1–H7 of
-> `spec/roadmaps/hub-native-experience.html` reaches *done*. The ten delta specs under `specs/`
-> remain authoritative for behaviour implemented in phases 1–8; child specs reference them rather
-> than restating them. Note that two of them currently overstate the system: `agent-inbound-queue`
-> and `agent-composer` describe behaviour the shipped UI does not honour (input during a running
-> turn, drafts surviving navigation). H1 closes both.
+> **REDEFINED (2026-08-02).** This umbrella is archived once every successor change re-cut from
+> phases 9–16 is done; see the slice table in
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. The ten delta specs under
+> `specs/` remain authoritative for behaviour implemented in phases 1–8, and successor changes
+> reference them rather than restating them. Note that two currently overstate the system:
+> `agent-inbound-queue` and `agent-composer` describe behaviour the shipped UI does not honour —
+> input accepted during a running turn, and drafts surviving navigation. The conversation change
+> closes both.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
