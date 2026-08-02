@@ -24,6 +24,7 @@ export interface AgentSummary {
   self_registered?: boolean  // True if agent joined via self-registration
   liveness?: 'online' | 'offline' | null  // Liveness for self-registered agents
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
+  color_index?: number | null  // Stable palette index, assigned once at registration
 }
 
 export interface ContextUsage {

@@ -70,4 +70,12 @@ describe('eventTargetsAgent — chat live-update matching (previously: no SSE co
   it('does not match an unrelated event type even with a matching agent field', () => {
     expect(eventTargetsAgent('task_updated', { agent: 'claude' }, 'claude')).toBe(false)
   })
+
+  it('matches queue lifecycle events so undelivered entries update live', () => {
+    expect(eventTargetsAgent('queue_entry_queued', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('queue_entry_delivered', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('queue_entry_withdrawn', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('queue_chain_suspended', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('queue_entry_queued', { agent: 'codex' }, 'claude')).toBe(false)
+  })
 })

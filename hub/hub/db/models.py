@@ -66,6 +66,10 @@ class Agent(Base):
     mcp_endpoint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     spawn_cmd: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     config: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Assigned once at registration by arrival order within the project, never derived
+    # from the name (a rename must not change it). Persists across restarts because it
+    # lives on this row, not in memory. The palette cycles once index >= palette length.
+    color_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

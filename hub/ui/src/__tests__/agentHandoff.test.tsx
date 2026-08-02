@@ -13,11 +13,23 @@ vi.mock('@/api/agents', async (importOriginal) => {
     ...actual,
     useAgentOutput: () => ({ lines: outputLines, isLoading: false }),
     useAgentSessions: () => ({ data: { sessions } }),
+    useAgents: () => ({ data: [] }),
+    useAgentTimeline: () => ({ data: [] }),
   }
 })
 
-vi.mock('@/components/stream/SharedStreamRenderer', () => ({
-  SharedStreamRenderer: () => <div data-testid="stream-output" />,
+vi.mock('@/api/agentChat', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/agentChat')>()
+  return {
+    ...actual,
+    useAgentChatHistory: () => ({ data: undefined, isLoading: false }),
+    useAgentRecentChat: () => ({ data: undefined, isLoading: false }),
+  }
+})
+
+vi.mock('@/api/queue', () => ({
+  useQueueStatus: () => ({ data: undefined }),
+  withdrawQueueEntry: vi.fn(),
 }))
 
 const fetchMock = vi.fn()

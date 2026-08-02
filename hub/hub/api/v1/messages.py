@@ -50,6 +50,9 @@ async def create_message(
         ):
             raise HTTPException(status_code=409, detail="Message run identity is invalid or stale")
         hop_depth = source_run.turn_depth + 1
+        # Recorded association, not inferred: the sender's timeline places this
+        # outbound entry by the run it was actually sent from (task 8.3).
+        msg.session_id = source_run.session_id
 
     entry = new_entry(
         project_id=project_id,

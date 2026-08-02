@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
-import { AgentSummary, useAgentOutput, useAgentSessions } from '@/api/agents'
+import { AgentSummary, useAgentOutput, useAgentSessions, useAgents, useAgentTimeline } from '@/api/agents'
+import { useAgentChatHistory, useAgentRecentChat } from '@/api/agentChat'
+import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useConfigStore } from '@/store/configStore'
-import { SharedStreamRenderer } from '@/components/stream/SharedStreamRenderer'
+import { AgentTimeline } from './AgentTimeline'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -130,6 +132,18 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     selectedSessionId && selectedSessionId !== NEW_SESSION_VALUE
       ? selectedSessionId
       : undefined
+
+  const { data: roster = [] } = useAgents()
+  const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
+  const { data: queueStatus } = useQueueStatus(agent.name)
+  const sessionChat = useAgentChatHistory(agent.name, currentSessionId ?? null)
+  const recentChat = useAgentRecentChat(agent.name)
+  const chat = currentSessionId ? sessionChat : recentChat
+  const timelineEntries = chat.data?.entries ?? []
+
+  const handleWithdraw = (entryId: string) => {
+    void withdrawQueueEntry(entryId)
+  }
 
   const postTrigger = async (
     triggerMessage: string,
@@ -345,12 +359,20 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
         className="flex-1 overflow-y-auto p-4 space-y-0.5"
         style={{ background: 'var(--bg)' }}
       >
-        {isLoading ? (
+        {isLoading || chat.isLoading ? (
           <p className="font-mono text-xs italic" style={{ color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace" }}>Loading output…</p>
-        ) : lines.length === 0 ? (
-          <p className="font-mono text-xs italic" style={{ color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace" }}>Waiting for output…</p>
         ) : (
-          <SharedStreamRenderer lines={lines} />
+          <AgentTimeline
+            agent={agent}
+            entries={timelineEntries}
+            roster={roster}
+            timelineEvents={timelineEvents}
+            queueStatus={queueStatus}
+            isRunning={isRunning}
+            onStop={handleStop}
+            isStopping={isStopping}
+            onWithdraw={handleWithdraw}
+          />
         )}
         <div ref={bottomRef} />
       </div>

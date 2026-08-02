@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import worktrees
+from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, ProjectSession
@@ -78,6 +79,10 @@ async def sync_session(
     all_agents_result = await session.execute(select(Agent).where(Agent.project_id == project_id))
     existing_agents = {row.name: row for row in all_agents_result.scalars().all()}
 
+    # Computed once and incremented locally (not re-queried per agent): several new
+    # agents can be added in the same sync, and none of them are flushed yet, so a
+    # per-iteration query would see the same max and hand out duplicate indices.
+    next_index = await next_color_index(session, project_id)
     for agent_name in agents_data:
         if agent_name not in existing_agents:
             session.add(
@@ -85,8 +90,10 @@ async def sync_session(
                     id=f"agent-{short_id()}",
                     project_id=project_id,
                     name=agent_name,
+                    color_index=next_index,
                 )
             )
+            next_index += 1
 
     removed_agent_names = [
         agent_name

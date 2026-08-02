@@ -1,24 +1,22 @@
-"""Tests for the three-tier session lookup in hub.api.v1.agent_chat.
+"""Tests for the merged conversation timeline in hub.api.v1.agent_chat (task 8.3).
 
-The /api/v1/agent/{agent}/chat/{session_id} endpoint merges:
-  1. Messages with msg.session_id == session_id  (post-migration column)
-  2. Messages with [Session: {session_id}] in content  (pre-migration tag)
-  3. Untagged messages (session_id=NULL) inside the session's time window,
-     excluding any that belong to a closer previous session.
+`GET /api/v1/agent/{agent}/chat/{session_id}` (and the sessionless
+`/chat?limit=`) merge four record types into one chronological, typed
+timeline:
 
-This is the second-most-recent refactor in the Hub and the 2026-04-01
-PR 11 session spent 60+ lines of HANDOFF on the bug-class. These 10
-tests pin the three tiers so a regression is caught at the test layer
-rather than the UI blinking.
+  - operator_input / inbound_peer — delivered `InboundQueueEntry` rows,
+    placed by their `Run.session_id` (recorded association, never a
+    timestamp window)
+  - agent_output — `AgentOutput` rows, filtered by their own `session_id`
+  - outbound_peer — `Message` rows the agent sent, filtered by their own
+    `session_id` (set at send time from the sender's live Run)
 
-Approach: insert Message + AgentOutput rows directly via
-async_session_factory, then call the endpoint and assert.
+Still-queued (undelivered) entries for the agent are appended regardless of
+which session was requested, since they have no session yet.
 
 Important: the Hub's DB engine is a module-level singleton, so in-memory
 SQLite data persists across tests in the same pytest run. Each test
-therefore uses a UNIQUE agent name (agent_t1, agent_t2, etc.) so the
-"other sessions" lookup in Tier 3 doesn't pick up leftover data from
-sibling tests and incorrectly exclude in-window messages.
+therefore uses a UNIQUE agent name so sibling tests' rows can't leak in.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -26,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AgentOutput, InboundQueueEntry, Run
+from hub.db.models import AgentOutput, InboundQueueEntry, Message, Project
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,50 +32,52 @@ from hub.db.models import AgentOutput, InboundQueueEntry, Run
 
 
 async def _project_id(app, auth_headers) -> str:
-    """Fetch the current project id from the /status endpoint."""
     resp = await app.get("/api/v1/status", headers=auth_headers)
     assert resp.status_code == 200
     return resp.json()["project_id"]
 
 
-async def _add_message(
+async def _add_run(project_id: str, *, run_id: str, agent: str, session_id: str) -> None:
+    from hub.db.models import Run
+
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id=run_id,
+                project_id=project_id,
+                agent=agent,
+                session_id=session_id,
+                status="completed",
+                started_at=datetime.now(timezone.utc),
+                turn_depth=0,
+            )
+        )
+        await session.commit()
+
+
+async def _add_queue_entry(
     project_id: str,
     *,
-    msg_id: str,
-    recipient: str,
+    entry_id: str,
+    agent: str,
+    origin_type: str,
     content: str,
-    session_id: str | None = None,
+    origin_agent: str | None = None,
+    hop_depth: int = 0,
+    run_id: str | None = None,
     timestamp: datetime | None = None,
 ) -> None:
-    """Insert a Message row directly into the DB.
-
-    sender is hard-coded to "user" (the agent_chat query only fetches
-    user→agent messages).
-    """
     async with async_session_factory() as session:
-        run_id = f"run-{msg_id}" if session_id else None
-        if run_id:
-            session.add(
-                Run(
-                    id=run_id,
-                    project_id=project_id,
-                    agent=recipient,
-                    session_id=session_id,
-                    status="completed",
-                    started_at=timestamp or datetime.now(timezone.utc),
-                    turn_depth=0,
-                )
-            )
         session.add(
             InboundQueueEntry(
-                id=msg_id,
+                id=entry_id,
                 project_id=project_id,
-                agent=recipient,
-                origin_type="operator",
-                origin_agent=None,
+                agent=agent,
+                origin_type=origin_type,
+                origin_agent=origin_agent,
                 content=content,
                 arrived_at=timestamp or datetime.now(timezone.utc),
-                hop_depth=0,
+                hop_depth=hop_depth,
                 state="delivered" if run_id else "queued",
                 delivered_in_run_id=run_id,
                 delivered_at=(timestamp or datetime.now(timezone.utc)) if run_id else None,
@@ -95,7 +95,6 @@ async def _add_output(
     session_id: str,
     timestamp: datetime | None = None,
 ) -> None:
-    """Insert an AgentOutput row directly into the DB."""
     async with async_session_factory() as session:
         session.add(
             AgentOutput(
@@ -110,153 +109,83 @@ async def _add_output(
         await session.commit()
 
 
+async def _add_outbound_message(
+    project_id: str,
+    *,
+    msg_id: str,
+    sender: str,
+    recipient: str,
+    content: str,
+    session_id: str | None,
+    timestamp: datetime | None = None,
+) -> None:
+    async with async_session_factory() as session:
+        session.add(
+            Message(
+                id=msg_id,
+                project_id=project_id,
+                sender=sender,
+                recipient=recipient,
+                content=content,
+                type="message",
+                session_id=session_id,
+                timestamp=timestamp or datetime.now(timezone.utc),
+            )
+        )
+        await session.commit()
+
+
+def _by_id(entries: list[dict], entry_id: str) -> dict:
+    return next(e for e in entries if e["id"] == entry_id)
+
+
 # ---------------------------------------------------------------------------
-# Tier 1: exact match on msg.session_id
+# Recorded association, not inferred
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_tier1_exact_session_id_match(app, auth_headers):
-    """A message with msg.session_id == session_id shows up in the chat."""
+async def test_delivered_operator_input_placed_by_its_run(app, auth_headers):
     project_id = await _project_id(app, auth_headers)
     agent = "agent_t1"
-    await _add_message(
+    await _add_run(project_id, run_id="run-t1", agent=agent, session_id="sess-A")
+    await _add_queue_entry(
         project_id,
-        msg_id="m-tier1",
-        recipient=agent,
-        session_id="sess-A",
-        content="tier1 content",
-    )
-    await _add_output(
-        project_id,
-        out_id="o-tier1",
+        entry_id="entry-t1",
         agent=agent,
-        content="tier1 reply",
-        session_id="sess-A",
+        origin_type="operator",
+        content="hello",
+        run_id="run-t1",
     )
+    await _add_output(project_id, out_id="o-t1", agent=agent, content="reply", session_id="sess-A")
 
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-A", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
-    ids = [m["id"] for m in data["messages"]]
-    assert "m-tier1" in ids
-    assert "o-tier1" in ids
-
-
-# ---------------------------------------------------------------------------
-# Tier 2: content-tag fallback
-# ---------------------------------------------------------------------------
+    entries = data["entries"]
+    op = _by_id(entries, "entry-t1")
+    assert op["kind"] == "operator_input"
+    assert op["delivery_state"] == "delivered"
+    out = _by_id(entries, "o-t1")
+    assert out["kind"] == "agent_output"
 
 
 @pytest.mark.asyncio
-async def test_content_tag_does_not_create_session_attribution(app, auth_headers):
-    """Literal session-looking prose is not a routing protocol."""
+async def test_untagged_entry_from_a_different_session_is_never_inferred_in(app, auth_headers):
+    """An entry delivered into a DIFFERENT session's run must never leak into this
+    session, no matter how close its timestamp is (no timestamp-window fallback)."""
     project_id = await _project_id(app, auth_headers)
     agent = "agent_t2"
-    await _add_message(
-        project_id,
-        msg_id="m-tier2",
-        recipient=agent,
-        session_id=None,
-        content="pre-migration body\n\n[Session: sess-B]",
-    )
-    await _add_output(
-        project_id,
-        out_id="o-tier2",
-        agent=agent,
-        content="tier2 reply",
-        session_id="sess-B",
-    )
-
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-B", headers=auth_headers)
-    assert resp.status_code == 200
-    ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-tier2" not in ids
-
-
-# ---------------------------------------------------------------------------
-# Tier 3: untagged message inside the time window
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_undelivered_entry_is_not_inferred_from_time_window(app, auth_headers):
-    """An untagged message (session_id=None) that falls inside the agent-output
-    time window is included via the heuristic."""
-    project_id = await _project_id(app, auth_headers)
-    agent = "agent_t3a"
     now = datetime.now(timezone.utc)
-    # Output at 'now' anchors the session window [now, now].
-    await _add_output(
+    await _add_run(project_id, run_id="run-prev", agent=agent, session_id="sess-prev")
+    await _add_queue_entry(
         project_id,
-        out_id="o-anchor",
+        entry_id="entry-prev",
         agent=agent,
-        content="anchor",
-        session_id="sess-C",
-        timestamp=now,
-    )
-    # Untagged message 1 minute BEFORE the anchor — inside the 5-min buffer.
-    await _add_message(
-        project_id,
-        msg_id="m-tier3",
-        recipient=agent,
-        session_id=None,
-        content="tier3 untagged",
-        timestamp=now - timedelta(minutes=1),
-    )
-
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-C", headers=auth_headers)
-    assert resp.status_code == 200
-    ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-tier3" not in ids
-
-
-@pytest.mark.asyncio
-async def test_tier3_untagged_outside_time_window_excluded(app, auth_headers):
-    """An untagged message 10 minutes BEFORE the first output is excluded
-    (outside the 5-minute pre-buffer)."""
-    project_id = await _project_id(app, auth_headers)
-    agent = "agent_t3b"
-    now = datetime.now(timezone.utc)
-    await _add_output(
-        project_id,
-        out_id="o-anchor2",
-        agent=agent,
-        content="anchor",
-        session_id="sess-D",
-        timestamp=now,
-    )
-    await _add_message(
-        project_id,
-        msg_id="m-too-old",
-        recipient=agent,
-        session_id=None,
-        content="too old",
-        timestamp=now - timedelta(minutes=10),
-    )
-
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-D", headers=auth_headers)
-    assert resp.status_code == 200
-    ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-too-old" not in ids
-
-
-@pytest.mark.asyncio
-async def test_tier3_closer_session_excludes_untagged(app, auth_headers):
-    """If another session started between the untagged message and the
-    current session, the untagged message is excluded from the current
-    session (it belongs to the closer previous one)."""
-    project_id = await _project_id(app, auth_headers)
-    agent = "agent_t3c"
-    now = datetime.now(timezone.utc)
-    # Previous session starts 30s ago, current session starts now.
-    await _add_output(
-        project_id,
-        out_id="o-prev",
-        agent=agent,
-        content="previous",
-        session_id="sess-prev",
-        timestamp=now - timedelta(seconds=30),
+        origin_type="operator",
+        content="belongs to prev session",
+        run_id="run-prev",
+        timestamp=now - timedelta(seconds=1),
     )
     await _add_output(
         project_id,
@@ -266,170 +195,228 @@ async def test_tier3_closer_session_excludes_untagged(app, auth_headers):
         session_id="sess-curr",
         timestamp=now,
     )
-    # Untagged message 1 minute ago — closer to sess-prev than to sess-curr.
-    await _add_message(
-        project_id,
-        msg_id="m-untagged",
-        recipient=agent,
-        session_id=None,
-        content="closer to prev",
-        timestamp=now - timedelta(minutes=1),
-    )
 
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-curr", headers=auth_headers)
     assert resp.status_code == 200
-    ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-untagged" not in ids, "untagged msg should belong to sess-prev, not sess-curr"
+    ids = [e["id"] for e in resp.json()["entries"]]
+    assert "entry-prev" not in ids
+    assert "o-curr" in ids
+
+
+@pytest.mark.asyncio
+async def test_concurrent_sessions_do_not_cross_contaminate(app, auth_headers):
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t3"
+    await _add_run(project_id, run_id="run-a", agent=agent, session_id="sess-a")
+    await _add_run(project_id, run_id="run-b", agent=agent, session_id="sess-b")
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-a",
+        agent=agent,
+        origin_type="operator",
+        content="a",
+        run_id="run-a",
+    )
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-b",
+        agent=agent,
+        origin_type="operator",
+        content="b",
+        run_id="run-b",
+    )
+    await _add_output(project_id, out_id="o-a", agent=agent, content="a-out", session_id="sess-a")
+    await _add_output(project_id, out_id="o-b", agent=agent, content="b-out", session_id="sess-b")
+
+    resp_a = await app.get(f"/api/v1/agent/{agent}/chat/sess-a", headers=auth_headers)
+    resp_b = await app.get(f"/api/v1/agent/{agent}/chat/sess-b", headers=auth_headers)
+    ids_a = {e["id"] for e in resp_a.json()["entries"] if e["delivery_state"] == "delivered"}
+    ids_b = {e["id"] for e in resp_b.json()["entries"] if e["delivery_state"] == "delivered"}
+    assert ids_a == {"entry-a", "o-a"}
+    assert ids_b == {"entry-b", "o-b"}
 
 
 # ---------------------------------------------------------------------------
-# Cross-tier / structural invariants
+# Peer traffic in both directions
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_agent_output_always_included(app, auth_headers):
-    """An agent output with session_id=requested is always in the response."""
+async def test_inbound_peer_message_tinted_with_sender(app, auth_headers):
     project_id = await _project_id(app, auth_headers)
     agent = "agent_t4"
-    await _add_output(
+    await _add_run(project_id, run_id="run-t4", agent=agent, session_id="sess-t4")
+    await _add_queue_entry(
         project_id,
-        out_id="o-only",
+        entry_id="entry-t4",
         agent=agent,
-        content="only output",
-        session_id="sess-only",
+        origin_type="agent",
+        origin_agent="sender_agent",
+        content="hi from sender_agent",
+        run_id="run-t4",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-only", headers=auth_headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert any(m["id"] == "o-only" and m["role"] == "agent" for m in data["messages"])
+    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t4", headers=auth_headers)
+    entry = _by_id(resp.json()["entries"], "entry-t4")
+    assert entry["kind"] == "inbound_peer"
+    assert entry["participant"] == "sender_agent"
+    assert entry["delivery_state"] == "delivered"
 
 
 @pytest.mark.asyncio
-async def test_literal_session_tag_is_preserved_as_content(app, auth_headers):
-    """A Tier-2 message's content is split on the \\n\\n[Session: tag and only
-    the prefix is returned to the client."""
+async def test_outbound_peer_message_placed_by_its_own_session_id(app, auth_headers):
     project_id = await _project_id(app, auth_headers)
     agent = "agent_t5"
-    await _add_message(
+    await _add_outbound_message(
         project_id,
-        msg_id="m-strip",
-        recipient=agent,
-        session_id="sess-strip",
-        content="user-visible\n\n[Session: sess-strip]",
-    )
-    # Anchor the session so the Tier-2 message is eligible.
-    await _add_output(
-        project_id,
-        out_id="o-strip",
-        agent=agent,
-        content="x",
-        session_id="sess-strip",
+        msg_id="msg-t5",
+        sender=agent,
+        recipient="other_agent",
+        content="delegating to other_agent",
+        session_id="sess-t5",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-strip", headers=auth_headers)
-    assert resp.status_code == 200
-    msg = next(m for m in resp.json()["messages"] if m["id"] == "m-strip")
-    assert msg["content"] == "user-visible\n\n[Session: sess-strip]"
+    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t5", headers=auth_headers)
+    entry = _by_id(resp.json()["entries"], "msg-t5")
+    assert entry["kind"] == "outbound_peer"
+    assert entry["participant"] == "other_agent"
+
+    # And it must NOT appear under an unrelated session for the same agent.
+    other_resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-other", headers=auth_headers)
+    other_ids = [e["id"] for e in other_resp.json()["entries"]]
+    assert "msg-t5" not in other_ids
+
+
+# ---------------------------------------------------------------------------
+# Undelivered entries and hop-budget suspension
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_empty_session_returns_empty_messages(app, auth_headers):
-    """A session with no outputs and no qualifying messages returns [ ]."""
+async def test_queued_entry_appears_regardless_of_requested_session(app, auth_headers):
+    project_id = await _project_id(app, auth_headers)
     agent = "agent_t6"
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t6-queued",
+        agent=agent,
+        origin_type="operator",
+        content="not delivered yet",
+    )
+
+    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-anything", headers=auth_headers)
+    entry = _by_id(resp.json()["entries"], "entry-t6-queued")
+    assert entry["delivery_state"] == "queued"
+    assert entry["hop_budget_exceeded"] is False
+
+
+@pytest.mark.asyncio
+async def test_queued_agent_origin_entry_over_hop_budget_is_flagged_suspended(app, auth_headers):
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t7"
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, project_id)
+        hop_budget = project.hop_budget
+        await session.commit()
+
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t7-suspended",
+        agent=agent,
+        origin_type="agent",
+        origin_agent="chain_source",
+        content="over budget",
+        hop_depth=hop_budget + 1,
+    )
+
+    resp = await app.get(f"/api/v1/agent/{agent}/chat", headers=auth_headers)
+    entry = _by_id(resp.json()["entries"], "entry-t7-suspended")
+    assert entry["delivery_state"] == "queued"
+    assert entry["hop_budget_exceeded"] is True
+
+
+@pytest.mark.asyncio
+async def test_delivered_entries_never_carry_hop_budget_exceeded(app, auth_headers):
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t8"
+    await _add_run(project_id, run_id="run-t8", agent=agent, session_id="sess-t8")
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t8",
+        agent=agent,
+        origin_type="operator",
+        content="delivered",
+        run_id="run-t8",
+    )
+
+    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t8", headers=auth_headers)
+    entry = _by_id(resp.json()["entries"], "entry-t8")
+    assert entry["hop_budget_exceeded"] is None
+
+
+# ---------------------------------------------------------------------------
+# Structural invariants
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_empty_session_returns_empty_entries(app, auth_headers):
+    agent = "agent_t9"
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-empty", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["session_id"] == "sess-empty"
     assert data["agent"] == agent
-    assert data["messages"] == []
+    assert data["entries"] == []
 
 
 @pytest.mark.asyncio
-async def test_other_session_messages_excluded(app, auth_headers):
-    """A message tagged with a DIFFERENT session_id is not in the response
-    for the current session."""
+async def test_entries_sorted_by_timestamp_with_queue_appended_last(app, auth_headers):
     project_id = await _project_id(app, auth_headers)
-    agent = "agent_t7"
+    agent = "agent_t10"
     now = datetime.now(timezone.utc)
-    # Add an output for sess-X to anchor the window.
-    await _add_output(
+    await _add_run(project_id, run_id="run-t10", agent=agent, session_id="sess-t10")
+    await _add_queue_entry(
         project_id,
-        out_id="o-anchor-x",
+        entry_id="entry-t10-1",
         agent=agent,
-        content="x-anchor",
-        session_id="sess-X",
-        timestamp=now,
-    )
-    # Message tied to a different session.
-    await _add_message(
-        project_id,
-        msg_id="m-other",
-        recipient=agent,
-        session_id="sess-OTHER",
-        content="belongs to OTHER",
-    )
-
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-X", headers=auth_headers)
-    assert resp.status_code == 200
-    ids = [m["id"] for m in resp.json()["messages"]]
-    assert "m-other" not in ids
-
-
-@pytest.mark.asyncio
-async def test_messages_sorted_by_timestamp(app, auth_headers):
-    """The final response is sorted by message.timestamp (agent output + user
-    messages interleaved correctly)."""
-    project_id = await _project_id(app, auth_headers)
-    agent = "agent_t8"
-    now = datetime.now(timezone.utc)
-    # 3 outputs and 2 messages, interleaved.
-    await _add_output(
-        project_id,
-        out_id="o1",
-        agent=agent,
+        origin_type="operator",
         content="first",
-        session_id="sess-Z",
+        run_id="run-t10",
         timestamp=now - timedelta(seconds=10),
     )
-    await _add_message(
+    await _add_output(
         project_id,
-        msg_id="m1",
-        recipient=agent,
-        session_id="sess-Z",
+        out_id="o-t10-1",
+        agent=agent,
         content="second",
+        session_id="sess-t10",
         timestamp=now - timedelta(seconds=9),
     )
-    await _add_output(
+    await _add_outbound_message(
         project_id,
-        out_id="o2",
-        agent=agent,
+        msg_id="msg-t10-1",
+        sender=agent,
+        recipient="peer",
         content="third",
-        session_id="sess-Z",
+        session_id="sess-t10",
         timestamp=now - timedelta(seconds=8),
     )
-    await _add_message(
+    await _add_queue_entry(
         project_id,
-        msg_id="m2",
-        recipient=agent,
-        session_id="sess-Z",
-        content="fourth",
-        timestamp=now - timedelta(seconds=7),
-    )
-    await _add_output(
-        project_id,
-        out_id="o3",
+        entry_id="entry-t10-pending",
         agent=agent,
-        content="fifth",
-        session_id="sess-Z",
-        timestamp=now - timedelta(seconds=6),
+        origin_type="operator",
+        content="pending",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-Z", headers=auth_headers)
-    assert resp.status_code == 200
-    msgs = resp.json()["messages"]
-    # Must be ascending timestamp order.
-    ts = [m["timestamp"] for m in msgs]
-    assert ts == sorted(ts), f"messages not sorted ascending: {ts!r}"
-    assert len(msgs) == 5
+    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t10", headers=auth_headers)
+    entries = resp.json()["entries"]
+    delivered = [e for e in entries if e["delivery_state"] == "delivered"]
+    ts = [e["timestamp"] for e in delivered]
+    assert ts == sorted(ts)
+    assert [e["id"] for e in delivered] == ["entry-t10-1", "o-t10-1", "msg-t10-1"]
+    # Queued entries are appended after every delivered one.
+    assert entries[-1]["id"] == "entry-t10-pending"
+    assert entries[-1]["delivery_state"] == "queued"

@@ -214,7 +214,6 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         "/api/v1/agents",
         "/api/v1/agents/alice/timeline",
         "/api/v1/agents/alice/output",
-        "/api/v1/agent/alice/chat",
     ]
 
     for path in list_endpoints:
@@ -232,13 +231,18 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
     assert sessions_resp.status_code == 200
     assert sessions_resp.json()["sessions"] == []
 
-    # Chat history for a specific session must also be empty.
+    # The merged chat timeline also returns a dict wrapper (task 8.3) — both the
+    # sessionless and session-scoped forms must report an empty entries list.
+    recent_chat_resp = await app.get("/api/v1/agent/alice/chat", headers=b)
+    assert recent_chat_resp.status_code == 200
+    assert recent_chat_resp.json()["entries"] == []
+
     chat_resp = await app.get(
         f"/api/v1/agent/alice/chat/{project_a_resources['session_id']}",
         headers=b,
     )
     assert chat_resp.status_code == 200
-    assert chat_resp.json()["messages"] == []
+    assert chat_resp.json()["entries"] == []
 
     # Status endpoint must report Project B, not Project A.
     status_resp = await app.get("/api/v1/status", headers=b)

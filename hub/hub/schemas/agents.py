@@ -70,6 +70,7 @@ class AgentSummary(BaseModel):
     runner_options: Optional[Dict[str, Any]] = (
         None  # Runner-specific options (e.g., memory for Codex)
     )
+    color_index: Optional[int] = None  # Stable palette index, assigned once at registration
 
     model_config = {"from_attributes": True}
 

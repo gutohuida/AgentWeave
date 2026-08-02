@@ -15,13 +15,14 @@ fix is applied. After the fix, every test in this file must pass.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import DataError, IntegrityError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from hub.config import settings
 from hub.db.engine import async_session_factory, init_db
@@ -123,7 +124,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0015. The full
+    migration runs cleanly and the version lands at 0016. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -131,7 +132,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0015).
+    # Verify alembic_version is at the latest revision (0016).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -142,7 +143,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0015", f"expected alembic_version=0015, got {version}"
+    assert version == "0016", f"expected alembic_version=0016, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -231,7 +232,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
     """For a file-based DB, _run_alembic_upgrade must actually apply migrations.
 
     Verifies the H5 fix at the unit level: a file-based URL is not skipped,
-    alembic is invoked, and the alembic_version table ends up at 0015.
+    alembic is invoked, and the alembic_version table ends up at 0016.
     """
     from hub.db.engine import _run_alembic_upgrade
 
@@ -253,7 +254,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0015", f"expected alembic_version=0015, got {version}"
+    assert version == "0016", f"expected alembic_version=0016, got {version}"
 
 
 @pytest.mark.asyncio
@@ -335,6 +336,84 @@ def test_migration_0012_creates_runs_table_on_existing_deployment(tmp_path) -> N
     assert columns["session_id"]["nullable"] is True
     assert columns["pid"]["nullable"] is True
     assert columns["ended_at"]["nullable"] is True
+
+
+def test_migration_0016_adds_and_backfills_agent_color_index(tmp_path) -> None:
+    """Migration 0016 must add `color_index` and backfill existing agents by
+    registration order (created_at) per project, not leave them null."""
+    db_file = tmp_path / "pre_0016.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _seed_pre_0016() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+                await conn.execute(sa.text("ALTER TABLE agents DROP COLUMN color_index"))
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0015')")
+                )
+                # Raw SQL, not the ORM Agent class: the ORM model already declares
+                # color_index (it was just dropped above to simulate a pre-0016
+                # deployment), so an ORM insert would try to write a column that no
+                # longer exists on this connection's schema.
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO projects (id, name, created_at) VALUES (:id, :name, :now)"
+                    ),
+                    {
+                        "id": "proj-color-test",
+                        "name": "Colour Test",
+                        "now": datetime.now(timezone.utc),
+                    },
+                )
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO agents (id, project_id, name, self_registered, created_at, updated) "
+                        "VALUES (:id, :project_id, :name, 0, :created_at, :created_at)"
+                    ),
+                    [
+                        {
+                            "id": "agent-first",
+                            "project_id": "proj-color-test",
+                            "name": "first",
+                            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        },
+                        {
+                            "id": "agent-second",
+                            "project_id": "proj-color-test",
+                            "name": "second",
+                            "created_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
+                        },
+                    ],
+                )
+        finally:
+            await engine.dispose()
+
+    _run(_seed_pre_0016())
+    _run_alembic_with(db_url)
+
+    columns = {column["name"]: column for column in _inspect_columns(db_url, "agents")}
+    assert "color_index" in columns
+    assert columns["color_index"]["nullable"] is True
+
+    async def _fetch_indices() -> dict:
+        engine = create_async_engine(db_url)
+        try:
+            async with AsyncSession(engine) as session:
+                result = await session.execute(
+                    sa.text("SELECT name, color_index FROM agents WHERE project_id = :p"),
+                    {"p": "proj-color-test"},
+                )
+                return dict(result.all())
+        finally:
+            await engine.dispose()
+
+    indices = _run(_fetch_indices())
+    assert indices == {"first": 0, "second": 1}
 
 
 @pytest.mark.asyncio

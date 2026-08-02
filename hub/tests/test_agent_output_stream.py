@@ -161,8 +161,8 @@ async def test_chat_history_preserves_structured_output_fields(app, auth_headers
         headers=auth_headers,
     )
     assert response.status_code == 200
-    message = next(item for item in response.json()["messages"] if item["role"] == "agent")
-    assert message["kind"] == "status"
+    message = next(item for item in response.json()["entries"] if item["kind"] == "agent_output")
+    assert message["output_kind"] == "status"
     assert message["payload"] == {"version": 1, "phase": "completed"}
     assert message["run_id"] == "run-chat"
     assert message["sequence"] == 7

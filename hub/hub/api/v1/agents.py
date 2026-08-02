@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import worktrees
+from ...agent_colors import next_color_index
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
 from ...db.engine import get_session
@@ -466,6 +467,7 @@ async def list_agents(
                 self_registered=_self_registered,
                 liveness=_liveness,
                 runner_options=agent_meta.get("runner_options"),
+                color_index=agent_row.color_index if agent_row else None,
             )
         )
 
@@ -922,6 +924,7 @@ async def request_agent(
         contact_mode="watchdog-spawn",
         self_registered=False,
         config=copied_config,
+        color_index=await next_color_index(session, project_id),
     )
     hop_depth = source_run.turn_depth + 1
     message = Message(
@@ -933,6 +936,9 @@ async def request_agent(
         content=body.task,
         type="delegation",
         task_id=None,
+        # Recorded association, not inferred (task 8.3) — same as messages.py's
+        # create_message.
+        session_id=source_run.session_id,
     )
     entry: InboundQueueEntry = new_entry(
         project_id=project_id,
@@ -1030,6 +1036,7 @@ async def register_agent(
             mcp_endpoint=mcp_endpoint,
             spawn_cmd=spawn_cmd,
             config=config,
+            color_index=await next_color_index(session, project_id),
         )
         session.add(agent_row)
 
