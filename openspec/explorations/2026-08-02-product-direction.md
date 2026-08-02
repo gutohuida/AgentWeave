@@ -59,11 +59,72 @@ missed.
 
 The distinction matters. A locally-installed Python app still needs an entry point — `uv tool
 install agentweave`, then a command that launches it. What goes is the CLI as a *collaboration
-substrate*: `switch`, `set-session`, `watch`, transport setup, the messaging and task commands, and
-the CLI-side MCP server that exists only so agents can reach a local filesystem session.
+substrate*.
 
-**Open:** exactly which commands survive as launcher/diagnostics. Needs a decision before the
-single-runtime change can be written.
+**Decided 2026-08-02** (delegated by the product owner). The governing principle:
+
+> The CLI does only what **cannot be done from inside the app**: start it, diagnose why it will not
+> start, stop it, and recover it when it is wedged.
+
+Everything that manipulates collaboration state belongs to one of the two real audiences — the app
+UI for the human, the MCP tool surface for agents. There is no third audience, so there is no third
+surface. `cli.py` currently has **56** `cmd_*` functions; **5** survive.
+
+| Surviving | Purpose |
+|---|---|
+| `agentweave` (bare) | Launch the app on the current directory. The primary entry point, equivalent to `npx t3`. Replaces `init`, `activate`, `quick`, and `start` — an unregistered directory is offered on launch rather than requiring a separate ceremony. |
+| `agentweave doctor` | Environment readiness: Python, runner CLIs on PATH, ports, database, permissions. Kept precisely because "hard to use" is the problem being solved — this is where a failed install explains itself. |
+| `agentweave status` | Is it running, on what port, against which project. |
+| `agentweave stop` | Stop a running instance. |
+| `agentweave reset` | Destroy local state and start clean. The escape hatch when something is wedged; successor to `hub-destroy`. |
+
+Plus `--version` and `--help`.
+
+Removed, by group: collaboration (`switch`, `relay`, `delegate`, `run`, `inbox`, `msg-*`, `reply`,
+`task-*`, `question-*`, `agents-list`, `agent-request`, `checkpoint`, `summary`, `log`, `yolo`,
+`sync-context`, `spec-push`) → app UI and MCP; `roles-*` → dies with runner/charter separation;
+`transport-*` and `agent-set-session` → die with the single runtime; `jobs-*` → app UI, with the
+existing MCP job tools covering agents; `agent-configure` / `agent-set-model` → app UI;
+`mcp-setup` → becomes automatic, per `agent-tool-surface`'s "one tool surface, configured
+automatically"; `update-template` → app UI.
+
+Naming note: `start`/`stop`/`status` currently mean *collaboration session* lifecycle. Removing
+those frees the names for app lifecycle, which is what a user would expect them to mean.
+
+### 1b. The MCP surface is already where it needs to be
+
+The product owner's expectation — "MCP will just be so the agents themselves can do things on the
+hub" — is **already the implemented design**. Phase 7 collapsed the CLI-side server into a
+compatibility re-export; `src/agentweave/mcp/server.py` now carries no tools of its own and its
+docstring states the CLI-side implementation "duplicated the Hub server and allowed local/git state
+reads around Hub governance."
+
+Remaining work is small: delete the compatibility shim once the CLI-only install path goes away.
+
+**The constraint on any new endpoint** comes from `agent-tool-surface`: *"The Hub supplies state;
+the tool surface carries intent."* Everything an agent needs to begin a turn is injected at turn
+start, so tools exist to **cause effects**, never to fetch state. New endpoints must therefore be
+verb-shaped — `propose_*`, `attach_*`, `request_*` — not `list_*` / `get_*`.
+
+Current surface (12 tools): `send_message`, `create_task`, `list_tasks`, `get_task`, `update_task`,
+`ask_user`, `get_answer`, `request_agent`, `create_job`, `delete_job`, `toggle_job`, `run_job`.
+
+Gaps against the stated differentiators:
+
+- **Specification (largest gap).** Spec-driven development with the agents is the hard focus, yet an
+  agent has no way to participate in a specification at all. Needs intent-shaped tools for proposing
+  a change to a requirement, attaching evidence to a requirement, and recording a verification
+  outcome. Blocked behind the specification program's own decomposition.
+- **Governance.** `update_task` can move a status, but there is no way to request a review, submit
+  evidence, or ask whether a gate is satisfied. Quality gates are a stated differentiator and have
+  no agent-facing surface.
+
+**Flagged inconsistency:** `list_tasks`, `get_task`, and `get_answer` are read-shaped and sit
+awkwardly against the requirement's general sentence, which limits the surface to causing effects.
+Its *scenario* is narrower — it forbids reading "queued or undelivered entries" specifically. So
+either tasks are deliberately outside "coordination state supplied at turn start", or the shipped
+surface contradicts its own spec. The requirement should be tightened to say which, before new
+endpoints are designed against an ambiguous rule.
 
 ### 2. Remote deployment leaves scope, and RQ-1 dissolves in its current form
 
