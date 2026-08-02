@@ -2,69 +2,72 @@
 
 ## Purpose
 
-Durable conversation transitions from the Hub Agent Output screen: preserve the
-current runner session in a checkpoint, start one fresh session, resume from the
-checkpoint, and then continue that new session normally.
+Durable conversation transitions from the agent conversation workspace: preserve the current
+AgentWeave conversation in a checkpoint, create one successor conversation, resume from the
+checkpoint, and then continue that successor conversation normally. Conversation identity is
+AgentWeave's own `conversation_id`, allocated before any provider process starts; the provider
+session is nullable continuation data beneath it, never the operator-facing identity a handoff
+transitions between.
 
 ## Requirements
 
 ### Requirement: Agent Output distinguishes continuation, fresh start, and handoff
 
-The Agent Output screen MUST present existing conversation IDs as resumable
-conversations, a `New conversation (start fresh)` choice that deliberately
-discards prior conversational context, and a `Handoff` action that preserves
-context through a durable checkpoint before starting fresh.
+The conversation workspace MUST present existing AgentWeave conversations as resumable choices, a
+`New conversation (start fresh)` choice that deliberately creates a new unbound conversation, and
+a `Handoff` action that preserves context through a durable checkpoint before creating a successor
+conversation.
 
-The agent-detail header MUST NOT present the legacy `Compact` and `Reset`
-actions as primary conversation controls.
+The normal picker and continuity controls MUST use `conversation_id` and MUST NOT use provider
+session IDs as conversation labels or values. The agent-detail header MUST NOT present the legacy
+`Compact` and `Reset` actions as primary conversation controls.
 
 #### Scenario: Existing conversation is selected
 
-- **WHEN** the user selects an existing conversation ID and sends a message
-- **THEN** the trigger MUST use `session_mode: "resume"`
-- **AND** it MUST include the selected conversation ID as `session_id`
+- **WHEN** the user selects an existing conversation and sends a message
+- **THEN** the trigger MUST include its exact `conversation_id`
+- **AND** the server MUST derive provider continuation from that conversation's binding
 
 #### Scenario: User starts fresh without a handoff
 
 - **WHEN** the user selects `New conversation (start fresh)` and sends a message
-- **THEN** the trigger MUST use `session_mode: "new"`
+- **THEN** the trigger MUST omit `conversation_id` so the server creates one synchronously
 - **AND** it MUST NOT inject handoff-resume instructions into the message
 
 #### Scenario: Legacy context actions are absent
 
-- **WHEN** the Agent detail screen renders
+- **WHEN** the agent conversation renders
 - **THEN** `Compact` and `Reset` buttons MUST NOT appear in its primary header
 - **AND** durable transitions MUST be initiated through `Handoff`
 
 ### Requirement: Handoff checkpoints the selected conversation
 
-The `Handoff` action MUST resume the selected conversation and instruct that
-session to invoke its `aw-checkpoint` workflow with reason `pre_handoff`. The
-instruction MUST require the checkpoint to preserve session intent, modified
-files, decisions and rationale, blockers, exact next steps, and verification
-commands under `.agentweave/shared/checkpoints/`.
+The `Handoff` action MUST append a checkpoint request to the selected AgentWeave conversation. The
+instruction MUST require the agent to invoke its checkpoint workflow with reason `pre_handoff` and
+preserve session intent, modified files, decisions and rationale, blockers, exact next steps, and
+verification commands in the configured durable checkpoint location.
 
 #### Scenario: User requests a handoff
 
 - **WHEN** an automatically managed agent has an existing conversation selected
-- **AND** the user clicks `Handoff`
-- **THEN** the Hub MUST trigger the selected conversation with
-  `session_mode: "resume"` and its exact `session_id`
+- **AND** the user activates `Handoff`
+- **THEN** the trigger MUST carry the selected `conversation_id`
 - **AND** the prompt MUST request a durable `pre_handoff` checkpoint
-- **AND** the conversation selector MUST be armed for one fresh conversation
+- **AND** the workspace MUST be armed to create one successor conversation
 
 #### Scenario: Handoff is being prepared
 
 - **WHEN** the checkpoint turn is queued or running
 - **THEN** the UI MUST display `Preparing durable handoff`
-- **AND** the selector and message composer MUST remain disabled
+- **AND** handoff controls MUST remain disabled until that checkpoint turn settles
+- **AND** unrelated running-state logic MUST NOT disable ordinary queued composer input
 
 #### Scenario: Checkpoint turn completes
 
 - **WHEN** the checkpoint turn emits a completed status
 - **OR** the agent transitions from running back to idle
 - **THEN** the UI MUST display that the handoff is ready
-- **AND** the message composer MUST become available for the fresh conversation
+- **AND** the message composer MUST become available for the successor conversation
 
 #### Scenario: Agent cannot be triggered automatically
 
@@ -74,51 +77,47 @@ commands under `.agentweave/shared/checkpoints/`.
 
 ### Requirement: The next conversation resumes the durable handoff
 
-After a handoff is ready, the next user message MUST start exactly one fresh
-runner session. Its prompt MUST instruct the new session to read the newest
-checkpoint for its agent, then `.agentweave/shared/context.md`, treat the
-checkpoint as authoritative, and continue from its `Next Steps` before handling
+After a handoff is ready, the next user message MUST create exactly one unbound successor
+conversation. Its prompt MUST instruct the new provider session to read the newest checkpoint for
+its agent, treat the checkpoint as authoritative, and continue from its next steps before handling
 the user's request.
 
 #### Scenario: First message after handoff
 
 - **WHEN** the handoff is ready and the user sends the next message
-- **THEN** the trigger MUST use `session_mode: "new"`
+- **THEN** the trigger MUST omit `conversation_id` and return the new successor `conversation_id`
 - **AND** the message MUST include the handoff-resume instructions
 - **AND** the user's original request MUST remain present
 
-#### Scenario: New conversation identity becomes available
+#### Scenario: Successor conversation identity is immediate
 
-- **WHEN** output or the session list reveals a conversation ID not present
-  before the fresh trigger
-- **THEN** the selector MUST automatically bind to that new conversation ID
-- **AND** the UI MUST indicate that it is continuing the new conversation
+- **WHEN** the fresh trigger is accepted
+- **THEN** the selector MUST bind to its returned `conversation_id` without waiting for output
+- **AND** the UI MUST indicate that it is continuing the successor conversation
 
 #### Scenario: Messages after the resumed handoff
 
-- **WHEN** the user sends another message after the new conversation is bound
-- **THEN** the trigger MUST use `session_mode: "resume"` with the new
-  conversation ID
+- **WHEN** the user sends another message in the successor conversation
+- **THEN** the trigger MUST carry that successor `conversation_id`
 - **AND** it MUST NOT inject the handoff-resume instructions again
-- **AND** it MUST NOT create another fresh conversation
+- **AND** it MUST NOT create another conversation
 
 ### Requirement: Conversation transition state is visible and scoped to the agent
 
-The Agent Output screen MUST visibly distinguish continuing an existing
-conversation, preparing a handoff, a ready handoff, starting a fresh
-conversation, and continuing the newly bound conversation. Transient handoff
-and pending-session state MUST be cleared when the selected agent changes or
-the user manually changes the conversation selection.
+The conversation workspace MUST visibly distinguish continuing an existing conversation, preparing
+a handoff, a ready handoff, starting a fresh conversation, and continuing its successor. Transient
+handoff state MUST be cleared when the selected agent changes or the user manually changes the
+conversation selection. Provider-binding latency MUST NOT be represented as a pending application
+identity state because `conversation_id` is already available.
 
 #### Scenario: User changes agents
 
 - **WHEN** the user selects a different agent
-- **THEN** handoff and pending-new-conversation state from the previous agent
-  MUST be cleared
-- **AND** the new agent's most recent conversation MUST be selected when available
+- **THEN** handoff state from the previous agent MUST be cleared
+- **AND** the new agent's most recently active conversation MUST be selected when available
 
 #### Scenario: User manually changes conversation
 
-- **WHEN** the user changes the conversation selector during an idle state
-- **THEN** any prepared handoff or pending new-conversation binding MUST be cancelled
-- **AND** the continuity indicator MUST describe the newly selected choice
+- **WHEN** the user changes the conversation selection during an idle state
+- **THEN** any prepared handoff MUST be cancelled
+- **AND** the continuity indicator MUST describe the newly selected conversation
