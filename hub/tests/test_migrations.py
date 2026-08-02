@@ -416,6 +416,143 @@ def test_migration_0016_adds_and_backfills_agent_color_index(tmp_path) -> None:
     assert indices == {"first": 0, "second": 1}
 
 
+def test_migration_0017_backfills_conversations_deterministically(tmp_path) -> None:
+    """Migration 0017 must group pre-existing runs into conversations by
+    `(project_id, agent, session_id)` — runs sharing a provider session collapse into
+    one conversation, a run with no session_id gets its own — and the id it assigns
+    must be a pure function of that identity, not a fresh random one each time the
+    migration logic runs. Determinism matters because design.md's migration guarantee
+    is that a redeploy re-running this backfill must reproduce the same ids rather
+    than orphaning history under new ones; it must also never guess groupings from
+    timestamp proximity."""
+    db_file = tmp_path / "pre_0017.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _seed_pre_0017() -> None:
+        # Base.metadata.create_all() would build the *current* schema, which already
+        # has conversation_id — and SQLite refuses ALTER TABLE ... DROP COLUMN on a
+        # column that's part of a foreign key (the error this replaced). So build the
+        # pre-0017 shape directly instead: just `projects` and `runs`, neither of
+        # which the migration requires anything else to exist alongside (its own
+        # per-table loops skip whatever isn't present).
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, "
+                        "name VARCHAR(128) NOT NULL, created_at TIMESTAMP NOT NULL)"
+                    )
+                )
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE runs (id VARCHAR(64) PRIMARY KEY, "
+                        "project_id VARCHAR(64) NOT NULL, agent VARCHAR(64) NOT NULL, "
+                        "session_id VARCHAR(128), status VARCHAR(32) NOT NULL, "
+                        "pid INTEGER, exit_code INTEGER, error TEXT, "
+                        "started_at TIMESTAMP NOT NULL, ended_at TIMESTAMP, "
+                        "last_heartbeat_at TIMESTAMP, turn_depth INTEGER)"
+                    )
+                )
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0016')")
+                )
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO projects (id, name, created_at) VALUES (:id, :name, :now)"
+                    ),
+                    {
+                        "id": "proj-conv-mig",
+                        "name": "Conv Migration Test",
+                        "now": datetime.now(timezone.utc),
+                    },
+                )
+                # run-a1/run-a2 share a provider session -> must collapse into one
+                # conversation. run-b1 has no session_id -> gets its own, keyed by run id.
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO runs (id, project_id, agent, session_id, status, started_at) "
+                        "VALUES (:id, :project_id, :agent, :session_id, 'completed', :started_at)"
+                    ),
+                    [
+                        {
+                            "id": "run-a1",
+                            "project_id": "proj-conv-mig",
+                            "agent": "claude",
+                            "session_id": "provider-shared",
+                            "started_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                        },
+                        {
+                            "id": "run-a2",
+                            "project_id": "proj-conv-mig",
+                            "agent": "claude",
+                            "session_id": "provider-shared",
+                            "started_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
+                        },
+                        {
+                            "id": "run-b1",
+                            "project_id": "proj-conv-mig",
+                            "agent": "claude",
+                            "session_id": None,
+                            "started_at": datetime(2026, 1, 3, tzinfo=timezone.utc),
+                        },
+                    ],
+                )
+        finally:
+            await engine.dispose()
+
+    _run(_seed_pre_0017())
+    _run_alembic_with(db_url)
+
+    async def _fetch() -> tuple:
+        engine = create_async_engine(db_url)
+        try:
+            async with AsyncSession(engine) as session:
+                runs = (
+                    await session.execute(sa.text("SELECT id, conversation_id FROM runs ORDER BY id"))
+                ).all()
+                conversations = (
+                    await session.execute(
+                        sa.text(
+                            "SELECT id, project_id, agent, provider_session_id, lifecycle "
+                            "FROM conversations"
+                        )
+                    )
+                ).all()
+                return runs, conversations
+        finally:
+            await engine.dispose()
+
+    runs, conversations = _run(_fetch())
+    runs_by_id = {row.id: row.conversation_id for row in runs}
+
+    assert runs_by_id["run-a1"] == runs_by_id["run-a2"]
+    assert runs_by_id["run-b1"] != runs_by_id["run-a1"]
+    assert len(conversations) == 2
+
+    by_id = {row.id: row for row in conversations}
+    shared = by_id[runs_by_id["run-a1"]]
+    assert shared.project_id == "proj-conv-mig"
+    assert shared.agent == "claude"
+    assert shared.provider_session_id == "provider-shared"
+    assert shared.lifecycle == "open"
+
+    solo = by_id[runs_by_id["run-b1"]]
+    assert solo.provider_session_id is None
+
+    # Determinism: re-deriving the shared conversation's id from the same inputs the
+    # migration used must reproduce exactly the id it picked.
+    import hashlib
+
+    digest = hashlib.sha256(
+        "\x1f".join(["proj-conv-mig", "claude", "provider-shared"]).encode()
+    ).hexdigest()[:20]
+    assert shared.id == f"conv-mig-{digest}"
+
+
 @pytest.mark.asyncio
 async def test_run_model_round_trips_through_the_orm(app) -> None:
     """Sanity check: a Run row can be created and read back with its fields intact."""

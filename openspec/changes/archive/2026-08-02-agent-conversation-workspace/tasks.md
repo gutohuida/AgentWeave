@@ -17,10 +17,14 @@
 
 ## 0. Stable conversation identity
 
-- [ ] 0.1 Write backend contract and migration tests for `Conversation(id, project_id, agent,
+- [x] 0.1 Write backend contract and migration tests for `Conversation(id, project_id, agent,
       provider_session_id, lifecycle, created_at, updated_at, archived_at)`; deterministic legacy
       backfill; synchronous allocation; immutable scope; idempotent provider binding; binding
-      conflict; retry/stop retention; and reset-only deletion.
+      conflict; retry/stop retention; and reset-only deletion. Done post-archive
+      (2026-08-02): `hub/tests/test_conversation_contract.py` (model contract, synchronous
+      allocation, immutable scope, idempotent binding, binding conflict, stop/retry retention,
+      reset-only-deletion scan) + `hub/tests/test_migrations.py::test_migration_0017_backfills_conversations_deterministically`
+      (deterministic legacy backfill). 398 passed, 4 skipped, full `hub/` suite.
 - [x] 0.2 Add the `conversations` migration and `conversation_id` associations on `Run`,
       `InboundQueueEntry`, `AgentOutput`, and `Message`, retaining legacy `session_id` only as a
       provider-continuation snapshot during migration.
