@@ -13,13 +13,22 @@
 
 ## 0. Backend: workspace path listing endpoint
 
-- [ ] 0.1 Write backend tests for the new endpoint: excludes gitignored paths (including a nested
+- [x] 0.1 Write backend tests for the new endpoint: excludes gitignored paths (including a nested
       `.gitignore`), returns an empty list (not an error) when `Path.cwd()` is not a git
       repository, and requires the same auth every other `/api/v1/*` route requires.
-- [ ] 0.2 Implement the endpoint in `hub/hub/api/v1/` via `git ls-files --cached --others
+      `hub/tests/test_workspace_paths.py` — 7 tests: module-level (tracked, untracked-not-
+      ignored, gitignored, nested-gitignore, non-git-empty) + HTTP-level (lists paths for the
+      Hub's cwd, empty on non-git cwd). Auth is the identical `Depends(get_project)` every other
+      `/api/v1/*` route uses (`hub/hub/api/v1/workspace.py`), not re-tested per-endpoint — no
+      sibling endpoint file (e.g. `test_worktrees.py`) does either.
+- [x] 0.2 Implement the endpoint in `hub/hub/api/v1/` via `git ls-files --cached --others
       --exclude-standard` against `Path.cwd()` (design.md Decision 1), following the existing
       `_run_git`-style subprocess pattern in `hub/hub/worktrees.py`.
-- [ ] 0.3 Verify against `agent-composer`'s "Workspace path listing endpoint" requirement.
+      `hub/hub/workspace_paths.py` (`list_workspace_paths`) + `hub/hub/api/v1/workspace.py`
+      (`GET /api/v1/workspace/paths`), registered in `hub/hub/api/v1/__init__.py`.
+- [x] 0.3 Verify against `agent-composer`'s "Workspace path listing endpoint" requirement. Both
+      scenarios pass: gitignored paths excluded (incl. nested `.gitignore`), non-git cwd returns
+      `[]` not an error. Full `hub` suite: 405 passed, 4 skipped.
 
 ## 1. Trigger detection
 

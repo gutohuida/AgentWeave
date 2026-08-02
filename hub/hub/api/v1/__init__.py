@@ -17,6 +17,7 @@ from .setup import router as setup_router
 from .spec import router as spec_router
 from .status import router as status_router
 from .tasks import router as tasks_router
+from .workspace import router as workspace_router
 from .worktrees import router as worktrees_router
 
 v1_router = APIRouter(prefix="/api/v1")
@@ -36,3 +37,4 @@ v1_router.include_router(instructions_router)
 v1_router.include_router(spec_router)
 v1_router.include_router(worktrees_router)
 v1_router.include_router(inbound_queue_router)
+v1_router.include_router(workspace_router)
