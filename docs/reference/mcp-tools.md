@@ -1,176 +1,38 @@
-# MCP Tools Reference
-
-These tools are available to agents in **local MCP mode** (`agentweave-mcp`) and **Hub MCP mode** (`python -m hub.mcp_server`). Some tools are transport-specific as noted below.
-
-## Messaging
-
-### `send_message(to, subject, content)`
-
-Send a message to another agent. The sender is always the identity the Hub or watchdog
-bound to this process at spawn (`AW_AGENT_IDENTITY`) — it cannot be passed as an argument.
-
-### `get_inbox(agent)`
-
-Read unread messages for the specified agent. Messages are automatically archived after being returned — no need to call `mark_read()` separately.
-
-### `mark_read(message_id)`
-
-Archive a message manually. Usually not needed since `get_inbox` auto-marks messages as read.
-
-## Tasks
-
-### `list_tasks(agent?)`
-
-List active tasks. Optionally filter by assignee.
-
-### `get_task(task_id)`
-
-Get full task details including requirements, acceptance criteria, and deliverables.
-
-### `update_task(task_id, status)`
-
-Update task status. Valid statuses: `pending`, `assigned`, `in_progress`, `completed`, `under_review`, `approved`, `revision_needed`, `rejected`.
-
-### `create_task(title, ...)`
-
-Create and assign a new task. Supports description, assignee, priority, requirements, and acceptance criteria. The assigner is always the bound identity (see `send_message` above), not a caller-supplied argument.
-
-## Session
-
-### `get_status()`
-
-Get a session-wide summary plus task counts by status and assignee.
-
-### `list_agents()`
-
-List all agents in the session with their roles and runners.
-
-**Returns:** Array of agents with `name`, `session_role`, `runner`, `dev_roles`, and `is_principal` fields.
-
-### `save_checkpoint(agent, session_intent, files_modified, decisions, next_steps, ...)` (local MCP only)
-
-Save a context checkpoint before handoffs or session end. Writes to `.agentweave/shared/checkpoints/<agent>-<timestamp>.md`.
-
-**Parameters:**
-- `agent` — Your agent name
-- `session_intent` — What this session was trying to accomplish
-- `files_modified` — List of files changed with descriptions
-- `decisions` — Decisions made with rationale
-- `next_steps` — Ordered list of actions for next session
-- `reason` — Why checkpoint is being written (token_threshold, phase_complete, pre_handoff, pre_sleep, manual)
-- `blockers` — Optional unresolved blockers
-- `verification_commands` — Optional shell commands to verify state
-
-## Context
-
-### `build_agent_context(agent)`
-
-Build and return the full runtime context for a declared agent. Uses the centralized `context_builder` module to assemble project config, session state, roles, and quality governance settings into the same canonical context written to `.agentweave/context/<agent>.md`.
-
-Useful for orchestrators that need a fresh, in-memory context snapshot without triggering a full `sync-context` cycle.
-
-**Parameters:**
-- `agent` — Agent name to generate context for
-
-**Returns:** Object with `agent`, `context` (markdown string), and `generated_at` fields.
-
-## Human Interaction (Hub only)
-
-### `ask_user(question)`
-
-Post a question to the human. Returns a question ID. The asker is always the bound identity (see `send_message` above).
-
-### `get_answer(question_id)`
-
-Check if the human has answered the question.
-
-## Agent Configuration (Hub only)
-
-### `get_agent_config(agent)`
-
-Get configuration for a specific agent including runner type, base URL, and API key environment variable name. Useful for orchestrators that need to understand proxy agent setup.
-
-**Returns:** Object with `runner`, `base_url`, and `api_key_var` fields.
-
-## Self-Registration
-
-Requires Hub/HTTP transport. In local MCP mode these tools return an error unless HTTP transport is active; in Hub MCP mode they call the Hub REST API directly.
-
-### `register_agent(name, contact_mode, ...)`
-
-Register or re-register an agent. `contact_mode` must be `poll`, `mcp-push`, or `watchdog-spawn`.
-
-### `update_agent_config(name, ...)`
-
-Partially update a self-registered agent's configuration, contact mode, MCP endpoint, or spawn command.
-
-### `get_context(role)`
-
-Return the markdown role guide for a role such as `backend_dev`. This remains a
-role lookup tool for compatibility. When an agent knows its own agent name, use
-`get_agent_context(agent)` for full project and onboarding context.
-
-### `get_agent_context(agent)`
-
-Return full runtime or onboarding context for an agent name.
-
-Declared agents receive the same canonical context generated at
-`.agentweave/context/<agent>.md`. Registered but undeclared external agents
-receive provisional onboarding context with project summary, communication
-rules, requested role guidance, available roles, and explicit restrictions
-against modifying files or claiming tasks until assigned. Unknown agents receive
-registration guidance.
-
-**Returns:** Object with `agent`, `known`, `declared`, `registered`,
-`provisional`, `roles`, `missing`, `metadata`, and markdown `context`.
-
-### `heartbeat(agent)`
-
-Send a liveness heartbeat for an agent.
-
-## Jobs
-
-AI Jobs allow scheduling recurring tasks for agents using cron expressions. Local transport stores jobs under `.agentweave/jobs/`; HTTP transport stores them in the Hub database and exposes them in the dashboard.
-
-### `create_job(name, agent, message, cron, session_mode?)`
-
-Create a new scheduled job.
-
-**Parameters:**
-- `name` — Human-readable job name
-- `agent` — Target agent name
-- `message` — Message/prompt sent to the agent
-- `cron` — Cron expression for scheduling (e.g., `"0 9 * * 1-5"`)
-- `session_mode` — `"new"` (default) or `"resume"`
-
-**Returns:** Object with `success` boolean, `job_id`, and `message`.
-
-### `list_jobs(agent?)`
-
-List all jobs, optionally filtered by agent.
-
-**Returns:** Array of job objects with `id`, `name`, `agent`, `cron`, `enabled`, `next_run`, etc.
-
-### `get_job(job_id)`
-
-Get detailed information about a job including run history.
-
-**Returns:** Job object with `history` array of recent runs.
-
-### `toggle_job(job_id, enabled)`
-
-Enable or disable a job.
-
-**Parameters:**
-- `job_id` — Job ID to update
-- `enabled` — `true` to enable, `false` to disable
-
-### `delete_job(job_id)`
-
-Delete a job and its history.
-
-### `run_job(job_id)`
-
-Manually trigger a job to run immediately, regardless of schedule.
-
-See [AI Jobs Guide](../guides/ai-jobs.md) for more details.
+# Agent Tool Surface
+
+The Hub exposes one identity-bound tool surface and injects its stdio configuration whenever it
+starts a compatible Claude or Codex runner. Operators do not run `agentweave mcp setup` or edit an
+agent client's global configuration.
+
+Turn-start state is already in the prompt: delivered queue entries, roster, charter, project
+instructions, and the selected access path. The surface carries outbound intent only.
+
+## Available tools
+
+| Tool | Purpose |
+|------|---------|
+| `send_message(to_agent, subject, content, ...)` | Queue an attributable peer message under the hop budget |
+| `create_task(title, ...)` | Create a task attributed to the bound agent |
+| `list_tasks(agent?)` | Read the shared task ledger |
+| `get_task(task_id)` | Read one task |
+| `update_task(task_id, status)` | Update task lifecycle state |
+| `ask_user(question, blocking?)` | Ask the operator an attributable question |
+| `get_answer(question_id)` | Check the answer to that question |
+| `request_agent(name, template, task)` | Create an agent from a pre-approved template under the project agent budget |
+| `create_job(...)`, `toggle_job(...)`, `run_job(...)`, `delete_job(...)` | Mutate scheduled work only when the operator enabled the project allowance |
+
+Identity and the current Run come from `AW_AGENT_IDENTITY` and `AW_RUN_ID`, which the Hub binds at
+spawn. No tool accepts a caller-supplied sender, assigner, asker, or requester.
+
+## Intentionally absent
+
+There is no tool for inbox retrieval, read receipts, roster/status/context retrieval, agent
+self-registration, configuration mutation, heartbeats, job inspection, or checkpoints. Those either
+bypass queue/budget governance, are supplied at turn start, belong to the operator surface, or remain
+ordinary workspace commands (`agentweave checkpoint`).
+
+## Command-path parity
+
+When a runner cannot use a tool-protocol server, the turn prompt selects ordinary `agentweave`
+commands instead. Messaging, task work, questions, and `agentweave agent request` reach the same Hub
+endpoints with the same bound identity, queue, hop budget, agent budget, and job allowance.

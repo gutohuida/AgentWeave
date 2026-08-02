@@ -140,7 +140,12 @@ def test_hop_budget_and_inline_prompt_use_typed_origin():
 async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_headers):
     defaults = await app.get("/api/v1/queue/settings", headers=auth_headers)
     assert defaults.status_code == 200
-    assert defaults.json() == {"hop_budget": 6, "turn_delivery_cap": 10}
+    assert defaults.json() == {
+        "hop_budget": 6,
+        "turn_delivery_cap": 10,
+        "agent_budget": 8,
+        "allow_agent_jobs": False,
+    }
 
     updated = await app.patch(
         "/api/v1/queue/settings",
@@ -148,7 +153,12 @@ async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_heade
         headers=auth_headers,
     )
     assert updated.status_code == 200
-    assert updated.json() == {"hop_budget": 4, "turn_delivery_cap": 2}
+    assert updated.json() == {
+        "hop_budget": 4,
+        "turn_delivery_cap": 2,
+        "agent_budget": 8,
+        "allow_agent_jobs": False,
+    }
 
     invalid = await app.patch(
         "/api/v1/queue/settings",

@@ -174,6 +174,7 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 # ---------------------------------------------------------------------------
 
 PROBEABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex"}
+MCP_INJECTABLE_RUNNERS = PROBEABLE_RUNNERS
 
 _PROBE_TTL_SECONDS = 300.0
 _probe_cache: Dict[str, Tuple[bool, float]] = {}
@@ -209,14 +210,13 @@ def probe_mcp_registered(cli: str) -> bool:
 
 
 def resolve_access_path(runner: str, cli: str, override: Optional[str] = None) -> str:
-    """Return ``"mcp"`` or ``"cli"`` for an agent of *runner*, using *override*
-    (the operator's explicit ``hub_client`` setting) when given, else a probe.
-    """
-    if override in ("cli", "mcp"):
-        return override
-    if runner not in PROBEABLE_RUNNERS:
+    """Choose the per-run path now that the Hub injects its canonical server."""
+    del cli
+    if override == "cli":
         return "cli"
-    return "mcp" if probe_mcp_registered(cli) else "cli"
+    if runner not in MCP_INJECTABLE_RUNNERS:
+        return "cli"
+    return "mcp"
 
 
 def access_path_notice(access_path: str) -> str:
@@ -230,8 +230,9 @@ def access_path_notice(access_path: str) -> str:
         "[AgentWeave] Tool access: MCP tools are not available in this environment. Use "
         "`agentweave` CLI commands instead — e.g. `agentweave msg send --to <agent> -m "
         '"..."`, `agentweave task create --title "..."`, `agentweave task update <id> '
-        '--status <status>`, `agentweave question ask -q "..."`, `agentweave inbox '
-        "--agent <you> --mark-read`."
+        '--status <status>`, `agentweave question ask -q "..."`, or `agentweave agent '
+        'request <name> --template <template> --task "..."`. Inbound content is already '
+        "included in this turn; no retrieval command is needed."
     )
 
 

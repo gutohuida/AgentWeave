@@ -504,11 +504,9 @@ def _print_init_next_steps(session: Session) -> None:
     print("4. Update .agentweave/shared/context.md with today's focus")
     print(f"5. Start {session.principal.capitalize()} — it will auto-read its context file")
     print()
-    print("Zero-relay MCP mode (optional):")
-    print("  agentweave mcp setup   # configure MCP server in both agents (once)")
-    print(
-        "  agentweave start       # launch background watchdog — agents notify each other automatically"
-    )
+    print("Hub mode (recommended):")
+    print("  agentweave hub start   # native execution; tool injection is automatic")
+    print("  agentweave activate    # reconcile config and start local helpers")
 
 
 def _print_init_skills(claude_count: int, codex_count: int) -> None:
@@ -1953,10 +1951,8 @@ def cmd_start(args: argparse.Namespace) -> int:
     if WATCHDOG_PID_FILE.exists():
         WATCHDOG_PID_FILE.unlink(missing_ok=True)
 
-    # Direct Hub triggers wake agents with an instruction to read their
-    # AgentWeave inbox. Ensure that MCP registration exists before launching
-    # the watchdog so `agentweave init` followed by `agentweave start` works
-    # without requiring a separate, easy-to-miss setup command.
+    # Global MCP registration is intentionally absent. The Hub injects its canonical
+    # surface per run; the watchdog uses ordinary commands.
     try:
         _activate_mcp()
     except Exception as exc:
@@ -1964,7 +1960,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         _emit_nonfatal_diagnostic(
             "mcp_startup",
             f"Could not verify MCP registration before watchdog start: {exc}",
-            hint="Run 'agentweave mcp setup' manually.",
+            hint="Use Hub-native execution for automatic per-run tool injection.",
         )
 
     try:
@@ -2219,6 +2215,14 @@ def _write_opencode_config_from_yml(yml_opencode_block: Dict[str, Any]) -> tuple
 
 def cmd_mcp_setup(args: argparse.Namespace) -> int:
     """Configure the AgentWeave MCP server for all session agents."""
+    # Phase 7: the Hub injects its one canonical surface into each spawned run.
+    # Keep this historical command as a harmless compatibility notice; it must no
+    # longer mutate Claude/Codex/OpenCode user configuration.
+    if not getattr(args, "_legacy_global_setup", False):
+        print_info(
+            "MCP setup is automatic for Hub-spawned agents; no client configuration changed."
+        )
+        return 0
     import os as _os
     import subprocess as _sp
 
@@ -4053,7 +4057,12 @@ def _activate_mcp() -> int:
     all agents (idempotent: re-registration is a no-op or reports
     'already configured').
     """
-    import json as _json
+    # Phase 7 removed the global registration ceremony. Activation retains this
+    # step only so older callers see an explicit, successful compatibility result.
+    print("[MCP] Injected automatically by the Hub at agent spawn")
+    return 0
+
+    import json as _json  # pragma: no cover - legacy migration reference
     import subprocess as _sp
 
     session = Session.load()
@@ -4459,15 +4468,66 @@ def cmd_agent_configure(args: argparse.Namespace) -> int:
                 "  No Copilot auth token detected. Set COPILOT_GITHUB_TOKEN to a"
                 " fine-grained PAT with 'Copilot Requests' permission."
             )
-        print(f"  Register the MCP server:  agentweave mcp setup --agent {agent}")
+        print("  Hub access configuration is supplied automatically at spawn.")
         print(f"  Show launch command:      agentweave switch {agent}")
         print()
         print("  Copilot CLI automatically reads AGENTS.md for project context.")
     elif runner == "kimi":
         print()
         print("  This agent uses the Kimi Code CLI.")
-        print(f"  Register the MCP server:  agentweave mcp setup --agent {agent}")
+        print("  Hub command access is selected automatically for this runner.")
         print(f"  Generate context file:    agentweave sync-context --agent {agent}")
+    return 0
+
+
+def cmd_agent_request(args: argparse.Namespace) -> int:
+    """Request a budgeted Hub agent from a pre-approved configured template."""
+    output_json: bool = getattr(args, "json", False)
+    if _require_bound_identity() is None:
+        return 1
+    run_id = os.environ.get("AW_RUN_ID", "").strip()
+    if not run_id:
+        message = "'agent request' requires a Hub-bound running turn (AW_RUN_ID is unset)"
+        if output_json:
+            print(json.dumps({"error": message}))
+        else:
+            print_error(message)
+        return 1
+
+    from .transport import get_transport
+
+    transport = get_transport()
+    if transport.get_transport_type() != "http":
+        message = "'agent request' requires Hub (HTTP) transport"
+        if output_json:
+            print(json.dumps({"error": message}))
+        else:
+            print_error(message)
+        return 1
+    try:
+        result = transport._request(  # type: ignore[attr-defined]
+            "POST",
+            "/agents/request",
+            {
+                "name": args.agent_name,
+                "template": args.template,
+                "task": args.task,
+                "run_id": run_id,
+            },
+        )
+    except RuntimeError as exc:
+        if output_json:
+            print(json.dumps({"error": str(exc)}))
+        else:
+            print_error(f"Agent request failed: {exc}")
+        return 1
+
+    if output_json:
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        print_success(f"Agent requested: {args.agent_name}")
+        print(f"   Template: {args.template}")
+        print(f"   Queue entry: {result.get('queue_entry_id', '?')}")
     return 0
 
 
@@ -5078,7 +5138,7 @@ def cmd_switch(args: argparse.Namespace) -> int:
         print(f"  {_build_copilot_launch_command(agent, model=model)}")
         print()
         print("Note: Copilot CLI automatically reads AGENTS.md for project context.")
-        print(f"  Register MCP server first:  agentweave mcp setup --agent {agent}")
+        print("  Hub access configuration is supplied automatically at spawn.")
         print()
         print(
             f"Tip: export AW_AGENT_IDENTITY={agent} first so tool calls are attributed "
@@ -5379,6 +5439,14 @@ For more help: https://github.com/gutohuida/AgentWeave
     agent_set_model.add_argument("agent_name", help="Agent name (e.g., minimax)")
     agent_set_model.add_argument("model", help="Model name (e.g., MiniMax-M2.5)")
     agent_set_model.set_defaults(func=cmd_agent_set_model)
+
+    agent_request = agent_subparsers.add_parser(
+        "request", help="Request a budgeted Hub agent from a configured template"
+    )
+    agent_request.add_argument("agent_name", help="New addressable agent name")
+    agent_request.add_argument("--template", required=True, help="Configured template agent")
+    agent_request.add_argument("--task", required=True, help="First queued instruction")
+    agent_request.add_argument("--json", action="store_true", help="Output JSON")
 
     # Switch env vars for a claude_proxy agent
     switch_parser = subparsers.add_parser(
@@ -5684,7 +5752,7 @@ For more help: https://github.com/gutohuida/AgentWeave
     mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command")
     mcp_setup_parser = mcp_subparsers.add_parser(
         "setup",
-        help="Configure agentweave-mcp in all session agents",
+        help="Compatibility notice (Hub tool injection is automatic)",
     )
     mcp_setup_parser.add_argument(
         "--start",
@@ -6134,6 +6202,8 @@ def main(args: Optional[List[str]] = None) -> int:
         elif parsed_args.command == "agent":
             if parsed_args.agent_command == "configure":
                 return cmd_agent_configure(parsed_args)
+            elif parsed_args.agent_command == "request":
+                return cmd_agent_request(parsed_args)
             elif parsed_args.agent_command == "set-session":
                 return cmd_agent_set_session(parsed_args)
             else:

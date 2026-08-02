@@ -190,7 +190,7 @@ async def test_get_agent_context_unknown_agent(app, auth_headers):
     data = resp.json()
     assert data["known"] is False
     assert data["registered"] is False
-    assert "register_agent" in data["context"]
+    assert "Ask the operator to register or configure this agent" in data["context"]
 
 
 @pytest.mark.asyncio

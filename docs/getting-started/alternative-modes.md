@@ -1,28 +1,31 @@
 # Alternative Modes
 
-AgentWeave supports three operating modes. The Hub is recommended for most users, but the other modes work with zero infrastructure.
+AgentWeave supports a Hub with either injected tools or ordinary commands, plus manual relay for zero-infrastructure experiments.
 
 ## Mode Comparison
 
 | Mode | Setup | Best For |
 |------|-------|----------|
 | **Hub** | Docker + HTTP transport | Teams, multi-machine, web dashboard *(recommended)* |
-| **Zero-relay MCP** | `agentweave mcp setup` + watchdog | Autonomous loops, same machine, no server |
+| **Hub command path** | Hub + `hub_client: cli` | Environments that prohibit tool-protocol servers |
 | **Manual relay** | Zero setup | Quick one-off delegation |
 
-## Zero-Relay MCP (No Hub)
+## Hub Command Path (No Tool-Protocol Server)
 
-In this mode, agents communicate directly through the local MCP server and a background watchdog keeps everything in sync.
+The Hub still owns execution, queues, budgets, and attribution, but tells the runner to use ordinary
+`agentweave` commands instead of injecting its tool-protocol server.
 
 ```bash
-pip install "agentweave-ai[mcp]"
+pip install "agentweave-ai[all]"
 cd your-project/
 agentweave init --project "My App"
-agentweave mcp setup   # configure MCP in agent settings
-agentweave start       # start background watchdog
+agentweave hub start
+# Set agents.<name>.hub_client: cli in agentweave.yml
+agentweave activate
 ```
 
-Agents will auto-poll for new messages and tasks. No web dashboard, but fully autonomous.
+Inbound entries are delivered inline at turn start. The command path retains messaging, task,
+question, and budgeted agent-request capabilities without inbox polling.
 
 ## Manual Relay (Simplest Possible)
 
@@ -46,5 +49,5 @@ Copy the output, switch to your Kimi session, paste it in. When Kimi finishes, c
 ## When to Use Which
 
 - **Just trying it out?** → Manual relay
-- **Solo developer, same machine?** → Zero-relay MCP
+- **Tool-protocol server prohibited?** → Hub command path
 - **Team, multiple machines, or you want a dashboard?** → Hub

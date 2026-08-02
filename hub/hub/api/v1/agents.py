@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,13 +23,16 @@ from ...db.models import (
     AgentHeartbeat,
     AgentOutput,
     EventLog,
+    InboundQueueEntry,
     Message,
+    Project,
     ProjectInstructions,
     ProjectRolesConfig,
     ProjectSession,
     Run,
     Task,
 )
+from ...inbound_queue import new_entry
 from ...launchability import get_agent_config, probe_agent
 from ...output_recording import record_agent_output, record_context_usage
 from ...schemas.agents import (
@@ -48,6 +52,13 @@ _24H = timedelta(hours=24)
 _ACTIVE_TASK_STATUSES = ("pending", "assigned", "in_progress", "under_review", "revision_needed")
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 _CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
+
+
+class AgentRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    template: str = Field(min_length=1, max_length=32)
+    task: str = Field(min_length=1, max_length=100_000)
+    run_id: str = Field(min_length=1, max_length=64)
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
@@ -786,8 +797,8 @@ async def _render_hub_agent_context(
         lines.append("## Communication Mode")
         lines.append("")
         lines.append(
-            "Use AgentWeave MCP tools for coordination. In Hub/MCP mode, do not use "
-            "`agentweave relay` or `agentweave quick` for delegation."
+            "Use the outbound path named in the turn prompt: injected AgentWeave tools or "
+            "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
     elif registered:
@@ -797,14 +808,14 @@ async def _render_hub_agent_context(
         lines.append("Until the principal assigns you work:")
         lines.append("- do not modify files")
         lines.append("- do not claim tasks")
-        lines.append("- read inbox and available tasks only")
+        lines.append("- use only delivered turn entries and the available task ledger")
         lines.append("- send a short availability message to the principal")
         lines.append("")
     else:
         lines.append("## External Agent Rules")
         lines.append("")
         lines.append("You are not registered with AgentWeave yet.")
-        lines.append("Call `register_agent(...)` before taking work.")
+        lines.append("Ask the operator to register or configure this agent before taking work.")
         lines.append("")
         missing.append("agent registration")
 
@@ -843,6 +854,115 @@ async def _render_hub_agent_context(
         },
         "context": context,
     }
+
+
+@router.post("/request", status_code=status.HTTP_201_CREATED)
+async def request_agent(
+    body: AgentRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Create a budgeted agent from a configured template and queue its first turn.
+
+    The source identity is derived from the bound running Run. Neither the MCP tool nor
+    the command endpoint accepts a caller-supplied requester identity.
+    """
+    project_id, _ = project
+    try:
+        worktrees.validate_agent_name(body.name)
+        worktrees.validate_agent_name(body.template)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    source_run = await session.get(Run, body.run_id)
+    if (
+        source_run is None
+        or source_run.project_id != project_id
+        or source_run.status != "running"
+        or source_run.turn_depth is None
+    ):
+        raise HTTPException(
+            status_code=409, detail="Agent request run identity is invalid or stale"
+        )
+
+    session_data = await _get_session_data(project_id, session) or {}
+    templates = session_data.get("agents", {}) or {}
+    template_config = templates.get(body.template)
+    if not isinstance(template_config, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Agent template '{body.template}' is not pre-approved for this project",
+        )
+
+    existing_rows = (
+        (await session.execute(select(Agent).where(Agent.project_id == project_id))).scalars().all()
+    )
+    existing_names = set(templates) | {row.name for row in existing_rows}
+    if body.name in existing_names:
+        raise HTTPException(status_code=409, detail=f"Agent '{body.name}' already exists")
+
+    project_row = await session.get(Project, project_id)
+    if project_row is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if len(existing_names) >= project_row.agent_budget:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Project agent budget exhausted ({len(existing_names)}/"
+                f"{project_row.agent_budget})"
+            ),
+        )
+
+    copied_config = dict(template_config)
+    copied_config.pop("principal", None)
+    agent_row = Agent(
+        id=f"agent-{short_id()}",
+        project_id=project_id,
+        name=body.name,
+        contact_mode="watchdog-spawn",
+        self_registered=False,
+        config=copied_config,
+    )
+    hop_depth = source_run.turn_depth + 1
+    message = Message(
+        id=f"msg-{short_id()}",
+        project_id=project_id,
+        sender=source_run.agent,
+        recipient=body.name,
+        subject=f"Agent request from {source_run.agent}",
+        content=body.task,
+        type="delegation",
+        task_id=None,
+    )
+    entry: InboundQueueEntry = new_entry(
+        project_id=project_id,
+        agent=body.name,
+        origin_type="agent",
+        origin_agent=source_run.agent,
+        content=body.task,
+        hop_depth=hop_depth,
+        message_id=message.id,
+    )
+    session.add_all([agent_row, message, entry])
+    await session.commit()
+
+    payload = {
+        "agent": body.name,
+        "template": body.template,
+        "requester": source_run.agent,
+        "run_id": source_run.id,
+        "queue_entry_id": entry.id,
+        "hop_depth": hop_depth,
+    }
+    await persist_event(session, project_id, "agent_requested", payload, agent=source_run.agent)
+    await sse_manager.broadcast(project_id, "agent_requested", payload)
+    await persist_event(session, project_id, "queue_entry_queued", payload, agent=body.name)
+    await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+
+    from ...turn_scheduler import schedule_agent
+
+    await schedule_agent(project_id, body.name)
+    return {**payload, "status": "queued"}
 
 
 @router.post("/register")

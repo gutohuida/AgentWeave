@@ -3,19 +3,41 @@
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AIJob, JobRun
+from ...db.models import AIJob, JobRun, Project, Run
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+async def _require_agent_job_allowance(
+    session: AsyncSession,
+    project_id: str,
+    agent: Optional[str],
+    run_id: Optional[str],
+) -> None:
+    """Gate agent-originated recurring-work mutations; operator calls have no headers."""
+    if agent is None and run_id is None:
+        return
+    if not agent or not run_id:
+        raise HTTPException(status_code=403, detail="Agent job request has incomplete attribution")
+    run = await session.get(Run, run_id)
+    if run is None or run.project_id != project_id or run.agent != agent or run.status != "running":
+        raise HTTPException(status_code=403, detail="Agent job request has stale attribution")
+    project = await session.get(Project, project_id)
+    if project is None or not project.allow_agent_jobs:
+        raise HTTPException(
+            status_code=403,
+            detail="Scheduled work from agents requires operator approval or an enabled allowance",
+        )
 
 
 def _safe_error_summary(exc: Exception) -> str:
@@ -71,9 +93,12 @@ async def create_job(
     body: JobCreate,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
+    agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
+    run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
 ):
     """Create a new AI job."""
     project_id, _ = project
+    await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
 
     # Validate cron using croniter
     try:
@@ -217,9 +242,12 @@ async def update_job(
     body: JobUpdate,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
+    agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
+    run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
 ):
     """Update job fields (enabled, name, message, cron, session_mode)."""
     project_id, _ = project
+    await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -293,9 +321,12 @@ async def delete_job(
     job_id: str,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
+    agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
+    run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
 ):
     """Delete a job and its history."""
     project_id, _ = project
+    await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -347,9 +378,12 @@ async def run_job(
     job_id: str,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
+    agent_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Agent"),
+    run_identity: Optional[str] = Header(default=None, alias="X-AgentWeave-Run"),
 ):
     """Fire a job immediately."""
     project_id, _ = project
+    await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")

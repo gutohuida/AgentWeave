@@ -101,11 +101,12 @@ def resolve_access_path(runner: str, cli: str, override: Optional[str] = None) -
     module cannot yet probe default to ``"cli"`` — the guaranteed-available path — rather
     than assuming an unverified tool-protocol server is reachable.
     """
-    if override in ("cli", "mcp"):
-        return override
-    if runner not in PROBEABLE_RUNNERS:
-        return "cli"
-    return "mcp" if probe_mcp_registered(cli) else "cli"
+    # The canonical server is injected by the Hub's native spawn path. The legacy
+    # watchdog cannot inject per-run tool configuration, so its guaranteed equivalent
+    # path is the ordinary command surface. Global client registration is no longer
+    # inspected or required.
+    del runner, cli, override
+    return "cli"
 
 
 def access_path_notice(access_path: str) -> str:
@@ -122,6 +123,7 @@ def access_path_notice(access_path: str) -> str:
         "[AgentWeave] Tool access: MCP tools are not available in this environment. Use "
         "`agentweave` CLI commands instead — e.g. `agentweave msg send --to <agent> -m "
         '"..."`, `agentweave task create --title "..."`, `agentweave task update <id> '
-        '--status <status>`, `agentweave question ask -q "..."`. Inbound content is already '
+        '--status <status>`, `agentweave question ask -q "..."`, or `agentweave agent '
+        'request <name> --template <template> --task "..."`. Inbound content is already '
         "included in this turn; no retrieval command is needed."
     )

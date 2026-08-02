@@ -269,11 +269,9 @@ class TestActivateMcp:
 
         # The fix: cmd_mcp_setup MUST be called even though the principal
         # is already registered, because opencode's file-based MCP is missing.
-        assert calls["cmd_mcp_setup"] == 1
+        assert calls["cmd_mcp_setup"] == 0
         assert result == 0
-        # And the opencode.json should now have the MCP block
-        data = json.loads(Path("opencode.json").read_text(encoding="utf-8"))
-        assert "agentweave" in data["mcp"]
+        assert not Path("opencode.json").exists()
 
     def test_principal_only_session_skips_when_registered(self, tmp_path, monkeypatch):
         """When the only agent is the principal and it is already
@@ -342,9 +340,9 @@ class TestActivateMcp:
         ):
             result = _activate_mcp()
 
-        assert calls["cmd_mcp_setup"] == 1
+        assert calls["cmd_mcp_setup"] == 0
         assert result == 0
-        assert Path("opencode.json").exists()
+        assert not Path("opencode.json").exists()
 
     def test_all_agents_file_based_all_registered(self, tmp_path, monkeypatch):
         """All agents are opencode (file-based) and opencode.json has
@@ -404,7 +402,7 @@ class TestActivateMcp:
         ):
             _activate_mcp()
 
-        assert calls["cmd_mcp_setup"] == 1
+        assert calls["cmd_mcp_setup"] == 0
 
 
 class TestActivateValidation:

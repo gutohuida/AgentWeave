@@ -59,7 +59,7 @@ def _make_ping_callback_and_fire(
     return captured
 
 
-def test_agent_message_to_codex_uses_message_as_prompt(tmp_path, monkeypatch):
+def test_agent_message_to_codex_uses_command_path_without_global_mcp(tmp_path, monkeypatch):
     from agentweave import tool_surface
 
     monkeypatch.setattr(tool_surface, "probe_mcp_registered", lambda cli: True)
@@ -83,7 +83,7 @@ def test_agent_message_to_codex_uses_message_as_prompt(tmp_path, monkeypatch):
             "Message:",
             "Please execute task-123",
             "",
-            tool_surface.access_path_notice("mcp"),
+            tool_surface.access_path_notice("cli"),
         ]
     )
     captured["transport"].archive_message.assert_called_once_with("msg-agent-001")

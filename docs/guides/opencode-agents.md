@@ -111,28 +111,11 @@ agentweave activate
 
 ---
 
-## MCP Setup
+## AgentWeave access path
 
-OpenCode uses a file-based MCP configuration (`opencode.json`) rather than a CLI `mcp add` command. AgentWeave handles this automatically:
-
-```bash
-agentweave mcp setup
-```
-
-This creates or updates `opencode.json` in your project root:
-
-```json
-{
-  "mcp": {
-    "agentweave": {
-      "type": "local",
-      "command": ["agentweave-mcp"]
-    }
-  }
-}
-```
-
-If you already have an `opencode.json` with other configuration, AgentWeave merges only the `mcp.agentweave` key and preserves everything else.
+OpenCode currently uses the Hub command path. The turn prompt supplies queued input and tells the
+agent to use ordinary `agentweave` commands for outbound collaboration. No `opencode.json` MCP block
+or global client setup is required; provider/model configuration remains unchanged.
 
 ---
 

@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -38,8 +39,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import worktrees
 from ...auth import get_project
+from ...config import settings
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Run
+from ...db.models import ApiKey, Run
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
@@ -226,6 +228,10 @@ async def trigger_agent_directly(
     # one that isn't actually available in this environment.
     access_path = resolve_access_path(runner, probe["cli"] or agent, config.get("hub_client"))
     prompt = f"{access_path_notice(access_path)}\n\n{message}"
+    mcp_command = None
+    if access_path == "mcp":
+        canonical_server = Path(__file__).resolve().parents[2] / "mcp_server.py"
+        mcp_command = [sys.executable, str(canonical_server)]
 
     try:
         cmd = build_command(
@@ -236,6 +242,7 @@ async def trigger_agent_directly(
             context_file=context_file,
             session_id=resume_session_id,
             yolo=yolo,
+            mcp_command=mcp_command,
         )
     except UnsupportedRunnerError as exc:
         raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
@@ -252,6 +259,22 @@ async def trigger_agent_directly(
     env["AW_RUN_ID"] = run_id
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
+    if access_path == "mcp":
+        key_result = await session.execute(
+            select(ApiKey.id)
+            .where(ApiKey.project_id == project_id, ApiKey.revoked == False)  # noqa: E712
+            .limit(1)
+        )
+        api_key = key_result.scalar_one_or_none()
+        if not api_key:
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                "No active project credential is available for the injected tool surface",
+            )
+        host = "127.0.0.1" if settings.aw_host in ("0.0.0.0", "::") else settings.aw_host
+        env["HUB_URL"] = os.environ.get("HUB_URL", f"http://{host}:{settings.aw_port}")
+        env["HUB_API_KEY"] = api_key
+        env["HUB_PROJECT_ID"] = project_id
 
     run = Run(
         id=run_id,

@@ -273,8 +273,8 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app,
     """Task 4.1: the Hub — not the agent — establishes identity at spawn, as an env var
     the tool surface reads rather than a caller-supplied parameter. Task 4.5: the agent is
     told, in its very first prompt, which access path (MCP vs. CLI commands) is in use.
-    conftest.py's autouse fixture defaults the probe to False, so this agent (probeable,
-    no override) gets the "cli" path.
+    Claude accepts per-run MCP configuration, so the Hub injects the canonical surface
+    without relying on a global client registration.
     """
     sync = await app.post(
         "/api/v1/session/sync",
@@ -317,7 +317,8 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app,
 
     prompt = captured_kwargs["prompt"]
     assert "do the thing" in prompt
-    assert "MCP tools are not available" in prompt
+    assert "the `agentweave` MCP tools are available" in prompt
+    assert captured_kwargs["mcp_command"][-1].endswith("mcp_server.py")
 
 
 @pytest.mark.asyncio

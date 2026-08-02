@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Message, Question
+from ...db.models import Question
+from ...inbound_queue import new_entry
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -99,40 +100,40 @@ async def answer_question(
     question.answered = True
     question.answered_at = datetime.now(timezone.utc)
 
-    # Create a message to the agent so the watchdog re-pings them with the answer
-    msg_id = f"msg-{short_id()}"
-    reply_msg = Message(
-        id=msg_id,
+    # Operator answers are typed depth-zero queue entries, not magic "user"
+    # messages or inbox-poll triggers. They resume autonomous chains in the same
+    # governed path as every other operator input.
+    entry = new_entry(
         project_id=project_id,
-        sender="user",
-        recipient=from_agent,
-        subject=f"Answer: {q_text[:80]}",
+        agent=from_agent,
+        origin_type="operator",
+        origin_agent=None,
         content=f"Question: {q_text}\n\nAnswer: {body.answer}",
-        type="reply",
+        hop_depth=0,
     )
-    session.add(reply_msg)
+    session.add(entry)
     await session.commit()
     await session.refresh(question)
 
     await sse_manager.broadcast(
         project_id, "question_answered", {"id": question_id, "answer": body.answer}
     )
-    await sse_manager.broadcast(
-        project_id,
-        "message_created",
-        {
-            "id": msg_id,
-            "from": "user",
-            "to": from_agent,
-            "subject": f"Answer: {q_text[:80]}",
-            "type": "reply",
-            "timestamp": reply_msg.timestamp.isoformat(),
-        },
-    )
+    queue_payload = {
+        "entry_id": entry.id,
+        "agent": from_agent,
+        "origin_type": "operator",
+        "hop_depth": 0,
+        "question_id": question_id,
+    }
+    await persist_event(session, project_id, "queue_entry_queued", queue_payload, agent=from_agent)
+    await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
     await persist_event(
         session,
         project_id,
         "question_answered",
         {"id": question_id, "answer": body.answer},
     )
+    from ...turn_scheduler import schedule_agent
+
+    await schedule_agent(project_id, from_agent)
     return question

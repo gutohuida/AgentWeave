@@ -1,16 +1,11 @@
-"""AgentWeave Hub MCP server — 16 tools backed by the Hub DB.
+"""The single Hub-owned AgentWeave tool surface.
 
-Can be run as stdio (default) or mounted at /mcp via sse_app().
-
-Usage (stdio):
-    python -m hub.mcp_server
-
-Usage (mounted in FastAPI):
-    from hub.mcp_server import mcp
-    app.mount("/mcp", mcp.sse_app())
+Turn-start state is injected by the Hub. This server therefore exposes only attributable
+outbound intent: messaging, task-ledger work, operator questions, governed agent requests,
+and operator-gated scheduled-work mutations.
 """
 
-import json as _json
+import json
 import os
 import urllib.error
 import urllib.parse
@@ -19,21 +14,31 @@ from typing import Any, Dict, List, Optional
 
 try:
     from fastmcp import FastMCP
-except ImportError as e:
-    raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from e
+except ImportError as exc:
+    raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from exc
 
 mcp = FastMCP(
-    name="agentweave-hub",
+    name="agentweave",
     instructions=(
-        "AgentWeave Hub collaboration tools. Use these to communicate with other AI agents, "
-        "manage shared tasks, and ask questions to the human user. "
-        "Always mark messages as read after processing them."
+        "AgentWeave outbound collaboration tools. Turn-start state and queued input are "
+        "already present in the prompt; no coordination-state retrieval is necessary. "
+        "Identity is bound by the Hub process that started this connection."
     ),
 )
 
-# ---------------------------------------------------------------------------
-# Internal helper — makes authenticated requests to the Hub REST API
-# ---------------------------------------------------------------------------
+
+class UnboundIdentityError(RuntimeError):
+    """Raised when an effect is attempted outside a Hub-bound agent process."""
+
+
+def _bound_identity() -> str:
+    identity = os.environ.get("AW_AGENT_IDENTITY", "").strip()
+    if not identity:
+        raise UnboundIdentityError(
+            "No bound agent identity (AW_AGENT_IDENTITY is unset); the Hub must start "
+            "this tool connection."
+        )
+    return identity
 
 
 def _hub_request(
@@ -42,70 +47,56 @@ def _hub_request(
     body: Optional[Dict[str, Any]] = None,
     params: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    """Make an authenticated request to the Hub REST API.
-
-    Reads HUB_URL, HUB_API_KEY, and HUB_PROJECT_ID lazily from the environment
-    on each call so that the server process can set/override them after import.
-    Raises RuntimeError on non-2xx responses.
-    """
-    base_url = os.environ.get("HUB_URL", "http://localhost:8000")
+    """Make one authenticated request to the Hub API with bound run attribution."""
+    base_url = os.environ.get("HUB_URL", "http://127.0.0.1:8000").rstrip("/")
     api_key = os.environ.get("HUB_API_KEY", "")
-    project_id = os.environ.get("HUB_PROJECT_ID", "proj-default")
-
     url = f"{base_url}/api/v1{path}"
     if params:
-        url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
-
-    payload: Optional[bytes] = None
-    if body is not None:
-        if "project_id" not in body:
-            body = {"project_id": project_id, **body}
-        payload = _json.dumps(body).encode()
-
-    req = urllib.request.Request(url, data=payload, method=method)
-    req.add_header("Authorization", f"Bearer {api_key}")
-    req.add_header("Content-Type", "application/json")
-
+        url += "?" + urllib.parse.urlencode(
+            {key: value for key, value in params.items() if value is not None}
+        )
+    payload = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(url, data=payload, method=method)
+    request.add_header("Authorization", f"Bearer {api_key}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json")
+    identity = os.environ.get("AW_AGENT_IDENTITY", "").strip()
+    run_id = os.environ.get("AW_RUN_ID", "").strip()
+    if identity:
+        request.add_header("X-AgentWeave-Agent", identity)
+    if run_id:
+        request.add_header("X-AgentWeave-Run", run_id)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return _json.loads(resp.read())
+        with urllib.request.urlopen(request, timeout=10) as response:
+            raw = response.read()
+        return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Hub API error {exc.code}: {exc.read().decode()}") from exc
+        detail = exc.read().decode(errors="replace")
+        raise RuntimeError(f"Hub API error {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Hub connection error: {exc.reason}") from exc
 
 
-# ---------------------------------------------------------------------------
-# Messaging tools
-# ---------------------------------------------------------------------------
+def _identity_error(exc: UnboundIdentityError) -> Dict[str, Any]:
+    return {"success": False, "error": str(exc)}
 
 
 @mcp.tool()
 def send_message(
-    from_agent: str,
     to_agent: str,
     subject: str,
     content: str,
     message_type: str = "message",
     task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Send a message from one agent to another.
-
-    Args:
-        from_agent: Sending agent name (e.g. "claude")
-        to_agent: Receiving agent name (e.g. "kimi")
-        subject: Short summary
-        content: Full message body
-        message_type: One of: message, delegation, review, discussion
-        task_id: Associated task ID (optional)
-
-    Returns:
-        Dict with 'id' of the created message.
-    """
+    """Send an attributable message through the recipient's durable inbound queue."""
     try:
+        identity = _bound_identity()
         result = _hub_request(
             "POST",
             "/messages",
             {
-                "from": from_agent,
+                "from": identity,
                 "to": to_agent,
                 "subject": subject,
                 "content": content,
@@ -115,57 +106,10 @@ def send_message(
             },
         )
         return {"success": True, "message_id": result.get("id")}
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
-
-
-@mcp.tool()
-def get_inbox(agent: str) -> List[Dict[str, Any]]:
-    """Get all unread messages for an agent and mark them as read.
-
-    Messages are automatically archived after being returned — no need to
-    call mark_read() separately.
-
-    Args:
-        agent: Agent name (e.g. "claude")
-
-    Returns:
-        List of message dicts.
-    """
-    try:
-        messages = _hub_request("GET", "/messages", params={"agent": agent})
-        for msg in messages:
-            # Best-effort read receipts; kept as try/except rather than
-            # contextlib.suppress to avoid a context manager per message.
-            try:  # noqa: SIM105
-                _hub_request("PATCH", f"/messages/{msg['id']}/read")
-            except RuntimeError:
-                pass
-        return messages
-    except RuntimeError:
-        return []
-
-
-@mcp.tool()
-def mark_read(message_id: str) -> Dict[str, Any]:
-    """Mark a message as read.
-
-    Args:
-        message_id: ID of the message (e.g. "msg-abc123")
-
-    Returns:
-        Dict with 'success' bool.
-    """
-    try:
-        _hub_request("PATCH", f"/messages/{message_id}/read")
-        return {"success": True}
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Task tools
-# ---------------------------------------------------------------------------
+    except UnboundIdentityError as exc:
+        return _identity_error(exc)
+    except RuntimeError as exc:
+        return {"success": False, "error": str(exc)}
 
 
 @mcp.tool()
@@ -173,26 +117,13 @@ def create_task(
     title: str,
     description: str = "",
     assignee: Optional[str] = None,
-    assigner: Optional[str] = None,
     priority: str = "medium",
     requirements: Optional[List[str]] = None,
     acceptance_criteria: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Create a new task.
-
-    Args:
-        title: Short task title
-        description: Full description
-        assignee: Agent to assign to
-        assigner: Agent creating the task
-        priority: low, medium, high, or critical
-        requirements: List of requirement strings
-        acceptance_criteria: List of acceptance criteria
-
-    Returns:
-        Created task dict.
-    """
+    """Create a task attributed to the bound agent."""
     try:
+        identity = _bound_identity()
         return _hub_request(
             "POST",
             "/tasks",
@@ -200,369 +131,102 @@ def create_task(
                 "title": title,
                 "description": description,
                 "assignee": assignee,
-                "assigner": assigner,
+                "assigner": identity,
                 "priority": priority,
                 "requirements": requirements or [],
                 "acceptance_criteria": acceptance_criteria or [],
             },
         )
-    except RuntimeError as e:
-        return {"error": str(e)}
+    except (UnboundIdentityError, RuntimeError) as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()
 def list_tasks(agent: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List active tasks, optionally filtered by assignee.
-
-    Args:
-        agent: Filter by assignee name. Omit to list all tasks.
-
-    Returns:
-        List of task dicts. Each assigned task includes the assignee runtime fields
-        'assignee_status', 'assignee_status_msg', and 'assignee_last_seen' so callers can
-        tell whether the worker is currently running or idle.
-    """
+    """Read the shared task ledger, optionally filtered by assignee."""
     try:
+        _bound_identity()
         return _hub_request("GET", "/tasks", params={"agent": agent})
-    except RuntimeError:
+    except (UnboundIdentityError, RuntimeError):
         return []
 
 
 @mcp.tool()
 def get_task(task_id: str) -> Dict[str, Any]:
-    """Get full details of a specific task.
-
-    Args:
-        task_id: Task ID (e.g. "task-abc123")
-
-    Returns:
-        Task dict, including assignee runtime fields, or {'error': '...'} if not found.
-    """
+    """Read one task-ledger entry by ID."""
     try:
+        _bound_identity()
         return _hub_request("GET", f"/tasks/{task_id}")
-    except RuntimeError as e:
-        return {"error": str(e)}
+    except (UnboundIdentityError, RuntimeError) as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()
 def update_task(task_id: str, status: str) -> Dict[str, Any]:
-    """Update a task's status.
-
-    Valid statuses: pending, assigned, in_progress, completed,
-    under_review, revision_needed, approved, rejected.
-
-    Args:
-        task_id: Task ID to update — must be the 'id' field from list_tasks() or
-                 create_task() (e.g. "task-abc123"). Do NOT use status names like
-                 "pending" as task IDs.
-        status: New status value
-
-    Returns:
-        Updated task dict, or {'error': '...'} on failure.
-    """
+    """Update a task's lifecycle status as the bound agent."""
     try:
+        _bound_identity()
         return _hub_request("PATCH", f"/tasks/{task_id}", {"status": status})
-    except RuntimeError as e:
-        return {"error": str(e)}
+    except (UnboundIdentityError, RuntimeError) as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()
-def get_status() -> Dict[str, Any]:
-    """Get project status: message counts, task counts, active agents.
-
-    NOTE: task_counts is a dict of {status_name: count} (e.g. {"pending": 2}).
-    The keys are status names, NOT task IDs. To get task IDs and details,
-    call list_tasks() instead, then use the returned 'id' field with update_task().
-
-    Returns:
-        StatusResponse dict with task_counts, message_counts, agents_active, etc.
-    """
+def ask_user(question: str, blocking: bool = False) -> Dict[str, Any]:
+    """Ask the operator a question attributed to the bound agent."""
     try:
-        return _hub_request("GET", "/status")
-    except RuntimeError as e:
-        return {"error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Agent roster tool
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-def list_agents() -> Dict[str, Any]:
-    """List all agents in the session with their roles and runners.
-
-    Returns:
-        Dict with 'agents' list. Each entry has:
-        - name: agent name
-        - session_role: principal / delegate / collaborator / reviewer
-        - runner: native / claude_proxy / manual
-        - dev_roles: list of role IDs from roles.json
-        - is_principal: bool
-    """
-    try:
-        agents = _hub_request("GET", "/agents")
-        result = []
-        for a in agents:
-            result.append(
-                {
-                    "name": a.get("name"),
-                    "session_role": a.get("role"),
-                    "runner": a.get("runner", "native"),
-                    "dev_roles": a.get("dev_roles", []),
-                    "is_principal": a.get("role") == "principal",
-                }
-            )
-        return {"agents": result}
-    except RuntimeError as e:
-        return {"error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Agent configuration tool
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-def get_agent_config(agent: str) -> Dict[str, Any]:
-    """Get runner configuration for an agent.
-
-    Returns runner type and, for claude_proxy agents, the base URL and the
-    name of the env var that holds the API key. Actual API key values are
-    never stored or returned.
-
-    Args:
-        agent: Agent name (e.g. "minimax")
-
-    Returns:
-        Dict with 'runner', and for claude_proxy agents also 'base_url' and
-        'api_key_var'. Returns {'error': '...'} if agent not found.
-    """
-    try:
-        agents = _hub_request("GET", "/agents")
-        match = next((a for a in agents if a.get("name") == agent), None)
-        if not match:
-            return {"error": f"Agent '{agent}' not found"}
-
-        result: Dict[str, Any] = {
-            "name": agent,
-            "runner": match.get("runner", "native"),
-        }
-
-        agent_cfg: Dict[str, Any] = {}
-        try:
-            session = _hub_request("GET", "/session/sync")
-            agent_cfg = (session.get("data") or {}).get("agents", {}).get(agent, {})
-        except RuntimeError:
-            if result["runner"] == "claude_proxy":
-                raise
-        if agent_cfg.get("model"):
-            result["model"] = agent_cfg["model"]
-
-        # For proxy agents, include connection details from the full session blob
-        if result["runner"] == "claude_proxy":
-            env_vars = agent_cfg.get("env_vars", {})
-            result["base_url"] = env_vars.get("ANTHROPIC_BASE_URL", "")
-            result["api_key_var"] = env_vars.get("ANTHROPIC_API_KEY_VAR", "")
-
-        return result
-    except RuntimeError as e:
-        return {"error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Human interaction tools (NEW)
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
-def ask_user(
-    from_agent: str,
-    question: str,
-    blocking: bool = False,
-) -> Dict[str, Any]:
-    """Ask the human user a question via the Hub dashboard.
-
-    The user can answer using `agentweave reply --id <question_id> "..."`.
-
-    Args:
-        from_agent: Name of the agent asking the question
-        question: The question text
-        blocking: If True, signals that the agent cannot continue until answered
-
-    Returns:
-        Dict with 'question_id' for use in get_answer().
-    """
-    try:
+        identity = _bound_identity()
         result = _hub_request(
             "POST",
             "/questions",
-            {
-                "from_agent": from_agent,
-                "question": question,
-                "blocking": blocking,
-            },
+            {"from_agent": identity, "question": question, "blocking": blocking},
         )
         return {"success": True, "question_id": result.get("id")}
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
+    except UnboundIdentityError as exc:
+        return _identity_error(exc)
+    except RuntimeError as exc:
+        return {"success": False, "error": str(exc)}
 
 
 @mcp.tool()
 def get_answer(question_id: str) -> Dict[str, Any]:
-    """Check if the human has answered a question.
-
-    Args:
-        question_id: ID returned by ask_user() (e.g. "q-abc123")
-
-    Returns:
-        Dict with 'answered' bool, 'answer' string (if answered), and 'pending' bool.
-    """
+    """Check whether the operator answered a previously asked question."""
     try:
-        q = _hub_request("GET", f"/questions/{question_id}")
+        _bound_identity()
+        question = _hub_request("GET", f"/questions/{question_id}")
+        answered = bool(question.get("answered"))
         return {
-            "answered": q.get("answered", False),
-            "answer": q.get("answer"),
-            "pending": not q.get("answered", False),
+            "answered": answered,
+            "answer": question.get("answer"),
+            "pending": not answered,
         }
-    except RuntimeError as e:
-        return {"answered": False, "answer": None, "pending": True, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Self-registration tools
-# ---------------------------------------------------------------------------
+    except (UnboundIdentityError, RuntimeError) as exc:
+        return {"answered": False, "answer": None, "pending": True, "error": str(exc)}
 
 
 @mcp.tool()
-def register_agent(
-    name: str,
-    contact_mode: str,
-    role_request: Optional[str] = None,
-    mcp_endpoint: Optional[str] = None,
-    spawn_cmd: Optional[List[str]] = None,
-    config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Register or re-register an agent with the Hub.
-
-    Args:
-        name: Agent name
-        contact_mode: One of: poll, mcp-push, watchdog-spawn
-        role_request: Requested role ID (optional)
-        mcp_endpoint: URL of the agent's MCP server (optional)
-        spawn_cmd: Command to spawn the agent (optional)
-        config: Agent configuration dict (optional)
-
-    Returns:
-        Dict with 'role' and 'context' on success, or 'error' on failure.
-    """
+def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
+    """Request a new agent from a pre-approved template under the project agent budget."""
     try:
+        _bound_identity()
+        run_id = os.environ.get("AW_RUN_ID", "").strip()
+        if not run_id:
+            return {"error": "request_agent requires a Hub-bound running turn"}
         return _hub_request(
             "POST",
-            "/agents/register",
-            {
-                "name": name,
-                "contact_mode": contact_mode,
-                "role_request": role_request,
-                "mcp_endpoint": mcp_endpoint,
-                "spawn_cmd": spawn_cmd,
-                "config": config,
-            },
+            "/agents/request",
+            {"name": name, "template": template, "task": task, "run_id": run_id},
         )
-    except RuntimeError as e:
-        return {"error": str(e)}
+    except (UnboundIdentityError, RuntimeError) as exc:
+        return {"error": str(exc)}
 
 
-@mcp.tool()
-def update_agent_config(
-    name: str,
-    config: Optional[Dict[str, Any]] = None,
-    contact_mode: Optional[str] = None,
-    mcp_endpoint: Optional[str] = None,
-    spawn_cmd: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    """Partially update a self-registered agent's configuration.
-
-    Args:
-        name: Agent name
-        config: Config dict to merge (optional)
-        contact_mode: One of: poll, mcp-push, watchdog-spawn (optional)
-        mcp_endpoint: URL of the agent's MCP server (optional)
-        spawn_cmd: Command to spawn the agent (optional)
-
-    Returns:
-        Dict with updated agent fields on success, or 'error' on failure.
-    """
-    body: Dict[str, Any] = {}
-    if config is not None:
-        body["config"] = config
-    if contact_mode is not None:
-        body["contact_mode"] = contact_mode
-    if mcp_endpoint is not None:
-        body["mcp_endpoint"] = mcp_endpoint
-    if spawn_cmd is not None:
-        body["spawn_cmd"] = spawn_cmd
-
+def _job_effect(method: str, path: str, body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     try:
-        return _hub_request("PATCH", f"/agents/{name}", body)
-    except RuntimeError as e:
-        return {"error": str(e)}
-
-
-@mcp.tool()
-def get_context(role: str) -> Dict[str, Any]:
-    """Get the markdown role guide for a given role.
-
-    Args:
-        role: Role ID (e.g. "backend_dev")
-
-    Returns:
-        Dict with 'content' on success, or 'error' on failure.
-    """
-    try:
-        result = _hub_request("GET", "/agents/context", params={"role": role})
-        return {"success": True, "content": result.get("content", "")}
-    except RuntimeError as e:
-        return {"error": str(e)}
-
-
-@mcp.tool()
-def get_agent_context(agent: str) -> Dict[str, Any]:
-    """Get full runtime or onboarding context for an agent.
-
-    Args:
-        agent: Agent name
-
-    Returns:
-        Dict with structured status and markdown context.
-    """
-    try:
-        result = _hub_request("GET", "/agents/agent-context", params={"agent": agent})
-        return {"success": True, **result}
-    except RuntimeError as e:
-        return {"error": str(e)}
-
-
-@mcp.tool()
-def heartbeat(agent: str) -> Dict[str, Any]:
-    """Send a heartbeat to the Hub to signal liveness.
-
-    Args:
-        agent: Agent name
-
-    Returns:
-        Dict with 'ok' bool.
-    """
-    try:
-        _hub_request("POST", f"/agents/{agent}/heartbeat", {"status": "active"})
-        return {"ok": True}
-    except RuntimeError as e:
-        return {"ok": False, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# AI Jobs tools
-# ---------------------------------------------------------------------------
+        _bound_identity()
+        return _hub_request(method, path, body)
+    except (UnboundIdentityError, RuntimeError) as exc:
+        return {"success": False, "approval_required": True, "error": str(exc)}
 
 
 @mcp.tool()
@@ -573,132 +237,41 @@ def create_job(
     cron: str,
     session_mode: str = "new",
 ) -> Dict[str, Any]:
-    """Create a new scheduled AI job.
-
-    Args:
-        name: Human-readable job name
-        agent: Target agent name (e.g. "claude", "kimi")
-        message: Message to send to the agent when job fires
-        cron: Cron expression (e.g., "0 9 * * 1-5" for weekdays at 9am)
-        session_mode: "new" for fresh session or "resume" to continue previous
-
-    Returns:
-        Dict with 'success', 'job_id', and 'message'.
-    """
-    try:
-        result = _hub_request(
-            "POST",
-            "/jobs",
-            {
-                "name": name,
-                "agent": agent,
-                "message": message,
-                "cron": cron,
-                "session_mode": session_mode,
-            },
-        )
-        return {"success": True, "job_id": result.get("id"), "message": "Job created"}
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
-
-
-@mcp.tool()
-def list_jobs(agent: Optional[str] = None) -> List[Dict[str, Any]]:
-    """List all AI jobs, optionally filtered by agent.
-
-    Args:
-        agent: Filter by agent name. Omit to list all jobs.
-
-    Returns:
-        List of job dicts with id, name, agent, cron, enabled, etc.
-    """
-    try:
-        return _hub_request("GET", "/jobs", params={"agent": agent})
-    except RuntimeError:
-        return []
-
-
-@mcp.tool()
-def get_job(job_id: str) -> Dict[str, Any]:
-    """Get full details of a job including run history.
-
-    Args:
-        job_id: Job ID (e.g., "job-abc123")
-
-    Returns:
-        Job dict with history, or {'error': '...'} if not found.
-    """
-    try:
-        return _hub_request("GET", f"/jobs/{job_id}")
-    except RuntimeError as e:
-        return {"error": str(e)}
+    """Create recurring work only when the operator enabled the agent-job allowance."""
+    return _job_effect(
+        "POST",
+        "/jobs",
+        {
+            "name": name,
+            "agent": agent,
+            "message": message,
+            "cron": cron,
+            "session_mode": session_mode,
+        },
+    )
 
 
 @mcp.tool()
 def delete_job(job_id: str) -> Dict[str, Any]:
-    """Delete a job and its history.
-
-    Args:
-        job_id: Job ID to delete
-
-    Returns:
-        Dict with 'success' and 'message'.
-    """
-    try:
-        _hub_request("DELETE", f"/jobs/{job_id}")
-        return {"success": True, "message": f"Job {job_id} deleted"}
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
+    """Delete recurring work only when the operator enabled the allowance."""
+    return _job_effect("DELETE", f"/jobs/{job_id}")
 
 
 @mcp.tool()
 def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
-    """Enable or disable a job.
-
-    Args:
-        job_id: Job ID to update
-        enabled: True to enable, False to disable
-
-    Returns:
-        Dict with 'success' and 'message'.
-    """
-    try:
-        _hub_request("PATCH", f"/jobs/{job_id}", {"enabled": enabled})
-        status = "enabled" if enabled else "disabled"
-        return {"success": True, "message": f"Job {job_id} {status}"}
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
+    """Enable or disable recurring work only under operator allowance."""
+    return _job_effect("PATCH", f"/jobs/{job_id}", {"enabled": enabled})
 
 
 @mcp.tool()
 def run_job(job_id: str) -> Dict[str, Any]:
-    """Run a job immediately (regardless of schedule).
-
-    Args:
-        job_id: Job ID to run
-
-    Returns:
-        Dict with 'success', 'message', and 'run_id'.
-    """
-    try:
-        result = _hub_request("POST", f"/jobs/{job_id}/run")
-        return {
-            "success": True,
-            "message": f"Job {job_id} fired",
-            "run_id": result.get("run_id"),
-        }
-    except RuntimeError as e:
-        return {"success": False, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+    """Trigger recurring work immediately only under operator allowance."""
+    return _job_effect("POST", f"/jobs/{job_id}/run")
 
 
 def main() -> None:
-    """Run the Hub MCP server (stdio transport)."""
-    mcp.run()
+    """Run the canonical Hub-owned surface over stdio."""
+    mcp.run(transport="stdio", show_banner=False)
 
 
 if __name__ == "__main__":

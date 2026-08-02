@@ -54,7 +54,6 @@ Changelog = "https://github.com/gutohuida/AgentWeave/blob/master/CHANGELOG.md"
 agentweave = "agentweave.cli:main"
 aw = "agentweave.cli:main"
 agentweave-watch = "agentweave.watchdog:main"
-agentweave-mcp = "agentweave.mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

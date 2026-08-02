@@ -876,7 +876,7 @@ For all REST endpoints, the pattern is:
 | `WARNING` | `"[MCP] ask_user failed: %s"` | Tool error |
 | `DEBUG` | `"[MCP] get_answer: question=%s, answered=%s"` | Polling |
 | `WARNING` | `"[MCP] get_answer failed: %s"` | Tool error |
-| `WARNING` | `"[MCP] %s failed: %s"` | Generic fallback for get_inbox, mark_read, list_tasks, get_task, get_status |
+| `WARNING` | `"[MCP] %s failed: %s"` | Generic fallback for the effect-only Hub tool surface |
 
 ---
 

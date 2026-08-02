@@ -13,7 +13,7 @@ You are working inside an AgentWeave collaboration session. Orient yourself befo
 Run the following steps in order:
 
 1. Read `.agentweave/roles.json` to find your assigned role in `agent_assignments.<your_name>` (or `agent_roles.<your_name>` if present).
-2. **Load your role guide.** Try calling the `get_context` MCP tool with your role ID (e.g., `get_context(role="backend_dev")`). If this succeeds, the returned content already includes any project-wide instructions prepended to your role guide — use this as your behavioral context. If `get_context` fails with a transport error (meaning you are on local transport), fall back to reading `.agentweave/project_instructions.md` first (if it exists and is non-empty), then read `.agentweave/roles/<role_key>.md`.
+2. **Load your role guide from turn-start context or disk.** The Hub injects project instructions and charter content. For local/manual sessions, read `.agentweave/project_instructions.md` first (if non-empty), then `.agentweave/roles/<role_key>.md`. There is no coordination-context retrieval tool.
 3. Read `agentweave.yml` `quality:` section (or check `session.json` `quality` key if no yml) — note the active settings.
 4. Run `agentweave inbox` to see unread messages addressed to you.
 5. Run `agentweave task list` to see all active tasks, then filter by your agent name if needed.

@@ -151,7 +151,7 @@ The `opencode:` top-level block is **opaque** to AgentWeave — AgentWeave doesn
 
 - Reads the `opencode:` block from `agentweave.yml`
 - Writes (or merges) it into `opencode.json` at the project root
-- Uses **add-or-replace semantics**: keys you declare overwrite, other top-level keys (`mcp`, `agent`, `instructions`, etc.) are preserved
+- Uses **add-or-replace semantics**: keys you declare overwrite, other top-level keys (`agent`, `instructions`, etc.) are preserved
 - Verifies the resulting `opencode.json` is valid JSON before saving
 
 ### After activate — what `opencode.json` looks like
@@ -159,9 +159,6 @@ The `opencode:` top-level block is **opaque** to AgentWeave — AgentWeave doesn
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "agentweave": { "type": "local", "command": ["agentweave-mcp"] }
-  },
   "provider": {
     "minimax": {
       "npm": "@ai-sdk/anthropic",

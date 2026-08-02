@@ -93,7 +93,6 @@ docker compose up --build -d
 agentweave --help
 aw --help                    # alias
 agentweave-watch --help      # watchdog
-agentweave-mcp               # MCP server (stdio)
 agentweave hub status        # check Hub status
 ```
 

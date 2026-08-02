@@ -113,7 +113,7 @@ Your template should include:
 1. **Read `.agentweave/roles.json`** — find your assigned role in `agent_assignments.<your_name>`, then read the corresponding guide in `.agentweave/roles/<role_key>.md`.
 2. **Read `.agentweave/protocol.md`** — learn the collaboration protocol.
 3. **Read `.agentweave/shared/context.md`** — see current focus.
-4. **Check for AgentWeave MCP tools** — look for `send_message`, `get_inbox`, etc.
+4. **Read the turn's access-path notice** — use injected outbound tools or their command equivalents.
 5. **Run `agentweave status`** — see pending tasks.
 
 ## Role Adherence Rules
@@ -370,30 +370,14 @@ elif agent == "minimax":
 
 ---
 
-### Step 5: Update MCP Server Documentation (Optional)
+### Step 5: Add a Hub access-path adapter (Optional)
 
-**File:** `src/agentweave/mcp/server.py`
+**Files:** `hub/hub/launchability.py`, `hub/hub/runner_commands.py`
 
-Update the docstring (around line 11-14) to include your agent:
-
-```python
-"""AgentWeave MCP server.
-
-Exposes AgentWeave messaging and task management as MCP tools.
-
-Usage:
-    agentweave-mcp                         # stdio (default)
-
-Configure in Claude Code:
-    claude mcp add agentweave -- agentweave-mcp
-
-Configure in Kimi Code:
-    kimi mcp add --transport stdio agentweave -- agentweave-mcp
-
-Configure in MiniMax:
-    minimax mcp add agentweave -- agentweave-mcp
-"""
-```
+If the runner accepts per-invocation tool configuration, add it to the Hub's injectable-runner set
+and teach `build_command()` how to pass the canonical `hub/hub/mcp_server.py` stdio command. Never
+create a runner-specific tool server or require a global `mcp add`. Until an adapter exists, the Hub
+selects the equivalent command path.
 
 ---
 
@@ -435,10 +419,8 @@ After making all changes:
    agentweave relay --agent minimax
    ```
 
-5. **Test MCP setup (if applicable):**
-   ```bash
-   agentweave mcp setup
-   ```
+5. **Test per-run access-path injection (if applicable):** verify the runner receives the canonical
+   Hub surface without editing its global configuration, or receives the command-path notice.
 
 6. **Test watchdog auto-ping:**
    ```bash
@@ -600,7 +582,7 @@ Use this checklist when adding full support for a new agent:
 - [ ] Add session detection (if agent uses custom session storage)
 - [ ] Update MCP server docstring
 - [ ] Update help text examples (optional)
-- [ ] Test all commands: init, relay, quick, mcp setup, start (watchdog)
+- [ ] Test all commands: init, relay, quick, Hub injection/command path, start (watchdog)
 
 ---
 
@@ -609,7 +591,7 @@ Use this checklist when adding full support for a new agent:
 If you've added support for a new agent that others might find useful:
 
 1. Follow this guide completely
-2. Test all functionality (init, sync-context, relay, mcp setup, watchdog)
+2. Test all functionality (init, sync-context, relay, Hub injection/command path, watchdog)
 3. Submit a pull request with:
    - Clear description of the agent
    - Link to agent's CLI documentation

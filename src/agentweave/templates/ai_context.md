@@ -121,37 +121,36 @@ Before parallelizing, split work into phases to avoid wasted implementation:
 
 This prevents the common failure: two agents implement incompatible approaches at the same time.
 
-### MCP vs CLI vs Hub+CLI — CRITICAL Rule
+### Injected tools vs Hub commands — CRITICAL Rule
 
 **Check which mode you are in before taking any Hub action.**
 
 | Mode | Signal | Use |
 |------|--------|-----|
-| **MCP** | `send_message` is in your available tools | MCP tools only |
-| **Hub+CLI** | Watchdog says `agentweave inbox --agent X --mark-read` | CLI commands only |
+| **Injected tools** | Turn prompt says the `agentweave` tools are available | Effect-only tools |
+| **Hub commands** | Turn prompt says MCP is unavailable | Equivalent CLI commands |
 | **Relay** | No Hub tools, no CLI instruction | `agentweave relay --agent X` |
 
-**In MCP mode**, these CLI delegation commands are **FORBIDDEN**:
+**With injected tools**, these manual-relay commands are **FORBIDDEN**:
 - ❌ `agentweave relay --agent <name>`
 - ❌ `agentweave quick --to <name> "..."`
 - ❌ `agentweave relay --agent <name> --run`
 
-They require manual human action. `send_message` + watchdog is fully automatic for all runner types:
-- `native` (claude, kimi, gemini) → watchdog calls their CLI directly
-- `claude_proxy` (minimax, glm) → watchdog injects env vars, calls `claude` on their behalf
-- `copilot` (GitHub Copilot CLI) → watchdog calls `copilot --output-format json --allow-all-tools`
-- `manual` (cursor) → watchdog queues message; human runs agent manually
+They require manual human action. `send_message` enters the Hub's durable queue directly.
 
-**In Hub+CLI mode**, these MCP tool calls are **UNAVAILABLE**:
-- ❌ `send_message(...)` — use `agentweave msg send --from X --to Y -m "..."`
-- ❌ `get_inbox(...)` — use `agentweave inbox --agent X --mark-read`
+**In Hub command mode**, use these equivalents:
+- ❌ `send_message(...)` — use `agentweave msg send --to Y -m "..."`
 - ❌ `list_tasks(...)` — use `agentweave task list [--assignee X] [--json]`
 - ❌ `update_task(...)` — use `agentweave task update <id> --status <status>`
 - ❌ `create_task(...)` — use `agentweave task create --title "..." --assignee X`
-- ❌ `ask_user(...)` — use `agentweave question ask --from X --question "..."`
+- ❌ `ask_user(...)` — use `agentweave question ask --question "..."`
+- ❌ `request_agent(...)` — use `agentweave agent request <name> --template <template> --task "..."`
 
-**Correct delegation (MCP mode):** `create_task(...)` → `send_message(...)` → done.
-**Correct delegation (Hub+CLI mode):** `agentweave task create ...` → `agentweave msg send ...` → done.
+Inbound queue entries, roster, charter, and project instructions are already in the prompt. There
+is no `get_inbox`, context/status retrieval, self-registration, heartbeat, or configuration tool.
+
+**Correct delegation (tools):** `create_task(...)` → `send_message(...)` → done.
+**Correct delegation (commands):** `agentweave task create ...` → `agentweave msg send ...` → done.
 **CLI relay is ONLY valid** when you have no Hub (local/git transport without Hub).
 
 ### A2A Communication Standard (all agent-to-agent messages)
@@ -204,7 +203,7 @@ Use natural language ONLY for `ask_user()` and `send_message(to="user")`.
 
 ### How to checkpoint
 
-Call `save_checkpoint(agent="<your-name>", session_intent="...", files_modified=[...], decisions=[...], next_steps=[...], reason="<reason>")` MCP tool, OR run `agentweave checkpoint --agent <your-name>` from Bash.
+Run `agentweave checkpoint --agent <your-name>` from the shell. Checkpoints are workspace state and are intentionally not part of the Hub agent tool surface.
 
 Checkpoint file location: `.agentweave/shared/checkpoints/<agent>-<timestamp>.md`
 

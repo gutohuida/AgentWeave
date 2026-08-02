@@ -37,6 +37,12 @@ class Project(Base):
     turn_delivery_cap: Mapped[int] = mapped_column(
         Integer, default=10, server_default="10", nullable=False
     )
+    agent_budget: Mapped[int] = mapped_column(
+        Integer, default=8, server_default="8", nullable=False
+    )
+    allow_agent_jobs: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")

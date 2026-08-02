@@ -36,6 +36,8 @@ class QueueEntryResponse(BaseModel):
 class QueueSettings(BaseModel):
     hop_budget: int = Field(ge=1)
     turn_delivery_cap: int = Field(ge=1)
+    agent_budget: int = Field(default=8, ge=1)
+    allow_agent_jobs: bool = False
 
 
 class QueueStatus(BaseModel):
@@ -54,7 +56,12 @@ async def get_queue_settings(
     row = await session.get(Project, project_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    return QueueSettings(hop_budget=row.hop_budget, turn_delivery_cap=row.turn_delivery_cap)
+    return QueueSettings(
+        hop_budget=row.hop_budget,
+        turn_delivery_cap=row.turn_delivery_cap,
+        agent_budget=row.agent_budget,
+        allow_agent_jobs=row.allow_agent_jobs,
+    )
 
 
 @router.patch("/settings", response_model=QueueSettings)
@@ -69,6 +76,8 @@ async def update_queue_settings(
         raise HTTPException(status_code=404, detail="Project not found")
     row.hop_budget = body.hop_budget
     row.turn_delivery_cap = body.turn_delivery_cap
+    row.agent_budget = body.agent_budget
+    row.allow_agent_jobs = body.allow_agent_jobs
     await session.commit()
     queued_agents = await session.execute(
         select(InboundQueueEntry.agent)

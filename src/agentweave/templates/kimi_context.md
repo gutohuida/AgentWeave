@@ -17,9 +17,9 @@ that auto-read `AGENTS.md` or `GEMINI.md`.
 
 ## Coordination
 
-- If AgentWeave MCP tools are available, use them for coordination:
-  `get_inbox`, `send_message`, `list_tasks`, `get_task`, `create_task`,
-  `update_task`, `ask_user`, and `save_checkpoint`.
+- If the Hub injected AgentWeave tools, use the effect-only surface:
+  `send_message`, `list_tasks`, `get_task`, `create_task`, `update_task`,
+  `ask_user`, `get_answer`, and `request_agent`. Inbound state is already in the prompt.
 - In Hub/MCP mode, do not use `agentweave relay` or `agentweave quick` for
   delegation.
 - For manual sessions, read `.agentweave/shared/context.md` before starting work

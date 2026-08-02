@@ -311,9 +311,9 @@ def build_agent_context(
         [
             "## Communication Mode",
             "",
-            "Use AgentWeave MCP tools for coordination when available: `send_message`,",
-            "`get_inbox`, `list_tasks`, `get_task`, `create_task`, `update_task`,",
-            "`ask_user`, and `save_checkpoint`.",
+            "Use the outbound path named in the turn prompt. Injected tools include",
+            "`send_message`, task-ledger tools, `ask_user`, `get_answer`, and `request_agent`.",
+            "Inbound queue entries and context are already supplied at turn start.",
             "",
             "In Hub/MCP mode, do not use `agentweave relay` or `agentweave quick` for",
             "delegation; those commands require manual relay and bypass Hub automation.",
@@ -424,7 +424,7 @@ def build_external_agent_context(
                 "Until the principal assigns you work:",
                 "- do not modify files",
                 "- do not claim tasks",
-                "- read inbox and available tasks only",
+                "- use only the turn-start entries and available task ledger",
                 "- send a short availability message to the principal",
                 "",
             ]
@@ -433,8 +433,7 @@ def build_external_agent_context(
         lines.extend(
             [
                 "You are not registered with AgentWeave yet.",
-                "Register before taking work by calling `register_agent(...)` with your",
-                "agent name, contact mode, and optional role request.",
+                "Ask the operator to register or configure this agent before taking work.",
                 "",
             ]
         )

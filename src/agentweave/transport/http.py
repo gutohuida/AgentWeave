@@ -160,6 +160,15 @@ class HttpTransport(BaseTransport):
         req.add_header("Authorization", f"Bearer {self.api_key}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Accept", "application/json")
+        # Agent-spawned command invocations inherit these bindings. Forward them so
+        # governed endpoints (notably scheduled work) can distinguish an attributable
+        # agent effect from an operator management call without accepting identity flags.
+        agent_identity = os.environ.get("AW_AGENT_IDENTITY", "").strip()
+        run_identity = os.environ.get("AW_RUN_ID", "").strip()
+        if agent_identity:
+            req.add_header("X-AgentWeave-Agent", agent_identity)
+        if run_identity:
+            req.add_header("X-AgentWeave-Run", run_identity)
 
         attempt = 0
         backoff = self.initial_backoff

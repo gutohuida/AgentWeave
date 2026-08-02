@@ -393,60 +393,23 @@ class TestActivateOpencodeConfig:
 
 
 class TestMcpSetupCodex:
-    """Tests for cmd_mcp_setup with codex runner."""
+    """Phase 7 keeps the old setup verb as a non-mutating compatibility notice."""
 
-    def test_mcp_setup_produces_codex_command(self, tmp_path, monkeypatch):
-        """cmd_mcp_setup builds correct 'codex mcp add' for codex agent."""
+    def test_mcp_setup_does_not_modify_global_codex_config(self, tmp_path, monkeypatch):
         import argparse
-        import json
 
         from agentweave.cli import cmd_mcp_setup
 
         monkeypatch.chdir(tmp_path)
-        session_dir = tmp_path / ".agentweave"
-        session_dir.mkdir()
-        session_data = {
-            "id": "test-session",
-            "name": "Test",
-            "mode": "hierarchical",
-            "principal": "claude",
-            "agents": {
-                "codex-dev": {"runner": "codex"},
-            },
-        }
-        (session_dir / "session.json").write_text(json.dumps(session_data))
-
-        # Mock subprocess to avoid actually running codex CLI
         import subprocess
 
-        original_run = subprocess.run
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not spawn")),
+        )
 
-        def mock_run(cmd, **kwargs):
-            class Result:
-                returncode = 0
-                stdout = ""
-                stderr = ""
-
-            # Simulate --version check
-            if "--version" in cmd:
-                r = Result()
-                r.returncode = 0
-                return r
-            # Capture the actual mcp add command
-            if "mcp" in cmd and "add" in cmd:
-                self.captured_cmd = cmd
-                r = Result()
-                r.returncode = 0
-                return r
-            return original_run(cmd, **kwargs)
-
-        monkeypatch.setattr(subprocess, "run", mock_run)
-
-        args = argparse.Namespace()
-        result = cmd_mcp_setup(args)
-        assert result == 0
-        assert hasattr(self, "captured_cmd")
-        assert self.captured_cmd == ["codex", "mcp", "add", "agentweave", "--", "agentweave-mcp"]
+        assert cmd_mcp_setup(argparse.Namespace()) == 0
 
 
 class TestDatetimeIsTzAware:

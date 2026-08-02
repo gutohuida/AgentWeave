@@ -2,7 +2,7 @@
 
 ## Do I need the Hub?
 
-No. Manual relay and local MCP modes work with zero infrastructure. The Hub adds a web dashboard, multi-machine support, and human question-answering.
+No. Manual relay works with zero infrastructure. The Hub adds durable queues, governed execution, injected tools or equivalent commands, a web dashboard, multi-machine support, and human question-answering.
 
 ## Should I put the UI in a separate folder/repo?
 
@@ -14,7 +14,7 @@ No. After `agentweave init`, just talk to Claude. It runs all `agentweave` comma
 
 ## Do the watchdog processes need to stay running?
 
-Yes (in local MCP mode or Hub mode). Run `agentweave start` once. If they stop, messages still queue — agents just won't be auto-triggered.
+Yes in Hub mode. Messages enter the durable inbound queue and start an idle, launchable agent within the configured hop budget.
 
 ## Should I commit `.agentweave/`?
 

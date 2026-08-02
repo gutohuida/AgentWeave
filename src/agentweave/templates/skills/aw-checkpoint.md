@@ -25,8 +25,7 @@ Steps:
    - **Verification commands:** Shell commands that confirm the current state is correct.
 
 4. Save the checkpoint:
-   - **If `save_checkpoint` MCP tool is available:** Call it with the data collected above.
-   - **If no MCP tools:** Run `agentweave checkpoint --agent <your-name> --reason <reason>` via Bash, then edit the generated file at `.agentweave/shared/checkpoints/` to fill in the qualitative sections.
+   - Run `agentweave checkpoint --agent <your-name> --reason <reason>`, then edit the generated file at `.agentweave/shared/checkpoints/` to fill in the qualitative sections. Checkpoints are workspace state, not an agent tool.
 
 5. Confirm the checkpoint was saved: verify the file exists at `.agentweave/shared/checkpoints/<your-agent>-*.md`.
 

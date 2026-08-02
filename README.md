@@ -79,18 +79,20 @@ Open **http://localhost:8000** to see:
 | Mode | Setup | Best for |
 |------|-------|----------|
 | **Hub** | `agentweave hub start --app` | Local projects, direct agent execution, web dashboard *(recommended)* |
-| **Zero-relay MCP** | `agentweave activate` (no Hub) | Autonomous loops, same machine |
+| **Hub command path** | `agentweave hub start` + `hub_client: cli` | Restricted runners with no tool-protocol access |
 | **Manual relay** | `agentweave init` only | Quick one-off delegation |
 
-### Zero-relay MCP (no Hub)
+### Hub command path (no tool-protocol server)
 
-Skip the Hub steps and activate locally:
+Start the Hub normally and force a runner to ordinary commands when its environment prohibits MCP:
 
 ```bash
-pip install "agentweave-ai[mcp]"
+pip install "agentweave-ai[all]"
 cd your-project/
 agentweave init --project "My App"
-agentweave activate    # Sets up MCP and watchdog locally
+agentweave hub start
+# Set agents.<name>.hub_client: cli in agentweave.yml, then:
+agentweave activate
 ```
 
 ### Manual relay (simplest possible)
@@ -284,23 +286,19 @@ agentweave reply --id <question_id> "Your answer"
 
 ## MCP Tools Reference
 
-Available to agents in both local MCP mode and via Hub MCP:
+Injected automatically by the Hub for compatible runners:
 
 | Tool | What it does |
 |------|-------------|
 | `send_message(to, subject, content)` | Send a message to another agent (sender is the bound identity) |
-| `get_inbox(agent)` | Read unread messages (auto-marked as read) |
-| `mark_read(message_id)` | Manually archive a message (optional) |
 | `list_tasks(agent?)` | List active tasks |
 | `get_task(task_id)` | Get full task details |
 | `update_task(task_id, status)` | Update task status |
 | `create_task(title, ...)` | Create and assign a new task (assigner is the bound identity) |
-| `get_status()` | Session-wide summary + task counts |
 | `ask_user(question)` | Post a question to the human (Hub only; asker is the bound identity) |
 | `get_answer(question_id)` | Check if the human answered (Hub only) |
-| `create_job(name, agent, message, cron)` | Create a scheduled recurring job |
-| `list_jobs(agent?)` | List scheduled jobs |
-| `run_job(job_id)` | Trigger a job immediately |
+| `request_agent(name, template, task)` | Request a pre-approved agent under the project budget |
+| `create_job` / `toggle_job` / `run_job` / `delete_job` | Mutate jobs only under operator allowance |
 
 ---
 
@@ -402,7 +400,7 @@ make lint
 ## FAQ
 
 **Q: Do I need the Hub?**
-No. Manual relay and local MCP modes work with zero infrastructure. The native Hub adds direct agent execution, a web dashboard, and human question-answering.
+No. Manual relay works with zero infrastructure. The native Hub adds durable queues, governed direct agent execution, injected tools or equivalent commands, a web dashboard, and human question-answering.
 
 **Q: Should I put the UI in a separate folder/repo?**
 No. The UI (`hub/ui/`) is built into both the Hub Python package and its optional Docker image, then served by the Hub at the same port. No second production server is needed.

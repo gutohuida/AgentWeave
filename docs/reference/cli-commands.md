@@ -270,5 +270,5 @@ See [Migration Guide](../getting-started/migration.md) and [agentweave.yml Refer
 ## MCP
 
 ```bash
-agentweave mcp setup   # register MCP server with all session agents
+agentweave mcp setup   # compatibility no-op; Hub injection is automatic
 ```

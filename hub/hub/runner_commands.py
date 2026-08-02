@@ -26,6 +26,7 @@ to existing users.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import List, Optional
 
@@ -45,6 +46,7 @@ def build_command(
     context_file: Optional[Path] = None,
     session_id: Optional[str] = None,
     yolo: bool = False,
+    mcp_command: Optional[List[str]] = None,
 ) -> List[str]:
     """Build the full CLI invocation for one turn.
 
@@ -61,6 +63,7 @@ def build_command(
             context_file=context_file,
             session_id=session_id,
             yolo=yolo,
+            mcp_command=mcp_command,
         )
     if runner in ("claude", "claude_proxy", "native"):
         return _build_claude_command(
@@ -70,6 +73,7 @@ def build_command(
             context_file=context_file,
             session_id=session_id,
             yolo=yolo,
+            mcp_command=mcp_command,
         )
     raise UnsupportedRunnerError(
         f"runner {runner!r} is not yet supported for direct Hub spawn "
@@ -85,12 +89,24 @@ def _build_claude_command(
     context_file: Optional[Path],
     session_id: Optional[str],
     yolo: bool,
+    mcp_command: Optional[List[str]] = None,
 ) -> List[str]:
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
     if context_file is not None and context_file.exists():
         cmd += ["--append-system-prompt-file", str(context_file)]
+    if mcp_command:
+        config = {
+            "mcpServers": {
+                "agentweave": {
+                    "type": "stdio",
+                    "command": mcp_command[0],
+                    "args": mcp_command[1:],
+                }
+            }
+        }
+        cmd += ["--mcp-config", json.dumps(config)]
     if yolo:
         cmd += ["--dangerously-skip-permissions"]
     if session_id:
@@ -107,9 +123,13 @@ def _build_codex_command(
     context_file: Optional[Path],
     session_id: Optional[str],
     yolo: bool,
+    mcp_command: Optional[List[str]] = None,
 ) -> List[str]:
     cmd = [cli, "exec"]
     cmd += ["--json", "--skip-git-repo-check"]
+    if mcp_command:
+        cmd += ["-c", f"mcp_servers.agentweave.command={json.dumps(mcp_command[0])}"]
+        cmd += ["-c", f"mcp_servers.agentweave.args={json.dumps(mcp_command[1:])}"]
     if context_file is not None and context_file.exists():
         cmd += ["-c", f"model_instructions_file={context_file}"]
     if model:

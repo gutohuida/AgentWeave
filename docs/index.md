@@ -43,7 +43,7 @@ It provides:
 | Mode | Setup | Best For |
 |------|-------|----------|
 | **Hub** | Docker + HTTP transport | Teams, multi-machine, web dashboard *(recommended)* |
-| **Zero-relay MCP** | `agentweave mcp setup` + watchdog | Autonomous loops, same machine, no server |
+| **Hub command path** | Hub + ordinary `agentweave` commands | Restricted runners with no tool-protocol server |
 | **Manual relay** | Zero setup | Quick one-off delegation |
 
 ## Documentation

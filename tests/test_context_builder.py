@@ -135,7 +135,7 @@ def test_external_unknown_agent_gets_registration_guidance(tmp_path, monkeypatch
 
     assert result.known is False
     assert result.registered is False
-    assert "register_agent" in result.context
+    assert "Ask the operator to register or configure this agent" in result.context
     assert "agent registration" in result.missing
 
 

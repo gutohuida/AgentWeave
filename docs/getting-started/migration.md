@@ -12,7 +12,7 @@ If you have an existing AgentWeave project using the old imperative commands, th
 |--------|-------|
 | `agentweave init --agents claude,kimi` | `agentweave init` (no `--agents` needed) |
 | `agentweave transport setup --type http ...` | Handled by `agentweave activate` |
-| `agentweave mcp setup` | Handled by `agentweave activate` |
+| `agentweave mcp setup` | Removed; the Hub injects its surface per run |
 | `agentweave start` | Handled by `agentweave activate` |
 | `agentweave agent configure <agent> ...` | Edit `agentweave.yml` + `agentweave activate` |
 | `agentweave agent set-model <agent> ...` | Edit `agentweave.yml` + `agentweave activate` |
@@ -114,7 +114,7 @@ These commands continue to work but may show deprecation warnings:
 |-------------|---------|
 | `agentweave init --agents a,b,c` | `agentweave init` then edit `agentweave.yml` |
 | `agentweave transport setup ...` | `agentweave activate` handles this |
-| `agentweave mcp setup` | `agentweave activate` handles this |
+| `agentweave mcp setup` | No longer needed; Hub injection is automatic |
 | `agentweave start` | `agentweave activate` handles this |
 
 ---

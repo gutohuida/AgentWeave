@@ -223,11 +223,9 @@ class TestAccessPath:
         monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: True)
         assert resolve_access_path("claude", "claude", override="auto") == "mcp"
 
-    def test_probeable_runner_uses_probe_result(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: True)
-        assert resolve_access_path("codex", "codex", override=None) == "mcp"
+    def test_injectable_runner_needs_no_global_registration(self, monkeypatch):
         monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: False)
-        assert resolve_access_path("codex", "codex", override=None) == "cli"
+        assert resolve_access_path("codex", "codex", override=None) == "mcp"
 
     def test_probe_mcp_registered_false_when_cli_not_on_path(self, monkeypatch):
         monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)

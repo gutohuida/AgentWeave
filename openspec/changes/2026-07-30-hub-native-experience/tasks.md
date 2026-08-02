@@ -1177,17 +1177,40 @@ before concurrency does.*
 
 *Immediately after the queue: `get_inbox` becomes a bypass the instant the queue exists.*
 
-- [ ] 7.1 Remove the bypass tools: `get_inbox`, `mark_read`, `register_agent`, `get_agent_config`,
+- [x] 7.1 Remove the bypass tools: `get_inbox`, `mark_read`, `register_agent`, `get_agent_config`,
       `update_agent_config`, `register_session`, `heartbeat`, `get_context`, `get_agent_context`,
-      `get_status`.
-- [ ] 7.2 Add `request_agent`, subject to the agent budget; gate the job tools (`create_job`,
-      `run_job`, `delete_job`, `toggle_job`) behind allowance or approval.
-- [ ] 7.3 Collapse `src/agentweave/mcp/server.py` and `hub/hub/mcp_server.py` into one surface;
-      decide the fate of `save_checkpoint`, which exists only on the CLI side.
-- [ ] 7.4 Inject tool configuration when the Hub spawns an agent; retire the `mcp-setup` ceremony.
-- [ ] 7.5 Ensure every outbound capability is reachable by command, routed through the same queue,
-      budgets, and attribution as the tool-protocol path.
-- [ ] 7.6 Verify a full multi-agent session with the tool-protocol server disabled entirely.
+      `get_status`. The canonical registered surface now contains only messaging, the task ledger,
+      operator questions, budgeted agent requests, and gated job mutations; roster/job inspection
+      and every coordination/configuration read are absent. Generated context and docs no longer
+      instruct agents to retrieve inbound state.
+- [x] 7.2 Add `request_agent`, subject to the agent budget; gate the job tools (`create_job`,
+      `run_job`, `delete_job`, `toggle_job`) behind allowance or approval. Migration 0015 adds the
+      project `agent_budget` (default 8) and `allow_agent_jobs` (default false). `/agents/request`
+      derives the requester from a live Run, copies only a configured pre-approved template,
+      refuses budget/name/template violations, creates the agent, and queues its first attributed
+      turn at source depth + 1. Agent-originated job mutations require a matching live Run and the
+      operator-controlled allowance.
+- [x] 7.3 Collapse `src/agentweave/mcp/server.py` and `hub/hub/mcp_server.py` into one surface;
+      decide the fate of `save_checkpoint`, which exists only on the CLI side. The Hub module is the
+      sole implementation; the CLI module is a re-export-only compatibility shim and the standalone
+      `agentweave-mcp` console script is removed. `save_checkpoint` is intentionally retired from
+      the surface; `agentweave checkpoint` remains the workspace command.
+- [x] 7.4 Inject tool configuration when the Hub spawns an agent; retire the `mcp-setup` ceremony.
+      Claude receives a per-run `--mcp-config`; Codex receives per-run `mcp_servers.agentweave`
+      overrides. Both start the canonical Hub stdio script and inherit bound identity, Run, project,
+      URL, and a live project credential. Global registration probing is no longer part of Hub path
+      selection; `agentweave mcp setup` is a non-mutating compatibility notice and `activate` no
+      longer changes client MCP configuration.
+- [x] 7.5 Ensure every outbound capability is reachable by command, routed through the same queue,
+      budgets, and attribution as the tool-protocol path. `agentweave agent request` reaches the
+      same budgeted endpoint; `HttpTransport` forwards bound agent/Run headers; existing message,
+      task, and question commands remain the equivalents named in the turn prompt. Operator answers
+      now resume agents as typed depth-zero queue entries instead of magic `user` messages.
+- [x] 7.6 Verify a full multi-agent session with the tool-protocol server disabled entirely. New
+      command-only integration coverage exercises task create/update, attributed peer queueing,
+      operator question/polling, budgeted agent creation, and recipient queue inspection with every
+      runner set to `hub_client: cli`. Canonical surface/signature, injection, governance, and shim
+      tests accompany full CLI (**971 passed, 4 skipped**) and Hub (**383 passed, 4 skipped**) runs.
 - [ ] 7.7 **`/handoff`**
 
 ## 8. Conversation timeline and agent colours
