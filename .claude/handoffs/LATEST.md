@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-02-2253-composer-extraction-drafts-complete.md
+.claude/handoffs/2026-08-02-2312-phase3-composer-complete.md
