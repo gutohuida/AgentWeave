@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation } from '@/api/agentChat'
@@ -77,13 +78,15 @@ describe('agent conversation handoff', () => {
   })
 
   it('checkpoints the old session and resumes the handoff in exactly one new session', async () => {
-    const view = render(<AgentOutputPanel agent={agent} />)
+    const onConversationChange = vi.fn()
+    const user = userEvent.setup()
+    const view = render(<AgentOutputPanel agent={agent} onConversationChange={onConversationChange} />)
     expect(screen.getAllByTestId('conversation-header')).toHaveLength(1)
 
-    const selector = await screen.findByRole('combobox')
-    await waitFor(() => expect(selector).toHaveValue('conv-old'))
+    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith('conv-old'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Handoff' }))
+    await user.click(screen.getByLabelText('Conversation actions'))
+    await user.click(await screen.findByRole('menuitem', { name: /Handoff/ }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(triggerBody(0)).toMatchObject({
@@ -91,7 +94,7 @@ describe('agent conversation handoff', () => {
       conversation_id: 'conv-old',
     })
     expect(triggerBody(0).message).toContain('aw-checkpoint skill')
-    await waitFor(() => expect(selector).toHaveValue('__new__'))
+    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith(null))
     expect(screen.getByTestId('session-continuity')).toHaveTextContent(
       'Preparing durable handoff',
     )
@@ -107,7 +110,7 @@ describe('agent conversation handoff', () => {
         payload: { phase: 'completed' },
       },
     ]
-    view.rerender(<AgentOutputPanel agent={agent} />)
+    view.rerender(<AgentOutputPanel agent={agent} onConversationChange={onConversationChange} />)
 
     await waitFor(() =>
       expect(screen.getByTestId('session-continuity')).toHaveTextContent('Handoff ready'),
@@ -138,7 +141,7 @@ describe('agent conversation handoff', () => {
         payload: { phase: 'started' },
       },
     ]
-    await waitFor(() => expect(selector).toHaveValue('conv-new'))
+    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith('conv-new'))
 
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'And now continue normally.' },

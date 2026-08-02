@@ -93,25 +93,25 @@ refuses.*
       rest, at least 12 before scrolling.
 - [x] 3.3 Implement the project-and-conversation draft store from `design.md`, degrading to no-persistence when
       storage is unavailable.
-- [ ] 3.4 Write the control-placement test spec: the resting control set idle and running, absence of
+- [x] 3.4 Write the control-placement test spec: the resting control set idle and running, absence of
       the removed controls, full keyboard operation of the overflow menu including focus return on
       dismissal, and unavailable actions shown disabled with a reason.
-- [ ] 3.5 Build the composer control row and the keyboard-operable overflow menu with the fixed
+- [x] 3.5 Build the composer control row and the keyboard-operable overflow menu with the fixed
       ordering and disabled-with-reason behaviour from `design.md`; agent details opens without
       navigating away or unmounting the conversation.
-- [ ] 3.6 Replace provider-session selection with AgentWeave conversation selection in the overflow
+- [x] 3.6 Replace provider-session selection with AgentWeave conversation selection in the overflow
       menu; keep continuity visible as human-readable text and provider IDs confined to details or
       diagnostics; preserve the successor-conversation handoff state machine.
-- [ ] 3.7 Remove the pause/resume-scroll control and drive autoscroll from scroll position.
-- [ ] 3.8 Place the existing `ContextUsageIndicator` in the composer control row, rendering nothing
+- [x] 3.7 Remove the pause/resume-scroll control and drive autoscroll from scroll position.
+- [x] 3.8 Place the existing `ContextUsageIndicator` in the composer control row, rendering nothing
       when no usage event has been received. *The indicator, its compact variant, and
       `record_context_usage` already exist — umbrella tasks 11.6–11.7 were built but never checked
       off. Only placement remains.*
-- [ ] 3.9 Build the banner stack above the composer for run failure, stream loss, and blocked-queue
+- [x] 3.9 Build the banner stack above the composer for run failure, stream loss, and blocked-queue
       conditions, with stable ordering across simultaneous conditions.
-- [ ] 3.10 Verify the composer, draft, control-placement, session-identity, autoscroll, banner, and
+- [x] 3.10 Verify the composer, draft, control-placement, session-identity, autoscroll, banner, and
       context-usage scenarios.
-- [ ] 3.11 **`/handoff`**
+- [x] 3.11 **`/handoff`**
 
 ## 4. Regression and closeout
 

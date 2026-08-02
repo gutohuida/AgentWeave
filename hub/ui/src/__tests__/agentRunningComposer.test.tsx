@@ -108,7 +108,9 @@ describe('running-agent composer', () => {
     const composer = screen.getByRole('textbox')
     const send = screen.getByRole('button', { name: 'Send message' })
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue(conversation.id))
+    await waitFor(() =>
+      expect(screen.getByTestId('session-continuity')).toHaveTextContent(conversation.id),
+    )
     expect(composer).toBeEnabled()
 
     fireEvent.change(composer, { target: { value: 'First follow-up' } })

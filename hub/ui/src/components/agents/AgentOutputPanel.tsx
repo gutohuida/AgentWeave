@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
-import { useCopy } from '@/hooks/useCopy'
+import { useSSEConnectionState } from '@/hooks/useSSE'
 import { AgentSummary, useAgentOutput, useAgents, useAgentTimeline } from '@/api/agents'
 import { useAgentChatHistory, useAgentConversations, useAgentRecentChat } from '@/api/agentChat'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
+import { BannerStack, type ConversationBanner } from './BannerStack'
 import { Composer } from './Composer'
+import { ConversationControls, type HandoffState } from './ConversationControls'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -30,8 +32,6 @@ as authoritative and continue from its Next Steps.
 
 User request:`
 
-type HandoffState = 'idle' | 'preparing' | 'ready'
-
 interface TriggerResult {
   status: string
   waiting_reason?: string | null
@@ -49,7 +49,6 @@ export function AgentOutputPanel({
   const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoscroll, setAutoscroll] = useState(true)
-  const { copied, copy } = useCopy(2000)
 
   const { apiKey, projectId } = useConfigStore()
   const [isSending, setIsSending] = useState(false)
@@ -126,7 +125,6 @@ export function AgentOutputPanel({
     setAutoscroll(atBottom)
   }
 
-  const sessionId = [...lines].reverse().find((l) => l.session_id)?.session_id
   const isRunning = agent.status === 'running'
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
@@ -143,8 +141,21 @@ export function AgentOutputPanel({
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
   const timelineEntries = chat.data?.entries ?? []
+  const sseConnectionState = useSSEConnectionState()
 
   const [foldAllSignal, setFoldAllSignal] = useState(0)
+
+  // Fixed evaluation order so a cleared condition never reshuffles the ones
+  // that remain (design.md: "Conditions are reported in a banner stack").
+  const banners: ConversationBanner[] = [
+    submissionError ? { id: 'run-failure', message: submissionError } : null,
+    sseConnectionState === 'reconnecting'
+      ? { id: 'stream-loss', message: 'Live updates are disconnected — reconnecting…' }
+      : null,
+    timelineEntries.some((entry) => entry.hop_budget_exceeded)
+      ? { id: 'blocked-queue', message: 'Queued messages are blocked by the hop limit — deliver now to continue.' }
+      : null,
+  ].filter((banner): banner is ConversationBanner => banner !== null)
 
   const handleWithdraw = (entryId: string) => {
     void withdrawQueueEntry(entryId)
@@ -253,6 +264,14 @@ export function AgentOutputPanel({
     }
   }
 
+  const selectConversation = (id: string) => {
+    setSelectedConversationId(id)
+    setHandoffState('idle')
+    setSessionNotice(null)
+    handoffOutputStartRef.current = null
+    handoffSawRunningRef.current = false
+  }
+
   const handleComposerSubmit = async (typedMessage: string): Promise<void> => {
     if (!apiKey) throw new Error('Not configured')
     setIsSending(true)
@@ -306,30 +325,10 @@ export function AgentOutputPanel({
         )}
         <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{agent.name}</span>
 
-        {/* Session ID chip */}
-        {sessionId && (
-          <button
-            onClick={() => copy(sessionId)}
-            title="Click to copy full session ID"
-            className="flex items-center gap-1 transition-colors cursor-pointer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              borderRadius: 'var(--radius-sm)',
-              padding: '2px 8px',
-              fontSize: 11,
-              fontWeight: 500,
-              background: copied ? 'var(--surface-3)' : 'rgba(168,85,247,0.1)',
-              color: copied ? 'var(--text)' : 'var(--purple)',
-            }}
-          >
-            <Icon name={copied ? 'check' : 'content_copy'} size={12} />
-            {copied ? 'copied' : `session: ${sessionId.slice(0, 12)}…`}
-          </button>
-        )}
-
-        {/* Status chip */}
+        {/* Status chip. Provider session identity is not shown here — see
+            "Conversation identity is readable without exposing provider
+            identity": normal controls use conversation_id only, and provider
+            binding is confined to agent details / diagnostics. */}
         <span
           className="flex items-center gap-1.5"
           style={{
@@ -349,84 +348,13 @@ export function AgentOutputPanel({
           )}
           {agent.status}
         </span>
-
-        {/* Stop control */}
-        {isRunning && (
-          <button
-            onClick={handleStop}
-            disabled={isStopping}
-            title="Terminate the in-progress run"
-            className="transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              borderRadius: 'var(--radius-sm)',
-              padding: '2px 8px',
-              fontSize: 11,
-              fontWeight: 500,
-              background: 'rgba(239,68,68,0.1)',
-              color: 'var(--red)',
-              cursor: isStopping ? 'default' : 'pointer',
-            }}
-          >
-            <Icon name="stop" size={12} />
-            {isStopping ? 'Stopping…' : 'Stop'}
-          </button>
-        )}
-
-        {/* Fold all turns */}
-        <button
-          onClick={() => setFoldAllSignal((s) => s + 1)}
-          className="ml-auto transition-colors"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            borderRadius: 'var(--radius-sm)',
-            padding: '2px 8px',
-            fontSize: 11,
-            fontWeight: 500,
-            background: 'var(--surface-3)',
-            color: 'var(--text-2)',
-            cursor: 'pointer',
-          }}
-        >
-          Fold all turns
-        </button>
-
-        {/* Autoscroll toggle */}
-        <button
-          onClick={() => {
-            setAutoscroll((v) => {
-              if (!v && bottomRef.current) {
-                bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-              }
-              return !v
-            })
-          }}
-          className="transition-colors"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            borderRadius: 'var(--radius-sm)',
-            padding: '2px 8px',
-            fontSize: 11,
-            fontWeight: 500,
-            background: 'var(--surface-3)',
-            color: 'var(--text-2)',
-            cursor: 'pointer',
-          }}
-        >
-          {autoscroll ? 'Pause scroll' : 'Resume scroll'}
-        </button>
       </div>
 
       {/* Output body */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        data-testid="conversation-output"
         className="flex-1 overflow-y-auto py-[22px]"
         style={{ background: 'var(--bg)' }}
       >
@@ -453,80 +381,23 @@ export function AgentOutputPanel({
         className="shrink-0 border-t px-3 py-2 flex flex-col gap-2"
         style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
-        {submissionError && (
-          <div
-            role="alert"
-            data-testid="conversation-banner"
-            className="rounded-lg border px-3 py-2 text-xs"
-            style={{
-              background: 'rgba(239,68,68,0.08)',
-              borderColor: 'rgba(239,68,68,0.28)',
-              color: 'var(--red)',
-            }}
-          >
-            {submissionError}
-          </div>
-        )}
-        {/* Conversation selector + durable handoff */}
-        <div className="flex gap-2">
-          <select
-            value={selectedConversationId}
-            aria-label="Conversation"
-            disabled={interactionLocked}
-            onChange={(e) => {
-              setSelectedConversationId(e.target.value)
-              setHandoffState('idle')
-              setSessionNotice(null)
-              handoffOutputStartRef.current = null
-              handoffSawRunningRef.current = false
-            }}
-            className="flex-1 min-w-0 px-2 py-1 rounded-lg text-xs border"
-            style={{
-              background: 'var(--surface)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-3)',
-              outline: 'none',
-            }}
-          >
-            <option value={NEW_CONVERSATION_VALUE}>New conversation (start fresh)</option>
-            {currentConversationId
-              && !conversations.some((conversation) => conversation.id === currentConversationId)
-              && <option value={currentConversationId}>{currentConversationId}</option>}
-            {conversations.map((conversation) => (
-              <option key={conversation.id} value={conversation.id}>
-                {conversation.id.slice(0, 28)}{conversation.id.length > 28 ? '…' : ''}
-                {conversation.updated_at
-                  && ` (${new Date(conversation.updated_at).toLocaleDateString()})`}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleHandoff}
-            disabled={
-              !currentConversationId
-              || interactionLocked
-              || handoffState !== 'idle'
-              || handoffUnavailable
-            }
-            title={
-              handoffUnavailable
-                ? 'Handoff requires an automatically managed runner'
-                : 'Save a durable checkpoint, then resume it in a fresh conversation'
-            }
-            className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: 'var(--surface)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-2)',
-            }}
-          >
-            {handoffState === 'preparing'
-              ? 'Preparing…'
-              : handoffState === 'ready'
-                ? 'Ready'
-                : 'Handoff'}
-          </button>
-        </div>
+        <ConversationControls
+          agent={agent}
+          isRunning={isRunning}
+          isStopping={isStopping}
+          onStop={handleStop}
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onSelectConversation={selectConversation}
+          onNewConversation={() => selectConversation(NEW_CONVERSATION_VALUE)}
+          handoffState={handoffState}
+          handoffUnavailable={handoffUnavailable}
+          interactionLocked={interactionLocked}
+          onHandoff={handleHandoff}
+          onFoldAll={() => setFoldAllSignal((s) => s + 1)}
+        />
+
+        <BannerStack banners={banners} />
 
         <span
           data-testid="session-continuity"
