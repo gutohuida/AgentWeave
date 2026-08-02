@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
@@ -21,31 +21,16 @@ interface AgentTimelineProps {
   timelineEvents: AgentTimelineEvent[]
   queueStatus?: QueueStatus
   isRunning: boolean
-  onStop?: () => void
-  isStopping?: boolean
+  onDeliverNow?: () => void
   onWithdraw?: (entryId: string) => void
+  /** Bump to fold every turn — driven by the header's "Fold all turns" button. */
+  foldAllSignal?: number
 }
 
-const LIFECYCLE_LABEL: Record<RunLifecycleStatus, string> = {
-  started: 'Running',
-  completed: 'Completed',
-  failed: 'Failed',
-  stopped: 'Stopped',
-  interrupted: 'Interrupted',
-}
-const LIFECYCLE_COLOR: Record<RunLifecycleStatus, string> = {
-  started: 'var(--blue)',
-  completed: 'var(--green)',
-  failed: 'var(--red)',
-  stopped: 'var(--amber)',
-  interrupted: 'var(--purple)',
-}
-const LIFECYCLE_ICON: Record<RunLifecycleStatus, string> = {
-  started: 'play_arrow',
-  completed: 'check_circle',
-  failed: 'error',
-  stopped: 'stop',
-  interrupted: 'warning',
+const TERMINAL_LABEL: Partial<Record<RunLifecycleStatus, string>> = {
+  failed: 'Turn failed',
+  stopped: 'Turn stopped',
+  interrupted: 'Turn interrupted',
 }
 
 type ColorLookup = Map<string, number | null | undefined>
@@ -57,9 +42,9 @@ export function AgentTimeline({
   timelineEvents,
   queueStatus,
   isRunning,
-  onStop,
-  isStopping,
+  onDeliverNow,
   onWithdraw,
+  foldAllSignal,
 }: AgentTimelineProps) {
   const colorByName: ColorLookup = useMemo(() => {
     const map = new Map<string, number | null | undefined>()
@@ -71,6 +56,41 @@ export function AgentTimeline({
   const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
   const [workOpen, setWorkOpen] = useState<Record<string, boolean>>({})
+
+  // The caller always passes a defined counter (never undefined) that starts
+  // at 0, so the effect must only react the SECOND time it sees a given
+  // value change, not merely "the effect ran." A `mounted` boolean guard
+  // looks equivalent but isn't: React 18 StrictMode double-invokes effects
+  // on mount (to surface missing cleanup), which flips such a guard on the
+  // phantom remount and folds every turn before the operator does anything.
+  // Comparing against the last-*processed* value is immune to being invoked
+  // an extra time, since a repeat invocation still carries the same value.
+  const lastProcessedSignal = useRef(foldAllSignal)
+  useEffect(() => {
+    if (foldAllSignal === undefined || foldAllSignal === lastProcessedSignal.current) return
+    lastProcessedSignal.current = foldAllSignal
+    setFoldOverride(() => {
+      const all: Record<string, boolean> = {}
+      turns.forEach((t, i) => {
+        all[t.runId ?? `turn-${i}`] = true
+      })
+      return all
+    })
+    // Only reacts to the signal firing — deliberately excludes `turns`, which
+    // changes on every poll and would otherwise re-fold turns the operator
+    // just reopened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foldAllSignal])
+
+  const suspendedByParticipant = useMemo(() => {
+    const groups = new Map<string, number>()
+    for (const entry of pending) {
+      if (entry.hop_budget_exceeded && entry.participant) {
+        groups.set(entry.participant, (groups.get(entry.participant) ?? 0) + 1)
+      }
+    }
+    return groups
+  }, [pending])
 
   if (turns.length === 0 && pending.length === 0) {
     return (
@@ -85,107 +105,123 @@ export function AgentTimeline({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="max-w-[760px] mx-auto flex flex-col gap-[18px] px-5">
       {turns.map((turn, turnIndex) => {
         const key = turn.runId ?? `turn-${turnIndex}`
         const isLastTurn = turnIndex === turns.length - 1
         const runStatus = turn.runId ? statusByRun[turn.runId] : undefined
-        const isRunningTurn = isLastTurn && isRunning && (!runStatus || runStatus === 'started')
-        // Default: the last turn is unfolded, every earlier one starts folded
-        // to a summary — the operator can toggle any of them either way.
+        // Default: the last turn is open, every earlier one starts folded to a
+        // one-line summary — the operator can toggle any of them either way.
         const folded = foldOverride[key] ?? !isLastTurn
 
-        return (
-          <div key={key} className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            <button
-              onClick={() => setFoldOverride((old) => ({ ...old, [key]: !folded }))}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-left"
-              style={{ background: 'var(--surface-2)' }}
-            >
-              <Icon
-                name="expand_more"
-                size={14}
-                style={{
-                  color: 'var(--text-3)',
-                  transform: folded ? 'rotate(-90deg)' : undefined,
-                  transition: 'transform var(--dur-fast) var(--ease)',
-                }}
-              />
-              {isRunningTurn ? (
-                <span
-                  className="flex items-center gap-1.5 text-[11px] font-medium"
-                  style={{ color: 'var(--green)' }}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                  Running
-                </span>
-              ) : runStatus ? (
-                <span
-                  className="flex items-center gap-1 text-[11px] font-medium"
-                  style={{ color: LIFECYCLE_COLOR[runStatus] }}
-                >
-                  <Icon name={LIFECYCLE_ICON[runStatus]} size={12} />
-                  {LIFECYCLE_LABEL[runStatus]}
-                </span>
-              ) : (
-                <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                  Turn
-                </span>
-              )}
-              <span className="text-[11px]" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-                {formatDistanceToNow(new Date(turn.entries[0].timestamp), { addSuffix: true })}
-              </span>
-              <span className="flex-1" />
-              {isRunningTurn && onStop && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onStop()
-                  }}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium"
-                  style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red)' }}
-                >
-                  <Icon name="stop" size={11} />
-                  {isStopping ? 'Stopping…' : 'Stop'}
-                </span>
-              )}
-            </button>
+        if (folded) {
+          return (
+            <FoldedTurnPill
+              key={key}
+              turn={turn}
+              onClick={() => setFoldOverride((old) => ({ ...old, [key]: false }))}
+            />
+          )
+        }
 
-            {!folded && (
-              <div className="p-3 space-y-2" style={{ background: 'var(--bg)' }}>
-                <TurnBody
-                  turn={turn}
-                  turnKey={key}
-                  agentName={agent.name}
-                  colorByName={colorByName}
-                  workOpen={workOpen[key] ?? false}
-                  onToggleWork={() => setWorkOpen((old) => ({ ...old, [key]: !old[key] }))}
-                />
+        const terminalLabel = runStatus ? TERMINAL_LABEL[runStatus] : undefined
+
+        return (
+          <div key={key} className="flex flex-col gap-[18px]">
+            {!isLastTurn && (
+              <button
+                onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
+                className="self-start flex items-center gap-1 text-[10.5px]"
+                style={{ color: 'var(--text-3)', opacity: 0.55 }}
+                title="Fold this turn"
+              >
+                <Icon name="expand_more" size={11} />
+                fold
+              </button>
+            )}
+            <TurnBody
+              turn={turn}
+              turnKey={key}
+              agentName={agent.name}
+              colorByName={colorByName}
+              workOpen={workOpen[key] ?? false}
+              onToggleWork={() => setWorkOpen((old) => ({ ...old, [key]: !old[key] }))}
+            />
+            {terminalLabel && (
+              <div
+                className="flex items-center gap-2 justify-center text-[12px]"
+                style={{ color: 'var(--text-3)' }}
+              >
+                <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                {terminalLabel}
+                {turn.entries.length > 0 &&
+                  ` · ${format(new Date(turn.entries[turn.entries.length - 1].timestamp), 'HH:mm')}`}
+                <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
               </div>
             )}
           </div>
         )
       })}
 
-      {(pending.length > 0 || (queueStatus && queueStatus.waiting_count > 0)) && (
+      {pending.map((entry) => (
+        <MessageEntry
+          key={entry.id}
+          entry={entry}
+          agentName={agent.name}
+          colorByName={colorByName}
+          queued
+          onWithdraw={onWithdraw}
+        />
+      ))}
+
+      {suspendedByParticipant.size > 0 && (
         <div
-          className="rounded-lg p-3 space-y-2"
-          style={{ border: '1px dashed var(--border-hi)', background: 'var(--surface-2)' }}
+          className="flex items-start gap-2.5 px-[13px] py-2.5 rounded-lg text-[12.5px]"
+          style={{
+            border: '1px solid color-mix(in oklab, var(--amber) 28%, transparent)',
+            background: 'color-mix(in oklab, var(--amber) 7%, transparent)',
+            color: 'color-mix(in oklab, var(--amber) 65%, var(--text))',
+          }}
         >
-          <div className="flex items-center gap-2 text-[11px] font-medium" style={{ color: 'var(--text-3)' }}>
-            <Icon name="schedule" size={13} />
-            Waiting to be delivered
-            {queueStatus ? ` (${queueStatus.waiting_count})` : ''}
-            {!isRunning && queueStatus?.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
+          <Icon name="warning" size={15} style={{ color: 'var(--amber)', marginTop: 1, flexShrink: 0 }} />
+          <div className="flex-1">
+            <b style={{ color: 'var(--amber)' }}>Autonomous continuation paused</b> —{' '}
+            {[...suspendedByParticipant.entries()]
+              .map(([who, count]) => `${count} ${count === 1 ? 'entry' : 'entries'} from ${who}`)
+              .join(', ')}{' '}
+            reached the hop budget. They'll be delivered with your next message.
           </div>
-          {pending.map((entry) => (
-            <PendingEntry key={entry.id} entry={entry} colorByName={colorByName} onWithdraw={onWithdraw} />
-          ))}
+          {onDeliverNow && (
+            <button
+              onClick={onDeliverNow}
+              className="shrink-0 text-[12px] font-medium px-2 py-1 rounded"
+              style={{ color: 'var(--text-2)' }}
+            >
+              Deliver now
+            </button>
+          )}
         </div>
       )}
+
+      {!isRunning && queueStatus && queueStatus.waiting_count > 0 && suspendedByParticipant.size === 0 && (
+        <p className="text-[11.5px] text-center" style={{ color: 'var(--text-3)' }}>
+          {queueStatus.waiting_count} waiting{queueStatus.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
+        </p>
+      )}
     </div>
+  )
+}
+
+function FoldedTurnPill({ turn, onClick }: { turn: TimelineTurn; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-2 self-stretch px-[11px] py-[6px] rounded-lg text-[12.5px] text-left"
+      style={{ border: '1px dashed var(--border)', color: 'var(--text-3)' }}
+    >
+      <Icon name="expand_more" size={13} style={{ transform: 'rotate(-90deg)' }} />
+      Turn folded · {turn.entries.length} {turn.entries.length === 1 ? 'entry' : 'entries'}
+    </button>
   )
 }
 
@@ -214,45 +250,46 @@ function TurnBody({
       .filter((id): id is string => Boolean(id)),
   )
   const workRows = work.filter((e) => !pairedResultIds.has(e.id))
+  const workDuration =
+    work.length > 1
+      ? ((new Date(work[work.length - 1].timestamp).getTime() - new Date(work[0].timestamp).getTime()) / 1000).toFixed(1)
+      : null
 
   return (
     <>
       {work.length > 0 && (
-        <div className="rounded-md" style={{ border: '1px solid var(--border)' }}>
-          <button
-            onClick={onToggleWork}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px]"
-            style={{ color: 'var(--text-3)' }}
+        <details open={workOpen} className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          <summary
+            onClick={(e) => {
+              e.preventDefault()
+              onToggleWork()
+            }}
+            className="flex items-center gap-2 px-[11px] py-[7px] text-[12.5px] cursor-pointer list-none"
+            style={{ color: 'var(--text-2)' }}
           >
             <Icon
               name="expand_more"
-              size={12}
-              style={{ transform: workOpen ? undefined : 'rotate(-90deg)' }}
+              size={13}
+              style={{ opacity: 0.6, transform: workOpen ? undefined : 'rotate(-90deg)' }}
             />
-            {work.length} step{work.length === 1 ? '' : 's'} of intermediate work
-          </button>
+            Work · {work.length} step{work.length === 1 ? '' : 's'}
+            {workDuration ? ` · ${workDuration}s` : ''}
+          </summary>
           {workOpen && (
-            <div className="px-2.5 pb-2 space-y-1.5">
+            <div className="px-[11px] py-[9px] text-[12.5px]" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>
               {workRows.map((entry) => (
                 <WorkRow key={entry.id} entry={entry} paired={findPairedResult(work, entry)} />
               ))}
             </div>
           )}
-        </div>
+        </details>
       )}
 
       {rest.map((entry) => {
         if (entryCategory(entry) === 'result') {
           return <ResultCard key={entry.id} entry={entry} turnKey={turnKey} />
         }
-        return (
-          <MessageBubble
-            key={entry.id}
-            entry={entry}
-            agentName={agentName}
-            colorByName={colorByName}
-          />
-        )
+        return <MessageEntry key={entry.id} entry={entry} agentName={agentName} colorByName={colorByName} />
       })}
     </>
   )
@@ -277,13 +314,10 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
   return (
     <button
       onClick={() => setExpanded((v) => !v)}
-      className="block w-full text-left font-mono text-[11px] leading-5"
-      style={{ color: 'var(--text-2)' }}
+      className="flex gap-[.55rem] py-[2.5px] w-full text-left font-mono text-[12.5px]"
     >
-      <span style={{ color: 'var(--text-3)' }}>
-        {label}
-        {statusSuffix}
-      </span>
+      <b style={{ color: 'var(--text)', fontWeight: 500, minWidth: 64 }}>{label}</b>
+      <span style={{ color: 'var(--text-2)' }}>{statusSuffix.replace(' · ', '')}</span>
       {expanded && (
         <span className="block whitespace-pre-wrap mt-0.5" style={{ color: 'var(--text-3)' }}>
           {entry.content}
@@ -301,15 +335,15 @@ function ResultCard({ entry, turnKey }: { entry: TimelineEntry; turnKey: string 
   return (
     <div
       data-testid={`result-card-${turnKey}`}
-      className="relative overflow-hidden px-3 py-2"
+      className="relative overflow-hidden px-[18px] py-4"
       style={{
         borderRadius: 'var(--radius-content)',
-        border: `1px solid ${isError ? 'var(--amber)' : 'var(--border-hi)'}`,
-        background: 'color-mix(in oklab, var(--surface-2) 90%, transparent)',
+        border: `1px solid ${isError ? 'var(--amber)' : 'var(--border)'}`,
+        background: 'color-mix(in oklab, var(--surface) 82%, transparent)',
         maxHeight: long && clipped ? 96 : undefined,
       }}
     >
-      <p className="text-xs whitespace-pre-wrap" style={{ color: 'var(--text-2)' }}>
+      <p className="text-[13px] whitespace-pre-wrap" style={{ color: 'var(--text-2)' }}>
         {entry.content}
       </p>
       {long && clipped && (
@@ -317,7 +351,7 @@ function ResultCard({ entry, turnKey }: { entry: TimelineEntry; turnKey: string 
           onClick={() => setClipped(false)}
           className="absolute inset-x-0 bottom-0 h-8 flex items-end justify-center text-[10px] pb-1"
           style={{
-            background: 'linear-gradient(to top, var(--surface-2), transparent)',
+            background: 'linear-gradient(to top, var(--surface), transparent)',
             color: 'var(--text-3)',
           }}
         >
@@ -338,93 +372,144 @@ function participantLabel(entry: TimelineEntry, agentName: string): { name: stri
   return { name: agentName, align: 'left' }
 }
 
-function MessageBubble({
+function MessageEntry({
   entry,
   agentName,
   colorByName,
+  queued = false,
+  onWithdraw,
 }: {
   entry: TimelineEntry
   agentName: string
   colorByName: ColorLookup
+  queued?: boolean
+  onWithdraw?: (entryId: string) => void
 }) {
-  const { name, align } = participantLabel(entry, agentName)
-  const isPeer = entry.kind === 'inbound_peer' || entry.kind === 'outbound_peer'
-  // Inbound is tinted with the SENDER's colour; outbound is accented with the
-  // RECIPIENT's colour — both are `entry.participant`, the "other" agent.
-  const colors = isPeer ? agentColorVars(colorByName.get(entry.participant || '')) : null
-  const isError = entry.output_kind === 'error'
+  const time = format(new Date(entry.timestamp), 'HH:mm')
+  const wrapperStyle: React.CSSProperties = { opacity: queued ? 0.55 : 1 }
+  const queuedTag = queued && (
+    <span
+      className="inline-flex items-center h-[18px] px-[.4rem] rounded text-[10.5px] font-semibold uppercase tracking-wide"
+      style={{ background: 'var(--accent)', color: 'var(--text-3)' }}
+    >
+      queued
+    </span>
+  )
+  const withdraw = queued && onWithdraw && (
+    <button
+      onClick={() => onWithdraw(entry.id)}
+      title="Withdraw before it's delivered"
+      className="text-[11px]"
+      style={{ color: 'var(--text-3)' }}
+    >
+      <Icon name="close" size={12} />
+    </button>
+  )
 
-  return (
-    <div className={`flex ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className="max-w-[85%] rounded-2xl px-3 py-2"
-        style={{
-          background: colors ? colors.tint : isError ? 'rgba(239,68,68,0.1)' : 'var(--surface-2)',
-          border: colors ? `1px solid ${colors.border}` : undefined,
-        }}
-      >
-        <div className="flex items-center gap-1.5 mb-0.5">
+  // Own plain text (or an error) — borderless, no bubble, just a "who" line.
+  if (entry.kind === 'agent_output') {
+    const isError = entry.output_kind === 'error'
+    const colors = agentColorVars(colorByName.get(agentName))
+    return (
+      <div className="flex flex-col gap-[5px]" style={wrapperStyle}>
+        <div className="flex items-center gap-[.4rem] text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>
           <span
-            className="text-[11px] font-medium"
-            style={{ color: colors ? colors.accent : isError ? 'var(--red)' : 'var(--text-3)' }}
-          >
-            {name}
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ background: isError ? 'var(--red)' : colors.accent }}
+          />
+          {agentName}
+          <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+            {time}
           </span>
+          {queuedTag}
+          {withdraw}
         </div>
-        <div className="text-sm whitespace-pre-wrap break-words" style={{ color: 'var(--text)' }}>
+        <div
+          className="text-sm leading-[1.6] whitespace-pre-wrap break-words"
+          style={{ color: isError ? 'var(--red)' : 'var(--text)' }}
+        >
           {entry.content}
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
-function PendingEntry({
-  entry,
-  colorByName,
-  onWithdraw,
-}: {
-  entry: TimelineEntry
-  colorByName: ColorLookup
-  onWithdraw?: (entryId: string) => void
-}) {
-  const isPeer = entry.kind === 'inbound_peer'
-  const colors = isPeer ? agentColorVars(colorByName.get(entry.participant || '')) : null
-  const label = entry.kind === 'operator_input' ? 'You' : entry.participant || 'agent'
+  // Operator ("you") — right-aligned tinted bubble.
+  if (entry.kind === 'operator_input') {
+    return (
+      <div className="flex flex-col items-end gap-[5px]" style={wrapperStyle}>
+        <div className="flex items-center gap-[.4rem] text-[11.5px] font-semibold" style={{ color: 'var(--text-2)' }}>
+          {queuedTag}
+          {withdraw}
+          you
+          <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+            {time}
+          </span>
+        </div>
+        <div
+          className="max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] whitespace-pre-wrap break-words"
+          style={{
+            borderRadius: 'var(--radius-xl, 18px)',
+            border: '1px solid color-mix(in oklab, var(--blue) 30%, transparent)',
+            background: 'color-mix(in oklab, var(--blue) 14%, var(--surface-2))',
+            color: 'var(--text)',
+          }}
+        >
+          {entry.content}
+        </div>
+      </div>
+    )
+  }
+
+  // Peer traffic, both directions.
+  const isInbound = entry.kind === 'inbound_peer'
+  const colors = agentColorVars(colorByName.get(entry.participant || ''))
+  const { name } = participantLabel(entry, agentName)
 
   return (
     <div
-      className="flex items-start gap-2 px-2.5 py-1.5 rounded-md"
-      style={{ background: 'var(--surface)', opacity: 0.85, border: '1px dashed var(--border)' }}
+      className="px-[13px] py-[10px] text-sm"
+      style={
+        isInbound
+          ? {
+              borderRadius: 'var(--radius-xl, 18px)',
+              border: `1px solid ${colors.border}`,
+              background: colors.tint,
+              ...wrapperStyle,
+            }
+          : {
+              borderRadius: 'var(--radius-xl, 18px)',
+              borderLeft: `2px solid ${colors.accent}`,
+              background: 'transparent',
+              ...wrapperStyle,
+            }
+      }
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-medium" style={{ color: colors ? colors.accent : 'var(--text-3)' }}>
-            {label}
-          </span>
-          <span className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-            queued
-          </span>
-        </div>
-        <p className="text-xs mt-0.5 whitespace-pre-wrap break-words" style={{ color: 'var(--text-2)' }}>
-          {entry.content}
-        </p>
-        {entry.hop_budget_exceeded && (
-          <p className="text-[11px] mt-1" style={{ color: 'var(--amber)' }}>
-            Autonomous continuation is paused — operator input will resume it.
-          </p>
+      <div className="flex items-center gap-[.4rem] mb-[5px] text-[11.5px] font-semibold" style={{ color: colors.accent }}>
+        {isInbound ? (
+          <>
+            {name}
+            <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+              → {agentName}
+            </span>
+          </>
+        ) : (
+          <>
+            {agentName}
+            <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+              → {name}
+            </span>
+          </>
         )}
+        <span className="font-normal" style={{ color: 'var(--text-3)' }}>
+          {time}
+        </span>
+        {queuedTag}
+        {withdraw}
       </div>
-      {onWithdraw && (
-        <button
-          onClick={() => onWithdraw(entry.id)}
-          title="Withdraw before it's delivered"
-          className="shrink-0 text-[11px] px-1.5 py-0.5 rounded"
-          style={{ color: 'var(--text-3)' }}
-        >
-          <Icon name="close" size={12} />
-        </button>
-      )}
+      <div className="whitespace-pre-wrap break-words" style={{ color: 'var(--text)' }}>
+        {entry.content}
+      </div>
     </div>
   )
 }

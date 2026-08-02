@@ -141,6 +141,8 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const chat = currentSessionId ? sessionChat : recentChat
   const timelineEntries = chat.data?.entries ?? []
 
+  const [foldAllSignal, setFoldAllSignal] = useState(0)
+
   const handleWithdraw = (entryId: string) => {
     void withdrawQueueEntry(entryId)
   }
@@ -186,6 +188,23 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     } catch (err) {
       console.error('Failed to stop run:', err)
       setIsStopping(false)
+    }
+  }
+
+  const handleDeliverNow = async () => {
+    // Any operator-origin entry is depth 0, so it unblocks a hop-budget-suspended
+    // chain and drains it in the same turn (design.md: "operator input resets
+    // the chain") — this reuses that existing behavior rather than adding a
+    // dedicated force-deliver endpoint.
+    if (!apiKey || isRunning || isSending) return
+    const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
+    setIsSending(true)
+    try {
+      await postTrigger('Continue — deliver the queued messages.', isNew ? 'new' : 'resume', selectedSessionId)
+    } catch (err) {
+      console.error('Failed to deliver queued messages:', err)
+    } finally {
+      setIsSending(false)
     }
   }
 
@@ -324,6 +343,26 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
           </button>
         )}
 
+        {/* Fold all turns */}
+        <button
+          onClick={() => setFoldAllSignal((s) => s + 1)}
+          className="ml-auto transition-colors"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            borderRadius: 'var(--radius-sm)',
+            padding: '2px 8px',
+            fontSize: 11,
+            fontWeight: 500,
+            background: 'var(--surface-3)',
+            color: 'var(--text-2)',
+            cursor: 'pointer',
+          }}
+        >
+          Fold all turns
+        </button>
+
         {/* Autoscroll toggle */}
         <button
           onClick={() => {
@@ -334,7 +373,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
               return !v
             })
           }}
-          className="ml-auto transition-colors"
+          className="transition-colors"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -356,11 +395,11 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-0.5"
+        className="flex-1 overflow-y-auto py-[22px]"
         style={{ background: 'var(--bg)' }}
       >
         {isLoading || chat.isLoading ? (
-          <p className="font-mono text-xs italic" style={{ color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace" }}>Loading output…</p>
+          <p className="font-mono text-xs italic px-5" style={{ color: 'var(--text-3)', fontFamily: "'JetBrains Mono', monospace" }}>Loading output…</p>
         ) : (
           <AgentTimeline
             agent={agent}
@@ -369,9 +408,9 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
             timelineEvents={timelineEvents}
             queueStatus={queueStatus}
             isRunning={isRunning}
-            onStop={handleStop}
-            isStopping={isStopping}
+            onDeliverNow={handleDeliverNow}
             onWithdraw={handleWithdraw}
+            foldAllSignal={foldAllSignal}
           />
         )}
         <div ref={bottomRef} />

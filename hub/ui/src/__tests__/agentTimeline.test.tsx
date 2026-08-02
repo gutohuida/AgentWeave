@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSummary } from '@/api/agents'
@@ -9,6 +10,7 @@ const agent: AgentSummary = {
   status: 'running',
   message_count: 0,
   active_task_count: 0,
+  runner: 'claude',
 }
 
 const peer: AgentSummary = {
@@ -78,11 +80,11 @@ describe('AgentTimeline', () => {
         isRunning={false}
       />,
     )
-    expect(screen.getByText('codex')).toBeInTheDocument()
+    expect(screen.getByText('→ codex')).toBeInTheDocument()
     expect(screen.getByText('delegating to codex')).toBeInTheDocument()
   })
 
-  it('renders a queued entry as undelivered, distinct from the delivered ones', () => {
+  it('renders a queued entry inline, tagged QUEUED, distinct from the delivered ones', () => {
     render(
       <AgentTimeline
         agent={agent}
@@ -92,11 +94,12 @@ describe('AgentTimeline', () => {
         isRunning={false}
       />,
     )
-    expect(screen.getByText('Waiting to be delivered')).toBeInTheDocument()
+    expect(screen.getByText('queued')).toBeInTheDocument()
     expect(screen.getByText('not delivered yet')).toBeInTheDocument()
   })
 
-  it('explains a hop-budget-suspended chain', () => {
+  it('explains a hop-budget-suspended chain and offers to deliver now', () => {
+    const onDeliverNow = vi.fn()
     render(
       <AgentTimeline
         agent={agent}
@@ -114,11 +117,12 @@ describe('AgentTimeline', () => {
         roster={[agent, peer]}
         timelineEvents={[]}
         isRunning={false}
+        onDeliverNow={onDeliverNow}
       />,
     )
-    expect(
-      screen.getByText('Autonomous continuation is paused — operator input will resume it.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Autonomous continuation paused')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Deliver now'))
+    expect(onDeliverNow).toHaveBeenCalled()
   })
 
   it('offers to withdraw an undelivered entry and calls back with its id', () => {
@@ -137,22 +141,6 @@ describe('AgentTimeline', () => {
     expect(onWithdraw).toHaveBeenCalledWith('q2')
   })
 
-  it('shows a stop control on the running turn', () => {
-    const onStop = vi.fn()
-    render(
-      <AgentTimeline
-        agent={agent}
-        entries={[entry({ id: 'a1', kind: 'agent_output', output_kind: 'text', run_id: 'run-live' })]}
-        roster={[agent]}
-        timelineEvents={[]}
-        isRunning
-        onStop={onStop}
-      />,
-    )
-    fireEvent.click(screen.getByText('Stop'))
-    expect(onStop).toHaveBeenCalled()
-  })
-
   it('renders a stopped turn as deliberately stopped, not an error', () => {
     render(
       <AgentTimeline
@@ -163,7 +151,7 @@ describe('AgentTimeline', () => {
         isRunning={false}
       />,
     )
-    expect(screen.getByText('Stopped')).toBeInTheDocument()
+    expect(screen.getByText(/Turn stopped/)).toBeInTheDocument()
   })
 
   it('folds a completed turn by default and unfolds it on click', () => {
@@ -179,11 +167,59 @@ describe('AgentTimeline', () => {
         isRunning={false}
       />,
     )
-    // The earlier turn starts folded — its body is not in the document.
+    // The earlier turn starts folded to a one-line pill — its body is not in the document.
     expect(screen.queryByText('earlier turn body')).not.toBeInTheDocument()
+    expect(screen.getByText(/Turn folded/)).toBeInTheDocument()
     expect(screen.getByText('latest turn body')).toBeInTheDocument()
 
-    fireEvent.click(screen.getAllByText('Turn')[0])
+    fireEvent.click(screen.getByText(/Turn folded/))
     expect(screen.getByText('earlier turn body')).toBeInTheDocument()
+  })
+
+  it('folds every turn on demand via foldAllSignal', () => {
+    const { rerender } = render(
+      <AgentTimeline
+        agent={agent}
+        entries={[entry({ id: 'a5', kind: 'agent_output', output_kind: 'text', content: 'latest turn body', run_id: 'run-new' })]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+        foldAllSignal={0}
+      />,
+    )
+    expect(screen.getByText('latest turn body')).toBeInTheDocument()
+
+    rerender(
+      <AgentTimeline
+        agent={agent}
+        entries={[entry({ id: 'a5', kind: 'agent_output', output_kind: 'text', content: 'latest turn body', run_id: 'run-new' })]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+        foldAllSignal={1}
+      />,
+    )
+    expect(screen.queryByText('latest turn body')).not.toBeInTheDocument()
+    expect(screen.getByText(/Turn folded/)).toBeInTheDocument()
+  })
+
+  it('does not fold the newest turn on mount under StrictMode double-invoked effects', () => {
+    // The Hub app renders inside <StrictMode>, which double-invokes effects on
+    // mount specifically to surface bugs like a "skip the first run" guard
+    // that a naive mounted-boolean ref defeats (a real bug this test pins).
+    render(
+      <StrictMode>
+        <AgentTimeline
+          agent={agent}
+          entries={[entry({ id: 'a6', kind: 'agent_output', output_kind: 'text', content: 'freshly opened turn', run_id: 'run-fresh' })]}
+          roster={[agent]}
+          timelineEvents={[]}
+          isRunning={false}
+          foldAllSignal={0}
+        />
+      </StrictMode>,
+    )
+    expect(screen.getByText('freshly opened turn')).toBeInTheDocument()
+    expect(screen.queryByText(/Turn folded/)).not.toBeInTheDocument()
   })
 })
