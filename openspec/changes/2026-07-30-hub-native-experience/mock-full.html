@@ -169,6 +169,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
   background:transparent;color:var(--fg-muted);font:inherit;font-size:12px;font-weight:550;cursor:pointer;white-space:nowrap}
 .project-link:hover{background:var(--accent);color:var(--fg)}
 .project-link.on{color:var(--fg);background:var(--accent);border-color:var(--border)}
+.back-project{width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:var(--radius-md);
+  display:grid;place-items:center;background:transparent;color:var(--fg-muted);cursor:pointer}
+.back-project:hover{background:var(--accent);border-color:var(--border);color:var(--fg)}
 
 .navitem{display:flex;align-items:center;gap:.55rem;width:100%;height:31px;padding:0 .5rem;
   border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--fg-muted);
@@ -266,6 +269,49 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .tile .track{height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:6px}
 .tile .fill{height:100%;background:var(--fg-muted);border-radius:99px}
 .tile .last{font-size:10.5px;color:var(--fg-dim)}
+.overview-grid{max-width:860px;margin:16px auto 28px;padding:0 22px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.summary-card{min-height:150px;padding:15px;border:1px solid var(--border);border-radius:var(--radius-xl);
+  background:color-mix(in oklab,var(--card) 82%,transparent);cursor:pointer;
+  transition:transform var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease)}
+.summary-card:hover{transform:translateY(-1px);border-color:var(--border-hi);background:var(--surface)}
+.summary-card.wide{grid-column:1/-1;min-height:auto}
+.summary-head{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.summary-head h3{margin:0;font-size:13px}.summary-head .go{margin-left:auto;color:var(--fg-dim);font-size:11px}
+.summary-number{font-size:25px;font-weight:650;letter-spacing:-.04em;line-height:1;color:var(--fg)}
+.summary-label{margin-top:5px;color:var(--fg-dim);font-size:11px}
+.summary-line{display:flex;align-items:center;gap:7px;padding:4px 0;color:var(--fg-muted);font-size:11.5px}
+.summary-line .value{margin-left:auto;color:var(--fg)}
+.coverage{display:flex;height:7px;border-radius:99px;overflow:hidden;background:var(--surface-2);margin:12px 0 7px}
+.coverage span{height:100%}
+@media(max-width:840px){.overview-grid{grid-template-columns:1fr}.summary-card.wide{grid-column:auto}}
+
+/* Specification workspace: library, living document, collaborating agent. */
+.spec-health{display:flex;gap:8px;padding:3px 26px 12px;overflow:auto}
+.health-chip{display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:11px;color:var(--fg-muted);white-space:nowrap}
+.health-chip b{color:var(--fg)}
+.spec-shell{display:grid;grid-template-columns:190px minmax(440px,1fr) 280px;flex:1;min-height:0;border-top:1px solid var(--border-region)}
+.spec-library,.spec-assist{min-height:0;overflow:auto;background:color-mix(in oklab,var(--rail) 58%,var(--bg))}
+.spec-library{padding:12px 9px;border-right:1px solid var(--border-region)}
+.spec-assist{display:flex;flex-direction:column;border-left:1px solid var(--border-region)}
+.spec-kicker{padding:5px 8px 7px;color:var(--fg-dim);font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.spec-item{padding:8px;border:1px solid transparent;border-radius:var(--radius-md);cursor:pointer}
+.spec-item:hover,.spec-item.on{background:var(--accent);border-color:var(--border)}
+.spec-item b{display:block;font-size:11.5px}.spec-item span{color:var(--fg-dim);font-size:10px}
+.spec-doc{min-height:0;overflow:auto;padding:24px 28px 60px}
+.spec-doc-inner{max-width:760px;margin:0 auto}
+.spec-doc-head{padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--border)}
+.spec-doc-head h2{margin:0 0 5px;font-size:22px;letter-spacing:-.025em}.spec-doc-head p{margin:0;color:var(--fg-muted);font-size:12px}
+.req{padding:14px 15px;margin:10px 0;border:1px solid var(--border);border-radius:var(--radius-lg);background:color-mix(in oklab,var(--card) 72%,transparent)}
+.req-top{display:flex;align-items:center;gap:7px;margin-bottom:7px}.req-id{font:10px "JetBrains Mono",monospace;color:var(--agent-1)}
+.req-state{margin-left:auto;font-size:10px;font-weight:650}.req-state.ok{color:var(--ok)}.req-state.review{color:var(--amber)}.req-state.drift{color:var(--danger)}
+.req h3{margin:0 0 5px;font-size:13px}.req p{margin:0;color:var(--fg-muted);font-size:12px;line-height:1.55}
+.req-links{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.req-links span{padding:2px 6px;border-radius:99px;background:var(--surface-2);color:var(--fg-dim);font-size:9.5px}
+.assist-head{display:flex;align-items:center;gap:7px;padding:11px;border-bottom:1px solid var(--border-region);font-size:12px;font-weight:650}
+.assist-stream{flex:1;padding:12px;overflow:auto}.assist-msg{margin-bottom:12px;color:var(--fg-muted);font-size:11.5px;line-height:1.55}
+.proposal{padding:10px;border:1px solid color-mix(in oklab,var(--agent-1) 42%,transparent);border-radius:var(--radius-lg);background:color-mix(in oklab,var(--agent-1) 10%,var(--surface));font-size:11px}
+.proposal b{display:block;margin-bottom:5px;color:var(--agent-1)}.proposal .old{text-decoration:line-through;color:var(--fg-dim)}.proposal .new{color:var(--fg);margin-top:4px}
+.proposal-actions{display:flex;gap:5px;margin-top:9px}.assist-compose{margin:10px;padding:9px;border:1px solid var(--border-hi);border-radius:var(--radius-lg);background:var(--surface);color:var(--fg-dim);font-size:11px}
+@media(max-width:1050px){.spec-shell{grid-template-columns:170px 1fr}.spec-assist{display:none}}
 
 /* ─── agent-row (used in Agents left panel) ────────────────*/
 .agent-row{display:flex;align-items:center;gap:.55rem;padding:calc(.5rem - 1px) calc(.6rem - 1px);
@@ -533,41 +579,42 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
           </div>
         </div>
 
-        <div class="sect">Needs your input</div>
-        <div class="rows">
-          <div class="notice" style="cursor:pointer" onclick="showPage('chat')">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
-            <div><b>reviewer is waiting</b> — gate failed on <span class="mono">test_hop_budget_resets</span>, needs your call.</div>
-            <button class="btn btn-ghost btn-sm act">Open conversation</button>
-          </div>
-        </div>
+        <div class="sect">Project overview</div>
+        <div class="overview-grid">
+          <article class="summary-card wide" onclick="showPage('chat')">
+            <div class="summary-head"><span class="dot" style="--c:var(--amber)"></span><h3>Needs your input</h3><span class="go">Open conversation →</span></div>
+            <div class="summary-line"><b style="color:var(--agent-4)">reviewer</b><span>Gate failed on <span class="mono">test_hop_budget_resets</span></span><span class="value">1 min ago</span></div>
+          </article>
 
-        <div class="sect">Tasks</div>
-        <div class="pillrow">
-          <span class="pill wip">in progress <b class="num" style="margin-left:4px;color:#8cc6fb">2</b></span>
-          <span class="pill rev">under review <b class="num" style="margin-left:4px;color:#f7b955">1</b></span>
-          <span class="pill pend">pending <b class="num" style="margin-left:4px;color:var(--fg-dim)">1</b></span>
-          <span class="pill done">done <b class="num" style="margin-left:4px;color:#5fdba7">2</b></span>
-          <span class="pill bad">needs revision <b class="num" style="margin-left:4px;color:#ff8b95">1</b></span>
-        </div>
+          <article class="summary-card" onclick="showPage('tasks')">
+            <div class="summary-head"><h3>Tasks</h3><span class="go">View all →</span></div>
+            <div class="summary-number">7</div><div class="summary-label">active work items</div>
+            <div class="summary-line"><span class="dot" style="--c:var(--agent-6)"></span>In progress<span class="value">2</span></div>
+            <div class="summary-line"><span class="dot" style="--c:var(--amber)"></span>Under review<span class="value">1</span></div>
+            <div class="summary-line"><span class="dot" style="--c:var(--danger)"></span>Needs revision<span class="value">1</span></div>
+          </article>
 
-        <div class="sect">Activity</div>
-        <div class="rows">
-          <div class="row" style="cursor:default">
-            <span class="dot" style="--c:var(--ok)"></span>
-            <span class="ttl">claude</span>
-            <span class="meta">run started · 40s ago</span>
-          </div>
-          <div class="row" style="cursor:default">
-            <span class="dot" style="--c:var(--agent-4)"></span>
-            <span class="ttl">reviewer</span>
-            <span class="meta">input requested · 1 min ago</span>
-          </div>
-          <div class="row" style="cursor:default">
-            <span class="dot" style="--c:var(--amber)"></span>
-            <span class="ttl">codex</span>
-            <span class="meta">context warning · 6 min ago</span>
-          </div>
+          <article class="summary-card" onclick="showPage('spec')">
+            <div class="summary-head"><h3>Specification health</h3><span class="go">Open workspace →</span></div>
+            <div class="summary-number">68%</div><div class="summary-label">34 of 50 requirements verified</div>
+            <div class="coverage"><span style="width:68%;background:var(--ok)"></span><span style="width:16%;background:var(--amber)"></span><span style="width:10%;background:var(--agent-6)"></span></div>
+            <div class="summary-line">Awaiting evidence review<span class="value">8</span></div>
+            <div class="summary-line" style="color:var(--amber)">Drifting or stale<span class="value">3</span></div>
+          </article>
+
+          <article class="summary-card" onclick="showPage('jobs')">
+            <div class="summary-head"><h3>Jobs</h3><span class="go">Manage →</span></div>
+            <div class="summary-number">2</div><div class="summary-label">active schedules · 1 paused</div>
+            <div class="summary-line"><span class="pulse"></span>Nightly regression sweep<span class="value">in 6h</span></div>
+            <div class="summary-line">Weekly dependency audit<span class="value">in 2d</span></div>
+          </article>
+
+          <article class="summary-card" onclick="showPage('activity')">
+            <div class="summary-head"><h3>Recent activity</h3><span class="go">View audit →</span></div>
+            <div class="summary-line"><span class="dot" style="--c:var(--ok)"></span><b>claude</b> run started<span class="value">40s</span></div>
+            <div class="summary-line"><span class="dot" style="--c:var(--agent-4)"></span><b>reviewer</b> requested input<span class="value">1m</span></div>
+            <div class="summary-line"><span class="dot" style="--c:var(--amber)"></span><b>codex</b> context warning<span class="value">6m</span></div>
+          </article>
         </div>
       </div>
 
@@ -718,18 +765,84 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
         </div>
       </div>
 
-      <!-- ══ SPEC (simplified index) ══ -->
+      <!-- ══ SPEC WORKSPACE ══ -->
       <div class="screen" id="page-spec">
-        <header class="head"><div class="title">Spec</div></header>
-        <div class="pane">
-          <div class="sect" style="padding-top:6px">Active changes</div>
-          <div class="rows">
-            <div class="row"><span class="pill wip">approved</span><span class="ttl">hub-native-experience</span><span class="meta">10 phases · 8 done</span></div>
-          </div>
-          <div class="sect">Archived</div>
-          <div class="rows">
-            <div class="row"><span class="pill done">archived</span><span class="ttl">spec-navigation</span><span class="meta">4 changes</span></div>
-          </div>
+        <header class="head">
+          <div class="title">Specifications <span class="sub">requirements, evidence, and agent collaboration</span></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm">Review queue · 4</button>
+          <button class="btn btn-primary btn-sm">New specification</button>
+        </header>
+        <div class="spec-health">
+          <span class="health-chip"><span class="dot" style="--c:var(--ok)"></span><b>34</b> verified</span>
+          <span class="health-chip"><span class="dot" style="--c:var(--amber)"></span><b>8</b> awaiting review</span>
+          <span class="health-chip"><span class="dot" style="--c:var(--agent-6)"></span><b>5</b> in progress</span>
+          <span class="health-chip"><span class="dot" style="--c:var(--danger)"></span><b>3</b> stale or drifting</span>
+        </div>
+        <div class="spec-shell">
+          <aside class="spec-library">
+            <div class="spec-kicker">Active</div>
+            <div class="spec-item on"><b>Hub Native Experience</b><span>Gate · 68% verified</span></div>
+            <div class="spec-item"><b>Agent Runtime</b><span>Contract · 12 requirements</span></div>
+            <div class="spec-item"><b>Project Portability</b><span>Sketch · edited today</span></div>
+            <div class="spec-kicker" style="margin-top:10px">Document outline</div>
+            <div class="spec-item"><b>Summary</b></div>
+            <div class="spec-item on"><b>Requirements</b><span>50 requirements</span></div>
+            <div class="spec-item"><b>Design</b></div>
+            <div class="spec-item"><b>Tasks</b><span>8 of 14 complete</span></div>
+            <div class="spec-kicker" style="margin-top:10px">History</div>
+            <div class="spec-item"><b>Archived changes</b><span>6 documents</span></div>
+          </aside>
+
+          <section class="spec-doc">
+            <div class="spec-doc-inner">
+              <div class="spec-doc-head">
+                <div style="display:flex;gap:6px;margin-bottom:9px"><span class="pill rev">Gate</span><span class="pill done">Approved</span><span class="pill pend">Live</span></div>
+                <h2>Hub Native Experience</h2>
+                <p>A project-native collaboration workspace connecting agents, conversations, requirements, work, and evidence.</p>
+              </div>
+              <div class="spec-kicker" style="padding-left:0">Navigation requirements</div>
+              <article class="req">
+                <div class="req-top"><span class="req-id">NAV-004</span><span class="req-state ok">● Verified</span></div>
+                <h3>Navigation lists live entities</h3>
+                <p>The project rail lists projects and agents with live state; project resources are reached from the content area.</p>
+                <div class="req-links"><span>T-10.3 complete</span><span style="color:var(--agent-1)">claude · run 48</span><span>3 evidence records</span></div>
+              </article>
+              <article class="req">
+                <div class="req-top"><span class="req-id">NAV-007</span><span class="req-state review">● Evidence awaiting review</span></div>
+                <h3>Deep views preserve project context</h3>
+                <p>Every project resource identifies its containing project and provides a direct return to the project overview.</p>
+                <div class="req-links"><span>T-10.5 in review</span><span style="color:var(--agent-3)">codex · run 51</span><span>Review evidence</span></div>
+              </article>
+              <article class="req">
+                <div class="req-top"><span class="req-id">SPEC-012</span><span class="req-state drift">● Drift detected</span></div>
+                <h3>Authoring is a conversation against a visible document</h3>
+                <p>The operator reads the document and converses with an assisting agent in the same workspace; proposed edits appear inline.</p>
+                <div class="req-links"><span>2 linked tasks</span><span style="color:var(--agent-4)">reviewer flagged drift</span><span>Inspect change</span></div>
+              </article>
+              <article class="req">
+                <div class="req-top"><span class="req-id">TRACE-003</span><span class="req-state review">● In progress</span></div>
+                <h3>Evidence is attributable and bidirectional</h3>
+                <p>Requirements reach their tasks, evidence, agents, and runs; completed work links back to the requirements it served.</p>
+                <div class="req-links"><span>T-14.3</span><span>T-14.7</span><span>Unserved</span></div>
+              </article>
+            </div>
+          </section>
+
+          <aside class="spec-assist">
+            <div class="assist-head"><span class="dot" style="--c:var(--agent-1)"></span>claude · spec assistant<span class="spacer"></span><span style="color:var(--ok);font-size:10px">ready</span></div>
+            <div class="assist-stream">
+              <div class="assist-msg"><b style="color:var(--fg)">You</b><br>Make project return navigation explicit and testable.</div>
+              <div class="assist-msg"><b style="color:var(--agent-1)">claude</b><br>I found one affected requirement. I’ve proposed the wording directly in NAV-007.</div>
+              <div class="proposal">
+                <b>Proposed edit · NAV-007</b>
+                <div class="old">The containing project is directly reachable.</div>
+                <div class="new">Every deep view displays the containing project and a single-action return to its overview.</div>
+                <div class="proposal-actions"><button class="btn btn-primary btn-sm">Accept</button><button class="btn btn-ghost btn-sm">Reject</button></div>
+              </div>
+            </div>
+            <div class="assist-compose">Ask about this specification…</div>
+          </aside>
         </div>
       </div>
 
@@ -1087,6 +1200,21 @@ document.querySelectorAll('.navitem[data-page]').forEach(n=>{
 });
 document.querySelectorAll('.workspace-tab[data-page]').forEach(n=>{
   n.addEventListener('click',()=>showPage(n.dataset.page));
+});
+
+// Every deep-dive has the same explicit route home. This is project context,
+// not browser history: it always returns to the containing project overview.
+document.querySelectorAll('.screen').forEach(screen=>{
+  if(screen.id==='page-overview'||screen.id==='page-chat')return;
+  const head=screen.querySelector('.head');
+  if(!head)return;
+  const back=document.createElement('button');
+  back.className='back-project';
+  back.title='Back to AgentWeave overview';
+  back.setAttribute('aria-label','Back to AgentWeave overview');
+  back.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>';
+  back.addEventListener('click',()=>showPage('overview'));
+  head.prepend(back);
 });
 
 // ── generic tab toggle (works for every .tabs group added above) ──
