@@ -15,11 +15,24 @@ changes, so that no two ledgers are live at once and so that this change's bound
 | **Runner / agent / charter separation** | Reusable execution capability vs. addressable identity vs. behaviour | Charter authoring UI | — (independent) | ready to propose |
 | **Specification program** | Requirement identity, traceability, evidence, drift, rigor, authoring | everything, until **RQ-2** is answered | **RQ-2** | blocked on research |
 | **Approval gates** | Pending task-lifecycle and spec-gate decisions inline in the conversation | New approval semantics | this change, spec program | blocked |
+| **Single runtime** | Make the locally-installed app the only way to run AgentWeave: delete the watchdog, local/git transports, and the CLI-only collaboration modes | The rename below | — (independent) | needs its own proposal |
+| **Retire the "Hub" name** | It is just AgentWeave | — | single runtime | deferred until the architecture settles |
 
 Accounting and runner/charter separation carry no dependency on this change and may be proposed in
 parallel. This change is placed first because it is the surface the operator touches on every
 interaction, and because continuing to build against the interaction model it removes would waste
 that work.
+
+**Direction decided 2026-08-02:** AgentWeave becomes a locally-installed app that is the *only* way
+to use it. There is no no-Hub product. This **reverses** the `2026-07-30-hub-native-experience`
+proposal's non-goal "Not changing the CLI's local/git transports" — those transports, the watchdog,
+and the Zero-relay MCP and manual-relay modes are all to be removed rather than preserved.
+
+One consequence for triage: in HTTP mode the CLI watchdog still spawns an agent on peer-message
+arrival (`_make_ping_callback`) while `hub/hub/api/v1/messages.py` independently calls
+`schedule_agent()` — two execution paths for one message. That defect is real but is **not worth a
+targeted fix**, because it disappears with the watchdog. This change is unaffected either way: its
+surface is Hub-only already, and the decision makes it more central rather than less.
 
 **Reconciliation rule.** Umbrella phases superseded by a slice are annotated in the umbrella's
 `tasks.md` naming the successor change. A superseded task is never marked complete on the strength
