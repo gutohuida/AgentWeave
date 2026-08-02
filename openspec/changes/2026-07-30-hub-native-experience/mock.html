@@ -21,7 +21,7 @@
   --radius-lg:var(--radius);
   --radius-xl:calc(var(--radius) + 4px);
   --radius-content:24px;          /* self-contained results are soft */
-  --side-w:266px;                 /* draggable */
+  --side-w:248px;                 /* compact project rail; draggable */
 
   /* motion scale */
   --dur-fast:150ms;
@@ -31,17 +31,17 @@
 
   /* surfaces — ONE ground plane. sidebar and main share it; nothing
      is "boxed". elevation is reserved for things that genuinely lift. */
-  --bg:#0b0b0d;
-  --surface:#141417;      /* lifts: composer, popovers, menus */
-  --surface-2:#191920;
-  --card:#141417;
-  --border:rgba(255,255,255,.07);
-  --border-hi:rgba(255,255,255,.13);
+  --bg:#111217;
+  --surface:#191b22;      /* lifts: composer, popovers, menus */
+  --surface-2:#20232c;
+  --card:#1a1c24;
+  --border:rgba(224,229,255,.09);
+  --border-hi:rgba(224,229,255,.16);
   --fg:#f5f5f6;
-  --fg-muted:#8e8e98;
-  --fg-dim:#5c5c66;
-  --accent:rgba(255,255,255,.055);
-  --primary:#5b7cfa;
+  --fg-muted:#a2a6b3;
+  --fg-dim:#707582;
+  --accent:rgba(139,151,255,.09);
+  --primary:#7486ff;
   --primary-fg:#fff;
   --ring:#5b7cfa;
   --danger:#f4525f;
@@ -56,6 +56,14 @@
   --agent-6:#63b3f7;  /* sky      */
   --agent-7:#c084fc;  /* violet   */
   --agent-8:#b9d94f;  /* lime     */
+}
+
+[data-mode="light"]{
+  --bg:#f7f8fb;--surface:#fff;--surface-2:#f0f2f7;--card:#fff;
+  --border:rgba(31,35,48,.10);--border-hi:rgba(31,35,48,.18);
+  --fg:#1b1d24;--fg-muted:#5f6471;--fg-dim:#858b98;
+  --accent:rgba(83,100,220,.08);--primary:#5266df;--primary-fg:#fff;
+  --ring:#5266df;--danger:#d43d4b;--ok:#16865a;
 }
 
 *{box-sizing:border-box}
@@ -153,7 +161,7 @@ body{
 .resizer:hover::before,.app.dragging .resizer::before{
   background:var(--primary);
   box-shadow:0 0 0 1px rgba(91,124,250,.28)}
-.brand{display:flex;align-items:center;gap:.6rem;padding:15px 16px 12px;
+.brand{display:flex;align-items:center;gap:.6rem;padding:14px 12px 12px;
   font-weight:600;letter-spacing:-.012em}
 .brand .logo{width:21px;height:21px;border-radius:7px;
   background:linear-gradient(135deg,var(--agent-1),var(--agent-7));flex:none}
@@ -171,6 +179,7 @@ body{
   border:1px solid transparent;border-radius:var(--radius-md);cursor:pointer;
   transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
 .proj-row:hover{background:var(--accent);border-color:var(--border)}
+.proj.active>.proj-row{background:var(--accent);border-color:var(--border-hi)}
 .proj-row .caret{width:13px;height:13px;opacity:.45;flex:none;
   transition:transform var(--dur-base) var(--ease)}
 .proj.open .proj-row .caret{transform:rotate(90deg)}
@@ -238,8 +247,9 @@ body{
 
 /* ─── main — header floats, no box, no rule ──────────────────── */
 .main{display:flex;flex-direction:column;min-width:0;min-height:0}
-.head{display:flex;align-items:center;gap:.55rem;padding:15px 22px 6px;
-  background:transparent;border:0}
+.head{display:flex;align-items:center;gap:.55rem;padding:14px 24px 8px;
+  background:color-mix(in oklab,var(--bg) 88%,transparent);border:0;
+  backdrop-filter:blur(12px);position:relative;z-index:4}
 .head .title{display:flex;align-items:center;gap:.5rem;font-weight:600;letter-spacing:-.012em}
 .head .crumb{color:var(--fg-dim);font-weight:400}
 .head .spacer{margin-left:auto}
@@ -247,8 +257,8 @@ body{
   border:1px solid var(--border);border-radius:var(--radius-sm);
   font-size:11px;font-weight:500;color:var(--fg-muted);background:var(--surface-2)}
 
-.stream{flex:1;overflow:auto;padding:22px 0 8px}
-.wrap{max-width:760px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:18px}
+.stream{flex:1;overflow:auto;padding:26px 0 10px}
+.wrap{max-width:940px;margin:0 auto;padding:0 28px;display:flex;flex-direction:column;gap:21px}
 
 /* entry: conversational */
 .msg{display:flex;flex-direction:column;gap:5px}
@@ -257,7 +267,7 @@ body{
 .bub{border:1px solid var(--border);border-radius:var(--radius-xl);
   padding:10px 13px;background:var(--surface);line-height:1.6}
 .msg.me{align-items:flex-end}
-.msg.me .bub{background:#1c2340;border-color:rgba(124,140,255,.3);max-width:82%}
+.msg.me .bub{background:color-mix(in oklab,var(--primary) 16%,var(--surface));border-color:color-mix(in oklab,var(--primary) 38%,transparent);max-width:74%}
 .msg.ai .bub{background:transparent;border-color:transparent;padding-left:0;padding-right:0}
 
 /* entry: peer message — tinted by the OTHER agent's colour */
@@ -321,10 +331,10 @@ body{
 .stopped::before,.stopped::after{content:"";height:1px;flex:1;background:var(--border)}
 
 /* ─── composer ───────────────────────────────────────────────── */
-.composer-wrap{padding:8px 20px 18px;background:linear-gradient(to top,var(--bg) 62%,transparent)}
-.composer{max-width:760px;margin:0 auto;
+.composer-wrap{padding:10px 28px 20px;background:linear-gradient(to top,var(--bg) 68%,transparent)}
+.composer{max-width:940px;margin:0 auto;
   border:1px solid var(--border);border-radius:var(--radius-content);
-  background:var(--surface);overflow:hidden;
+  background:var(--surface);overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,.18),0 1px 0 rgba(255,255,255,.04) inset;
   transition:border-color var(--dur-base) var(--ease),box-shadow var(--dur-base) var(--ease)}
 .composer:focus-within{border-color:rgba(124,140,255,.5);
   box-shadow:0 0 0 3px rgba(91,124,250,.12)}
@@ -338,7 +348,7 @@ body{
   border:1px solid var(--border);border-radius:4px;padding:.5px 4px;color:var(--fg-muted)}
 
 /* trigger menu */
-.menu{max-width:760px;margin:0 auto 7px;border:1px solid var(--border-hi);
+.menu{max-width:940px;margin:0 auto 7px;border:1px solid var(--border-hi);
   border-radius:var(--radius-lg);background:var(--surface-2);overflow:hidden;
   box-shadow:0 12px 34px rgba(0,0,0,.5)}
 .menu .mh{padding:5px 11px;font-size:10.5px;font-weight:600;letter-spacing:.05em;
@@ -382,6 +392,9 @@ body{
     <div class="brand">
       <div class="logo"></div>AgentWeave
       <span class="spacer"></span>
+      <button class="btn btn-ghost btn-icon" id="theme" title="Toggle appearance" aria-label="Toggle appearance" style="width:26px;height:26px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+      </button>
       <button class="btn btn-ghost btn-icon" title="Add project" style="width:26px;height:26px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </button>
@@ -390,7 +403,7 @@ body{
     <div class="scroll">
 
       <!-- project 1 — open -->
-      <div class="proj open">
+      <div class="proj open active">
         <div class="proj-row">
           <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
           <span class="nm" data-proj="AgentWeave">AgentWeave</span>
@@ -695,7 +708,14 @@ rz.addEventListener('pointermove',e=>{
   document.documentElement.style.setProperty('--side-w',w+'px');
 });
 rz.addEventListener('pointerup',e=>{drag=false;app.classList.remove('dragging');rz.releasePointerCapture(e.pointerId)});
-rz.addEventListener('dblclick',()=>document.documentElement.style.setProperty('--side-w','266px'));
+rz.addEventListener('dblclick',()=>document.documentElement.style.setProperty('--side-w','248px'));
+
+// appearance preview — the production UI should follow the system preference
+// and persist an explicit override. The mock keeps the toggle deliberately local.
+document.getElementById('theme').addEventListener('click',()=>{
+  const root=document.documentElement;
+  root.dataset.mode=root.dataset.mode==='dark'?'light':'dark';
+});
 
 // ── project view <-> conversation ──
 const pv=document.getElementById('projview'), cv=document.getElementById('chatview');
