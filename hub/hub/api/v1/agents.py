@@ -18,6 +18,7 @@ from ... import worktrees
 from ...agent_colors import next_color_index
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
+from ...conversations import new_conversation
 from ...db.engine import get_session
 from ...db.models import (
     Agent,
@@ -927,6 +928,7 @@ async def request_agent(
         color_index=await next_color_index(session, project_id),
     )
     hop_depth = source_run.turn_depth + 1
+    conversation = new_conversation(project_id=project_id, agent=body.name)
     message = Message(
         id=f"msg-{short_id()}",
         project_id=project_id,
@@ -939,6 +941,7 @@ async def request_agent(
         # Recorded association, not inferred (task 8.3) — same as messages.py's
         # create_message.
         session_id=source_run.session_id,
+        conversation_id=source_run.conversation_id,
     )
     entry: InboundQueueEntry = new_entry(
         project_id=project_id,
@@ -948,8 +951,9 @@ async def request_agent(
         content=body.task,
         hop_depth=hop_depth,
         message_id=message.id,
+        conversation_id=conversation.id,
     )
-    session.add_all([agent_row, message, entry])
+    session.add_all([agent_row, conversation, message, entry])
     await session.commit()
 
     payload = {
@@ -959,6 +963,7 @@ async def request_agent(
         "run_id": source_run.id,
         "queue_entry_id": entry.id,
         "hop_depth": hop_depth,
+        "conversation_id": conversation.id,
     }
     await persist_event(session, project_id, "agent_requested", payload, agent=source_run.agent)
     await sse_manager.broadcast(project_id, "agent_requested", payload)

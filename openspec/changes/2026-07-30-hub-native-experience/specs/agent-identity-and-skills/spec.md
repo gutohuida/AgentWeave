@@ -63,9 +63,9 @@ the full scope of its project.
 
 ### Requirement: An agent's behaviour is defined by a charter, not a persona
 
-An agent MAY carry a charter declaring its **purpose**, its **scope**, and the **skills** it loads
-by default. A charter SHALL express a boundary — what the agent is for and what it may act upon —
-rather than a personality or professional identity.
+The system SHALL allow an agent to carry a charter declaring its **purpose**, its **scope**, and
+the **skills** it loads by default. A charter SHALL express a boundary — what the agent is for and
+what it may act upon — rather than a personality or professional identity.
 
 Scope SHALL constrain what the agent may act upon. An empty charter SHALL mean the full scope of
 the project.
@@ -154,8 +154,8 @@ was configured.
 
 ### Requirement: A single-agent project carries no multi-agent overhead
 
-When a project contains exactly one agent, no roster, collaboration protocol, or delegation
-instruction SHALL be injected into its turns.
+The system SHALL omit the roster, collaboration protocol, and delegation instruction from turns
+when a project contains exactly one agent.
 
 Multi-agent capability SHALL appear when a second agent is added, without reconfiguring the first.
 

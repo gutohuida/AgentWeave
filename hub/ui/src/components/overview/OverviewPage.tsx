@@ -132,7 +132,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
             <AgentHealthCard
               key={agent.name}
               agent={agent}
-              onClick={() => onNavigate('agents')}
+              onClick={() => onNavigate(`agent:${agent.name}`)}
             />
           ))}
         </div>

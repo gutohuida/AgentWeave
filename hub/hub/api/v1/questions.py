@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
+from ...conversations import latest_open_conversation, new_conversation
 from ...db.engine import get_session
 from ...db.models import Question
 from ...inbound_queue import new_entry
@@ -103,6 +104,13 @@ async def answer_question(
     # Operator answers are typed depth-zero queue entries, not magic "user"
     # messages or inbox-poll triggers. They resume autonomous chains in the same
     # governed path as every other operator input.
+    conversation = await latest_open_conversation(
+        session, project_id=project_id, agent=from_agent
+    )
+    if conversation is None:
+        conversation = new_conversation(project_id=project_id, agent=from_agent)
+        session.add(conversation)
+
     entry = new_entry(
         project_id=project_id,
         agent=from_agent,
@@ -110,6 +118,7 @@ async def answer_question(
         origin_agent=None,
         content=f"Question: {q_text}\n\nAnswer: {body.answer}",
         hop_depth=0,
+        conversation_id=conversation.id,
     )
     session.add(entry)
     await session.commit()
@@ -124,6 +133,7 @@ async def answer_question(
         "origin_type": "operator",
         "hop_depth": 0,
         "question_id": question_id,
+        "conversation_id": conversation.id,
     }
     await persist_event(session, project_id, "queue_entry_queued", queue_payload, agent=from_agent)
     await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)

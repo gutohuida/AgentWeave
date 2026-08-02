@@ -41,7 +41,8 @@ from ... import worktrees
 from ...auth import get_project
 from ...config import settings
 from ...db.engine import async_session_factory, get_session
-from ...db.models import ApiKey, Run
+from ...conversations import conversation_for_provider_session, get_open_conversation, new_conversation
+from ...db.models import ApiKey, Conversation, Run
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
@@ -87,7 +88,10 @@ _stop_requested: set = set()
 class TriggerAgentRequest(BaseModel):
     agent: str = Field(..., max_length=64, description="Target agent name (e.g., 'claude')")
     message: str = Field(..., max_length=10000, description="Prompt to send to the agent")
-    session_mode: str = Field(default="new", max_length=64, description="'new' or 'resume'")
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
+    session_mode: Optional[str] = Field(
+        default=None, max_length=64, description="Deprecated legacy field"
+    )
     session_id: Optional[str] = Field(
         default=None, max_length=128, description="Required when session_mode='resume'"
     )
@@ -102,6 +106,8 @@ class TriggerAgentResponse(BaseModel):
     agent: str
     run_id: Optional[str] = None
     status: str
+    conversation_id: str
+    provider_session_id: Optional[str] = None
     session_id: Optional[str] = None
     queue_entry_id: Optional[str] = None
     waiting_reason: Optional[str] = None
@@ -126,8 +132,7 @@ async def trigger_agent_directly(
     project_id: str,
     agent: str,
     message: str,
-    session_mode: str = "new",
-    session_id: Optional[str] = None,
+    conversation_id: str,
     work_dir: Optional[str] = None,
     session: AsyncSession,
     queue_entry_ids: Optional[List[str]] = None,
@@ -148,14 +153,14 @@ async def trigger_agent_directly(
     except ValueError as exc:
         raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    if session_mode not in ("new", "resume"):
-        raise TriggerAgentError(
-            status.HTTP_400_BAD_REQUEST, "session_mode must be 'new' or 'resume'"
-        )
-    if session_mode == "resume" and not session_id:
-        raise TriggerAgentError(
-            status.HTTP_400_BAD_REQUEST, "session_id is required when session_mode='resume'"
-        )
+    conversation = await get_open_conversation(
+        session,
+        project_id=project_id,
+        agent=agent,
+        conversation_id=conversation_id,
+    )
+    if conversation is None:
+        raise TriggerAgentError(status.HTTP_409_CONFLICT, "Conversation is unavailable")
     if work_dir and (".." in work_dir or "~" in work_dir or any(ord(c) < 32 for c in work_dir)):
         raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, "Invalid work_dir")
 
@@ -199,7 +204,8 @@ async def trigger_agent_directly(
     repo_root = Path.cwd()
     context_file = repo_root / ".agentweave" / "context" / f"{agent}.md"
     yolo = bool(config.get("yolo"))
-    resume_session_id = session_id if session_mode == "resume" else None
+    resume_session_id = conversation.provider_session_id
+    session_mode = "resume" if resume_session_id else "new"
     env = resolve_agent_env(runner, config)
 
     # Task 5.1/5.2: a writing agent gets its own git worktree, isolated from every other
@@ -281,6 +287,7 @@ async def trigger_agent_directly(
         project_id=project_id,
         agent=agent,
         session_id=resume_session_id,
+        conversation_id=conversation.id,
         status="running",
         turn_depth=turn_depth,
     )
@@ -305,6 +312,7 @@ async def trigger_agent_directly(
             project_id=project_id,
             agent=agent,
             run_id=run_id,
+            conversation_id=conversation.id,
             runner=runner,
             cmd=cmd,
             model=model,
@@ -322,7 +330,12 @@ async def trigger_agent_directly(
             session,
             project_id,
             "run_triggered",
-            {"agent": agent, "run_id": run_id, "session_mode": session_mode},
+            {
+                "agent": agent,
+                "run_id": run_id,
+                "conversation_id": conversation.id,
+                "session_mode": session_mode,
+            },
             agent=agent,
         )
         for entry in delivered:
@@ -330,6 +343,7 @@ async def trigger_agent_directly(
                 "entry_id": entry.id,
                 "agent": agent,
                 "run_id": run_id,
+                "conversation_id": conversation.id,
                 "hop_depth": entry.hop_depth,
             }
             await persist_event(session, project_id, "queue_entry_delivered", payload, agent=agent)
@@ -345,6 +359,8 @@ async def trigger_agent_directly(
         agent=agent,
         run_id=run_id,
         status="running",
+        conversation_id=conversation.id,
+        provider_session_id=resume_session_id,
         session_id=resume_session_id,
     )
 
@@ -355,18 +371,13 @@ async def trigger_agent(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Spawn an agent directly and return its run identifier.
-
-    Examples:
-    - New session: `{"agent": "claude", "message": "Hello", "session_mode": "new"}`
-    - Resume: `{"agent": "claude", "message": "Continue", "session_mode": "resume", "session_id": "..."}`
-    """
+    """Append input to an AgentWeave conversation and schedule it when possible."""
     project_id, _ = project
     try:
         worktrees.validate_agent_name(body.agent)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if body.session_mode not in ("new", "resume"):
+    if body.session_mode is not None and body.session_mode not in ("new", "resume"):
         raise HTTPException(status_code=400, detail="session_mode must be 'new' or 'resume'")
     if body.session_mode == "resume" and not body.session_id:
         raise HTTPException(
@@ -386,6 +397,31 @@ async def trigger_agent(
             detail="work_dir cannot override workspace isolation for a writing agent",
         )
 
+    conversation: Optional[Conversation] = None
+    if body.conversation_id is not None:
+        conversation = await get_open_conversation(
+            session,
+            project_id=project_id,
+            agent=body.agent,
+            conversation_id=body.conversation_id,
+        )
+        if conversation is None:
+            raise HTTPException(status_code=409, detail="Conversation is unavailable")
+    elif body.session_mode == "resume" and body.session_id:
+        conversation = await conversation_for_provider_session(
+            session,
+            project_id=project_id,
+            agent=body.agent,
+            provider_session_id=body.session_id,
+        )
+        if conversation is None:
+            conversation = new_conversation(project_id=project_id, agent=body.agent)
+            conversation.provider_session_id = body.session_id
+            session.add(conversation)
+    else:
+        conversation = new_conversation(project_id=project_id, agent=body.agent)
+        session.add(conversation)
+
     entry = new_entry(
         project_id=project_id,
         agent=body.agent,
@@ -394,13 +430,16 @@ async def trigger_agent(
         hop_depth=0,
         session_mode=body.session_mode,
         session_id=body.session_id,
+        conversation_id=conversation.id,
         work_dir=body.work_dir,
     )
     session.add(entry)
+    conversation.updated_at = entry.arrived_at
     await session.commit()
     payload = {
         "entry_id": entry.id,
         "agent": body.agent,
+        "conversation_id": conversation.id,
         "origin_type": "operator",
         "hop_depth": 0,
     }
@@ -419,6 +458,9 @@ async def trigger_agent(
         message=f"Input queued for {body.agent}.",
         agent=body.agent,
         status="queued",
+        conversation_id=conversation.id,
+        provider_session_id=conversation.provider_session_id,
+        session_id=conversation.provider_session_id,
         queue_entry_id=entry.id,
         waiting_reason=scheduled.waiting_reason,
     )
@@ -541,6 +583,7 @@ async def _execute_run(
     project_id: str,
     agent: str,
     run_id: str,
+    conversation_id: str,
     runner: str,
     cmd: list,
     model: Optional[str],
@@ -612,11 +655,12 @@ async def _execute_run(
         parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
 
         session_id = known_session_id
+        binding_conflict: Optional[str] = None
         sequence = 0
         buffer = ""
 
         async def _flush_line(raw_line: str) -> None:
-            nonlocal session_id, sequence
+            nonlocal binding_conflict, session_id, sequence
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
             # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
             # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
@@ -629,13 +673,42 @@ async def _execute_run(
             )
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows.
-            if parsed.session_id and not session_id:
-                session_id = parsed.session_id
+            if parsed.session_id:
                 async with async_session_factory() as db:
                     run = await db.get(Run, run_id)
-                    if run:
+                    conversation = await db.get(Conversation, conversation_id)
+                    if conversation is None:
+                        binding_conflict = "Conversation disappeared during provider binding"
+                    elif conversation.provider_session_id is None:
+                        conversation.provider_session_id = parsed.session_id
+                        conversation.updated_at = datetime.now(timezone.utc)
+                        session_id = parsed.session_id
+                    elif conversation.provider_session_id == parsed.session_id:
+                        session_id = parsed.session_id
+                    else:
+                        binding_conflict = (
+                            "Provider session binding conflict: "
+                            f"expected {conversation.provider_session_id!r}, "
+                            f"received {parsed.session_id!r}"
+                        )
+                    if run and binding_conflict is None:
                         run.session_id = session_id
-                        await db.commit()
+                    await db.commit()
+                    if binding_conflict is not None:
+                        await persist_event(
+                            db,
+                            project_id,
+                            "conversation_binding_conflict",
+                            {
+                                "agent": agent,
+                                "run_id": run_id,
+                                "conversation_id": conversation_id,
+                                "error": binding_conflict,
+                            },
+                            agent=agent,
+                            severity="warn",
+                        )
+                        return
             for event in parsed.events:
                 sequence += 1
                 async with async_session_factory() as db:
@@ -645,6 +718,7 @@ async def _execute_run(
                         agent,
                         content=event.content,
                         session_id=session_id,
+                        conversation_id=conversation_id,
                         kind=event.kind,
                         payload=event.payload,
                         run_id=run_id,
@@ -688,7 +762,9 @@ async def _execute_run(
         # check a stop would be misreported as "failed". Checked before the exit-code
         # branch below so a stop always wins regardless of what the process happened to
         # exit with.
-        if run_id in _stop_requested:
+        if binding_conflict is not None:
+            final_status, lifecycle_event = "failed", "run_failed"
+        elif run_id in _stop_requested:
             final_status, lifecycle_event = "stopped", "run_stopped"
         elif exit_code == 0:
             final_status, lifecycle_event = "completed", "run_completed"
@@ -700,6 +776,8 @@ async def _execute_run(
             if run:
                 run.status = final_status
                 run.exit_code = exit_code
+                if binding_conflict is not None:
+                    run.error = binding_conflict
                 run.ended_at = datetime.now(timezone.utc)
                 await db.commit()
             await _broadcast_run_lifecycle(
@@ -708,6 +786,7 @@ async def _execute_run(
                 lifecycle_event,
                 agent=agent,
                 run_id=run_id,
+                conversation_id=conversation_id,
                 session_id=session_id,
                 exit_code=exit_code,
             )
@@ -723,6 +802,7 @@ async def _execute_run(
                 {
                     "id": f"status-{run_id}",
                     "agent": agent,
+                    "conversation_id": conversation_id,
                     "session_id": session_id,
                     "content": f"Run {final_status} (exit {exit_code}).",
                     "kind": "status",

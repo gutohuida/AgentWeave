@@ -1,5 +1,78 @@
 ## ADDED Requirements
 
+### Requirement: AgentWeave owns the durable conversation identity
+
+The system SHALL allocate a stable `conversation_id` before starting a provider process. A
+conversation SHALL belong to exactly one project and one immutable target agent, SHALL remain the
+same across runs, retries, stops, failures, and provider-session binding, and SHALL treat provider
+session identity as nullable continuation data rather than as the conversation's identity.
+
+Every newly created run, inbound queue entry, and recorded agent output SHALL carry its
+`conversation_id`. An outbound peer message SHALL carry its sender conversation, and its recipient
+queue entry SHALL carry the recipient conversation selected by the queue-routing contract.
+
+#### Scenario: A new conversation is returned synchronously
+
+- **WHEN** the operator submits input without a `conversation_id`
+- **THEN** the server creates a conversation and its first queue entry atomically
+- **AND** the response contains the new `conversation_id` whether its status is `running` or `queued`
+- **AND** the response does not wait for a provider session ID
+
+#### Scenario: Immediate follow-up targets the same conversation
+
+- **WHEN** the operator submits another input with the returned `conversation_id` before provider binding completes
+- **THEN** the new queue entry carries that `conversation_id`
+- **AND** no second provider session is started for that conversation while its first run is active
+
+#### Scenario: Provider binding does not replace application identity
+
+- **WHEN** runner output first reports a provider session ID for an unbound conversation
+- **THEN** the run and conversation are bound to that provider session before the output is recorded
+- **AND** the conversation retains its original `conversation_id`
+
+#### Scenario: Conflicting provider binding is refused
+
+- **WHEN** runner output reports a provider session ID different from the conversation's existing binding
+- **THEN** the existing binding is not overwritten
+- **AND** the run fails with a recorded binding-conflict event
+
+#### Scenario: Conversation scope is enforced
+
+- **WHEN** a trigger supplies a conversation belonging to another project, another agent, or an archived conversation
+- **THEN** the request is rejected
+- **AND** no queue entry or run is created
+
+#### Scenario: Runs are attempts within a conversation
+
+- **WHEN** a run completes, fails, is interrupted, or is stopped
+- **THEN** the conversation remains open
+- **AND** a retry creates another run carrying the same `conversation_id`
+
+#### Scenario: Different conversations never share one provider turn
+
+- **WHEN** one agent has eligible queued entries for multiple conversations
+- **THEN** the scheduler chooses the conversation of the oldest eligible entry
+- **AND** the resulting run drains only entries for that conversation in arrival order up to the existing cap
+
+#### Scenario: History uses recorded conversation association
+
+- **WHEN** the selected conversation history is requested
+- **THEN** runs, output, peer traffic, delivered input, and still-queued input are selected by recorded `conversation_id`
+- **AND** neither provider session matching nor timestamp proximity determines membership
+
+#### Scenario: Legacy state is migrated without deletion
+
+- **WHEN** existing session-based records are migrated
+- **THEN** records with the same non-null project, agent, and provider session are attached to one conversation
+- **AND** each unbound legacy run receives its own conversation
+- **AND** ambiguous orphan records remain available to migration diagnostics rather than being guessed or deleted
+
+#### Scenario: Reset is the only destructive lifecycle operation
+
+- **WHEN** AgentWeave starts, migrates, stops a run, archives a conversation, or reopens a project
+- **THEN** conversation records and history are retained
+- **AND** they are deleted only through the existing explicitly confirmed reset operation
+
 ### Requirement: An agent conversation is reached directly, without an intermediate list
 
 Selecting an agent from the navigation rail or from the project overview's agent roster SHALL open
@@ -104,6 +177,12 @@ source of truth for the outcome.
 - **THEN** it is also queued
 - **AND** it appears in arrival order after the first
 
+#### Scenario: Follow-up input stays in a newly started conversation
+
+- **WHEN** the operator starts a new conversation and submits further input before the runner reports its provider session ID
+- **THEN** the further input is associated with the same AgentWeave conversation
+- **AND** it MUST NOT start a second provider session merely because the first session ID is not known yet
+
 #### Scenario: The running state never disables the composer
 
 - **WHEN** an agent's status is running
@@ -145,9 +224,9 @@ rows, and SHALL scroll rather than grow beyond its maximum.
 
 ### Requirement: Unsent composer text survives navigation and reload
 
-Unsent composer text SHALL be retained per agent conversation across navigation away and back and
-across a page reload, SHALL be cleared on successful submission, and MUST NOT be visible in or
-overwritten by another agent's conversation.
+Unsent composer text SHALL be retained per project and AgentWeave conversation across navigation
+away and back and across a page reload, SHALL be cleared on successful submission, and MUST NOT be
+visible in or overwritten by another project, agent, or conversation.
 
 Where persistent storage is unavailable, the composer SHALL remain fully functional; only persistence
 is lost.
@@ -163,10 +242,16 @@ is lost.
 - **WHEN** the page is reloaded with an unsent draft present
 - **THEN** the draft is still present
 
+#### Scenario: Drafts do not leak between conversations of one agent
+
+- **WHEN** one agent has unsent drafts in two different conversations
+- **THEN** each conversation shows only its own draft
+
 #### Scenario: Submission clears the draft
 
 - **WHEN** a draft is submitted successfully
-- **THEN** the stored draft for that agent is cleared
+- **THEN** the stored draft for that conversation is cleared
+- **AND** no delayed persistence write restores the submitted text
 
 #### Scenario: Unavailable storage degrades to no persistence
 
@@ -179,8 +264,8 @@ is lost.
 The resting composer SHALL expose only these controls: submit, stop while the agent is running, the
 active-agent indicator, and context usage.
 
-New conversation, session selection, durable handoff, fold-all, and agent details SHALL be reachable
-from one overflow menu that is fully operable by keyboard.
+New conversation, conversation selection, durable handoff, fold-all, and agent details SHALL be
+reachable from one overflow menu that is fully operable by keyboard.
 
 An action that is unavailable SHALL be presented disabled with its reason rather than omitted, so
 that the menu's contents do not shift between agents.
@@ -189,7 +274,7 @@ that the menu's contents do not shift between agents.
 
 - **WHEN** a conversation is open and the agent is idle
 - **THEN** the composer exposes submit, the active-agent indicator, and context usage
-- **AND** exposes no session selector, handoff button, fold-all control, or scroll toggle
+- **AND** exposes no provider-session selector, handoff button, fold-all control, or scroll toggle
 
 #### Scenario: Stop appears only while running
 
@@ -199,7 +284,7 @@ that the menu's contents do not shift between agents.
 #### Scenario: The overflow menu is operable by keyboard alone
 
 - **WHEN** the operator opens the overflow menu and moves through it using the keyboard
-- **THEN** new conversation, session selection, handoff, fold-all, and agent details are each reachable and activatable
+- **THEN** new conversation, conversation selection, handoff, fold-all, and agent details are each reachable and activatable
 - **AND** dismissing the menu returns focus to its trigger
 
 #### Scenario: An unavailable action is disabled with its reason
@@ -207,21 +292,35 @@ that the menu's contents do not shift between agents.
 - **WHEN** an action such as handoff is unavailable for the current agent
 - **THEN** it is present in the menu, disabled, with the reason stated
 
-### Requirement: Session identity is readable without a selector control
+#### Scenario: Agent details do not replace the conversation
 
-The session selection control SHALL be removed from the resting conversation surface. The current
-session's continuity state SHALL remain visible as text, and session selection SHALL be performed
-from the overflow menu.
+- **WHEN** the operator activates agent details from the overflow menu
+- **THEN** details for the current agent open without unmounting or navigating away from the conversation
+- **AND** closing the details returns focus to the invoking control
+
+### Requirement: Conversation identity is readable without exposing provider identity
+
+The provider-session selection control SHALL be removed from the conversation surface. The current
+AgentWeave conversation's continuity state SHALL remain visible as human-readable text, and
+conversation selection SHALL be performed from the overflow menu. Normal navigation, URLs, history,
+and drafts MUST use `conversation_id`; provider session IDs MAY appear only in details or diagnostic
+surfaces.
 
 #### Scenario: Continuity is readable at rest
 
 - **WHEN** a conversation is continuing an existing session
 - **THEN** its continuity state is readable as text on the resting surface
 
-#### Scenario: Session selection still works from the menu
+#### Scenario: Conversation selection works from the menu
 
-- **WHEN** the operator selects a different session from the overflow menu
+- **WHEN** the operator selects a different AgentWeave conversation from the overflow menu
 - **THEN** the conversation switches to it with the same effect the removed selector had
+
+#### Scenario: Provider identity is hidden from normal conversation controls
+
+- **WHEN** the operator inspects the resting surface and conversation picker
+- **THEN** no provider session ID is shown as a conversation label or selection value
+- **AND** provider binding remains available in agent details or diagnostics
 
 ### Requirement: Autoscroll follows the operator's scroll position
 
@@ -267,7 +366,7 @@ condition.
 
 ### Requirement: Context-window usage is shown in the composer
 
-The composer SHOULD display the agent's context-window consumption using the existing indicator,
+The composer SHALL display the agent's context-window consumption using the existing indicator,
 derived from the most recent context-usage event reported for that agent.
 
 Where no context-usage event has been received, the composer SHALL render no indicator rather than a
@@ -311,8 +410,8 @@ claim the backend cannot honour.
 
 ### Requirement: Existing conversation behaviour is preserved
 
-Session continuity, durable handoff, stop, withdraw, and deliver-now SHALL CONTINUE TO behave as
-they do today, including the new-session binding and the handoff state machine.
+Provider continuity, durable handoff, stop, withdraw, and deliver-now SHALL CONTINUE TO behave as
+specified after the stable-conversation migration, including successor-conversation handoff.
 
 Queue semantics — hop budget, per-turn delivery cap, and delivery ordering — SHALL CONTINUE TO be
 unchanged by this change.
@@ -322,3 +421,8 @@ unchanged by this change.
 - **WHEN** the existing conversation, timeline, handoff, and status suites are run against the reworked surface
 - **THEN** every assertion about continuity, handoff, stop, withdraw, and deliver-now passes
 - **AND** the only changes to those suites are to how the surface is mounted and queried
+
+#### Scenario: Queue controls remain available in the conversation
+
+- **WHEN** an undelivered entry or hop-budget-blocked chain is shown
+- **THEN** the operator can still withdraw the undelivered entry or deliver the blocked chain now

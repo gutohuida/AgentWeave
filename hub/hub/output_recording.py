@@ -12,7 +12,8 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import AgentOutput, EventLog
+from .conversations import latest_open_conversation, new_conversation
+from .db.models import AgentOutput, Conversation, EventLog, Run
 from .sse import sse_manager
 from .utils import persist_event, short_id
 
@@ -24,12 +25,43 @@ async def record_agent_output(
     *,
     content: str,
     session_id: Optional[str],
+    conversation_id: Optional[str] = None,
     kind: Optional[str] = None,
     payload: Optional[Dict[str, Any]] = None,
     run_id: Optional[str] = None,
     sequence: Optional[int] = None,
 ) -> AgentOutput:
     """Persist one AgentOutput row and broadcast it, mirroring `POST .../output`."""
+    if conversation_id is None and run_id:
+        run_result = await db.execute(
+            select(Run.conversation_id).where(
+                Run.id == run_id,
+                Run.project_id == project_id,
+                Run.agent == agent,
+            )
+        )
+        conversation_id = run_result.scalar_one_or_none()
+    if conversation_id is None and session_id:
+        conversation_result = await db.execute(
+            select(Conversation.id).where(
+                Conversation.project_id == project_id,
+                Conversation.agent == agent,
+                Conversation.provider_session_id == session_id,
+            )
+        )
+        conversation_id = conversation_result.scalar_one_or_none()
+    if conversation_id is None:
+        conversation = None
+        if session_id is None:
+            conversation = await latest_open_conversation(
+                db, project_id=project_id, agent=agent
+            )
+        if conversation is None:
+            conversation = new_conversation(project_id=project_id, agent=agent)
+            conversation.provider_session_id = session_id
+            db.add(conversation)
+            await db.flush()
+        conversation_id = conversation.id
     is_new_session = False
     if session_id:
         count_result = await db.execute(
@@ -48,6 +80,7 @@ async def record_agent_output(
         project_id=project_id,
         agent=agent,
         session_id=session_id,
+        conversation_id=conversation_id,
         content=content,
         kind=kind,
         payload=payload,
@@ -65,6 +98,7 @@ async def record_agent_output(
             "id": row.id,
             "agent": agent,
             "session_id": session_id,
+            "conversation_id": conversation_id,
             "content": content,
             "kind": kind,
             "payload": payload,

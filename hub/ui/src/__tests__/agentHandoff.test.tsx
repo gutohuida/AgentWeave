@@ -1,18 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentOutputLine, AgentSession, AgentSummary } from '@/api/agents'
+import type { AgentOutputLine, AgentSummary } from '@/api/agents'
+import type { AgentConversation } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 
 let outputLines: AgentOutputLine[] = []
-let sessions: AgentSession[] = []
+let conversations: AgentConversation[] = []
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
   return {
     ...actual,
     useAgentOutput: () => ({ lines: outputLines, isLoading: false }),
-    useAgentSessions: () => ({ data: { sessions } }),
     useAgents: () => ({ data: [] }),
     useAgentTimeline: () => ({ data: [] }),
   }
@@ -22,6 +22,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
   return {
     ...actual,
+    useAgentConversations: () => ({ data: conversations }),
     useAgentChatHistory: () => ({ data: undefined, isLoading: false }),
     useAgentRecentChat: () => ({ data: undefined, isLoading: false }),
   }
@@ -50,11 +51,22 @@ function triggerBody(callIndex: number): Record<string, unknown> {
 describe('agent conversation handoff', () => {
   beforeEach(() => {
     outputLines = []
-    sessions = [{ id: 'session-old', type: 'claude', path: 'old.json' }]
+    conversations = [{
+      id: 'conv-old',
+      agent: 'claude',
+      provider_session_id: 'session-old',
+      lifecycle: 'open',
+      created_at: '2026-07-29T11:00:00Z',
+      updated_at: '2026-07-29T12:00:00Z',
+    }]
     fetchMock.mockReset()
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ status: 'running' }), { status: 200 })),
-    )
+    fetchMock.mockImplementation((_url, init) => {
+      const body = JSON.parse(init.body as string) as { conversation_id?: string }
+      return Promise.resolve(new Response(JSON.stringify({
+        status: 'running',
+        conversation_id: body.conversation_id ?? 'conv-new',
+      }), { status: 200 }))
+    })
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
@@ -66,17 +78,17 @@ describe('agent conversation handoff', () => {
 
   it('checkpoints the old session and resumes the handoff in exactly one new session', async () => {
     const view = render(<AgentOutputPanel agent={agent} />)
+    expect(screen.getAllByTestId('conversation-header')).toHaveLength(1)
 
     const selector = await screen.findByRole('combobox')
-    await waitFor(() => expect(selector).toHaveValue('session-old'))
+    await waitFor(() => expect(selector).toHaveValue('conv-old'))
 
     fireEvent.click(screen.getByRole('button', { name: 'Handoff' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(triggerBody(0)).toMatchObject({
       agent: 'claude',
-      session_mode: 'resume',
-      session_id: 'session-old',
+      conversation_id: 'conv-old',
     })
     expect(triggerBody(0).message).toContain('aw-checkpoint skill')
     await waitFor(() => expect(selector).toHaveValue('__new__'))
@@ -109,9 +121,8 @@ describe('agent conversation handoff', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(triggerBody(1)).toMatchObject({
       agent: 'claude',
-      session_mode: 'new',
     })
-    expect(triggerBody(1)).not.toHaveProperty('session_id')
+    expect(triggerBody(1)).not.toHaveProperty('conversation_id')
     expect(triggerBody(1).message).toContain('Resume from the latest durable AgentWeave handoff')
     expect(triggerBody(1).message).toContain('Continue implementing the feature.')
 
@@ -127,13 +138,7 @@ describe('agent conversation handoff', () => {
         payload: { phase: 'started' },
       },
     ]
-    sessions = [
-      { id: 'session-new', type: 'claude', path: 'new.json' },
-      ...sessions,
-    ]
-    view.rerender(<AgentOutputPanel agent={agent} />)
-
-    await waitFor(() => expect(selector).toHaveValue('session-new'))
+    await waitFor(() => expect(selector).toHaveValue('conv-new'))
 
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'And now continue normally.' },
@@ -144,8 +149,7 @@ describe('agent conversation handoff', () => {
     expect(triggerBody(2)).toEqual({
       agent: 'claude',
       message: 'And now continue normally.',
-      session_mode: 'resume',
-      session_id: 'session-new',
+      conversation_id: 'conv-new',
     })
   })
 })

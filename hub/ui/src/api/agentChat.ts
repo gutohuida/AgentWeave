@@ -36,9 +36,37 @@ export interface TimelineEntry {
 }
 
 export interface ChatHistoryResponse {
+  conversation_id: string | null
   session_id: string | null
   agent: string
   entries: TimelineEntry[]
+}
+
+export interface AgentConversation {
+  id: string
+  agent: string
+  provider_session_id: string | null
+  lifecycle: 'open' | 'archived'
+  created_at: string
+  updated_at: string
+}
+
+export function useAgentConversations(agent: string | null) {
+  const { isConfigured } = useConfigStore()
+  const queryClient = useQueryClient()
+
+  useSSE((event) => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    if (agent && data.agent === agent && data.conversation_id) {
+      queryClient.invalidateQueries({ queryKey: ['agent', agent, 'conversations'] })
+    }
+  })
+
+  return useQuery<AgentConversation[]>({
+    queryKey: ['agent', agent, 'conversations'],
+    queryFn: () => getJson<AgentConversation[]>(`/api/v1/agent/${agent}/conversations`),
+    enabled: isConfigured && !!agent,
+  })
 }
 
 const QUEUE_EVENT_TYPES = new Set([
@@ -60,20 +88,20 @@ export function eventTargetsAgent(eventType: string, data: unknown, agent: strin
   return d.to === agent || d.recipient === agent || d.agent === agent
 }
 
-export function useAgentChatHistory(agent: string | null, sessionId: string | null) {
+export function useAgentChatHistory(agent: string | null, conversationId: string | null) {
   const { isConfigured } = useConfigStore()
   const queryClient = useQueryClient()
 
   useSSE((event) => {
     if (agent && eventTargetsAgent(event.type, event.data, agent)) {
-      queryClient.invalidateQueries({ queryKey: ['agent', agent, 'chat', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['agent', agent, 'chat', conversationId] })
     }
   })
 
   return useQuery<ChatHistoryResponse>({
-    queryKey: ['agent', agent, 'chat', sessionId],
-    queryFn: () => getJson<ChatHistoryResponse>(`/api/v1/agent/${agent}/chat/${sessionId}`),
-    enabled: isConfigured && !!agent && !!sessionId && sessionId !== NEW_SESSION_ID,
+    queryKey: ['agent', agent, 'chat', conversationId],
+    queryFn: () => getJson<ChatHistoryResponse>(`/api/v1/agent/${agent}/chat/${conversationId}`),
+    enabled: isConfigured && !!agent && !!conversationId && conversationId !== NEW_SESSION_ID,
   })
 }
 

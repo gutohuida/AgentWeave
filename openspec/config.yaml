@@ -21,6 +21,10 @@ context: |
     not make it impossible either.
   - "Hub" is being retired as a name — it is just AgentWeave. Defer the rename until the
     architecture settles, to avoid doubling churn.
+  - Agents have one least-privilege READ/WRITE capability plane. Direct HTTP is first-class because
+    some company environments prohibit MCP servers; MCP is a thin adapter over the same canonical
+    application/API operations. Turn-start state injection does not prohibit demand-driven reads.
+    Agent effects must use run-bound identity rather than caller-asserted agent/run headers.
 
   What differentiates the product and must stay integrated into one experience:
   multi-agent collaboration with inter-agent communication, spec-driven development with the

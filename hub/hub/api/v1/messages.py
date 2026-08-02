@@ -8,6 +8,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
+from ...conversations import latest_open_conversation, new_conversation
 from ...db.engine import get_session
 from ...db.models import Message, Run
 from ...inbound_queue import new_entry, project_limits
@@ -39,6 +40,7 @@ async def create_message(
     )
     hop_budget, _ = await project_limits(session, project_id)
     hop_depth = hop_budget + 1
+    source_conversation_id = None
     if body.run_id:
         source_run = await session.get(Run, body.run_id)
         if (
@@ -53,6 +55,15 @@ async def create_message(
         # Recorded association, not inferred: the sender's timeline places this
         # outbound entry by the run it was actually sent from (task 8.3).
         msg.session_id = source_run.session_id
+        msg.conversation_id = source_run.conversation_id
+        source_conversation_id = source_run.conversation_id
+
+    recipient_conversation = await latest_open_conversation(
+        session, project_id=project_id, agent=body.recipient
+    )
+    if recipient_conversation is None:
+        recipient_conversation = new_conversation(project_id=project_id, agent=body.recipient)
+        session.add(recipient_conversation)
 
     entry = new_entry(
         project_id=project_id,
@@ -62,6 +73,7 @@ async def create_message(
         content=body.content,
         hop_depth=hop_depth,
         message_id=msg.id,
+        conversation_id=recipient_conversation.id,
     )
     session.add_all([msg, entry])
     await session.commit()
@@ -74,6 +86,8 @@ async def create_message(
         "origin_type": "agent",
         "origin_agent": body.sender,
         "hop_depth": hop_depth,
+        "conversation_id": recipient_conversation.id,
+        "source_conversation_id": source_conversation_id,
     }
     await persist_event(
         session, project_id, "queue_entry_queued", queue_payload, agent=body.recipient

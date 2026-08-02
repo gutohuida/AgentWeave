@@ -1,3 +1,8 @@
+> **Direction override — 2026-08-02.** This document preserves the reasoning behind phases 1–8,
+> but its remote/Docker topology, retained-watchdog duties, command fallback, and local/git
+> compatibility decisions no longer describe the target product. Successor changes follow the
+> local-only direction recorded in `openspec/explorations/2026-08-02-product-direction.md`.
+
 ## Context
 
 This design uses **T3 Code as a studied reference**, not as an upstream. All observations below

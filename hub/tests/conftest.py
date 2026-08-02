@@ -12,7 +12,8 @@ os.environ.setdefault("AW_BOOTSTRAP_API_KEY", "aw_live_testkey_abcdefgh")
 os.environ.setdefault("AW_BOOTSTRAP_PROJECT_ID", "proj-test")
 os.environ.setdefault("AW_BOOTSTRAP_PROJECT_NAME", "Test Project")
 
-from hub.db.engine import init_db  # noqa: E402
+from hub.db.engine import engine, init_db  # noqa: E402
+from hub.db.models import Base  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
 
 
@@ -21,6 +22,8 @@ async def app():
     application = create_app()
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
     # (create_all + bootstrap key) explicitly before each test.
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
     await init_db()
     async with AsyncClient(
         transport=ASGITransport(app=application), base_url="http://test"

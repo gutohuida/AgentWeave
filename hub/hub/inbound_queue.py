@@ -26,6 +26,7 @@ def new_entry(
     message_id: Optional[str] = None,
     session_mode: Optional[str] = None,
     session_id: Optional[str] = None,
+    conversation_id: Optional[str] = None,
     work_dir: Optional[str] = None,
 ) -> InboundQueueEntry:
     if origin_type not in ("operator", "agent"):
@@ -46,6 +47,7 @@ def new_entry(
         message_id=message_id,
         session_mode=session_mode,
         session_id=session_id,
+        conversation_id=conversation_id,
         work_dir=work_dir,
         state="queued",
     )
@@ -58,14 +60,22 @@ async def project_limits(db: AsyncSession, project_id: str) -> tuple[int, int]:
     return project.hop_budget, project.turn_delivery_cap
 
 
-async def queued_entries(db: AsyncSession, project_id: str, agent: str) -> List[InboundQueueEntry]:
+async def queued_entries(
+    db: AsyncSession,
+    project_id: str,
+    agent: str,
+    conversation_id: Optional[str] = None,
+) -> List[InboundQueueEntry]:
+    predicates = [
+        InboundQueueEntry.project_id == project_id,
+        InboundQueueEntry.agent == agent,
+        InboundQueueEntry.state == "queued",
+    ]
+    if conversation_id is not None:
+        predicates.append(InboundQueueEntry.conversation_id == conversation_id)
     result = await db.execute(
         select(InboundQueueEntry)
-        .where(
-            InboundQueueEntry.project_id == project_id,
-            InboundQueueEntry.agent == agent,
-            InboundQueueEntry.state == "queued",
-        )
+        .where(*predicates)
         .order_by(InboundQueueEntry.sequence)
     )
     return list(result.scalars().all())
@@ -105,6 +115,10 @@ async def deliver_entries_with_run(
     entries = list(result.scalars().all())
     if [entry.id for entry in entries] != entry_ids:
         raise RuntimeError("queue changed before atomic delivery")
+    if run.conversation_id is not None and any(
+        entry.conversation_id != run.conversation_id for entry in entries
+    ):
+        raise RuntimeError("one run cannot deliver entries from different conversations")
     now = datetime.now(timezone.utc)
     db.add(run)
     for entry in entries:

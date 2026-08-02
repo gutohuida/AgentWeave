@@ -241,8 +241,7 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         f"/api/v1/agent/alice/chat/{project_a_resources['session_id']}",
         headers=b,
     )
-    assert chat_resp.status_code == 200
-    assert chat_resp.json()["entries"] == []
+    assert chat_resp.status_code == 404
 
     # Status endpoint must report Project B, not Project A.
     status_resp = await app.get("/api/v1/status", headers=b)

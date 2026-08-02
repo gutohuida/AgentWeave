@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
-import { AgentSummary, useAgentOutput, useAgentSessions, useAgents, useAgentTimeline } from '@/api/agents'
-import { useAgentChatHistory, useAgentRecentChat } from '@/api/agentChat'
+import { AgentSummary, useAgentOutput, useAgents, useAgentTimeline } from '@/api/agents'
+import { useAgentChatHistory, useAgentConversations, useAgentRecentChat } from '@/api/agentChat'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
+import { Composer } from './Composer'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
+  onBackToProject?: () => void
+  initialConversationId?: string | null
+  onConversationChange?: (conversationId: string | null) => void
 }
 
-const NEW_SESSION_VALUE = '__new__'
+const NEW_CONVERSATION_VALUE = '__new__'
 const HANDOFF_PROMPT = `Prepare a durable AgentWeave handoff before ending this session.
 
 Invoke your aw-checkpoint skill with reason pre_handoff. Save the current intent, files modified,
@@ -28,55 +32,67 @@ User request:`
 
 type HandoffState = 'idle' | 'preparing' | 'ready'
 
-interface PendingNewSession {
-  knownSessionIds: Set<string>
-  outputStartIndex: number
-}
-
 interface TriggerResult {
   status: string
   waiting_reason?: string | null
+  conversation_id: string
+  provider_session_id?: string | null
 }
 
-export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
+export function AgentOutputPanel({
+  agent,
+  onBackToProject,
+  initialConversationId = null,
+  onConversationChange,
+}: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoscroll, setAutoscroll] = useState(true)
   const { copied, copy } = useCopy(2000)
 
-  const { apiKey } = useConfigStore()
-  const [message, setMessage] = useState('')
+  const { apiKey, projectId } = useConfigStore()
   const [isSending, setIsSending] = useState(false)
-  const [selectedSessionId, setSelectedSessionId] = useState<string>('')
+  const [selectedConversationId, setSelectedConversationId] = useState<string>(
+    initialConversationId ?? '',
+  )
+  const onConversationChangeRef = useRef(onConversationChange)
+  onConversationChangeRef.current = onConversationChange
   const [handoffState, setHandoffState] = useState<HandoffState>('idle')
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
-  const pendingNewSessionRef = useRef<PendingNewSession | null>(null)
-  const { data: sessionsData } = useAgentSessions(agent.name)
-  const sessions = sessionsData?.sessions || []
+  const { data: conversations = [] } = useAgentConversations(agent.name)
 
   useEffect(() => {
-    setSelectedSessionId('')
+    setSelectedConversationId(initialConversationId ?? '')
     setHandoffState('idle')
     setSessionNotice(null)
+    setSubmissionError(null)
     setIsStopping(false)
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
-    pendingNewSessionRef.current = null
-  }, [agent.name])
+  }, [agent.name, initialConversationId])
+
+  useEffect(() => {
+    onConversationChangeRef.current?.(
+      selectedConversationId && selectedConversationId !== NEW_CONVERSATION_VALUE
+        ? selectedConversationId
+        : null,
+    )
+  }, [selectedConversationId])
 
   useEffect(() => {
     if (agent.status !== 'running') setIsStopping(false)
   }, [agent.status])
 
   useEffect(() => {
-    if (sessions.length > 0 && !selectedSessionId) {
-      setSelectedSessionId(sessions[0].id)
+    if (conversations.length > 0 && !selectedConversationId) {
+      setSelectedConversationId(conversations[0].id)
     }
-  }, [sessions, selectedSessionId])
+  }, [conversations, selectedConversationId])
 
   useEffect(() => {
     const outputStart = handoffOutputStartRef.current
@@ -98,23 +114,6 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   }, [agent.status, handoffState, lines.length])
 
   useEffect(() => {
-    const pending = pendingNewSessionRef.current
-    if (!pending) return
-
-    const outputSessionId = lines
-      .slice(pending.outputStartIndex)
-      .map((line) => line.session_id)
-      .find((id): id is string => Boolean(id) && !pending.knownSessionIds.has(id as string))
-    const listedSessionId = sessions.find((session) => !pending.knownSessionIds.has(session.id))?.id
-    const newSessionId = outputSessionId || listedSessionId
-    if (!newSessionId) return
-
-    pendingNewSessionRef.current = null
-    setSelectedSessionId(newSessionId)
-    setSessionNotice(`Continuing new conversation ${newSessionId.slice(0, 12)}…`)
-  }, [lines, sessions])
-
-  useEffect(() => {
     if (autoscroll && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
@@ -129,21 +128,20 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
 
   const sessionId = [...lines].reverse().find((l) => l.session_id)?.session_id
   const isRunning = agent.status === 'running'
-  const isBindingNewSession = pendingNewSessionRef.current !== null
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
-    isRunning || isSending || handoffState === 'preparing' || isBindingNewSession
-  const currentSessionId =
-    selectedSessionId && selectedSessionId !== NEW_SESSION_VALUE
-      ? selectedSessionId
+    isRunning || isSending || handoffState === 'preparing'
+  const currentConversationId =
+    selectedConversationId && selectedConversationId !== NEW_CONVERSATION_VALUE
+      ? selectedConversationId
       : undefined
 
   const { data: roster = [] } = useAgents()
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
-  const sessionChat = useAgentChatHistory(agent.name, currentSessionId ?? null)
+  const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
-  const chat = currentSessionId ? sessionChat : recentChat
+  const chat = currentConversationId ? conversationChat : recentChat
   const timelineEntries = chat.data?.entries ?? []
 
   const [foldAllSignal, setFoldAllSignal] = useState(0)
@@ -154,8 +152,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
 
   const postTrigger = async (
     triggerMessage: string,
-    sessionMode: 'new' | 'resume',
-    triggerSessionId?: string,
+    conversationId?: string,
   ): Promise<TriggerResult> => {
     const response = await fetch('/api/v1/agent/trigger', {
       method: 'POST',
@@ -166,8 +163,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
       body: JSON.stringify({
         agent: agent.name,
         message: triggerMessage,
-        session_mode: sessionMode,
-        session_id: sessionMode === 'resume' ? triggerSessionId : undefined,
+        conversation_id: conversationId,
       }),
     })
     if (!response.ok) {
@@ -210,14 +206,14 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     // the chain") — this reuses that existing behavior rather than adding a
     // dedicated force-deliver endpoint.
     if (!apiKey || isRunning || isSending) return
-    const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
+    const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
     setIsSending(true)
     try {
       const result = await postTrigger(
         'Continue — deliver the queued messages.',
-        isNew ? 'new' : 'resume',
-        selectedSessionId,
+        isNew ? undefined : selectedConversationId,
       )
+      setSelectedConversationId(result.conversation_id)
       const notice = queuedNotice(result, `${agent.name} is still not available to receive it`)
       if (notice) setSessionNotice(`Still queued — ${notice}`)
     } catch (err) {
@@ -228,14 +224,14 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   }
 
   const handleHandoff = async () => {
-    if (!apiKey || !currentSessionId || isRunning || isSending) return
+    if (!apiKey || !currentConversationId || isRunning || isSending) return
     setIsSending(true)
     setHandoffState('preparing')
     setSessionNotice('Preparing durable handoff…')
     handoffOutputStartRef.current = lines.length
     handoffSawRunningRef.current = false
     try {
-      const result = await postTrigger(HANDOFF_PROMPT, 'resume', currentSessionId)
+      const result = await postTrigger(HANDOFF_PROMPT, currentConversationId)
       const notice = queuedNotice(result, `${agent.name} is not available to receive it`)
       if (notice) {
         handoffOutputStartRef.current = null
@@ -244,58 +240,47 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
         setSessionNotice(`Could not start handoff — ${notice}`)
         return
       }
-      setSelectedSessionId(NEW_SESSION_VALUE)
+      setSelectedConversationId(NEW_CONVERSATION_VALUE)
     } catch (err) {
       console.error('Failed to prepare handoff:', err)
       handoffOutputStartRef.current = null
       handoffSawRunningRef.current = false
       setHandoffState('idle')
-      setSelectedSessionId(currentSessionId)
+      setSelectedConversationId(currentConversationId)
       setSessionNotice('Failed to prepare handoff')
     } finally {
       setIsSending(false)
     }
   }
 
-  const handleSend = async () => {
-    if (!message.trim() || !apiKey) return
+  const handleComposerSubmit = async (typedMessage: string): Promise<void> => {
+    if (!apiKey) throw new Error('Not configured')
     setIsSending(true)
-    const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
+    setSubmissionError(null)
+    const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
     const outgoingMessage =
       isNew && handoffState === 'ready'
-        ? `${RESUME_HANDOFF_PREFIX}\n\n${message.trim()}`
-        : message.trim()
-    if (isNew) {
-      pendingNewSessionRef.current = {
-        knownSessionIds: new Set(sessions.map((session) => session.id)),
-        outputStartIndex: lines.length,
-      }
-      setSessionNotice('Starting new conversation…')
-    }
+        ? `${RESUME_HANDOFF_PREFIX}\n\n${typedMessage}`
+        : typedMessage
+    if (isNew) setSessionNotice('Starting new conversation…')
     try {
-      const result = await postTrigger(outgoingMessage, isNew ? 'new' : 'resume', selectedSessionId)
-      setMessage('')
+      const result = await postTrigger(
+        outgoingMessage,
+        isNew ? undefined : selectedConversationId,
+      )
+      setSelectedConversationId(result.conversation_id)
       if (isNew) setHandoffState('idle')
       const notice = queuedNotice(result, `${agent.name} is not available to receive it right now`)
       if (notice) {
-        // Nothing is going to run, so the "wait for a new session id to appear" tracking
-        // this block set up above would otherwise hang forever and keep the composer locked.
-        if (isNew) pendingNewSessionRef.current = null
         setSessionNotice(`Queued — ${notice}`)
       }
     } catch (err) {
       console.error('Failed to send message:', err)
-      if (isNew) pendingNewSessionRef.current = null
+      setSubmissionError('Failed to send message')
       setSessionNotice('Failed to send message')
+      throw err
     } finally {
       setIsSending(false)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
     }
   }
 
@@ -304,8 +289,21 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
       {/* Header bar */}
       <div
         className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b"
+        data-testid="conversation-header"
         style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
+        {onBackToProject && (
+          <button
+            type="button"
+            onClick={onBackToProject}
+            aria-label="Back to project"
+            title="Back to project"
+            className="text-sm"
+            style={{ color: 'var(--text-2)' }}
+          >
+            ←
+          </button>
+        )}
         <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{agent.name}</span>
 
         {/* Session ID chip */}
@@ -455,19 +453,32 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
         className="shrink-0 border-t px-3 py-2 flex flex-col gap-2"
         style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
-        {/* Session selector + durable handoff */}
+        {submissionError && (
+          <div
+            role="alert"
+            data-testid="conversation-banner"
+            className="rounded-lg border px-3 py-2 text-xs"
+            style={{
+              background: 'rgba(239,68,68,0.08)',
+              borderColor: 'rgba(239,68,68,0.28)',
+              color: 'var(--red)',
+            }}
+          >
+            {submissionError}
+          </div>
+        )}
+        {/* Conversation selector + durable handoff */}
         <div className="flex gap-2">
           <select
-            value={selectedSessionId}
+            value={selectedConversationId}
             aria-label="Conversation"
             disabled={interactionLocked}
             onChange={(e) => {
-              setSelectedSessionId(e.target.value)
+              setSelectedConversationId(e.target.value)
               setHandoffState('idle')
               setSessionNotice(null)
               handoffOutputStartRef.current = null
               handoffSawRunningRef.current = false
-              pendingNewSessionRef.current = null
             }}
             className="flex-1 min-w-0 px-2 py-1 rounded-lg text-xs border"
             style={{
@@ -477,18 +488,22 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
               outline: 'none',
             }}
           >
-            <option value={NEW_SESSION_VALUE}>New conversation (start fresh)</option>
-            {sessions.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.id.slice(0, 28)}{s.id.length > 28 ? '…' : ''}
-                {s.last_active && ` (${new Date(s.last_active).toLocaleDateString()})`}
+            <option value={NEW_CONVERSATION_VALUE}>New conversation (start fresh)</option>
+            {currentConversationId
+              && !conversations.some((conversation) => conversation.id === currentConversationId)
+              && <option value={currentConversationId}>{currentConversationId}</option>}
+            {conversations.map((conversation) => (
+              <option key={conversation.id} value={conversation.id}>
+                {conversation.id.slice(0, 28)}{conversation.id.length > 28 ? '…' : ''}
+                {conversation.updated_at
+                  && ` (${new Date(conversation.updated_at).toLocaleDateString()})`}
               </option>
             ))}
           </select>
           <button
             onClick={handleHandoff}
             disabled={
-              !currentSessionId
+              !currentConversationId
               || interactionLocked
               || handoffState !== 'idle'
               || handoffUnavailable
@@ -519,7 +534,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
           style={{
             fontSize: 11,
             color:
-              handoffState === 'ready' || selectedSessionId === NEW_SESSION_VALUE
+              handoffState === 'ready' || selectedConversationId === NEW_CONVERSATION_VALUE
                 ? 'var(--blue)'
                 : 'var(--text-3)',
           }}
@@ -528,60 +543,29 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
             name={
               handoffState === 'preparing'
                 ? 'hourglass_top'
-                : selectedSessionId === NEW_SESSION_VALUE
+                : selectedConversationId === NEW_CONVERSATION_VALUE
                   ? 'move_up'
                   : 'link'
             }
             size={12}
           />
           {sessionNotice
-            || (selectedSessionId === NEW_SESSION_VALUE
+            || (selectedConversationId === NEW_CONVERSATION_VALUE
               ? 'Next message starts a fresh conversation'
-              : currentSessionId
-                ? `Continuing ${currentSessionId.slice(0, 12)}…`
+              : currentConversationId
+                ? `Continuing ${currentConversationId.slice(0, 12)}…`
                 : 'No conversation yet')}
         </span>
 
         {/* Input row */}
-        <div className="flex gap-2">
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isRunning ? `${agent.name} is responding…` : `Message ${agent.name}…`}
-            rows={1}
-            disabled={interactionLocked}
-            className="flex-1 px-3 py-2 rounded-lg text-xs resize-none border disabled:opacity-50"
-            style={{
-              background: 'var(--surface)',
-              borderColor: 'var(--border)',
-              color: 'var(--text-3)',
-              minHeight: '36px',
-              maxHeight: '96px',
-              outline: 'none',
-              fontFamily: "'JetBrains Mono', monospace",
-            }}
-            onInput={(e) => {
-              const t = e.target as HTMLTextAreaElement
-              t.style.height = 'auto'
-              t.style.height = `${Math.min(t.scrollHeight, 96)}px`
-            }}
-          />
-          <button
-            onClick={handleSend}
-            aria-label="Send message"
-            disabled={!message.trim() || interactionLocked}
-            className="px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: message.trim() && !interactionLocked ? 'var(--blue)' : 'var(--surface)',
-              color: message.trim() && !interactionLocked ? '#fff' : 'var(--text-3)',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <Icon name="send" size={18} />
-          </button>
-        </div>
+        <Composer
+          key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_VALUE}`}
+          agent={agent.name}
+          projectId={projectId}
+          conversationId={currentConversationId ?? null}
+          isRunning={isRunning}
+          onSubmit={handleComposerSubmit}
+        />
       </div>
     </div>
   )

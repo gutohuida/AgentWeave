@@ -12,6 +12,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .conversations import conversation_for_provider_session, new_conversation
 from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, JobRun
 from .sse import sse_manager
@@ -275,6 +276,19 @@ class JobScheduler:
                 job.next_run = None
 
             resume_session_id = job.last_session_id if job.session_mode == "resume" else None
+            conversation = None
+            if resume_session_id:
+                conversation = await conversation_for_provider_session(
+                    session,
+                    project_id=job.project_id,
+                    agent=job.agent,
+                    provider_session_id=resume_session_id,
+                )
+            if conversation is None:
+                conversation = new_conversation(project_id=job.project_id, agent=job.agent)
+                if resume_session_id:
+                    conversation.provider_session_id = resume_session_id
+                session.add(conversation)
 
             # Create run record
             run_id = f"run-{short_id()}"
@@ -322,6 +336,7 @@ class JobScheduler:
                 hop_depth=0,
                 session_mode=job.session_mode,
                 session_id=resume_session_id,
+                conversation_id=conversation.id,
             )
             session.add(entry)
             await session.commit()
@@ -332,6 +347,7 @@ class JobScheduler:
                 "origin_type": "operator",
                 "hop_depth": 0,
                 "job_id": job.id,
+                "conversation_id": conversation.id,
             }
             await persist_event(
                 session, job.project_id, "queue_entry_queued", queue_payload, agent=job.agent

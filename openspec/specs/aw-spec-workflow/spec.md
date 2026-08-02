@@ -1,7 +1,9 @@
 # aw-spec-workflow Specification
 
 ## Purpose
-TBD - created by archiving change improve-aw-spec-discovery-flow. Update Purpose after archive.
+Packaged, portable specification-development workflows for exploring ideas, investigating technical
+implementation, proposing and applying changes, maintaining the specification manifest, and
+archiving verified work in AgentWeave user projects.
 ## Requirements
 ### Requirement: Idea exploration focuses on discovery before execution planning
 

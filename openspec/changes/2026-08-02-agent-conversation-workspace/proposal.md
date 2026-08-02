@@ -1,6 +1,6 @@
 ## Why
 
-The `2026-07-30-hub-native-experience` change has completed phases 1–8 and become an umbrella: 69
+The `2026-07-30-hub-native-experience` ledger marks phases 1–8 complete and has become an umbrella: 69
 unchecked items spanning eight phases and at least five unrelated outcomes. That is more than one
 review can honestly cover, and it postpones the surface the operator touches on every interaction.
 This change extracts the conversation work into a slice that can be approved, implemented, and
@@ -37,8 +37,12 @@ Three findings from a read of the ten delta specs against the shipped code drive
    truncated UUIDs, a handoff button, and a "Pause scroll" toggle that duplicates what the scroll
    position already says.
 
-All three are client-side. This change requires no new endpoint, no schema change, and no new
-dependency.
+Most of the visible work is client-side. Final review found one backend prerequisite the original
+proposal missed: a new provider session has no session ID until runner output arrives, so immediate
+follow-up input cannot be attached safely without an AgentWeave-owned conversation identity. The
+approved model follows the same separation T3 Code uses for threads: AgentWeave owns the durable
+conversation ID, runs are attempts within it, and the provider session is a nullable continuation
+binding beneath it. It still requires no new runtime dependency.
 
 ## What Changes
 
@@ -60,18 +64,23 @@ dependency.
 
 - The composer SHALL accept and submit input while the agent is running; the submitted input
   appears in the timeline in the undelivered state without a manual refresh.
+- A new conversation SHALL receive an AgentWeave-owned identity synchronously, before the runner
+  reports a provider session ID, so immediate follow-up input targets the same conversation.
+- Trigger, queue, history, draft, and navigation contracts SHALL use `conversation_id`; provider
+  session IDs SHALL NOT be the operator-facing identity or appear in the normal conversation picker.
 - The composer's input and submit control MUST NOT be disabled on account of the agent's running
   state. They may be disabled only while a submission of their own is in flight.
 
 **Composer**
 
 - The composer SHALL present at least 3 rows at rest, grow to at least 12, then scroll.
-- Unsent text SHALL be retained per agent conversation across navigation and reload, cleared on
-  successful submission, and never visible in another agent's conversation.
+- Unsent text SHALL be retained per project and conversation across navigation and reload, cleared
+  on successful submission, and never visible in another project, agent, or conversation.
 - Only submit, stop (while running), the active-agent indicator, and context usage remain visible.
-  New conversation, session selection, handoff, fold-all, and agent details move into one
+  New conversation, conversation selection, handoff, fold-all, and agent details move into one
   keyboard-operable overflow menu.
-- The session `<select>` leaves the resting surface; continuity remains visible as text.
+- The provider-session `<select>` is replaced by AgentWeave conversation selection in the overflow
+  menu; continuity remains visible as human-readable text.
 - The manual pause/resume-scroll control is removed; autoscroll follows the operator's scroll
   position.
 - A banner stack above the composer carries run failure, stream loss, and blocked-queue conditions.
@@ -80,8 +89,10 @@ dependency.
 
 **Preserved**
 
-- Session continuity, durable handoff, stop, withdraw, and deliver-now behave exactly as they do
-  today. Queue semantics — hop budget, per-turn cap, delivery ordering — are unchanged.
+- Provider continuity within an AgentWeave conversation, durable handoff, stop, withdraw, and
+  deliver-now behave as defined after the identity migration. Queue semantics — hop budget,
+  per-turn cap, and arrival ordering — are unchanged; entries from different conversations MUST
+  NOT be delivered into one provider turn.
 
 ## Non-Goals
 
@@ -95,7 +106,8 @@ dependency.
   which agent is active; it does not offer an in-place switcher. Once every agent is one click away
   in the rail, a switcher's remaining value is reassigning an in-flight conversation, which is a
   change to turn routing rather than to layout.
-- **Changing what a turn receives.** No queue semantics change.
+- **Changing what a turn receives.** Conversation scoping prevents cross-conversation mixing, but
+  does not change prompt formatting, hop budgets, per-turn caps, or ordering within a conversation.
 - **Runner records, model reassignment, charters, or templates.**
 - **Specification traceability, authoring, and approval gates.**
 - **Token accounting and budgets.**
@@ -107,9 +119,9 @@ dependency.
 
 ## Impact
 
-- Affected specs: `agent-conversation-workspace` (new). Brings the interface into conformance with
-  the existing `agent-inbound-queue`, `agent-conversation-timeline`, and `agent-composer` deltas
-  without restating or amending them.
+- Affected specs: `agent-conversation-workspace` (new), `agent-conversation-handoff`,
+  `agent-inbound-queue`, and `agent-conversation-timeline`. The existing `agent-composer` behavior
+  is consumed without amendment.
 - Affected code: `hub/ui/src/App.tsx`, `hub/ui/src/components/layout/Sidebar.tsx`,
   `hub/ui/src/components/agents/AgentOutputPanel.tsx`,
   `hub/ui/src/components/agents/AgentsPage.tsx`,
@@ -117,5 +129,7 @@ dependency.
   `hub/ui/src/components/overview/OverviewPage.tsx`.
 - Removed from the interface: the Agents master-detail page with its filter tabs and grid view, the
   Messages navigation destination, the session `<select>`, and the pause-scroll toggle.
-- No backend change. No new endpoint, permission, schema, or runtime dependency.
+- Backend: introduce stable conversation identity and bind provider continuation state beneath it;
+  update trigger, queue, scheduler, history, run, output, peer-message, and session-listing
+  persistence/contracts accordingly. No new runtime dependency.
 - Supersedes umbrella phases 11 and 12 in full and 10.3–10.7 in part; see `design.md`.

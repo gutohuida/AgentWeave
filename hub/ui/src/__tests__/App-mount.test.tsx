@@ -19,7 +19,7 @@ vi.mock('@/hooks/useSSE', () => ({
 vi.mock('@/components/overview/OverviewPage', () => ({
   OverviewPage: ({ onNavigate }: { onNavigate?: (p: string) => void }) => (
     <div data-testid="page-overview">
-      <button onClick={() => onNavigate?.('agents')}>go to agents</button>
+      <button onClick={() => onNavigate?.('tasks')}>go to tasks</button>
     </div>
   ),
 }))
@@ -88,13 +88,11 @@ describe('Q15 — App.tsx: only the active page is mounted (data-driven routing)
   it('does NOT mount any of the other pages on initial mount', () => {
     render(withQueryClient(<App />))
     for (const id of [
-      'page-messages',
       'page-tasks',
       'page-questions',
       'page-activity',
       'page-quality',
       'page-logs',
-      'page-agents',
       'page-jobs',
       'page-instructions',
     ]) {
@@ -108,22 +106,22 @@ describe('Q15 — App.tsx: only the active page is mounted (data-driven routing)
 
     // Click the stub OverviewPage's "go to agents" button — this exercises
     // the onNavigate callback App wires into every page.
-    fireEvent.click(screen.getByText('go to agents'))
+    fireEvent.click(screen.getByText('go to tasks'))
 
     // OverviewPage is gone; AgentsPage is mounted.
     expect(screen.queryByTestId('page-overview')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-agents')).toBeInTheDocument()
+    expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
   })
 
   it('navigating twice mounts the third page and unmounts the second', () => {
     render(withQueryClient(<App />))
-    fireEvent.click(screen.getByText('go to agents'))
-    expect(screen.getByTestId('page-agents')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('go to tasks'))
+    expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
 
     // The Sidebar's nav button click should swap to messages.
-    fireEvent.click(screen.getByTestId('nav-messages'))
-    expect(screen.queryByTestId('page-agents')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-messages')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('nav-questions'))
+    expect(screen.queryByTestId('page-tasks')).not.toBeInTheDocument()
+    expect(screen.getByTestId('page-questions')).toBeInTheDocument()
   })
 
   it('uses the scroll wrapper class for scroll pages and flex-col for flex pages', () => {
@@ -134,14 +132,14 @@ describe('Q15 — App.tsx: only the active page is mounted (data-driven routing)
     expect(overviewWrapper?.className).not.toContain('flex flex-col')
 
     // agents -> flex-col wrapper
-    fireEvent.click(screen.getByTestId('nav-agents'))
-    const agentsWrapper = screen.getByTestId('page-agents').parentElement
-    expect(agentsWrapper?.className).toContain('flex flex-col')
-    expect(agentsWrapper?.className).not.toContain('overflow-auto')
+    fireEvent.click(screen.getByTestId('nav-logs'))
+    const logsWrapper = screen.getByTestId('page-logs').parentElement
+    expect(logsWrapper?.className).toContain('flex flex-col')
+    expect(logsWrapper?.className).not.toContain('overflow-auto')
 
     // messages -> scroll wrapper
-    fireEvent.click(screen.getByTestId('nav-messages'))
-    const messagesWrapper = screen.getByTestId('page-messages').parentElement
-    expect(messagesWrapper?.className).toContain('overflow-auto')
+    fireEvent.click(screen.getByTestId('nav-tasks'))
+    const tasksWrapper = screen.getByTestId('page-tasks').parentElement
+    expect(tasksWrapper?.className).toContain('overflow-auto')
   })
 })

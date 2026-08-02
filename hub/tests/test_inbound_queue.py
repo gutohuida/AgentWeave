@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
 from hub.db.engine import async_session_factory
-from hub.db.models import InboundQueueEntry, Run
+from hub.db.models import Conversation, InboundQueueEntry, Run
 from hub.inbound_queue import (
     can_start,
     deliver_entries_with_run,
@@ -199,7 +199,7 @@ async def test_undelivered_entry_can_be_withdrawn(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_over_budget_peer_entry_waits_and_operator_input_resets_batch(app, auth_headers):
+async def test_operator_input_does_not_drain_another_conversation(app, auth_headers):
     await app.post(
         "/api/v1/session/sync",
         json={
@@ -272,7 +272,8 @@ async def test_over_budget_peer_entry_waits_and_operator_input_resets_batch(app,
             select(InboundQueueEntry).where(InboundQueueEntry.agent == "hop-target")
         )
         entries = list(result.scalars().all())
-    assert [entry.state for entry in entries] == ["delivered", "delivered"]
+    assert [entry.state for entry in entries] == ["queued", "delivered"]
+    assert entries[0].conversation_id != entries[1].conversation_id
 
 
 @pytest.mark.asyncio
@@ -287,8 +288,15 @@ async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers)
     async with async_session_factory() as db:
         project = await db.get(Project, "proj-test")
         project.turn_delivery_cap = 2
+        conversation = Conversation(
+            id="conv-cap-target",
+            project_id="proj-test",
+            agent="cap-target",
+            lifecycle="open",
+        )
         db.add_all(
-            [
+            [conversation]
+            + [
                 new_entry(
                     project_id="proj-test",
                     agent="cap-target",
@@ -296,6 +304,7 @@ async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers)
                     content=f"item {index}",
                     hop_depth=0,
                     session_mode="new",
+                    conversation_id=conversation.id,
                 )
                 for index in range(3)
             ]

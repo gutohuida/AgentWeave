@@ -131,8 +131,8 @@ An operator MAY record that a change was editorial and that existing evidence st
 
 ### Requirement: Drift between specification and implementation is surfaced
 
-Where implementation linked to a requirement changes without any corresponding change to that
-requirement, the divergence SHALL be reported.
+The system SHALL report divergence where implementation linked to a requirement changes without
+any corresponding change to that requirement.
 
 Drift SHALL be presented as a diagnostic to be resolved — by updating the requirement, by recording
 that none was needed, or by correcting the implementation — and MUST NOT silently alter either

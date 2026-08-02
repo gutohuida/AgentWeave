@@ -1316,9 +1316,10 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 > **SUPERSEDED (2026-08-02) — split across two changes.** Items 10.3–10.7 belong to
 > `openspec/changes/2026-08-02-agent-conversation-workspace/`. Items 10.1–10.2 belong to a
-> multi-project change that is **blocked on research question RQ-1** (see that change's
-> `design.md`): `_project_from_api_key` binds one API key to one `project_id` and the SSE ticket is
-> signed per project, so a project switcher is not a frontend task. Do not implement from this list.
+> local multi-project change that is ready for technical exploration after the single-runtime
+> change. RQ-1's multi-tenant premise was resolved by the local-only product direction; project
+> discovery, lifecycle, and SSE switching still need their own design. Do not implement from this
+> list.
 
 - [ ] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
       agent, and token budgets.
@@ -1410,12 +1411,13 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 ## 14. Specification traceability and authoring
 
-> **SUPERSEDED (2026-08-02) — blocked on research question RQ-2.** See
+> **SUPERSEDED (2026-08-02) — ready for technical exploration under narrowed RQ-2.** See
 > `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Stable requirement
 > identifiers, evidence, and proposals need one unambiguous home before any of this is built, and
 > AgentWeave currently ships two specification systems: this repository's own `openspec/` workflow
-> and the `aw-spec-workflow` capability it provides to user projects. That authority question must
-> be answered first. The slice will need its own decomposition. Do not implement from this list.
+> and the `aw-spec-workflow` capability it provides to user projects. Local-only removes
+> cross-machine reconciliation from the problem, but file authority, stable identifiers, database
+> indexing, and external-editor changes still need a decision. Do not implement from this list.
 
 - [ ] 14.1 Add stable, visible requirement identifiers; report unidentified requirements; never
       reissue a retired identifier; keep identifiers stable across rewording, reordering, relocation.

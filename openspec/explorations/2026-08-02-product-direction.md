@@ -67,8 +67,9 @@ substrate*.
 > start, stop it, and recover it when it is wedged.
 
 Everything that manipulates collaboration state belongs to one of the two real audiences — the app
-UI for the human, the MCP tool surface for agents. There is no third audience, so there is no third
-surface. `cli.py` currently has **56** `cmd_*` functions; **5** survive.
+UI for the human and an agent capability plane. Agents may reach that plane through MCP or direct
+HTTP, depending on what their environment permits. Those are adapters over the same capabilities,
+not separate product surfaces. `cli.py` currently has **56** `cmd_*` functions; **5** survive.
 
 | Surviving | Purpose |
 |---|---|
@@ -91,20 +92,38 @@ automatically"; `update-template` → app UI.
 Naming note: `start`/`stop`/`status` currently mean *collaboration session* lifecycle. Removing
 those frees the names for app lifecycle, which is what a user would expect them to mean.
 
-### 1b. The MCP surface is already where it needs to be
+### 1b. Agent capabilities are API-first; MCP is one adapter
 
-The product owner's expectation — "MCP will just be so the agents themselves can do things on the
-hub" — is **already the implemented design**. Phase 7 collapsed the CLI-side server into a
-compatibility re-export; `src/agentweave/mcp/server.py` now carries no tools of its own and its
-docstring states the CLI-side implementation "duplicated the Hub server and allowed local/git state
-reads around Hub governance."
+**Correction decided 2026-08-02:** agents need to read selected shared state as well as cause
+effects. MCP must not be the only access path: company policy may prohibit MCP servers while still
+allowing ordinary local API calls. The product therefore has one canonical agent capability plane
+with at least two equivalent adapters:
 
-Remaining work is small: delete the compatibility shim once the CLI-only install path goes away.
+1. direct HTTP API calls; and
+2. MCP tools that delegate to the same application operations or HTTP endpoints.
 
-**The constraint on any new endpoint** comes from `agent-tool-surface`: *"The Hub supplies state;
-the tool surface carries intent."* Everything an agent needs to begin a turn is injected at turn
-start, so tools exist to **cause effects**, never to fetch state. New endpoints must therefore be
-verb-shaped — `propose_*`, `attach_*`, `request_*` — not `list_*` / `get_*`.
+The React UI is another client of the application API, but it is an operator surface and does not
+inherit agent permissions. The reduced CLI is not an agent capability adapter.
+
+Part of this is **already implemented**. Phase 7 collapsed the CLI-side MCP server into a
+compatibility re-export; `src/agentweave/mcp/server.py` now carries no tools of its own. Every tool
+in `hub/hub/mcp_server.py` calls an existing `/api/v1` HTTP endpoint through `_hub_request`, so MCP
+is already an HTTP adapter rather than an independent state implementation. The remaining work is
+to make this relationship an explicit, tested contract and replace the soon-to-be-removed CLI
+command fallback with first-class direct HTTP access. Deleting the compatibility shim is only the
+small mechanical part of that work.
+
+Turn-start injection remains important: queued inbound entries, the roster, the agent charter, and
+project instructions should arrive without an initial fetch. It is an onboarding and delivery
+guarantee, **not a ban on reads during a turn**. Agents must be able to retrieve information that is
+too large, dynamic, or demand-driven to inject safely — for example task details, specification
+requirements, evidence, gate state, and the answer to a question they asked.
+
+The read boundary is least privilege rather than grammatical shape. `get_*` and `list_*` are valid
+when the information is needed for the agent's work and scoped to the current project/run. Reads
+that bypass delivery or governance remain invalid: an agent must not inspect another agent's
+undelivered queue, secrets, hidden operator state, or configuration outside its scope. Mutations
+remain attributable and governed.
 
 Current surface (12 tools): `send_message`, `create_task`, `list_tasks`, `get_task`, `update_task`,
 `ask_user`, `get_answer`, `request_agent`, `create_job`, `delete_job`, `toggle_job`, `run_job`.
@@ -119,12 +138,37 @@ Gaps against the stated differentiators:
   evidence, or ask whether a gate is satisfied. Quality gates are a stated differentiator and have
   no agent-facing surface.
 
-**Flagged inconsistency:** `list_tasks`, `get_task`, and `get_answer` are read-shaped and sit
-awkwardly against the requirement's general sentence, which limits the surface to causing effects.
-Its *scenario* is narrower — it forbids reading "queued or undelivered entries" specifically. So
-either tasks are deliberately outside "coordination state supplied at turn start", or the shipped
-surface contradicts its own spec. The requirement should be tightened to say which, before new
-endpoints are designed against an ambiguous rule.
+**The existing specification is internally inconsistent.** `agent-tool-surface` first limits the
+surface to causing effects, then explicitly requires agents to read the task ledger and receive
+answers. The latter is the intended behaviour. A successor delta must replace the effect-only
+sentence with the least-privilege read boundary above while preserving the prohibition on reading
+queued or undelivered entries around the delivery system.
+
+### 1c. Direct API parity needs an identity boundary
+
+The HTTP routes already cover far more than the 12 MCP tools, but endpoint existence is not yet the
+same as a supported agent API:
+
+- parity is not enumerated or tested as a capability matrix;
+- response/error contracts are not documented for non-MCP callers;
+- the approved non-MCP fallback is still CLI commands, which the single-runtime change removes;
+- several agent effects accept identity in request bodies or headers while authentication uses a
+  project-wide bearer key.
+
+That last point is a security/design gap. `hub/hub/auth.py::_project_from_api_key` authenticates a
+project, not an agent or run. `hub/hub/mcp_server.py` adds `X-AgentWeave-Agent` and
+`X-AgentWeave-Run`, but a caller holding the same project key can assert different values. Job
+mutations validate the pair against a live run; messaging, tasks, and questions do not share one
+uniform run-principal dependency.
+
+The target should issue an ephemeral, least-privilege credential when the app starts a run. That
+credential binds project, agent, run, expiry, and allowed capabilities. Both direct HTTP and MCP
+use it; neither accepts caller-selected attribution. The local operator/UI uses a distinct local
+operator principal. The exact token format is a design detail for the capability-plane proposal,
+not a reason to retain multi-tenant authentication.
+
+The single-runtime change must not delete the CLI command fallback until direct HTTP parity and
+run-bound attribution exist. This is a dependency, not a reason to keep the collaboration CLI.
 
 ### 2. Remote deployment leaves scope, and RQ-1 dissolves in its current form
 

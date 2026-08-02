@@ -51,6 +51,7 @@ class Project(Base):
     jobs: Mapped[List["AIJob"]] = relationship(back_populates="project")
     agents: Mapped[List["Agent"]] = relationship(back_populates="project")
     queue_entries: Mapped[List["InboundQueueEntry"]] = relationship(back_populates="project")
+    conversations: Mapped[List["Conversation"]] = relationship(back_populates="project")
 
 
 class Agent(Base):
@@ -96,6 +97,44 @@ class ApiKey(Base):
     project: Mapped["Project"] = relationship(back_populates="api_keys")
 
 
+CONVERSATION_LIFECYCLES = ("open", "archived")
+
+
+class Conversation(Base):
+    """AgentWeave-owned durable conversation, independent of provider session identity."""
+
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    provider_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    lifecycle: Mapped[str] = mapped_column(String(16), default="open", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    project: Mapped["Project"] = relationship(back_populates="conversations")
+
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle IN ('open', 'archived')", name="ck_conversations_lifecycle"
+        ),
+        Index("ix_conversations_project_agent_updated", "project_id", "agent", "updated_at"),
+        Index(
+            "uq_conversations_project_agent_provider_session",
+            "project_id",
+            "agent",
+            "provider_session_id",
+            unique=True,
+        ),
+    )
+
+
 class Message(Base):
     __tablename__ = "messages"
 
@@ -113,12 +152,16 @@ class Message(Base):
     read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("conversations.id"), nullable=True
+    )
 
     project: Mapped["Project"] = relationship(back_populates="messages")
 
     __table_args__ = (
         Index("ix_messages_project_recipient", "project_id", "recipient"),
         Index("ix_messages_project_read", "project_id", "read"),
+        Index("ix_messages_conversation", "conversation_id"),
     )
 
 
@@ -149,6 +192,9 @@ class InboundQueueEntry(Base):
     message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     session_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("conversations.id"), nullable=True
+    )
     work_dir: Mapped[Optional[str]] = mapped_column(String(4096), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
@@ -174,6 +220,7 @@ class InboundQueueEntry(Base):
             "sequence",
         ),
         Index("ix_inbound_queue_delivered_run", "delivered_in_run_id"),
+        Index("ix_inbound_queue_conversation_state", "conversation_id", "state", "sequence"),
     )
 
 
@@ -370,6 +417,9 @@ class Run(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("conversations.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(32), default="running", nullable=False, index=True)
     pid: Mapped[Optional[int]] = mapped_column(nullable=True)
     exit_code: Mapped[Optional[int]] = mapped_column(nullable=True)
@@ -386,6 +436,7 @@ class Run(Base):
     __table_args__ = (
         Index("ix_runs_project_agent", "project_id", "agent"),
         Index("ix_runs_project_status", "project_id", "status"),
+        Index("ix_runs_conversation_started", "conversation_id", "started_at"),
     )
 
 
@@ -396,6 +447,9 @@ class AgentOutput(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("conversations.id"), nullable=True
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     payload: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
@@ -410,6 +464,7 @@ class AgentOutput(Base):
     __table_args__ = (
         Index("ix_agent_outputs_project_agent", "project_id", "agent"),
         Index("ix_agent_outputs_project_ts", "project_id", "timestamp"),
+        Index("ix_agent_outputs_conversation", "conversation_id", "timestamp"),
         Index(
             "ix_agent_outputs_project_agent_run_sequence",
             "project_id",

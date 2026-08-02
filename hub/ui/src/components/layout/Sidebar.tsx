@@ -1,80 +1,79 @@
-import { useQuestions } from '@/api/questions'
-import { useMessages } from '@/api/messages'
+import { useState } from 'react'
 import { useAgents } from '@/api/agents'
-import { useSessionSync } from '@/api/status'
+import { useSessionSync, useStatus } from '@/api/status'
+import { agentColorVars } from '@/lib/agentColors'
+import { buildRailProjects } from '@/lib/navigation'
 import { SidebarItem, type SidebarBadge } from './SidebarItem'
 
-type Page = 'overview' | 'messages' | 'tasks' | 'questions' | 'activity' | 'logs' | 'agents' | 'jobs' | 'quality' | 'instructions' | 'spec'
+export type SidebarPage =
+  | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec'
 
 interface SidebarProps {
-  activePage: Page
-  onNavigate: (page: Page) => void
+  activePage: SidebarPage | 'overview' | null
+  activeAgent?: string | null
+  onNavigate: (page: SidebarPage) => void
+  onOpenProject: (projectId: string) => void
+  onOpenAgent: (projectId: string, agent: string) => void
   onOpenSetup: () => void
-  /**
-   * Icon-only rail. Passed explicitly by App rather than inferred from
-   * `activePage`, so the rail never depends on hidden page state.
-   */
   compact?: boolean
-  /** Current rail width in px when not compact. Owned by App so the resizer
-   *  and the rail cannot disagree. Defaults to SIDEBAR_WIDTH. */
   width?: number
 }
 
 export const SIDEBAR_WIDTH = 220
 export const SIDEBAR_COMPACT_WIDTH = 52
-/** Clamp bounds for the draggable rail — below the minimum labels are
- *  unreadable, above the maximum the content pane starts to suffer. */
 export const SIDEBAR_MIN_WIDTH = 180
 export const SIDEBAR_MAX_WIDTH = 420
 
 interface NavItem {
-  id: Page
+  id: SidebarPage
   label: string
   icon: string
   section?: string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'overview',  label: 'Overview',  icon: 'home' },
-  { id: 'agents',    label: 'Agents',    icon: 'smart_toy' },
   { id: 'instructions', label: 'Instructions', icon: 'description' },
-  { id: 'tasks',     label: 'Tasks',     icon: 'task_alt',     section: 'WORK' },
-  { id: 'spec',      label: 'Spec',      icon: 'article',      section: 'WORK' },
-  { id: 'jobs',      label: 'Jobs',      icon: 'schedule',     section: 'WORK' },
-  { id: 'messages',  label: 'Messages',  icon: 'chat',         section: 'COMMUNICATION' },
-  { id: 'questions', label: 'Questions', icon: 'help',         section: 'COMMUNICATION' },
-  { id: 'logs',      label: 'Logs',      icon: 'terminal',     section: 'OBSERVE' },
-  { id: 'activity',  label: 'Activity',  icon: 'monitoring',   section: 'OBSERVE' },
-  { id: 'quality',   label: 'Quality',   icon: 'verified_user', section: 'OBSERVE' },
+  { id: 'tasks', label: 'Tasks', icon: 'task_alt', section: 'WORK' },
+  { id: 'spec', label: 'Spec', icon: 'article', section: 'WORK' },
+  { id: 'jobs', label: 'Jobs', icon: 'schedule', section: 'WORK' },
+  { id: 'questions', label: 'Questions', icon: 'help', section: 'COMMUNICATION' },
+  { id: 'logs', label: 'Logs', icon: 'terminal', section: 'OBSERVE' },
+  { id: 'activity', label: 'Activity', icon: 'monitoring', section: 'OBSERVE' },
+  { id: 'quality', label: 'Quality', icon: 'verified_user', section: 'OBSERVE' },
 ]
 
 const SECTION_ORDER = ['WORK', 'COMMUNICATION', 'OBSERVE']
 
 export function Sidebar({
   activePage,
+  activeAgent = null,
   onNavigate,
+  onOpenProject,
+  onOpenAgent,
   onOpenSetup,
   compact = false,
   width = SIDEBAR_WIDTH,
 }: SidebarProps) {
-  const { data: questions }    = useQuestions(false)
-  const { data: messages }     = useMessages()
-  const { data: agents }       = useAgents()
-  const { data: sessionSync }  = useSessionSync()
+  const { data: agents = [] } = useAgents()
+  const { data: status } = useStatus()
+  const { data: sessionSync } = useSessionSync()
+  const projects = buildRailProjects(
+    status ? { id: status.project_id, name: status.project_name } : null,
+    agents,
+  )
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const qualityActive = !!sessionSync?.data?.quality
 
-  const unanswered   = questions?.length ?? 0
-  const unread       = messages?.filter((m) => !m.read).length ?? 0
-  const activeAgents = agents?.filter((a) => a.status === 'active').length ?? 0
-  const qualityActive = !!(sessionSync?.data?.quality)
-
-  function getBadge(id: Page): SidebarBadge | null {
-    if (id === 'messages'  && unread > 0)        return { count: unread, danger: false }
-    if (id === 'questions' && unanswered > 0)    return { count: unanswered, danger: true }
-    if (id === 'agents'    && activeAgents > 0)  return { count: activeAgents, danger: false }
-    if (id === 'quality'   && qualityActive)     return { count: 1, danger: false }
+  function getBadge(id: SidebarPage): SidebarBadge | null {
+    if (id === 'quality' && qualityActive) return { count: 1, danger: false }
     return null
   }
 
+  const topItems = NAV_ITEMS.filter((item) => !item.section)
+  const sectionedItems = SECTION_ORDER.map((section) => ({
+    section,
+    items: NAV_ITEMS.filter((item) => item.section === section),
+  }))
   const sectionLabelStyle: React.CSSProperties = {
     fontSize: 10,
     fontWeight: 600,
@@ -85,13 +84,6 @@ export function Sidebar({
     marginTop: 8,
   }
 
-  // Group nav items by section
-  const topItems = NAV_ITEMS.filter((i) => !i.section)
-  const sectionedItems = SECTION_ORDER.map((sec) => ({
-    section: sec,
-    items: NAV_ITEMS.filter((i) => i.section === sec),
-  }))
-
   return (
     <div
       className="flex h-full flex-col shrink-0"
@@ -99,16 +91,10 @@ export function Sidebar({
       data-compact={compact ? 'true' : 'false'}
       style={{
         width: compact ? SIDEBAR_COMPACT_WIDTH : width,
-        // One ground plane: the rail shares the app background rather than
-        // carrying its own fill. Previously it had BOTH a distinct fill
-        // (--surface) and a --border divider; two simultaneous boundary
-        // signals read as far heavier than either alone. The divider now
-        // lives on the resizer between the panes.
         background: 'transparent',
         padding: compact ? '12px 4px' : '12px 8px',
       }}
     >
-      {/* Logo mark */}
       <div
         className={compact ? 'mb-2 text-center' : 'px-2 mb-2'}
         style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}
@@ -116,7 +102,62 @@ export function Sidebar({
         AW
       </div>
 
-      {/* Top-level nav items */}
+      {!compact && projects.map((project) => {
+        const expanded = !collapsed[project.id]
+        return (
+          <div key={project.id} className="mb-2">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={`${expanded ? 'Collapse' : 'Expand'} ${project.name}`}
+                data-testid={`project-expander-${project.id}`}
+                onClick={() => setCollapsed((state) => ({ ...state, [project.id]: expanded }))}
+                className="w-6 h-7 text-xs"
+                style={{ color: 'var(--text-3)' }}
+              >
+                {expanded ? '▾' : '▸'}
+              </button>
+              <button
+                type="button"
+                data-testid={`project-name-${project.id}`}
+                onClick={() => onOpenProject(project.id)}
+                className="flex-1 truncate text-left px-1 py-1 text-sm font-medium"
+                style={{ color: activePage === 'overview' ? 'var(--text)' : 'var(--text-2)' }}
+              >
+                {project.name}
+              </button>
+            </div>
+            {expanded && (
+              <div className="ml-7 flex flex-col gap-0.5">
+                {project.agents.map((agent) => {
+                  const colors = agentColorVars(agent.color_index)
+                  return (
+                    <button
+                      key={agent.name}
+                      type="button"
+                      data-testid={`rail-agent-${agent.name}`}
+                      onClick={() => onOpenAgent(project.id, agent.name)}
+                      className="flex items-center gap-2 rounded px-2 py-1 text-left text-xs"
+                      style={{
+                        color: activeAgent === agent.name ? 'var(--text)' : 'var(--text-2)',
+                        background: activeAgent === agent.name ? 'var(--surface-2)' : 'transparent',
+                      }}
+                    >
+                      <span
+                        data-testid={`rail-agent-color-${agent.name}`}
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ background: colors.accent }}
+                      />
+                      <span className="truncate">{agent.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
       <nav className="flex flex-col">
         {topItems.map(({ id, label, icon }) => (
           <SidebarItem
@@ -132,7 +173,6 @@ export function Sidebar({
         ))}
       </nav>
 
-      {/* Sectioned nav items */}
       {sectionedItems.map(({ section, items }) => (
         <div key={section}>
           {!compact && <div style={sectionLabelStyle}>{section}</div>}
@@ -153,13 +193,8 @@ export function Sidebar({
         </div>
       ))}
 
-      {/* Spacer */}
       <div className="flex-1" />
-
-      {/* Settings — pinned bottom */}
-      <div
-        style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}
-      >
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
         <SidebarItem
           label="Settings"
           icon="settings"

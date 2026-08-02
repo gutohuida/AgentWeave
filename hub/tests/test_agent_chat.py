@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AgentOutput, InboundQueueEntry, Message, Project
+from hub.db.models import AgentOutput, Conversation, InboundQueueEntry, Message, Project
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,11 +42,21 @@ async def _add_run(project_id: str, *, run_id: str, agent: str, session_id: str)
 
     async with async_session_factory() as session:
         session.add(
+            Conversation(
+                id=session_id,
+                project_id=project_id,
+                agent=agent,
+                provider_session_id=session_id,
+                lifecycle="open",
+            )
+        )
+        session.add(
             Run(
                 id=run_id,
                 project_id=project_id,
                 agent=agent,
                 session_id=session_id,
+                conversation_id=session_id,
                 status="completed",
                 started_at=datetime.now(timezone.utc),
                 turn_depth=0,
@@ -65,9 +75,26 @@ async def _add_queue_entry(
     origin_agent: str | None = None,
     hop_depth: int = 0,
     run_id: str | None = None,
+    conversation_id: str | None = None,
     timestamp: datetime | None = None,
 ) -> None:
     async with async_session_factory() as session:
+        if run_id:
+            from hub.db.models import Run
+
+            run = await session.get(Run, run_id)
+            conversation_id = run.conversation_id
+        elif conversation_id is None:
+            conversation_id = f"conv-{agent}"
+        if await session.get(Conversation, conversation_id) is None:
+            session.add(
+                Conversation(
+                    id=conversation_id,
+                    project_id=project_id,
+                    agent=agent,
+                    lifecycle="open",
+                )
+            )
         session.add(
             InboundQueueEntry(
                 id=entry_id,
@@ -81,6 +108,7 @@ async def _add_queue_entry(
                 state="delivered" if run_id else "queued",
                 delivered_in_run_id=run_id,
                 delivered_at=(timestamp or datetime.now(timezone.utc)) if run_id else None,
+                conversation_id=conversation_id,
             )
         )
         await session.commit()
@@ -96,6 +124,16 @@ async def _add_output(
     timestamp: datetime | None = None,
 ) -> None:
     async with async_session_factory() as session:
+        if await session.get(Conversation, session_id) is None:
+            session.add(
+                Conversation(
+                    id=session_id,
+                    project_id=project_id,
+                    agent=agent,
+                    provider_session_id=session_id,
+                    lifecycle="open",
+                )
+            )
         session.add(
             AgentOutput(
                 id=out_id,
@@ -103,6 +141,7 @@ async def _add_output(
                 agent=agent,
                 content=content,
                 session_id=session_id,
+                conversation_id=session_id,
                 timestamp=timestamp or datetime.now(timezone.utc),
             )
         )
@@ -120,6 +159,16 @@ async def _add_outbound_message(
     timestamp: datetime | None = None,
 ) -> None:
     async with async_session_factory() as session:
+        if session_id and await session.get(Conversation, session_id) is None:
+            session.add(
+                Conversation(
+                    id=session_id,
+                    project_id=project_id,
+                    agent=sender,
+                    provider_session_id=session_id,
+                    lifecycle="open",
+                )
+            )
         session.add(
             Message(
                 id=msg_id,
@@ -129,6 +178,7 @@ async def _add_outbound_message(
                 content=content,
                 type="message",
                 session_id=session_id,
+                conversation_id=session_id,
                 timestamp=timestamp or datetime.now(timezone.utc),
             )
         )
@@ -283,8 +333,7 @@ async def test_outbound_peer_message_placed_by_its_own_session_id(app, auth_head
 
     # And it must NOT appear under an unrelated session for the same agent.
     other_resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-other", headers=auth_headers)
-    other_ids = [e["id"] for e in other_resp.json()["entries"]]
-    assert "msg-t5" not in other_ids
+    assert other_resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +342,7 @@ async def test_outbound_peer_message_placed_by_its_own_session_id(app, auth_head
 
 
 @pytest.mark.asyncio
-async def test_queued_entry_appears_regardless_of_requested_session(app, auth_headers):
+async def test_queued_entry_appears_in_its_conversation(app, auth_headers):
     project_id = await _project_id(app, auth_headers)
     agent = "agent_t6"
     await _add_queue_entry(
@@ -302,6 +351,7 @@ async def test_queued_entry_appears_regardless_of_requested_session(app, auth_he
         agent=agent,
         origin_type="operator",
         content="not delivered yet",
+        conversation_id="sess-anything",
     )
 
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-anything", headers=auth_headers)
@@ -363,10 +413,23 @@ async def test_delivered_entries_never_carry_hop_budget_exceeded(app, auth_heade
 @pytest.mark.asyncio
 async def test_empty_session_returns_empty_entries(app, auth_headers):
     agent = "agent_t9"
+    project_id = await _project_id(app, auth_headers)
+    async with async_session_factory() as session:
+        session.add(
+            Conversation(
+                id="sess-empty",
+                project_id=project_id,
+                agent=agent,
+                provider_session_id=None,
+                lifecycle="open",
+            )
+        )
+        await session.commit()
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-empty", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
-    assert data["session_id"] == "sess-empty"
+    assert data["conversation_id"] == "sess-empty"
+    assert data["session_id"] is None
     assert data["agent"] == agent
     assert data["entries"] == []
 
@@ -409,6 +472,7 @@ async def test_entries_sorted_by_timestamp_with_queue_appended_last(app, auth_he
         agent=agent,
         origin_type="operator",
         content="pending",
+        conversation_id="sess-t10",
     )
 
     resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t10", headers=auth_headers)

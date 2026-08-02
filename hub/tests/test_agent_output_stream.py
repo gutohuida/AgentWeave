@@ -156,9 +156,12 @@ async def test_chat_history_preserves_structured_output_fields(app, auth_headers
     )
     assert response.status_code == 201
 
+    conversations = await app.get(
+        "/api/v1/agent/stream-chat/conversations", headers=auth_headers
+    )
+    conversation_id = conversations.json()[0]["id"]
     response = await app.get(
-        "/api/v1/agent/stream-chat/chat/sess-chat-stream",
-        headers=auth_headers,
+        f"/api/v1/agent/stream-chat/chat/{conversation_id}", headers=auth_headers
     )
     assert response.status_code == 200
     message = next(item for item in response.json()["entries"] if item["kind"] == "agent_output")

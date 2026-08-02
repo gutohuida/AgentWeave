@@ -9,7 +9,7 @@ from typing import Dict, Optional, Tuple
 from sqlalchemy import select
 
 from .db.engine import async_session_factory
-from .db.models import Run
+from .db.models import Conversation, Run
 from .inbound_queue import can_start, format_turn_prompt, project_limits, queued_entries
 
 _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
@@ -45,34 +45,32 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         if not can_start(entries, hop_budget):
             return ScheduleResult(waiting_reason="hop budget exhausted")
 
-        selected = entries[:cap]
-        controlling = next((entry for entry in selected if entry.origin_type == "operator"), None)
-        if controlling is not None:
-            session_mode = controlling.session_mode or "new"
-            session_id = controlling.session_id
-            work_dir = controlling.work_dir
-        else:
-            latest = await db.execute(
-                select(Run.session_id)
-                .where(
-                    Run.project_id == project_id,
-                    Run.agent == agent,
-                    Run.session_id.isnot(None),
-                )
-                .order_by(Run.started_at.desc())
-                .limit(1)
-            )
-            session_id = latest.scalar_one_or_none()
-            session_mode = "resume" if session_id else "new"
-            work_dir = None
+        controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
+        if controlling is None or controlling.conversation_id is None:
+            return ScheduleResult(waiting_reason="queued entry has no conversation")
+        conversation = await db.get(Conversation, controlling.conversation_id)
+        if (
+            conversation is None
+            or conversation.project_id != project_id
+            or conversation.agent != agent
+            or conversation.lifecycle != "open"
+        ):
+            return ScheduleResult(waiting_reason="conversation is unavailable")
+
+        selected = [
+            entry for entry in entries if entry.conversation_id == conversation.id
+        ][:cap]
+        controlling_operator = next(
+            (entry for entry in selected if entry.origin_type == "operator"), None
+        )
+        work_dir = controlling_operator.work_dir if controlling_operator is not None else None
 
         try:
             response = await trigger_agent_directly(
                 project_id=project_id,
                 agent=agent,
                 message=format_turn_prompt(selected),
-                session_mode=session_mode,
-                session_id=session_id,
+                conversation_id=conversation.id,
                 work_dir=work_dir,
                 session=db,
                 queue_entry_ids=[entry.id for entry in selected],

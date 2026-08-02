@@ -2,9 +2,9 @@
 
 ### Requirement: The Hub supplies state; the tool surface carries intent
 
-Everything an agent needs in order to begin a turn — its queued entries, the roster of its
-collaborators, its charter, and its project's instructions — SHALL be supplied by the Hub at the
-start of that turn.
+The system SHALL supply everything an agent needs in order to begin a turn — its queued entries,
+the roster of its collaborators, its charter, and its project's instructions — at the start of
+that turn.
 
 The tool surface exposed to an agent SHALL therefore be limited to **causing effects** in shared
 state. A tool MUST NOT allow an agent to read coordination state that was not supplied to it, and

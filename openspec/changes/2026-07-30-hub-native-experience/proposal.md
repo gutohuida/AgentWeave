@@ -1,3 +1,10 @@
+> **Direction override — 2026-08-02.** Phases 1–8 below describe historical implementation work.
+> The product is now a local-only application; the collaboration CLI, watchdog, local/git
+> transports, Docker/remote topology, role system, and the "Hub" name are being retired. Phases
+> 9–16 are superseded by successor slices listed in
+> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Do not use this umbrella's
+> old non-goals or deployment decisions to constrain those successors.
+
 ## Why
 
 AgentWeave's coordination substrate works, but the experience of using it does not. Daily use
