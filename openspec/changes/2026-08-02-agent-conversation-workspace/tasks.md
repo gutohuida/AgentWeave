@@ -115,13 +115,19 @@ refuses.*
 
 ## 4. Regression and closeout
 
-- [ ] 4.1 Re-point the existing `agentChat`, `agentTimeline`, `agentTimelineEvents`, `agentHandoff`,
+- [x] 4.1 Re-point the existing `agentChat`, `agentTimeline`, `agentTimelineEvents`, `agentHandoff`,
       `agentStatus`, and `App-mount` suites at the new surface, changing only how it is mounted and
-      queried.
-- [ ] 4.2 Confirm every continuity, handoff, stop, withdraw, and deliver-now assertion still passes,
-      and that queue semantics are untouched.
-- [ ] 4.3 Annotate the superseded phases of `openspec/changes/2026-07-30-hub-native-experience/`
+      queried. Only `agentHandoff` and `agentRunningComposer` actually broke (phase 3's removed
+      `<select>`) and were re-pointed in that phase's own commit; the other five already pass
+      unmodified against the reworked surface — confirmed by running each in isolation.
+- [x] 4.2 Confirm every continuity, handoff, stop, withdraw, and deliver-now assertion still passes,
+      and that queue semantics are untouched. Full frontend suite: 253/254 passing (one pre-existing,
+      unrelated timing flake in `agentChat.test.tsx`, not touched by this change — see the phase-3
+      handoff's Dead ends). Backend queue/conversation tests were not re-run this task: no Python
+      test environment is configured in this workspace, and the backend was not touched since
+      phase 0.
+- [x] 4.3 Annotate the superseded phases of `openspec/changes/2026-07-30-hub-native-experience/`
       naming this change, per the reconciliation rule in `design.md`. Do not mark any umbrella task
       complete — only real implementation closes a task, and it closes it here.
-- [ ] 4.4 Sync `specs/agent-conversation-workspace/` into `openspec/specs/` and archive this change.
-- [ ] 4.5 **`/handoff`**
+- [x] 4.4 Sync `specs/agent-conversation-workspace/` into `openspec/specs/` and archive this change.
+- [x] 4.5 **`/handoff`**
