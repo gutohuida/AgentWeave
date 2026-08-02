@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spec: Agent Conversation Workspace</title>
+  <meta name="aw-spec-name" content="agent-conversation-workspace">
+  <meta name="aw-spec-kind" content="change-spec">
+  <meta name="aw-spec-status" content="draft">
+  <meta name="aw-spec-approved-by" content="">
+  <meta name="aw-spec-approved-at" content="">
+  <meta name="aw-spec-generated-at" content="2026-08-02">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg:#ffffff; --surface:#f6f7f9; --surface-2:#eef0f3; --fg:#1a1a1a; --muted:#5b6472;
+      --border:#e2e4e9; --accent:#2563eb; --done:#0a7f3f; --warn:#8a6400; --warn-bg:#fff3cd;
+      --danger:#b3261e; --danger-bg:#fdeaea;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:#15171c; --surface:#1c1f26; --surface-2:#22262e; --fg:#e6e8ec; --muted:#9aa3b2;
+        --border:#2a2e37; --accent:#6c9bff; --done:#3ddc84; --warn:#f0c04c; --warn-bg:#3a301a;
+        --danger:#ff7a72; --danger-bg:#3a2020;
+      }
+    }
+    :root[data-theme="light"] {
+      --bg:#ffffff; --surface:#f6f7f9; --surface-2:#eef0f3; --fg:#1a1a1a; --muted:#5b6472;
+      --border:#e2e4e9; --accent:#2563eb; --done:#0a7f3f; --warn:#8a6400; --warn-bg:#fff3cd;
+      --danger:#b3261e; --danger-bg:#fdeaea;
+    }
+    :root[data-theme="dark"] {
+      --bg:#15171c; --surface:#1c1f26; --surface-2:#22262e; --fg:#e6e8ec; --muted:#9aa3b2;
+      --border:#2a2e37; --accent:#6c9bff; --done:#3ddc84; --warn:#f0c04c; --warn-bg:#3a301a;
+      --danger:#ff7a72; --danger-bg:#3a2020;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font: 16px/1.6 system-ui, -apple-system, sans-serif;
+      display: flex; align-items: flex-start; min-height: 100vh;
+    }
+    h1,h2,h3 { line-height:1.25; }
+    a { color: var(--accent); }
+
+    nav.toc {
+      position: sticky; top: 0; align-self: flex-start; width: 220px; flex-shrink: 0;
+      height: 100vh; overflow-y: auto; padding: 1.25rem 1rem; background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+    nav.toc .toc-title { font-size:.75rem; text-transform:uppercase; letter-spacing:.05em;
+      color: var(--muted); margin: 0 0 .5rem; }
+    nav.toc ol { list-style:none; margin:0; padding:0; }
+    nav.toc li { margin: 0; }
+    nav.toc a { display:block; padding:.35rem .5rem; border-radius:6px; font-size:.85rem;
+      color: var(--muted); text-decoration:none; }
+    nav.toc a:hover { background: var(--surface-2); color: var(--fg); }
+    nav.toc a.active { background: var(--surface-2); color: var(--accent); font-weight:600; }
+
+    main.content { flex:1; min-width:0; max-width: 900px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+
+    header.spec-header {
+      position: sticky; top:0; z-index:2; background: var(--bg);
+      padding: 1.5rem 0 1rem; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem;
+    }
+    .status { display:inline-block; padding:.3rem .7rem; border-radius:999px; font-weight:600; font-size:.8rem; }
+    .status.draft { background: var(--warn-bg); color: var(--warn); }
+    .status.approved { background: var(--surface-2); color: var(--done); }
+    .progress-track { height:6px; border-radius:999px; background: var(--surface-2); margin-top:.75rem; overflow:hidden; }
+    .progress-fill { height:100%; background: var(--accent); width:0%; transition: width .2s ease; }
+    .progress-label { font-size:.8rem; color: var(--muted); margin-top:.35rem; }
+
+    section { scroll-margin-top: 1rem; margin-bottom: 2.5rem; }
+    table { border-collapse:collapse; width:100%; margin:1rem 0; }
+    th,td { border:1px solid var(--border); padding:.5rem .7rem; text-align:left; vertical-align:top; }
+    th { background: var(--surface); }
+    code,.mono { font-family: ui-monospace, 'JetBrains Mono', monospace; }
+    pre { background: var(--surface); border:1px solid var(--border); border-radius:8px;
+      padding: 1rem; overflow-x:auto; }
+
+    .note,.example,.warning,.issue { border-left:4px solid var(--border); padding:.4rem .8rem;
+      margin:1rem 0; background: var(--surface); border-radius: 0 6px 6px 0; }
+    .warning { border-color: var(--warn); background: var(--warn-bg); }
+    .issue { border-color: var(--danger); background: var(--danger-bg); }
+
+    .badge { display:inline-block; padding:.1rem .5rem; border-radius:4px; font-size:.75rem;
+      font-weight:700; letter-spacing:.02em; }
+    .badge-must { background: var(--danger-bg); color: var(--danger); }
+    .badge-should { background: var(--warn-bg); color: var(--warn); }
+    .badge-may { background: var(--surface-2); color: var(--muted); }
+
+    .scenario { border:1px solid var(--border); border-radius:8px; padding:.6rem .9rem;
+      margin:.9rem 0; background: var(--surface); }
+    .scenario ul { margin:.4rem 0 0; }
+
+    ol.algorithm li { margin:.2rem 0; }
+    ul.tasks { list-style:none; padding-left:0; }
+    li.task { margin:.4rem 0; padding:.4rem .6rem; border-radius:6px; background: var(--surface); }
+    li.task[data-status="done"] .task-desc { color: var(--done); text-decoration:line-through; }
+    .req-refs { color: var(--muted); font-size:.85em; }
+
+    @media (max-width: 780px) {
+      nav.toc { display:none; }
+      main.content { margin: 0; padding: 0 1rem 3rem; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="toc" aria-label="Table of contents">
+    <p class="toc-title">Contents</p>
+    <ol>
+      <li><a href="#summary">1. Summary</a></li>
+      <li><a href="#problem">2. Problem / Motivation</a></li>
+      <li><a href="#scope">3. Scope &amp; Non-Goals</a></li>
+      <li><a href="#conformance">4. Conformance</a></li>
+      <li><a href="#requirements">5. Requirements</a></li>
+      <li><a href="#acceptance">6. Acceptance Criteria</a></li>
+      <li><a href="#algorithms">7. Behavior / Algorithms</a></li>
+      <li><a href="#design">8. Design (How)</a></li>
+      <li><a href="#evidence">9. Evidence &amp; Coverage Limits</a></li>
+      <li><a href="#lifecycle">10. Spec Lifecycle</a></li>
+      <li><a href="#team">11. Team &amp; Ownership</a></li>
+      <li><a href="#tasks">12. Tasks</a></li>
+      <li><a href="#open-questions">13. Open Questions</a></li>
+      <li><a href="#approval">14. Approval</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+    <header class="spec-header">
+      <h1>Specification: Agent Conversation Workspace</h1>
+      <p class="status draft">Status: DRAFT — awaiting user approval</p>
+      <div class="progress-track"><div class="progress-fill" data-progress-fill></div></div>
+      <p class="progress-label" data-progress-label>0 / 0 tasks complete</p>
+    </header>
+
+    <section id="summary">
+      <h2>1. Summary</h2>
+      <p>
+        Make the agent conversation the primary surface of the Hub: reachable in one click from a
+        project-and-agents rail, occupying the whole content area with a single header, and usable
+        while the agent is running. This is row
+        <a href="../../roadmaps/hub-native-experience.html#H1">H1</a> of the
+        <a href="../../roadmaps/hub-native-experience.html">Hub-Native Experience roadmap</a>.
+      </p>
+      <p>
+        The backend for all of this already exists. This change is almost entirely a client-side
+        correction: the shipped interface hides a working merged timeline behind a master-detail
+        list and a tab bar, and it disables the composer for the exact duration in which the durable
+        inbound queue was built to accept input.
+      </p>
+    </section>
+
+    <section id="problem">
+      <h2>2. Problem / Motivation</h2>
+
+      <h3>2.1 The operator cannot talk to a running agent</h3>
+      <p>
+        This is the sharpest problem, and it is a contradiction rather than a missing feature. The
+        approved <code>agent-inbound-queue</code> delta spec requires that entries arriving while an
+        agent is running are queued and delivered at the start of the next turn, and the approved
+        <code>agent-conversation-timeline</code> delta spec requires that operator input submitted
+        during a run appears immediately in an undelivered state and that the operator "may continue
+        submitting further input."
+      </p>
+      <p>
+        The backend honours this. <code>POST /api/v1/agent/trigger</code> returns
+        <code>status: "queued"</code> with a <code>queue_entry_id</code>, persists a
+        <code>queue_entry_queued</code> event, and broadcasts it over SSE. The chat endpoint appends
+        still-queued entries to the timeline in the undelivered state.
+      </p>
+      <p>
+        The interface then throws it away. In <code>AgentOutputPanel.tsx</code>,
+        <code>interactionLocked</code> is defined as
+        <code>isRunning || isSending || handoffState === 'preparing' || isBindingNewSession</code>,
+        and that flag disables the textarea and the send button. So during precisely the window the
+        queue exists to serve, the operator is locked out and the placeholder reads
+        "<em>agent is responding&hellip;</em>". A durable queue whose only human producer cannot
+        reach it is dead weight.
+      </p>
+
+      <h3>2.2 The conversation is buried</h3>
+      <p>
+        Reaching a conversation costs four steps: open <em>Agents</em>, pick a filter tab, select an
+        agent from a 240&nbsp;px master list, then find the Output tab inside the detail panel. The
+        conversation is a tab inside a panel inside a page. It renders two agent headers, one from
+        the page and one from the panel, and the timeline gets whatever vertical space is left.
+      </p>
+      <p>
+        Meanwhile <em>Messages</em> is a separate top-level destination, even though peer traffic in
+        both directions is already merged into the conversation timeline. The operator is offered
+        two places to read the same records.
+      </p>
+
+      <h3>2.3 The composer is a single-row input with no memory</h3>
+      <p>
+        The composer is a <code>rows={1}</code> textarea with a 96&nbsp;px ceiling &mdash; roughly
+        four lines &mdash; holding its value in component state. Navigating away discards whatever
+        was typed, which the <code>agent-composer</code> delta spec explicitly forbids. Around it sit
+        controls that do not earn their permanent place: a raw session
+        <code>&lt;select&gt;</code> listing truncated UUIDs, a handoff button, and a
+        "Pause scroll" toggle that duplicates what the scroll position already says.
+      </p>
+
+      <p class="note">
+        <strong>Note:</strong> the visual direction for this change was agreed against
+        <code>openspec/changes/2026-07-30-hub-native-experience/mock-full.html</code>. The mock is
+        static and proves layout only; it is a reference, not a contract.
+      </p>
+    </section>
+
+    <section id="scope">
+      <h2>3. Scope &amp; Non-Goals</h2>
+
+      <h3>In scope</h3>
+      <ul>
+        <li>A navigation rail listing the current project and its agents, replacing the flat page
+            list.</li>
+        <li>Direct navigation from rail or overview roster to a full-height agent conversation, and
+            back to the project in one action.</li>
+        <li>Removal of the <em>Agents</em> master-detail page and the <em>Messages</em> destination
+            from navigation, leaving their records and APIs untouched.</li>
+        <li>Input accepted, submitted, and queued while a turn is running.</li>
+        <li>An autosizing composer with per-conversation drafts that survive navigation and reload.</li>
+        <li>Consolidation of conversation controls into a small visible set plus a keyboard-operable
+            overflow menu.</li>
+        <li>A banner stack above the composer for run failure, stream loss, and blocked-queue
+            conditions.</li>
+        <li>The existing context-usage indicator placed in the composer.</li>
+        <li>A rail data adapter shaped for many projects but populated with the one authenticated
+            project.</li>
+      </ul>
+
+      <h3>Non-Goals</h3>
+      <ul>
+        <li><strong>Real multi-project switching or project creation.</strong> Authentication binds
+            one API key to one project; see roadmap
+            <a href="../../roadmaps/hub-native-experience.html#RP-1">RP-1</a>. No control in this
+            change may imply a second project exists.</li>
+        <li><strong>Composer trigger menus</strong> for <code>@path</code>, <code>/command</code>,
+            and <code>$skill</code>. These need a workspace path-listing endpoint that does not
+            exist, and they are roadmap row
+            <a href="../../roadmaps/hub-native-experience.html#H2">H2</a>.</li>
+        <li><strong>Changing what a turn receives.</strong> Queue semantics, hop budget, per-turn
+            cap, and delivery ordering are unchanged.</li>
+        <li><strong>Changing which agent handles a conversation from inside the composer.</strong>
+            The composer shows <em>which</em> agent is active (<a href="#FR-10">FR-10</a>); it does
+            not offer a searchable in-place switcher. Once every agent is one click away in the
+            rail, a switcher's remaining value is reassigning an in-flight conversation, which is a
+            change to turn routing rather than to layout. It belongs with the other composer
+            selectors in row <a href="../../roadmaps/hub-native-experience.html#H2">H2</a>.</li>
+        <li><strong>Runner records, model reassignment, charters, or templates</strong> &mdash;
+            roadmap row H5.</li>
+        <li><strong>Specification authoring, requirement traceability, and approval gates</strong>
+            &mdash; roadmap rows H6 and H7.</li>
+        <li><strong>Token accounting and budgets</strong> &mdash; roadmap row H4.</li>
+        <li><strong>Deleting message storage, message APIs, or the agents API.</strong> Only the
+            navigation destinations go.</li>
+        <li><strong>A permission-mode control.</strong> No permission behaviour exists to control
+            yet.</li>
+        <li><strong>A project-level agent directory.</strong> Once agents are reachable from the
+            rail and the overview roster, a bulk list has no remaining job; it may return if a real
+            bulk-management workflow appears.</li>
+      </ul>
+    </section>
+
+    <section id="conformance">
+      <h2>4. Conformance</h2>
+
+      <h3>Producer requirements (allowed inputs)</h3>
+      <ul>
+        <li>The operator MAY submit text of any length, containing newlines, at any time, regardless
+            of whether the agent is idle, running, or unlaunchable.</li>
+        <li>The operator MAY navigate away from a conversation, to another agent or to the project
+            overview, while unsent text remains in the composer.</li>
+        <li>The operator MAY reload the page at any point, including with unsent text present.</li>
+        <li>The operator MAY select an agent from the navigation rail or from the project overview's
+            agent roster.</li>
+        <li>The operator MAY operate every conversation control using the keyboard alone.</li>
+      </ul>
+
+      <h3>Consumer requirements (required behavior)</h3>
+      <ul>
+        <li>The interface MUST route input to the existing trigger endpoint unchanged and MUST
+            reflect whichever outcome that endpoint reports &mdash; started or queued &mdash; rather
+            than predicting it.</li>
+        <li>The interface MUST NOT suppress an input affordance on the basis of agent state that the
+            backend accepts.</li>
+        <li>The interface MUST NOT present an affordance whose backing capability does not exist.</li>
+        <li>The interface MUST preserve every behaviour listed in <a href="#FR-16">FR-16</a> exactly
+            as it behaves today.</li>
+      </ul>
+    </section>
+
+    <section id="requirements">
+      <h2>5. Requirements</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Level</th><th>Requirement</th></tr></thead>
+        <tbody>
+          <tr id="FR-1">
+            <td>FR-1</td><td><span class="badge badge-must">MUST</span></td>
+            <td>Selecting an agent from the navigation rail or from the project overview's agent
+                roster MUST open that agent's conversation occupying the full content area, with no
+                intermediate list, filter tab bar, or detail-panel selection step.</td>
+          </tr>
+          <tr id="FR-2">
+            <td>FR-2</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The navigation rail MUST present the current project as a named entry whose children
+                are its agents. Activating the project name MUST navigate to the project overview;
+                activating its expander MUST toggle the agent list without navigating.</td>
+          </tr>
+          <tr id="FR-3">
+            <td>FR-3</td><td><span class="badge badge-must">MUST</span></td>
+            <td>From an agent conversation, the containing project's overview MUST be reachable in a
+                single action.</td>
+          </tr>
+          <tr id="FR-4">
+            <td>FR-4</td><td><span class="badge badge-must">MUST</span></td>
+            <td><em>Agents</em> and <em>Messages</em> MUST be removed as navigation destinations.
+                Message records, the messages API, agent records, and the agents API MUST remain
+                unchanged, because they are still the source data for routing, attribution, and
+                history.</td>
+          </tr>
+          <tr id="FR-5">
+            <td>FR-5</td><td><span class="badge badge-must">MUST</span></td>
+            <td>WHEN the operator submits composer input while the agent is running, THE SYSTEM SHALL
+                enqueue that input and SHALL display it in the timeline in the undelivered state
+                without requiring a manual refresh.</td>
+          </tr>
+          <tr id="FR-6">
+            <td>FR-6</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The composer's text input and its submit control MUST NOT be disabled on account of
+                the agent's running state. They MAY be disabled only while a submission of their own
+                is in flight.</td>
+          </tr>
+          <tr id="FR-7">
+            <td>FR-7</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The composer MUST present at least 3 text rows at rest, MUST grow with its content
+                to at least 12 rows, and MUST scroll rather than grow beyond its maximum.</td>
+          </tr>
+          <tr id="FR-8">
+            <td>FR-8</td><td><span class="badge badge-must">MUST</span></td>
+            <td>Unsent composer text MUST be retained per agent conversation across navigation away
+                and back and across a page reload, MUST be cleared on successful submission, and
+                MUST NOT be visible in or overwritten by another agent's conversation.</td>
+          </tr>
+          <tr id="FR-9">
+            <td>FR-9</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The conversation MUST present exactly one header identifying the agent. No second
+                header, status strip, or duplicate agent name from a containing panel may remain.</td>
+          </tr>
+          <tr id="FR-10">
+            <td>FR-10</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The resting composer MUST show only these controls: submit, stop (while running),
+                the active-agent indicator, and context usage. New conversation, session selection,
+                durable handoff, fold-all, and agent details MUST be reachable from one overflow
+                menu that is fully operable by keyboard.</td>
+          </tr>
+          <tr id="FR-11">
+            <td>FR-11</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The session selection <code>&lt;select&gt;</code> MUST be removed from the resting
+                surface. The current session's continuity state MUST remain visible as text, and
+                session selection MUST move into the overflow menu.</td>
+          </tr>
+          <tr id="FR-12">
+            <td>FR-12</td><td><span class="badge badge-must">MUST</span></td>
+            <td>The manual pause/resume-scroll control MUST be removed. Autoscroll MUST be driven by
+                scroll position: pinned while the operator is at the bottom, suspended once they
+                scroll away, and resumed when they return to the bottom.</td>
+          </tr>
+          <tr id="FR-13">
+            <td>FR-13</td><td><span class="badge badge-must">MUST</span></td>
+            <td>A banner region directly above the composer MUST display run failure, stream loss,
+                and blocked-queue conditions. Simultaneous conditions MUST stack in a stable order,
+                each stating its own condition.</td>
+          </tr>
+          <tr id="FR-14">
+            <td>FR-14</td><td><span class="badge badge-should">SHOULD</span></td>
+            <td>The composer SHOULD display the agent's context-window usage using the existing
+                indicator, and SHOULD render nothing rather than a zero when no context-usage event
+                has been received for that agent.</td>
+          </tr>
+          <tr id="FR-15">
+            <td>FR-15</td><td><span class="badge badge-must">MUST</span></td>
+            <td>Navigation MUST read its project and agent tree from a single adapter whose shape is
+                a collection of projects, populated with exactly the one authenticated project. No
+                control may offer project creation or switching, or otherwise imply that more than
+                one project is reachable.</td>
+          </tr>
+          <tr id="FR-16">
+            <td>FR-16</td><td><span class="badge badge-must">MUST</span></td>
+            <td>Session continuity, durable handoff, stop, withdraw, and deliver-now SHALL CONTINUE
+                TO behave exactly as they do today, including the new-session binding and the
+                handoff state machine.</td>
+          </tr>
+          <tr id="FR-17">
+            <td>FR-17</td><td><span class="badge badge-must">MUST</span></td>
+            <td>Each agent's assigned identity colour MUST appear beside its name in the navigation
+                rail, and MUST NOT be the only means of identifying it &mdash; the name MUST be
+                present in text.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="acceptance">
+      <h2>6. Acceptance Criteria</h2>
+
+      <div class="scenario">
+        <p><strong>AC-1</strong> (satisfies <a href="#FR-1">FR-1</a>)</p>
+        <ul>
+          <li><strong>Given</strong> a project with several agents and the operator on the project overview</li>
+          <li><strong>When</strong> the operator activates one agent in the rail</li>
+          <li><strong>Then</strong> that agent's conversation is rendered as the whole content area,
+              and no agent list, filter tab bar, or "select an agent" placeholder is present in the
+              document</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-2</strong> (satisfies <a href="#FR-1">FR-1</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the project overview showing the agent roster</li>
+          <li><strong>When</strong> the operator activates an agent tile in the roster</li>
+          <li><strong>Then</strong> that agent's conversation opens directly, in the same state as
+              if it had been opened from the rail</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-3</strong> (satisfies <a href="#FR-2">FR-2</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the rail showing the project with its agents expanded</li>
+          <li><strong>When</strong> the operator activates the project's expander</li>
+          <li><strong>Then</strong> the agent list collapses and the active destination is unchanged</li>
+          <li><strong>When</strong> the operator activates the project's name</li>
+          <li><strong>Then</strong> the project overview opens</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-4</strong> (satisfies <a href="#FR-3">FR-3</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the operator in an agent conversation</li>
+          <li><strong>When</strong> the operator activates the back-to-project control</li>
+          <li><strong>Then</strong> the project overview opens in one action, with no intermediate
+              destination</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-5</strong> (satisfies <a href="#FR-4">FR-4</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the Hub is loaded</li>
+          <li><strong>Then</strong> navigation offers no <em>Agents</em> destination and no
+              <em>Messages</em> destination</li>
+          <li><strong>And</strong> <code>GET /api/v1/messages</code> and
+              <code>GET /api/v1/agents</code> respond exactly as before, verified by their existing
+              backend tests passing unmodified</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-6</strong> (satisfies <a href="#FR-5">FR-5</a>, <a href="#FR-6">FR-6</a>)</p>
+        <ul>
+          <li><strong>Given</strong> an agent whose status is running</li>
+          <li><strong>When</strong> the operator types into the composer and submits</li>
+          <li><strong>Then</strong> the composer is enabled throughout, the trigger endpoint is
+              called, and on a <code>queued</code> response the input appears in the timeline in the
+              undelivered state without a refresh</li>
+          <li><strong>And</strong> the operator can immediately submit a second input, which also
+              appears queued, in arrival order after the first</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-7</strong> (satisfies <a href="#FR-6">FR-6</a>)</p>
+        <ul>
+          <li><strong>Given</strong> an agent whose status is running</li>
+          <li><strong>Then</strong> neither the composer textarea nor the submit control carries a
+              disabled state attributable to the running status</li>
+          <li><strong>When</strong> a submission is in flight</li>
+          <li><strong>Then</strong> the submit control may be disabled until that submission
+              settles, and is enabled again afterwards</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-8</strong> (satisfies <a href="#FR-7">FR-7</a>)</p>
+        <ul>
+          <li><strong>Given</strong> an empty composer</li>
+          <li><strong>Then</strong> its rendered height is at least 3 text rows</li>
+          <li><strong>When</strong> the operator enters content exceeding 12 rows</li>
+          <li><strong>Then</strong> the composer height stops increasing and the content scrolls
+              within it</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-9</strong> (satisfies <a href="#FR-8">FR-8</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the operator has typed unsent text in agent A's conversation</li>
+          <li><strong>When</strong> they navigate to agent B and back to agent A</li>
+          <li><strong>Then</strong> agent A's text is present and agent B's composer was empty</li>
+          <li><strong>When</strong> the page is reloaded</li>
+          <li><strong>Then</strong> agent A's text is still present</li>
+          <li><strong>When</strong> the text is submitted successfully</li>
+          <li><strong>Then</strong> the stored draft for agent A is cleared</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-10</strong> (satisfies <a href="#FR-9">FR-9</a>)</p>
+        <ul>
+          <li><strong>Given</strong> an open agent conversation</li>
+          <li><strong>Then</strong> the agent's name appears in exactly one header region, and the
+              document contains no second header or status strip repeating it</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-11</strong> (satisfies <a href="#FR-10">FR-10</a>, <a href="#FR-11">FR-11</a>)</p>
+        <ul>
+          <li><strong>Given</strong> an open agent conversation with the agent idle</li>
+          <li><strong>Then</strong> the resting composer exposes submit, the active-agent indicator,
+              and context usage, and exposes no session selector, handoff button, fold-all control,
+              or scroll toggle</li>
+          <li><strong>When</strong> the agent is running</li>
+          <li><strong>Then</strong> a stop control is additionally visible</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-12</strong> (satisfies <a href="#FR-10">FR-10</a>)</p>
+        <ul>
+          <li><strong>Given</strong> a closed overflow menu</li>
+          <li><strong>When</strong> the operator opens it and moves through it using the keyboard
+              alone</li>
+          <li><strong>Then</strong> new conversation, session selection, handoff, fold-all, and
+              agent details are each reachable and activatable, and dismissing returns focus to the
+              trigger</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-13</strong> (satisfies <a href="#FR-11">FR-11</a>)</p>
+        <ul>
+          <li><strong>Given</strong> a conversation continuing an existing session</li>
+          <li><strong>Then</strong> the continuity state is readable as text on the resting surface</li>
+          <li><strong>When</strong> the operator selects a different session from the overflow menu</li>
+          <li><strong>Then</strong> the conversation switches to it with the same effect as the
+              removed selector had</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-14</strong> (satisfies <a href="#FR-12">FR-12</a>)</p>
+        <ul>
+          <li><strong>Given</strong> a conversation scrolled to the bottom while output streams</li>
+          <li><strong>Then</strong> the view stays pinned to the newest entry and no scroll toggle
+              is present</li>
+          <li><strong>When</strong> the operator scrolls up</li>
+          <li><strong>Then</strong> the view stops following new output</li>
+          <li><strong>When</strong> the operator scrolls back to the bottom</li>
+          <li><strong>Then</strong> following resumes</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-15</strong> (satisfies <a href="#FR-13">FR-13</a>)</p>
+        <ul>
+          <li><strong>Given</strong> a conversation whose last run failed and whose event stream is
+              disconnected</li>
+          <li><strong>Then</strong> two banners are shown above the composer, in a stable order,
+              each naming its own condition</li>
+          <li><strong>When</strong> a condition clears</li>
+          <li><strong>Then</strong> its banner is removed and the remaining banner keeps its
+              position</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-16</strong> (satisfies <a href="#FR-14">FR-14</a>)</p>
+        <ul>
+          <li><strong>Given</strong> an agent for which a context-usage event has been received</li>
+          <li><strong>Then</strong> the composer shows the usage indicator reflecting that event</li>
+          <li><strong>Given</strong> an agent for which no context-usage event has been received</li>
+          <li><strong>Then</strong> no usage indicator and no zero value is rendered</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-17</strong> (satisfies <a href="#FR-15">FR-15</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the rail rendered from the adapter</li>
+          <li><strong>Then</strong> the adapter returns a collection containing exactly one project,
+              and the rail renders it</li>
+          <li><strong>And</strong> the document contains no control offering to add, create, or
+              switch projects</li>
+          <li><strong>When</strong> the adapter is supplied a second project in a test</li>
+          <li><strong>Then</strong> the rail renders both without a change to the rail component</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-18</strong> (satisfies <a href="#FR-16">FR-16</a>)</p>
+        <ul>
+          <li><strong>Given</strong> the existing suites <code>agentChat</code>,
+              <code>agentTimeline</code>, <code>agentTimelineEvents</code>,
+              <code>agentHandoff</code>, and <code>agentStatus</code></li>
+          <li><strong>When</strong> they are run against the reworked conversation</li>
+          <li><strong>Then</strong> every assertion about continuity, handoff, stop, withdraw, and
+              deliver-now passes, with changes limited to how the surface is mounted and queried</li>
+        </ul>
+      </div>
+
+      <div class="scenario">
+        <p><strong>AC-19</strong> (satisfies <a href="#FR-17">FR-17</a>)</p>
+        <ul>
+          <li><strong>Given</strong> a project with several agents</li>
+          <li><strong>Then</strong> each rail entry shows that agent's assigned colour together with
+              its name in text</li>
+          <li><strong>And</strong> the colour matches the one used for that agent in the timeline</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="algorithms">
+      <h2>7. Behavior / Algorithms</h2>
+
+      <h3>7.1 Submitting composer input</h3>
+      <p>
+        This replaces the current path, whose first step is effectively "if the agent is running, do
+        nothing."
+      </p>
+      <ol class="algorithm">
+        <li>If the composer text is empty or whitespace only, stop.</li>
+        <li>If a submission for this conversation is already in flight, stop.</li>
+        <li>Mark a submission in flight and clear the composer text optimistically.</li>
+        <li>Call the trigger endpoint with the agent, the text, and the current session selection.
+            Do not branch on the agent's running state &mdash; the endpoint decides.</li>
+        <li>If the endpoint reports the turn started, clear the stored draft and let the existing
+            output stream render the turn.</li>
+        <li>If the endpoint reports the input was queued, clear the stored draft and rely on the
+            <code>queue_entry_queued</code> event and the chat endpoint's undelivered entries to
+            render it; do not synthesize a local entry, because the timeline is built from stored
+            records and must not gain an entry the server did not record.</li>
+        <li>If the call fails, restore the text into the composer, restore the stored draft, and
+            raise a run-failure banner.</li>
+        <li>Clear the in-flight mark.</li>
+      </ol>
+
+      <h3>7.2 Draft persistence</h3>
+      <ol class="algorithm">
+        <li>Drafts are keyed by agent name, under one namespaced storage key.</li>
+        <li>On mounting a conversation, read the draft for that agent and seed the composer with it;
+            an absent draft seeds an empty composer.</li>
+        <li>On every change to the composer text, write the draft for that agent, debounced.</li>
+        <li>On successful submission, delete that agent's draft.</li>
+        <li>If storage is unavailable, the composer still functions; only persistence is lost. This
+            mirrors how the rail width is persisted and must never break the surface.</li>
+      </ol>
+
+      <h3>7.3 Autoscroll</h3>
+      <ol class="algorithm">
+        <li>Maintain a single derived flag: the operator is at the bottom if the scroll position is
+            within a small threshold of the maximum.</li>
+        <li>When new content arrives and the flag is set, scroll to the newest entry.</li>
+        <li>When new content arrives and the flag is clear, do not move the viewport.</li>
+        <li>Recompute the flag on every scroll event. No manual override control exists, because the
+            operator's scroll position already expresses the intent the control duplicated.</li>
+      </ol>
+
+      <h3>7.4 Control placement</h3>
+      <ol class="algorithm">
+        <li>Render submit, the active-agent indicator, and context usage in the composer control
+            row.</li>
+        <li>If the agent is running, additionally render stop.</li>
+        <li>Render every remaining conversation action inside the overflow menu, in a fixed order:
+            new conversation, session selection, handoff, fold all, agent details.</li>
+        <li>If an action is unavailable &mdash; for example handoff on a manual runner &mdash;
+            present it disabled with its reason, rather than omitting it, so the menu's contents do
+            not shift between agents.</li>
+      </ol>
+    </section>
+
+    <section id="design">
+      <h2>8. Design (How)</h2>
+      <p>
+        The conversation surface stops being a tab inside <code>AgentsPage &rarr;
+        AgentDetailPanel</code> and becomes a destination in its own right. <code>App.tsx</code>'s
+        flat <code>Page</code> union gains an agent-scoped destination, so the active view is either
+        a project-level view or one agent's conversation. <code>AgentOutputPanel</code> is split:
+        the timeline host stays, and the composer becomes its own component owning drafts, controls,
+        and the banner stack.
+      </p>
+      <p>
+        No backend change is required. Every endpoint and event this change consumes already exists
+        and is already exercised by tests.
+      </p>
+
+      <pre>
+  Rail (adapter: Project[] — one entry today)
+    └─ Project ▾ ──────────────► ProjectOverview
+         ├─ agent A ───────────► AgentConversation(agent)
+         ├─ agent B                   │
+         └─ agent C                   ├── one header  ── back-to-project
+                                      ├── AgentTimeline  (unchanged)
+                                      ├── BannerStack    (new)
+                                      └── Composer       (new)
+                                            ├── textarea + draft store
+                                            ├── submit / stop
+                                            ├── active agent · context usage
+                                            └── overflow ▸ new · session · handoff
+                                                            · fold all · details
+
+  POST /api/v1/agent/trigger  ──►  { status: "started" | "queued", queue_entry_id? }
+  SSE  queue_entry_queued / queue_entry_delivered / agent_output   (all existing)
+      </pre>
+
+      <h3>Key decisions</h3>
+      <ul>
+        <li><strong>The composer never inspects <code>isRunning</code> to decide whether to accept
+            input.</strong> The endpoint already returns which of the two outcomes occurred, and the
+            queue is durable. Any client-side prediction of agent state is a second source of truth
+            that can only be wrong.</li>
+        <li><strong>Queued input is rendered from server records, not optimistically.</strong> The
+            <code>agent-conversation-timeline</code> spec requires entries to be placed by recorded
+            association. A locally synthesized entry would violate that and would double-render when
+            the real record arrives.</li>
+        <li><strong>Drafts live in browser storage keyed by agent, not on the server.</strong> A
+            draft is unsent operator text with no coordination value; persisting it server-side
+            would create a record other agents could observe. Storage failure degrades to
+            no-persistence rather than breaking the composer.</li>
+        <li><strong>The rail consumes a project collection from day one.</strong> Shaping the
+            adapter now costs nothing and means row H3 changes what fills the collection rather than
+            rewriting the rail. Shaping it as a single project would guarantee a rewrite.</li>
+        <li><strong>Messages disappear as a destination, not as a model.</strong> Peer traffic is
+            already merged into the timeline, so the destination is redundant; the records remain
+            source data for routing, attribution, and history.</li>
+        <li><strong>Unavailable overflow actions are shown disabled with a reason.</strong> A menu
+            whose contents change between agents forces the operator to re-learn it each time.</li>
+      </ul>
+
+      <h3>Security considerations</h3>
+      <ul>
+        <li>No new endpoint, no new permission, and no change to authentication. The change consumes
+            the same project-scoped bearer credential and the same signed SSE ticket as today.</li>
+        <li>Drafts are unsent operator text held in browser storage on the operator's own machine.
+            They are not transmitted and not shared between agents. Draft keys are namespaced and
+            keyed by agent name, which is already constrained by
+            <code>^[a-zA-Z0-9_-]{1,32}$</code>, so a key cannot be forged into another namespace.</li>
+        <li>Removing navigation destinations does not remove authorization checks; the underlying
+            endpoints keep their existing dependencies.</li>
+        <li>No new runtime dependency is introduced.</li>
+      </ul>
+    </section>
+
+    <section id="evidence">
+      <h2>9. Evidence &amp; Coverage Limits</h2>
+
+      <h3>Sources inspected</h3>
+      <table>
+        <thead><tr><th>Source</th><th>What it establishes</th></tr></thead>
+        <tbody>
+          <tr><td><code>hub/ui/src/components/agents/AgentOutputPanel.tsx</code></td>
+              <td>The running-turn lock, the single-row composer with a 96&nbsp;px ceiling, the
+                  in-component draft state, the session selector, and the scroll toggle &mdash; the
+                  concrete defects this change corrects.</td></tr>
+          <tr><td><code>hub/ui/src/components/agents/AgentsPage.tsx</code>,
+                  <code>AgentDetailPanel.tsx</code></td>
+              <td>The master-detail and tab structure being removed, and the duplicate header.</td></tr>
+          <tr><td><code>hub/ui/src/App.tsx</code>, <code>components/layout/Sidebar.tsx</code></td>
+              <td>The flat eleven-entry page model being replaced by a project-and-agents tree.</td></tr>
+          <tr><td><code>hub/hub/api/v1/agent_trigger.py</code></td>
+              <td>That the backend already returns <code>status: "queued"</code> with a
+                  <code>queue_entry_id</code> and broadcasts <code>queue_entry_queued</code>, so
+                  <a href="#FR-5">FR-5</a> needs no server work.</td></tr>
+          <tr><td><code>hub/hub/api/v1/agent_chat.py</code></td>
+              <td>That still-queued entries are appended to the timeline in the undelivered state.</td></tr>
+          <tr><td><code>hub/hub/auth.py</code></td>
+              <td>That one API key resolves to one <code>project_id</code> and the SSE ticket is
+                  signed per project &mdash; the basis for the multi-project non-goal.</td></tr>
+          <tr><td><code>hub/ui/src/components/context/</code>, <code>output_recording.py</code></td>
+              <td>That context-usage capture and rendering already exist end to end, reducing
+                  <a href="#FR-14">FR-14</a> to placement.</td></tr>
+          <tr><td>Delta specs <code>agent-inbound-queue</code>,
+                  <code>agent-conversation-timeline</code>, <code>agent-composer</code></td>
+              <td>The approved requirements this change brings the interface back into line with.</td></tr>
+          <tr><td>Existing suites <code>agentChat</code>, <code>agentTimeline</code>,
+                  <code>agentTimelineEvents</code>, <code>agentHandoff</code>,
+                  <code>agentStatus</code>, <code>App-mount</code></td>
+              <td>The regression surface for <a href="#FR-16">FR-16</a>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Coverage limits</h3>
+      <ul>
+        <li>No test currently asserts that the composer accepts input while an agent is running.
+            That gap is why the contradiction between the shipped interface and
+            <code>agent-inbound-queue</code> survived phases 6&ndash;8. It is closed by
+            <a href="#tasks">T6</a>.</li>
+        <li>No test currently asserts draft persistence; <code>agent-composer</code>'s
+            "draft survives navigation" scenario has never been exercised.</li>
+        <li>The visual direction comes from a static mock. It proves layout at one viewport and
+            proves nothing about live data, streaming, or state transitions.</li>
+        <li>Backend behaviour is taken as given from reading the endpoints and their existing tests;
+            this change adds no backend test because it adds no backend behaviour. If applying it
+            reveals that the trigger endpoint's queued path is untested, that test belongs to this
+            change.</li>
+        <li>Accessibility beyond keyboard operability of the overflow menu
+            (<a href="#FR-10">FR-10</a>) is not specified here and is not claimed.</li>
+      </ul>
+    </section>
+
+    <section id="lifecycle">
+      <h2>10. Spec Lifecycle</h2>
+      <p>
+        <strong>Model: flow-forward.</strong> <code>spec/changes/agent-conversation-workspace/</code>
+        is frozen at archive time and becomes history. Corrections before archive are made here;
+        corrections after archive belong to a new change.
+      </p>
+      <p><strong>Reconciliation rules:</strong></p>
+      <ol class="algorithm">
+        <li>On approval, this document is the authority for the behaviour it defines. Where it
+            conflicts with phases 9&ndash;16 of the openspec umbrella, this document wins.</li>
+        <li>Phases 10 (partially), 11, and 12 of
+            <code>openspec/changes/2026-07-30-hub-native-experience/tasks.md</code> are annotated as
+            superseded by roadmap row H1, naming this spec. Superseded tasks are not marked complete
+            &mdash; only real implementation closes work, and it closes it here.</li>
+        <li>The delta specs <code>agent-inbound-queue</code>,
+            <code>agent-conversation-timeline</code>, and <code>agent-composer</code> remain
+            authoritative for the behaviour they describe. This spec brings the interface into
+            conformance with them; it does not restate or amend them.</li>
+        <li>On archive, roadmap row <a href="../../roadmaps/hub-native-experience.html#H1">H1</a>
+            moves to <em>done</em> and this document's entry in <code>spec/index.json</code> is
+            updated to its archived path.</li>
+      </ol>
+    </section>
+
+    <section id="team">
+      <h2>11. Team &amp; Ownership</h2>
+      <p>
+        <strong>Quality governance: not configured.</strong> <code>agentweave.yml</code> has no
+        <code>quality:</code> block, and there is no <code>.agentweave/roles.json</code> or
+        <code>.agentweave/session.json</code>. The project is configured with a single agent,
+        <code>codex</code>, as principal in hierarchical mode.
+      </p>
+      <table>
+        <thead><tr><th>Role</th><th>Agent</th><th>Responsibility</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>frontend_dev</td><td>codex</td>
+              <td>Navigation rail and adapter, conversation destination, composer, drafts, controls,
+                  banners.</td><td>OK codex</td></tr>
+          <tr><td>qa_engineer</td><td>codex</td>
+              <td>Test specs written before each behaviour; regression coverage for
+                  <a href="#FR-16">FR-16</a>.</td><td>OK codex (not separated)</td></tr>
+          <tr><td>code_reviewer</td><td>&mdash;</td>
+              <td>Independent review of the queue-during-run path and the regression surface.</td>
+              <td>missing</td></tr>
+        </tbody>
+      </table>
+      <p class="warning">
+        <strong>⚠ No reviewer assigned</strong> &mdash; the project has one agent, so implementation
+        and review would share an author, which is exactly the echo-chamber case review exists to
+        prevent. Add a second agent and run
+        <code>agentweave roles add &lt;agent&gt; code_reviewer</code>, or accept that review of this
+        change is the operator's own.
+      </p>
+    </section>
+
+    <section id="tasks">
+      <h2>12. Tasks</h2>
+      <p class="progress" data-total="17" data-done="0">0 / 17 tasks complete</p>
+
+      <h3>Navigation and shell — codex</h3>
+      <ul class="tasks">
+        <li class="task" data-task-id="T1" data-status="pending" data-role="qa_engineer"
+            data-agent="codex" data-requirements="FR-1,FR-2,FR-3">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Write the navigation test spec: rail project entry with expander
+            versus name, agent activation opening a conversation directly, roster activation, and
+            back-to-project in one action.</span>
+          <span class="req-refs">(<a href="#FR-1">FR-1</a>, <a href="#FR-2">FR-2</a>, <a href="#FR-3">FR-3</a>)</span>
+        </li>
+        <li class="task" data-task-id="T2" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-2,FR-15,FR-17">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Build the rail data adapter returning a project collection, and
+            render the project-and-agents tree from it with per-agent identity colour beside the
+            name.</span>
+          <span class="req-refs">(<a href="#FR-2">FR-2</a>, <a href="#FR-15">FR-15</a>, <a href="#FR-17">FR-17</a>)</span>
+        </li>
+        <li class="task" data-task-id="T3" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-1,FR-9">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Add the agent-scoped conversation destination to the app's view
+            model and render the conversation full-height with exactly one header.</span>
+          <span class="req-refs">(<a href="#FR-1">FR-1</a>, <a href="#FR-9">FR-9</a>)</span>
+        </li>
+        <li class="task" data-task-id="T4" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-1,FR-4">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Remove the Agents master-detail page, its filter tabs and grid
+            view, and the Messages navigation destination, leaving both APIs and all records
+            untouched.</span>
+          <span class="req-refs">(<a href="#FR-1">FR-1</a>, <a href="#FR-4">FR-4</a>)</span>
+        </li>
+        <li class="task" data-task-id="T5" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-1,FR-3">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Make the project overview's agent roster open a conversation
+            directly, and add the back-to-project control to the conversation header.</span>
+          <span class="req-refs">(<a href="#FR-1">FR-1</a>, <a href="#FR-3">FR-3</a>)</span>
+        </li>
+      </ul>
+
+      <h3>Talking to a running agent — codex</h3>
+      <ul class="tasks">
+        <li class="task" data-task-id="T6" data-status="pending" data-role="qa_engineer"
+            data-agent="codex" data-requirements="FR-5,FR-6">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Write the queue-during-run test spec: composer enabled while
+            running, submission calls the trigger endpoint, a queued response renders an undelivered
+            timeline entry, and a second submission queues in order behind the first.</span>
+          <span class="req-refs">(<a href="#FR-5">FR-5</a>, <a href="#FR-6">FR-6</a>)</span>
+        </li>
+        <li class="task" data-task-id="T7" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-5,FR-6">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Remove the running state from the composer's disabled condition
+            and implement the submission algorithm in §7.1, including failure restoring the typed
+            text.</span>
+          <span class="req-refs">(<a href="#FR-5">FR-5</a>, <a href="#FR-6">FR-6</a>)</span>
+        </li>
+      </ul>
+
+      <h3>Composer — codex</h3>
+      <ul class="tasks">
+        <li class="task" data-task-id="T8" data-status="pending" data-role="qa_engineer"
+            data-agent="codex" data-requirements="FR-7,FR-8">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Write the composer test spec: resting and maximum heights, growth
+            then scroll, and per-agent draft retention across navigation, reload, and successful
+            submission.</span>
+          <span class="req-refs">(<a href="#FR-7">FR-7</a>, <a href="#FR-8">FR-8</a>)</span>
+        </li>
+        <li class="task" data-task-id="T9" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-7,FR-8">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Extract the composer into its own component with bounded
+            autosizing per FR-7 and the draft store per §7.2, degrading to no-persistence when
+            storage is unavailable.</span>
+          <span class="req-refs">(<a href="#FR-7">FR-7</a>, <a href="#FR-8">FR-8</a>)</span>
+        </li>
+        <li class="task" data-task-id="T10" data-status="pending" data-role="qa_engineer"
+            data-agent="codex" data-requirements="FR-10,FR-11">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Write the control-placement test spec: the resting control set
+            idle and running, absence of the removed controls, and full keyboard operation of the
+            overflow menu including focus return on dismissal.</span>
+          <span class="req-refs">(<a href="#FR-10">FR-10</a>, <a href="#FR-11">FR-11</a>)</span>
+        </li>
+        <li class="task" data-task-id="T11" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-10">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Build the composer control row and the keyboard-operable overflow
+            menu with the fixed ordering and disabled-with-reason behaviour from §7.4.</span>
+          <span class="req-refs">(<a href="#FR-10">FR-10</a>)</span>
+        </li>
+        <li class="task" data-task-id="T12" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-11,FR-16">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Move session selection into the overflow menu and keep the
+            continuity state visible as text, preserving the new-session binding and handoff state
+            machine unchanged.</span>
+          <span class="req-refs">(<a href="#FR-11">FR-11</a>, <a href="#FR-16">FR-16</a>)</span>
+        </li>
+        <li class="task" data-task-id="T13" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-12">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Remove the pause/resume-scroll control and drive autoscroll from
+            scroll position per §7.3.</span>
+          <span class="req-refs">(<a href="#FR-12">FR-12</a>)</span>
+        </li>
+        <li class="task" data-task-id="T14" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-13">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Build the banner stack above the composer for run failure, stream
+            loss, and blocked-queue conditions, with stable ordering across simultaneous
+            conditions.</span>
+          <span class="req-refs">(<a href="#FR-13">FR-13</a>)</span>
+        </li>
+        <li class="task" data-task-id="T15" data-status="pending" data-role="frontend_dev"
+            data-agent="codex" data-requirements="FR-14">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Place the existing context-usage indicator in the composer control
+            row, rendering nothing when no usage event has been received.</span>
+          <span class="req-refs">(<a href="#FR-14">FR-14</a>)</span>
+        </li>
+      </ul>
+
+      <h3>Regression and consistency — codex</h3>
+      <ul class="tasks">
+        <li class="task" data-task-id="T16" data-status="pending" data-role="qa_engineer"
+            data-agent="codex" data-requirements="FR-16">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Re-point the existing agentChat, agentTimeline,
+            agentTimelineEvents, agentHandoff, agentStatus, and App-mount suites at the new surface,
+            changing only mounting and queries, and confirm every continuity, handoff, stop,
+            withdraw, and deliver-now assertion still passes.</span>
+          <span class="req-refs">(<a href="#FR-16">FR-16</a>)</span>
+        </li>
+        <li class="task" data-task-id="T17" data-status="pending" data-role="qa_engineer"
+            data-agent="codex" data-requirements="FR-4,FR-15,FR-17">
+          <input type="checkbox" disabled>
+          <span class="task-desc">Assert the removed destinations are absent while the messages and
+            agents endpoints still respond unchanged, that no project create/switch control exists,
+            that the adapter renders a supplied second project without a rail change, and that rail
+            colours match the timeline.</span>
+          <span class="req-refs">(<a href="#FR-4">FR-4</a>, <a href="#FR-15">FR-15</a>, <a href="#FR-17">FR-17</a>)</span>
+        </li>
+      </ul>
+    </section>
+
+    <section id="open-questions">
+      <h2>13. Open Questions</h2>
+      <p>None. Two questions raised during planning were resolved from the codebase rather than left
+         open:</p>
+      <ul>
+        <li><strong>Whether composer trigger menus belong in this change.</strong> Resolved: no.
+            Their workspace-path result source needs a path-listing endpoint that does not exist, so
+            including them would turn a client-side change into a client-and-server change. They are
+            roadmap row <a href="../../roadmaps/hub-native-experience.html#H2">H2</a>, which becomes
+            ready the moment this lands.</li>
+        <li><strong>Whether to keep a project-level agent directory.</strong> Resolved: no, per the
+            operator's decision. It is listed as a non-goal and may return if a real bulk-management
+            workflow appears.</li>
+      </ul>
+      <p class="note">
+        <strong>Note:</strong> two questions remain open at the <em>epic</em> level and deliberately
+        do not block this change &mdash; operator identity versus project-scoped authentication
+        (<a href="../../roadmaps/hub-native-experience.html#RP-1">RP-1</a>) and specification file
+        authority (<a href="../../roadmaps/hub-native-experience.html#RP-2">RP-2</a>). Both are
+        recorded as research prerequisites on the roadmap, and this change is scoped so that neither
+        answer can invalidate it.
+      </p>
+    </section>
+
+    <section id="approval">
+      <h2>14. Approval</h2>
+      <p>This specification requires explicit user approval before implementation.</p>
+      <p><strong>Status:</strong> <span class="mono">draft</span></p>
+      <p><strong>Approved by:</strong> <span class="mono">—</span> ·
+         <strong>on:</strong> <span class="mono">—</span></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      document.addEventListener('click', function (e) {
+        var a = e.target.closest && e.target.closest('a[href^="#"]');
+        if (!a) return;
+        var id = a.getAttribute('href').slice(1);
+        var target = id ? document.getElementById(id) : null;
+        e.preventDefault();
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    })();
+
+    (function () {
+      var tasks = document.querySelectorAll('li.task');
+      var total = tasks.length;
+      var done = document.querySelectorAll('li.task[data-status="done"]').length;
+      var pct = total ? Math.round((done / total) * 100) : 0;
+      var fill = document.querySelector('[data-progress-fill]');
+      var label = document.querySelector('[data-progress-label]');
+      if (fill) fill.style.width = pct + '%';
+      if (label) label.textContent = done + ' / ' + total + ' tasks complete';
+    })();
+
+    (function () {
+      var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+      var sections = links
+        .map(function (a) { return document.querySelector(a.getAttribute('href')); })
+        .filter(Boolean);
+      if (!('IntersectionObserver' in window) || sections.length === 0) return;
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var link = document.querySelector('nav.toc a[href="#' + entry.target.id + '"]');
+          if (!link) return;
+          if (entry.isIntersecting) {
+            links.forEach(function (l) { l.classList.remove('active'); });
+            link.classList.add('active');
+          }
+        });
+      }, { rootMargin: '-10% 0px -80% 0px' });
+      sections.forEach(function (s) { observer.observe(s); });
+    })();
+  </script>
+</body>
+</html>

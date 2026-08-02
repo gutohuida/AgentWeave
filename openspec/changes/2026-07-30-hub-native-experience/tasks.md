@@ -1294,6 +1294,10 @@ before concurrency does.*
 
 ## 9. Accounting and budgets
 
+> **SUPERSEDED (2026-08-02)** by roadmap row **H4** in
+> `spec/roadmaps/hub-native-experience.html`. Ready to specify; carries no dependency on H1 and
+> may be picked up in parallel. Do not implement from this list.
+
 - [ ] 9.1 Parse runner token usage — Claude Code `result.usage` / `modelUsage` from stream-json,
       Codex `event_msg.payload.type == "token_count"` under `~/.codex`, OpenCode step telemetry —
       and record it per turn.
@@ -1309,6 +1313,14 @@ before concurrency does.*
 *New phase. `Project` is already a table and all five tables carry `project_id`, but there is no
 projects API and no UI. `hub-visual-language` depends on this.*
 
+> **SUPERSEDED — split across two roadmap rows (2026-08-02).** See
+> `spec/roadmaps/hub-native-experience.html`. Items 10.3–10.7 belong to row **H1**
+> (`spec/changes/agent-conversation-workspace/spec.html`). Items 10.1–10.2 belong to row **H3**,
+> which is **blocked** on research prerequisite RP-1: authentication binds one API key to one
+> `project_id` and the SSE ticket is signed per project, so a project switcher is not a frontend
+> task. Do not implement from this list — implement from the child spec. These items stay
+> unchecked until the real work lands there.
+
 - [ ] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
       agent, and token budgets.
 - [ ] 10.2 Give each project a working directory and record it.
@@ -1322,6 +1334,16 @@ projects API and no UI. `hub-visual-language` depends on this.*
 - [ ] 10.8 **`/handoff`**
 
 ## 11. Composer, first cut
+
+> **SUPERSEDED — split across two roadmap rows (2026-08-02).** See
+> `spec/roadmaps/hub-native-experience.html`. Item 11.1 belongs to row **H1**
+> (`spec/changes/agent-conversation-workspace/spec.html`). Items 11.2–11.5 belong to row **H2**,
+> which additionally requires a workspace path-listing endpoint that does not exist yet.
+> Items 11.6–11.7 are **already implemented** but were never checked off: `record_context_usage`
+> in `hub/hub/output_recording.py`, `context_usage` on the agent summary, and
+> `hub/ui/src/components/context/ContextUsageIndicator.tsx` with a compact variant, covered by
+> `contextPresentation.test.tsx`. What remains of them is placement in the composer, which is H1
+> task T15. Do not implement from this list.
 
 - [ ] 11.1 Replace the chat input with an autosizing composer: bounded growth then scroll, submit vs.
       newline gestures, persisted per-conversation draft.
@@ -1342,6 +1364,13 @@ projects API and no UI. `hub-visual-language` depends on this.*
 
 ## 12. Composer controls
 
+> **SUPERSEDED — split across two roadmap rows (2026-08-02).** See
+> `spec/roadmaps/hub-native-experience.html`. Items 12.2–12.3 (inline controls with overflow
+> collapse, banner stack) belong to row **H1**
+> (`spec/changes/agent-conversation-workspace/spec.html`). Item 12.1 (the searchable in-place
+> agent selector) belongs to row **H2** — H1 shows which agent is active but does not reassign an
+> in-flight conversation. Do not implement from this list.
+
 - [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
 - [ ] 12.2 Add inline composer controls with responsive collapse into an overflow menu.
@@ -1350,6 +1379,10 @@ projects API and no UI. `hub-visual-language` depends on this.*
 - [ ] 12.5 **`/handoff`**
 
 ## 13. Agent identity, charters, and skills
+
+> **SUPERSEDED (2026-08-02)** by roadmap row **H5** in
+> `spec/roadmaps/hub-native-experience.html`. Ready to specify; independent of H1.
+> Do not implement from this list.
 
 - [ ] 13.1 Introduce the runner record — CLI, model, environment — reusable across projects and
       independent of agent identity.
@@ -1379,6 +1412,13 @@ projects API and no UI. `hub-visual-language` depends on this.*
 - [ ] 13.15 **`/handoff`**
 
 ## 14. Specification traceability and authoring
+
+> **SUPERSEDED (2026-08-02)** by roadmap row **H6** in
+> `spec/roadmaps/hub-native-experience.html`. **Blocked** on research prerequisite RP-2: two
+> specification systems currently coexist (Markdown under `openspec/`, authoritative portable HTML
+> under `spec/` with `spec/index.json`), and stable requirement identifiers, evidence, and
+> proposals need one unambiguous home before any of this is built. H6 will be split into its own
+> sub-roadmap. Do not implement from this list.
 
 - [ ] 14.1 Add stable, visible requirement identifiers; report unidentified requirements; never
       reissue a retired identifier; keep identifiers stable across rewording, reordering, relocation.
@@ -1420,6 +1460,10 @@ projects API and no UI. `hub-visual-language` depends on this.*
 *Moved after specifications so gates cover both task lifecycle and specification gates, rather than
 being built twice.*
 
+> **SUPERSEDED (2026-08-02)** by roadmap row **H7** in
+> `spec/roadmaps/hub-native-experience.html`. Blocked on H1 and H6.
+> Do not implement from this list.
+
 - [ ] 15.1 Surface pending task-lifecycle and specification-gate decisions as an inline approval
       panel in the composer, actionable without leaving the conversation.
 - [ ] 15.2 Connect approval actions to the existing task lifecycle transitions and to requirement
@@ -1428,6 +1472,13 @@ being built twice.*
 - [ ] 15.4 **`/handoff`**
 
 ## 16. Closeout
+
+> **REDEFINED (2026-08-02).** This umbrella is archived only when every row H1–H7 of
+> `spec/roadmaps/hub-native-experience.html` reaches *done*. The ten delta specs under `specs/`
+> remain authoritative for behaviour implemented in phases 1–8; child specs reference them rather
+> than restating them. Note that two of them currently overstate the system: `agent-inbound-queue`
+> and `agent-composer` describe behaviour the shipped UI does not honour (input during a running
+> turn, drafts surviving navigation). H1 closes both.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,

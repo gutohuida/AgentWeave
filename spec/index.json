@@ -33,6 +33,22 @@
       "status": "approved",
       "parent": "spec/roadmaps/agentweave-reconstruction.html",
       "order": 10
+    },
+    {
+      "path": "spec/roadmaps/hub-native-experience.html",
+      "title": "Roadmap: Hub-Native Experience",
+      "kind": "roadmap",
+      "status": "living",
+      "parent": null,
+      "order": 40
+    },
+    {
+      "path": "spec/changes/agent-conversation-workspace/spec.html",
+      "title": "Spec: Agent Conversation Workspace",
+      "kind": "change-spec",
+      "status": "draft",
+      "parent": "spec/roadmaps/hub-native-experience.html",
+      "order": 10
     }
   ]
 }
