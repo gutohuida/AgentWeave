@@ -226,7 +226,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .row-stack .r-body{font-size:12.5px;color:var(--fg-muted);line-height:1.5}
 .row-stack .r-meta{display:flex;align-items:center;gap:.4rem;margin-top:1px}
 
-.sect{max-width:860px;margin:0 auto;padding:16px 22px 6px;font-size:11px;font-weight:600;letter-spacing:.06em;
+.sect{max-width:1180px;margin:0 auto;padding:16px 28px 6px;font-size:11px;font-weight:600;letter-spacing:.06em;
   text-transform:uppercase;color:var(--fg-dim)}
 .pillrow{max-width:860px;margin:0 auto;padding:0 22px;display:flex;flex-wrap:wrap;gap:.4rem}
 
@@ -258,7 +258,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .card h4{margin:0 0 3px;font-size:14px;letter-spacing:-.01em}
 .card .sub{color:var(--fg-dim);font-size:12px;margin-bottom:11px}
 
-.tilegrid{max-width:860px;margin:0 auto;padding:8px 22px 0;display:grid;
+.tilegrid{max-width:1180px;margin:0 auto;padding:8px 28px 0;display:grid;
   grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
 .tile{border:1px solid transparent;border-radius:var(--radius-lg);padding:12px;cursor:pointer;
   transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
@@ -269,12 +269,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .tile .track{height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:6px}
 .tile .fill{height:100%;background:var(--fg-muted);border-radius:99px}
 .tile .last{font-size:10.5px;color:var(--fg-dim)}
-.overview-grid{max-width:860px;margin:16px auto 28px;padding:0 22px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.summary-card{min-height:150px;padding:15px;border:1px solid var(--border);border-radius:var(--radius-xl);
-  background:color-mix(in oklab,var(--card) 82%,transparent);cursor:pointer;
+.overview-grid{max-width:1180px;margin:10px auto 30px;padding:0 20px;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px}
+.summary-card{min-height:150px;padding:17px 18px;border:1px solid transparent;border-radius:var(--radius-xl);
+  background:transparent;cursor:pointer;
   transition:transform var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease)}
-.summary-card:hover{transform:translateY(-1px);border-color:var(--border-hi);background:var(--surface)}
+.summary-card:hover{border-color:var(--border);background:var(--accent)}
 .summary-card.wide{grid-column:1/-1;min-height:auto}
+.summary-card.tasks{grid-column:span 5}.summary-card.specs{grid-column:span 7}
+.summary-card.jobs{grid-column:span 5}.summary-card.activity{grid-column:span 7}
 .summary-head{display:flex;align-items:center;gap:8px;margin-bottom:11px}
 .summary-head h3{margin:0;font-size:13px}.summary-head .go{margin-left:auto;color:var(--fg-dim);font-size:11px}
 .summary-number{font-size:25px;font-weight:650;letter-spacing:-.04em;line-height:1;color:var(--fg)}
@@ -283,13 +285,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .summary-line .value{margin-left:auto;color:var(--fg)}
 .coverage{display:flex;height:7px;border-radius:99px;overflow:hidden;background:var(--surface-2);margin:12px 0 7px}
 .coverage span{height:100%}
-@media(max-width:840px){.overview-grid{grid-template-columns:1fr}.summary-card.wide{grid-column:auto}}
+@media(max-width:940px){.overview-grid{grid-template-columns:1fr}.summary-card,.summary-card.wide,.summary-card.tasks,.summary-card.specs,.summary-card.jobs,.summary-card.activity{grid-column:auto}}
 
 /* Specification workspace: library, living document, collaborating agent. */
 .spec-health{display:flex;gap:8px;padding:3px 26px 12px;overflow:auto}
 .health-chip{display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:11px;color:var(--fg-muted);white-space:nowrap}
 .health-chip b{color:var(--fg)}
-.spec-shell{display:grid;grid-template-columns:190px minmax(440px,1fr) 280px;flex:1;min-height:0;border-top:1px solid var(--border-region)}
+.spec-shell{display:grid;grid-template-columns:210px minmax(520px,1fr);flex:1;min-height:0;border-top:1px solid var(--border-region)}
 .spec-library,.spec-assist{min-height:0;overflow:auto;background:color-mix(in oklab,var(--rail) 58%,var(--bg))}
 .spec-library{padding:12px 9px;border-right:1px solid var(--border-region)}
 .spec-assist{display:flex;flex-direction:column;border-left:1px solid var(--border-region)}
@@ -297,7 +299,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .spec-item{padding:8px;border:1px solid transparent;border-radius:var(--radius-md);cursor:pointer}
 .spec-item:hover,.spec-item.on{background:var(--accent);border-color:var(--border)}
 .spec-item b{display:block;font-size:11.5px}.spec-item span{color:var(--fg-dim);font-size:10px}
-.spec-doc{min-height:0;overflow:auto;padding:24px 28px 60px}
+.spec-doc{position:relative;min-height:0;overflow:auto;padding:24px 34px 150px}
 .spec-doc-inner{max-width:760px;margin:0 auto}
 .spec-doc-head{padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--border)}
 .spec-doc-head h2{margin:0 0 5px;font-size:22px;letter-spacing:-.025em}.spec-doc-head p{margin:0;color:var(--fg-muted);font-size:12px}
@@ -305,13 +307,22 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 .req-top{display:flex;align-items:center;gap:7px;margin-bottom:7px}.req-id{font:10px "JetBrains Mono",monospace;color:var(--agent-1)}
 .req-state{margin-left:auto;font-size:10px;font-weight:650}.req-state.ok{color:var(--ok)}.req-state.review{color:var(--amber)}.req-state.drift{color:var(--danger)}
 .req h3{margin:0 0 5px;font-size:13px}.req p{margin:0;color:var(--fg-muted);font-size:12px;line-height:1.55}
+.req{transition:border-color var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease)}
+.req:hover{border-color:var(--border-hi);background:var(--accent)}
+.req-ask{opacity:0;margin-left:4px;color:var(--agent-1);font-size:10px;transition:opacity var(--dur-fast) var(--ease)}
+.req:hover .req-ask{opacity:1}
 .req-links{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}.req-links span{padding:2px 6px;border-radius:99px;background:var(--surface-2);color:var(--fg-dim);font-size:9.5px}
 .assist-head{display:flex;align-items:center;gap:7px;padding:11px;border-bottom:1px solid var(--border-region);font-size:12px;font-weight:650}
 .assist-stream{flex:1;padding:12px;overflow:auto}.assist-msg{margin-bottom:12px;color:var(--fg-muted);font-size:11.5px;line-height:1.55}
 .proposal{padding:10px;border:1px solid color-mix(in oklab,var(--agent-1) 42%,transparent);border-radius:var(--radius-lg);background:color-mix(in oklab,var(--agent-1) 10%,var(--surface));font-size:11px}
 .proposal b{display:block;margin-bottom:5px;color:var(--agent-1)}.proposal .old{text-decoration:line-through;color:var(--fg-dim)}.proposal .new{color:var(--fg);margin-top:4px}
 .proposal-actions{display:flex;gap:5px;margin-top:9px}.assist-compose{margin:10px;padding:9px;border:1px solid var(--border-hi);border-radius:var(--radius-lg);background:var(--surface);color:var(--fg-dim);font-size:11px}
-@media(max-width:1050px){.spec-shell{grid-template-columns:170px 1fr}.spec-assist{display:none}}
+.inline-proposal{margin-top:12px;padding:11px 12px;border-left:2px solid var(--agent-1);border-radius:0 var(--radius-lg) var(--radius-lg) 0;background:color-mix(in oklab,var(--agent-1) 9%,var(--surface));font-size:11px}
+.inline-proposal .agent{display:flex;align-items:center;gap:6px;margin-bottom:7px;color:var(--agent-1);font-weight:650}
+.ai-dock{position:sticky;bottom:12px;max-width:760px;margin:26px auto 0;border:1px solid var(--border-hi);border-radius:20px;background:color-mix(in oklab,var(--surface) 94%,transparent);box-shadow:0 18px 45px rgba(2,5,18,.28);backdrop-filter:blur(16px);overflow:hidden}
+.ai-status{display:flex;align-items:center;gap:7px;padding:8px 12px 0;color:var(--fg-muted);font-size:10.5px}.ai-status .hint{margin-left:auto;color:var(--agent-1)}
+.ai-input{display:flex;align-items:center;gap:7px;padding:8px}.ai-input .prompt{flex:1;padding:8px;color:var(--fg-dim);font-size:12px}
+@media(max-width:900px){.spec-shell{grid-template-columns:1fr}.spec-library{display:none}.spec-doc{padding-left:22px;padding-right:22px}}
 
 /* ─── agent-row (used in Agents left panel) ────────────────*/
 .agent-row{display:flex;align-items:center;gap:.55rem;padding:calc(.5rem - 1px) calc(.6rem - 1px);
@@ -586,7 +597,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
             <div class="summary-line"><b style="color:var(--agent-4)">reviewer</b><span>Gate failed on <span class="mono">test_hop_budget_resets</span></span><span class="value">1 min ago</span></div>
           </article>
 
-          <article class="summary-card" onclick="showPage('tasks')">
+          <article class="summary-card tasks" onclick="showPage('tasks')">
             <div class="summary-head"><h3>Tasks</h3><span class="go">View all →</span></div>
             <div class="summary-number">7</div><div class="summary-label">active work items</div>
             <div class="summary-line"><span class="dot" style="--c:var(--agent-6)"></span>In progress<span class="value">2</span></div>
@@ -594,7 +605,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
             <div class="summary-line"><span class="dot" style="--c:var(--danger)"></span>Needs revision<span class="value">1</span></div>
           </article>
 
-          <article class="summary-card" onclick="showPage('spec')">
+          <article class="summary-card specs" onclick="showPage('spec')">
             <div class="summary-head"><h3>Specification health</h3><span class="go">Open workspace →</span></div>
             <div class="summary-number">68%</div><div class="summary-label">34 of 50 requirements verified</div>
             <div class="coverage"><span style="width:68%;background:var(--ok)"></span><span style="width:16%;background:var(--amber)"></span><span style="width:10%;background:var(--agent-6)"></span></div>
@@ -602,14 +613,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
             <div class="summary-line" style="color:var(--amber)">Drifting or stale<span class="value">3</span></div>
           </article>
 
-          <article class="summary-card" onclick="showPage('jobs')">
+          <article class="summary-card jobs" onclick="showPage('jobs')">
             <div class="summary-head"><h3>Jobs</h3><span class="go">Manage →</span></div>
             <div class="summary-number">2</div><div class="summary-label">active schedules · 1 paused</div>
             <div class="summary-line"><span class="pulse"></span>Nightly regression sweep<span class="value">in 6h</span></div>
             <div class="summary-line">Weekly dependency audit<span class="value">in 2d</span></div>
           </article>
 
-          <article class="summary-card" onclick="showPage('activity')">
+          <article class="summary-card activity" onclick="showPage('activity')">
             <div class="summary-head"><h3>Recent activity</h3><span class="go">View audit →</span></div>
             <div class="summary-line"><span class="dot" style="--c:var(--ok)"></span><b>claude</b> run started<span class="value">40s</span></div>
             <div class="summary-line"><span class="dot" style="--c:var(--agent-4)"></span><b>reviewer</b> requested input<span class="value">1m</span></div>
@@ -803,46 +814,46 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
               </div>
               <div class="spec-kicker" style="padding-left:0">Navigation requirements</div>
               <article class="req">
-                <div class="req-top"><span class="req-id">NAV-004</span><span class="req-state ok">● Verified</span></div>
+                <div class="req-top"><span class="req-id">NAV-004</span><span class="req-ask">Ask claude</span><span class="req-state ok">● Verified</span></div>
                 <h3>Navigation lists live entities</h3>
                 <p>The project rail lists projects and agents with live state; project resources are reached from the content area.</p>
                 <div class="req-links"><span>T-10.3 complete</span><span style="color:var(--agent-1)">claude · run 48</span><span>3 evidence records</span></div>
               </article>
               <article class="req">
-                <div class="req-top"><span class="req-id">NAV-007</span><span class="req-state review">● Evidence awaiting review</span></div>
+                <div class="req-top"><span class="req-id">NAV-007</span><span class="req-ask">Ask claude</span><span class="req-state review">● Evidence awaiting review</span></div>
                 <h3>Deep views preserve project context</h3>
                 <p>Every project resource identifies its containing project and provides a direct return to the project overview.</p>
                 <div class="req-links"><span>T-10.5 in review</span><span style="color:var(--agent-3)">codex · run 51</span><span>Review evidence</span></div>
               </article>
               <article class="req">
-                <div class="req-top"><span class="req-id">SPEC-012</span><span class="req-state drift">● Drift detected</span></div>
+                <div class="req-top"><span class="req-id">SPEC-012</span><span class="req-ask">Ask claude</span><span class="req-state drift">● Drift detected</span></div>
                 <h3>Authoring is a conversation against a visible document</h3>
                 <p>The operator reads the document and converses with an assisting agent in the same workspace; proposed edits appear inline.</p>
                 <div class="req-links"><span>2 linked tasks</span><span style="color:var(--agent-4)">reviewer flagged drift</span><span>Inspect change</span></div>
+                <div class="inline-proposal">
+                  <div class="agent"><span class="dot" style="--c:var(--agent-1)"></span>claude proposed a clarification</div>
+                  <div style="color:var(--fg-dim);text-decoration:line-through">The operator sees the document while authoring.</div>
+                  <div style="color:var(--fg);margin-top:4px">The operator reads the live document, discusses a selected requirement, and reviews each proposed edit in place.</div>
+                  <div class="proposal-actions"><button class="btn btn-primary btn-sm">Accept</button><button class="btn btn-ghost btn-sm">Reject</button><button class="btn btn-ghost btn-sm">Discuss</button></div>
+                </div>
               </article>
               <article class="req">
-                <div class="req-top"><span class="req-id">TRACE-003</span><span class="req-state review">● In progress</span></div>
+                <div class="req-top"><span class="req-id">TRACE-003</span><span class="req-ask">Ask claude</span><span class="req-state review">● In progress</span></div>
                 <h3>Evidence is attributable and bidirectional</h3>
                 <p>Requirements reach their tasks, evidence, agents, and runs; completed work links back to the requirements it served.</p>
                 <div class="req-links"><span>T-14.3</span><span>T-14.7</span><span>Unserved</span></div>
               </article>
             </div>
-          </section>
-
-          <aside class="spec-assist">
-            <div class="assist-head"><span class="dot" style="--c:var(--agent-1)"></span>claude · spec assistant<span class="spacer"></span><span style="color:var(--ok);font-size:10px">ready</span></div>
-            <div class="assist-stream">
-              <div class="assist-msg"><b style="color:var(--fg)">You</b><br>Make project return navigation explicit and testable.</div>
-              <div class="assist-msg"><b style="color:var(--agent-1)">claude</b><br>I found one affected requirement. I’ve proposed the wording directly in NAV-007.</div>
-              <div class="proposal">
-                <b>Proposed edit · NAV-007</b>
-                <div class="old">The containing project is directly reachable.</div>
-                <div class="new">Every deep view displays the containing project and a single-action return to its overview.</div>
-                <div class="proposal-actions"><button class="btn btn-primary btn-sm">Accept</button><button class="btn btn-ghost btn-sm">Reject</button></div>
+            <div class="ai-dock">
+              <div class="ai-status"><span class="dot" style="--c:var(--agent-1)"></span><b style="color:var(--agent-1)">claude</b> understands the open document and selected requirement<span class="hint">SPEC-012 selected</span></div>
+              <div class="ai-input">
+                <button class="btn btn-ghost btn-icon" title="Add implementation context"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+                <div class="prompt">Ask, explore, draft a requirement, or connect evidence…</div>
+                <button class="btn btn-ghost btn-sm">Explore</button>
+                <button class="btn btn-primary btn-icon" title="Send to spec agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
               </div>
             </div>
-            <div class="assist-compose">Ask about this specification…</div>
-          </aside>
+          </section>
         </div>
       </div>
 
