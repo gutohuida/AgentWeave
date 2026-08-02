@@ -32,23 +32,30 @@
 
 ## 1. Trigger detection
 
-- [ ] 1.1 Write tests for `detectComposerTrigger(text, cursor)`: slash-command only matches at
+- [x] 1.1 Write tests for `detectComposerTrigger(text, cursor)`: slash-command only matches at
       line start (not mid-sentence), `@path`/`$skill` match at any position via backward
       whitespace-walk, and detection returns `null` once the cursor has moved past a completed
-      token.
-- [ ] 1.2 Implement `detectComposerTrigger` as a new, self-contained module (own implementation,
+      token. `hub/ui/src/__tests__/composerTrigger.test.ts`'s `detectComposerTrigger` block (7
+      tests).
+- [x] 1.2 Implement `detectComposerTrigger` as a new, self-contained module (own implementation,
       not a port — design.md Context) returning `{kind, query, rangeStart, rangeEnd} | null` for
-      `path` | `slash-command` | `skill`.
-- [ ] 1.3 Verify against `agent-composer`'s "Composer trigger detection" requirement.
+      `path` | `slash-command` | `skill`. `hub/ui/src/lib/composerTrigger.ts`.
+- [x] 1.3 Verify against `agent-composer`'s "Composer trigger detection" requirement. All 4
+      requirement scenarios pass (`npx vitest run src/__tests__/composerTrigger.test.ts` — 14/14).
 
 ## 2. Range replacement
 
-- [ ] 2.1 Write tests for `replaceTextRange`: the returned cursor position lands immediately after
+- [x] 2.1 Write tests for `replaceTextRange`: the returned cursor position lands immediately after
       the inserted value (not at the end of the full text), and a value containing whitespace is
-      quote-escaped in the inserted text.
-- [ ] 2.2 Implement `replaceTextRange(text, start, end, replacement)` and the quote-escape helper
-      for values containing whitespace.
-- [ ] 2.3 Verify against `agent-composer`'s "Trigger range replacement" requirement.
+      quote-escaped in the inserted text. `composerTrigger.test.ts`'s `replaceTextRange`,
+      `quoteMentionValue`, and `acceptTriggerResult` blocks.
+- [x] 2.2 Implement `replaceTextRange(text, start, end, replacement)` and the quote-escape helper
+      for values containing whitespace. `replaceTextRange` + `quoteMentionValue` +
+      `acceptTriggerResult` (composes the two for the full accept-a-menu-result flow, including
+      re-prepending the trigger character the matched range already covers) in
+      `hub/ui/src/lib/composerTrigger.ts`.
+- [x] 2.3 Verify against `agent-composer`'s "Trigger range replacement" requirement. Both
+      requirement scenarios pass, same test run as 1.3 — 14/14.
 
 ## 3. Trigger menu
 
