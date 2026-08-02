@@ -52,7 +52,9 @@ describe('agent conversation handoff', () => {
     outputLines = []
     sessions = [{ id: 'session-old', type: 'claude', path: 'old.json' }]
     fetchMock.mockReset()
-    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ status: 'running' }), { status: 200 })),
+    )
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',

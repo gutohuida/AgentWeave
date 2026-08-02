@@ -33,6 +33,11 @@ interface PendingNewSession {
   outputStartIndex: number
 }
 
+interface TriggerResult {
+  status: string
+  waiting_reason?: string | null
+}
+
 export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
@@ -151,7 +156,7 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     triggerMessage: string,
     sessionMode: 'new' | 'resume',
     triggerSessionId?: string,
-  ) => {
+  ): Promise<TriggerResult> => {
     const response = await fetch('/api/v1/agent/trigger', {
       method: 'POST',
       headers: {
@@ -168,7 +173,15 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     if (!response.ok) {
       throw new Error(`Trigger failed with status ${response.status}`)
     }
+    return (await response.json()) as TriggerResult
   }
+
+  // A 200 response does not mean the agent actually ran — the Hub can accept the input and
+  // still leave it queued (no worktree yet, still running, etc). `status` tells the two
+  // apart; without checking it here, a queued trigger looked identical to a running one and
+  // the operator got no feedback at all (the "sent a message and nothing happened" report).
+  const queuedNotice = (result: TriggerResult, fallback: string): string | null =>
+    result.status === 'queued' ? (result.waiting_reason ?? fallback) : null
 
   const handleStop = async () => {
     if (!apiKey || !isRunning || isStopping) return
@@ -200,7 +213,13 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     const isNew = !selectedSessionId || selectedSessionId === NEW_SESSION_VALUE
     setIsSending(true)
     try {
-      await postTrigger('Continue — deliver the queued messages.', isNew ? 'new' : 'resume', selectedSessionId)
+      const result = await postTrigger(
+        'Continue — deliver the queued messages.',
+        isNew ? 'new' : 'resume',
+        selectedSessionId,
+      )
+      const notice = queuedNotice(result, `${agent.name} is still not available to receive it`)
+      if (notice) setSessionNotice(`Still queued — ${notice}`)
     } catch (err) {
       console.error('Failed to deliver queued messages:', err)
     } finally {
@@ -216,7 +235,15 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
     handoffOutputStartRef.current = lines.length
     handoffSawRunningRef.current = false
     try {
-      await postTrigger(HANDOFF_PROMPT, 'resume', currentSessionId)
+      const result = await postTrigger(HANDOFF_PROMPT, 'resume', currentSessionId)
+      const notice = queuedNotice(result, `${agent.name} is not available to receive it`)
+      if (notice) {
+        handoffOutputStartRef.current = null
+        handoffSawRunningRef.current = false
+        setHandoffState('idle')
+        setSessionNotice(`Could not start handoff — ${notice}`)
+        return
+      }
       setSelectedSessionId(NEW_SESSION_VALUE)
     } catch (err) {
       console.error('Failed to prepare handoff:', err)
@@ -246,9 +273,16 @@ export function AgentOutputPanel({ agent }: AgentOutputPanelProps) {
       setSessionNotice('Starting new conversation…')
     }
     try {
-      await postTrigger(outgoingMessage, isNew ? 'new' : 'resume', selectedSessionId)
+      const result = await postTrigger(outgoingMessage, isNew ? 'new' : 'resume', selectedSessionId)
       setMessage('')
       if (isNew) setHandoffState('idle')
+      const notice = queuedNotice(result, `${agent.name} is not available to receive it right now`)
+      if (notice) {
+        // Nothing is going to run, so the "wait for a new session id to appear" tracking
+        // this block set up above would otherwise hang forever and keep the composer locked.
+        if (isNew) pendingNewSessionRef.current = null
+        setSessionNotice(`Queued — ${notice}`)
+      }
     } catch (err) {
       console.error('Failed to send message:', err)
       if (isNew) pendingNewSessionRef.current = null
