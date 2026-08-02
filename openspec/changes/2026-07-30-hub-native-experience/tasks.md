@@ -1218,26 +1218,79 @@ before concurrency does.*
 
 *Placed here so the queue's behaviour becomes visible as soon as it exists.*
 
-- [ ] 8.1 Assign each agent a stable colour index at registration, persisted on the agent record and
-      independent of its name.
-- [ ] 8.2 Define the agent colour palette as hue tokens, deriving bubble tint, accent, and foreground
-      per theme via `color-mix(in oklab, …)`; verify legibility in light and dark.
-- [ ] 8.3 Build the merged timeline read model over turns, output, and messages — replacing the
-      timestamp-window attribution heuristic in `agent_chat.py:60-100`.
-- [ ] 8.4 Render the four entry kinds: operator input, agent output, inbound peer tinted with the
+- [x] 8.1 Assign each agent a stable colour index at registration, persisted on the agent record and
+      independent of its name. Added `Agent.color_index` (migration 0016, backfilling existing rows
+      by `created_at` per project) and `hub/hub/agent_colors.py`'s `next_color_index()` — monotonic
+      per project, not reused after removal, wired into all three creation sites (session sync,
+      self-registration, budgeted agent requests). Exposed on `AgentSummary.color_index`.
+- [x] 8.2 Define the agent colour palette as hue tokens, deriving bubble tint, accent, and foreground
+      per theme via `color-mix(in oklab, …)`; verify legibility in light and dark. The raw
+      `--agent-1..8` hue tokens already existed pre-tuned per theme; added derived
+      `--agent-N-tint`/`--agent-N-border` via one shared `color-mix` formula per hue (works in both
+      themes from one definition, same technique as the context ring). `hub/ui/src/lib/agentColors.ts`
+      maps a `color_index` onto these vars, cycling past the 8-hue palette, with a neutral fallback
+      when no colour is assigned. Live-verified legible in both themes against the real dev Hub.
+- [x] 8.3 Build the merged timeline read model over turns, output, and messages — replacing the
+      timestamp-window attribution heuristic in `agent_chat.py:60-100`. Rewrote `agent_chat.py`'s two
+      endpoints to return typed `TimelineEntry` rows (operator_input/agent_output/inbound_peer/
+      outbound_peer) placed by recorded association only: delivered `InboundQueueEntry`/`Run` join,
+      `AgentOutput.session_id`, and `Message.session_id` (newly wired at send time from the sender's
+      live `Run`, in both `messages.py`'s `create_message` and `agents.py`'s `request_agent` —
+      `Message.session_id` existed since migration 0003 but was never populated). Still-queued entries
+      are appended regardless of requested session. Old `test_agent_chat.py` (whose own docstring
+      described a three-tier heuristic already gone from the real implementation) rewritten to test
+      the actual merged-timeline behavior: recorded association, session isolation, peer traffic both
+      directions, undelivered/hop-suspended flagging, sort order.
+- [x] 8.4 Render the four entry kinds: operator input, agent output, inbound peer tinted with the
       sender's colour, outbound peer accented with the recipient's colour. Always label with the name.
-- [ ] 8.5 Render the undelivered state and its transition to delivered; render the
-      hop-budget-suspended explanation.
-- [ ] 8.6 Show waiting-entry counts and the reason when an agent is not running.
-- [ ] 8.7 Type the timeline entries — conversational exchange, intermediate work, self-contained
+      New `AgentTimeline.tsx` + `agentTimelineModel.ts`; a real bug caught by its own test
+      (`labels an outbound peer message with the recipient name`): the first draft labelled an
+      outbound entry with the *subject* agent's own name instead of the recipient's, contradicting the
+      spec's explicit scenario. Fixed.
+- [x] 8.5 Render the undelivered state and its transition to delivered; render the
+      hop-budget-suspended explanation. Undelivered entries render in a distinct dashed "Waiting to be
+      delivered" section with a withdraw control (reusing the Phase-6 `DELETE /queue/entries/{id}`
+      endpoint, previously unwired to any UI); a queued agent-origin entry past the project hop budget
+      shows "Autonomous continuation is paused — operator input will resume it."
+- [x] 8.6 Show waiting-entry counts and the reason when an agent is not running. New
+      `hub/ui/src/api/queue.ts`'s `useQueueStatus` consumes the existing Phase-6
+      `GET /queue/{agent}/status` endpoint (already returned `waiting_count`/`running`/
+      `waiting_reason` — no backend work needed, only wiring).
+- [x] 8.7 Type the timeline entries — conversational exchange, intermediate work, self-contained
       structured results — and render each in its own form rather than as a uniform bubble.
-- [ ] 8.8 Make intermediate work collapsible and completed turns foldable to a summary.
-- [ ] 8.9 Present structured results as content surfaces using the softer content radius, with a fade
-      indicating clipped content.
-- [ ] 8.10 Add the stop control to the running turn; render a stopped turn as deliberately stopped
-      rather than as an error.
-- [ ] 8.11 Verify against `agent-conversation-timeline`.
-- [ ] 8.12 **`/handoff`**
+      `entryCategory()` partitions every entry into `message`/`work`/`result`; each renders via its own
+      component (`MessageBubble`/`WorkRow`/`ResultCard`).
+- [x] 8.8 Make intermediate work collapsible and completed turns foldable to a summary. Entries are
+      grouped into turns by `run_id` (`groupIntoTurns`); the last turn starts unfolded, every earlier
+      one starts folded to its status/timestamp summary, independently toggleable. Work entries
+      (thinking/tool_use/tool_result, tool_use paired with its tool_result by `call_id`) collapse
+      behind one "N steps of intermediate work" toggle per turn.
+- [x] 8.9 Present structured results as content surfaces using the softer content radius, with a fade
+      indicating clipped content. `ResultCard` uses `var(--radius-content)`; content past 240 chars
+      clips with a bottom gradient fade and a "Show more" control.
+- [x] 8.10 Add the stop control to the running turn; render a stopped turn as deliberately stopped
+      rather than as an error. The running turn's own header carries a Stop button (in addition to the
+      existing header-level one from task 3.7); terminal turns look up their outcome via
+      `runStatusByRunId()`, reusing the existing `/agents/{name}/timeline` run-lifecycle events (no new
+      backend endpoint) so `run_stopped` renders amber/"Stopped", distinct from red/"Failed".
+- [x] 8.11 Verify against `agent-conversation-timeline`. 27 new frontend tests (`agentTimelineModel.test.ts`,
+      `agentTimeline.test.ts`, `agentColors.test.ts`) plus 10 new backend tests
+      (`test_agent_chat.py`) map directly onto the spec's scenarios. Full suites green: CLI
+      **971 passed, 4 skipped**; Hub **382 passed, 4 skipped, 3 pre-existing order-dependent failures**
+      (confirmed identical against unmodified `d241d38` — shared in-memory test DB across the pytest
+      session, already flagged in the Phase 7 handoff's dead-ends, not introduced here); UI **222
+      passed**; `tsc --noEmit` clean. Then live-verified end-to-end against a real native Hub +
+      real Vite dev server: seeded a realistic conversation directly in the dev DB (delivered turn
+      with thinking/tool_use/tool_result/text, an outbound delegation, a completed run, a second
+      running turn with an inbound peer reply, and a hop-budget-suspended queued entry), which
+      incidentally triggered the project's own watchdog into running a **real** `kimi` agent turn —
+      its genuine reply then flowed correctly through the new merged timeline and queue-status UI
+      live via SSE, in both light and dark themes (folded/unfolded turns, coloured peer bubbles,
+      Stop button on the running turn, "Waiting to be delivered (N)" with the suspended explanation).
+      Cleaned up afterward: stopped the scratch Hub/watchdog/Vite processes, deleted the scratch
+      project and seed script.
+- [x] 8.12 **`/handoff`** — durable boundary state written to
+      `.claude/handoffs/2026-08-02-0300-hub-native-phase8-timeline-complete.md`.
 
 ## 9. Accounting and budgets
 

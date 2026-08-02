@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-01-1938-phase3-audit-findings-closed.md
+.claude/handoffs/2026-08-02-0300-hub-native-phase8-timeline-complete.md
