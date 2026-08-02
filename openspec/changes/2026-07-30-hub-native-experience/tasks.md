@@ -1211,7 +1211,8 @@ before concurrency does.*
       operator question/polling, budgeted agent creation, and recipient queue inspection with every
       runner set to `hub_client: cli`. Canonical surface/signature, injection, governance, and shim
       tests accompany full CLI (**971 passed, 4 skipped**) and Hub (**383 passed, 4 skipped**) runs.
-- [ ] 7.7 **`/handoff`**
+- [x] 7.7 **`/handoff`** — durable boundary state written to
+      `.claude/handoffs/2026-08-02-0140-phase7-agent-tool-surface-complete.md`.
 
 ## 8. Conversation timeline and agent colours
 
