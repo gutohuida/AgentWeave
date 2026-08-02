@@ -9,11 +9,10 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* ─────────────────────────────────────────────────────────────
-   NOTE: this is a companion to mock.html covering EVERY screen in
-   the app's real (kept) navigation structure — Overview, Agents,
-   Instructions, Tasks, Spec, Jobs, Messages, Questions, Logs,
-   Activity, Quality, Settings — plus the existing agent
-   conversation view, all styled with the same design system.
+   NOTE: this is a companion to mock.html covering the future Hub
+   shell: project home, agent conversations, tasks, spec/verification,
+   jobs, activity/audit, and settings. Legacy screen samples remain in
+   this file for visual comparison but are deliberately unreachable.
    Sample data only. Fonts load from CDN because this is a
    single-file mock; the spec requires self-hosted .woff2.
    ───────────────────────────────────────────────────────────── */
@@ -124,7 +123,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 
 /* ─── shell ───────────────────────────────────────────────── */
 .shell{display:flex;flex-direction:column;height:100vh}
-.topbar{height:48px;flex:none;display:flex;align-items:center;gap:.55rem;padding:0 14px;
+.topbar{display:none;height:48px;flex:none;align-items:center;gap:.55rem;padding:0 14px;
   background:var(--top);border-bottom:1px solid var(--border-region)}
 .tb-brand{font-weight:600;font-size:13px;letter-spacing:-.012em}
 .tb-sep{width:1px;height:18px;background:var(--border);flex:none}
@@ -141,7 +140,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
   transition:background-color var(--dur-base) var(--ease),box-shadow var(--dur-base) var(--ease)}
 .resizer:hover::before,.app.dragging .resizer::before{background:var(--primary);box-shadow:0 0 0 1px rgba(91,124,250,.28)}
 
-.brandmark{font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--fg);padding:2px 8px 10px}
+.brandmark{display:flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.09em;color:var(--fg-dim);padding:2px 4px 10px 8px}
+.brandmark .rail-actions{display:flex;margin-left:auto;gap:2px}
 
 .legacy-nav,.side>.foot{display:none}
 .project-tree{display:flex;flex:1;flex-direction:column;gap:4px;overflow:auto;min-height:0}
@@ -164,6 +164,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
   background:transparent;color:var(--fg-muted);font:inherit;font-size:12px;font-weight:550;cursor:pointer;white-space:nowrap}
 .workspace-tab:hover{background:var(--accent);color:var(--fg)}
 .workspace-tab.on{background:var(--surface-2);border-color:var(--border-hi);color:var(--fg)}
+.project-links{display:flex;align-items:center;gap:5px;padding:3px 26px 10px;overflow:auto}
+.project-link{height:29px;padding:0 9px;border:1px solid transparent;border-radius:var(--radius-md);
+  background:transparent;color:var(--fg-muted);font:inherit;font-size:12px;font-weight:550;cursor:pointer;white-space:nowrap}
+.project-link:hover{background:var(--accent);color:var(--fg)}
+.project-link.on{color:var(--fg);background:var(--accent);border-color:var(--border)}
 
 .navitem{display:flex;align-items:center;gap:.55rem;width:100%;height:31px;padding:0 .5rem;
   border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--fg-muted);
@@ -380,7 +385,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
 
     <!-- ── sidebar (real app nav structure, not project-tree) ── -->
     <aside class="side">
-      <div class="brandmark">PROJECTS</div>
+      <div class="brandmark">PROJECTS
+        <span class="rail-actions">
+          <button class="btn btn-ghost btn-icon" id="rail-theme" title="Toggle appearance" aria-label="Toggle appearance" style="width:26px;height:26px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+          </button>
+        </span>
+      </div>
       <div class="project-tree">
         <section class="project active">
           <div class="project-head" onclick="showPage('overview')">
@@ -475,49 +486,59 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
       <!-- ══ OVERVIEW ══ -->
       <div class="screen on" id="page-overview">
         <header class="head">
-          <div class="title">Overview <span class="sub">5 agents · 7 tasks · AgentWeave</span></div>
+          <div class="title">AgentWeave <span class="sub">5 agents · 7 tasks · ~/projects/AgentWeave</span></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm" onclick="showPage('settings')">Project settings</button>
+          <button class="btn btn-primary btn-sm">Add agent</button>
         </header>
+        <nav class="project-links" aria-label="Project resources">
+          <button class="project-link on" onclick="showPage('overview')">Home</button>
+          <button class="project-link" onclick="showPage('tasks')">Tasks · 7</button>
+          <button class="project-link" onclick="showPage('spec')">Spec</button>
+          <button class="project-link" onclick="showPage('jobs')">Jobs · 3</button>
+          <button class="project-link" onclick="showPage('activity')">Activity</button>
+        </nav>
 
         <div class="sect" style="padding-top:6px">Agents</div>
         <div class="tilegrid">
           <div class="tile" onclick="showPage('chat')">
             <div class="top"><span class="dot" style="--c:var(--agent-1)"></span><span class="nm">claude</span></div>
-            <div class="stats"><span>2 tasks</span><span>14 msgs</span></div>
+            <div class="stats"><span>2 tasks</span><span>14 turns</span></div>
             <div class="track"><div class="fill" style="width:41%"></div></div>
             <div class="last">running · updated just now</div>
           </div>
           <div class="tile" onclick="showPage('chat')">
             <div class="top"><span class="dot" style="--c:var(--agent-3)"></span><span class="nm">codex</span></div>
-            <div class="stats"><span>1 task</span><span>6 msgs</span></div>
+            <div class="stats"><span>1 task</span><span>6 turns</span></div>
             <div class="track"><div class="fill" style="width:18%"></div></div>
             <div class="last">idle · 4 min ago</div>
           </div>
           <div class="tile" onclick="showPage('chat')">
             <div class="top"><span class="dot" style="--c:var(--agent-2)"></span><span class="nm">opencode</span></div>
-            <div class="stats"><span>0 tasks</span><span>2 msgs</span></div>
+            <div class="stats"><span>0 tasks</span><span>2 turns</span></div>
             <div class="track"><div class="fill" style="width:7%"></div></div>
             <div class="last">2 queued · 11 min ago</div>
           </div>
           <div class="tile" onclick="showPage('chat')">
             <div class="top"><span class="dot" style="--c:var(--agent-4)"></span><span class="nm">reviewer</span></div>
-            <div class="stats"><span>3 tasks</span><span>9 msgs</span></div>
+            <div class="stats"><span>3 tasks</span><span>9 turns</span></div>
             <div class="track"><div class="fill" style="width:64%"></div></div>
             <div class="last">waiting on you · 1 min ago</div>
           </div>
           <div class="tile" onclick="showPage('chat')">
             <div class="top"><span class="dot" style="--c:var(--agent-6)"></span><span class="nm">gemini</span></div>
-            <div class="stats"><span>1 task</span><span>3 msgs</span></div>
+            <div class="stats"><span>1 task</span><span>3 turns</span></div>
             <div class="track"><div class="fill" style="width:22%"></div></div>
             <div class="last">idle · 1h ago</div>
           </div>
         </div>
 
-        <div class="sect">Questions</div>
+        <div class="sect">Needs your input</div>
         <div class="rows">
-          <div class="notice" style="cursor:pointer" onclick="showPage('questions')">
+          <div class="notice" style="cursor:pointer" onclick="showPage('chat')">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
             <div><b>reviewer is waiting</b> — gate failed on <span class="mono">test_hop_budget_resets</span>, needs your call.</div>
-            <button class="btn btn-ghost btn-sm act">Answer</button>
+            <button class="btn btn-ghost btn-sm act">Open conversation</button>
           </div>
         </div>
 
@@ -540,7 +561,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
           <div class="row" style="cursor:default">
             <span class="dot" style="--c:var(--agent-4)"></span>
             <span class="ttl">reviewer</span>
-            <span class="meta">question asked · 1 min ago</span>
+            <span class="meta">input requested · 1 min ago</span>
           </div>
           <div class="row" style="cursor:default">
             <span class="dot" style="--c:var(--amber)"></span>
@@ -592,7 +613,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus
             <div class="rows" style="padding:0">
               <div class="row" style="cursor:default"><span class="ttl">Status</span><span class="meta">running · session 75320140…</span></div>
               <div class="row" style="cursor:default"><span class="ttl">Tasks</span><span class="meta">2 active</span></div>
-              <div class="row" style="cursor:default"><span class="ttl">Messages</span><span class="meta">14 total</span></div>
+              <div class="row" style="cursor:default"><span class="ttl">Conversation</span><span class="meta">14 turns</span></div>
               <div class="row" style="cursor:default"><span class="ttl">Context</span><span class="meta">41% · 82k/200k</span></div>
               <div class="row" style="cursor:default"><span class="ttl">Last seen</span><span class="meta">just now</span></div>
             </div>
@@ -1100,10 +1121,12 @@ rz.addEventListener('pointermove',e=>{
 rz.addEventListener('pointerup',e=>{drag=false;app.classList.remove('dragging');rz.releasePointerCapture(e.pointerId)});
 rz.addEventListener('dblclick',()=>document.documentElement.style.setProperty('--side-w','252px'));
 
-document.getElementById('theme').addEventListener('click',()=>{
+const toggleTheme=()=>{
   const root=document.documentElement;
   root.dataset.mode=root.dataset.mode==='dark'?'light':'dark';
-});
+};
+document.getElementById('theme').addEventListener('click',toggleTheme);
+document.getElementById('rail-theme').addEventListener('click',toggleTheme);
 
 // ── textarea autosize (chat composer) ──
 const ta=document.querySelector('.composer textarea');
