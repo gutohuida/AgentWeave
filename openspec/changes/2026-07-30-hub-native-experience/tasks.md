@@ -1320,6 +1320,17 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > change. RQ-1's multi-tenant premise was resolved by the local-only product direction; project
 > discovery, lifecycle, and SSE switching still need their own design. Do not implement from this
 > list.
+>
+> **Update (2026-08-02) — partially closed by the successor's phase 1, real implementation, not on
+> the strength of this note.** 10.4 (project name navigates, expander toggles) and 10.5 (project
+> reachable from an agent conversation) are done — see that change's `tasks.md` 1.5 and
+> `conversationShell.test.tsx`/`conversationNavigation.test.ts`. 10.3's navigation-restructure half
+> is done (the rail lists only projects and agents), but its "move per-project views into the
+> content area as tabs" half is not — `tasks`/`questions`/`activity`/`quality`/`logs`/`jobs`/
+> `instructions`/`spec` remain top-level sidebar destinations, not project-scoped tabs. 10.6 is done
+> only for the rail and the conversation timeline (`tasks.md` 1.3); task-assignment and activity
+> colouring were not touched. 10.7 was verified against `agent-conversation-workspace`'s own spec,
+> not literally `hub-visual-language`. 10.1–10.2 remain undone.
 
 - [ ] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
       agent, and token budgets.
@@ -1343,6 +1354,13 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > `hub/ui/src/components/context/ContextUsageIndicator.tsx` with a compact variant, covered by
 > `contextPresentation.test.tsx`. Only placement in the composer remains, which is task 3.8 of the
 > conversation change. Do not implement from this list.
+>
+> **Update (2026-08-02) — 11.1 and the remainder of 11.6–11.7 are now done, real implementation, not
+> on the strength of this note.** 11.1 (autosizing composer, bounded growth then scroll, per-
+> project-and-conversation draft persistence) shipped in that change's `tasks.md` 3.1–3.3
+> (`Composer.tsx`, `composerDrafts.ts`, `conversationComposer.test.tsx`). 11.6–11.7's only remaining
+> gap, placement, shipped in 3.8 (`ConversationControls.tsx`, `conversationControls.test.tsx`).
+> 11.2–11.5 remain undone, still belonging to the composer intelligence change.
 
 - [ ] 11.1 Replace the chat input with an autosizing composer: bounded growth then scroll, submit vs.
       newline gestures, persisted per-conversation draft.
@@ -1368,6 +1386,15 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > `openspec/changes/2026-08-02-agent-conversation-workspace/`. Item 12.1 (the searchable in-place
 > agent selector) belongs to the composer intelligence change — the conversation change shows which
 > agent is active but does not reassign an in-flight conversation. Do not implement from this list.
+>
+> **Update (2026-08-02) — 12.2 and 12.3 are now done, real implementation, not on the strength of
+> this note.** See that change's `tasks.md` 3.5 (`ConversationControls.tsx`: submit/stop/active-
+> agent/context-usage inline, everything else in a fixed-order keyboard-operable overflow menu) and
+> 3.9 (`BannerStack.tsx`). **Not a literal match to 12.2's own wording**: the shipped design is a
+> fixed inline/overflow split, not a *responsive* collapse that moves items between the two based on
+> viewport width — the approved `agent-conversation-workspace` requirement replaced "collapse when
+> tight" with "only ever show four things inline," which closes the same underlying need (composer
+> chrome shouldn't crowd out the text) by a different, simpler design. 12.1 remains undone.
 
 - [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
