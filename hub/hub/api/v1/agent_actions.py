@@ -16,7 +16,14 @@ from ...db.models import Question
 from ...schemas.messages import MessageCreate, MessageResponse, _MESSAGE_TYPES
 from ...schemas.questions import QuestionCreate, QuestionResponse
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
-from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate, _PRIORITIES, _TASK_STATUSES
+from ...schemas.tasks import (
+    TaskCreate,
+    TaskResponse,
+    TaskUpdate,
+    _PRIORITIES,
+    _TASK_ID_RE,
+    _TASK_STATUSES,
+)
 from .messages import create_message_for_actor
 from .agents import AgentRequest, request_agent
 from .jobs import create_job, delete_job, run_job, update_job
@@ -44,6 +51,7 @@ class AgentMessageCreate(BaseModel):
 
 
 class AgentTaskCreate(BaseModel):
+    id: Optional[str] = Field(default=None, max_length=64)
     title: str = Field(max_length=256)
     description: str = Field(default="", max_length=10000)
     status: str = Field(default="pending", max_length=64)
@@ -61,6 +69,13 @@ class AgentTaskCreate(BaseModel):
     def validate_status(cls, value: str) -> str:
         if value not in _TASK_STATUSES:
             raise ValueError(f"status must be one of {_TASK_STATUSES}")
+        return value
+
+    @field_validator("id")
+    @classmethod
+    def validate_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not _TASK_ID_RE.match(value):
+            raise ValueError("id must be a safe task identifier")
         return value
 
     @field_validator("priority")

@@ -56,6 +56,30 @@ class TestEnsureSpecSourceId:
 
 
 class TestGetTransportSpecSourceId:
+    def test_bound_run_constructs_keyless_http_transport_without_reading_project_config(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_secret")
+        monkeypatch.setenv("HUB_URL", "http://runtime:9000")
+        _write_transport_json(
+            tmp_path / ".agentweave" / "transport.json",
+            {
+                "type": "http",
+                "url": "http://operator",
+                "api_key": "aw_live_operator-secret",
+                "project_id": "operator-project",
+            },
+        )
+
+        transport = get_transport()
+
+        assert isinstance(transport, HttpTransport)
+        assert transport.url == "http://runtime:9000"
+        assert transport.api_key == ""
+        assert transport.project_id == ""
+        assert transport.source_id is None
+
     def test_http_transport_gets_a_source_id(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         _write_transport_json(

@@ -47,7 +47,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import async_session_factory, get_session
-from ...db.models import ApiKey, Conversation, Run
+from ...db.models import Conversation, Run
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
@@ -279,22 +279,12 @@ async def trigger_agent_directly(
     env["AW_RUN_TOKEN"] = run_token
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
-    if access_path == "mcp":
-        key_result = await session.execute(
-            select(ApiKey.id)
-            .where(ApiKey.project_id == project_id, ApiKey.revoked == False)  # noqa: E712
-            .limit(1)
-        )
-        api_key = key_result.scalar_one_or_none()
-        if not api_key:
-            raise TriggerAgentError(
-                status.HTTP_409_CONFLICT,
-                "No active project credential is available for the injected tool surface",
-            )
-        host = "127.0.0.1" if settings.aw_host in ("0.0.0.0", "::") else settings.aw_host
-        env["HUB_URL"] = os.environ.get("HUB_URL", f"http://{host}:{settings.aw_port}")
-        env["HUB_API_KEY"] = api_key
-        env["HUB_PROJECT_ID"] = project_id
+    host = "127.0.0.1" if settings.aw_host in ("0.0.0.0", "::") else settings.aw_host
+    env["HUB_URL"] = os.environ.get("HUB_URL", f"http://{host}:{settings.aw_port}")
+    # A parent service environment may contain operator credentials. Never pass them
+    # through to a spawned run: AW_RUN_TOKEN is the run's complete authority.
+    env.pop("HUB_API_KEY", None)
+    env.pop("HUB_PROJECT_ID", None)
 
     run = Run(
         id=run_id,

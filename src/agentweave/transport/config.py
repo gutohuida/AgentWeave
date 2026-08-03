@@ -1,5 +1,6 @@
 """Transport factory — reads .agentweave/transport.json and returns the active transport."""
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -88,6 +89,18 @@ def get_transport() -> BaseTransport:
     "{cluster}.{agent}" as the sender, and inbox filtering matches both
     "{cluster}.{agent}" and plain "{agent}" for backward compatibility.
     """
+    # Hub-owned runs use their short-lived capability directly and must not load or
+    # depend on a project API key from transport.json.
+    run_token = os.environ.get("AW_RUN_TOKEN", "").strip()
+    if run_token:
+        from .http import HttpTransport
+
+        return HttpTransport(
+            url=os.environ.get("HUB_URL", "http://127.0.0.1:8000"),
+            api_key="",
+            project_id="",
+        )
+
     found = _find_transport_config()
     if not found:
         from .local import LocalTransport

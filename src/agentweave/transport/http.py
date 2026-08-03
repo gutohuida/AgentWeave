@@ -122,6 +122,10 @@ class HttpTransport(BaseTransport):
     # Internal helper
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _run_token() -> str:
+        return os.environ.get("AW_RUN_TOKEN", "").strip()
+
     def _request(
         self,
         method: str,
@@ -138,11 +142,14 @@ class HttpTransport(BaseTransport):
         (honors Retry-After header on 429). Raises HubTransportError on
         non-2xx, non-retryable errors or after exhausting retries.
         """
-        url = f"{self.url}/api/v1{path}"
+        run_token = self._run_token()
+        agent_mode = bool(run_token)
+        route_prefix = "/api/v1/agent-actions" if agent_mode else "/api/v1"
+        url = f"{self.url}{route_prefix}{path}"
 
         # Inject project_id into GET params
         if method == "GET":
-            qs: Dict[str, str] = {"project_id": self.project_id}
+            qs: Dict[str, str] = {} if agent_mode else {"project_id": self.project_id}
             if params:
                 qs.update(params)
             url += "?" + urllib.parse.urlencode({k: v for k, v in qs.items() if v is not None})
@@ -154,21 +161,28 @@ class HttpTransport(BaseTransport):
             # key (see hub/hub/auth.py), and most writeable schemas use
             # extra="forbid" — injecting here triggers 422 on POST /tasks,
             # /messages, /jobs and PATCH /tasks/{id}, /jobs/{id}.
+            if agent_mode:
+                body = dict(body)
+                for identity_field in (
+                    "from",
+                    "sender",
+                    "assigner",
+                    "from_agent",
+                    "requester",
+                    "run_id",
+                    "project_id",
+                    "source",
+                ):
+                    body.pop(identity_field, None)
+                if path == "/messages":
+                    recipient = body.pop("to", body.pop("recipient", None))
+                    body["recipient"] = recipient
             payload = json.dumps(body).encode()
 
         req = urllib.request.Request(url, data=payload, method=method)
-        req.add_header("Authorization", f"Bearer {self.api_key}")
+        req.add_header("Authorization", f"Bearer {run_token or self.api_key}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Accept", "application/json")
-        # Agent-spawned command invocations inherit these bindings. Forward them so
-        # governed endpoints (notably scheduled work) can distinguish an attributable
-        # agent effect from an operator management call without accepting identity flags.
-        agent_identity = os.environ.get("AW_AGENT_IDENTITY", "").strip()
-        run_identity = os.environ.get("AW_RUN_ID", "").strip()
-        if agent_identity:
-            req.add_header("X-AgentWeave-Agent", agent_identity)
-        if run_identity:
-            req.add_header("X-AgentWeave-Run", run_identity)
 
         attempt = 0
         backoff = self.initial_backoff
@@ -256,6 +270,8 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/messages", body)
             return True
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={
@@ -313,6 +329,8 @@ class HttpTransport(BaseTransport):
             self._request("POST", "/tasks", body)
             return True
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             message = str(exc)
             if error is not None:
                 error.append(message)
@@ -336,6 +354,8 @@ class HttpTransport(BaseTransport):
                 return result
             return []
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.warning(
                 "transport_error",
                 extra={
@@ -357,6 +377,8 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/tasks/{task_id}")
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.warning(
                 "transport_error",
                 extra={
@@ -372,6 +394,8 @@ class HttpTransport(BaseTransport):
             self._request("PATCH", f"/tasks/{task_id}", {"status": status})
             return True
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={
@@ -394,6 +418,8 @@ class HttpTransport(BaseTransport):
             )
             return result.get("id")
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={
@@ -411,6 +437,8 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/questions/{question_id}")
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.warning(
                 "transport_error",
                 extra={
@@ -672,6 +700,8 @@ class HttpTransport(BaseTransport):
             result = self._request("POST", "/jobs", job_data)
             return result.get("id")
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={
@@ -692,6 +722,8 @@ class HttpTransport(BaseTransport):
                 return result
             return []
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.warning(
                 "transport_error",
                 extra={
@@ -706,6 +738,8 @@ class HttpTransport(BaseTransport):
         try:
             return self._request("GET", f"/jobs/{job_id}")
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.warning(
                 "transport_error",
                 extra={
@@ -721,6 +755,8 @@ class HttpTransport(BaseTransport):
             self._request("PATCH", f"/jobs/{job_id}", updates)
             return True
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={
@@ -736,6 +772,8 @@ class HttpTransport(BaseTransport):
             self._request("DELETE", f"/jobs/{job_id}")
             return True
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={
@@ -751,6 +789,8 @@ class HttpTransport(BaseTransport):
             self._request("POST", f"/jobs/{job_id}/run", {"trigger": trigger})
             return True
         except RuntimeError as exc:
+            if self._run_token():
+                raise
             logger.error(
                 "transport_error",
                 extra={

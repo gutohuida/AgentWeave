@@ -22,7 +22,7 @@ def test_agent_request_command_uses_same_budgeted_endpoint(monkeypatch, capsys):
 
     transport = _HttpTransport()
     monkeypatch.setenv("AW_AGENT_IDENTITY", "lead")
-    monkeypatch.setenv("AW_RUN_ID", "run-1")
+    monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_secret")
     monkeypatch.setattr("agentweave.transport.get_transport", lambda: transport)
     args = argparse.Namespace(
         agent_name="worker-2", template="worker-template", task="Implement it", json=True
@@ -36,7 +36,6 @@ def test_agent_request_command_uses_same_budgeted_endpoint(monkeypatch, capsys):
                 "name": "worker-2",
                 "template": "worker-template",
                 "task": "Implement it",
-                "run_id": "run-1",
             },
         )
     ]
@@ -48,7 +47,7 @@ def test_agent_request_command_refuses_unbound_or_non_hub(monkeypatch, capsys):
 
     args = argparse.Namespace(agent_name="worker", template="template", task="work", json=True)
     monkeypatch.delenv("AW_AGENT_IDENTITY", raising=False)
-    monkeypatch.delenv("AW_RUN_ID", raising=False)
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
     assert cmd_agent_request(args) == 1
     assert "No bound agent identity" in capsys.readouterr().out
 
@@ -73,7 +72,7 @@ def test_legacy_mcp_setup_is_a_non_mutating_compatibility_notice(monkeypatch, ca
     assert "automatic" in capsys.readouterr().out.lower()
 
 
-def test_http_command_path_forwards_bound_agent_and_run_headers(monkeypatch):
+def test_http_command_path_uses_run_token_without_identity_headers(monkeypatch):
     from agentweave.transport.http import HttpTransport
 
     captured = {}
@@ -89,7 +88,9 @@ def test_http_command_path_forwards_bound_agent_and_run_headers(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
     monkeypatch.setenv("AW_AGENT_IDENTITY", "lead")
     monkeypatch.setenv("AW_RUN_ID", "run-1")
+    monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_secret")
     transport = HttpTransport("http://localhost:8000", "key", "proj")
     transport._request("POST", "/tasks", {"title": "T"})
-    assert captured["headers"]["X-agentweave-agent"] == "lead"
-    assert captured["headers"]["X-agentweave-run"] == "run-1"
+    assert captured["headers"]["Authorization"] == "Bearer aw_run_secret"
+    assert "X-agentweave-agent" not in captured["headers"]
+    assert "X-agentweave-run" not in captured["headers"]

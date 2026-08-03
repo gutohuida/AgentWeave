@@ -31,12 +31,12 @@
 
 ## 3. MCP and command parity
 
-- [ ] 3.1 Add parity tests for every allowed capability and representative validation, denied,
+- [x] 3.1 Add parity tests for every allowed capability and representative validation, denied,
       conflict, and not-found failures.
-- [ ] 3.2 Make the canonical MCP server a thin run-token adapter; stop swallowing typed failures.
-- [ ] 3.3 Move bound CLI/HttpTransport commands to the same agent-action API.
-- [ ] 3.4 Remove project API credentials and caller identity headers from spawned-agent environments.
-- [ ] 3.5 Verify HTTP/MCP/command parity and absence of duplicate business rules; hand off and commit.
+- [x] 3.2 Make the canonical MCP server a thin run-token adapter; stop swallowing typed failures.
+- [x] 3.3 Move bound CLI/HttpTransport commands to the same agent-action API.
+- [x] 3.4 Remove project API credentials and caller identity headers from spawned-agent environments.
+- [x] 3.5 Verify HTTP/MCP/command parity and absence of duplicate business rules; hand off and commit.
 
 ## 4. Integration and closeout
 

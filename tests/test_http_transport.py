@@ -62,6 +62,44 @@ class TestHttpTransport(unittest.TestCase):
         self.assertTrue(result)
         mock_urlopen.assert_called_once()
 
+    @patch.dict(
+        "os.environ",
+        {"AW_RUN_TOKEN": "aw_run_bound-secret", "AW_AGENT_IDENTITY": "claimed"},
+        clear=False,
+    )
+    @patch("urllib.request.urlopen")
+    def test_bound_send_uses_agent_api_token_and_actor_free_payload(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response({"id": "msg-bound"})
+        assert self.transport.send_message(
+            {"from": "impostor", "to": "peer", "content": "hello", "run_id": "fake"}
+        )
+
+        request = mock_urlopen.call_args.args[0]
+        self.assertTrue(request.full_url.endswith("/api/v1/agent-actions/messages"))
+        self.assertEqual(request.get_header("Authorization"), "Bearer aw_run_bound-secret")
+        self.assertIsNone(request.get_header("X-agentweave-agent"))
+        self.assertIsNone(request.get_header("X-agentweave-run"))
+        self.assertEqual(
+            json.loads(request.data),
+            {
+                "recipient": "peer",
+                "subject": "",
+                "content": "hello",
+                "type": "message",
+                "task_id": None,
+            },
+        )
+
+    @patch.dict("os.environ", {"AW_RUN_TOKEN": "aw_run_bound-secret"}, clear=False)
+    @patch("urllib.request.urlopen")
+    def test_bound_task_read_preserves_not_found_error(self, mock_urlopen):
+        mock_urlopen.side_effect = _http_error(404, b'{"detail":"Task not found"}')
+
+        with self.assertRaises(HubTransportError) as raised:
+            self.transport.get_task_by_id("task-missing")
+
+        self.assertEqual(raised.exception.status_code, 404)
+
     @patch("urllib.request.urlopen")
     def test_send_message_failure(self, mock_urlopen):
         import urllib.error

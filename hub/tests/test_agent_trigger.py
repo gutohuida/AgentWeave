@@ -269,13 +269,17 @@ async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
 
 
 @pytest.mark.asyncio
-async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app, auth_headers):
+async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
+    app, auth_headers, monkeypatch
+):
     """Task 4.1: the Hub — not the agent — establishes identity at spawn, as an env var
     the tool surface reads rather than a caller-supplied parameter. Task 4.5: the agent is
     told, in its very first prompt, which access path (MCP vs. CLI commands) is in use.
     Claude accepts per-run MCP configuration, so the Hub injects the canonical surface
     without relying on a global client registration.
     """
+    monkeypatch.setenv("HUB_API_KEY", "aw_live_parent-secret")
+    monkeypatch.setenv("HUB_PROJECT_ID", "parent-project")
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"identity-claude": {"runner": "claude"}}}},
@@ -315,6 +319,8 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app,
     run_token = spawned_env["AW_RUN_TOKEN"]
     assert run_token.startswith("aw_run_")
     assert run_token not in resp.text
+    assert "HUB_API_KEY" not in spawned_env
+    assert "HUB_PROJECT_ID" not in spawned_env
     # The Hub's own environment must be inherited, not replaced, by adding these keys.
     assert "PATH" in spawned_env or "Path" in spawned_env
 

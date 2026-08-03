@@ -29,9 +29,7 @@ def hub(monkeypatch):
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
     monkeypatch.setenv("HUB_URL", "http://localhost:8000")
-    monkeypatch.setenv("HUB_API_KEY", "test-key")
-    monkeypatch.setenv("AW_AGENT_IDENTITY", "lead")
-    monkeypatch.setenv("AW_RUN_ID", "run-1")
+    monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_test-key")
     return calls, responses
 
 
@@ -39,20 +37,21 @@ def _body(request):
     return json.loads(request.data) if request.data else None
 
 
-def test_hub_request_binds_headers_and_does_not_inject_project_body(hub):
+def test_hub_request_binds_run_token_without_identity_headers(hub):
     from hub.mcp_server import _hub_request
 
     calls, responses = hub
     responses.append(b'{"ok": true}')
     assert _hub_request("POST", "/tasks", {"title": "T"}) == {"ok": True}
     request = calls[0]
-    assert request.get_header("Authorization") == "Bearer test-key"
-    assert request.get_header("X-agentweave-agent") == "lead"
-    assert request.get_header("X-agentweave-run") == "run-1"
+    assert request.get_header("Authorization") == "Bearer aw_run_test-key"
+    assert request.get_header("X-agentweave-agent") is None
+    assert request.get_header("X-agentweave-run") is None
+    assert request.full_url.endswith("/api/v1/agent-actions/tasks")
     assert _body(request) == {"title": "T"}
 
 
-def test_send_message_uses_bound_identity_and_run(hub):
+def test_send_message_payload_contains_no_identity_or_run(hub):
     from hub.mcp_server import send_message
 
     calls, responses = hub
@@ -62,28 +61,25 @@ def test_send_message_uses_bound_identity_and_run(hub):
         "message_id": "msg-1",
     }
     assert _body(calls[0]) == {
-        "from": "lead",
-        "to": "worker",
+        "recipient": "worker",
         "subject": "Subject",
         "content": "Content",
         "type": "message",
         "task_id": None,
-        "run_id": "run-1",
     }
 
 
-def test_effect_refuses_unbound_identity(hub, monkeypatch):
+def test_effect_refuses_unbound_run_credential(hub, monkeypatch):
     from hub.mcp_server import send_message
 
     calls, _ = hub
-    monkeypatch.delenv("AW_AGENT_IDENTITY")
-    result = send_message("worker", "Subject", "Content")
-    assert result["success"] is False
-    assert "No bound agent identity" in result["error"]
+    monkeypatch.delenv("AW_RUN_TOKEN")
+    with pytest.raises(RuntimeError, match="No bound run credential"):
+        send_message("worker", "Subject", "Content")
     assert calls == []
 
 
-def test_task_tools_use_ledger_endpoints_and_bound_assigner(hub):
+def test_task_tools_use_agent_ledger_endpoints_without_assigner(hub):
     from hub.mcp_server import create_task, get_task, list_tasks, update_task
 
     calls, responses = hub
@@ -96,7 +92,7 @@ def test_task_tools_use_ledger_endpoints_and_bound_assigner(hub):
         ]
     )
     assert create_task("Build", assignee="worker")["id"] == "task-1"
-    assert _body(calls[0])["assigner"] == "lead"
+    assert "assigner" not in _body(calls[0])
     assert list_tasks("worker")[0]["id"] == "task-1"
     assert "agent=worker" in calls[1].full_url
     assert get_task("task-1")["id"] == "task-1"
@@ -110,11 +106,7 @@ def test_question_tools_bind_asker_and_return_answer(hub):
     calls, responses = hub
     responses.extend([b'{"id":"q-1"}', b'{"answered":true,"answer":"yes"}'])
     assert ask_user("Proceed?", blocking=True)["question_id"] == "q-1"
-    assert _body(calls[0]) == {
-        "from_agent": "lead",
-        "question": "Proceed?",
-        "blocking": True,
-    }
+    assert _body(calls[0]) == {"question": "Proceed?", "blocking": True}
     assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}
 
 
@@ -128,7 +120,6 @@ def test_request_agent_uses_bound_run_without_requester_field(hub):
         "name": "worker-2",
         "template": "worker-template",
         "task": "Implement it",
-        "run_id": "run-1",
     }
 
 
@@ -138,7 +129,7 @@ def test_request_agent_uses_bound_run_without_requester_field(hub):
         (
             lambda module: module.create_job("N", "worker", "M", "0 2 * * *"),
             "POST",
-            "/api/v1/jobs",
+            "/api/v1/agent-actions/jobs",
             {
                 "name": "N",
                 "agent": "worker",
@@ -150,11 +141,21 @@ def test_request_agent_uses_bound_run_without_requester_field(hub):
         (
             lambda module: module.toggle_job("job-1", True),
             "PATCH",
-            "/api/v1/jobs/job-1",
+            "/api/v1/agent-actions/jobs/job-1",
             {"enabled": True},
         ),
-        (lambda module: module.run_job("job-1"), "POST", "/api/v1/jobs/job-1/run", None),
-        (lambda module: module.delete_job("job-1"), "DELETE", "/api/v1/jobs/job-1", None),
+        (
+            lambda module: module.run_job("job-1"),
+            "POST",
+            "/api/v1/agent-actions/jobs/job-1/run",
+            None,
+        ),
+        (
+            lambda module: module.delete_job("job-1"),
+            "DELETE",
+            "/api/v1/agent-actions/jobs/job-1",
+            None,
+        ),
     ],
 )
 def test_job_mutations_reach_only_governed_api(call, method, path, body, hub):
@@ -168,8 +169,8 @@ def test_job_mutations_reach_only_governed_api(call, method, path, body, hub):
     assert _body(calls[0]) == body
 
 
-def test_job_mutation_reports_approval_required_on_gate_rejection(hub):
-    from hub.mcp_server import run_job
+def test_job_mutation_preserves_forbidden_failure(hub):
+    from hub.mcp_server import HubAPIError, run_job
 
     _, responses = hub
     responses.append(
@@ -181,9 +182,31 @@ def test_job_mutation_reports_approval_required_on_gate_rejection(hub):
             MagicMock(read=lambda: b'{"detail":"operator approval required"}'),
         )
     )
-    result = run_job("job-1")
-    assert result["success"] is False
-    assert result["approval_required"] is True
+    with pytest.raises(HubAPIError) as raised:
+        run_job("job-1")
+    assert raised.value.status_code == 403
+    assert "operator approval required" in raised.value.detail
+
+
+@pytest.mark.parametrize("status_code", [403, 404, 409, 422])
+def test_mcp_adapter_preserves_typed_application_failures(hub, status_code):
+    from hub.mcp_server import HubAPIError, _hub_request
+
+    _, responses = hub
+    responses.append(
+        urllib.error.HTTPError(
+            "http://localhost/api/v1/agent-actions/tasks/x",
+            status_code,
+            "application failure",
+            {},
+            MagicMock(read=lambda: b'{"detail":"typed failure"}'),
+        )
+    )
+
+    with pytest.raises(HubAPIError) as raised:
+        _hub_request("GET", "/tasks/x")
+    assert raised.value.status_code == status_code
+    assert raised.value.detail == "typed failure"
 
 
 def test_hub_request_timeout_is_ten_seconds(monkeypatch):
@@ -196,5 +219,6 @@ def test_hub_request_timeout_is_ten_seconds(monkeypatch):
         return _response(b"{}")
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_test")
     _hub_request("GET", "/tasks")
     assert captured["timeout"] == 10

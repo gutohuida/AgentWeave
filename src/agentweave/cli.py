@@ -4485,9 +4485,9 @@ def cmd_agent_request(args: argparse.Namespace) -> int:
     output_json: bool = getattr(args, "json", False)
     if _require_bound_identity() is None:
         return 1
-    run_id = os.environ.get("AW_RUN_ID", "").strip()
-    if not run_id:
-        message = "'agent request' requires a Hub-bound running turn (AW_RUN_ID is unset)"
+    run_token = os.environ.get("AW_RUN_TOKEN", "").strip()
+    if not run_token:
+        message = "'agent request' requires a Hub-bound running turn (AW_RUN_TOKEN is unset)"
         if output_json:
             print(json.dumps({"error": message}))
         else:
@@ -4512,7 +4512,6 @@ def cmd_agent_request(args: argparse.Namespace) -> int:
                 "name": args.agent_name,
                 "template": args.template,
                 "task": args.task,
-                "run_id": run_id,
             },
         )
     except RuntimeError as exc:
