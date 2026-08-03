@@ -11,6 +11,7 @@ from sqlalchemy import select
 from .db.engine import async_session_factory
 from .db.models import Conversation, Run
 from .inbound_queue import can_start, format_turn_prompt, project_limits, queued_entries
+from .usage_accounting import project_budget_state
 
 _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 
@@ -63,6 +64,10 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         controlling_operator = next(
             (entry for entry in selected if entry.origin_type == "operator"), None
         )
+        initiator = "operator" if controlling_operator is not None else "autonomous"
+        budget = await project_budget_state(db, project_id)
+        if initiator == "autonomous" and budget["exhausted"]:
+            return ScheduleResult(waiting_reason="token budget exhausted")
         work_dir = controlling_operator.work_dir if controlling_operator is not None else None
 
         try:
@@ -75,6 +80,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 session=db,
                 queue_entry_ids=[entry.id for entry in selected],
                 turn_depth=min(entry.hop_depth for entry in selected),
+                initiator=initiator,
             )
         except TriggerAgentError as exc:
             return ScheduleResult(waiting_reason=exc.detail)

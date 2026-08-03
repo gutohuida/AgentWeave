@@ -124,7 +124,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0018. The full
+    migration runs cleanly and the version lands at 0019. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -132,7 +132,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0018).
+    # Verify alembic_version is at the latest revision (0019).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -143,7 +143,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0018", f"expected alembic_version=0018, got {version}"
+    assert version == "0019", f"expected alembic_version=0019, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -254,7 +254,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0018", f"expected alembic_version=0018, got {version}"
+    assert version == "0019", f"expected alembic_version=0019, got {version}"
 
 
 @pytest.mark.asyncio
@@ -647,6 +647,80 @@ def test_migration_0018_adds_durable_turn_accounting(tmp_path) -> None:
             await engine.dispose()
 
     _run(_check_default_and_uniqueness())
+
+
+def test_migration_0019_allows_scheduled_queue_origin(tmp_path) -> None:
+    db_file = tmp_path / "queue-origin-0018.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _create_old_state() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256))"
+                    )
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO projects (id, name) VALUES ('proj-old', 'Old')")
+                )
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE inbound_queue_entries ("
+                        "sequence INTEGER PRIMARY KEY AUTOINCREMENT, id VARCHAR(64) UNIQUE NOT NULL, "
+                        "project_id VARCHAR(64) NOT NULL REFERENCES projects(id), "
+                        "agent VARCHAR(64) NOT NULL, origin_type VARCHAR(16) NOT NULL, "
+                        "origin_agent VARCHAR(64), content TEXT NOT NULL, "
+                        "arrived_at DATETIME NOT NULL, hop_depth INTEGER NOT NULL, "
+                        "state VARCHAR(16) NOT NULL, delivered_in_run_id VARCHAR(64), "
+                        "delivered_at DATETIME, withdrawn_at DATETIME, message_id VARCHAR(64), "
+                        "session_mode VARCHAR(16), session_id VARCHAR(128), "
+                        "conversation_id VARCHAR(64), work_dir VARCHAR(4096), "
+                        "CONSTRAINT ck_inbound_queue_origin_type "
+                        "CHECK (origin_type IN ('operator', 'agent')), "
+                        "CONSTRAINT ck_inbound_queue_origin_agent CHECK ("
+                        "(origin_type = 'operator' AND origin_agent IS NULL) OR "
+                        "(origin_type = 'agent' AND origin_agent IS NOT NULL)), "
+                        "CONSTRAINT ck_inbound_queue_state "
+                        "CHECK (state IN ('queued', 'delivered', 'withdrawn')), "
+                        "CONSTRAINT ck_inbound_queue_hop_depth CHECK (hop_depth >= 0))"
+                    )
+                )
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0018')")
+                )
+        finally:
+            await engine.dispose()
+
+    async def _insert_job() -> str:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO inbound_queue_entries "
+                        "(id, project_id, agent, origin_type, origin_agent, content, arrived_at, "
+                        "hop_depth, state) VALUES ('entry-job', 'proj-old', 'claude', 'job', NULL, "
+                        "'scheduled', :now, 0, 'queued')"
+                    ),
+                    {"now": datetime.now(timezone.utc)},
+                )
+                result = await conn.execute(
+                    sa.text(
+                        "SELECT origin_type FROM inbound_queue_entries WHERE id = 'entry-job'"
+                    )
+                )
+                return result.scalar_one()
+        finally:
+            await engine.dispose()
+
+    _run(_create_old_state())
+    _run_alembic_with(db_url)
+    assert _run(_insert_job()) == "job"
 
 
 @pytest.mark.asyncio

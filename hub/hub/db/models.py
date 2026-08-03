@@ -168,7 +168,7 @@ class Message(Base):
 
 
 QUEUE_ENTRY_STATES = ("queued", "delivered", "withdrawn")
-QUEUE_ORIGIN_TYPES = ("operator", "agent")
+QUEUE_ORIGIN_TYPES = ("operator", "agent", "job")
 
 
 class InboundQueueEntry(Base):
@@ -203,7 +203,7 @@ class InboundQueueEntry(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "origin_type IN ('operator', 'agent')", name="ck_inbound_queue_origin_type"
+            "origin_type IN ('operator', 'agent', 'job')", name="ck_inbound_queue_origin_type"
         ),
         CheckConstraint(
             "state IN ('queued', 'delivered', 'withdrawn')", name="ck_inbound_queue_state"
@@ -211,7 +211,8 @@ class InboundQueueEntry(Base):
         CheckConstraint("hop_depth >= 0", name="ck_inbound_queue_hop_depth"),
         CheckConstraint(
             "(origin_type = 'operator' AND origin_agent IS NULL) OR "
-            "(origin_type = 'agent' AND origin_agent IS NOT NULL)",
+            "(origin_type = 'agent' AND origin_agent IS NOT NULL) OR "
+            "(origin_type = 'job' AND origin_agent IS NULL)",
             name="ck_inbound_queue_origin_agent",
         ),
         Index(

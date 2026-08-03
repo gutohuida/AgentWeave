@@ -71,7 +71,7 @@ def _queue_entry_to_timeline(
     entry: InboundQueueEntry, hop_budget: Optional[int], *, delivered: bool
 ) -> TimelineEntry:
     kind: TimelineEntryKind = (
-        "operator_input" if entry.origin_type == "operator" else "inbound_peer"
+        "operator_input" if entry.origin_type in ("operator", "job") else "inbound_peer"
     )
     return TimelineEntry(
         id=entry.id,

@@ -180,3 +180,17 @@ async def accounting_snapshot(
         "preferred_display": preferred_display,
         "recent_turns": recent_turns,
     }
+
+
+async def project_budget_state(db: AsyncSession, project_id: str) -> Dict[str, Any]:
+    """Return the lightweight budget facts needed on the turn-scheduling hot path."""
+    project = await db.get(Project, project_id)
+    if project is None:
+        raise ValueError(f"project {project_id!r} does not exist")
+    used = await db.scalar(
+        select(func.sum(TurnUsage.total_tokens)).where(
+            TurnUsage.project_id == project_id,
+            TurnUsage.status == "measured",
+        )
+    )
+    return budget_state(project.token_budget, int(used) if used is not None else None)

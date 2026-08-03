@@ -45,11 +45,16 @@
 
 ## 3. Autonomous budget enforcement
 
-- [ ] 3.1 Add scheduler tests proving agent and scheduled-job entries pause at exhaustion while
+- [x] 3.1 Add scheduler tests proving agent and scheduled-job entries pause at exhaustion while
       operator turns still start and queued entries remain durable.
-- [ ] 3.2 Add explicit job origin and persisted run initiator; enforce the budget before delivery.
-- [ ] 3.3 Verify autonomous/operator budget scenarios.
-- [ ] 3.4 Write handoff and commit the phase.
+- [x] 3.2 Add explicit job origin and persisted run initiator; enforce the budget before delivery.
+      Migration 0019 expands queue origin to `job`; scheduler checks measured project usage before
+      atomic delivery and budget updates reschedule retained work.
+- [x] 3.3 Verify autonomous/operator budget scenarios. Focused scheduler/migration/API suites:
+      35 passed, 1 skipped before the added migration-specific test; full Hub suite after all
+      changes: 432 passed, 4 skipped. Targeted Ruff and `git diff --check` pass.
+- [x] 3.4 Write handoff and commit the phase. Handoff:
+      `.claude/handoffs/2026-08-03-0140-accounting-phase3-budget-enforcement.md`.
 
 ## 4. Operator UI and integration
 

@@ -331,7 +331,7 @@ class JobScheduler:
             entry = new_entry(
                 project_id=job.project_id,
                 agent=job.agent,
-                origin_type="operator",
+                origin_type="job",
                 content=job.message,
                 hop_depth=0,
                 session_mode=job.session_mode,
@@ -344,7 +344,7 @@ class JobScheduler:
             queue_payload = {
                 "entry_id": entry.id,
                 "agent": job.agent,
-                "origin_type": "operator",
+                "origin_type": "job",
                 "hop_depth": 0,
                 "job_id": job.id,
                 "conversation_id": conversation.id,

@@ -136,6 +136,29 @@ def test_hop_budget_and_inline_prompt_use_typed_origin():
     assert "Operator (hop 0):\nreset" in prompt
 
 
+def test_scheduled_job_origin_is_typed_and_has_no_origin_agent():
+    job = new_entry(
+        project_id="p",
+        agent="a",
+        origin_type="job",
+        content="scheduled",
+        hop_depth=0,
+    )
+    assert format_turn_prompt([job]) == (
+        "[AgentWeave inbound queue — delivered inline in arrival order]\n\n"
+        "Scheduled job (hop 0):\nscheduled"
+    )
+    with pytest.raises(ValueError, match="origin_agent"):
+        new_entry(
+            project_id="p",
+            agent="a",
+            origin_type="job",
+            origin_agent="fake",
+            content="invalid",
+            hop_depth=0,
+        )
+
+
 @pytest.mark.asyncio
 async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_headers):
     defaults = await app.get("/api/v1/queue/settings", headers=auth_headers)

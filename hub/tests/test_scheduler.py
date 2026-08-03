@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AIJob, JobRun, Message, Run
+from hub.db.models import Agent, AIJob, InboundQueueEntry, JobRun, Message, Run
 from hub.scheduler import JobScheduler
 
 
@@ -75,6 +75,14 @@ async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(app, a
         runs = (await db.execute(select(Run).where(Run.agent == "job-claude"))).scalars().all()
         assert len(runs) == 1
         assert runs[0].status == "completed"
+        assert runs[0].initiator == "autonomous"
+
+        delivered = (
+            await db.execute(
+                select(InboundQueueEntry).where(InboundQueueEntry.agent == "job-claude")
+            )
+        ).scalar_one()
+        assert delivered.origin_type == "job"
 
         # The old protocol wrote a synthetic Message for the watchdog to scan and
         # re-trigger from; the direct-execution path must not write one at all.
@@ -162,3 +170,4 @@ async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers):
             .all()
         )
         assert [entry.content for entry in queued] == ["hello from a scheduled job"]
+        assert queued[0].origin_type == "job"

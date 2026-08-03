@@ -4,11 +4,12 @@ from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Project
+from ...db.models import InboundQueueEntry, Project
 from ...usage_accounting import accounting_snapshot, budget_state
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
@@ -42,4 +43,16 @@ async def update_budget(
     project_row.token_budget = body.token_budget
     await session.commit()
     snapshot = await accounting_snapshot(session, project_id, recent_limit=0)
+    queued_result = await session.execute(
+        select(InboundQueueEntry.agent)
+        .where(
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.state == "queued",
+        )
+        .distinct()
+    )
+    from ...turn_scheduler import schedule_agent
+
+    for agent in queued_result.scalars().all():
+        await schedule_agent(project_id, agent)
     return budget_state(body.token_budget, snapshot["project"]["total_tokens"])

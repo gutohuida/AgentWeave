@@ -147,6 +147,7 @@ async def trigger_agent_directly(
     session: AsyncSession,
     queue_entry_ids: Optional[List[str]] = None,
     turn_depth: Optional[int] = None,
+    initiator: str = "operator",
 ) -> TriggerAgentResponse:
     """Validate and spawn *agent* directly, returning its run identifier.
 
@@ -300,6 +301,7 @@ async def trigger_agent_directly(
         conversation_id=conversation.id,
         status="running",
         turn_depth=turn_depth,
+        initiator=initiator,
     )
     delivered = []
     if queue_entry_ids:
@@ -345,6 +347,7 @@ async def trigger_agent_directly(
                 "run_id": run_id,
                 "conversation_id": conversation.id,
                 "session_mode": session_mode,
+                "initiator": initiator,
             },
             agent=agent,
         )

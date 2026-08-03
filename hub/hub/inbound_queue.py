@@ -29,8 +29,8 @@ def new_entry(
     conversation_id: Optional[str] = None,
     work_dir: Optional[str] = None,
 ) -> InboundQueueEntry:
-    if origin_type not in ("operator", "agent"):
-        raise ValueError("origin_type must be 'operator' or 'agent'")
+    if origin_type not in ("operator", "agent", "job"):
+        raise ValueError("origin_type must be 'operator', 'agent', or 'job'")
     if (origin_type == "agent") != bool(origin_agent):
         raise ValueError("agent origins require origin_agent; operator origins forbid it")
     if hop_depth < 0:
@@ -88,7 +88,12 @@ def can_start(entries: Iterable[InboundQueueEntry], hop_budget: int) -> bool:
 def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
     blocks = ["[AgentWeave inbound queue — delivered inline in arrival order]"]
     for entry in entries:
-        origin = "Operator" if entry.origin_type == "operator" else f'Agent "{entry.origin_agent}"'
+        if entry.origin_type == "operator":
+            origin = "Operator"
+        elif entry.origin_type == "job":
+            origin = "Scheduled job"
+        else:
+            origin = f'Agent "{entry.origin_agent}"'
         blocks.append(f"{origin} (hop {entry.hop_depth}):\n{entry.content}")
     return "\n\n".join(blocks)
 
