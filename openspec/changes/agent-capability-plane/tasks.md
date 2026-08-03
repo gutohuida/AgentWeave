@@ -24,10 +24,10 @@
 
 ## 2. Governed agent and job actions
 
-- [ ] 2.1 Add tests for request-agent and job operations through the run credential.
-- [ ] 2.2 Route both through existing template/agent-budget and job-allowance governance services.
-- [ ] 2.3 Persist request/job attribution and prove headers/payloads cannot override the actor.
-- [ ] 2.4 Verify governance scenarios; hand off and commit.
+- [x] 2.1 Add tests for request-agent and job operations through the run credential.
+- [x] 2.2 Route both through existing template/agent-budget and job-allowance governance services.
+- [x] 2.3 Persist request/job attribution and prove headers/payloads cannot override the actor.
+- [x] 2.4 Verify governance scenarios; hand off and commit.
 
 ## 3. MCP and command parity
 

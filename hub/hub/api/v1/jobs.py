@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AIJob, JobRun, Project, Run
+from ...db.models import AIJob, AgentJobDeletion, JobRun, Project, Run
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -55,6 +55,7 @@ async def _record_job_run_failure(
     job: AIJob,
     trigger: str,
     exc: Exception,
+    requested_by_run_id: Optional[str] = None,
 ) -> str:
     error_summary = _safe_error_summary(exc)
     run_id = f"run-{short_id()}"
@@ -67,6 +68,7 @@ async def _record_job_run_failure(
         trigger=trigger,
         session_id=job.last_session_id if job.session_mode == "resume" else None,
         error_summary=error_summary,
+        requested_by_run_id=requested_by_run_id,
     )
     session.add(run)
     await persist_event(
@@ -137,6 +139,7 @@ async def create_job(
         enabled=body.enabled,
         next_run=next_run,
         source=body.source if body.source in ("local", "hub") else "hub",
+        created_by_run_id=run_identity,
     )
 
     session.add(job)
@@ -294,6 +297,8 @@ async def update_job(
         job.enabled = body.enabled
         update_scheduler = True
 
+    job.updated_by_run_id = run_identity
+
     await session.commit()
     await session.refresh(job)
 
@@ -330,6 +335,17 @@ async def delete_job(
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    if run_identity and agent_identity:
+        session.add(
+            AgentJobDeletion(
+                id=f"job-delete-{short_id()}",
+                job_id=job.id,
+                project_id=project_id,
+                agent=agent_identity,
+                run_id=run_identity,
+            )
+        )
 
     # Remove from scheduler first
     try:
@@ -401,7 +417,9 @@ async def run_job(
         scheduler = get_scheduler()
         if not scheduler:
             exc = RuntimeError("Job scheduler not available")
-            await _record_job_run_failure(session, job, "manual", exc)
+            await _record_job_run_failure(
+                session, job, "manual", exc, requested_by_run_id=run_identity
+            )
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
         # Pass the session to avoid duplicate work
@@ -418,6 +436,9 @@ async def run_job(
         )
         latest_run = result.scalar_one_or_none()
         run_id = latest_run.id if latest_run else "unknown"
+        if latest_run is not None:
+            latest_run.requested_by_run_id = run_identity
+            await session.commit()
 
         if not success:
             # `_fire_job_internal` already persisted the right event (job_run_skipped or
@@ -441,7 +462,9 @@ async def run_job(
     except HTTPException:
         raise
     except Exception as e:
-        await _record_job_run_failure(session, job, "manual", e)
+        await _record_job_run_failure(
+            session, job, "manual", e, requested_by_run_id=run_identity
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fire job: {_safe_error_summary(e)}",

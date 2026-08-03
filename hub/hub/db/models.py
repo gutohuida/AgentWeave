@@ -73,6 +73,7 @@ class Agent(Base):
     # from the name (a rename must not change it). Persists across restarts because it
     # lives on this row, not in memory. The palette cycles once index >= palette length.
     color_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
@@ -569,6 +570,8 @@ class AIJob(Base):
     source: Mapped[str] = mapped_column(
         String(16), default="hub", nullable=False
     )  # "local" or "hub" - tracks origin for sync logic
+    created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     project: Mapped["Project"] = relationship(back_populates="jobs")
     runs: Mapped[List["JobRun"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -600,7 +603,23 @@ class JobRun(Base):
     )  # "scheduled" or "manual"
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     error_summary: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    requested_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)
 
     job: Mapped["AIJob"] = relationship(back_populates="runs")
+
+
+class AgentJobDeletion(Base):
+    """Durable attribution tombstone for an agent-deleted scheduled job."""
+
+    __tablename__ = "agent_job_deletions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    deleted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )

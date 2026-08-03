@@ -926,6 +926,7 @@ async def request_agent(
         self_registered=False,
         config=copied_config,
         color_index=await next_color_index(session, project_id),
+        created_by_run_id=source_run.id,
     )
     hop_depth = source_run.turn_depth + 1
     conversation = new_conversation(project_id=project_id, agent=body.name)
@@ -942,6 +943,7 @@ async def request_agent(
         # create_message.
         session_id=source_run.session_id,
         conversation_id=source_run.conversation_id,
+        created_by_run_id=source_run.id,
     )
     entry: InboundQueueEntry = new_entry(
         project_id=project_id,

@@ -15,8 +15,11 @@ from ...db.engine import get_session
 from ...db.models import Question
 from ...schemas.messages import MessageCreate, MessageResponse, _MESSAGE_TYPES
 from ...schemas.questions import QuestionCreate, QuestionResponse
+from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate, _PRIORITIES, _TASK_STATUSES
 from .messages import create_message_for_actor
+from .agents import AgentRequest, request_agent
+from .jobs import create_job, delete_job, run_job, update_job
 from .questions import ask_question_for_actor
 from .tasks import create_task_for_actor, get_task, list_tasks, update_task_for_actor
 
@@ -73,6 +76,32 @@ class AgentQuestionCreate(BaseModel):
     blocking: bool = False
 
     model_config = {"extra": "forbid"}
+
+
+class BoundAgentRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    template: str = Field(min_length=1, max_length=32)
+    task: str = Field(min_length=1, max_length=100_000)
+
+    model_config = {"extra": "forbid"}
+
+
+class AgentJobCreate(BaseModel):
+    name: str = Field(max_length=256)
+    agent: str = Field(max_length=64)
+    message: str = Field(max_length=10000)
+    cron: str = Field(max_length=128)
+    session_mode: str = Field(default="new", max_length=64)
+    enabled: bool = True
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("session_mode")
+    @classmethod
+    def validate_session_mode(cls, value: str) -> str:
+        if value not in ("new", "resume"):
+            raise ValueError("session_mode must be 'new' or 'resume'")
+        return value
 
 
 @router.post("/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -197,3 +226,78 @@ async def get_own_question(
     ):
         raise HTTPException(status_code=404, detail="Question not found")
     return question
+
+
+@router.post("/agents/request", status_code=status.HTTP_201_CREATED)
+async def request_governed_agent(
+    body: BoundAgentRequest,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await request_agent(
+        AgentRequest(**body.model_dump(), run_id=actor.run_id),
+        project=(actor.project_id, actor.project_id),
+        session=session,
+    )
+
+
+@router.post("/jobs", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
+async def create_governed_job(
+    body: AgentJobCreate,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await create_job(
+        JobCreate(**body.model_dump(), source="hub"),
+        project=(actor.project_id, actor.project_id),
+        session=session,
+        agent_identity=actor.agent,
+        run_identity=actor.run_id,
+    )
+
+
+@router.patch("/jobs/{job_id}", response_model=JobResponse)
+async def update_governed_job(
+    job_id: str,
+    body: JobUpdate,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await update_job(
+        job_id,
+        body,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+        agent_identity=actor.agent,
+        run_identity=actor.run_id,
+    )
+
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_governed_job(
+    job_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await delete_job(
+        job_id,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+        agent_identity=actor.agent,
+        run_identity=actor.run_id,
+    )
+
+
+@router.post("/jobs/{job_id}/run")
+async def run_governed_job(
+    job_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await run_job(
+        job_id,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+        agent_identity=actor.agent,
+        run_identity=actor.run_id,
+    )
