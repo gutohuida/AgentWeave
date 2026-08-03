@@ -106,4 +106,4 @@
       retained, and the selector listed both configured agents as runnable and filtered by search.
 - [x] 6.3 Full `hub/ui` and `hub` test suites green. UI: 35 files / 285 tests; Hub: 405 passed,
       4 skipped. Production UI build also passes.
-- [ ] 6.4 `/handoff`
+- [x] 6.4 `/handoff` — `.claude/handoffs/2026-08-03-0113-composer-phase6-verified.md`.
