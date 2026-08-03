@@ -17,10 +17,10 @@
 
 ## 1. Messaging, tasks, and questions
 
-- [ ] 1.1 Add actor-derived API tests whose payload signatures contain no identity/run/project.
-- [ ] 1.2 Extract actor-aware services and implement message, task, and question agent routes.
-- [ ] 1.3 Persist create/update run attribution and enforce same-agent question-answer reads.
-- [ ] 1.4 Verify allowed intent and prohibited coordination/configuration reads; hand off and commit.
+- [x] 1.1 Add actor-derived API tests whose payload signatures contain no identity/run/project.
+- [x] 1.2 Extract actor-aware services and implement message, task, and question agent routes.
+- [x] 1.3 Persist create/update run attribution and enforce same-agent question-answer reads.
+- [x] 1.4 Verify allowed intent and prohibited coordination/configuration reads; hand off and commit.
 
 ## 2. Governed agent and job actions
 

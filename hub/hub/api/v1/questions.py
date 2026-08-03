@@ -19,20 +19,22 @@ from ...utils import persist_event, short_id
 router = APIRouter(prefix="/questions", tags=["questions"])
 
 
-@router.post("", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
-async def ask_question(
+async def ask_question_for_actor(
     body: QuestionCreate,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    project_id, _ = project
+    *,
+    project_id: str,
+    from_agent: str,
+    created_by_run_id: Optional[str],
+    session: AsyncSession,
+) -> Question:
     q_id = f"q-{short_id()}"
     question = Question(
         id=q_id,
         project_id=project_id,
-        from_agent=body.from_agent,
+        from_agent=from_agent,
         question=body.question,
         blocking=body.blocking,
+        created_by_run_id=created_by_run_id,
     )
     session.add(question)
     await session.commit()
@@ -40,16 +42,32 @@ async def ask_question(
     await sse_manager.broadcast(
         project_id,
         "question_asked",
-        {"id": q_id, "from_agent": body.from_agent, "blocking": body.blocking},
+        {"id": q_id, "from_agent": from_agent, "blocking": body.blocking},
     )
     await persist_event(
         session,
         project_id,
         "question_asked",
-        {"id": q_id, "from_agent": body.from_agent, "blocking": body.blocking},
-        agent=body.from_agent,
+        {"id": q_id, "from_agent": from_agent, "blocking": body.blocking},
+        agent=from_agent,
     )
     return question
+
+
+@router.post("", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
+async def ask_question(
+    body: QuestionCreate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    return await ask_question_for_actor(
+        body,
+        project_id=project_id,
+        from_agent=body.from_agent,
+        created_by_run_id=None,
+        session=session,
+    )
 
 
 @router.get("", response_model=List[QuestionResponse])

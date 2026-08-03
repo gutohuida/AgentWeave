@@ -20,33 +20,35 @@ from ...utils import persist_event, short_id
 router = APIRouter(prefix="/messages", tags=["messages"])
 
 
-@router.post("", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-async def create_message(
+async def create_message_for_actor(
     body: MessageCreate,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    project_id, _ = project
+    *,
+    project_id: str,
+    sender: str,
+    run_id: Optional[str],
+    session: AsyncSession,
+) -> Message:
     msg = Message(
         id=f"msg-{short_id()}",
         project_id=project_id,
-        sender=body.sender,
+        sender=sender,
         recipient=body.recipient,
         subject=body.subject,
         content=body.content,
         type=body.type,
         timestamp=datetime.now(timezone.utc),
         task_id=body.task_id,
+        created_by_run_id=run_id,
     )
     hop_budget, _ = await project_limits(session, project_id)
     hop_depth = hop_budget + 1
     source_conversation_id = None
-    if body.run_id:
-        source_run = await session.get(Run, body.run_id)
+    if run_id:
+        source_run = await session.get(Run, run_id)
         if (
             source_run is None
             or source_run.project_id != project_id
-            or source_run.agent != body.sender
+            or source_run.agent != sender
             or source_run.status != "running"
             or source_run.turn_depth is None
         ):
@@ -69,7 +71,7 @@ async def create_message(
         project_id=project_id,
         agent=body.recipient,
         origin_type="agent",
-        origin_agent=body.sender,
+        origin_agent=sender,
         content=body.content,
         hop_depth=hop_depth,
         message_id=msg.id,
@@ -84,7 +86,7 @@ async def create_message(
         "entry_id": entry.id,
         "agent": entry.agent,
         "origin_type": "agent",
-        "origin_agent": body.sender,
+        "origin_agent": sender,
         "hop_depth": hop_depth,
         "conversation_id": recipient_conversation.id,
         "source_conversation_id": source_conversation_id,
@@ -114,6 +116,22 @@ async def create_message(
 
     await schedule_agent(project_id, body.recipient)
     return msg
+
+
+@router.post("", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+async def create_message(
+    body: MessageCreate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    return await create_message_for_actor(
+        body,
+        project_id=project_id,
+        sender=body.sender,
+        run_id=body.run_id,
+        session=session,
+    )
 
 
 @router.get("", response_model=List[MessageResponse])

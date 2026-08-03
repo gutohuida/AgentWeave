@@ -50,13 +50,14 @@ async def _latest_heartbeats_by_agent(
     return heartbeats
 
 
-@router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_task(
+async def create_task_for_actor(
     body: TaskCreate,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    project_id, _ = project
+    *,
+    project_id: str,
+    assigner: Optional[str],
+    created_by_run_id: Optional[str],
+    session: AsyncSession,
+) -> TaskResponse:
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
@@ -69,11 +70,12 @@ async def create_task(
         status=body.status,
         priority=body.priority,
         assignee=body.assignee,
-        assigner=body.assigner,
+        assigner=assigner,
         requirements=body.requirements,
         acceptance_criteria=body.acceptance_criteria,
         deliverables=body.deliverables,
         notes=body.notes,
+        created_by_run_id=created_by_run_id,
     )
     session.add(task)
     try:
@@ -102,6 +104,22 @@ async def create_task(
         {task.assignee} if task.assignee else set(),
     )
     return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+
+
+@router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+async def create_task(
+    body: TaskCreate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    return await create_task_for_actor(
+        body,
+        project_id=project_id,
+        assigner=body.assigner,
+        created_by_run_id=None,
+        session=session,
+    )
 
 
 @router.get("", response_model=List[TaskResponse])
@@ -151,14 +169,14 @@ async def get_task(
     return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
 
 
-@router.patch("/{task_id}", response_model=TaskResponse)
-async def update_task(
+async def update_task_for_actor(
     task_id: str,
     body: TaskUpdate,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    project_id, _ = project
+    *,
+    project_id: str,
+    updated_by_run_id: Optional[str],
+    session: AsyncSession,
+) -> TaskResponse:
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -173,6 +191,7 @@ async def update_task(
     if body.notes is not None:
         task.notes = body.notes
     task.updated = datetime.now(timezone.utc)
+    task.updated_by_run_id = updated_by_run_id
     await session.commit()
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
@@ -190,3 +209,20 @@ async def update_task(
         {task.assignee} if task.assignee else set(),
     )
     return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+
+
+@router.patch("/{task_id}", response_model=TaskResponse)
+async def update_task(
+    task_id: str,
+    body: TaskUpdate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    return await update_task_for_actor(
+        task_id,
+        body,
+        project_id=project_id,
+        updated_by_run_id=None,
+        session=session,
+    )

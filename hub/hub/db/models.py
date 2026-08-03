@@ -157,6 +157,7 @@ class Message(Base):
     conversation_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("conversations.id"), nullable=True
     )
+    created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     project: Mapped["Project"] = relationship(back_populates="messages")
 
@@ -248,6 +249,8 @@ class Task(Base):
     acceptance_criteria: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     deliverables: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     notes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -271,6 +274,7 @@ class Question(Base):
         DateTime(timezone=True), default=_now, nullable=False
     )
     answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
 
