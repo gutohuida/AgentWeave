@@ -1,4 +1,4 @@
-# Handoff: Runner/agent/charter separation proposed; concurrency incident found and resolved
+# Handoff: Runner/agent/charter separation proposed
 
 **Date:** 2026-08-03T16:15:00+01:00 · **Branch:** hub-native-experience · **HEAD:** 9001204
 **Agent:** Claude Sonnet 5 (Claude Code)
@@ -15,24 +15,28 @@ time, per the slice table in
 
 **Two things happened this session, in order:**
 
-1. **A concurrency incident.** This session resumed from
-   `.claude/handoffs/2026-08-03-0245-agent-capability-plane-closed.md` (which recommended
+1. **A same-directory concurrent-write overlap, now explained and closed.** This session resumed
+   from `.claude/handoffs/2026-08-03-0245-agent-capability-plane-closed.md` (which recommended
    "single-runtime" as next and said it was not yet started) and began redoing single-runtime's
    phase 3 (spec reconciliation) from scratch. Partway through, HEAD moved twice underneath this
    session — commits `a677935` ("single runtime phase 3: reconcile specifications") and `c31b3df`
    ("single runtime phase 4: verify and archive") landed while this session was still editing files,
-   made by **a separate, concurrent agent session** ("Codex gpt-5.6-sol", per its own handoff at
+   made by **a separate agent session** ("Codex gpt-5.6-sol", per its own handoff at
    `.claude/handoffs/2026-08-03-1153-single-runtime-archived.md`) operating in the **same working
-   directory** on disk. This session's uncommitted edits to `openspec/specs/*.md` were apparently
-   swept into Codex's `a677935` commit (the diff is nearly identical to what this session was
-   independently producing from the same delta spec files) — git tree came back clean, 390 CLI
-   tests passed, `openspec validate --all --strict` was 18/18. No data appears lost, but this was
-   real, unplanned concurrent write access to one working tree by two different agent CLIs, not
-   something either session orchestrated. **The user was told about this and explicitly chose
-   "Continue, single agent at a time — this was unintentional overlap... make sure no other session
-   is running before the next successor starts."** Confirmed before continuing: only one `claude`
-   process running (this session, PID 20160), no `codex` process, no extra git worktrees, HEAD
-   stable at `c31b3df` before this session's own commit.
+   directory** on disk. **The user has since clarified they personally launched that Codex session
+   to keep the work moving after this session ran out of context/tokens — it was a deliberate
+   continuation, not an unexplained or automated spawn, and the user is in direct control of when
+   further sessions are started.** This session's uncommitted edits to `openspec/specs/*.md` were
+   apparently swept into Codex's `a677935` commit (the diff is nearly identical to what this session
+   was independently producing from the same delta spec files) — git tree came back clean, 390 CLI
+   tests passed, `openspec validate --all --strict` was 18/18. No data was lost. The one real
+   takeaway to carry forward: two agent CLIs writing the same working tree at once can silently
+   fold one session's uncommitted edits into another's commit — harmless here because the edits
+   happened to converge, but worth confirming single-agent state before starting the next
+   successor's *implementation* phase, since a collision there would be higher-stakes than a
+   spec-sync redo. Confirmed before continuing: only one `claude` process running (this session,
+   PID 20160), no `codex` process, no extra git worktrees, HEAD stable at `c31b3df` before this
+   session's own commit.
 2. **Proposed the next successor.** `single-runtime` was already fully done (implemented, tested,
    live-verified, spec-synced, archived at `openspec/changes/archive/2026-08-03-single-runtime/`,
    by the concurrent Codex session — not this one) by the time the incident above was resolved, so
@@ -114,9 +118,11 @@ them, not this one — do not assume this handoff explains them.
 
 > "At the end of every implementation run handoff aaand spawn a new run with the skill resume."
 
-> [this session, in response to the concurrency incident] "Continue, single agent at a time" — i.e.
-> the overlap with the Codex session was unintentional, not by design; make sure no other session is
-> running before the next successor starts.
+> [this session, after the Codex overlap was found] "I launched it to continue on your work because
+> I ran out of token. ... I'm in control right now" — the user personally launches follow-on
+> sessions (Codex or otherwise) when a session runs out of context; it is not automated. Still worth
+> confirming single-agent state before an implementation phase, but there is no unexplained spawn to
+> chase down.
 
 No root AgentWeave state; live product testing only in `testbed/`. Never mark a task done from a
 plan alone — this session's runner-agent-charter-separation change is a **proposal only**; nothing
@@ -130,12 +136,8 @@ in it should be treated as implemented.
   started" claim without a fresh `git log` first. (This session did check, but only once, before
   starting — the second HEAD movement happened *during* the work and wasn't caught until a `git
   status`/`Edit` call surfaced a "file does not exist" error. Consider checking `git rev-parse HEAD`
-  again immediately before any commit, not just at session start, until it's confirmed no other
-  agent automation is configured to run concurrently on this repo.)
-- The **root cause of the concurrent Codex session is still unknown** — nothing in this session
-  established what launched it (no cron/schedule found via `CronList`-equivalent, no visible
-  automation config was inspected). This is a real open question, not just a resolved incident — see
-  below.
+  again immediately before any commit, not just at session start, in case the user has started a
+  follow-on session elsewhere in the meantime.)
 
 ## Verification
 
@@ -145,10 +147,10 @@ in it should be treated as implemented.
   there is nothing to test. The 390-CLI-tests-passed / 18-openspec-passed numbers reported earlier
   in this session were verifying the *single-runtime* state left by the concurrent Codex session,
   not any work from this session.
-- **Not verified**: whether another agent process is configured to auto-launch again on this repo.
-  This session confirmed only that none was running *at the moment checked* (one `claude` process,
-  PID 20160, no `codex` process, single git worktree) — that is a point-in-time fact, not a
-  guarantee against the next successor's implementation phase.
+- Confirmed only that no other agent process was running *at the moment checked* (one `claude`
+  process, PID 20160, no `codex` process, single git worktree). The user controls when a follow-on
+  session (Codex or otherwise) is launched, so this is a point-in-time fact to re-check at the start
+  of each session, not a standing guarantee.
 
 ## Git state
 
@@ -157,27 +159,20 @@ clean except the three pre-existing untracked files noted above (not part of thi
 
 ## Next steps
 
-1. **Before starting any implementation**, confirm again that no other agent session (Codex or
-   otherwise) is active on this repo — repeat the process/worktree check from this session (`Get-
-   Process | Where-Object { $_.ProcessName -match 'codex|claude' }`, `git worktree list`,
-   `git status --short`, `git log -1`) immediately before writing any file.
-2. Consider raising with the user (not yet done) what actually spawned the concurrent Codex session,
-   since it's unexplained and could recur during the next successor's implementation. This is listed
-   under Open questions below rather than acted on, since it needs the user's input on their own
-   external tooling/automation, not something discoverable from repo state alone.
-3. Once confirmed single-agent, start
-   `openspec/changes/runner-agent-charter-separation/tasks.md` phase 0 (data model): write failing
-   tests for the new `Runner`/`Charter` SQLAlchemy models and `Agent.runner_id`/`charter_id` columns
-   in `hub/tests/`, per task 0.1, before touching `hub/hub/db/models.py`.
-4. Work the successor's phases the same way as every prior one: tests precede implementation, commit
+1. **Before starting any implementation**, confirm again that no other agent session is active on
+   this repo — repeat the process/worktree check from this session (`Get-Process | Where-Object {
+   $_.ProcessName -match 'codex|claude' }`, `git worktree list`, `git status --short`, `git log -1`)
+   immediately before writing any file. The user launches follow-on sessions manually when a prior
+   one runs out of context, so this is a quick sanity check, not an investigation.
+2. Start `openspec/changes/runner-agent-charter-separation/tasks.md` phase 0 (data model): write
+   failing tests for the new `Runner`/`Charter` SQLAlchemy models and `Agent.runner_id`/`charter_id`
+   columns in `hub/tests/`, per task 0.1, before touching `hub/hub/db/models.py`.
+3. Work the successor's phases the same way as every prior one: tests precede implementation, commit
    and hand off every verified phase, verify against spec scenarios not intent.
 
 ## Open questions for the user
 
-- What launched the concurrent Codex session that collided with this one mid-session? Worth asking
-  before the next implementation phase, since an unexplained recurrence would risk the same
-  collision again, potentially with actual implementation code (higher stakes than a spec-sync
-  redo).
+None.
 
 ## Read on resume
 
