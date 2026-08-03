@@ -163,6 +163,58 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, b
 
 
 @pytest.mark.asyncio
+async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={
+            "data": {
+                "agents": {
+                    "runner-options": {"runner": "codex", "model": "legacy-model"}
+                }
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    runner = (
+        await app.post(
+            "/api/v1/runners",
+            json={
+                "name": "Configured Claude",
+                "cli": "claude",
+                "model": "bound-model",
+                "flags": ["--effort", "high"],
+            },
+            headers=auth_headers,
+        )
+    ).json()
+    bound = await app.patch(
+        "/api/v1/agents/runner-options",
+        json={"runner_id": runner["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            response = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "runner-options", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200
+            await _await_background_run()
+
+    command = fake_spawn.call_args.args[0]
+    assert command[command.index("--model") + 1] == "bound-model"
+    assert command[command.index("--effort") + 1] == "high"
+    assert "legacy-model" not in command
+
+
+@pytest.mark.asyncio
 async def test_writing_agent_worktree_exists_before_first_spawn(
     app, auth_headers, bind_runner, tmp_path, monkeypatch
 ):

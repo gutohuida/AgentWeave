@@ -68,6 +68,9 @@ charter separation — Reusable execution capability vs. addressable identity vs
   underlying layering behavior (stable guidance + generated facts + project instructions + live
   session state) is preserved — only the source and identifier space of the "stable guidance" layer
   changes.
+- `project-instructions`: terminology changes from role-guide content to charter content while the
+  existing ordering contract remains unchanged: project instructions precede charter guidance in
+  both direct and full agent context.
 
 `agent-tool-surface`'s "Hub supplies state; the tool surface carries intent" requirement already
 promises an agent "its charter" and needs no textual change — this change makes that promise real by

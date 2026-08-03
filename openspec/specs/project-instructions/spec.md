@@ -1,7 +1,7 @@
 # project-instructions Specification
 
 ## Purpose
-Per-project instruction content stored in Hub DB and served prepended to every agent's role guide; editable via Hub UI. `openspec/changes/single-runtime` removed the local-file mirror and its `agentweave init` placeholder — the Hub DB is now the only source.
+Per-project instruction content stored in Hub DB and served before every agent's charter guidance; editable via Hub UI. `openspec/changes/single-runtime` removed the local-file mirror and its `agentweave init` placeholder — the Hub DB is now the only source.
 
 ## Requirements
 ### Requirement: Hub stores project instructions per project
@@ -17,16 +17,17 @@ The Hub DB SHALL store project-wide instruction content in a `ProjectInstruction
 
 ---
 
-### Requirement: Hub prepends instructions to role guide content
-The Hub SHALL prepend project instructions before the role guide content in every `GET /api/v1/agents/context` response.
+### Requirement: Hub prepends instructions to charter content
+The Hub SHALL prepend project instructions before charter content in every direct
+`GET /api/v1/agents/context` response and before charter guidance in full agent context.
 
-#### Scenario: Instructions exist — prepended to role guide
-- **WHEN** project has non-empty instructions and agent calls `get_context`
-- **THEN** response content is `[instructions]\n\n---\n\n[role guide]`
+#### Scenario: Instructions exist — prepended to charter
+- **WHEN** project instructions are non-empty and an agent requests direct or full charter context
+- **THEN** project instructions appear before the charter content
 
-#### Scenario: No instructions — role guide returned unchanged
-- **WHEN** project has no instructions (empty or no DB row)
-- **THEN** response content is the role guide only, unchanged
+#### Scenario: No instructions — charter returned unchanged
+- **WHEN** project instructions are empty or no instruction row exists
+- **THEN** direct charter lookup returns the charter content unchanged
 
 ---
 

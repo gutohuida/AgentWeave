@@ -94,10 +94,16 @@ async def test_get_agent_context_places_instructions_before_charter(app, auth_he
     assert "# Global Rule\n\nBe concise." in content
     assert content.index("# Global Rule") < content.index("Charter guidance")
 
+    direct = await app.get(
+        f"/api/v1/agents/context?charter={charter['id']}", headers=auth_headers
+    )
+    assert direct.status_code == 200
+    assert direct.json()["content"] == "# Global Rule\n\nBe concise.\n\n---\n\nCharter guidance"
+
 
 @pytest.mark.asyncio
-async def test_direct_charter_context_excludes_project_instructions(app, auth_headers):
-    """Direct charter lookup returns authored behavior, not the full layered context."""
+async def test_direct_charter_context_without_instructions_is_unchanged(app, auth_headers):
+    """With no project instructions, direct lookup returns the charter unchanged."""
     # Ensure no instructions are set (clean up from prior tests)
     await app.put(
         "/api/v1/project/instructions",

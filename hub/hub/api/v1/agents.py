@@ -1174,8 +1174,15 @@ async def get_charter_context(
     charter_row = await session.get(Charter, charter)
     if charter_row is None or charter_row.project_id != project_id:
         raise HTTPException(status_code=404, detail=f"Charter '{charter}' not found")
+    instructions_result = await session.execute(
+        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
+    )
+    instructions_row = instructions_result.scalars().first()
+    content = charter_row.content
+    if instructions_row and instructions_row.content:
+        content = instructions_row.content + "\n\n---\n\n" + content
     return {
-        "content": charter_row.content,
+        "content": content,
         "hint": "Use get_agent_context(agent) for full project and onboarding context.",
     }
 

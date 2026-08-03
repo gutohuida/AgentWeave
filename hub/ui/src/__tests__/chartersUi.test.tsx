@@ -18,6 +18,14 @@ vi.mock('@/api/charters', () => ({
         created_at: '2026-08-03T00:00:00Z',
         updated_at: '2026-08-03T00:00:00Z',
       },
+      {
+        id: 'charter-two',
+        project_id: 'proj-test',
+        name: 'Incident Commander',
+        content: 'Coordinate incidents.',
+        created_at: '2026-08-03T00:00:00Z',
+        updated_at: '2026-08-03T00:00:00Z',
+      },
     ],
     isLoading: false,
   }),
@@ -64,7 +72,7 @@ describe('charter management UI', () => {
     )
   })
 
-  it('binds a charter from the agent detail view', async () => {
+  it('reassigns a charter from the agent detail view', async () => {
     const user = userEvent.setup()
     render(
       <AgentInfoTab
@@ -73,7 +81,7 @@ describe('charter management UI', () => {
           status: 'idle',
           message_count: 0,
           active_task_count: 0,
-          charter_id: null,
+          charter_id: 'charter-two',
         }}
       />,
     )

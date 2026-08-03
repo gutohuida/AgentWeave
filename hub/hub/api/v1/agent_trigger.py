@@ -270,6 +270,7 @@ async def trigger_agent_directly(
             session_id=resume_session_id,
             yolo=yolo,
             mcp_command=mcp_command,
+            extra_flags=runner_row.flags,
         )
     except UnsupportedRunnerError as exc:
         raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc

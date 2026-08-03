@@ -40,11 +40,11 @@ The system SHALL generate a concise project operating profile from validated Age
 ---
 
 ### Requirement: Layered project and role context
-The system SHALL layer stable role guidance, generated project facts, long-lived project context, project-wide instructions, and live session state without duplicating stale information across files.
+The system SHALL layer stable charter guidance, generated project facts, long-lived project context, project-wide instructions, and live session state without duplicating stale information across files.
 
-#### Scenario: Role files remain stable contracts
-- **WHEN** role markdown files are copied or generated
-- **THEN** they describe role scope, responsibilities, boundaries, handoff rules, quality behavior, definition of done, and escalation paths without embedding a full copy of `agentweave.yml`
+#### Scenario: Charter content remains a stable contract
+- **WHEN** a charter is authored or edited through the Hub UI
+- **THEN** it describes agent scope, responsibilities, boundaries, handoff rules, quality behavior, definition of done, and escalation paths without embedding a full copy of project instructions
 
 #### Scenario: Placeholder project context is not silently injected
 - **WHEN** `.agentweave/ai_context.md` contains known untouched template placeholders
@@ -78,14 +78,14 @@ The Hub/MCP interface SHALL provide `get_agent_context(agent)` for retrieving fu
 ---
 
 ### Requirement: Role context lookup compatibility
-The system SHALL preserve `get_context(role)` as a role-guide lookup while making `get_agent_context(agent)` the preferred onboarding/runtime context API.
+The system SHALL preserve `get_context(charter)` as a direct charter-content lookup while making `get_agent_context(agent)` the preferred onboarding/runtime context API.
 
-#### Scenario: Existing role lookup still works
-- **WHEN** an agent calls `get_context(role)` with a valid role id
-- **THEN** the system returns role guidance compatible with existing clients
+#### Scenario: Existing charter lookup still works
+- **WHEN** an agent calls `get_context(charter)` with a valid charter identifier
+- **THEN** the system returns that charter's content compatible with existing clients
 
-#### Scenario: Role lookup directs agents to richer context
-- **WHEN** `get_context(role)` returns role content
+#### Scenario: Charter lookup directs agents to richer context
+- **WHEN** `get_context(charter)` returns charter content
 - **THEN** the returned content or metadata indicates that `get_agent_context(agent)` should be used for full project and onboarding context when the caller knows its agent name
 
 ---

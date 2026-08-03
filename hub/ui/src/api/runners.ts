@@ -10,7 +10,7 @@ export interface Runner {
   name: string
   cli: RunnerCli
   model?: string | null
-  flags?: unknown
+  flags?: string[] | null
   created_at: string
   updated_at: string
 }

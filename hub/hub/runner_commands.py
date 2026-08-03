@@ -35,6 +35,7 @@ def build_command(
     session_id: Optional[str] = None,
     yolo: bool = False,
     mcp_command: Optional[List[str]] = None,
+    extra_flags: Optional[List[str]] = None,
 ) -> List[str]:
     """Build the full CLI invocation for one turn.
 
@@ -52,6 +53,7 @@ def build_command(
             session_id=session_id,
             yolo=yolo,
             mcp_command=mcp_command,
+            extra_flags=extra_flags,
         )
     if runner in ("claude", "claude_proxy", "native"):
         return _build_claude_command(
@@ -62,6 +64,7 @@ def build_command(
             session_id=session_id,
             yolo=yolo,
             mcp_command=mcp_command,
+            extra_flags=extra_flags,
         )
     raise UnsupportedRunnerError(
         f"runner {runner!r} is not yet supported for direct Hub spawn "
@@ -78,6 +81,7 @@ def _build_claude_command(
     session_id: Optional[str],
     yolo: bool,
     mcp_command: Optional[List[str]] = None,
+    extra_flags: Optional[List[str]] = None,
 ) -> List[str]:
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
@@ -99,6 +103,8 @@ def _build_claude_command(
         cmd += ["--dangerously-skip-permissions"]
     if session_id:
         cmd += ["--resume", session_id]
+    if extra_flags:
+        cmd += extra_flags
     cmd += ["-p", prompt]
     return cmd
 
@@ -112,6 +118,7 @@ def _build_codex_command(
     session_id: Optional[str],
     yolo: bool,
     mcp_command: Optional[List[str]] = None,
+    extra_flags: Optional[List[str]] = None,
 ) -> List[str]:
     cmd = [cli, "exec"]
     cmd += ["--json", "--skip-git-repo-check"]
@@ -141,5 +148,7 @@ def _build_codex_command(
     # flag placed after the subcommand with "unexpected argument '--sandbox'".
     if session_id:
         cmd += ["resume", session_id]
+    if extra_flags:
+        cmd += extra_flags
     cmd += [prompt]
     return cmd

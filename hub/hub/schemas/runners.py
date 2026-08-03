@@ -1,7 +1,7 @@
 """Runner schemas."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,7 +12,7 @@ class RunnerCreate(BaseModel):
     name: str = Field(max_length=256)
     cli: str = Field(max_length=16)
     model: Optional[str] = Field(default=None, max_length=256)
-    flags: Optional[Any] = None
+    flags: Optional[List[str]] = None
 
     model_config = {"extra": "forbid"}
 
@@ -27,7 +27,7 @@ class RunnerCreate(BaseModel):
 class RunnerUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=256)
     model: Optional[str] = Field(default=None, max_length=256)
-    flags: Optional[Any] = None
+    flags: Optional[List[str]] = None
 
     model_config = {"extra": "forbid"}
 
@@ -38,7 +38,7 @@ class RunnerResponse(BaseModel):
     name: str = Field(max_length=256)
     cli: str = Field(max_length=16)
     model: Optional[str] = None
-    flags: Optional[Any] = None
+    flags: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
 

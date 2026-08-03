@@ -61,6 +61,15 @@ class TestBuildCommandClaude:
         )
         assert cmd[-4:] == ["--resume", "s", "-p", "hi"]
 
+    def test_runner_record_flags_are_inserted_before_prompt(self):
+        cmd = build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hi",
+            extra_flags=["--effort", "high"],
+        )
+        assert cmd[-4:] == ["--effort", "high", "-p", "hi"]
+
 
 class TestBuildCommandCodex:
     def test_new_session_minimal(self):
@@ -103,6 +112,15 @@ class TestBuildCommandCodex:
         cmd = build_command(runner="codex", cli="codex", prompt="hi", model="gpt-5.5")
         assert "--model" in cmd
         assert cmd[cmd.index("--model") + 1] == "gpt-5.5"
+
+    def test_runner_record_flags_are_inserted_before_prompt(self):
+        cmd = build_command(
+            runner="codex",
+            cli="codex",
+            prompt="hello",
+            extra_flags=["--profile", "review"],
+        )
+        assert cmd[-3:] == ["--profile", "review", "hello"]
 
 
 class TestBuildCommandUnsupported:

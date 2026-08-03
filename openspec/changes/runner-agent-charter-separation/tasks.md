@@ -130,11 +130,22 @@ warnings. Packaged seed guides live at `hub/hub/data/roles/` (the shorter path a
 
 ## 3. Spec reconciliation
 
-- [ ] 3.1 Sync this change's delta specs into `openspec/specs/`: create `runner-registry` and
+- [x] 3.1 Sync this change's delta specs into `openspec/specs/`: create `runner-registry` and
       `agent-charter`; apply the MODIFIED deltas to `agent-context-onboarding`.
-- [ ] 3.2 Verify every scenario in the touched delta specs against the phase 0–2 implementation, not
+- [x] 3.2 Verify every scenario in the touched delta specs against the phase 0–2 implementation, not
       against intent. Note anything that cannot be verified and why.
-- [ ] 3.3 Hand off and commit.
+- [x] 3.3 Hand off and commit.
+
+**Phase 3 evidence:** Created canonical `runner-registry` and `agent-charter` specs and applied the
+approved `agent-context-onboarding` modifications. Reconciliation found that the unchanged
+project-instructions ordering contract needed a terminology delta, so `project-instructions` is now
+declared as modified and its canonical wording says charter rather than role guide. Scenario review
+also found Runner flags were persisted but not launched; added failing command/integration tests and
+wired validated string-list flags from the bound Runner into Claude/Codex command construction.
+Runner/charter authoring and reassignment scenarios now have dedicated frontend tests. Verification:
+102 focused Hub scenario tests passed, full Hub regression passed 489 (4 skipped), all 293 frontend
+tests passed, production frontend build passed, Ruff passed on the changed Python surface, and
+`openspec validate --all --strict` passed 21/21. No touched delta scenario remains unverified.
 
 ## 4. Delete the legacy role system
 
