@@ -223,7 +223,6 @@ async def trigger_agent_directly(
 
     model = config.get("model")
     repo_root = Path.cwd()
-    context_file = repo_root / ".agentweave" / "context" / f"{agent}.md"
     yolo = bool(config.get("yolo"))
     resume_session_id = conversation.provider_session_id
     session_mode = "resume" if resume_session_id else "new"
@@ -250,6 +249,29 @@ async def trigger_agent_directly(
             ) from exc
         effective_work_dir = str(workspace)
         isolated_workspace = workspace if workspace != repo_root else None
+
+    # Build context from current Hub-owned state for every turn. Runners consume a file,
+    # so materialize the canonical response inside the effective workspace immediately
+    # before command construction; an edited charter is therefore visible on the next run.
+    from .agents import _get_session_data, _render_hub_agent_context
+
+    session_data = await _get_session_data(project_id, session)
+    rendered_context = await _render_hub_agent_context(
+        agent=agent,
+        project_id=project_id,
+        db=session,
+        session_data=session_data,
+        agent_row=agent_row,
+    )
+    context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
+    try:
+        context_file.parent.mkdir(parents=True, exist_ok=True)
+        context_file.write_text(rendered_context["context"], encoding="utf-8")
+    except OSError as exc:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"Could not materialize canonical context for {agent}: {exc}",
+        ) from exc
 
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
     # one that isn't actually available in this environment.

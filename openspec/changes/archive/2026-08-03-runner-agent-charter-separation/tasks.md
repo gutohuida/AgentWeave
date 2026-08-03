@@ -177,16 +177,26 @@ Ruff passed, strict OpenSpec validation passed 21/21, and zero imports/callers r
 
 ## 5. Regression, live verification, and docs
 
-- [ ] 5.1 Run full CLI, Hub, and frontend regressions.
-- [ ] 5.2 Live-verify in a throwaway `testbed/` directory: a fresh project boots with seeded default
+- [x] 5.1 Run full CLI, Hub, and frontend regressions.
+- [x] 5.2 Live-verify in a throwaway `testbed/` directory: a fresh project boots with seeded default
       runners and charters, an agent bound to a runner and a charter is triggered and its context
       includes the charter content, an agent with no charter gets the no-charter notice instead of
       an error, and an agent with no runner refuses to launch with a typed error.
-- [ ] 5.3 `openspec validate --all --strict` passes.
-- [ ] 5.4 Update `AGENTS.md`/`CLAUDE.md`: resolve the multi-role deprecation note (it currently
+- [x] 5.3 `openspec validate --all --strict` passes.
+- [x] 5.4 Update `AGENTS.md`/`CLAUDE.md`: resolve the multi-role deprecation note (it currently
       warns against building on the old system; after this change there is no old system to warn
       about) and correct the `src/agentweave/` module list and Hub architecture sections.
-- [ ] 5.5 Archive this change; annotate
+
+**Phase 5 evidence:** Full verification passed with CLI 349 passed (3 skipped), Hub 490 passed
+(4 skipped), frontend 286 passed, the production UI build, and changed-file Ruff and Black checks.
+The additional Hub regression proves a trigger materializes the current Hub-owned agent context in
+the effective workspace and supplies that file to the bound runner. A real Hub and real Codex CLI
+run in `testbed/live-runner-charter/` confirmed fresh boot seeds two runners and 21 charters, a
+bound custom charter reached both the canonical context file and the running agent (including the
+unique live marker), an unchartered agent received the explicit no-charter notice, and an unbound
+agent returned the typed no-runner waiting result. Strict OpenSpec validation passed 21/21.
+
+- [x] 5.5 Archive this change; annotate
       `openspec/changes/2026-07-30-hub-native-experience/tasks.md` 16.2 with what this successor
       synced, matching the pattern of prior successors' annotations.
 - [ ] 5.6 Final handoff and commit.

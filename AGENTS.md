@@ -19,7 +19,7 @@ they were test output that read as project state.
 
 | Don't | Do |
 |---|---|
-| Run `agentweave init`, `switch`, `watch`, `roles`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
+| Run `agentweave init`, `switch`, `watch`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
 | Invoke `aw-*` skills (`aw-spec-propose`, `aw-status`, `aw-delegate`, …) | Use the `openspec-*` skills |
 | Delegate work through AgentWeave messaging | Do the work directly |
 | Write to `spec/` | Write to `openspec/changes/<date>-<name>/` |
@@ -78,19 +78,15 @@ AgentWeave/
 │   ├── spec_manifest.py         # spec/index.json validation + safe spec/**/*.html discovery
 │   ├── watchdog.py              # File monitoring daemon with auto-ping
 │   ├── eventlog.py              # Event logging (read-path utilities)
+│   ├── config.py                # agentweave.yml parsing and generation
 │   ├── runner.py                # Agent runner helpers (claude_proxy support)
-│   ├── roles.py                 # Multi-role agent management
 │   ├── constants.py             # All constants and valid values
 │   ├── utils.py                 # Utility functions
 │   ├── logging_config.py        # Python logging stdlib configuration
 │   ├── templates/               # Markdown prompt templates
 │   │   ├── __init__.py          # Template loader
 │   │   ├── ai_context.md        # AI context template
-│   │   ├── roles/               # Role-specific guides
-│   │   │   ├── backend_dev.md
-│   │   │   ├── frontend_dev.md
-│   │   │   └── ...
-│   │   └── ...
+│   │   └── skills/              # Generated aw-* product skills
 │   ├── transport/               # Pluggable transport layer
 │   │   ├── base.py              # BaseTransport ABC
 │   │   ├── local.py             # Local filesystem transport
@@ -105,9 +101,12 @@ AgentWeave/
 │   │   ├── main.py              # FastAPI app factory
 │   │   ├── mcp_server.py        # Hub-side MCP server (11 tools)
 │   │   ├── spec_manifest.py     # Independent copy of CLI manifest validation (kept in sync by hand)
+│   │   ├── data/charters/       # Starter charter seed documents + manifest
 │   │   ├── db/                  # SQLAlchemy models
 │   │   ├── api/v1/              # REST API endpoints
 │   │   │   ├── agents.py        # Agent management
+│   │   │   ├── runners.py       # Runner registry CRUD
+│   │   │   ├── charters.py      # Charter CRUD
 │   │   │   ├── messages.py      # Message CRUD
 │   │   │   ├── tasks.py         # Task CRUD
 │   │   │   ├── questions.py     # Human questions
@@ -218,31 +217,17 @@ mkdocs gh-deploy
 The CLI commands shown below are the **product surface you implement and test**, not a workflow to
 run in this repo. Read them as "this is what a user types." To exercise one, use `testbed/`.
 
-> **Planned removal:** the multi-role system (`agentweave roles`, `roles.py`, `roles.json`,
-> `VALID_ROLE_IDS`, and the 21 guides under `templates/roles/`) is slated for replacement by
-> runner/agent/charter separation. See the slice table in
-> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md` before building new work on
-> roles.
+### 1. Runner, Agent, and Charter Separation
 
-### 1. Multi-Role Agent System (v0.15.0)
+The Hub models execution capability, roster identity, and behavioral guidance independently:
 
-Agents can have multiple roles assigned simultaneously:
+- `Runner` is a reusable project-scoped CLI/model/flags configuration (`claude` or `codex`).
+- `Agent` is the addressable identity and has nullable `runner_id` and `charter_id` bindings.
+- `Charter` is editable project-scoped markdown supplied in the agent's canonical turn context.
 
-```python
-from agentweave.roles import add_role_to_agent, set_agent_roles
-
-# Add single role
-add_role_to_agent("kimi", "backend_dev", config)
-
-# Set multiple roles
-set_agent_roles("claude", ["tech_lead", "backend_dev"], config)
-```
-
-Available roles (see `constants.py` `VALID_ROLE_IDS` for the source of truth):
-- Human-title: `tech_lead`, `architect`, `backend_dev`, `frontend_dev`, `fullstack_dev`, `qa_engineer`, `devops_engineer`, `security_engineer`, `data_engineer`, `ml_engineer`, `technical_writer`, `code_reviewer`, `project_manager`
-- AI-native (function-first): `coordinator`, `model_router`, `explorer`, `implementer`, `verifier`, `guardian`, `context_keeper`, `spec`
-
-Role guides are auto-copied to `.agentweave/roles/{role}.md` when assigned.
+Fresh projects seed two default runners and 21 starter charters. Operators author and bind them in
+the Hub's Runners, Charters, and agent-detail screens. There is no CLI role-assignment subsystem or
+fixed role enum; do not reintroduce `.agentweave/roles.json`, `roles.py`, or role-derived API fields.
 
 ### 2. Claude-Proxy Agents (v0.12.0+)
 
@@ -333,7 +318,9 @@ Key React components in `hub/ui/src/components/`:
 |-----------|---------|
 | `AgentsPage.tsx` | Main agent list + detail view |
 | `AgentOutputPanel.tsx` | Real-time output log viewer |
-| `AgentCard.tsx` | Agent summary card with roles badges |
+| `AgentCard.tsx` | Agent summary card with runner/model status |
+| `RunnersPage.tsx` | Runner registry authoring |
+| `ChartersPage.tsx` | Charter authoring |
 | `TasksBoard.tsx` | Kanban-style task board |
 | `MessagesFeed.tsx` | Inbox + message history |
 | `QuestionsPanel.tsx` | Human Q&A interface |

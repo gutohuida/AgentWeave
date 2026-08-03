@@ -166,13 +166,7 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, b
 async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_headers):
     sync = await app.post(
         "/api/v1/session/sync",
-        json={
-            "data": {
-                "agents": {
-                    "runner-options": {"runner": "codex", "model": "legacy-model"}
-                }
-            }
-        },
+        json={"data": {"agents": {"runner-options": {"runner": "codex", "model": "legacy-model"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
@@ -212,6 +206,60 @@ async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_heade
     assert command[command.index("--model") + 1] == "bound-model"
     assert command[command.index("--effort") + 1] == "high"
     assert "legacy-model" not in command
+
+
+@pytest.mark.asyncio
+async def test_trigger_materializes_bound_charter_context(
+    app, auth_headers, bind_runner, tmp_path, monkeypatch
+):
+    repo = _init_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={
+            "data": {
+                "name": "Live Context Project",
+                "agents": {"chartered": {"runner": "claude", "read_only": True}},
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("chartered", cli="claude")
+    create = await app.post(
+        "/api/v1/charters",
+        json={"name": "Live Charter", "content": "LIVE_CHARTER_MARKER"},
+        headers=auth_headers,
+    )
+    assert create.status_code == 201
+    charter_id = create.json()["id"]
+    bind = await app.patch(
+        "/api/v1/agents/chartered",
+        json={"charter_id": charter_id},
+        headers=auth_headers,
+    )
+    assert bind.status_code == 200
+
+    fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            response = await app.post(
+                "/api/v1/agent/trigger",
+                json={"agent": "chartered", "message": "verify context", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert response.status_code == 200
+            assert response.json()["status"] == "running"
+            await _await_background_run()
+
+    command = fake_spawn.call_args.args[0]
+    context_flag = command.index("--append-system-prompt-file")
+    context_path = Path(command[context_flag + 1])
+    assert context_path.exists()
+    context = context_path.read_text(encoding="utf-8")
+    assert "Live Context Project" in context
+    assert "## Charter: Live Charter" in context
+    assert "LIVE_CHARTER_MARKER" in context
 
 
 @pytest.mark.asyncio
@@ -1021,6 +1069,7 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(
     assert spawned_env is not None
     assert spawned_env["ANTHROPIC_API_KEY"] == "sk-minimax-secret"
     assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
+
 
 # test_trigger_unsupported_runner_accumulates_queue (kimi-agent, runner="kimi") was
 # removed here: since runner-agent-charter-separation phase 1, Runner.cli is

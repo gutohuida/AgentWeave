@@ -1549,6 +1549,13 @@ being built twice.*
 > `app-lifecycle` spec; and retired the empty `opencode-runner` spec. This does not sync the nine
 > remaining umbrella-originated delta specs listed above, so umbrella task 16.2 remains open.
 
+> **Additional partial 16.2 (2026-08-03) — runner/agent/charter ownership reconciled.** The
+> `runner-agent-charter-separation` successor synced its deltas into `agent-charter`,
+> `agent-context-onboarding`, `agent-runtime-binding`, and `runner-management`, and created the
+> authoritative `charter-management` spec. It also removed the legacy fixed-role runtime while
+> preserving the starter documents as editable charters. Other unsynced umbrella deltas remain,
+> so umbrella task 16.2 remains open.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.

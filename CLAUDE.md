@@ -14,7 +14,7 @@ root.
 
 | Don't | Do |
 |---|---|
-| Run `agentweave init`, `switch`, `watch`, `roles`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
+| Run `agentweave init`, `switch`, `watch`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
 | Invoke `aw-*` skills (`aw-spec-propose`, `aw-status`, `aw-delegate`, …) | Use the `openspec-*` skills — see "Specifications" below |
 | Delegate to agents via AgentWeave messaging | Do the work directly, or use Claude Code subagents |
 | Write to `spec/` | Write to `openspec/changes/<date>-<name>/` |
@@ -117,13 +117,12 @@ src/agentweave/
 ├── watchdog.py         # Polls for new messages/tasks, auto-pings agents
 ├── eventlog.py         # Read-path utilities for events.jsonl
 ├── logging_config.py   # Python logging stdlib setup (JSONRotatingFileHandler, HubHandler)
+├── config.py           # agentweave.yml parsing and generation
 ├── runner.py           # Agent runner helpers (claude_proxy support, env var resolution)
-├── roles.py            # Multi-role agent management (v0.15.0)
 ├── constants.py        # All valid values, regex patterns, directory paths
 ├── utils.py            # load_json, save_json, generate_id, now_iso, print_* helpers
 ├── templates/          # Markdown templates loaded via get_template("name")
-│   ├── roles/          # Role-specific behavioral guides
-│   └── ...
+│   └── skills/         # Generated aw-* product skills
 ├── transport/          # Pluggable transport layer
 │   ├── base.py         # BaseTransport ABC (6 abstract methods)
 │   ├── local.py        # Local filesystem transport
@@ -141,11 +140,14 @@ hub/
 ├── hub/                      # Python package
 │   ├── main.py               # FastAPI app factory + lifespan
 │   ├── mcp_server.py         # Hub-side MCP server (11 tools)
-│   ├── db/                   # SQLAlchemy async models (5 tables)
+│   ├── data/charters/        # Starter charter seed documents + manifest
+│   ├── db/                   # SQLAlchemy async models and migrations
 │   │   ├── models.py
 │   │   └── engine.py
 │   ├── api/v1/               # REST endpoints
-│   │   ├── agents.py         # GET /api/v1/agents (+ roles, sessions, runner)
+│   │   ├── agents.py         # Agent roster, bindings, and canonical context
+│   │   ├── runners.py        # Runner registry CRUD
+│   │   ├── charters.py       # Charter CRUD
 │   │   ├── messages.py       # Messages CRUD
 │   │   ├── tasks.py          # Tasks CRUD
 │   │   ├── questions.py      # Human Q&A
@@ -167,7 +169,7 @@ hub/
 │   │   ├── components/
 │   │   │   ├── agents/       # Agent UI
 │   │   │   │   ├── AgentsPage.tsx
-│   │   │   │   ├── AgentCard.tsx          # Role badges, runner badge
+│   │   │   │   ├── AgentCard.tsx          # Runner/model and status summary
 │   │   │   │   ├── AgentOutputPanel.tsx   # Live output logs
 │   │   │   │   ├── AgentActivityTab.tsx   # Output + timeline events
 │   │   │   │   └── AgentInfoTab.tsx
@@ -190,25 +192,17 @@ hub/
 The commands below are the **product surface you implement and test**, not a workflow to run in this
 repo. When you need to exercise one, do it in `testbed/`. Read them as "this is what a user types."
 
-> **Planned removal:** the multi-role system (`agentweave roles`, `roles.py`, `roles.json`,
-> `VALID_ROLE_IDS`, and the 21 guides under `templates/roles/`) is slated for replacement by
-> runner/agent/charter separation. See the slice table in
-> `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Don't build new work on
-> roles without checking that first.
+### Runner, Agent, and Charter Separation
 
-### Multi-Role Agent System
+The Hub owns three independent project-scoped concepts:
 
-Agents can have multiple roles assigned:
+- runners describe reusable execution capability (`claude`/`codex`, model, and flags);
+- agents are addressable roster identities bound to at most one runner and one charter;
+- charters are editable markdown behavior contracts injected into canonical turn context.
 
-```bash
-# CLI commands
-agentweave roles list
-agentweave roles add <agent> <role>
-agentweave roles set <agent> <role1,role2,...>
-agentweave roles available
-```
-
-Role guides auto-copied to `.agentweave/roles/{role}.md`.
+Fresh projects seed default runners and 21 starter charters. Operators manage and bind them through
+the Hub UI. The former CLI multi-role subsystem, fixed enum, role files, and role-derived API/UI
+fields no longer exist and must not be recreated.
 
 ### Claude-Proxy Agents
 
