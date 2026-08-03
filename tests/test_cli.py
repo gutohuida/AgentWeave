@@ -685,26 +685,6 @@ class TestSwitchAndSetSessionRemovedFromHubManagedPath:
         assert "Hub" in captured.out
         assert "export" not in captured.out.lower()
 
-    def test_switch_still_works_for_non_http_transport(self, tmp_path, monkeypatch, capsys):
-        from agentweave.session import Session
-
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("MINIMAX_API_KEY", "sk-test")
-        session = Session.create(name="Test", agents=["minimax"])
-        session.agents["minimax"]["runner"] = "claude_proxy"
-        session.agents["minimax"]["env_vars"] = {
-            "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
-            "ANTHROPIC_API_KEY_VAR": "MINIMAX_API_KEY",
-        }
-        session.save()
-        # No transport.json -> defaults to LocalTransport, not http.
-
-        result = cmd_switch(argparse.Namespace(agent="minimax"))
-
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "export ANTHROPIC_API_KEY=sk-test" in captured.out
-
     def test_set_session_steers_to_hub_ui_when_http_transport(self, tmp_path, monkeypatch, capsys):
         from agentweave.runner import get_claude_session_id
         from agentweave.session import Session
@@ -724,18 +704,3 @@ class TestSwitchAndSetSessionRemovedFromHubManagedPath:
         # Must not have actually written the session file — the Hub is the source of
         # truth for session continuity on this path now.
         assert get_claude_session_id("claude") is None
-
-    def test_set_session_still_works_for_non_http_transport(self, tmp_path, monkeypatch, capsys):
-        from agentweave.runner import get_claude_session_id
-        from agentweave.session import Session
-
-        monkeypatch.chdir(tmp_path)
-        session = Session.create(name="Test", agents=["claude"])
-        session.save()
-
-        result = cmd_agent_set_session(
-            argparse.Namespace(agent_name="claude", session_id="sess-manual-123")
-        )
-
-        assert result == 0
-        assert get_claude_session_id("claude") == "sess-manual-123"

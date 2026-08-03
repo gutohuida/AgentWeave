@@ -5,11 +5,11 @@ from typing import Any, Dict, List, Optional
 
 
 class BaseTransport(ABC):
-    """Abstract base class for all transport backends.
+    """Abstract base class for transport backends.
 
-    All message and task I/O goes through this interface, enabling
-    LocalTransport (filesystem), GitTransport (orphan branch), and
-    future McpTransport (AgentWeave Hub) to be swapped transparently.
+    All message and task I/O goes through this interface. `HttpTransport` (to a locally-owned
+    Hub) is the only implementation; single-runtime (`openspec/changes/single-runtime`) removed
+    the local/git backends this abstraction used to switch between.
     """
 
     @abstractmethod

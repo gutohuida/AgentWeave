@@ -71,23 +71,21 @@ def _find_transport_config() -> Optional[tuple]:
 
 
 def get_transport() -> BaseTransport:
-    """Return the configured transport, defaulting to LocalTransport.
+    """Return the configured HTTP transport.
 
-    Searches the current directory and ancestors for the nearest AgentWeave
-    project's .agentweave/transport.json, so the MCP stdio server (which may
-    run from a project subdirectory) can still find the correct config.
+    Single-runtime (`openspec/changes/single-runtime`) removed local and git transport:
+    AgentWeave is a locally-installed app whose CLI always talks to its own co-located Hub over
+    HTTP. There is no single-machine no-Hub fallback left to default to.
 
-    If no transport.json is found anywhere, LocalTransport is returned,
-    preserving 100% of existing single-machine behavior.
+    Searches the current directory and ancestors for the nearest AgentWeave project's
+    .agentweave/transport.json, so the MCP stdio server (which may run from a project
+    subdirectory) can still find the correct config.
 
     transport.json shape:
-        {"type": "git", "remote": "origin", "branch": "agentweave/collab",
-         "poll_interval": 10, "cluster": "alice"}
         {"type": "http", "url": "https://...", "api_key": "iaf_live_xxx", "project_id": "proj-abc"}
 
-    The "cluster" key is optional. When set, outgoing messages are stamped with
-    "{cluster}.{agent}" as the sender, and inbox filtering matches both
-    "{cluster}.{agent}" and plain "{agent}" for backward compatibility.
+    Raises RuntimeError if no transport.json is found and the process is not a Hub-owned run
+    (AW_RUN_TOKEN unset) — there is nothing left to fall back to.
     """
     # Hub-owned runs use their short-lived capability directly and must not load or
     # depend on a project API key from transport.json.
@@ -103,38 +101,31 @@ def get_transport() -> BaseTransport:
 
     found = _find_transport_config()
     if not found:
-        from .local import LocalTransport
-
-        return LocalTransport()
+        raise RuntimeError(
+            "No transport configured and no AW_RUN_TOKEN present. Local/git transport were "
+            "removed; configure HTTP transport (.agentweave/transport.json) or run within a "
+            "Hub-owned run."
+        )
     config, config_path = found
 
-    transport_type = config.get("type", "local")
-
-    if transport_type == "git":
-        from .git import GitTransport
-
-        return GitTransport(
-            remote=config.get("remote", "origin"),
-            branch=config.get("branch", "agentweave/collab"),
-            poll_interval=int(config.get("poll_interval", 10)),
-            cluster=config.get("cluster", ""),
+    transport_type = config.get("type", "http")
+    if transport_type != "http":
+        raise RuntimeError(
+            f"Unsupported transport type {transport_type!r} in {config_path}. Only 'http' is "
+            "supported; local/git transport were removed."
         )
-    elif transport_type == "http":
-        from .http import HttpTransport
 
-        transport = HttpTransport(
-            url=config.get("url", ""),
-            api_key=config.get("api_key", ""),
-            project_id=config.get("project_id", ""),
-            source_id=_ensure_spec_source_id(config, config_path),
-        )
-        # Sync local jobs to Hub on connect
-        import contextlib
+    from .http import HttpTransport
 
-        with contextlib.suppress(Exception):  # Don't fail transport creation if sync fails
-            transport.sync_local_jobs()
-        return transport
-    else:
-        from .local import LocalTransport
+    transport = HttpTransport(
+        url=config.get("url", ""),
+        api_key=config.get("api_key", ""),
+        project_id=config.get("project_id", ""),
+        source_id=_ensure_spec_source_id(config, config_path),
+    )
+    # Sync local jobs to Hub on connect
+    import contextlib
 
-        return LocalTransport()
+    with contextlib.suppress(Exception):  # Don't fail transport creation if sync fails
+        transport.sync_local_jobs()
+    return transport

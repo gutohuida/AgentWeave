@@ -64,14 +64,10 @@ AGENTWEAVE_GITIGNORE_PATTERNS = [
 class TransportType(str, Enum):
     """Pluggable transport backends."""
 
-    LOCAL = "local"
-    GIT = "git"
     HTTP = "http"
 
 
 TRANSPORT_CONFIG_FILE = AGENTWEAVE_DIR / "transport.json"
-GIT_COLLAB_BRANCH = "agentweave/collab"
-GIT_SEEN_DIR = AGENTWEAVE_DIR / ".git_seen"  # local seen-set for git transport (gitignored)
 
 # Agent name validation: alphanumeric / hyphen / underscore, 1-32 chars.
 # Replaces the old hardcoded two-item list — any name matching this is accepted.

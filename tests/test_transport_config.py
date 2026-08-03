@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from agentweave.transport.config import (
     _ensure_spec_source_id,
     _find_transport_config,
     get_transport,
 )
 from agentweave.transport.http import HttpTransport
-from agentweave.transport.local import LocalTransport
 
 
 def _write_transport_json(path, data: dict) -> None:
@@ -123,9 +124,8 @@ class TestTransportProjectBoundary:
         (child / ".agentweave").mkdir(parents=True)
         monkeypatch.chdir(child)
 
-        transport = get_transport()
-
-        assert isinstance(transport, LocalTransport)
+        with pytest.raises(RuntimeError):
+            get_transport()
 
     def test_subdirectory_uses_nearest_project_transport(self, tmp_path, monkeypatch):
         project = tmp_path / "project"
@@ -134,7 +134,7 @@ class TestTransportProjectBoundary:
         config_path = project / ".agentweave" / "transport.json"
         _write_transport_json(
             config_path,
-            {"type": "local"},
+            {"type": "http", "url": "http://localhost:8000", "api_key": "k", "project_id": "p"},
         )
         monkeypatch.chdir(nested)
 
@@ -142,5 +142,22 @@ class TestTransportProjectBoundary:
 
         assert found is not None
         config, path = found
-        assert config["type"] == "local"
+        assert config["type"] == "http"
         assert path == config_path
+
+
+class TestGetTransportUnconfigured:
+    def test_no_config_and_no_run_token_raises(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+
+        with pytest.raises(RuntimeError, match="No transport configured"):
+            get_transport()
+
+    def test_unsupported_transport_type_raises(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+        _write_transport_json(tmp_path / ".agentweave" / "transport.json", {"type": "git"})
+
+        with pytest.raises(RuntimeError, match="Unsupported transport type"):
+            get_transport()

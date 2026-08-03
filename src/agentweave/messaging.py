@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from .constants import MESSAGE_TYPES, MESSAGES_ARCHIVE_DIR, MESSAGES_PENDING_DIR, TransportType
+from .constants import MESSAGE_TYPES, MESSAGES_ARCHIVE_DIR, MESSAGES_PENDING_DIR
 from .locking import lock
 from .utils import generate_id, load_json, now_iso, save_json, write_json_atomic
 
@@ -256,10 +256,4 @@ class MessageBus:
         """Mark a message as read via the active transport."""
         from .transport import get_transport
 
-        t = get_transport()
-        if t.get_transport_type() == TransportType.LOCAL:
-            message = Message.load(message_id, pending=True)
-            if message:
-                return message.mark_read()
-            return False
-        return t.archive_message(message_id)
+        return get_transport().archive_message(message_id)

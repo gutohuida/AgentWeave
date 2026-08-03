@@ -12,15 +12,39 @@
 
 ## 0. Transport layer
 
-- [ ] 0.1 Grep every caller of `get_transport()`, `LocalTransport`, and `GitTransport` across
+- [x] 0.1 Grep every caller of `get_transport()`, `LocalTransport`, and `GitTransport` across
       `src/agentweave/` (not just `cli.py`) to enumerate what breaks when local/git are deleted.
-- [ ] 0.2 Add/adjust tests asserting `get_transport()` has exactly two branches left: the
-      `AW_RUN_TOKEN`-bound keyless `HttpTransport` (from `agent-capability-plane`) and a project-key
-      `HttpTransport` for the app UI / surviving CLI commands.
-- [ ] 0.3 Delete `src/agentweave/transport/local.py` and `src/agentweave/transport/git.py`; collapse
-      `transport/config.py::get_transport()` and update every caller found in 0.1.
-- [ ] 0.4 Verify: full CLI regression passes with no reference to local/git transport remaining;
-      hand off and commit.
+      Found: only `transport/config.py` and `transport/__init__.py` instantiate `LocalTransport`/
+      `GitTransport` directly; `messaging.py`/`session.py`/`roles.py`/`logging_handlers.py` only
+      call `get_transport()` generically or check `get_transport_type() == "http"` (which becomes
+      always-true, not broken, once local/git are gone — no source change needed there beyond
+      `messaging.py`'s dead `TransportType.LOCAL` branch, cleaned up below). `cli.py` has 46
+      `get_transport()` call sites, nearly all inside `cmd_*` functions this change's phase 2
+      deletes wholesale — left untouched here by design (see design.md's deletion-order rationale);
+      phase 2 deletes them, not phase 0.
+- [x] 0.2 Adjusted `tests/test_transport_config.py` for the collapsed two-branch behavior
+      (`AW_RUN_TOKEN`-bound keyless `HttpTransport`; project-key `HttpTransport` from
+      `transport.json`) plus a new `TestGetTransportUnconfigured` class asserting `RuntimeError` when
+      neither is present or the configured type isn't `http`.
+- [x] 0.3 Deleted `src/agentweave/transport/local.py` and `src/agentweave/transport/git.py`;
+      collapsed `transport/config.py::get_transport()` to the two branches (raises `RuntimeError`
+      otherwise, replacing the old silent `LocalTransport()` fallback); trimmed
+      `transport/__init__.py`'s exports and `constants.py`'s `TransportType`/`GIT_COLLAB_BRANCH`/
+      `GIT_SEEN_DIR`; removed `messaging.py::MessageBus.mark_read`'s dead
+      `TransportType.LOCAL` branch (now always false — `archive_message` is the only remaining
+      path). Deleted `tests/test_transport_local.py`, `tests/test_transport_git.py`,
+      `tests/test_messaging.py` (100% `LocalTransport`-dependent; `messaging.py`'s own deletion is
+      phase 2's job, once its only remaining callers — deleted `cmd_*` functions and the deleted
+      watchdog — are gone). Deleted 2 `test_cli.py` tests whose premise (`cmd_switch`/
+      `cmd_agent_set_session` "still works for non-http transport") no longer exists; their
+      http-transport sibling tests are untouched and still pass.
+- [x] 0.4 Verify: full CLI regression passes (919 passed, 4 skipped, was 974/4 before — net -55,
+      accounted for above), full Hub regression unaffected (453 passed, 4 skipped, unchanged); grep
+      confirms no remaining `LocalTransport`/`GitTransport` import anywhere in `src/`/`tests/`/`hub/`
+      (two harmless prose-only mentions remain: a docstring in `transport/base.py`, updated to
+      describe the single remaining backend, and a historical-context comment in
+      `test_cli.py::TestSubprocessRunHasTimeout` explaining why that regression guard exists, left
+      as-is). Hand off and commit.
 
 ## 1. Watchdog removal
 
