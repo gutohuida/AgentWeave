@@ -1533,6 +1533,15 @@ being built twice.*
 > input accepted during a running turn, and drafts surviving navigation. The conversation change
 > closes both.
 
+> **Partial 16.2 (2026-08-03) — `agent-tool-surface` reconciled by its successor.** The
+> `agent-capability-plane` change (phases 9's identity work, re-cut as its own successor) is
+> complete and synced `openspec/specs/agent-tool-surface/spec.md`: the six unmodified requirements
+> from this umbrella's delta plus the identity requirement as revised by
+> `openspec/changes/agent-capability-plane/specs/agent-tool-surface/spec.md` (run-credential
+> authentication in place of environment-variable binding, `HTTP, MCP, or command access` in place
+> of `the tool surface`). It also synced the new `agent-capability-plane` capability spec. The other
+> nine delta specs under this umbrella's `specs/` remain unsynced — 16.2 is not done until they are.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.

@@ -40,7 +40,7 @@
 
 ## 4. Integration and closeout
 
-- [ ] 4.1 Run full CLI, Hub, and frontend regressions plus focused security checks.
-- [ ] 4.2 Live-verify one real spawned run using the injected plane with no project credential.
-- [ ] 4.3 Sync authoritative specs, archive the successor, annotate the umbrella/tool-surface
+- [x] 4.1 Run full CLI, Hub, and frontend regressions plus focused security checks.
+- [x] 4.2 Live-verify one real spawned run using the injected plane with no project credential.
+- [x] 4.3 Sync authoritative specs, archive the successor, annotate the umbrella/tool-surface
       reconciliation, write final handoff, and commit.
