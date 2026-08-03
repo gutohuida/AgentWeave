@@ -1361,6 +1361,14 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > (`Composer.tsx`, `composerDrafts.ts`, `conversationComposer.test.tsx`). 11.6–11.7's only remaining
 > gap, placement, shipped in 3.8 (`ConversationControls.tsx`, `conversationControls.test.tsx`).
 > 11.2–11.5 remain undone, still belonging to the composer intelligence change.
+>
+> **Update (2026-08-03) — phase 11 is now closed by real successor implementation.** Composer
+> intelligence shipped and was archived at
+> `openspec/changes/archive/2026-08-03-composer-intelligence/`: trigger detection, exact range
+> replacement, the keyboard menu, and all three result sources are covered by that change's phases
+> 1–4 and its final 285-test UI run. Together with the archived conversation successor cited above,
+> every item in 11.1–11.8 is implemented and verified. The checkboxes below remain unchanged under
+> the reconciliation rule; 11.9's durable handoffs exist in both successor archives.
 
 - [ ] 11.1 Replace the chat input with an autosizing composer: bounded growth then scroll, submit vs.
       newline gestures, persisted per-conversation draft.
@@ -1395,6 +1403,13 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > viewport width — the approved `agent-conversation-workspace` requirement replaced "collapse when
 > tight" with "only ever show four things inline," which closes the same underlying need (composer
 > chrome shouldn't crowd out the text) by a different, simpler design. 12.1 remains undone.
+>
+> **Update (2026-08-03) — phase 12 is now closed by real successor implementation.** The searchable
+> launchability-aware selector and immutable cross-agent redirect shipped in
+> `openspec/changes/archive/2026-08-03-composer-intelligence/` phases 5–6. Combined with the
+> conversation successor's controls and banner work cited above, every item in 12.1–12.4 is now
+> implemented and verified. The checkboxes remain unchanged under the reconciliation rule; 12.5's
+> durable handoffs exist in the successor archives.
 
 - [ ] 12.1 Build the agent/runner selector: in-place switching, search, launchability indicators from
       the Phase 3 probe.
