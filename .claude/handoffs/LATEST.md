@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-03-0113-composer-phase6-verified.md
+.claude/handoffs/2026-08-03-0124-accounting-phase0-model.md

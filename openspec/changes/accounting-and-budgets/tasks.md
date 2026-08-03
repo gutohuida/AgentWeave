@@ -9,11 +9,14 @@
 
 ## 0. Durable accounting model
 
-- [ ] 0.1 Add migration/model tests for project token budget, run initiator, and one-to-one turn
+- [x] 0.1 Add migration/model tests for project token budget, run initiator, and one-to-one turn
       usage with measured/unavailable status.
-- [ ] 0.2 Implement the schema and migration.
-- [ ] 0.3 Verify the durable per-turn accounting scenarios.
-- [ ] 0.4 Write handoff and commit the phase.
+- [x] 0.2 Implement the schema and migration. `Project.token_budget`, `Run.initiator`, and
+      `TurnUsage` are added by migration 0018 with availability and one-row-per-run constraints.
+- [x] 0.3 Verify the durable per-turn accounting scenarios. Accounting-model and migration suites:
+      15 passed, 1 skipped; targeted Ruff and `git diff --check` pass.
+- [x] 0.4 Write handoff and commit the phase. Handoff:
+      `.claude/handoffs/2026-08-03-0124-accounting-phase0-model.md`.
 
 ## 1. Runner normalization and recording
 
@@ -49,4 +52,3 @@
       validation.
 - [ ] 4.4 Sync the authoritative capability spec, archive this change, annotate umbrella phase 9,
       write final slice handoff, and commit.
-

@@ -124,7 +124,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0017. The full
+    migration runs cleanly and the version lands at 0018. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -132,7 +132,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0017).
+    # Verify alembic_version is at the latest revision (0018).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -143,7 +143,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0017", f"expected alembic_version=0017, got {version}"
+    assert version == "0018", f"expected alembic_version=0018, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -254,7 +254,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0017", f"expected alembic_version=0017, got {version}"
+    assert version == "0018", f"expected alembic_version=0018, got {version}"
 
 
 @pytest.mark.asyncio
@@ -551,6 +551,102 @@ def test_migration_0017_backfills_conversations_deterministically(tmp_path) -> N
         "\x1f".join(["proj-conv-mig", "claude", "provider-shared"]).encode()
     ).hexdigest()[:20]
     assert shared.id == f"conv-mig-{digest}"
+
+
+def test_migration_0018_adds_durable_turn_accounting(tmp_path) -> None:
+    """An existing 0017 deployment gains budget, initiator, and one usage row per run."""
+    db_file = tmp_path / "accounting-0017.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _create_old_state() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256) NOT NULL)"
+                    )
+                )
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE runs (id VARCHAR(64) PRIMARY KEY, "
+                        "project_id VARCHAR(64) NOT NULL, agent VARCHAR(64) NOT NULL)"
+                    )
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO projects (id, name) VALUES ('proj-old', 'Old')")
+                )
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO runs (id, project_id, agent) "
+                        "VALUES ('run-old', 'proj-old', 'claude')"
+                    )
+                )
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0017')")
+                )
+        finally:
+            await engine.dispose()
+
+    _run(_create_old_state())
+    _run_alembic_with(db_url)
+
+    assert "token_budget" in {
+        column["name"] for column in _inspect_columns(db_url, "projects")
+    }
+    run_columns = {column["name"]: column for column in _inspect_columns(db_url, "runs")}
+    assert run_columns["initiator"]["nullable"] is False
+    usage_columns = {column["name"] for column in _inspect_columns(db_url, "turn_usage")}
+    assert {
+        "run_id",
+        "status",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "allowance",
+    } <= usage_columns
+
+    async def _check_default_and_uniqueness() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                result = await conn.execute(
+                    sa.text("SELECT initiator FROM runs WHERE id = 'run-old'")
+                )
+                assert result.scalar_one() == "operator"
+                params = {
+                    "id": "usage-old",
+                    "run_id": "run-old",
+                    "project_id": "proj-old",
+                    "agent": "claude",
+                    "status": "unavailable",
+                    "observed_at": datetime.now(timezone.utc),
+                }
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO turn_usage "
+                        "(id, run_id, project_id, agent, status, observed_at) "
+                        "VALUES (:id, :run_id, :project_id, :agent, :status, :observed_at)"
+                    ),
+                    params,
+                )
+                with pytest.raises(sa.exc.IntegrityError):
+                    await conn.execute(
+                        sa.text(
+                            "INSERT INTO turn_usage "
+                            "(id, run_id, project_id, agent, status, observed_at) "
+                            "VALUES ('usage-duplicate', :run_id, :project_id, :agent, "
+                            ":status, :observed_at)"
+                        ),
+                        params,
+                    )
+        finally:
+            await engine.dispose()
+
+    _run(_check_default_and_uniqueness())
 
 
 @pytest.mark.asyncio

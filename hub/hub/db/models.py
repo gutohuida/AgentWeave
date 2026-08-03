@@ -43,6 +43,7 @@ class Project(Base):
     allow_agent_jobs: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    token_budget: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
@@ -52,6 +53,7 @@ class Project(Base):
     agents: Mapped[List["Agent"]] = relationship(back_populates="project")
     queue_entries: Mapped[List["InboundQueueEntry"]] = relationship(back_populates="project")
     conversations: Mapped[List["Conversation"]] = relationship(back_populates="project")
+    turn_usages: Mapped[List["TurnUsage"]] = relationship(back_populates="project")
 
 
 class Agent(Base):
@@ -400,6 +402,7 @@ class ProjectSpecSnapshot(Base):
 # action (task 3.7), "interrupted" is crash reconciliation finding the process gone
 # (task 3.8, Decision 8), "failed"/"completed" are the process's own exit outcome.
 RUN_STATUSES = ("running", "completed", "failed", "interrupted", "stopped")
+RUN_INITIATORS = ("operator", "autonomous")
 
 
 class Run(Base):
@@ -432,11 +435,69 @@ class Run(Base):
         DateTime(timezone=True), nullable=True
     )
     turn_depth: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    initiator: Mapped[str] = mapped_column(
+        String(16), default="operator", server_default="operator", nullable=False
+    )
 
     __table_args__ = (
+        CheckConstraint(
+            "initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"
+        ),
         Index("ix_runs_project_agent", "project_id", "agent"),
         Index("ix_runs_project_status", "project_id", "status"),
         Index("ix_runs_conversation_started", "conversation_id", "started_at"),
+    )
+
+
+TURN_USAGE_STATUSES = ("measured", "unavailable")
+
+
+class TurnUsage(Base):
+    """The immutable accounting outcome for one Hub-owned run."""
+
+    __tablename__ = "turn_usage"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("runs.id"), unique=True, nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False
+    )
+    agent: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    runner: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cache_read_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cache_write_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    api_equivalent_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    allowance: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="turn_usages")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('measured', 'unavailable')", name="ck_turn_usage_status"
+        ),
+        CheckConstraint(
+            "(status = 'measured' AND total_tokens IS NOT NULL) OR "
+            "(status = 'unavailable' AND input_tokens IS NULL AND output_tokens IS NULL "
+            "AND total_tokens IS NULL AND cache_read_tokens IS NULL "
+            "AND cache_write_tokens IS NULL AND reasoning_tokens IS NULL)",
+            name="ck_turn_usage_availability",
+        ),
+        CheckConstraint(
+            "total_tokens IS NULL OR total_tokens >= 0", name="ck_turn_usage_total_nonnegative"
+        ),
+        Index("ix_turn_usage_project_agent", "project_id", "agent"),
+        Index("ix_turn_usage_project_observed", "project_id", "observed_at"),
     )
 
 
