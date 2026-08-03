@@ -61,13 +61,13 @@
 
 ## 3. Runtime and filesystem isolation
 
-- [ ] 3.1 Write two-repository tests for direct/queued runs, context materialization, workspace path
+- [x] 3.1 Write two-repository tests for direct/queued runs, context materialization, workspace path
       listing, worktree create/list/conflicts/release, git diagnostics, and concurrent agents.
-- [ ] 3.2 Replace every project-related Hub `Path.cwd()` call with `ProjectWorkspace`; make worktree
+- [x] 3.2 Replace every project-related Hub `Path.cwd()` call with `ProjectWorkspace`; make worktree
       operations project-rooted and context files effective-workspace-rooted.
-- [ ] 3.3 Remove absolute `work_dir`; if subdirectory execution remains, accept only a contained
+- [x] 3.3 Remove absolute `work_dir`; if subdirectory execution remains, accept only a contained
       repository-relative path. Add traversal/symlink escape tests.
-- [ ] 3.4 Remove the global `.agentweave/session.json` roster fallback and render canonical context
+- [x] 3.4 Remove the global `.agentweave/session.json` roster fallback and render canonical context
       from Hub-owned project/agent/runner/charter/instruction state without cross-project leakage.
 - [ ] 3.5 Write unavailable-directory tests: new operator input refused, existing queue retained,
       autonomous/scheduled starts paused with events, repair re-evaluates work without disabling jobs.
