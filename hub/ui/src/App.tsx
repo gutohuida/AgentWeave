@@ -18,6 +18,7 @@ import { StatusBar } from '@/components/layout/StatusBar'
 import { OverviewPage } from '@/components/overview/OverviewPage'
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
+import { RunnersPage } from '@/components/runners/RunnersPage'
 import { SpecPage } from '@/components/spec/SpecPage'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { useSSE } from '@/hooks/useSSE'
@@ -48,6 +49,7 @@ const PAGES: Record<Page, PageMeta> = {
   logs: { Component: LogsView, wrapper: 'flex-col' },
   jobs: { Component: JobsPage, wrapper: 'flex-col' },
   instructions: { Component: InstructionsPage, wrapper: 'flex-col' },
+  runners: { Component: RunnersPage, wrapper: 'flex-col' },
   spec: { Component: SpecPage, wrapper: 'flex-col' },
 }
 

@@ -90,10 +90,17 @@
       real API, to construct the scenario it tested; a comment at its old location explains why and
       points to the unbound-agent test as the surviving equivalent coverage.
       Full Hub regression after this task: 469 passed, 4 skipped.
-- [ ] 1.4 Build the Hub UI runner screen (list/create/edit/delete) and a runner picker on the agent
-      detail view, following the `project-instructions` Instructions-screen pattern.
-- [ ] 1.5 Verify: runner CRUD, seed-on-first-boot, and trigger-resolves-from-binding scenarios all
-      pass against real tests, not just the plan. Hand off and commit.
+- [x] 1.4 Built the Hub UI runner screen (list/create/edit/delete) and registered it in the
+      project sidebar/page router. Added runner API React Query hooks and a runner picker to the
+      agent detail view, including explicit unbind plus loading/pending/error states. The agent list
+      response now exposes `runner_id`/`charter_id`, with a backend regression test for the bound
+      runner ID contract.
+- [x] 1.5 Verified runner CRUD, idempotent default seeding, agent binding, and trigger resolution
+      through `hub/tests/test_runners_api.py` (11 passed) and the full Hub suite (470 passed, 4
+      skipped). Frontend production build passes and all 289 frontend tests pass. The repository's
+      existing `npm run lint` command cannot start because ESLint 9 requires an `eslint.config.*`
+      file and this project still has only legacy configuration; no lint-result claim is made.
+      Hand off and commit.
 
 ## 2. Agent charter
 

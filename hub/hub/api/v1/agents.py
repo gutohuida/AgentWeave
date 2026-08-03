@@ -470,6 +470,8 @@ async def list_agents(
                 liveness=_liveness,
                 runner_options=agent_meta.get("runner_options"),
                 color_index=agent_row.color_index if agent_row else None,
+                runner_id=agent_row.runner_id if agent_row else None,
+                charter_id=agent_row.charter_id if agent_row else None,
             )
         )
 

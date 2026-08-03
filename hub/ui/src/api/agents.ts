@@ -25,6 +25,8 @@ export interface AgentSummary {
   liveness?: 'online' | 'offline' | null  // Liveness for self-registered agents
   runner_options?: Record<string, unknown>  // Runner-specific options (e.g., memory for Codex)
   color_index?: number | null  // Stable palette index, assigned once at registration
+  runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)
+  charter_id?: string | null  // Bound Charter record, if any (runner-agent-charter-separation)
 }
 
 export interface AgentLaunchability {

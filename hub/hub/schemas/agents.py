@@ -71,6 +71,8 @@ class AgentSummary(BaseModel):
         None  # Runner-specific options (e.g., memory for Codex)
     )
     color_index: Optional[int] = None  # Stable palette index, assigned once at registration
+    runner_id: Optional[str] = Field(default=None, max_length=64)  # Bound Runner record, if any
+    charter_id: Optional[str] = Field(default=None, max_length=64)  # Bound Charter record, if any
 
     model_config = {"from_attributes": True}
 

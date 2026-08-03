@@ -1,4 +1,5 @@
 import { AgentSummary, useAgentSessions } from '@/api/agents'
+import { useBindAgentRunner, useRunners } from '@/api/runners'
 import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
 import { formatDistanceToNow } from 'date-fns'
@@ -171,6 +172,14 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
             </div>
           )}
         </div>
+
+        {/* Bound Runner (runner-agent-charter-separation) */}
+        <div className="mt-4">
+          <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
+            Bound Runner
+          </p>
+          <RunnerPicker agent={agent} />
+        </div>
       </section>
 
       {/* Stats Section */}
@@ -204,6 +213,47 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           </div>
         </div>
       </section>
+    </div>
+  )
+}
+
+function RunnerPicker({ agent }: { agent: AgentSummary }) {
+  const { data: runners = [], isLoading } = useRunners()
+  const bindRunner = useBindAgentRunner()
+
+  if (isLoading) {
+    return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading runners...</span>
+  }
+
+  return (
+    <div>
+      <select
+        value={agent.runner_id ?? ''}
+        onChange={(event) => {
+          bindRunner.mutate({ agent: agent.name, runnerId: event.target.value || null })
+        }}
+        disabled={bindRunner.isPending}
+        aria-label={`Runner for ${agent.name}`}
+        className="w-full px-3 py-2 rounded-md text-sm"
+        style={{
+          background: 'var(--surface-3)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          opacity: bindRunner.isPending ? 0.6 : 1,
+        }}
+      >
+        <option value="">No runner</option>
+        {runners.map((runner) => (
+          <option key={runner.id} value={runner.id}>
+            {runner.name} ({runner.cli})
+          </option>
+        ))}
+      </select>
+      {bindRunner.isError && (
+        <p className="text-xs mt-2" style={{ color: 'var(--red, #ef4444)' }}>
+          Could not update runner binding.
+        </p>
+      )}
     </div>
   )
 }

@@ -46,6 +46,11 @@ vi.mock('@/api/queue', () => ({
   withdrawQueueEntry: vi.fn(),
 }))
 
+vi.mock('@/api/runners', () => ({
+  useRunners: () => ({ data: [], isLoading: false }),
+  useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+}))
+
 vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))

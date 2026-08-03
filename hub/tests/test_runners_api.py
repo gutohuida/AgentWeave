@@ -151,6 +151,33 @@ async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_agent_list_surfaces_bound_runner_id(app, auth_headers):
+    runner = (
+        await app.post(
+            "/api/v1/runners", json={"name": "Listed", "cli": "codex"}, headers=auth_headers
+        )
+    ).json()
+    reg = await app.post(
+        "/api/v1/agents/register",
+        json={"name": "listed-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code in (200, 201)
+    bind = await app.patch(
+        "/api/v1/agents/listed-agent",
+        json={"runner_id": runner["id"]},
+        headers=auth_headers,
+    )
+    assert bind.status_code == 200
+
+    listed = await app.get("/api/v1/agents", headers=auth_headers)
+    assert listed.status_code == 200
+    entry = next(a for a in listed.json() if a["name"] == "listed-agent")
+    assert entry["runner_id"] == runner["id"]
+    assert entry["charter_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_bind_agent_to_unknown_runner_is_refused(app, auth_headers):
     reg = await app.post(
         "/api/v1/agents/register",
