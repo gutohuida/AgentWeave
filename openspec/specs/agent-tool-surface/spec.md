@@ -5,7 +5,9 @@
 Defines what an agent may do through HTTP, MCP, and ordinary commands, and how that access is
 established. Originated by `openspec/changes/2026-07-30-hub-native-experience`; the identity
 requirement below carries the `openspec/changes/agent-capability-plane` revision (run-credential
-authentication in place of environment-variable binding).
+authentication in place of environment-variable binding). `openspec/changes/single-runtime` removed
+the per-runner access-path selection and command-based-fallback requirements below, since it deletes
+the CLI collaboration commands they depended on — HTTP and MCP are the only two paths now.
 
 ## Requirements
 
@@ -99,69 +101,6 @@ variable without validating a live run credential SHALL NOT by itself satisfy th
 - **WHEN** any effect is recorded
 - **THEN** it names the agent and run that caused it
 - **AND** no effect is recorded against an unknown or placeholder identity
-
-### Requirement: The access path is chosen per runner from probed capability
-
-Whether an agent reaches the tool surface through a tool-protocol server or through commands SHALL
-be determined by the capability of its runner in the current environment, established by the Hub
-rather than configured by hand for each agent.
-
-Runners differ in this respect within a single environment, and a runner that supports a
-tool-protocol server in general may be prohibited from using one locally. The Hub SHALL record what
-is actually available, not what is theoretically supported.
-
-An operator MAY override the chosen path for a runner.
-
-#### Scenario: Runners in one environment resolve differently
-
-- **WHEN** one runner permits a tool-protocol server and another does not, on the same machine
-- **THEN** each agent uses the path available to its runner
-- **AND** neither required per-agent configuration
-
-#### Scenario: Prohibited is distinguished from unsupported
-
-- **WHEN** a runner supports a tool-protocol server but is prohibited from connecting to one
-- **THEN** the Hub records it as unavailable in this environment and uses commands
-
-#### Scenario: The operator can override
-
-- **WHEN** an operator selects a path for a runner
-- **THEN** that choice is used in place of the probed capability
-
-### Requirement: The tool surface is available without a tool-protocol server
-
-Every outbound capability SHALL be reachable by an agent through an ordinary command invocation, in
-addition to any tool-protocol server the Hub provides. An environment that permits no tool-protocol
-server SHALL remain fully supported.
-
-Selecting the command-based path MUST NOT reduce what an agent can do, and MUST NOT bypass the
-queue, the hop budget, the agent budget, or attribution.
-
-The Hub SHALL tell the agent which path is in use, so the agent does not attempt an unavailable one.
-
-#### Scenario: A restricted environment loses no capability
-
-- **WHEN** an agent runs where no tool-protocol server is permitted
-- **THEN** it can still message another agent, create and update tasks, read the task ledger, ask
-  the operator a question, and request an agent
-- **AND** every effect is attributed as it would be otherwise
-
-#### Scenario: Governance holds on the command-based path
-
-- **WHEN** an agent uses a command to message another agent or request a further agent
-- **THEN** the hop budget, agent budget, and queue apply unchanged
-
-#### Scenario: The agent is told which path to use
-
-- **WHEN** a turn begins
-- **THEN** the agent is told whether to use the tool-protocol server or commands
-- **AND** it is not offered a path unavailable in that environment
-
-#### Scenario: Turn-start state needs no tools at all
-
-- **WHEN** an agent runs where no tool-protocol server is permitted
-- **THEN** its queued entries, roster, charter, and project instructions are still supplied at turn
-  start without any tool invocation
 
 ### Requirement: One tool surface, configured automatically
 

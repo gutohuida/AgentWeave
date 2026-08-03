@@ -103,78 +103,11 @@ be resolved.
 - **WHEN** no matching rollout record can be resolved but consecutive cumulative observations are available
 - **THEN** any delta sample SHALL be visibly estimated and SHALL NOT be presented as measured
 
-### Requirement: OpenCode context mapping
-
-For OpenCode, the canonical source SHALL be the latest usable `step_finish.part.tokens` sample.
-Context tokens SHALL equal `tokens.total - tokens.reasoning`. The collector SHALL use the current
-model's effective input limit when declared, otherwise its effective context fallback.
-
-The collector SHALL NOT accumulate token values across step-finish events and SHALL NOT depend
-primarily on an AgentWeave hard-coded model-limit table.
-
-#### Scenario: OpenCode performs a second model step
-- **WHEN** the second step moves prior input into `cache.read`
-- **THEN** the second step SHALL replace the first context sample
-
-#### Scenario: OpenCode reports reasoning separately
-- **WHEN** a step total includes separately reported reasoning tokens
-- **THEN** reasoning tokens SHALL be excluded from the retained context count
-
-#### Scenario: OpenCode model metadata includes an input limit
-- **WHEN** the active model declares both context and input limits
-- **THEN** the effective input limit SHALL be used for the context percentage
-
-### Requirement: Copilot context mapping
-
-For GitHub Copilot, the watchdog SHALL configure an invocation-unique OTel JSONL exporter before
-process spawn with prompt/response content capture disabled. The canonical source SHALL be the
-latest relevant top-level child `chat` span, not the aggregate `invoke_agent` span.
-
-`gen_ai.usage.input_tokens` SHALL be used directly with `basis=latest_request_input`.
-`gen_ai.usage.cache_read.input_tokens` and
-`gen_ai.usage.cache_creation.input_tokens` SHALL be retained only as breakdowns because OTel
-defines them as included in the input total.
-
-#### Scenario: Copilot emits an aggregate parent and child chat spans
-- **WHEN** an invocation contains one parent `invoke_agent` span and multiple child `chat` spans
-- **THEN** the latest relevant top-level child chat span SHALL provide the sample
-
-#### Scenario: Copilot telemetry contains cache attributes
-- **WHEN** the selected chat span contains input and cache token attributes
-- **THEN** cache fields SHALL NOT be added to `gen_ai.usage.input_tokens`
-
-#### Scenario: Copilot content capture is disabled
-- **WHEN** the watchdog configures token telemetry
-- **THEN** prompt, response, system instruction, and tool-definition content SHALL NOT be enabled or persisted
-
-### Requirement: Kimi 0.29 context mapping
-
-For Kimi 0.29.x, the canonical source SHALL be session status or the latest matching main-agent
-completed-step usage plus model capability metadata. Context tokens SHALL equal:
-
-`inputOther + inputCacheRead + inputCacheCreation + output`.
-
-The effective limit SHALL be `max_input_tokens ?? max_context_tokens` from the active model
-capability. `llm.request.maxTokens` SHALL NOT be used as a context limit, and accumulated
-`usage.record` accounting SHALL NOT replace the latest context-size observation.
-
-#### Scenario: Kimi session status is available
-- **WHEN** status supplies context tokens, effective limit, and ratio for the active session
-- **THEN** the collector SHALL normalize those values as the measured provider-context sample
-
-#### Scenario: Kimi status service is unavailable
-- **WHEN** the collector can resolve a matching completed step and model capability
-- **THEN** it SHALL reproduce Kimi 0.29.x context-size arithmetic from those values
-
-#### Scenario: Only completion maxTokens is present
-- **WHEN** a Kimi Wire request contains `llm.request.maxTokens` but no model context capability
-- **THEN** the collector SHALL omit the limit and percentage rather than treating completion capacity as context capacity
-
 ### Requirement: Auxiliary collectors are invocation and session bound
 
 Auxiliary usage collectors SHALL be configured and resolved by the runner invocation coordinator.
-Codex rollout, Copilot OTel, and Kimi status/Wire sources SHALL be associated with the active
-provider session and SHALL NOT be selected through an unscoped newest-file heuristic.
+Codex rollout sources SHALL be associated with the active provider session and SHALL NOT be
+selected through an unscoped newest-file heuristic.
 
 Collectors SHALL tolerate partial records and perform a final bounded poll after stdout closes.
 
@@ -197,19 +130,14 @@ SHALL immediately replace the prior display with `unavailable` until a valid sam
 session arrives.
 
 Samples tied to an old session, earlier invocation boundary, or mismatched agent SHALL be rejected.
-A watchdog restart SHALL reconstruct session binding before accepting auxiliary observations.
 
 #### Scenario: User starts a new session
-- **WHEN** the watchdog launches without resuming the prior provider session
+- **WHEN** the Hub launches a run without resuming the prior provider session
 - **THEN** the old context percentage SHALL disappear before the new session's first sample
 
 #### Scenario: Old file receives a late write
 - **WHEN** a late observation belongs to the previous provider session
 - **THEN** it SHALL NOT overwrite the active session's context snapshot
-
-#### Scenario: Watchdog restarts
-- **WHEN** the watchdog resumes an existing provider session after restart
-- **THEN** the next accepted sample SHALL reflect that session without relying on stale in-memory deltas
 
 ### Requirement: Canonical context persistence and delivery
 
@@ -221,7 +149,7 @@ The Hub SHALL validate enums, numeric ranges, bounded identifiers, bounded break
 percentage consistency. Invalid payloads SHALL be rejected rather than stored as arbitrary
 dictionaries.
 
-#### Scenario: Watchdog posts a measured sample
+#### Scenario: Hub-triggered run posts a measured sample
 - **WHEN** a canonical sample reaches the Hub
 - **THEN** the Hub SHALL preserve its status, basis, operands, percentage, source, session, model, and observation time
 
@@ -285,19 +213,15 @@ The repository SHALL include versioned provider fixtures and tests for arithmeti
 inclusion, latest-sample selection, model limits, session binding, stale rejection, legacy
 normalization, typed Hub delivery, SSE/summary projection, and UI state rendering.
 
-Installed-runner smoke tests SHALL inspect only event and token metadata and SHALL document runners
-that could not be executed. Copilot implementation completion SHALL require a current real fixture
-when the CLI becomes available.
-
 #### Scenario: Provider arithmetic suite runs
 - **WHEN** context adapter tests execute
-- **THEN** Claude, Codex, OpenCode, Copilot, and Kimi 0.29.x fixtures SHALL produce their specified canonical samples without cache double-counting
+- **THEN** Claude and Codex fixtures SHALL produce their specified canonical samples without cache double-counting
 
 #### Scenario: Full normalized pipeline is tested
 - **WHEN** the context pipeline integration suite executes
 - **THEN** a canonical sample SHALL survive local writing, HTTP validation, Hub storage/projection, and UI normalization without field-name drift
 
 #### Scenario: Runner cannot provide a measured sample
-- **WHEN** a fixture represents missing telemetry, missing limit, or an unsupported runner
+- **WHEN** a fixture represents missing telemetry or missing limit
 - **THEN** the pipeline SHALL preserve the appropriate honest status instead of silently swallowing the state
 

@@ -49,8 +49,8 @@ The system SHALL layer stable role guidance, generated project facts, long-lived
 - **WHEN** `.agentweave/ai_context.md` contains known untouched template placeholders
 - **THEN** generated context omits the placeholder content or includes a clear missing-context warning instead of presenting the placeholder as project facts
 
-#### Scenario: Live shared context is prompt-level for watchdog triggers
-- **WHEN** the watchdog triggers an agent from a Hub/direct message and `.agentweave/shared/context.md` is non-empty
+#### Scenario: Live shared context is prompt-level for Hub-triggered runs
+- **WHEN** the Hub triggers an agent from a peer message and `.agentweave/shared/context.md` is non-empty
 - **THEN** the system prepends the shared context to the prompt as current session focus without requiring regeneration of `.agentweave/context/<agent>.md`
 
 ---

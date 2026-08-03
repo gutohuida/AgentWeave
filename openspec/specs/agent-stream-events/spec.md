@@ -4,7 +4,7 @@
 TBD - created by archiving change add-agent-stream-kinds. Update Purpose after archive.
 ## Requirements
 ### Requirement: Canonical runner event envelope
-The watchdog SHALL normalize supported runner output into a provider-neutral parser result containing
+The Hub's direct-execution path SHALL normalize supported runner output into a provider-neutral parser result containing
 zero or more output events, an independent optional usage sample, optional session changes, and
 control flags.
 
@@ -27,11 +27,11 @@ represented as `error`; a failed tool invocation SHALL remain `tool_result` with
 
 #### Scenario: Runner completes successfully
 - **WHEN** a runner reports successful turn completion
-- **THEN** the watchdog SHALL emit a `status` event whose payload phase is `completed`
+- **THEN** the Hub SHALL emit a `status` event whose payload phase is `completed`
 
 #### Scenario: Tool returns an error
 - **WHEN** a tool result reports failure
-- **THEN** the watchdog SHALL emit a `tool_result` event with `is_error=true` rather than a top-level `error`
+- **THEN** the Hub SHALL emit a `tool_result` event with `is_error=true` rather than a top-level `error`
 
 ### Requirement: Versioned kind-specific payloads
 Every structured payload SHALL include `version=1` and satisfy the schema for its event kind.
@@ -61,23 +61,20 @@ the provider supplies one, and SHALL preserve a readable tool name and summary.
 - **THEN** the events SHALL remain renderable as unpaired tool activity without inventing a provider identifier
 
 ### Requirement: Run identity and deterministic ordering
-Every watchdog invocation SHALL receive a unique `run_id`, and each emitted event within that
-invocation SHALL receive a monotonically increasing `sequence` assigned after normalization.
+Every Hub-triggered run SHALL receive a unique `run_id`, and each emitted event within that
+run SHALL receive a monotonically increasing `sequence` assigned after normalization.
 
 #### Scenario: Events share an invocation
 - **WHEN** multiple output events are emitted by one runner invocation
 - **THEN** they SHALL share a `run_id` and have strictly increasing sequence values
 
 #### Scenario: Runner is retried
-- **WHEN** the watchdog starts another process attempt after a stale-session or transient failure
+- **WHEN** the Hub starts another process attempt after a stale-session or transient failure
 - **THEN** the new invocation SHALL receive a new `run_id`
 
 ### Requirement: Supported runner normalization
-The system SHALL normalize the installed or documented streaming formats for Claude, Codex,
-OpenCode, GitHub Copilot, and Kimi into the canonical event contract.
-
-Kimi conformance SHALL target the supported v0.29.x print stream; existing Kimi v1 compatibility
-SHALL be preserved but SHALL NOT be expanded by this change.
+The system SHALL normalize the installed or documented streaming formats for Claude and Codex into
+the canonical event contract.
 
 #### Scenario: Claude emits content blocks
 - **WHEN** Claude emits readable thinking, text, tool-use, tool-result, result, or error data
@@ -87,18 +84,6 @@ SHALL be preserved but SHALL NOT be expanded by this change.
 - **WHEN** Codex emits reasoning, agent-message, command, file-change, MCP-call, web-search,
   plan-update, lifecycle, or error events
 - **THEN** the adapter SHALL map them to canonical events without exposing raw JSONL as user content
-
-#### Scenario: OpenCode emits JSON events
-- **WHEN** OpenCode emits message, tool, step-finish, lifecycle, diagnostic, or failure data
-- **THEN** the adapter SHALL map the recognized data and safely ignore or summarize unknown event variants
-
-#### Scenario: Copilot emits stream events
-- **WHEN** GitHub Copilot emits assistant reasoning, messages, tool execution, lifecycle, diagnostic, or error data
-- **THEN** the adapter SHALL map them to canonical events
-
-#### Scenario: Kimi v0.29 emits sequential messages
-- **WHEN** Kimi v0.29.x emits assistant, tool-use, tool-result, lifecycle, or error messages
-- **THEN** the adapter SHALL retain readable content and tool identifiers in canonical events
 
 ### Requirement: Unknown provider events degrade safely
 Runner adapters SHALL tolerate syntactically valid provider events that they do not recognize.
@@ -111,10 +96,10 @@ terminating the runner stream.
 
 #### Scenario: Stream line is malformed
 - **WHEN** a runner produces malformed structured output
-- **THEN** the watchdog SHALL preserve a bounded diagnostic or readable fallback and continue when safe
+- **THEN** the Hub SHALL preserve a bounded diagnostic or readable fallback and continue when safe
 
 ### Requirement: Structured payload safety
-The watchdog SHALL recursively redact known secret patterns before transport and SHALL NOT persist
+The Hub SHALL recursively redact known secret patterns before transport and SHALL NOT persist
 complete raw provider events, opaque reasoning blobs, or encrypted reasoning fields.
 
 The serialized payload SHALL be at most 64 KiB, and a retained tool-result excerpt SHALL be at most
@@ -122,7 +107,7 @@ The serialized payload SHALL be at most 64 KiB, and a retained tool-result excer
 
 #### Scenario: Tool input contains a secret
 - **WHEN** normalized structured input contains a recognized credential or secret
-- **THEN** the secret SHALL be redacted before the event leaves the watchdog
+- **THEN** the secret SHALL be redacted before the event leaves the Hub's direct-execution path
 
 #### Scenario: Tool output exceeds its bound
 - **WHEN** a tool result is larger than 8 KiB
@@ -137,7 +122,7 @@ Agent output persistence, creation requests, responses, and SSE events SHALL sup
 `kind`, `payload`, `run_id`, and `sequence` fields in addition to existing content, session, and
 timestamp fields.
 
-The Hub SHALL validate allowed kinds and payload bounds independently of watchdog validation.
+The Hub SHALL validate allowed kinds and payload bounds independently of upstream parser validation.
 
 #### Scenario: New producer posts a structured event
 - **WHEN** the Hub receives valid content with structured stream fields
@@ -193,7 +178,7 @@ prefix inspection when structured fields are present.
 - **THEN** all surfaces SHALL use the same semantic label, severity, and content treatment
 
 #### Scenario: Legacy prefixed content appears
-- **WHEN** a text-only legacy event contains an existing watchdog prefix
+- **WHEN** a text-only legacy event contains an existing pre-canonical content prefix
 - **THEN** compatibility handling SHALL preserve current visibility behavior without affecting structured events
 
 ### Requirement: Thinking presentation
@@ -229,7 +214,7 @@ shared UI rendering behavior.
 
 #### Scenario: Provider fixture suite runs
 - **WHEN** the stream adapter tests execute
-- **THEN** fixtures for Claude, Codex, OpenCode, Copilot, and Kimi v0.29.x SHALL produce the expected canonical events
+- **THEN** fixtures for Claude and Codex SHALL produce the expected canonical events
 
 #### Scenario: UI contract tests run
 - **WHEN** the Hub UI test or build verification executes

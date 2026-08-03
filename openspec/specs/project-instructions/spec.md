@@ -1,22 +1,9 @@
 # project-instructions Specification
 
 ## Purpose
-Per-project instruction content stored in Hub DB and served prepended to every agent's role guide; editable via Hub UI and readable locally as `.agentweave/project_instructions.md`.
+Per-project instruction content stored in Hub DB and served prepended to every agent's role guide; editable via Hub UI. `openspec/changes/single-runtime` removed the local-file mirror and its `agentweave init` placeholder — the Hub DB is now the only source.
 
 ## Requirements
-### Requirement: Project instructions file created on init
-`agentweave init` SHALL create an empty `.agentweave/project_instructions.md` file as a placeholder when the file does not already exist.
-
-#### Scenario: Init creates placeholder
-- **WHEN** user runs `agentweave init` on a new project
-- **THEN** `.agentweave/project_instructions.md` is created with an empty or placeholder comment body
-
-#### Scenario: Init does not overwrite existing file
-- **WHEN** user runs `agentweave init` and `.agentweave/project_instructions.md` already exists
-- **THEN** the existing file is left unchanged
-
----
-
 ### Requirement: Hub stores project instructions per project
 The Hub DB SHALL store project-wide instruction content in a `ProjectInstructions` table scoped by `project_id`.
 
@@ -31,7 +18,7 @@ The Hub DB SHALL store project-wide instruction content in a `ProjectInstruction
 ---
 
 ### Requirement: Hub prepends instructions to role guide content
-When HTTP transport is active, the Hub SHALL prepend project instructions before the role guide content in every `GET /api/v1/agents/context` response.
+The Hub SHALL prepend project instructions before the role guide content in every `GET /api/v1/agents/context` response.
 
 #### Scenario: Instructions exist — prepended to role guide
 - **WHEN** project has non-empty instructions and agent calls `get_context`
@@ -40,23 +27,6 @@ When HTTP transport is active, the Hub SHALL prepend project instructions before
 #### Scenario: No instructions — role guide returned unchanged
 - **WHEN** project has no instructions (empty or no DB row)
 - **THEN** response content is the role guide only, unchanged
-
-#### Scenario: Hub wins over local file
-- **WHEN** HTTP transport is active and both Hub DB and local file have content
-- **THEN** Hub DB version is used; local file is not read
-
----
-
-### Requirement: Local transport reads instructions file
-When local transport is active, `aw-collab-start` SHALL read `.agentweave/project_instructions.md` before the role guide if the file exists and is non-empty.
-
-#### Scenario: Instructions file present — read first
-- **WHEN** local transport is active and `.agentweave/project_instructions.md` is non-empty
-- **THEN** agent reads instructions content before reading the role guide
-
-#### Scenario: Instructions file absent or empty — no change
-- **WHEN** local transport is active and the file does not exist or is empty
-- **THEN** agent proceeds with role guide only, no error
 
 ---
 

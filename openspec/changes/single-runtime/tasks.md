@@ -122,13 +122,21 @@
 
 ## 3. Spec reconciliation
 
-- [ ] 3.1 Sync this change's delta specs into `openspec/specs/`: create `app-lifecycle`; apply the
+- [x] 3.1 Sync this change's delta specs into `openspec/specs/`: create `app-lifecycle`; apply the
       MODIFIED/REMOVED deltas to `agent-tool-surface`, `runtime-diagnostics`, `project-instructions`,
       `agent-context-usage`, `agent-context-onboarding`, `agent-stream-events`, `spec-manifest-sync`,
       `trace-timeline`; retire `opencode-runner` (delete its now-empty main spec file).
-- [ ] 3.2 Verify every scenario in the touched delta specs against the implementation from phases
-      0–2 — not against intent. Note any scenario that cannot be verified and why.
-- [ ] 3.3 Hand off and commit.
+- [x] 3.2 Verify every scenario in the touched delta specs against the implementation from phases
+      0–2 — not against intent. Verification found two classes of non-conformance that must remain
+      open for phase 4 rather than being silently treated as implemented: (a) `app-lifecycle`'s
+      `doctor` scenarios promise port/database/permission checks, but the surviving diagnostics
+      still inspect the deleted local-session/`agentweave.yml` model; (b) retained, non-delta
+      requirements in `agent-context-onboarding` and `runtime-diagnostics` still name deleted
+      `activate`/`switch`/`run` commands. Hub launchability does implement missing-runner CLI
+      detection and a typed 409 refusal; the broader stale diagnostic requirements need a scoped
+      spec/code reconciliation before archive. All other phase-0–2 deletion scenarios were checked
+      against the five-command parser, deleted modules, and Hub-owned trigger path.
+- [x] 3.3 Hand off and commit.
 
 ## 4. Regression, live verification, and docs
 

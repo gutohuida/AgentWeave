@@ -35,7 +35,7 @@ Hub-renderable spec. It MUST report unsafe candidate files rather than silently 
 - **WHEN** discovery encounters Markdown notes, an escaping symlink, a hidden path, a path with a
   traversal segment, or a non-HTML file
 - **THEN** none is uploaded as a Hub spec
-- **AND** unsafe HTML candidates produce a visible CLI or watchdog diagnostic
+- **AND** unsafe HTML candidates produce a visible CLI diagnostic
 
 ### Requirement: The manifest has a versioned structural contract
 
@@ -84,67 +84,6 @@ semantic relationships.
 - **THEN** its cached title, kind, status, parent, and order remain available for diagnostics
 - **AND** it is reported as missing rather than silently removed
 
-### Requirement: Synchronization publishes a complete source snapshot
-
-After synchronizing changed documents, an HTTP watchdog or manual spec push SHALL submit a
-source-identified reconciliation snapshot containing the manifest text or manifest-read error and
-the complete set of discovered safe HTML paths.
-
-The client MUST submit the snapshot only after every discovered file is known to match a
-successfully uploaded version for the current file state. A failed read, stat, or upload MUST
-prevent that cycle from authorizing reconciliation or pruning and MUST be retried without breaking
-the watchdog poll loop.
-
-#### Scenario: Initial watchdog synchronization
-
-- **WHEN** an HTTP watchdog starts with unchanged spec files already on disk
-- **THEN** it uploads every discovered document
-- **AND** submits a complete reconciliation snapshot after all uploads succeed
-
-#### Scenario: A document upload fails
-
-- **WHEN** at least one discovered document cannot be read or uploaded
-- **THEN** its successful-state marker is not advanced
-- **AND** the client does not submit a snapshot that could classify or prune against the incomplete
-  upload set
-- **AND** a later poll retries the operation
-
-#### Scenario: A document is deleted
-
-- **WHEN** a previously synchronized document disappears from the discovered inventory
-- **THEN** the next complete snapshot records its absence even though no file upload occurs
-
-### Requirement: Reconciliation is safe across multiple machines
-
-Each HTTP workspace SHALL use a stable, non-secret sync-source identifier, and the Hub SHALL retain
-the latest reconciliation snapshot per project and source. The Hub MUST treat recently updated
-source snapshots as active and MUST surface conflicting active inventories or manifests rather than
-silently treating the last writer as globally authoritative.
-
-Ordinary synchronization MUST NOT delete stored document content. A document absent from every
-active complete inventory MAY be classified as stale. A prune request MUST delete only rows absent
-from every active complete inventory and every active manifest; it MUST refuse or report a conflict
-rather than deleting a path claimed by another active source.
-
-#### Scenario: An older checkout omits a newer document
-
-- **WHEN** two active sources disagree and one source still reports a document
-- **THEN** ordinary reconciliation does not delete or classify that document as globally absent
-- **AND** the Hub reports the source disagreement
-
-#### Scenario: Explicit prune removes a true orphan
-
-- **WHEN** an authenticated user or repair workflow requests pruning after a complete successful
-  snapshot and no active inventory or manifest claims a stored path
-- **THEN** the Hub deletes that orphaned row
-- **AND** returns the paths it pruned
-
-#### Scenario: Explicit prune encounters an active claim
-
-- **WHEN** a prune request omits a path that another active source still claims
-- **THEN** the Hub preserves the path
-- **AND** reports why it was not pruned
-
 ### Requirement: Invalid or absent manifests degrade visibly
 
 Manifest absence, unreadability, malformed JSON, excessive size, or semantic invalidity MUST NOT
@@ -156,7 +95,7 @@ The system MUST bound manifest bytes and document count before parsing or persis
 
 #### Scenario: Manifest JSON is temporarily malformed
 
-- **WHEN** the watchdog reads malformed `spec/index.json`
+- **WHEN** a synchronization pass reads malformed `spec/index.json`
 - **THEN** safe HTML documents continue to synchronize
 - **AND** the Hub reports the malformed manifest without replacing it with invented structure
 

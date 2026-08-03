@@ -8,15 +8,11 @@ The system SHALL provide runtime readiness checks for the current AgentWeave pro
 
 #### Scenario: Doctor reports project readiness
 - **WHEN** the user runs `agentweave doctor`
-- **THEN** the system reports readiness checks for session state, project config, transport, Hub connectivity when configured, watchdog heartbeat, configured agents, runner CLIs, proxy API key variables, context files, MCP setup indicators, and configured jobs
+- **THEN** the system reports readiness checks for session state, project config, Hub connectivity, configured agents, runner CLIs, proxy API key variables, context files, MCP setup indicators, and configured jobs
 
 #### Scenario: Doctor does not expose secrets
 - **WHEN** readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings
 - **THEN** the system reports variable names, paths, statuses, and hints without printing API key values, bearer tokens, or other secret values
-
-#### Scenario: Doctor supports machine-local diagnostics
-- **WHEN** the project uses local or git transport
-- **THEN** the system still reports local session, config, watchdog, agent runner, context-file, and job readiness checks without requiring a Hub connection
 
 ---
 
@@ -28,7 +24,7 @@ The system SHALL represent each readiness check as a structured result with a st
 - **THEN** the result includes the check identifier, affected agent, status `fail`, severity `error`, the missing environment variable name, and a hint describing how to set it
 
 #### Scenario: Check result can be rendered consistently
-- **WHEN** the same readiness result is shown by `agentweave doctor`, `agentweave activate`, or watchdog diagnostics
+- **WHEN** the same readiness result is shown by `agentweave doctor` and `agentweave status`
 - **THEN** the system uses the same status, severity, message, and hint semantics for that check
 
 ---
@@ -51,19 +47,19 @@ The system SHALL detect missing required proxy provider API key variables before
 ---
 
 ### Requirement: Watchdog launch preflight
-The watchdog SHALL run deterministic preflight checks before launching an agent subprocess and SHALL skip launches that are known to be impossible.
+The Hub SHALL run deterministic preflight checks before spawning an agent's run and SHALL refuse launches that are known to be impossible.
 
-#### Scenario: Watchdog skips proxy launch with missing key
-- **WHEN** the watchdog receives work for a proxy agent whose required provider API key variable is missing
-- **THEN** it does not start the subprocess, emits a structured `proxy_api_key_missing` or `agent_launch_skipped` diagnostic event, and reports the skip through Hub agent output when HTTP transport is active
+#### Scenario: Hub refuses proxy launch with missing key
+- **WHEN** the Hub receives a trigger for a proxy agent whose required provider API key variable is missing
+- **THEN** it does not spawn the process, returns a typed conflict response naming the missing variable, and records a structured diagnostic event
 
-#### Scenario: Watchdog skips missing CLI
-- **WHEN** the watchdog receives work for an agent whose runner CLI is not available in PATH
-- **THEN** it does not start the subprocess, emits a structured launch-skip diagnostic event, and reports a clear user-facing message
+#### Scenario: Hub refuses launch with missing CLI
+- **WHEN** the Hub receives a trigger for an agent whose runner CLI is not available in PATH
+- **THEN** it does not spawn the process, returns a typed conflict response, and records a structured launch-skip diagnostic event
 
-#### Scenario: Watchdog preserves queue semantics
-- **WHEN** the watchdog skips a launch because deterministic preflight checks fail
-- **THEN** the system preserves enough message or task state for the user to retry after fixing the readiness issue
+#### Scenario: A refused launch preserves state
+- **WHEN** the Hub refuses a launch because a deterministic preflight check fails
+- **THEN** the system preserves enough queued state for the user to retry after fixing the readiness issue
 
 ---
 
@@ -85,15 +81,7 @@ The system SHALL emit durable structured diagnostic events for runtime failures,
 ---
 
 ### Requirement: Hub trigger confidence reporting
-The Hub SHALL distinguish queued agent triggers by execution confidence based on available watchdog and agent state.
-
-#### Scenario: Trigger queued with healthy watchdog
-- **WHEN** the user triggers an agent from the Hub and a recent watchdog heartbeat is available
-- **THEN** the response indicates that the message was queued and host-side execution is expected
-
-#### Scenario: Trigger queued with stale watchdog
-- **WHEN** the user triggers an agent from the Hub and the latest watchdog heartbeat is stale or missing
-- **THEN** the response indicates that the message was queued but execution may not happen until the watchdog is started or reconnected
+The Hub SHALL distinguish queued agent work by execution confidence based on available agent and runner state.
 
 #### Scenario: Trigger queued for manual agent
 - **WHEN** the user triggers an agent whose runner is configured as manual
@@ -110,7 +98,7 @@ The Hub Logs UI SHALL expose diagnostics in a way that reflects the current proj
 
 #### Scenario: Diagnostic category filters exist
 - **WHEN** diagnostic events exist in the log stream
-- **THEN** the user can filter or search common categories such as transport, watchdog, runner, proxy credentials, setup, jobs, and agent stderr
+- **THEN** the user can filter or search common categories such as runner, proxy credentials, setup, jobs, and agent stderr
 
 #### Scenario: Log detail remains secret-safe
 - **WHEN** a log entry contains diagnostic data derived from env vars, transport config, or runner commands
