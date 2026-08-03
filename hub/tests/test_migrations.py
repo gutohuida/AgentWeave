@@ -26,8 +26,8 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from hub.config import settings
-from hub.db.engine import async_session_factory, init_db
-from hub.db.models import AIJob, ApiKey, Base, JobRun, Project
+from hub.db.engine import async_session_factory, engine, init_db
+from hub.db.models import AIJob, ApiKey, Base, JobRun, OperatorCredential, Project
 
 # hub/tests/test_migrations.py → hub/tests/ → hub/ → hub/hub/ (where alembic.ini
 # is packaged, task 3.12, so it ships with a plain pip install too)
@@ -125,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0025. The full
+    migration runs cleanly and the version lands at 0026. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -133,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0025).
+    # Verify alembic_version is at the latest revision (0026).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0025", f"expected alembic_version=0025, got {version}"
+    assert version == "0026", f"expected alembic_version=0026, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0025"
+    assert version == "0026"
 
 
 def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
@@ -251,6 +251,34 @@ async def test_init_db_skips_alembic_for_in_memory(tmp_path, monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
+async def test_init_db_creates_zero_projects_without_legacy_bootstrap_env(monkeypatch) -> None:
+    """A genuinely fresh install (no AW_BOOTSTRAP_PROJECT_ID in the environment) starts
+    with zero projects — local-multi-project-workspace design decision 6: "Startup no
+    longer bootstraps proj-default unconditionally." Only an explicit env value (as
+    conftest.py sets for the rest of this suite) requests the legacy back-compat project.
+    The instance operator credential must still exist so the local app can authenticate.
+    """
+    from sqlalchemy import func, select
+
+    monkeypatch.delenv("AW_BOOTSTRAP_PROJECT_ID", raising=False)
+    monkeypatch.setattr(settings, "aw_bootstrap_api_key", "")
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
+    await init_db()
+
+    async with async_session_factory() as session:
+        project_count = await session.scalar(select(func.count()).select_from(Project))
+        api_key_count = await session.scalar(select(func.count()).select_from(ApiKey))
+        credential_count = await session.scalar(
+            select(func.count()).select_from(OperatorCredential)
+        )
+    assert project_count == 0
+    assert api_key_count == 0
+    assert credential_count == 1
+
+
+@pytest.mark.asyncio
 async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
     """For a file-based DB, _run_alembic_upgrade must actually apply migrations.
 
@@ -277,7 +305,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0025", f"expected alembic_version=0025, got {version}"
+    assert version == "0026", f"expected alembic_version=0026, got {version}"
 
 
 @pytest.mark.asyncio
@@ -535,7 +563,9 @@ def test_migration_0017_backfills_conversations_deterministically(tmp_path) -> N
         try:
             async with AsyncSession(engine) as session:
                 runs = (
-                    await session.execute(sa.text("SELECT id, conversation_id FROM runs ORDER BY id"))
+                    await session.execute(
+                        sa.text("SELECT id, conversation_id FROM runs ORDER BY id")
+                    )
                 ).all()
                 conversations = (
                     await session.execute(
@@ -617,9 +647,7 @@ def test_migration_0018_adds_durable_turn_accounting(tmp_path) -> None:
     _run(_create_old_state())
     _run_alembic_with(db_url)
 
-    assert "token_budget" in {
-        column["name"] for column in _inspect_columns(db_url, "projects")
-    }
+    assert "token_budget" in {column["name"] for column in _inspect_columns(db_url, "projects")}
     run_columns = {column["name"]: column for column in _inspect_columns(db_url, "runs")}
     assert run_columns["initiator"]["nullable"] is False
     usage_columns = {column["name"] for column in _inspect_columns(db_url, "turn_usage")}
@@ -681,9 +709,7 @@ def test_migration_0019_allows_scheduled_queue_origin(tmp_path) -> None:
         try:
             async with engine.begin() as conn:
                 await conn.execute(
-                    sa.text(
-                        "CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256))"
-                    )
+                    sa.text("CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256))")
                 )
                 await conn.execute(
                     sa.text("INSERT INTO projects (id, name) VALUES ('proj-old', 'Old')")
@@ -733,9 +759,7 @@ def test_migration_0019_allows_scheduled_queue_origin(tmp_path) -> None:
                     {"now": datetime.now(timezone.utc)},
                 )
                 result = await conn.execute(
-                    sa.text(
-                        "SELECT origin_type FROM inbound_queue_entries WHERE id = 'entry-job'"
-                    )
+                    sa.text("SELECT origin_type FROM inbound_queue_entries WHERE id = 'entry-job'")
                 )
                 return result.scalar_one()
         finally:
@@ -781,9 +805,7 @@ def test_migration_0020_adds_empty_unique_run_token_digest(tmp_path) -> None:
         try:
             async with engine.connect() as conn:
                 digest = await conn.scalar(
-                    sa.text(
-                        "SELECT capability_token_hash FROM runs WHERE id = 'run-old'"
-                    )
+                    sa.text("SELECT capability_token_hash FROM runs WHERE id = 'run-old'")
                 )
                 indexes = await conn.run_sync(
                     lambda sync_conn: sa.inspect(sync_conn).get_indexes("runs")

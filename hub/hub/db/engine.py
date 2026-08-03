@@ -20,6 +20,7 @@ from .models import (  # noqa: F401
     Base,
     Charter,
     JobRun,
+    OperatorCredential,
     Project,
     ProjectInstructions,
     Runner,
@@ -167,6 +168,56 @@ async def _seed_default_charters(session: AsyncSession) -> None:
     await session.commit()
 
 
+async def _seed_operator_credential(session: AsyncSession) -> None:
+    """Promote the legacy bootstrap secret onto the instance operator plane.
+
+    Alembic performs the durable upgrade for file databases. This idempotent path
+    also covers fresh databases and in-memory development databases where Alembic is
+    deliberately skipped.
+    """
+    from sqlalchemy import func, select
+
+    if await session.scalar(select(func.count()).select_from(OperatorCredential)):
+        return
+
+    candidate = None
+    if settings.aw_bootstrap_api_key:
+        candidate = await session.get(ApiKey, settings.aw_bootstrap_api_key)
+    if candidate is None:
+        candidate = await session.scalar(
+            select(ApiKey)
+            .where(ApiKey.label.in_(("bootstrap", "auto-generated")))
+            .order_by(ApiKey.created_at, ApiKey.id)
+        )
+    if candidate is None:
+        result = await session.execute(select(ApiKey).order_by(ApiKey.created_at, ApiKey.id))
+        keys = result.scalars().all()
+        if len(keys) == 1:
+            candidate = keys[0]
+
+    if candidate is not None:
+        session.add(
+            OperatorCredential(
+                id=candidate.id,
+                label=candidate.label,
+                revoked=candidate.revoked,
+                created_at=candidate.created_at,
+            )
+        )
+        await session.commit()
+        return
+
+    # A genuinely fresh install has no legacy ApiKey to promote — mint the instance
+    # operator credential directly so the local app can authenticate before any
+    # project exists.
+    api_key = settings.aw_bootstrap_api_key
+    if not api_key or api_key == _PLACEHOLDER_API_KEY:
+        api_key = _generate_api_key()
+        logger.info("Bootstrap API key auto-generated")
+    session.add(OperatorCredential(id=api_key, label="bootstrap", revoked=False))
+    await session.commit()
+
+
 async def init_db() -> None:
     """Create tables and bootstrap API key if none exist."""
     if settings.database_url.startswith("sqlite"):
@@ -185,7 +236,12 @@ async def init_db() -> None:
 
         # Check if any keys exist
         count = await session.scalar(select(func.count()).select_from(ApiKey))
-        if count == 0:
+        # AW_BOOTSTRAP_PROJECT_ID is only ever present when explicitly requested — by
+        # conftest.py's test fixture, or by an existing pre-multi-project .env carried
+        # forward from before this change. A genuinely fresh native install's scaffolded
+        # .env no longer writes this key, so it starts with zero projects (design
+        # decision 6: "Startup no longer bootstraps proj-default unconditionally").
+        if count == 0 and os.environ.get("AW_BOOTSTRAP_PROJECT_ID") is not None:
             # No keys exist - need to bootstrap
             # Determine API key: use env value unless it's empty or placeholder
             api_key = settings.aw_bootstrap_api_key
@@ -216,5 +272,6 @@ async def init_db() -> None:
             if auto_generated:
                 logger.info("Bootstrap API key stored in database")
 
+        await _seed_operator_credential(session)
         await _seed_default_runners(session)
         await _seed_default_charters(session)

@@ -85,9 +85,9 @@ def cmd_status(args: argparse.Namespace) -> int:
             if resp.status == 200:
                 print(f"[HUB] Status: running ({mode_label})")
                 print(f"   URL:    {hub_url}")
-                project = _hub_project_label()
-                if project:
-                    print(f"   Project: {project}")
+                projects = _hub_project_status_summary(port)
+                if projects:
+                    print(f"   Projects: {projects}")
                 if pid is not None:
                     print(f"   PID:    {pid}")
                 with contextlib.suppress(ValueError, UnicodeDecodeError, json.JSONDecodeError):
@@ -220,26 +220,6 @@ HUB_COMPOSE_SHA256_URL: Optional[str] = None
 HUB_ENV_SHA256_URL: Optional[str] = None
 
 
-def _hub_project_label() -> Optional[str]:
-    """Read the non-secret bootstrap project identity from the native Hub environment file."""
-    try:
-        values: dict[str, str] = {}
-        for raw_line in (HUB_DIR / ".env").read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            if key in {"AW_BOOTSTRAP_PROJECT_ID", "AW_BOOTSTRAP_PROJECT_NAME"}:
-                values[key] = value.strip().strip('"').strip("'")
-    except OSError:
-        return None
-    project_id = values.get("AW_BOOTSTRAP_PROJECT_ID")
-    project_name = values.get("AW_BOOTSTRAP_PROJECT_NAME")
-    if project_name and project_id:
-        return f"{project_name} ({project_id})"
-    return project_name or project_id
-
-
 def _hub_url(port: int = 8000) -> str:
     """Get the Hub base URL for a given port."""
     return f"http://localhost:{port}"
@@ -253,6 +233,82 @@ def _hub_health_url(port: int = 8000) -> str:
 def _hub_setup_token_url(port: int = 8000) -> str:
     """Get the Hub setup token endpoint URL for a given port."""
     return f"{_hub_url(port)}/api/v1/setup/token"
+
+
+def _hub_projects_url(port: int = 8000) -> str:
+    """Get the Hub project-collection endpoint URL for a given port."""
+    return f"{_hub_url(port)}/api/v1/projects"
+
+
+def _hub_open_project(port: int, directory: Path, token: Optional[str]) -> Optional[dict]:
+    """Register/select `directory` as a project via POST /api/v1/projects/open.
+
+    Returns the project summary dict on success, or None on any failure (missing
+    token, network error, or Hub-side rejection) — the caller must treat this as
+    non-fatal and fall back to opening the bare Hub URL.
+    """
+    import json as _json
+    import urllib.request as _req
+
+    if not token:
+        return None
+    body = _json.dumps({"path": str(directory)}).encode("utf-8")
+    request = _req.Request(
+        f"{_hub_projects_url(port)}/open",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+    )
+    try:
+        with _req.urlopen(request, timeout=10) as resp:
+            return _json.loads(resp.read())
+    except Exception:
+        return None
+
+
+def _hub_project_app_url(port: int, project: Optional[dict]) -> str:
+    """Return the app URL to open: project-scoped if `project` resolved, else bare."""
+    if project and project.get("id"):
+        return f"{_hub_url(port)}/?project={project['id']}&view=overview"
+    return _hub_url(port)
+
+
+def _hub_resolve_launch_url(port: int, cwd: Optional[Path]) -> str:
+    """Open/register `cwd` as a project (after health) and return the launch URL.
+
+    Non-fatal by design: a Hub that is slow, unauthenticated, or offline for this
+    one call must not block the app from opening — it just opens without a project
+    selected, matching a directly started Hub with zero registered projects.
+    """
+    if cwd is None:
+        return _hub_url(port)
+    project = _hub_open_project(port, cwd, _fetch_setup_token(port))
+    if project is None:
+        print_warning("Could not open the current directory as a project; opening Hub without one.")
+        return _hub_url(port)
+    print_info(f"Project: {project.get('name')} ({project.get('id')})")
+    return _hub_project_app_url(port, project)
+
+
+def _hub_project_status_summary(port: int) -> Optional[str]:
+    """Fetch live project-collection state for `status`: count and most recent."""
+    import json as _json
+    import urllib.request as _req
+
+    token = _fetch_setup_token(port)
+    if not token:
+        return None
+    request = _req.Request(_hub_projects_url(port), headers={"Authorization": f"Bearer {token}"})
+    try:
+        with _req.urlopen(request, timeout=5) as resp:
+            projects = _json.loads(resp.read())
+    except Exception:
+        return None
+    if not projects:
+        return "0 registered"
+    most_recent = projects[0]
+    label = most_recent.get("name") or most_recent.get("id")
+    return f"{len(projects)} registered (most recent: {label})"
 
 
 def _docker_available() -> bool:
@@ -471,11 +527,12 @@ def _hub_native_scaffold(data_dir: Path) -> tuple:
         db_path = data_dir / "agentweave.db"
         # Use forward slashes for the SQLite URL (required on Windows)
         db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
+        # No AW_BOOTSTRAP_PROJECT_ID/NAME here: a genuinely fresh native install starts
+        # with zero registered projects (local-multi-project-workspace design decision
+        # 6). The first post-health `open` call registers the invocation directory.
         env_content = (
             f"DATABASE_URL={db_url}\n"
             f"AW_BOOTSTRAP_API_KEY={api_key}\n"
-            f"AW_BOOTSTRAP_PROJECT_ID=proj-default\n"
-            f"AW_BOOTSTRAP_PROJECT_NAME=Default Project\n"
             f"AW_TICKET_SECRET={_secrets.token_hex(32)}\n"
         )
         env_path.write_text(env_content, encoding="utf-8")
@@ -594,13 +651,19 @@ def _open_app_window(url: str) -> None:
     webbrowser.open(url)
 
 
-def _wait_and_open_app(port: int) -> None:
-    """Poll for Hub health, then open the app-mode window. Runs off the main thread."""
+def _wait_and_open_app(port: int, cwd: Optional[Path]) -> None:
+    """Poll for Hub health, open/register `cwd`, then open the app-mode window.
+
+    Runs off the main thread so a foreground (--no-detach) start can block on
+    uvicorn while still opening the browser once the Hub answers healthy.
+    """
     if _hub_health_check(port=port, timeout=60):
-        _open_app_window(_hub_url(port))
+        _open_app_window(_hub_resolve_launch_url(port, cwd))
 
 
-def _hub_native_start(port: int, detach: bool = True, app: bool = False) -> int:
+def _hub_native_start(
+    port: int, detach: bool = True, app: bool = False, cwd: Optional[Path] = None
+) -> int:
     """Start the Hub natively using uvicorn (no Docker).
 
     Handles scaffolding, migrations, and process management.
@@ -623,9 +686,10 @@ def _hub_native_start(port: int, detach: bool = True, app: bool = False) -> int:
         with _req.urlopen(health_url, timeout=2) as resp:
             if resp.status == 200:
                 print_info(f"Hub is already running at {_hub_url(port)}")
+                url = _hub_resolve_launch_url(port, cwd)
                 if app:
                     print_info("Opening Hub in app mode...")
-                    _open_app_window(_hub_url(port))
+                    _open_app_window(url)
                 return 0
     except Exception:
         pass
@@ -719,9 +783,10 @@ def _hub_native_start(port: int, detach: bool = True, app: bool = False) -> int:
             if is_first_run and api_key:
                 print_info(f"API key: {api_key}")
                 print_info(f"(Saved to {HUB_DIR / '.env'})")
+            url = _hub_resolve_launch_url(port, cwd)
             if app:
                 print_info("Opening Hub in app mode...")
-                _open_app_window(_hub_url(port))
+                _open_app_window(url)
         else:
             # Foreground mode — block until Ctrl+C
             if is_first_run and api_key:
@@ -730,7 +795,7 @@ def _hub_native_start(port: int, detach: bool = True, app: bool = False) -> int:
             if app:
                 import threading
 
-                threading.Thread(target=_wait_and_open_app, args=(port,), daemon=True).start()
+                threading.Thread(target=_wait_and_open_app, args=(port, cwd), daemon=True).start()
             try:
                 import uvicorn  # type: ignore[import]
 
@@ -760,7 +825,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
     app = getattr(args, "app", False)
 
     if not docker:
-        return _hub_native_start(port=port, detach=not no_detach, app=app)
+        return _hub_native_start(port=port, detach=not no_detach, app=app, cwd=Path.cwd())
 
     import subprocess as _sp
     import urllib.request as _req
