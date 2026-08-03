@@ -12,9 +12,12 @@ os.environ.setdefault("AW_BOOTSTRAP_API_KEY", "aw_live_testkey_abcdefgh")
 os.environ.setdefault("AW_BOOTSTRAP_PROJECT_ID", "proj-test")
 os.environ.setdefault("AW_BOOTSTRAP_PROJECT_NAME", "Test Project")
 
-from hub.db.engine import engine, init_db  # noqa: E402
+from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
 from hub.db.models import Base  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
+from hub.project_workspace import (
+    resolve_project_workspace as _REAL_RESOLVE_PROJECT_WORKSPACE,
+)  # noqa: E402
 
 
 @pytest_asyncio.fixture
@@ -66,11 +69,13 @@ def bind_runner(app, auth_headers):
         payload = {"name": f"{agent_name}-runner", "cli": cli}
         if model:
             payload["model"] = model
-        created = await app.post("/api/v1/runners", json=payload, headers=auth_headers)
+        created = await app.post(
+            "/api/v1/projects/proj-test/runners", json=payload, headers=auth_headers
+        )
         assert created.status_code == 201, created.text
         runner_id = created.json()["id"]
         bound = await app.patch(
-            f"/api/v1/agents/{agent_name}",
+            f"/api/v1/projects/proj-test/agents/{agent_name}",
             json={"runner_id": runner_id},
             headers=auth_headers,
         )
@@ -95,3 +100,58 @@ def _no_real_worktree_provision(monkeypatch):
     monkeypatch.setattr(
         worktrees, "resolve_agent_workspace", lambda repo_root, agent, config: repo_root
     )
+
+
+@pytest.fixture(autouse=True)
+def _default_project_workspace(monkeypatch, tmp_path):
+    """Every agent-trigger, worktree, workspace-path, and session-sync endpoint now
+    calls `project_workspace.resolve_project_workspace(session, project_id)` to root
+    its filesystem operations in the project's real registered directory instead of
+    the Hub process's `Path.cwd()`. The suite's bootstrap project (`proj-test`) is
+    deliberately left unbound in the database by `init_db()` — `test_project_lifecycle.py`'s
+    legacy-binding tests exercise binding it themselves via `ProjectLifecycleService`
+    directly, bypassing this fixture entirely — so resolving it for real here would either
+    break those tests or require every other test in the suite to explicitly register a
+    directory just to trigger an agent.
+
+    Default to resolving *any* project_id to this test's own disposable `tmp_path`,
+    mirroring `_no_real_worktree_provision`'s "stub away the real thing by default"
+    convention above. Tests exercising real, distinct project directories (worktrees,
+    workspace paths, context materialization, session-sync worktree release) use the
+    `bind_project_workspace` fixture below, which registers a real directory and
+    restores the real resolver for that one test.
+    """
+    import hub.project_workspace as project_workspace
+
+    async def _fake_resolve(session, project_id, *, hub_data_directory=None):
+        del session, hub_data_directory
+        return project_workspace.ProjectWorkspace(
+            project_id=project_id, root=tmp_path, path_key=f"test:{project_id}"
+        )
+
+    monkeypatch.setattr(project_workspace, "resolve_project_workspace", _fake_resolve)
+
+
+@pytest.fixture
+def bind_project_workspace(monkeypatch):
+    """Returns an async helper: `await bind_project_workspace(directory)`.
+
+    Registers *directory* as the single unbound legacy project's (`proj-test`) real
+    working directory through the same lifecycle path a genuine `agentweave` bare
+    invocation uses, then restores the real `resolve_project_workspace` for the rest
+    of this test — undoing `_default_project_workspace`'s fake above. Use this in place
+    of the old `monkeypatch.chdir(repo)` pattern for any test whose real git repository
+    must be what the Hub resolves as its project root.
+    """
+    import hub.project_workspace as project_workspace_module
+    from hub.project_lifecycle import ProjectLifecycleService
+
+    async def _bind(directory):
+        async with async_session_factory() as session:
+            project = await ProjectLifecycleService(session).open_existing(directory)
+        monkeypatch.setattr(
+            project_workspace_module, "resolve_project_workspace", _REAL_RESOLVE_PROJECT_WORKSPACE
+        )
+        return project
+
+    return _bind

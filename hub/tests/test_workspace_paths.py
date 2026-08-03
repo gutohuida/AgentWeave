@@ -1,4 +1,4 @@
-"""Tests for `hub.workspace_paths` and `GET /api/v1/workspace/paths` (task 0 of the
+"""Tests for `hub.workspace_paths` and `GET /api/v1/projects/proj-test/workspace/paths` (task 0 of the
 composer-intelligence change) — see
 openspec/changes/composer-intelligence/specs/agent-composer/spec.md's "Workspace path listing
 endpoint" requirement: excludes gitignored paths (including nested `.gitignore` files) and
@@ -79,11 +79,13 @@ def test_list_workspace_paths_returns_empty_for_non_git_directory(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_workspace_paths_endpoint_lists_paths_for_hub_cwd(app, auth_headers, repo, monkeypatch):
-    monkeypatch.chdir(repo)
+async def test_workspace_paths_endpoint_lists_paths_for_hub_cwd(
+    app, auth_headers, repo, bind_project_workspace
+):
+    await bind_project_workspace(repo)
     (repo / "extra.txt").write_text("hi\n")
 
-    response = await app.get("/api/v1/workspace/paths", headers=auth_headers)
+    response = await app.get("/api/v1/projects/proj-test/workspace/paths", headers=auth_headers)
 
     assert response.status_code == 200
     assert {"README.md", "extra.txt"} <= set(response.json())
@@ -91,13 +93,13 @@ async def test_workspace_paths_endpoint_lists_paths_for_hub_cwd(app, auth_header
 
 @pytest.mark.asyncio
 async def test_workspace_paths_endpoint_returns_empty_for_non_git_cwd(
-    app, auth_headers, tmp_path, monkeypatch
+    app, auth_headers, tmp_path, bind_project_workspace
 ):
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
-    monkeypatch.chdir(plain)
+    await bind_project_workspace(plain)
 
-    response = await app.get("/api/v1/workspace/paths", headers=auth_headers)
+    response = await app.get("/api/v1/projects/proj-test/workspace/paths", headers=auth_headers)
 
     assert response.status_code == 200
     assert response.json() == []

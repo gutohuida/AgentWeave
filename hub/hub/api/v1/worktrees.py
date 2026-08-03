@@ -1,4 +1,4 @@
-"""Workspace-isolation read endpoints — GET /api/v1/worktrees, GET /api/v1/worktrees/conflicts
+"""Project-scoped workspace-isolation read endpoints.
 
 Read-only views over `worktrees.py`'s git state (task 5, design.md Decision 7): which
 writing agents currently have an isolated checkout, and whether any of their branches
@@ -8,14 +8,15 @@ hub-native-runtime's "Divergent changes surface as a conflict" scenario.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import List, Tuple
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import worktrees
+from ... import project_workspace, worktrees
 from ...auth import get_project
+from ...db.engine import get_session
 
 router = APIRouter(prefix="/worktrees", tags=["worktrees"])
 
@@ -31,15 +32,22 @@ class ConflictInfo(BaseModel):
     paths: List[str]
 
 
-@router.get("", response_model=List[WorktreeInfo])
-async def list_worktrees(project: Tuple[str, str] = Depends(get_project)) -> List[WorktreeInfo]:
-    """List every agent branch currently provisioned under this Hub's repo root.
+async def _resolve_repo_root(project_id: str, session: AsyncSession):
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return workspace.root
 
-    Project-scoped in name only today — the Hub runs one project per host repo
-    (Decision 1), so `repo_root` (`Path.cwd()`) is the same for every request; kept
-    behind the same `get_project` auth dependency as every other endpoint regardless.
-    """
-    repo_root = Path.cwd()
+
+@router.get("", response_model=List[WorktreeInfo])
+async def list_worktrees(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> List[WorktreeInfo]:
+    """List every agent branch currently provisioned under this project's repo root."""
+    project_id, _ = project
+    repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
         return []
     return [
@@ -55,11 +63,13 @@ async def list_worktrees(project: Tuple[str, str] = Depends(get_project)) -> Lis
 @router.get("/conflicts", response_model=List[ConflictInfo])
 async def get_worktree_conflicts(
     project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
 ) -> List[ConflictInfo]:
     """Pairwise-check every provisioned agent branch against every other's with
     `git merge-tree` and report which agents diverge, and on which files.
     """
-    repo_root = Path.cwd()
+    project_id, _ = project
+    repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
         return []
     return [

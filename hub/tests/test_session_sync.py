@@ -1,4 +1,4 @@
-"""Tests for POST /api/v1/session/sync's agent-roster reconciliation, including task
+"""Tests for POST /api/v1/projects/proj-test/session/sync's agent-roster reconciliation, including task
 5.4's worktree-release wiring: an agent that drops out of the synced roster (removed
 from agentweave.yml) has its isolated worktree released, with unmerged work reported
 via a persisted + broadcast `worktree_released` event rather than discarded silently.
@@ -48,7 +48,7 @@ def _init_repo(path: Path) -> Path:
 @pytest.mark.asyncio
 async def test_sync_creates_and_removes_agents(app, auth_headers):
     resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {"agents": {"keep-me": {"runner": "claude"}, "drop-me": {"runner": "claude"}}}
         },
@@ -58,7 +58,7 @@ async def test_sync_creates_and_removes_agents(app, auth_headers):
     assert set(resp.json()["agents"]) == {"keep-me", "drop-me"}
 
     resp2 = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"keep-me": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -74,7 +74,7 @@ async def test_sync_creates_and_removes_agents(app, auth_headers):
 @pytest.mark.asyncio
 async def test_sync_rejects_agent_name_that_could_escape_worktree_root(app, auth_headers):
     response = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"../escape": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -85,23 +85,22 @@ async def test_sync_rejects_agent_name_that_could_escape_worktree_root(app, auth
 
 @pytest.mark.asyncio
 async def test_removing_agent_releases_its_worktree_and_reports_no_unmerged_work(
-    app, auth_headers, tmp_path, monkeypatch
+    app, auth_headers, bind_project_workspace, tmp_path
 ):
-    monkeypatch.chdir(_init_repo(tmp_path / "repo"))
-
-    repo_root = Path.cwd()
+    repo_root = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo_root)
     path = worktrees.ensure_worktree(repo_root, "leaving-agent")
     assert path.is_dir()
 
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"leaving-agent": {"runner": "claude"}}}},
         headers=auth_headers,
     )
 
     queue = sse_manager.subscribe("proj-test")
     resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {}}},
         headers=auth_headers,
     )
@@ -120,23 +119,22 @@ async def test_removing_agent_releases_its_worktree_and_reports_no_unmerged_work
 
 @pytest.mark.asyncio
 async def test_removing_agent_with_dirty_worktree_reports_unmerged_work(
-    app, auth_headers, tmp_path, monkeypatch
+    app, auth_headers, bind_project_workspace, tmp_path
 ):
-    monkeypatch.chdir(_init_repo(tmp_path / "repo"))
-
-    repo_root = Path.cwd()
+    repo_root = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo_root)
     path = worktrees.ensure_worktree(repo_root, "dirty-agent")
     (path / "f.txt").write_text("dirty-agent's uncommitted work\n")
 
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"dirty-agent": {"runner": "claude"}}}},
         headers=auth_headers,
     )
 
     queue = sse_manager.subscribe("proj-test")
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {}}},
         headers=auth_headers,
     )
@@ -153,19 +151,19 @@ async def test_removing_agent_with_dirty_worktree_reports_unmerged_work(
 
 @pytest.mark.asyncio
 async def test_removing_agent_that_never_had_a_worktree_is_a_no_op(
-    app, auth_headers, tmp_path, monkeypatch
+    app, auth_headers, bind_project_workspace, tmp_path
 ):
-    monkeypatch.chdir(_init_repo(tmp_path / "repo"))
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
 
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"never-provisioned": {"runner": "claude"}}}},
         headers=auth_headers,
     )
 
     queue = sse_manager.subscribe("proj-test")
     resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {}}},
         headers=auth_headers,
     )

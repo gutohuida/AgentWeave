@@ -273,9 +273,9 @@ def test_detect_conflicts_ignores_agents_with_no_commits_yet(repo):
 
 @pytest.mark.asyncio
 async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
-    app, auth_headers, repo, monkeypatch
+    app, auth_headers, repo, bind_project_workspace
 ):
-    monkeypatch.chdir(repo)
+    await bind_project_workspace(repo)
     a = worktrees.ensure_worktree(repo, "taylor")
     b = worktrees.ensure_worktree(repo, "uma")
     (a / "f.txt").write_text("taylor\n")
@@ -283,8 +283,10 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
     (b / "f.txt").write_text("uma\n")
     worktrees.snapshot_worktree(b, "uma")
 
-    listing = await app.get("/api/v1/worktrees", headers=auth_headers)
-    conflicts = await app.get("/api/v1/worktrees/conflicts", headers=auth_headers)
+    listing = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
+    conflicts = await app.get(
+        "/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers
+    )
 
     assert listing.status_code == 200
     assert {item["agent"] for item in listing.json()} == {"taylor", "uma"}

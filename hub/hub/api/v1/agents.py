@@ -1,11 +1,8 @@
 """Agent monitor endpoints."""
 
 import asyncio
-import json
-import os
 import re
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -64,36 +61,16 @@ class AgentRequest(BaseModel):
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
-    """Return session config for *project_id*.
+    """Return session config for *project_id* from the `ProjectSession` table.
 
-    Priority:
-    1. DB (ProjectSession table) — populated by CLI/watchdog via push_session().
-       Works in Docker where the container has no host filesystem access.
-    2. Local filesystem fallback — for developers running the Hub directly
-       (not in Docker) alongside the CLI in the same working directory.
+    Populated by the CLI/watchdog via `push_session()` on every session save. There is
+    no filesystem fallback: a global `.agentweave/session.json` read relative to the Hub
+    process's own working directory could only ever represent one project, and would
+    leak that project's configured agents across every other project's boundary (task 3.4).
     """
     result = await db.execute(select(ProjectSession).where(ProjectSession.project_id == project_id))
     row = result.scalars().first()
-    if row:
-        return row.data
-
-    # Filesystem state has no project_id, so it can only represent the local bootstrap
-    # project. Falling back for any other API-key project leaks the bootstrap project's
-    # configured agents across the project boundary.
-    if project_id != os.environ.get("AW_BOOTSTRAP_PROJECT_ID"):
-        return None
-
-    # Filesystem fallback for the local bootstrap project (development without Docker).
-    for path in [
-        Path(".agentweave") / "session.json",
-        Path("..") / ".agentweave" / "session.json",
-    ]:
-        if path.exists():
-            try:
-                return json.loads(path.read_text())
-            except (OSError, json.JSONDecodeError):
-                continue
-    return None
+    return row.data if row else None
 
 
 @router.get("/configured")

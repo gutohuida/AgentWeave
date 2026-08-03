@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import worktrees
+from ... import project_workspace, worktrees
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
 from ...config import settings
@@ -101,7 +101,10 @@ class TriggerAgentRequest(BaseModel):
         default=None, max_length=128, description="Required when session_mode='resume'"
     )
     work_dir: Optional[str] = Field(
-        default=None, max_length=4096, description="Working directory for the agent process"
+        default=None,
+        max_length=4096,
+        description="Project-relative working directory for the agent process (read-only "
+        "agents only; refused for a writing agent, which always gets its isolated worktree)",
     )
 
 
@@ -167,8 +170,6 @@ async def trigger_agent_directly(
     )
     if conversation is None:
         raise TriggerAgentError(status.HTTP_409_CONFLICT, "Conversation is unavailable")
-    if work_dir and (".." in work_dir or "~" in work_dir or any(ord(c) < 32 for c in work_dir)):
-        raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, "Invalid work_dir")
 
     agent_row_result = await session.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
@@ -177,7 +178,8 @@ async def trigger_agent_directly(
     if agent_row is None or agent_row.runner_id is None:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
-            f"{agent} has no runner bound. Bind one via PATCH /api/v1/agents/{agent} "
+            f"{agent} has no runner bound. Bind one via PATCH "
+            f"/api/v1/projects/{project_id}/agents/{agent} "
             "(runner_id) or the Hub UI before triggering.",
         )
     runner_row = await session.get(Runner, agent_row.runner_id)
@@ -222,22 +224,36 @@ async def trigger_agent_directly(
         raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
 
     model = config.get("model")
-    repo_root = Path.cwd()
+    try:
+        workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT, f"Project workspace is unavailable: {exc}"
+        ) from exc
+    repo_root = workspace_root.root
     yolo = bool(config.get("yolo"))
     resume_session_id = conversation.provider_session_id
     session_mode = "resume" if resume_session_id else "new"
     env = resolve_agent_env(runner, config)
 
     # Task 5.1/5.2: a writing agent gets its own git worktree, isolated from every other
-    # agent's (Decision 7). A custom cwd cannot override that isolation. Read-only
-    # agents may retain the existing explicit-cwd behavior.
+    # agent's (Decision 7). A custom work_dir cannot override that isolation. Read-only
+    # agents may retain the existing project-relative work_dir behavior.
     if work_dir and worktrees.is_writing_agent(config):
         raise TriggerAgentError(
             status.HTTP_400_BAD_REQUEST,
             "work_dir cannot override workspace isolation for a writing agent",
         )
     if work_dir:
-        effective_work_dir = work_dir
+        # Task 3.3: work_dir is resolved as a project-relative path, never an absolute
+        # or escaping one — resolve_relative rejects traversal, absolute paths, control
+        # characters, and symlink escapes in one place.
+        try:
+            effective_work_dir = str(workspace_root.resolve_relative(work_dir))
+        except project_workspace.ProjectPathError as exc:
+            raise TriggerAgentError(
+                status.HTTP_400_BAD_REQUEST, f"Invalid work_dir: {exc}"
+            ) from exc
         isolated_workspace: Optional[Path] = None
     else:
         try:
@@ -422,19 +438,18 @@ async def trigger_agent(
         raise HTTPException(
             status_code=400, detail="session_id is required when session_mode='resume'"
         )
-    if body.work_dir and (
-        ".." in body.work_dir
-        or "~" in body.work_dir
-        or any(ord(char) < 32 for char in body.work_dir)
-    ):
-        raise HTTPException(status_code=400, detail="Invalid work_dir")
-
     config = await get_agent_config(project_id, body.agent, session)
     if body.work_dir and worktrees.is_writing_agent(config):
         raise HTTPException(
             status_code=400,
             detail="work_dir cannot override workspace isolation for a writing agent",
         )
+    if body.work_dir:
+        try:
+            workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
+            workspace_root.resolve_relative(body.work_dir)
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid work_dir: {exc}") from exc
 
     conversation: Optional[Conversation] = None
     if body.conversation_id is not None:

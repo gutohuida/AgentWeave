@@ -1,4 +1,4 @@
-"""Session sync endpoint — POST /api/v1/session/sync
+"""Project-scoped session sync endpoints.
 
 Accepts the full session.json payload pushed from the CLI or watchdog and
 stores it in the database. This lets the Hub (running in Docker with no
@@ -11,7 +11,6 @@ calls it on startup as a safety net.
 
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import worktrees
+from ... import project_workspace, worktrees
 from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
@@ -109,7 +108,14 @@ async def sync_session(
     # release its isolated worktree (if any), never discarding unmerged work silently.
     # Best-effort and after the DB commit above: a git failure here must not roll back
     # the roster sync itself, which is the thing this endpoint actually exists for.
-    repo_root = Path.cwd()
+    #
+    # Best-effort here too: an unavailable project workspace must not fail the roster
+    # sync itself, so this is silently skipped rather than raised — there is nothing to
+    # release if the directory the worktrees would live in cannot even be resolved.
+    try:
+        repo_root = (await project_workspace.resolve_project_workspace(session, project_id)).root
+    except project_workspace.ProjectWorkspaceError:
+        removed_agent_names = []
     for agent_name in removed_agent_names:
         try:
             release_result = worktrees.release_worktree(repo_root, agent_name)
