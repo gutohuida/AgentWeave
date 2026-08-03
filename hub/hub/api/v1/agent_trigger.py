@@ -40,8 +40,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import worktrees
 from ...auth import get_project
 from ...config import settings
+from ...conversations import (
+    conversation_for_provider_session,
+    get_open_conversation,
+    new_conversation,
+)
 from ...db.engine import async_session_factory, get_session
-from ...conversations import conversation_for_provider_session, get_open_conversation, new_conversation
 from ...db.models import ApiKey, Conversation, Run
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
@@ -60,8 +64,14 @@ from ...pty_runner import (
     terminate_process_tree,
 )
 from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_command
-from ...runner_parsing import parse_claude_line, parse_codex_line
+from ...runner_events import AccountingSample
+from ...runner_parsing import (
+    parse_claude_line,
+    parse_codex_line,
+    read_codex_rollout_accounting,
+)
 from ...sse import sse_manager
+from ...usage_accounting import record_turn_usage
 from ...utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -624,6 +634,14 @@ async def _execute_run(
                 run.status = "failed"
                 run.error = str(exc)
                 run.ended_at = datetime.now(timezone.utc)
+                await record_turn_usage(
+                    db,
+                    run_id=run_id,
+                    project_id=project_id,
+                    agent=agent,
+                    runner=runner,
+                    sample=None,
+                )
             returned = await return_run_entries(db, run_id)
             await db.commit()
             await _broadcast_run_lifecycle(
@@ -656,11 +674,12 @@ async def _execute_run(
 
         session_id = known_session_id
         binding_conflict: Optional[str] = None
+        accounting_sample: Optional[AccountingSample] = None
         sequence = 0
         buffer = ""
 
         async def _flush_line(raw_line: str) -> None:
-            nonlocal binding_conflict, session_id, sequence
+            nonlocal accounting_sample, binding_conflict, session_id, sequence
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
             # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
             # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
@@ -729,6 +748,12 @@ async def _execute_run(
                     await record_context_usage(
                         db, project_id, agent, parsed.usage.to_payload(agent)
                     )
+            if parsed.accounting is not None:
+                accounting_sample = (
+                    parsed.accounting
+                    if accounting_sample is None
+                    else accounting_sample.merged(parsed.accounting)
+                )
 
         while True:
             chunk = await loop.run_in_executor(None, pty.read)
@@ -742,6 +767,21 @@ async def _execute_run(
             await _flush_line(buffer)
 
         exit_code = await loop.run_in_executor(None, pty.wait)
+
+        if runner == "codex" and session_id:
+            codex_home = Path(env["CODEX_HOME"]) if env and env.get("CODEX_HOME") else None
+            rollout_accounting = await loop.run_in_executor(
+                None,
+                lambda: read_codex_rollout_accounting(
+                    session_id, codex_home=codex_home, model=model
+                ),
+            )
+            if rollout_accounting is not None:
+                accounting_sample = (
+                    rollout_accounting
+                    if accounting_sample is None
+                    else accounting_sample.merged(rollout_accounting)
+                )
 
         if worktree is not None:
             # Task 5.3 needs real commits to compare branches with `git merge-tree` —
@@ -779,6 +819,14 @@ async def _execute_run(
                 if binding_conflict is not None:
                     run.error = binding_conflict
                 run.ended_at = datetime.now(timezone.utc)
+                await record_turn_usage(
+                    db,
+                    run_id=run_id,
+                    project_id=project_id,
+                    agent=agent,
+                    runner=runner,
+                    sample=accounting_sample,
+                )
                 await db.commit()
             await _broadcast_run_lifecycle(
                 db,

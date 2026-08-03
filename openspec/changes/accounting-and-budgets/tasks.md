@@ -20,12 +20,17 @@
 
 ## 1. Runner normalization and recording
 
-- [ ] 1.1 Add fixture tests for Claude result usage/modelUsage, Codex turn and token-count shapes,
+- [x] 1.1 Add fixture tests for Claude result usage/modelUsage, Codex turn and token-count shapes,
       OpenCode step telemetry, allowance, and malformed/missing telemetry.
-- [ ] 1.2 Implement runner-neutral accounting samples without changing context-meter semantics.
-- [ ] 1.3 Record exactly one measured or unavailable outcome when each Hub-owned run ends.
-- [ ] 1.4 Verify parser and run-recording scenarios.
-- [ ] 1.5 Write handoff and commit the phase.
+- [x] 1.2 Implement runner-neutral accounting samples without changing context-meter semantics.
+      `AccountingSample` is separate from `ContextUsageSample`; Codex rollout request deltas
+      supersede potentially cumulative stdout totals.
+- [x] 1.3 Record exactly one measured or unavailable outcome when each Hub-owned run ends.
+      `record_turn_usage` is idempotent and the direct-run completion/spawn-failure paths call it.
+- [x] 1.4 Verify parser and run-recording scenarios. Targeted runner, model, and direct-trigger
+      suites: 72 passed; targeted Ruff, `git diff --check`, and strict change validation pass.
+- [x] 1.5 Write handoff and commit the phase. Handoff:
+      `.claude/handoffs/2026-08-03-0131-accounting-phase1-runner-usage.md`.
 
 ## 2. Aggregation and API
 

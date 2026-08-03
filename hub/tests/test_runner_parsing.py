@@ -8,7 +8,12 @@ task 3.5's implementation — not hand-guessed shapes.
 import pytest
 
 from hub.runner_commands import UnsupportedRunnerError, build_command
-from hub.runner_parsing import parse_claude_line, parse_codex_line
+from hub.runner_parsing import (
+    parse_claude_line,
+    parse_codex_line,
+    parse_opencode_line,
+    read_codex_rollout_accounting,
+)
 
 
 class TestBuildCommandClaude:
@@ -137,6 +142,13 @@ CLAUDE_ERROR_RESULT_LINE = (
     '{"is_error":true,"session_id":"sess-1","type":"result","subtype":"error_max_turns",'
     '"result":"Max turns reached"}'
 )
+CLAUDE_ACCOUNTING_RESULT_LINE = (
+    '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-usage",'
+    '"total_cost_usd":0.0125,"usage":{"input_tokens":100,"output_tokens":20,'
+    '"cache_read_input_tokens":30,"cache_creation_input_tokens":10},'
+    '"modelUsage":{"claude-sonnet-5":{"inputTokens":999,"outputTokens":999,'
+    '"contextWindow":1000000}}}'
+)
 
 
 class TestParseClaudeLine:
@@ -183,6 +195,41 @@ class TestParseClaudeLine:
         assert len(parsed.events) == 1
         assert parsed.events[0].kind == "error"
         assert "Max turns reached" in parsed.events[0].content
+
+    def test_final_result_usage_is_the_accounting_outcome(self):
+        partial = parse_claude_line(CLAUDE_ASSISTANT_LINE)
+        final = parse_claude_line(CLAUDE_ACCOUNTING_RESULT_LINE)
+
+        assert partial.accounting is None
+        assert final.accounting is not None
+        assert final.accounting.input_tokens == 140
+        assert final.accounting.output_tokens == 20
+        assert final.accounting.total_tokens == 160
+        assert final.accounting.cache_read_tokens == 30
+        assert final.accounting.api_equivalent_usd_micros == 12_500
+
+    def test_model_usage_is_a_fallback_when_result_usage_is_absent(self):
+        line = (
+            '{"type":"result","subtype":"success","modelUsage":{'
+            '"primary":{"inputTokens":10,"outputTokens":2,"cacheReadInputTokens":3},'
+            '"helper":{"inputTokens":4,"outputTokens":1}}}'
+        )
+        accounting = parse_claude_line(line).accounting
+        assert accounting is not None
+        assert accounting.input_tokens == 17
+        assert accounting.output_tokens == 3
+        assert accounting.total_tokens == 20
+
+    def test_rate_limit_allowance_merges_with_final_usage(self):
+        allowance = parse_claude_line(
+            '{"type":"rate_limit_event","rate_limit_info":'
+            '{"five_hour":{"remaining_percent":64}}}'
+        ).accounting
+        final = parse_claude_line(CLAUDE_ACCOUNTING_RESULT_LINE).accounting
+        assert allowance is not None and final is not None
+        merged = allowance.merged(final)
+        assert merged.total_tokens == 160
+        assert merged.allowance == {"five_hour": {"remaining_percent": 64}}
 
     def test_malformed_json_falls_back_to_text_event(self):
         parsed = parse_claude_line("not json at all")
@@ -252,6 +299,10 @@ class TestParseCodexLine:
         assert parsed.usage.status == "estimated"
         assert parsed.usage.context_tokens == 13690 + 5
         assert parsed.usage.limit_tokens == 272000
+        assert parsed.accounting is not None
+        assert parsed.accounting.total_tokens == 13695
+        assert parsed.accounting.cache_read_tokens == 11008
+        assert parsed.accounting.reasoning_tokens == 0
 
     def test_turn_completed_unknown_model_uses_default_limit(self):
         parsed = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="some-future-model")
@@ -263,6 +314,83 @@ class TestParseCodexLine:
         assert parsed.events[0].kind == "error"
         assert "model overloaded" in parsed.events[0].content
 
+    def test_rollout_token_count_uses_latest_request_delta_not_cumulative_total(self):
+        line = (
+            '{"type":"event_msg","payload":{"type":"token_count","info":{'
+            '"last_token_usage":{"input_tokens":40,"cached_input_tokens":30,'
+            '"output_tokens":5,"reasoning_output_tokens":2,"total_tokens":45},'
+            '"total_token_usage":{"total_tokens":999}}}}'
+        )
+        accounting = parse_codex_line(line).accounting
+        assert accounting is not None
+        assert accounting.total_tokens == 45
+        assert accounting.input_tokens == 40
+        assert accounting.reasoning_tokens == 2
+
     def test_malformed_json_falls_back_to_text_event(self):
         parsed = parse_codex_line("also not json")
         assert parsed.events[0].kind == "text"
+
+
+class TestParseOpenCodeLine:
+    def test_step_finish_normalizes_tokens_cache_reasoning_and_cost(self):
+        line = (
+            '{"type":"step_finish","part":{"tokens":{"total":12537,"input":217,'
+            '"output":10,"reasoning":22,"cache":{"read":12000,"write":288}},'
+            '"cost":0.0042}}'
+        )
+        parsed = parse_opencode_line(line, model="opencode/big-pickle")
+        assert parsed.accounting is not None
+        assert parsed.accounting.total_tokens == 12537
+        assert parsed.accounting.input_tokens == 217
+        assert parsed.accounting.cache_read_tokens == 12000
+        assert parsed.accounting.cache_write_tokens == 288
+        assert parsed.accounting.reasoning_tokens == 22
+        assert parsed.accounting.api_equivalent_usd_micros == 4200
+        assert parsed.usage is not None
+        assert parsed.usage.context_tokens == 12515
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "not json",
+            '{"type":"step_finish","part":{}}',
+            '{"type":"step_finish","part":{"tokens":{"input":"unknown"}}}',
+        ],
+    )
+    def test_malformed_or_missing_telemetry_yields_no_accounting_sample(self, line):
+        assert parse_opencode_line(line).accounting is None
+
+
+def test_codex_rollout_accounting_uses_latest_request_delta(tmp_path):
+    rollout_dir = tmp_path / "sessions" / "2026" / "08" / "03"
+    rollout_dir.mkdir(parents=True)
+    rollout = rollout_dir / "rollout-2026-08-03T01-00-00-thread-abc.jsonl"
+    rollout.write_text(
+        "\n".join(
+            [
+                '{"type":"event_msg","payload":{"type":"token_count","info":{'
+                '"last_token_usage":{"input_tokens":10,"output_tokens":2,'
+                '"total_tokens":12}}}}',
+                '{"type":"event_msg","payload":{"type":"token_count","info":{'
+                '"last_token_usage":{"input_tokens":20,"cached_input_tokens":15,'
+                '"output_tokens":3,"reasoning_output_tokens":1,"total_tokens":23},'
+                '"total_token_usage":{"total_tokens":999}}}}',
+                "{partial",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    accounting = read_codex_rollout_accounting(
+        "thread-abc", codex_home=tmp_path, model="gpt-5.5"
+    )
+    assert accounting is not None
+    assert accounting.source == "codex_token_count"
+    assert accounting.total_tokens == 23
+    assert accounting.cache_read_tokens == 15
+    assert accounting.reasoning_tokens == 1
+
+
+def test_codex_rollout_accounting_returns_none_when_session_is_missing(tmp_path):
+    assert read_codex_rollout_accounting("missing", codex_home=tmp_path) is None

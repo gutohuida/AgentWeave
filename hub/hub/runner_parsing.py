@@ -23,10 +23,13 @@ and matches the T3-derived principle in design.md: "the meter never computes con
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .runner_events import (
+    AccountingSample,
     ContextUsageSample,
     RunEvent,
     error_event,
@@ -50,7 +53,115 @@ CODEX_DEFAULT_CONTEXT_LIMIT = 128000
 class ParsedLine:
     events: List[RunEvent] = field(default_factory=list)
     usage: Optional[ContextUsageSample] = None
+    accounting: Optional[AccountingSample] = None
     session_id: Optional[str] = None
+
+
+def _token_int(value: Any) -> Optional[int]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return None
+    return int(value)
+
+
+def _first_token(mapping: Dict[str, Any], *keys: str) -> Optional[int]:
+    for key in keys:
+        value = _token_int(mapping.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _accounting_from_dimensions(
+    dimensions: Dict[str, Any],
+    *,
+    source: str,
+    model: Optional[str] = None,
+    cost_usd: Any = None,
+    allowance: Optional[Dict[str, Any]] = None,
+    cache_is_separate_input: bool = False,
+) -> Optional[AccountingSample]:
+    fresh_input = _first_token(dimensions, "input_tokens", "inputTokens", "input")
+    output = _first_token(dimensions, "output_tokens", "outputTokens", "output")
+    cache_read = _first_token(
+        dimensions,
+        "cache_read_input_tokens",
+        "cacheReadInputTokens",
+        "cached_input_tokens",
+        "cache_read_tokens",
+    )
+    cache_write = _first_token(
+        dimensions,
+        "cache_creation_input_tokens",
+        "cacheCreationInputTokens",
+        "cache_write_input_tokens",
+        "cache_write_tokens",
+    )
+    reasoning = _first_token(
+        dimensions, "reasoning_output_tokens", "reasoningTokens", "reasoning"
+    )
+    reported_total = _first_token(dimensions, "total_tokens", "totalTokens", "total")
+    if fresh_input is None and output is None and reported_total is None:
+        if allowance is None and cost_usd is None:
+            return None
+        normalized_input = None
+        total = None
+    else:
+        normalized_input = fresh_input
+        if cache_is_separate_input and fresh_input is not None:
+            normalized_input += (cache_read or 0) + (cache_write or 0)
+        total = reported_total
+        if total is None:
+            total = (normalized_input or 0) + (output or 0)
+    cost_micros = None
+    if isinstance(cost_usd, (int, float)) and not isinstance(cost_usd, bool) and cost_usd >= 0:
+        cost_micros = round(float(cost_usd) * 1_000_000)
+    return AccountingSample(
+        source=source,
+        input_tokens=normalized_input,
+        output_tokens=output,
+        total_tokens=total,
+        cache_read_tokens=cache_read,
+        cache_write_tokens=cache_write,
+        reasoning_tokens=reasoning,
+        model=model,
+        api_equivalent_usd_micros=cost_micros,
+        allowance=allowance,
+    )
+
+
+def _claude_model_accounting(
+    model_usage: Dict[str, Any], *, source: str, cost_usd: Any
+) -> Optional[AccountingSample]:
+    samples = [
+        _accounting_from_dimensions(
+            entry,
+            source=source,
+            model=model_name,
+            cache_is_separate_input=True,
+        )
+        for model_name, entry in model_usage.items()
+        if isinstance(entry, dict)
+    ]
+    measured = [sample for sample in samples if sample is not None and sample.total_tokens is not None]
+    if not measured:
+        return _accounting_from_dimensions({}, source=source, cost_usd=cost_usd)
+    best_model = max(measured, key=lambda sample: sample.total_tokens or 0).model
+    cost_micros = (
+        round(float(cost_usd) * 1_000_000)
+        if isinstance(cost_usd, (int, float)) and not isinstance(cost_usd, bool) and cost_usd >= 0
+        else None
+    )
+    return AccountingSample(
+        source=source,
+        input_tokens=sum(sample.input_tokens or 0 for sample in measured),
+        output_tokens=sum(sample.output_tokens or 0 for sample in measured),
+        total_tokens=sum(sample.total_tokens or 0 for sample in measured),
+        cache_read_tokens=sum(sample.cache_read_tokens or 0 for sample in measured),
+        cache_write_tokens=sum(sample.cache_write_tokens or 0 for sample in measured),
+        reasoning_tokens=sum(sample.reasoning_tokens or 0 for sample in measured),
+        model=best_model,
+        api_equivalent_usd_micros=cost_micros,
+    )
 
 
 def _claude_tool_result_text(content: Any) -> str:
@@ -201,6 +312,20 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                     model=best_model,
                     session_id=session_id,
                 )
+        accounting = None
+        result_usage = data.get("usage")
+        if isinstance(result_usage, dict):
+            accounting = _accounting_from_dimensions(
+                result_usage,
+                source=source,
+                model=usage_sample.model if usage_sample is not None else None,
+                cost_usd=data.get("total_cost_usd"),
+                cache_is_separate_input=True,
+            )
+        if accounting is None and isinstance(model_usage, dict):
+            accounting = _claude_model_accounting(
+                model_usage, source=source, cost_usd=data.get("total_cost_usd")
+            )
         if data.get("is_error") is True or str(subtype).startswith("error"):
             event = error_event(
                 code="claude_result_error",
@@ -210,7 +335,19 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             cost = data.get("total_cost_usd")
             summary = f"Completed (cost: ${cost:.4f})" if cost is not None else "Completed"
             event = status_event("completed", summary=summary)
-        return ParsedLine(events=[event], usage=usage_sample, session_id=session_id)
+        return ParsedLine(
+            events=[event],
+            usage=usage_sample,
+            accounting=accounting,
+            session_id=session_id,
+        )
+
+    if msg_type == "rate_limit_event":
+        allowance = data.get("rate_limit_info") or data.get("rate_limit")
+        accounting = None
+        if isinstance(allowance, dict):
+            accounting = AccountingSample(source=source, allowance=allowance)
+        return ParsedLine(accounting=accounting, session_id=session_id)
 
     return ParsedLine(session_id=session_id)
 
@@ -408,7 +545,25 @@ def parse_codex_line(
     if msg_type == "turn.completed":
         usage = data.get("usage") or {}
         usage_sample = _codex_usage_sample(usage, source=source, model=model) if usage else None
-        return ParsedLine(usage=usage_sample)
+        accounting = (
+            _accounting_from_dimensions(usage, source=source, model=model)
+            if isinstance(usage, dict)
+            else None
+        )
+        return ParsedLine(usage=usage_sample, accounting=accounting)
+
+    if msg_type == "event_msg":
+        payload = data.get("payload")
+        if isinstance(payload, dict) and payload.get("type") == "token_count":
+            info = payload.get("info")
+            if isinstance(info, dict):
+                last_usage = info.get("last_token_usage")
+                if isinstance(last_usage, dict):
+                    return ParsedLine(
+                        accounting=_accounting_from_dimensions(
+                            last_usage, source=f"{source}_token_count", model=model
+                        )
+                    )
 
     if msg_type == "turn.failed":
         error = data.get("error") or {}
@@ -422,3 +577,100 @@ def parse_codex_line(
         return ParsedLine(events=[error_event(code="codex_error", message=message)])
 
     return ParsedLine()
+
+
+def parse_opencode_line(
+    line: str, *, source: str = "opencode", model: Optional[str] = None
+) -> ParsedLine:
+    """Parse accounting and context telemetry from OpenCode JSON step events.
+
+    The Hub does not directly launch OpenCode yet; keeping normalization here makes the
+    runner-neutral accounting contract available when that execution adapter lands.
+    """
+    try:
+        data = json.loads(line)
+        if not isinstance(data, dict):
+            return ParsedLine()
+    except Exception:
+        return ParsedLine()
+    if data.get("type") != "step_finish":
+        return ParsedLine()
+    part = data.get("part")
+    if not isinstance(part, dict):
+        return ParsedLine()
+    tokens = part.get("tokens")
+    if not isinstance(tokens, dict):
+        return ParsedLine()
+    accounting = _accounting_from_dimensions(
+        tokens,
+        source=source,
+        model=model,
+        cost_usd=part.get("cost"),
+    )
+    usage = None
+    total = _first_token(tokens, "total")
+    if total is not None:
+        reasoning = _first_token(tokens, "reasoning") or 0
+        cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+        usage = ContextUsageSample(
+            status="measured",
+            source=source,
+            basis="provider_context",
+            context_tokens=max(0, total - reasoning),
+            model=model,
+            breakdown={
+                "input_tokens": _first_token(tokens, "input") or 0,
+                "output_tokens": _first_token(tokens, "output") or 0,
+                "cache_read_tokens": _first_token(cache, "read") or 0,
+                "cache_creation_tokens": _first_token(cache, "write") or 0,
+                "reasoning_tokens": reasoning,
+            },
+        )
+    if accounting is not None and isinstance(tokens.get("cache"), dict):
+        cache = tokens["cache"]
+        accounting.cache_read_tokens = _first_token(cache, "read")
+        accounting.cache_write_tokens = _first_token(cache, "write")
+    return ParsedLine(usage=usage, accounting=accounting)
+
+
+def read_codex_rollout_accounting(
+    session_id: str, *, codex_home: Optional[Path] = None, model: Optional[str] = None
+) -> Optional[AccountingSample]:
+    """Read the latest request delta from a Codex session rollout.
+
+    Codex stdout can be cumulative for resumed sessions. Its persisted token-count event
+    carries `last_token_usage`, which is the exact turn boundary needed for accounting.
+    """
+    home = codex_home or Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+    sessions_dir = home / "sessions"
+    if not sessions_dir.is_dir():
+        return None
+    matches = sorted(
+        sessions_dir.rglob(f"rollout-*-{session_id}.jsonl"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    if not matches:
+        return None
+    latest_usage: Optional[Dict[str, Any]] = None
+    try:
+        with matches[-1].open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                try:
+                    record = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict) or record.get("type") != "event_msg":
+                    continue
+                payload = record.get("payload")
+                if not isinstance(payload, dict) or payload.get("type") != "token_count":
+                    continue
+                info = payload.get("info")
+                if isinstance(info, dict) and isinstance(info.get("last_token_usage"), dict):
+                    latest_usage = info["last_token_usage"]
+    except OSError:
+        return None
+    if latest_usage is None:
+        return None
+    return _accounting_from_dimensions(
+        latest_usage, source="codex_token_count", model=model
+    )

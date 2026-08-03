@@ -5,6 +5,8 @@ from sqlalchemy.exc import IntegrityError
 
 from hub.db.engine import async_session_factory
 from hub.db.models import Project, Run, TurnUsage
+from hub.runner_events import AccountingSample
+from hub.usage_accounting import record_turn_usage
 
 
 @pytest.mark.asyncio
@@ -82,3 +84,43 @@ async def test_unavailable_usage_has_no_fabricated_token_values(app) -> None:
         assert usage.input_tokens is None
         assert usage.output_tokens is None
         assert usage.total_tokens is None
+
+
+@pytest.mark.asyncio
+async def test_record_turn_usage_is_idempotent_and_preserves_runner_telemetry(app) -> None:
+    async with async_session_factory() as session:
+        project = Project(id="proj-record", name="Record")
+        run = Run(id="run-record", project_id=project.id, agent="claude")
+        session.add_all([project, run])
+        await session.flush()
+        sample = AccountingSample(
+            source="claude",
+            input_tokens=100,
+            output_tokens=20,
+            total_tokens=120,
+            api_equivalent_usd_micros=12_500,
+            allowance={"five_hour": {"remaining_percent": 72}},
+        )
+        first = await record_turn_usage(
+            session,
+            run_id=run.id,
+            project_id=project.id,
+            agent="claude",
+            runner="claude",
+            sample=sample,
+        )
+        second = await record_turn_usage(
+            session,
+            run_id=run.id,
+            project_id=project.id,
+            agent="claude",
+            runner="claude",
+            sample=None,
+        )
+        await session.commit()
+
+        assert second.id == first.id
+        assert first.status == "measured"
+        assert first.total_tokens == 120
+        assert first.api_equivalent_usd_micros == 12_500
+        assert first.allowance == {"five_hour": {"remaining_percent": 72}}

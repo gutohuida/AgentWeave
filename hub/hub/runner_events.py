@@ -210,3 +210,37 @@ class ContextUsageSample:
             "breakdown": self.breakdown,
             "observed_at": self.observed_at,
         }
+
+
+@dataclass
+class AccountingSample:
+    """Runner-neutral totals for one turn, separate from context-window pressure."""
+
+    source: str
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
+    cache_write_tokens: Optional[int] = None
+    reasoning_tokens: Optional[int] = None
+    model: Optional[str] = None
+    api_equivalent_usd_micros: Optional[int] = None
+    allowance: Optional[Dict[str, Any]] = None
+
+    def merged(self, newer: "AccountingSample") -> "AccountingSample":
+        """Overlay newer reported fields while retaining independent earlier telemetry."""
+        values: Dict[str, Any] = {}
+        for name in (
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "cache_read_tokens",
+            "cache_write_tokens",
+            "reasoning_tokens",
+            "model",
+            "api_equivalent_usd_micros",
+            "allowance",
+        ):
+            newer_value = getattr(newer, name)
+            values[name] = newer_value if newer_value is not None else getattr(self, name)
+        return AccountingSample(source=newer.source or self.source, **values)

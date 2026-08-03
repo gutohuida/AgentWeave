@@ -391,10 +391,64 @@ async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers
                     headers=auth_headers,
                 )
                 assert resp.status_code == 200
+                run_id = resp.json()["run_id"]
                 await _await_background_run()
 
     fake_spawn.assert_called_once()
     pty_spawn.assert_not_called()
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import TurnUsage
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))
+        usage = result.scalar_one()
+        assert usage.status == "measured"
+        assert usage.input_tokens == 1
+        assert usage.output_tokens == 1
+        assert usage.total_tokens == 2
+
+
+@pytest.mark.asyncio
+async def test_run_without_usage_records_unavailable_once(app, auth_headers):
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"no-usage": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"s-none"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn), patch(
+        "hub.launchability.shutil.which", return_value="/usr/bin/claude"
+    ):
+        response = await app.post(
+            "/api/v1/agent/trigger",
+            json={"agent": "no-usage", "message": "hi"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        run_id = response.json()["run_id"]
+        await _await_background_run()
+
+    from sqlalchemy import func, select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import TurnUsage
+
+    async with async_session_factory() as session:
+        count = await session.scalar(
+            select(func.count()).select_from(TurnUsage).where(TurnUsage.run_id == run_id)
+        )
+        result = await session.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))
+        usage = result.scalar_one()
+        assert count == 1
+        assert usage.status == "unavailable"
+        assert usage.total_tokens is None
 
 
 @pytest.mark.asyncio
