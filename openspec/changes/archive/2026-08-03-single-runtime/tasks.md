@@ -140,16 +140,27 @@
 
 ## 4. Regression, live verification, and docs
 
-- [ ] 4.1 Run full CLI, Hub, and frontend regressions. Expect a large CLI test-count drop (mirrors
-      task 3.16's precedent in the umbrella: deletions are accounted for, not just "fewer tests").
-- [ ] 4.2 Live-verify bare `agentweave` end to end in a throwaway `testbed/` directory: first
+- [x] 4.1 Run full CLI, Hub, and frontend regressions. CLI: 387 passed, 3 skipped. Hub after the
+      live-found MCP forwarding fix: 454 passed, 4 skipped. Frontend: 289 passed; production build
+      succeeded. The CLI count is down from 919/4 after phase 0 because phases 1–2 deliberately
+      deleted the watchdog, collaboration CLI, runner helper, messaging module, and their tests.
+      This mirrors task 3.16's precedent in the umbrella: deletions are accounted for, not just
+      reported as "fewer tests".
+- [x] 4.2 Live-verify bare `agentweave` end to end in a throwaway `testbed/` directory: first
       invocation registers + launches, a Claude/Codex run starts and streams output, an agent
       messages/tasks through the capability plane, no `watchdog.pid` or `transport.json` is ever
       created, and `agentweave reset` cleans up. Same rigor as `agent-capability-plane` phase 4 (real
-      process, no `TestClient` substitute for the parts that must prove a real spawn).
-- [ ] 4.3 `openspec validate --all --strict` passes.
-- [ ] 4.4 Update `README.md`'s quick start to bare `agentweave` (finishing task 3.17's partial state)
+      process, no `TestClient` substitute for the parts that must prove a real spawn). Verified on
+      isolated port 8765 with a temporary Windows profile so pre-existing user Hub data was not
+      touched. The first Codex capability attempt exposed that dynamically configured MCP servers
+      did not inherit `AW_RUN_TOKEN`; added Codex `env_vars` forwarding by name (never token values
+      in argv), regression-tested it, restarted the real Hub, and re-ran successfully: real Codex
+      spawn, streamed output, task row, message row, and `LIVE_OK` in 17 seconds. No `watchdog.pid`
+      or `transport.json` was created. `agentweave stop` + `reset --all --yes` succeeded and the
+      validated temporary profile was removed.
+- [x] 4.3 `openspec validate --all --strict` passes (19/19).
+- [x] 4.4 Update `README.md`'s quick start to bare `agentweave` (finishing task 3.17's partial state)
       and remove any remaining local/git-transport or watchdog claims from docs.
-- [ ] 4.5 Archive this change; annotate `openspec/changes/2026-07-30-hub-native-experience/tasks.md`
+- [x] 4.5 Archive this change; annotate `openspec/changes/2026-07-30-hub-native-experience/tasks.md`
       16.2 with what this successor synced, same pattern as `agent-capability-plane`'s annotation.
-- [ ] 4.6 Final handoff and commit.
+- [x] 4.6 Final handoff and commit.

@@ -229,7 +229,7 @@ class TestStopCommand:
 class TestStatusCommand:
     """Tests for cmd_status."""
 
-    def test_status_running(self, capsys):
+    def test_status_running(self, tmp_path, capsys):
         """Test that status reports running when Hub is healthy."""
         import json
 
@@ -239,11 +239,17 @@ class TestStatusCommand:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=None)
 
-        with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
-            result = cmd_status(MagicMock())
+        (tmp_path / ".env").write_text(
+            "AW_BOOTSTRAP_PROJECT_ID=proj-default\n" "AW_BOOTSTRAP_PROJECT_NAME=Default Project\n",
+            encoding="utf-8",
+        )
+        with patch("agentweave.cli.HUB_DIR", tmp_path):  # noqa: SIM117
+            with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
+                result = cmd_status(MagicMock())
             assert result == 0
             captured = capsys.readouterr()
             assert "running" in captured.out.lower()
+            assert "Default Project (proj-default)" in captured.out
 
     def test_status_stopped(self, capsys):
         """Test that status reports stopped when Hub is not responding."""

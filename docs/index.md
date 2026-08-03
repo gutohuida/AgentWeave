@@ -1,71 +1,25 @@
 # AgentWeave
 
-**A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, Minimax, GLM, and more.**
+AgentWeave is a self-hosted workspace where AI coding agents collaborate through one Hub-owned
+runtime. The Hub owns execution, conversations, tasks, messages, jobs, specifications, usage, and
+the operator dashboard.
 
-AgentWeave lets multiple AI agents work together on the same project through a shared protocol. The **AgentWeave Hub** is a self-hosted server with a web dashboard — the recommended way to run it.
-
-## Quick Start
-
-Get up and running in 5 minutes:
+## Quick start
 
 ```bash
-# 1. Install the CLI and Hub
-pip install "agentweave-ai[mcp]" agentweave-hub
-
-# 2. Start the Hub (native, no Docker needed)
-agentweave hub start
-
-# 3. Initialize your project
-cd /path/to/your-project
-agentweave init --project "My App"
-
-# 4. Activate (connects Hub, sets up MCP, starts watchdog)
-agentweave activate
+uv tool install agentweave-ai --with agentweave-hub
+agentweave
 ```
 
-See the [Getting Started](getting-started/quickstart.md) guide for full details.
+The first launch creates user-local state, runs migrations, starts the Hub, and opens the dashboard
+at `http://localhost:8000`.
 
----
+## Product model
 
-## What is AgentWeave?
+- Operators use the dashboard.
+- Running agents use the least-privilege agent capability plane.
+- The CLI starts, diagnoses, reports, stops, or resets the local instance.
+- The Hub is the only collaboration and execution runtime.
 
-AgentWeave solves a simple but important problem: **how do you get multiple AI agents to collaborate on the same codebase?**
-
-It provides:
-
-- **A shared protocol** — tasks, messages, and context files that all agents can read and write
-- **Multiple transport modes** — local filesystem, git orphan branch, or HTTP via the Hub
-- **An MCP server** — native tool integration so agents can send messages and manage tasks autonomously
-- **A web dashboard** — real-time visibility into agent activity, tasks, and messages
-
-## Three Modes of Operation
-
-| Mode | Setup | Best For |
-|------|-------|----------|
-| **Hub** | Docker + HTTP transport | Teams, multi-machine, web dashboard *(recommended)* |
-| **Hub command path** | Hub + ordinary `agentweave` commands | Restricted runners with no tool-protocol server |
-| **Manual relay** | Zero setup | Quick one-off delegation |
-
-## Documentation
-
-| Section | Description | Links |
-|---------|-------------|-------|
-| **Getting Started** | Install the CLI, start the Hub, and connect your first agents | [Installation](getting-started/installation.md) · [Quick Start](getting-started/quickstart.md) |
-| **Guides** | Step-by-step guides for common tasks and workflows | [Adding New Agents](guides/adding-new-agents.md) · [Context Files](guides/context-files.md) · [Session Modes](guides/session-modes.md) · [AW-Spec Workflow](guides/aw-spec-workflow.md) · [AI Jobs](guides/ai-jobs.md) · [Dashboard](guides/dashboard.md) · [FAQ](guides/faq.md) |
-| **Reference** | CLI commands, MCP tools, API endpoints, and configuration options | [CLI Commands](reference/cli-commands.md) · [MCP Tools](reference/mcp-tools.md) · [Task Lifecycle](reference/task-lifecycle.md) · [Hub API](reference/hub-api.md) |
-| **Architecture** | Understand how AgentWeave works under the hood | [Overview](architecture/overview.md) · [Transport Layer](architecture/transport-layer.md) · [Messaging](architecture/messaging.md) · [Locking](architecture/locking.md) |
-| **Contributing** | Development setup and release process | [Development](contributing/development.md) · [Release Process](contributing/release-process.md) |
-
-## Dashboard Features
-
-Open **http://localhost:8000** to see:
-
-- **Overview** — centralized landing page with agent health, task summary, and activity ticker
-- **Tasks board** — all tasks with status, priority, assignee, and deliverables
-- **Messages feed** — inter-agent messages with inline task linking
-- **Human questions** — answer agent questions directly in the UI
-- **Agent activity** — live event stream, per-agent output logs, and session management
-- **Agent chat** — per-session chat history with session selector
-- **Agent cards** — connected agents with multi-role badges, yolo mode, and runner type
-
-See [Using the Dashboard](guides/dashboard.md) for more.
+Start with the [quick start](getting-started/quickstart.md), review the
+[CLI reference](reference/cli-commands.md), or read the [architecture](architecture/overview.md).

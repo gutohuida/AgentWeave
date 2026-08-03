@@ -7,9 +7,13 @@ zero-dependency CLI and tests.
 from __future__ import annotations
 
 import json
+import importlib.util
 import os
 import re
 import shutil
+import socket
+import sqlite3
+import sys
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
@@ -29,6 +33,8 @@ from .constants import (
 
 SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.I)
 SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
+NATIVE_HUB_DIR = Path.home() / ".agentweave" / "hub"
+MINIMUM_PYTHON = (3, 8)
 
 
 REQUIRED_CONTEXT_SECTIONS = (
@@ -131,6 +137,171 @@ def _load_json_raw(path: Path) -> tuple[Optional[dict[str, Any]], Optional[str]]
         return data, None
     except (OSError, json.JSONDecodeError) as exc:
         return None, str(exc)
+
+
+def check_python_version() -> DiagnosticResult:
+    version = sys.version_info[:3]
+    rendered = ".".join(str(part) for part in version)
+    if version[:2] >= MINIMUM_PYTHON:
+        return ok(
+            "python_version_supported",
+            "python",
+            f"Python {rendered} is supported.",
+            category="environment",
+            data={"version": rendered},
+        )
+    minimum = ".".join(str(part) for part in MINIMUM_PYTHON)
+    return fail(
+        "python_version_unsupported",
+        "python",
+        f"Python {rendered} is unsupported; AgentWeave requires Python {minimum}+.",
+        hint=f"Install Python {minimum} or newer and reinstall AgentWeave.",
+        category="environment",
+    )
+
+
+def check_hub_runtime() -> DiagnosticResult:
+    try:
+        installed = importlib.util.find_spec("hub.main") is not None
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        installed = False
+    if installed:
+        return ok(
+            "hub_runtime_installed",
+            "hub",
+            "The native Hub runtime is installed.",
+            category="environment",
+        )
+    return fail(
+        "hub_runtime_missing",
+        "hub",
+        "The native Hub runtime is not installed.",
+        hint="Reinstall AgentWeave with its Hub runtime package.",
+        category="environment",
+    )
+
+
+def check_runner_clis() -> DiagnosticResult:
+    commands = sorted(
+        {
+            str(config.get("cli", "")).strip()
+            for config in RUNNER_CONFIGS.values()
+            if str(config.get("cli", "")).strip()
+        }
+    )
+    available = [command for command in commands if shutil.which(command)]
+    if available:
+        return ok(
+            "runner_cli_available",
+            "runners",
+            f"Detected runner CLI(s): {', '.join(available)}.",
+            category="environment",
+            data={"available": available, "checked": commands},
+        )
+    return warn(
+        "runner_cli_missing",
+        "runners",
+        "No supported agent runner CLI was found in PATH.",
+        hint=f"Install and authenticate at least one runner CLI: {', '.join(commands)}.",
+        category="environment",
+        data={"checked": commands},
+    )
+
+
+def _port_is_available(port: int) -> bool:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+
+
+def check_port_availability(port: int = 8000) -> DiagnosticResult:
+    if _port_is_available(port):
+        return ok(
+            "hub_port_available",
+            f"port:{port}",
+            f"Port {port} is available for the Hub.",
+            category="environment",
+            data={"port": port},
+        )
+    return fail(
+        "hub_port_unavailable",
+        f"port:{port}",
+        f"Port {port} is already in use.",
+        hint=f"Stop the process using port {port}, or start AgentWeave with --port <free-port>.",
+        category="environment",
+        data={"port": port},
+    )
+
+
+def _nearest_existing_parent(path: Path) -> Path:
+    candidate = path
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return candidate
+
+
+def check_database_accessibility() -> DiagnosticResult:
+    database = NATIVE_HUB_DIR / "data" / "agentweave.db"
+    if not database.exists():
+        parent = _nearest_existing_parent(database.parent)
+        if os.access(parent, os.W_OK):
+            return ok(
+                "database_location_ready",
+                str(database),
+                "The native database location is writable for first launch.",
+                category="environment",
+            )
+        return fail(
+            "database_location_unwritable",
+            str(database),
+            f"The database directory cannot be created beneath {parent}.",
+            hint=f"Grant write permission to {parent} or choose a writable user profile.",
+            category="environment",
+        )
+    try:
+        connection = sqlite3.connect(f"file:{database.as_posix()}?mode=rw", uri=True)
+        try:
+            connection.execute("PRAGMA schema_version").fetchone()
+        finally:
+            connection.close()
+    except (OSError, sqlite3.Error) as exc:
+        return fail(
+            "database_inaccessible",
+            str(database),
+            f"The native database is not accessible: {exc}.",
+            hint=(
+                "Check database file permissions and integrity, or use `agentweave reset` after "
+                "backing up needed data."
+            ),
+            category="environment",
+        )
+    return ok(
+        "database_accessible",
+        str(database),
+        "The native database is accessible.",
+        category="environment",
+    )
+
+
+def check_hub_state_permissions() -> DiagnosticResult:
+    target = _nearest_existing_parent(NATIVE_HUB_DIR)
+    if os.access(target, os.R_OK | os.W_OK):
+        return ok(
+            "hub_state_permissions_ready",
+            str(target),
+            "The native Hub state location is readable and writable.",
+            category="environment",
+        )
+    return fail(
+        "hub_state_permissions_denied",
+        str(target),
+        "The native Hub state location is not readable and writable.",
+        hint=f"Grant read and write permission to {target}.",
+        category="environment",
+    )
 
 
 def _context_source_paths() -> list[Path]:
@@ -799,53 +970,23 @@ def check_jobs() -> list[DiagnosticResult]:
         ]
 
 
-def collect_diagnostics(*, include_network: bool = True) -> list[DiagnosticResult]:
-    results: list[DiagnosticResult] = []
-    results.extend(check_session())
-    results.extend(check_project_config())
-    results.extend(check_project_context())
-    if include_network:
-        results.extend(check_transport())
-    else:
-        config, error = _load_json_raw(TRANSPORT_CONFIG_FILE)
-        if error == "missing":
-            results.append(
-                ok(
-                    "transport_not_configured",
-                    "transport",
-                    "No transport.json found.",
-                    category="transport",
-                )
-            )
-        elif error:
-            results.append(
-                fail(
-                    "transport_config_invalid",
-                    "transport",
-                    f"Could not parse {TRANSPORT_CONFIG_FILE}: {error}",
-                    category="transport",
-                )
-            )
-        else:
-            transport_type = (config or {}).get("type", "")
-            results.append(
-                ok(
-                    f"transport_{transport_type}_configured",
-                    "transport",
-                    f"Transport type is {transport_type}.",
-                    category="transport",
-                )
-                if transport_type == "http"
-                else fail(
-                    "transport_type_unsupported",
-                    "transport",
-                    f"Unsupported transport type {transport_type!r}; only 'http' is supported.",
-                    category="transport",
-                )
-            )
-    results.extend(check_agents())
-    results.extend(check_jobs())
-    return results
+def collect_diagnostics(
+    *, include_network: bool = True, port: int = 8000
+) -> list[DiagnosticResult]:
+    """Collect non-mutating readiness checks for the single native runtime.
+
+    ``include_network`` remains accepted for CLI/API compatibility. The port probe is a local bind
+    check and does not contact a running Hub or any external service.
+    """
+    del include_network
+    return [
+        check_python_version(),
+        check_hub_runtime(),
+        check_runner_clis(),
+        check_port_availability(port),
+        check_database_accessibility(),
+        check_hub_state_permissions(),
+    ]
 
 
 def has_failures(results: Iterable[DiagnosticResult]) -> bool:

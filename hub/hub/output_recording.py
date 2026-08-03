@@ -1,5 +1,5 @@
-"""Shared agent-output / context-usage recording, used by both the self-report HTTP
-endpoints (`POST /agents/{name}/output`, `.../context-usage` — the watchdog's path) and the
+"""Shared agent-output / context-usage recording, used by both compatibility self-report HTTP
+endpoints (`POST /agents/{name}/output`, `.../context-usage`) and the
 Hub's own direct-spawn output loop (`agent_trigger.py`). Factored out so a Hub-spawned run's
 output is recorded through the exact same DB-write + SSE-broadcast shape a self-reporting
 agent already produces — one path, not two that can drift.
@@ -53,9 +53,7 @@ async def record_agent_output(
     if conversation_id is None:
         conversation = None
         if session_id is None:
-            conversation = await latest_open_conversation(
-                db, project_id=project_id, agent=agent
-            )
+            conversation = await latest_open_conversation(db, project_id=project_id, agent=agent)
         if conversation is None:
             conversation = new_conversation(project_id=project_id, agent=agent)
             conversation.provider_session_id = session_id

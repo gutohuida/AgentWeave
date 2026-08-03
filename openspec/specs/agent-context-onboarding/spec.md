@@ -5,19 +5,20 @@ Define generated model-facing context, project operating profiles, and Hub/MCP o
 
 ## Requirements
 ### Requirement: Canonical per-agent runtime context
-The system SHALL treat `.agentweave/context/<agent>.md` as the canonical runtime context artifact for declared agents.
+The Hub SHALL build canonical runtime context for each configured agent and supply it to every run.
+It MAY materialize that context inside a run workspace when a runner requires a file.
 
-#### Scenario: Sync generates canonical context for each declared agent
-- **WHEN** `agentweave sync-context` runs for a session with declared agents
-- **THEN** the system writes `.agentweave/context/<agent>.md` for each synced agent with the agent's project operating profile, team context, quality gates, assigned role guides, project instructions, and project context when available
+#### Scenario: Hub generates canonical context for each configured agent
+- **WHEN** the Hub prepares a run for a configured agent
+- **THEN** it builds context containing the agent's project operating profile, team context, quality gates, charter guidance, project instructions, and project context when available
 
-#### Scenario: Activate refreshes generated context
-- **WHEN** `agentweave activate` reconciles `agentweave.yml` successfully
-- **THEN** the system refreshes generated per-agent context so role, runner, project, and quality changes are reflected before agents are launched
+#### Scenario: Run preparation uses current configuration
+- **WHEN** agent, runner, project, charter, or quality configuration changes before a run
+- **THEN** the next run receives context generated from the current Hub-owned configuration
 
-#### Scenario: Runtime launch uses generated context where supported
-- **WHEN** AgentWeave launches or recommends a launch command for a supported runner
-- **THEN** the command injects `.agentweave/context/<agent>.md` using that runner's supported context mechanism
+#### Scenario: Runtime launch injects generated context
+- **WHEN** the Hub launches a supported runner
+- **THEN** it supplies canonical context using that runner's supported prompt or file mechanism
 
 ---
 
@@ -96,9 +97,9 @@ The system SHALL provide diagnostics that explain what context each agent receiv
 - **WHEN** AgentWeave context diagnostics run
 - **THEN** the output lists relevant source files, generated per-agent context files, root bootstrap files, and runner-specific injection mechanisms
 
-#### Scenario: Diagnostics detect stale or incomplete generated context
-- **WHEN** generated context is missing, older than relevant source files, or lacks required sections
-- **THEN** diagnostics report the issue and suggest `agentweave sync-context` or `agentweave sync-context --force`
+#### Scenario: Diagnostics detect incomplete generated context
+- **WHEN** generated context is missing required inputs or sections
+- **THEN** diagnostics report the issue and identify the Hub-owned configuration that needs attention
 
 #### Scenario: Diagnostics flag placeholder project context
 - **WHEN** `.agentweave/ai_context.md` still contains known template placeholders

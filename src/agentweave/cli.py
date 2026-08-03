@@ -85,6 +85,9 @@ def cmd_status(args: argparse.Namespace) -> int:
             if resp.status == 200:
                 print(f"[HUB] Status: running ({mode_label})")
                 print(f"   URL:    {hub_url}")
+                project = _hub_project_label()
+                if project:
+                    print(f"   Project: {project}")
                 if pid is not None:
                     print(f"   PID:    {pid}")
                 with contextlib.suppress(ValueError, UnicodeDecodeError, json.JSONDecodeError):
@@ -215,6 +218,26 @@ HUB_ENV_URL = "https://raw.githubusercontent.com/gutohuida/AgentWeave/master/hub
 # download proceeds without verification and a WARN is logged. (S9.)
 HUB_COMPOSE_SHA256_URL: Optional[str] = None
 HUB_ENV_SHA256_URL: Optional[str] = None
+
+
+def _hub_project_label() -> Optional[str]:
+    """Read the non-secret bootstrap project identity from the native Hub environment file."""
+    try:
+        values: dict[str, str] = {}
+        for raw_line in (HUB_DIR / ".env").read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            if key in {"AW_BOOTSTRAP_PROJECT_ID", "AW_BOOTSTRAP_PROJECT_NAME"}:
+                values[key] = value.strip().strip('"').strip("'")
+    except OSError:
+        return None
+    project_id = values.get("AW_BOOTSTRAP_PROJECT_ID")
+    project_name = values.get("AW_BOOTSTRAP_PROJECT_NAME")
+    if project_name and project_id:
+        return f"{project_name} ({project_id})"
+    return project_name or project_id
 
 
 def _hub_url(port: int = 8000) -> str:
@@ -853,7 +876,6 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
         print_info("Opening Hub in app mode...")
         _open_app_window(hub_url)
     return 0
-
 
 
 def cmd_reset(args: argparse.Namespace) -> int:

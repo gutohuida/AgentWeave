@@ -162,7 +162,8 @@ See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage.
 
 The Hub health check is available outside the API prefix at `GET /health`.
 
-Used by `agentweave activate` to auto-configure HTTP transport without manual API key entry.
+Used by the native app bootstrap to obtain its local project credential without displaying or
+copying it through an operator command.
 
 ### Project Instructions
 

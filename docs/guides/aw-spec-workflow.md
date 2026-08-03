@@ -72,7 +72,7 @@ anything semantic (which roadmap a change belongs to, whether a missing file was
 deleted) it asks about rather than guessing.
 
 **Multi-machine safety.** The Hub is explicitly built for more than one checkout syncing the
-same project. Ordinary synchronization — from the watchdog or `agentweave spec push` — never
+same project. Ordinary Hub-owned synchronization never
 deletes stored content, even when a document disappears from one machine's inventory; it is
 reported as stale instead, in case another active checkout still has it. Only an explicit
 `agentweave spec push --prune` removes rows no active source claims at all, and even then it
@@ -84,7 +84,8 @@ stay agent-facing and are not synced either.
 
 ## Prerequisites
 
-The AW-Spec workflow skills are available as Claude Code and Codex skills when you run `agentweave init`. They are generated into `.claude/skills/` and `.agents/skills/`.
+The AW-Spec workflow skills are distributed as project templates for Claude Code and Codex. The Hub
+can install or expose them when configuring an agent workspace.
 
 ## Stage 1: Explore What
 

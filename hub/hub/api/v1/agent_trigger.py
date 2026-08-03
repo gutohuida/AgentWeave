@@ -12,15 +12,9 @@ some other process might eventually pick the request up. Session identity is a t
 on the run record (`Run.session_id`), never text embedded in a message body.
 
 Only claude/claude_proxy/native and codex are wired to an actual spawn path today —
-`runner_commands.py`'s scope. Kimi, OpenCode, and Copilot are refused with a stated 501
-rather than silently mishandled. There is no fallback path left for them over HTTP
-transport: task 3.10 removed the watchdog's message-scanning auto-trigger (the thing
-that used to pick these runners up indirectly, for job-triggered runs only — a manual
-`POST /agent/trigger` for one of these runners has 501'd since task 3.5, before this
-file ever created a message for any runner). Extending this list to cover every runner
-is future work, not this task; local/git transport is unaffected (the watchdog's own
-`_check_jobs`/`_fire_job` "timer duties" still spawn these runners directly, no Hub
-involved).
+`runner_commands.py`'s scope. Kimi, OpenCode, and Copilot are refused with a stated 501 rather than
+silently mishandled. There is no fallback runtime for them. Extending the Hub adapter list to cover
+every runner is future work.
 """
 
 from __future__ import annotations
@@ -195,8 +189,7 @@ async def trigger_agent_directly(
             status.HTTP_501_NOT_IMPLEMENTED,
             f"Direct spawn for runner {runner!r} is not implemented yet "
             f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
-            "This runner has no Hub-triggered execution path over HTTP transport — "
-            "use local/git transport, where the watchdog's own timer duties still spawn it.",
+            "This runner has no Hub-owned execution adapter.",
         )
 
     if not probe["runnable"]:

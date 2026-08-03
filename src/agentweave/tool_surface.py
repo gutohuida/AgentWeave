@@ -3,9 +3,7 @@
 Two mechanisms specified by ``agent-tool-surface`` (openspec change
 ``hub-native-experience``, phase 4):
 
-- **Identity** is established once, at spawn, by whoever starts an agent's process — the
-  Hub's native runtime (``agent_trigger.py``), the watchdog's ping spawn, or a human via
-  ``agentweave switch``/``agentweave run``. It is never asserted by a tool-call parameter
+- **Identity** is established once by the Hub when it starts an agent run. It is never asserted by a tool-call parameter
   or a CLI flag; a process that was not spawned with a bound identity has none, and any
   tool that would cause an attributed effect must refuse rather than fall back to
   ``"unknown"`` or ``"user"``.

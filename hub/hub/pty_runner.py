@@ -55,9 +55,7 @@ def strip_ansi_escapes(text: str) -> str:
 def resolve_executable(cmd: List[str]) -> List[str]:
     """Resolve ``cmd[0]`` to an absolute path via PATH/PATHEXT if it isn't one already.
 
-    Mirrors the fix already applied in the watchdog's own spawn path
-    (``src/agentweave/watchdog.py``, "Resolve the CLI binary to an absolute path"):
-    handing a bare command name to a process launcher can fail to find `.cmd`/`.bat`
+    Handing a bare command name to a process launcher can fail to find `.cmd`/`.bat`
     shims on Windows (agent CLIs installed via npm, e.g. ``claude.cmd``), because shim
     resolution depends on PATHEXT, which the OS process launcher does not consult the way
     ``shutil.which`` (and ``cmd.exe``) do. Resolving first also avoids ever needing

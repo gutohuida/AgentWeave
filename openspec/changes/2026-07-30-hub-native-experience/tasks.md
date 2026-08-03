@@ -1542,6 +1542,13 @@ being built twice.*
 > of `the tool surface`). It also synced the new `agent-capability-plane` capability spec. The other
 > nine delta specs under this umbrella's `specs/` remain unsynced — 16.2 is not done until they are.
 
+> **Additional partial 16.2 (2026-08-03) — single-runtime consequences reconciled.** The
+> `single-runtime` successor synced its changes into `agent-context-onboarding`,
+> `agent-context-usage`, `agent-stream-events`, `agent-tool-surface`, `project-instructions`,
+> `runtime-diagnostics`, `spec-manifest-sync`, and `trace-timeline`; created the authoritative
+> `app-lifecycle` spec; and retired the empty `opencode-runner` spec. This does not sync the nine
+> remaining umbrella-originated delta specs listed above, so umbrella task 16.2 remains open.
+
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
       `runtime-diagnostics`, and `agent-conversation-handoff` with their new behaviour.

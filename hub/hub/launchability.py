@@ -114,15 +114,9 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
     """Build the subprocess environment for spawning *runner*, resolving provider
     credentials from the Hub's own process environment (task 3.11).
 
-    Closes the gap that used to require `eval $(agentweave switch <agent>)` in a
-    terminal before a `claude_proxy` agent could actually authenticate — the Hub now
-    resolves the same `env_vars` indirection (`ANTHROPIC_API_KEY_VAR` names an env var
+    The Hub resolves `env_vars` indirection (`ANTHROPIC_API_KEY_VAR` names an env var
     to read, plain values are passed through, and a value equal to its own key name is
     treated as another env-var-name placeholder) itself, at spawn time.
-
-    Deliberately reimplemented rather than imported from `agentweave.watchdog`'s
-    `_prepare_agent_env`/`_prepare_runner_env` (which this mirrors exactly) — see this
-    module's own docstring on why the Hub never hard-depends on the CLI package.
 
     Returns `None` when no override is needed at all (`PtySession.spawn` then inherits
     the Hub process's own environment unchanged); otherwise a full environment dict —

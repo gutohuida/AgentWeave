@@ -1,8 +1,6 @@
 """JSONL output parsing for Hub-spawned Claude Code and Codex CLI runs.
 
-Mirrors `agentweave.watchdog._parse_claude_stream_line` / `_parse_codex_stream_line` and
-their usage-sample helpers, reimplemented for the same reason as the rest of this module
-group (see `runner_commands.py`'s docstring) — event shapes verified live against real
+Event shapes are verified against real
 `claude --output-format stream-json` / `codex exec --json` output on this machine.
 
 Session-ID extraction is the data-driven strategy the CLI's `_extract_jsonl_session_id`
@@ -96,9 +94,7 @@ def _accounting_from_dimensions(
         "cache_write_input_tokens",
         "cache_write_tokens",
     )
-    reasoning = _first_token(
-        dimensions, "reasoning_output_tokens", "reasoningTokens", "reasoning"
-    )
+    reasoning = _first_token(dimensions, "reasoning_output_tokens", "reasoningTokens", "reasoning")
     reported_total = _first_token(dimensions, "total_tokens", "totalTokens", "total")
     if fresh_input is None and output is None and reported_total is None:
         if allowance is None and cost_usd is None:
@@ -142,7 +138,9 @@ def _claude_model_accounting(
         for model_name, entry in model_usage.items()
         if isinstance(entry, dict)
     ]
-    measured = [sample for sample in samples if sample is not None and sample.total_tokens is not None]
+    measured = [
+        sample for sample in samples if sample is not None and sample.total_tokens is not None
+    ]
     if not measured:
         return _accounting_from_dimensions({}, source=source, cost_usd=cost_usd)
     best_model = max(measured, key=lambda sample: sample.total_tokens or 0).model
@@ -671,6 +669,4 @@ def read_codex_rollout_accounting(
         return None
     if latest_usage is None:
         return None
-    return _accounting_from_dimensions(
-        latest_usage, source="codex_token_count", model=model
-    )
+    return _accounting_from_dimensions(latest_usage, source="codex_token_count", model=model)

@@ -1,437 +1,117 @@
 # AgentWeave
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://badge.fury.io/py/agentweave-ai)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+[![PyPI version](https://badge.fury.io/py/agentweave-ai.svg)](https://pypi.org/project/agentweave-ai/)
 
-> **A collaboration framework for N AI agents — Claude, Kimi, Gemini, Codex, Minimax, GLM, GitHub Copilot, and more**
->
-> 📖 [Documentation](https://gutohuida.github.io/AgentWeave/)
+AgentWeave is a self-hosted workspace where multiple AI coding agents collaborate through one
+Hub-owned runtime. The Hub provides the dashboard, agent execution, REST/SSE APIs, and the shared
+agent capability plane. Legacy watchdog, local transport, Git transport, and collaboration CLI
+workflows have been retired.
 
-AgentWeave lets multiple AI agents work together on the same project through a shared protocol. The **AgentWeave Hub** is a self-hosted server with a web dashboard — the recommended way to run it.
+## Quick start
 
----
-
-## Quick Start — One Command
-
-The Hub provides a web dashboard, REST + SSE + MCP interfaces, and real-time visibility into agent activity. It now owns agent execution directly, so there is no watchdog or per-agent shell setup in the normal Hub workflow.
-
-### Prerequisites
-
-- Install the CLI and Hub together (Python 3.11+):
+Install the CLI and native Hub together:
 
 ```bash
 uv tool install agentweave-ai --with agentweave-hub
 ```
 
-`pipx install agentweave-ai --include-deps` plus `pipx inject agentweave-ai agentweave-hub`, or a regular `pip install agentweave-ai agentweave-hub`, also works.
-
-### Start AgentWeave
+Then start AgentWeave:
 
 ```bash
-agentweave hub start --app
+agentweave
 ```
 
-This starts the Hub natively, runs migrations, fetches the local API key automatically, and opens the dashboard in an app-mode browser window. Configure Claude or Codex agents in the dashboard; the Hub launches them directly and streams their output. If app mode is unavailable, AgentWeave opens **http://localhost:8000** in a normal browser tab.
+The first launch creates user-local Hub state, runs database migrations, starts the native Hub, and
+opens the dashboard at `http://localhost:8000`. Configure agents and collaboration from the
+dashboard. Re-running `agentweave` opens the existing instance.
 
-### Daily Commands
+## CLI
+
+The CLI manages only the local application instance:
 
 ```bash
-agentweave status          # Check session status
-agentweave doctor          # Runtime readiness diagnostics
-agentweave hub stop        # Stop the Hub
+agentweave                 # Start or open the app
+agentweave doctor          # Check installation and runtime readiness
+agentweave status          # Show instance URL, port, and project
+agentweave stop            # Stop the local instance
+agentweave reset           # Delete local Hub state after confirmation
+agentweave --version
 ```
 
----
+Messages, tasks, agents, jobs, questions, and project settings are managed through the dashboard or
+the run-authenticated agent capability plane—not CLI subcommands.
 
-## What the Dashboard Shows
+## What the dashboard provides
 
-Open **http://localhost:8000** to see:
+- Agent roster, launch readiness, conversations, and streamed output
+- Task board, messages, questions, and scheduled jobs
+- Usage accounting, logs, traces, specifications, and project settings
+- Direct Hub-owned execution for configured runners
+- One least-privilege capability API shared by HTTP, MCP, and agent-facing CLI adapters
 
-- **Overview** — centralized landing page with agent health grid, task summary, and activity ticker
-- **Tasks board** — all tasks with status, priority, assignee, requirements, acceptance criteria, and deliverables (click any card to expand)
-- **Messages feed** — inter-agent messages with expand-to-read for long content; message type and linked task shown inline
-- **Human questions** — questions agents have asked you; answer directly in the dashboard
-- **AI Jobs** — scheduled recurring tasks with cron expressions, run history, and enable/disable controls
-- **Agent activity** — live event stream and per-agent output log
-- **Agent cards** — connected agents auto-discovered from your session; shows role, yolo mode, and per-agent chat history
+## Local state and configuration
 
----
+The native instance stores state under `~/.agentweave/hub/`:
 
-## Configuration — .env reference
+- `.env` — generated bootstrap identity and local configuration
+- `data/agentweave.db` — SQLite database
+- `hub.pid` — native process identity while running
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key auto-created on first start (`aw_live_…`) |
-| `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
-| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
-| `AW_PORT` | `8000` | Port the Hub listens on |
-| `AW_HOST` | `127.0.0.1` | Interface the native Hub binds to (`--docker` always binds `0.0.0.0` inside its container regardless of this variable) |
-| `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS (leave empty in production) |
-| `DATABASE_URL` | see below | SQLite connection string |
+Important environment settings include:
 
-`agentweave hub start` (native, the default) scaffolds `~/.agentweave/hub/.env` on first run with an absolute `DATABASE_URL` pointing at `~/.agentweave/hub/data/agentweave.db` — a plain file, back up or copy it like any other file. `--docker` instead reads `hub/.env` (relative `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`) and persists that path inside the `hub-data` Docker volume.
+| Variable | Default | Purpose |
+|---|---|---|
+| `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Bootstrap project ID |
+| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Bootstrap project name |
+| `AW_PORT` | `8000` | Hub port |
+| `AW_HOST` | `127.0.0.1` | Native bind address |
+| `DATABASE_URL` | generated SQLite URL | Database connection |
 
----
+Provider credentials remain environment variables available to the Hub process. Secret values are
+never returned by readiness or diagnostic APIs.
 
-## Alternative Modes
+## Agent capability plane
 
-| Mode | Setup | Best for |
-|------|-------|----------|
-| **Hub** | `agentweave hub start --app` | Local projects, direct agent execution, web dashboard *(recommended)* |
-| **Hub command path** | `agentweave hub start` + `hub_client: cli` | Restricted runners with no tool-protocol access |
-| **Manual relay** | `agentweave init` only | Quick one-off delegation |
-
-### Hub command path (no tool-protocol server)
-
-Start the Hub normally and force a runner to ordinary commands when its environment prohibits MCP:
-
-```bash
-pip install "agentweave-ai[all]"
-cd your-project/
-agentweave init --project "My App"
-agentweave hub start
-# Set agents.<name>.hub_client: cli in agentweave.yml, then:
-agentweave activate
-```
-
-### Manual relay (simplest possible)
-
-```bash
-pip install agentweave-ai
-cd your-project/
-agentweave init --project "My App"
-# Use agentweave quick + relay to manually hand off work between agents
-```
-
----
-
-## Claude-Proxy Agents (Minimax, GLM, and any OpenAI-compatible provider)
-
-Some models — like **MiniMax** and **Zhipu GLM** — don't have a native CLI. AgentWeave runs them through the Claude Code CLI by overriding two environment variables:
-
-```
-ANTHROPIC_BASE_URL  →  the provider's OpenAI-compatible endpoint
-ANTHROPIC_API_KEY   →  the provider's API key (resolved from your shell at runtime)
-```
-
-This is called a **`claude_proxy` runner**. AgentWeave tracks a separate Claude resume session ID per proxy agent so each one maintains its own conversation history.
-
-### Setup
-
-Add to `agentweave.yml`:
-
-```yaml
-agents:
-  claude:
-    runner: claude
-    model: <claude-model>
-  
-  minimax:           # Built-in defaults for minimax/glm
-    runner: claude_proxy
-    env:
-      - MINIMAX_API_KEY
-    yolo: true
-  
-  mymodel:           # Custom provider
-    runner: claude_proxy
-    model: custom-model-name
-    env:
-      - MY_MODEL_API_KEY
-```
-
-Then run `agentweave activate` to apply.
-
-### Running a proxy agent
-
-```bash
-# Option A — switch env vars in your current shell, then run Claude manually
-export MINIMAX_API_KEY=<your-key>
-eval $(agentweave switch minimax)          # exports ANTHROPIC_BASE_URL + ANTHROPIC_API_KEY
-claude --resume <session-id> -p "..."
-
-# Option B — let AgentWeave handle it (sets env + launches Claude with relay prompt)
-export MINIMAX_API_KEY=<your-key>
-agentweave run --agent minimax
-
-# Option C — from relay (shows switching instructions, or auto-runs with --run)
-agentweave relay --agent minimax           # shows copy-paste prompt + switching instructions
-agentweave relay --agent minimax --run     # combined: sets env + launches Claude
-```
-
-### Session continuity
-
-AgentWeave tracks the Claude session ID per proxy agent so `--resume` is used automatically on subsequent runs. To register a session ID manually (e.g. from `claude --list`):
-
-```bash
-agentweave agent set-session minimax <session-id>
-```
-
-**Security note:** API keys are never stored in `session.json`. Only the env var *name* is stored (e.g. `MINIMAX_API_KEY`). The actual value is resolved from your shell at runtime.
-
-### Built-in provider registry
-
-| Agent | Base URL | Env var |
-|-------|----------|---------|
-| `minimax` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` |
-| `glm` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` |
-
----
-
-## Cross-Machine Collaboration
-
-### Via Git (no server required)
-
-```bash
-agentweave transport setup --type git --cluster yourname
-```
-
-Creates an orphan branch (`agentweave/collab`) on your git remote. Messages sync through git plumbing — working tree and HEAD are never touched. Both developers need access to the same remote.
-
-### Via Hub (recommended for teams)
-
-Deploy the Hub once, connect all agents via HTTP transport. The dashboard shows all messages, tasks, and human questions in real time.
-
----
-
-## Commands Reference
-
-### Session
-
-```bash
-agentweave init --project "Name"
-agentweave status
-agentweave summary
-agentweave checkpoint --agent claude --reason pre_handoff   # save context before handoff
-```
-
-### Delegation
-
-```bash
-agentweave quick --to kimi "Task description"
-agentweave relay --agent kimi
-agentweave relay --agent minimax --run     # auto-run for claude_proxy agents
-agentweave inbox --agent claude
-```
-
-### Agent runner (claude_proxy setup)
-
-```bash
-agentweave agent configure minimax                      # use built-in defaults
-agentweave agent configure glm                          # use built-in defaults
-agentweave agent configure mymodel \                    # custom OpenAI-compatible provider
-  --runner claude_proxy \
-  --base-url https://api.example.com/v1 \
-  --api-key-var MY_MODEL_API_KEY
-agentweave agent set-session minimax <session-id>       # register Claude resume ID manually
-agentweave agent set-model claude <model-name>          # update model for a runner
-agentweave agent set-model codex <model-name>
-agentweave agent set-model kimi <model-name>
-
-agentweave switch minimax        # output eval-able export commands
-agentweave run --agent minimax   # set env vars + launch Claude with relay prompt
-```
-
-### AI Jobs (scheduled tasks)
-
-```bash
-# Create a daily recurring job
-agentweave jobs create --name "Daily Report" --agent claude \
-  --message "Generate summary of yesterday's commits" --cron "0 9 * * 1-5"
-
-# Manage jobs
-agentweave jobs list                    # list all scheduled jobs
-agentweave jobs get <job_id>            # view job details and run history
-agentweave jobs pause <job_id>          # disable a job
-agentweave jobs resume <job_id>         # re-enable a job
-agentweave jobs run <job_id>            # trigger immediately
-agentweave jobs delete <job_id>         # remove a job
-```
-
-### Tasks
-
-```bash
-agentweave task list
-agentweave task show <task_id>
-agentweave task update <task_id> --status in_progress
-agentweave task update <task_id> --status completed
-agentweave task update <task_id> --status approved
-agentweave task update <task_id> --status revision_needed --note "Fix X"
-```
-
-### Transport
-
-```bash
-agentweave transport setup --type http --url ... --api-key ... --project-id ...
-agentweave transport setup --type git --cluster yourname
-agentweave transport status
-agentweave transport pull
-agentweave transport disable
-```
-
-### Yolo mode
-
-```bash
-agentweave yolo --agent claude --enable    # allow agent to act without confirmations
-agentweave yolo --agent claude --disable   # re-enable confirmation prompts
-```
-
-### Human interaction (Hub only)
-
-```bash
-agentweave reply --id <question_id> "Your answer"
-```
-
----
-
-## MCP Tools Reference
-
-Injected automatically by the Hub for compatible runners:
-
-| Tool | What it does |
-|------|-------------|
-| `send_message(to, subject, content)` | Send a message to another agent (sender is the bound identity) |
-| `list_tasks(agent?)` | List active tasks |
-| `get_task(task_id)` | Get full task details |
-| `update_task(task_id, status)` | Update task status |
-| `create_task(title, ...)` | Create and assign a new task (assigner is the bound identity) |
-| `ask_user(question)` | Post a question to the human (Hub only; asker is the bound identity) |
-| `get_answer(question_id)` | Check if the human answered (Hub only) |
-| `request_agent(name, template, task)` | Request a pre-approved agent under the project budget |
-| `create_job` / `toggle_job` / `run_job` / `delete_job` | Mutate jobs only under operator allowance |
-
----
-
-## Task Status Lifecycle
-
-```
-pending → assigned → in_progress → completed → under_review → approved
-                                             ↘ revision_needed (loops back)
-                                             ↘ rejected
-```
-
----
-
-## Build from Source
-
-```bash
-git clone https://github.com/gutohuida/AgentWeave.git
-cd AgentWeave/hub
-
-make install    # pip install -e ".[dev]" + npm install for the UI
-make dev        # runs migrations, then uvicorn --reload at http://localhost:8000
-```
-
-`make docker-up` builds and runs the same source through Docker Compose instead, if you'd rather not install Python/Node locally.
-
-### Hub UI development (hot-reload)
-
-```bash
-cd hub/ui
-npm install
-npm run dev      # dashboard at http://localhost:5173, proxies /api → Hub at localhost:8000
-```
-
----
-
-## Repository Layout
-
-```
-AgentWeave/
-├── src/agentweave/     CLI package (Python 3.8+, zero core runtime deps) — v0.42.0
-├── hub/                AgentWeave Hub server (Python 3.11+, FastAPI) — v0.35.0
-│   ├── hub/            Hub Python package
-│   ├── ui/             React dashboard (built into the pip package's static/ui/ and the Docker image)
-│   └── Dockerfile      Multi-stage build: Node UI → Python server (optional; native is the default runtime)
-├── docs/               Additional documentation
-├── tests/              CLI unit tests (pytest)
-└── Makefile            Convenience targets for both packages
-```
-
----
+Every running agent receives a short-lived run token. That identity can access only the project and
+agent actions permitted to that run. HTTP, MCP, and CLI adapters expose the same action set and
+authorization semantics; operator APIs continue to use project credentials.
 
 ## Development
 
 ```bash
-# CLI
 pip install -e ".[dev]"
-ruff check src/
-black src/
-mypy src/
-pytest tests/ -v
+py -3.11 -m pytest tests/ -q
 
-# Hub
 cd hub
-pip install -e ".[dev]"
-make ui-build    # rebuild React UI
-pytest tests/ -v
+py -3.11 -m pytest tests/ -q
 
-# Both
-make install-all
-make test-all
-make lint
+cd ui
+npm install
+npm run test -- --run
+npm run build
 ```
 
----
+Exercise stateful product commands only inside `testbed/` or another throwaway directory. This
+repository is the AgentWeave framework source and must not acquire root `.agentweave/`,
+`agentweave.yml`, or `spec/` runtime state.
 
-## Roadmap
+## Repository layout
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Local transport | ✅ Done | Single-machine via `.agentweave/` filesystem |
-| Git transport | ✅ Done (v0.2.0) | Cross-machine via orphan branch, zero infra |
-| N-agent support | ✅ Done (v0.3.0) | Multi-agent teams with roles.json and cluster naming |
-| Local MCP server | ✅ Done (v0.4.0) | Native tool integration, zero-relay with watchdog pinger |
-| HTTP transport | ✅ Done (v0.5.0) | CLI ↔ Hub via REST |
-| AgentWeave Hub | ✅ Done (v0.2.0) | Self-hosted server, REST + SSE + MCP + web dashboard |
-| Hub UI | ✅ Done (v0.2.1) | React dashboard — expandable tasks/messages, agent trigger, configurator |
-| Per-agent context templates | ✅ Done (v0.6.0) | `claude_context.md`, `kimi_context.md`, `collab_protocol.md` |
-| Session sync to Hub | ✅ Done (v0.10.0) | Watchdog pushes session.json to Hub on startup; agents auto-appear in dashboard |
-| Yolo mode | ✅ Done (v0.10.0) | Per-agent flag to suppress confirmation prompts for autonomous loops |
-| Claude-proxy agents | ✅ Done (v0.12.0) | Run Minimax, GLM, and any OpenAI-compatible provider via Claude CLI proxy |
-| Multi-role support | ✅ Done (v0.15.0) | Multiple roles per agent with `agentweave roles` CLI and Hub sync |
-| AI Jobs | ✅ Done (v0.20.1) | Scheduled recurring agent tasks with cron expressions |
-| Pilot Mode | 🗑️ Removed | Shipped in v0.21.0; removed — superseded by Hub-managed session continuity |
-| GitHub Copilot runner | ✅ Done (v0.38.0) | Run GitHub Copilot CLI as an automated agent with MCP and session resumption |
-| Official hosted Hub | 🔲 Planned | Public `hub.agentweave.dev` — Supabase + Vercel + Railway |
-
----
-
-## FAQ
-
-**Q: Do I need the Hub?**
-No. Manual relay works with zero infrastructure. The native Hub adds durable queues, governed direct agent execution, injected tools or equivalent commands, a web dashboard, and human question-answering.
-
-**Q: Should I put the UI in a separate folder/repo?**
-No. The UI (`hub/ui/`) is built into both the Hub Python package and its optional Docker image, then served by the Hub at the same port. No second production server is needed.
-
-**Q: Do I need to run CLI commands during my session?**
-No. Start the Hub once, then prompt Claude or Codex from the dashboard.
-
-**Q: Does the Hub need a watchdog process?**
-No. The native Hub owns agent execution directly. A watchdog is needed only for the separate zero-relay MCP workflow.
-
-**Q: Should I commit `.agentweave/`?**
-Partially. Runtime state (tasks, messages, session.json, transport.json) is gitignored. AGENTS.md and README.md are committed.
-
-**Q: Do both developers need the same git remote for git transport?**
-Yes. Git transport requires a shared remote (e.g. `origin`).
-
-**Q: How do I use Minimax or GLM — they don't have a CLI?**
-Use `agentweave agent configure minimax` (or `glm`) to set them up as `claude_proxy` agents. AgentWeave runs them through the Claude CLI with overridden env vars (`ANTHROPIC_BASE_URL` + `ANTHROPIC_API_KEY`). Export your provider key, then run `agentweave run --agent minimax`. See the [Claude-Proxy Agents](#claude-proxy-agents-minimax-glm-and-any-openai-compatible-provider) section above.
-
-**Q: Can I use any OpenAI-compatible provider as an agent?**
-Yes. Use `agentweave agent configure <name> --runner claude_proxy --base-url <url> --api-key-var <VAR>`. The Claude CLI will proxy requests to that endpoint using your existing API key env var.
-
----
+```text
+src/agentweave/   Python CLI and agent adapters
+hub/hub/          FastAPI backend and Hub-owned execution
+hub/ui/           React dashboard
+tests/            CLI unit tests
+hub/tests/        Hub tests
+docs/             MkDocs documentation
+openspec/         Current specifications and changes
+```
 
 ## Links
 
-- **GitHub:** https://github.com/gutohuida/AgentWeave
-- **PyPI:** https://pypi.org/project/agentweave-ai/
-- **Issues:** https://github.com/gutohuida/AgentWeave/issues
-- **Roadmap:** [ROADMAP.md](ROADMAP.md)
-
----
-
-MIT License
+- [Documentation](https://gutohuida.github.io/AgentWeave/)
+- [GitHub](https://github.com/gutohuida/AgentWeave)
+- [PyPI](https://pypi.org/project/agentweave-ai/)
+- [Changelog](CHANGELOG.md)

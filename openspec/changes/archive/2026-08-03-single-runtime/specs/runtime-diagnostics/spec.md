@@ -1,11 +1,16 @@
 ## MODIFIED Requirements
 
 ### Requirement: Runtime readiness checks
-The system SHALL provide runtime readiness checks for the current AgentWeave project without requiring Hub mode or external model-provider API calls.
+The system SHALL provide non-mutating readiness checks for the single native AgentWeave instance
+without starting the Hub or making external model-provider API calls.
 
-#### Scenario: Doctor reports project readiness
+#### Scenario: Doctor reports instance readiness
 - **WHEN** the user runs `agentweave doctor`
-- **THEN** the system reports readiness checks for session state, project config, Hub connectivity, configured agents, runner CLIs, proxy API key variables, context files, MCP setup indicators, and configured jobs
+- **THEN** the system reports Python support, native Hub installation, runner CLIs on PATH, local port availability, SQLite database accessibility, and Hub-state file permissions
+
+#### Scenario: Doctor runs before first launch
+- **WHEN** the native Hub state directory does not exist
+- **THEN** diagnostics inspect the nearest existing parent and do not create Hub state, a project, or a database
 
 #### Scenario: Doctor does not expose secrets
 - **WHEN** readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings
@@ -66,3 +71,47 @@ The Hub Logs UI SHALL expose diagnostics in a way that reflects the current proj
 #### Scenario: Log detail remains secret-safe
 - **WHEN** a log entry contains diagnostic data derived from env vars, transport config, or runner commands
 - **THEN** the UI does not display secret values
+
+---
+
+### Requirement: Proxy credential diagnostics
+The Hub SHALL detect missing required proxy provider API key variables when agent configuration is
+validated and before a proxy runner is spawned.
+
+#### Scenario: Hub configuration reports missing proxy key
+- **WHEN** a `claude_proxy` agent references a provider API key variable that is unavailable to the Hub process
+- **THEN** the agent readiness response names the missing variable and explains how to provide it without exposing a secret value
+
+#### Scenario: Hub trigger fails before spawn
+- **WHEN** a run is requested for a proxy agent whose required provider API key variable is missing
+- **THEN** the Hub refuses the run before spawn with an actionable typed conflict naming the missing variable
+
+---
+
+### Requirement: Structured diagnostic events
+The system SHALL emit durable structured diagnostic events for runtime failures, degraded states, skipped execution, and unavailable dependencies.
+
+#### Scenario: Non-fatal setup failure is logged
+- **WHEN** a setup, synchronization, or registration step fails but the operation continues
+- **THEN** the system emits a structured diagnostic event with the failing step, severity, message, and remediation hint when available
+
+#### Scenario: Transport failure is classified
+- **WHEN** an HTTP transport operation fails because the Hub is unreachable, authentication fails, a project is missing, a request times out, or the response is invalid
+- **THEN** the system emits or returns a classified diagnostic rather than only a generic failure
+
+#### Scenario: Agent process failure is summarized
+- **WHEN** a launched agent subprocess exits with a non-zero status
+- **THEN** the system records a structured diagnostic event containing agent name, runner type, exit code, duration when known, and a secret-safe summary of recent stderr
+
+---
+
+### Requirement: Agent readiness summary
+The Hub SHALL summarize readiness so users can see whether configured agents are immediately usable.
+
+#### Scenario: Hub exposes agent readiness
+- **WHEN** the operator inspects configured agents
+- **THEN** the Hub exposes a compact readiness summary for each agent covering runner type, CLI availability, required environment variables, context status, and overall readiness
+
+#### Scenario: Hub records degraded readiness
+- **WHEN** one or more readiness checks warn or fail
+- **THEN** the Hub records structured diagnostic events and exposes remediation hints to the operator

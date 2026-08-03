@@ -4,11 +4,16 @@
 TBD - created by syncing change improve-runtime-diagnostics. Update Purpose after archive.
 ## Requirements
 ### Requirement: Runtime readiness checks
-The system SHALL provide runtime readiness checks for the current AgentWeave project without requiring Hub mode or external model-provider API calls.
+The system SHALL provide non-mutating readiness checks for the single native AgentWeave instance
+without starting the Hub or making external model-provider API calls.
 
-#### Scenario: Doctor reports project readiness
+#### Scenario: Doctor reports instance readiness
 - **WHEN** the user runs `agentweave doctor`
-- **THEN** the system reports readiness checks for session state, project config, Hub connectivity, configured agents, runner CLIs, proxy API key variables, context files, MCP setup indicators, and configured jobs
+- **THEN** the system reports Python support, native Hub installation, runner CLIs on PATH, local port availability, SQLite database accessibility, and Hub-state file permissions
+
+#### Scenario: Doctor runs before first launch
+- **WHEN** the native Hub state directory does not exist
+- **THEN** diagnostics inspect the nearest existing parent and do not create Hub state, a project, or a database
 
 #### Scenario: Doctor does not expose secrets
 - **WHEN** readiness checks inspect environment variables, transport configuration, runner commands, or proxy settings
@@ -30,19 +35,16 @@ The system SHALL represent each readiness check as a structured result with a st
 ---
 
 ### Requirement: Proxy credential diagnostics
-The system SHALL detect missing required proxy provider API key variables before a proxy runner is used.
+The Hub SHALL detect missing required proxy provider API key variables when agent configuration is
+validated and before a proxy runner is spawned.
 
-#### Scenario: Configure warns about missing proxy key
-- **WHEN** the user configures a `claude_proxy` agent and the configured provider API key variable is not available from the process environment or loaded `.env`
-- **THEN** the command succeeds only if the configuration is valid and prints a warning naming the missing variable and how to set it
+#### Scenario: Hub configuration reports missing proxy key
+- **WHEN** a `claude_proxy` agent references a provider API key variable that is unavailable to the Hub process
+- **THEN** the agent readiness response names the missing variable and explains how to provide it without exposing a secret value
 
-#### Scenario: Activate reports missing proxy key
-- **WHEN** `agentweave activate` processes a configured `claude_proxy` agent whose required provider API key variable is missing
-- **THEN** the activation output includes a readiness warning or error for that agent and emits a structured diagnostic event
-
-#### Scenario: Switch and direct run keep failing early
-- **WHEN** the user runs `agentweave switch <agent>` or `agentweave run --agent <agent>` for a proxy agent with a missing provider API key variable
-- **THEN** the command exits before launching the provider proxy command and prints an actionable error naming the missing variable
+#### Scenario: Hub trigger fails before spawn
+- **WHEN** a run is requested for a proxy agent whose required provider API key variable is missing
+- **THEN** the Hub refuses the run before spawn with an actionable typed conflict naming the missing variable
 
 ---
 
@@ -67,7 +69,7 @@ The Hub SHALL run deterministic preflight checks before spawning an agent's run 
 The system SHALL emit durable structured diagnostic events for runtime failures, degraded states, skipped execution, and unavailable dependencies.
 
 #### Scenario: Non-fatal setup failure is logged
-- **WHEN** a setup, activation, sync, or registration step fails but the command continues
+- **WHEN** a setup, synchronization, or registration step fails but the operation continues
 - **THEN** the system emits a structured diagnostic event with the failing step, severity, message, and remediation hint when available
 
 #### Scenario: Transport failure is classified
@@ -119,13 +121,13 @@ The system SHALL make scheduled and manually fired job failures durable and visi
 
 ---
 
-### Requirement: Activation readiness summary
-The system SHALL summarize readiness after activation so users can see whether configured agents are immediately usable.
+### Requirement: Agent readiness summary
+The Hub SHALL summarize readiness so users can see whether configured agents are immediately usable.
 
-#### Scenario: Activate prints agent readiness table
-- **WHEN** `agentweave activate` completes configuration steps
-- **THEN** it prints a compact readiness summary for each configured agent covering runner type, CLI availability, required env vars, context file status, and overall readiness
+#### Scenario: Hub exposes agent readiness
+- **WHEN** the operator inspects configured agents
+- **THEN** the Hub exposes a compact readiness summary for each agent covering runner type, CLI availability, required environment variables, context status, and overall readiness
 
-#### Scenario: Activate emits diagnostics for degraded readiness
-- **WHEN** one or more readiness checks warn or fail during activation
-- **THEN** the system emits structured diagnostic events and provides remediation hints in the CLI output
+#### Scenario: Hub records degraded readiness
+- **WHEN** one or more readiness checks warn or fail
+- **THEN** the Hub records structured diagnostic events and exposes remediation hints to the operator

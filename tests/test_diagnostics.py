@@ -5,6 +5,58 @@ import io
 import json
 
 
+def test_collect_diagnostics_is_instance_level_and_non_mutating(tmp_path, monkeypatch):
+    from agentweave import diagnostics
+
+    hub_dir = tmp_path / "native-hub"
+    monkeypatch.setattr(diagnostics, "NATIVE_HUB_DIR", hub_dir)
+    monkeypatch.setattr(diagnostics, "_port_is_available", lambda _port: True)
+    monkeypatch.setattr(diagnostics.shutil, "which", lambda cli: f"/bin/{cli}")
+
+    results = diagnostics.collect_diagnostics(include_network=False)
+    ids = {result.id for result in results}
+
+    assert {
+        "python_version_supported",
+        "hub_runtime_installed",
+        "runner_cli_available",
+        "hub_port_available",
+        "database_location_ready",
+        "hub_state_permissions_ready",
+    } <= ids
+    assert not {"session_missing", "config_missing", "project_context_missing"} & ids
+    assert not hub_dir.exists()
+
+
+def test_database_diagnostic_reports_unreadable_database(tmp_path, monkeypatch):
+    from agentweave import diagnostics
+
+    hub_dir = tmp_path / "native-hub"
+    database = hub_dir / "data" / "agentweave.db"
+    database.parent.mkdir(parents=True)
+    database.write_text("not sqlite", encoding="utf-8")
+    monkeypatch.setattr(diagnostics, "NATIVE_HUB_DIR", hub_dir)
+
+    result = diagnostics.check_database_accessibility()
+
+    assert result.status == "fail"
+    assert result.id == "database_inaccessible"
+    assert result.hint
+
+
+def test_port_diagnostic_names_conflict_and_remediation(monkeypatch):
+    from agentweave import diagnostics
+
+    monkeypatch.setattr(diagnostics, "_port_is_available", lambda _port: False)
+
+    result = diagnostics.check_port_availability(8123)
+
+    assert result.status == "fail"
+    assert result.id == "hub_port_unavailable"
+    assert "8123" in result.message
+    assert result.hint
+
+
 def test_doctor_json_redacts_transport_api_key(tmp_path, monkeypatch, capsys):
     from agentweave.cli import cmd_doctor
     from agentweave.session import Session

@@ -92,7 +92,7 @@ docker compose up --build -d
 ```bash
 agentweave --help
 aw --help                    # alias
-agentweave-watch --help      # watchdog
+agentweave --help            # lifecycle CLI
 agentweave hub status        # check Hub status
 ```
 

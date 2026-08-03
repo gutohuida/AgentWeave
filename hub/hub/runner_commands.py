@@ -1,27 +1,15 @@
 """Command-line construction for Hub-spawned agent runs — Claude Code and Codex CLI only.
 
-Mirrors `agentweave.watchdog._agent_ping_cmd`'s `claude`/`claude_proxy`/`native` and `codex`
-branches, reimplemented here for the same reason as `launchability.py` and
-`runner_events.py`: the Hub has no dependency on the `agentweave-ai` package. Every flag
-below was verified live against the CLIs actually installed on this machine (Claude Code
-2.1.220, codex-cli 0.146.0) — new-session and resume invocations for both. Claude runs
-through `PtySession`; Codex's non-interactive JSONL mode runs through `PipeSession` (see
-`pty_runner.py`).
+The Hub owns command construction independently from the lifecycle CLI. Every flag below was
+verified against the supported runner CLIs. Claude runs through `PtySession`; Codex's
+non-interactive JSONL mode runs through `PipeSession` (see `pty_runner.py`).
 
 Kimi, OpenCode, and Copilot are explicitly out of scope for this task (per-runner command
 construction for them is deferred) — `build_command` raises `UnsupportedRunnerError` for
 anything else so the caller gets a clear, stated reason rather than a silently wrong command.
 
-One deliberate divergence from the watchdog: `_agent_ping_cmd` never passes a permission-
-bypass flag for claude/claude_proxy/native, even when the agent's `yolo` flag is enabled —
-confirmed by reading `agentweave/watchdog.py` in full; only codex/copilot/kimi apply yolo.
-`cli.py:4407`'s yolo-enable hint even claims `--dangerously-skip-permissions` "will be used"
-for claude, but nothing in the watchdog actually passes it. That gap makes a yolo-enabled
-claude agent hang on file-edit permission prompts with no human present to answer them —
-harmless for the watchdog (a human is usually nearby) but fatal for a headless Hub-spawned
-run. This module passes `--dangerously-skip-permissions` when yolo is enabled for claude,
-fixing that gap rather than reproducing it, since this is new code with no regression risk
-to existing users.
+Yolo-enabled Claude runs receive `--dangerously-skip-permissions`; headless Hub execution has no
+interactive terminal where an operator could answer a permission prompt.
 """
 
 from __future__ import annotations
@@ -130,6 +118,16 @@ def _build_codex_command(
     if mcp_command:
         cmd += ["-c", f"mcp_servers.agentweave.command={json.dumps(mcp_command[0])}"]
         cmd += ["-c", f"mcp_servers.agentweave.args={json.dumps(mcp_command[1:])}"]
+        # Codex filters environment inherited by dynamically configured stdio MCP servers.
+        # Forward names only: Codex resolves their values from its own local environment.
+        forwarded = [
+            "AW_RUN_TOKEN",
+            "AW_AGENT_IDENTITY",
+            "AW_RUN_ID",
+            "AW_TURN_DEPTH",
+            "HUB_URL",
+        ]
+        cmd += ["-c", f"mcp_servers.agentweave.env_vars={json.dumps(forwarded)}"]
     if context_file is not None and context_file.exists():
         cmd += ["-c", f"model_instructions_file={context_file}"]
     if model:

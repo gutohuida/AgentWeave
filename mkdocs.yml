@@ -59,35 +59,18 @@ nav:
   - Getting Started:
     - getting-started/installation.md
     - getting-started/quickstart.md
-    - getting-started/configuration.md
-    - getting-started/migration.md
-    - getting-started/alternative-modes.md
   - Guides:
-    - guides/adding-new-agents.md
-    - guides/context-files.md
-    - guides/session-modes.md
     - guides/aw-spec-workflow.md
-    - guides/claude-proxy-agents.md
-    - guides/opencode-agents.md
-    - guides/opencode-models.md
-    - guides/ai-jobs.md
-    - guides/cross-machine-collab.md
     - guides/dashboard.md
-    - guides/logging-guide.md
-    - guides/faq.md
   - Reference:
     - reference/cli-commands.md
     - reference/mcp-tools.md
     - reference/task-lifecycle.md
     - reference/hub-api.md
     - reference/agent-stream-contract.md
-    - reference/agentweave-yml.md
     - reference/env-variables.md
   - Architecture:
     - architecture/overview.md
-    - architecture/transport-layer.md
-    - architecture/messaging.md
-    - architecture/watchdog.md
     - architecture/locking.md
   - Contributing:
     - contributing/development.md
@@ -98,6 +81,8 @@ nav:
       - Changes: archive/2026-q2-hardening/changes.md
     - Autonomous Dev Loop (shelved):
       - archive/autonomous-dev-loop/index.md
+    - Legacy multi-runtime documentation:
+      - archive/legacy-multi-runtime/README.md
 
 extra:
   social:
