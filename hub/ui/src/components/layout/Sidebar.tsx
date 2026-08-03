@@ -8,6 +8,7 @@ import { SidebarItem, type SidebarBadge } from './SidebarItem'
 export type SidebarPage =
   | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec'
   | 'runners'
+  | 'charters'
 
 interface SidebarProps {
   activePage: SidebarPage | 'overview' | null
@@ -34,6 +35,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'instructions', label: 'Instructions', icon: 'description' },
+  { id: 'charters', label: 'Charters', icon: 'assignment_ind' },
   { id: 'runners', label: 'Runners', icon: 'dns' },
   { id: 'tasks', label: 'Tasks', icon: 'task_alt', section: 'WORK' },
   { id: 'spec', label: 'Spec', icon: 'article', section: 'WORK' },

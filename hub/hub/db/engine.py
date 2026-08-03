@@ -1,5 +1,6 @@
 """Async SQLAlchemy engine, session factory, and init_db."""
 
+import json
 import logging
 import os
 import secrets
@@ -116,7 +117,7 @@ async def _seed_default_runners(session: AsyncSession) -> None:
     from sqlalchemy import func, select
 
     from ..utils import short_id
-    from .models import RUNNER_CLIS, Runner
+    from .models import RUNNER_CLIS
 
     projects = (await session.execute(select(Project.id))).scalars().all()
     for project_id in projects:
@@ -134,6 +135,35 @@ async def _seed_default_runners(session: AsyncSession) -> None:
                     cli=cli,
                 )
             )
+    await session.commit()
+
+
+async def _seed_default_charters(session: AsyncSession) -> None:
+    """Seed bundled role guides as editable charters for projects with none."""
+    from sqlalchemy import func, select
+
+    from ..utils import short_id
+
+    roles_dir = Path(__file__).parent.parent / "data" / "roles"
+    roles_config = json.loads((roles_dir / "roles.json").read_text(encoding="utf-8"))
+    projects = (await session.execute(select(Project))).scalars().all()
+    for project in projects:
+        if project.charters_seeded:
+            continue
+        count = await session.scalar(
+            select(func.count()).select_from(Charter).where(Charter.project_id == project.id)
+        )
+        if count == 0:
+            for role_id, metadata in roles_config["roles"].items():
+                session.add(
+                    Charter(
+                        id=f"charter-{short_id()}",
+                        project_id=project.id,
+                        name=metadata["label"],
+                        content=(roles_dir / f"{role_id}.md").read_text(encoding="utf-8"),
+                    )
+                )
+        project.charters_seeded = True
     await session.commit()
 
 
@@ -187,3 +217,4 @@ async def init_db() -> None:
                 logger.info("Bootstrap API key stored in database")
 
         await _seed_default_runners(session)
+        await _seed_default_charters(session)

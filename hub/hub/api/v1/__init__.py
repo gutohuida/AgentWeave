@@ -7,6 +7,7 @@ from .agent_chat import router as agent_chat_router
 from .agent_actions import router as agent_actions_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
+from .charters import router as charters_router
 from .events import router as events_router
 from .inbound_queue import router as inbound_queue_router
 from .instructions import router as instructions_router
@@ -44,3 +45,4 @@ v1_router.include_router(worktrees_router)
 v1_router.include_router(inbound_queue_router)
 v1_router.include_router(workspace_router)
 v1_router.include_router(runners_router)
+v1_router.include_router(charters_router)

@@ -1,4 +1,5 @@
 import { AgentSummary, useAgentSessions } from '@/api/agents'
+import { useBindAgentCharter, useCharters } from '@/api/charters'
 import { useBindAgentRunner, useRunners } from '@/api/runners'
 import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
@@ -180,6 +181,13 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           </p>
           <RunnerPicker agent={agent} />
         </div>
+
+        <div className="mt-4">
+          <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
+            Bound Charter
+          </p>
+          <CharterPicker agent={agent} />
+        </div>
       </section>
 
       {/* Stats Section */}
@@ -252,6 +260,46 @@ function RunnerPicker({ agent }: { agent: AgentSummary }) {
       {bindRunner.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red, #ef4444)' }}>
           Could not update runner binding.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function CharterPicker({ agent }: { agent: AgentSummary }) {
+  const { data: charters = [], isLoading } = useCharters()
+  const bindCharter = useBindAgentCharter()
+
+  if (isLoading) {
+    return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading charters...</span>
+  }
+
+  return (
+    <div>
+      <select
+        value={agent.charter_id ?? ''}
+        onChange={(event) => bindCharter.mutate({
+          agent: agent.name,
+          charterId: event.target.value || null,
+        })}
+        disabled={bindCharter.isPending}
+        aria-label={`Charter for ${agent.name}`}
+        className="w-full px-3 py-2 rounded-md text-sm"
+        style={{
+          background: 'var(--surface-3)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          opacity: bindCharter.isPending ? 0.6 : 1,
+        }}
+      >
+        <option value="">No charter</option>
+        {charters.map((charter) => (
+          <option key={charter.id} value={charter.id}>{charter.name}</option>
+        ))}
+      </select>
+      {bindCharter.isError && (
+        <p className="text-xs mt-2" style={{ color: 'var(--red, #ef4444)' }}>
+          Could not update charter binding.
         </p>
       )}
     </div>

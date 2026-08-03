@@ -104,20 +104,29 @@
 
 ## 2. Agent charter
 
-- [ ] 2.1 Write failing tests for charter CRUD API (`/api/v1/charters`) and the one-time seed step
+- [x] 2.1 Write failing tests for charter CRUD API (`/api/v1/charters`) and the one-time seed step
       (project with zero charters gets one per bundled role guide in `hub/data/roles/*.md`, named
       from the guide's label).
-- [ ] 2.2 Implement the CRUD API and the seed step. Seeding runs at most once per project — verify
+- [x] 2.2 Implement the CRUD API and the seed step. Seeding runs at most once per project — verify
       this with a test that restarts the Hub against an existing project and asserts no duplicate
       charters appear.
-- [ ] 2.3 Wire `hub/hub/api/v1/agents.py::_render_hub_agent_context` and the `/context` role-lookup
+- [x] 2.3 Wire `hub/hub/api/v1/agents.py::_render_hub_agent_context` and the `/context` role-lookup
       route to resolve the agent's bound charter instead of `_load_role_content`'s file-based
       lookup. An agent with no bound charter gets project instructions plus a clear no-charter
       notice, not an error (per `agent-charter`'s "Agent has no bound charter" scenario).
-- [ ] 2.4 Build the Hub UI charter screen (list/create/edit/delete) and a charter picker on the
+- [x] 2.4 Build the Hub UI charter screen (list/create/edit/delete) and a charter picker on the
       agent detail view.
-- [ ] 2.5 Verify: charter CRUD, one-time seed-from-role-guides, context resolution with and without
+- [x] 2.5 Verify: charter CRUD, one-time seed-from-role-guides, context resolution with and without
       a bound charter all pass against real tests. Hand off and commit.
+
+**Phase 2 evidence:** Added failing-first charter CRUD, exact 21-guide seed parity, restart and
+delete-all idempotence, migration, binding, edited-content, direct-lookup, and bound/unbound context
+tests. Implemented typed charter API/schema, migration 0024's durable `Project.charters_seeded`
+marker, DB-backed context by stable charter ID, project-instructions layering, Charters UI, and the
+agent charter picker. Verified 37 focused tests passed (1 skipped), the full Hub suite passed 486
+(4 skipped), all 291 frontend tests passed, the production frontend build passed, and Black/Ruff
+passed on the changed Python surface. The build retains pre-existing duplicate-case and bundle-size
+warnings. Packaged seed guides live at `hub/hub/data/roles/` (the shorter path above is conceptual).
 
 ## 3. Spec reconciliation
 

@@ -51,6 +51,11 @@ vi.mock('@/api/runners', () => ({
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
+vi.mock('@/api/charters', () => ({
+  useCharters: () => ({ data: [], isLoading: false }),
+  useBindAgentCharter: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+}))
+
 vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))

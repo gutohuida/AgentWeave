@@ -92,10 +92,12 @@ async def test_register_agent_invalid_contact_mode(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_context_returns_role_content(app, auth_headers):
-    """Test that GET /api/v1/agents/context returns role guide content."""
+async def test_get_context_returns_charter_content(app, auth_headers):
+    """The direct compatibility lookup resolves a stable charter ID."""
+    charters = (await app.get("/api/v1/charters", headers=auth_headers)).json()
+    charter = next(item for item in charters if item["name"] == "Backend Developer")
     resp = await app.get(
-        "/api/v1/agents/context?role=backend_dev",
+        f"/api/v1/agents/context?charter={charter['id']}",
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -105,10 +107,10 @@ async def test_get_context_returns_role_content(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_context_unknown_role(app, auth_headers):
-    """Test that GET /api/v1/agents/context returns 404 for unknown role."""
+async def test_get_context_unknown_charter(app, auth_headers):
+    """Unknown charter identifiers return 404."""
     resp = await app.get(
-        "/api/v1/agents/context?role=nonexistent_role_xyz",
+        "/api/v1/agents/context?charter=charter-nonexistent",
         headers=auth_headers,
     )
     assert resp.status_code == 404

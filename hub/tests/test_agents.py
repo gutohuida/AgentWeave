@@ -6,14 +6,14 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_get_role_context_rejects_path_traversal_role(app, auth_headers):
-    # Before S1 fix this reads project-root README.md via ../ traversal and returns 200.
+async def test_get_charter_context_rejects_path_traversal_identifier(app, auth_headers):
+    # Charter lookup is DB-backed; path-shaped identifiers must never read files.
     resp = await app.get(
-        "/api/v1/agents/context?role=../../../../README",
+        "/api/v1/agents/context?charter=../../../../README",
         headers=auth_headers,
     )
     assert resp.status_code in (400, 404)
-    assert "role" in resp.text.lower() or "invalid" in resp.text.lower()
+    assert "charter" in resp.text.lower() or "invalid" in resp.text.lower()
 
 
 @pytest.mark.asyncio

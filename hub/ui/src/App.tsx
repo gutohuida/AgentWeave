@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType } from 'react'
 import { useAgents } from '@/api/agents'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 import { ActivityLog } from '@/components/activity/ActivityLog'
+import { ChartersPage } from '@/components/charters/ChartersPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
 import { LogsView } from '@/components/logs/LogsView'
@@ -49,6 +50,7 @@ const PAGES: Record<Page, PageMeta> = {
   logs: { Component: LogsView, wrapper: 'flex-col' },
   jobs: { Component: JobsPage, wrapper: 'flex-col' },
   instructions: { Component: InstructionsPage, wrapper: 'flex-col' },
+  charters: { Component: ChartersPage, wrapper: 'flex-col' },
   runners: { Component: RunnersPage, wrapper: 'flex-col' },
   spec: { Component: SpecPage, wrapper: 'flex-col' },
 }

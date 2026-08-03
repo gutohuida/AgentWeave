@@ -58,8 +58,8 @@ async def test_put_overwrites_instructions(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_context_prepends_instructions(app, auth_headers):
-    """Test that role context prepends project instructions when set."""
+async def test_get_agent_context_places_instructions_before_charter(app, auth_headers):
+    """Full agent context layers project instructions ahead of charter guidance."""
     # Set project instructions
     resp = await app.put(
         "/api/v1/project/instructions",
@@ -68,18 +68,36 @@ async def test_get_context_prepends_instructions(app, auth_headers):
     )
     assert resp.status_code == 200
 
-    # Get context for a known role
-    resp = await app.get("/api/v1/agents/context?role=backend_dev", headers=auth_headers)
+    charter = (
+        await app.post(
+            "/api/v1/charters",
+            json={"name": "Instruction Test", "content": "Charter guidance"},
+            headers=auth_headers,
+        )
+    ).json()
+    await app.post(
+        "/api/v1/agents/register",
+        json={"name": "instruction-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    await app.patch(
+        "/api/v1/agents/instruction-agent",
+        json={"charter_id": charter["id"]},
+        headers=auth_headers,
+    )
+    resp = await app.get(
+        "/api/v1/agents/agent-context?agent=instruction-agent", headers=auth_headers
+    )
     assert resp.status_code == 200
-    content = resp.json()["content"]
+    content = resp.json()["context"]
 
-    assert content.startswith("# Global Rule\n\nBe concise.")
-    assert "\n\n---\n\n" in content
+    assert "# Global Rule\n\nBe concise." in content
+    assert content.index("# Global Rule") < content.index("Charter guidance")
 
 
 @pytest.mark.asyncio
-async def test_get_context_without_instructions(app, auth_headers):
-    """Test that role context does not prepend separator when no instructions."""
+async def test_direct_charter_context_excludes_project_instructions(app, auth_headers):
+    """Direct charter lookup returns authored behavior, not the full layered context."""
     # Ensure no instructions are set (clean up from prior tests)
     await app.put(
         "/api/v1/project/instructions",
@@ -87,9 +105,15 @@ async def test_get_context_without_instructions(app, auth_headers):
         headers=auth_headers,
     )
 
-    resp = await app.get("/api/v1/agents/context?role=backend_dev", headers=auth_headers)
+    charter = (
+        await app.post(
+            "/api/v1/charters",
+            json={"name": "Direct", "content": "Direct guidance"},
+            headers=auth_headers,
+        )
+    ).json()
+    resp = await app.get(f"/api/v1/agents/context?charter={charter['id']}", headers=auth_headers)
     assert resp.status_code == 200
     content = resp.json()["content"]
 
-    assert not content.startswith("\n\n---\n\n")
-    assert "\n\n---\n\n" not in content
+    assert content == "Direct guidance"

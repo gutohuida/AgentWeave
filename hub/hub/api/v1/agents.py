@@ -24,6 +24,7 @@ from ...db.models import (
     Agent,
     AgentHeartbeat,
     AgentOutput,
+    Charter,
     EventLog,
     InboundQueueEntry,
     Message,
@@ -754,6 +755,18 @@ async def _render_hub_agent_context(
     roles = _roles_for_agent(agent, roles_data, agent_meta if declared else registered_config)
     missing: List[str] = []
 
+    instructions_result = await db.execute(
+        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
+    )
+    instructions_row = instructions_result.scalars().first()
+    project_instructions = instructions_row.content if instructions_row else ""
+
+    charter = None
+    if agent_row and agent_row.charter_id:
+        candidate = await db.get(Charter, agent_row.charter_id)
+        if candidate is not None and candidate.project_id == project_id:
+            charter = candidate
+
     lines = []
     if declared:
         lines.append(f"# {agent} - AgentWeave Runtime Context")
@@ -799,6 +812,12 @@ async def _render_hub_agent_context(
         lines.append(f"- dependency_check: `{str(bool(quality.get('dependency_check'))).lower()}`")
         lines.append("")
 
+    if project_instructions:
+        lines.append("## Project Instructions")
+        lines.append("")
+        lines.append(project_instructions)
+        lines.append("")
+
     if declared:
         lines.append("## Communication Mode")
         lines.append("")
@@ -825,25 +844,17 @@ async def _render_hub_agent_context(
         lines.append("")
         missing.append("agent registration")
 
-    if roles:
-        lines.append("## Role Guidance")
+    if charter:
+        lines.append(f"## Charter: {charter.name}")
         lines.append("")
-        for role in roles:
-            try:
-                lines.append(await _load_role_content(role, project_id, db))
-                lines.append("")
-            except FileNotFoundError:
-                missing.append(f"role:{role}")
+        lines.append(charter.content)
+        lines.append("")
     else:
-        missing.append("roles")
-
-    available_roles = sorted((roles_data.get("roles") or {}).keys())
-    if not declared and available_roles:
-        lines.append("## Available Roles")
+        lines.append("## Charter")
         lines.append("")
-        for role in available_roles:
-            lines.append(f"- `{role}`")
+        lines.append("No charter is assigned to this agent.")
         lines.append("")
+        missing.append("charter")
 
     context = "\n".join(lines).rstrip() + "\n"
     return {
@@ -853,6 +864,8 @@ async def _render_hub_agent_context(
         "registered": registered,
         "provisional": not declared,
         "roles": roles,
+        "charter_id": charter.id if charter else None,
+        "charter_name": charter.name if charter else None,
         "missing": sorted(set(missing)),
         "metadata": {
             "context_path": f".agentweave/context/{agent}.md" if declared else None,
@@ -1121,6 +1134,14 @@ async def patch_agent(
                 raise HTTPException(status_code=404, detail=f"Runner '{runner_id}' not found")
         agent_row.runner_id = runner_id
 
+    if "charter_id" in body:
+        charter_id = body["charter_id"]
+        if charter_id is not None:
+            charter_row = await session.get(Charter, charter_id)
+            if charter_row is None or charter_row.project_id != project_id:
+                raise HTTPException(status_code=404, detail=f"Charter '{charter_id}' not found")
+        agent_row.charter_id = charter_id
+
     # Merge config if provided
     if "config" in body:
         new_config = body["config"] or {}
@@ -1143,21 +1164,20 @@ async def patch_agent(
 
 
 @router.get("/context")
-async def get_role_context(
-    role: str = Query(..., min_length=1, max_length=64),
+async def get_charter_context(
+    charter: str = Query(..., min_length=1, max_length=64),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Get role guide content for an agent."""
+    """Get one charter's authored content by stable identifier."""
     project_id, _ = project
-    try:
-        content = await _load_role_content(role, project_id, session)
-        return {
-            "content": content,
-            "hint": "Use get_agent_context(agent) for full project and onboarding context.",
-        }
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"Role template not found: {role}") from exc
+    charter_row = await session.get(Charter, charter)
+    if charter_row is None or charter_row.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Charter '{charter}' not found")
+    return {
+        "content": charter_row.content,
+        "hint": "Use get_agent_context(agent) for full project and onboarding context.",
+    }
 
 
 @router.get("/agent-context")

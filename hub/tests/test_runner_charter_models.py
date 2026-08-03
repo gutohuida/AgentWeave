@@ -149,9 +149,7 @@ def test_migration_0023_adds_runners_charters_and_agent_bindings(tmp_path) -> No
         try:
             async with engine.begin() as conn:
                 await conn.execute(
-                    sa.text(
-                        "CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256))"
-                    )
+                    sa.text("CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256))")
                 )
                 await conn.execute(
                     sa.text("INSERT INTO projects (id, name) VALUES ('proj-old', 'Old')")
@@ -207,9 +205,7 @@ def test_migration_0023_adds_runners_charters_and_agent_bindings(tmp_path) -> No
             async with engine.connect() as conn:
                 row = (
                     await conn.execute(
-                        sa.text(
-                            "SELECT runner_id, charter_id FROM agents WHERE id = 'agent-old'"
-                        )
+                        sa.text("SELECT runner_id, charter_id FROM agents WHERE id = 'agent-old'")
                     )
                 ).one()
                 return row
@@ -219,6 +215,46 @@ def test_migration_0023_adds_runners_charters_and_agent_bindings(tmp_path) -> No
     row = _run(_existing_agent_loads_with_null_bindings())
     assert row.runner_id is None
     assert row.charter_id is None
+
+
+def test_migration_0024_adds_durable_charter_seed_marker(tmp_path) -> None:
+    db_file = tmp_path / "charter-seed-marker-0023.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _create_0023_state() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sa.text("CREATE TABLE projects (id VARCHAR(64) PRIMARY KEY, name VARCHAR(256))")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO projects (id, name) VALUES ('proj-old', 'Old')")
+                )
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0023')")
+                )
+        finally:
+            await engine.dispose()
+
+    async def _read_marker() -> int:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.connect() as conn:
+                return (
+                    await conn.execute(
+                        sa.text("SELECT charters_seeded FROM projects WHERE id = 'proj-old'")
+                    )
+                ).scalar_one()
+        finally:
+            await engine.dispose()
+
+    _run(_create_0023_state())
+    _run_alembic_with(db_url)
+    assert _run(_read_marker()) == 0
 
 
 def _run_alembic_with(db_url: str) -> None:

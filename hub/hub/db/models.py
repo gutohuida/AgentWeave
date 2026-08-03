@@ -44,6 +44,9 @@ class Project(Base):
         Boolean, default=False, server_default="0", nullable=False
     )
     token_budget: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    charters_seeded: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
