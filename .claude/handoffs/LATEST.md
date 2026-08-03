@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-03-0140-accounting-phase3-budget-enforcement.md
+.claude/handoffs/2026-08-03-0145-accounting-phase4-ui-verified.md

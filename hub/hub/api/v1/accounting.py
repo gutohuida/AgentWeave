@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
+from ...sse import sse_manager
 from ...usage_accounting import accounting_snapshot, budget_state
+from ...utils import persist_event
 
 router = APIRouter(prefix="/accounting", tags=["accounting"])
 
@@ -42,6 +44,9 @@ async def update_budget(
         raise HTTPException(status_code=404, detail="Project not found")
     project_row.token_budget = body.token_budget
     await session.commit()
+    event_payload = {"token_budget": body.token_budget}
+    await persist_event(session, project_id, "accounting_budget_updated", event_payload)
+    await sse_manager.broadcast(project_id, "accounting_budget_updated", event_payload)
     snapshot = await accounting_snapshot(session, project_id, recent_limit=0)
     queued_result = await session.execute(
         select(InboundQueueEntry.agent)

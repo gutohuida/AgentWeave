@@ -44,6 +44,7 @@ const SSE_EVENT_TYPES = [
   'queue_entry_queued',
   'queue_entry_delivered',
   'queue_entry_withdrawn',
+  'accounting_budget_updated',
   'queue_chain_suspended',
 ]
 
@@ -425,6 +426,10 @@ export function useSSE(onEvent?: SSEListener) {
           // heartbeat — without this, the running/idle badge would never
           // update for a direct-spawn run.
           queryClient.invalidateQueries({ queryKey: ['agents'] })
+          queryClient.invalidateQueries({ queryKey: ['accounting'] })
+          break
+        case 'accounting_budget_updated':
+          queryClient.invalidateQueries({ queryKey: ['accounting'] })
           break
         case 'queue_entry_queued':
         case 'queue_entry_delivered':

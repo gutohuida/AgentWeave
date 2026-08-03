@@ -4,6 +4,8 @@ import { useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
 import { presentContextUsage } from '@/components/context/contextPresentation'
 import { useSSEConnectionState } from '@/hooks/useSSE'
+import { useAccounting } from '@/api/accounting'
+import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
 
 interface StatusBarProps {
   onOpenSetup: () => void
@@ -14,6 +16,7 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
   const { data: agents = [] } = useAgents()
   const { mode, setMode } = useConfigStore()
   const connectionState = useSSEConnectionState()
+  const { data: accounting } = useAccounting()
 
   const contextWarningCount = agents.filter(
     (agent) => presentContextUsage(agent.context_usage)?.isPolicyWarning
@@ -114,6 +117,11 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
             <span>ctx!</span>
           </div>
         )}
+
+        <BudgetExhaustionNotice
+          exhausted={accounting?.budget.exhausted ?? false}
+          compact
+        />
 
         {/* Stream-health indicator — quiet while live; visible the moment the
             SSE connection is lost, since several views now rely on it rather

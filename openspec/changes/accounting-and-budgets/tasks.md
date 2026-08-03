@@ -58,10 +58,11 @@
 
 ## 4. Operator UI and integration
 
-- [ ] 4.1 Add frontend tests for totals, unavailable usage, allowance/API-equivalent wording, and
+- [x] 4.1 Add frontend tests for totals, unavailable usage, allowance/API-equivalent wording, and
       exhausted-budget messaging.
-- [ ] 4.2 Add the accounting API hook and project/conversation presentation.
-- [ ] 4.3 Run full Hub backend tests, full frontend tests, production build, and strict OpenSpec
+- [x] 4.2 Add the accounting API hook and project/conversation presentation. Overview owns totals
+      and configuration; the global status bar keeps exhaustion visible without disabling input.
+- [x] 4.3 Run full Hub backend tests, full frontend tests, production build, and strict OpenSpec
       validation.
 - [ ] 4.4 Sync the authoritative capability spec, archive this change, annotate umbrella phase 9,
       write final slice handoff, and commit.

@@ -8,6 +8,7 @@ import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { DevRoleTagList } from '@/lib/agentStatus'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
+import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 
 interface OverviewPageProps {
   onNavigate: (page: string) => void
@@ -118,6 +119,8 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
           {status?.project_name ? ` · ${status.project_name}` : ''}
         </p>
       </div>
+
+      <AccountingPanel />
 
       {/* Agent health grid */}
       {agents.length > 0 ? (
