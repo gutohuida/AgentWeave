@@ -9,9 +9,11 @@ from typing import Dict, Optional, Tuple
 from sqlalchemy import select
 
 from .db.engine import async_session_factory
-from .db.models import Conversation, Run
+from .db.models import Conversation, InboundQueueEntry, Run
 from .inbound_queue import can_start, format_turn_prompt, project_limits, queued_entries
+from .sse import sse_manager
 from .usage_accounting import project_budget_state
+from .utils import persist_event
 
 _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 
@@ -58,9 +60,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         ):
             return ScheduleResult(waiting_reason="conversation is unavailable")
 
-        selected = [
-            entry for entry in entries if entry.conversation_id == conversation.id
-        ][:cap]
+        selected = [entry for entry in entries if entry.conversation_id == conversation.id][:cap]
         controlling_operator = next(
             (entry for entry in selected if entry.origin_type == "operator"), None
         )
@@ -83,5 +83,48 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 initiator=initiator,
             )
         except TriggerAgentError as exc:
+            if getattr(exc, "workspace_unavailable", False):
+                await persist_event(
+                    db,
+                    project_id,
+                    "queue_agent_paused",
+                    {
+                        "agent": agent,
+                        "reason": exc.detail,
+                        "directory_state": exc.directory_state,
+                    },
+                    agent=agent,
+                    severity="warn",
+                )
+                await sse_manager.broadcast(
+                    project_id,
+                    "queue_agent_paused",
+                    {
+                        "agent": agent,
+                        "reason": exc.detail,
+                        "directory_state": exc.directory_state,
+                    },
+                )
             return ScheduleResult(waiting_reason=exc.detail)
         return ScheduleResult(response=response)
+
+
+async def redrain_queued_agents(project_id: str) -> None:
+    """Re-evaluate every queued agent after repair or settings change."""
+    async with async_session_factory() as db:
+        agents = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry.agent)
+                    .where(
+                        InboundQueueEntry.project_id == project_id,
+                        InboundQueueEntry.state == "queued",
+                    )
+                    .distinct()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for agent in agents:
+            await schedule_agent(project_id, agent)

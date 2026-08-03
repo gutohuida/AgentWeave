@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import project_workspace
 from ...auth import get_project
 from ...conversations import latest_open_conversation, new_conversation
 from ...db.engine import get_session
@@ -125,6 +126,11 @@ async def create_message(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    try:
+        await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        project_workspace.raise_workspace_http_error(exc)
+
     return await create_message_for_actor(
         body,
         project_id=project_id,

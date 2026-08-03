@@ -129,9 +129,18 @@ class TriggerAgentError(Exception):
     route below catches this and converts it back to an `HTTPException` for HTTP callers.
     """
 
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: str,
+        *,
+        workspace_unavailable: bool = False,
+        directory_state: Optional[str] = None,
+    ) -> None:
         self.status_code = status_code
         self.detail = detail
+        self.workspace_unavailable = workspace_unavailable
+        self.directory_state = directory_state
         super().__init__(detail)
 
 
@@ -228,7 +237,10 @@ async def trigger_agent_directly(
         workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
         raise TriggerAgentError(
-            status.HTTP_409_CONFLICT, f"Project workspace is unavailable: {exc}"
+            status.HTTP_409_CONFLICT,
+            f"Project workspace is unavailable: {exc}",
+            workspace_unavailable=True,
+            directory_state=exc.directory_state,
         ) from exc
     repo_root = workspace_root.root
     yolo = bool(config.get("yolo"))
@@ -438,6 +450,12 @@ async def trigger_agent(
         raise HTTPException(
             status_code=400, detail="session_id is required when session_mode='resume'"
         )
+
+    try:
+        workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        project_workspace.raise_workspace_http_error(exc)
+
     config = await get_agent_config(project_id, body.agent, session)
     if body.work_dir and worktrees.is_writing_agent(config):
         raise HTTPException(
@@ -446,9 +464,8 @@ async def trigger_agent(
         )
     if body.work_dir:
         try:
-            workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
             workspace_root.resolve_relative(body.work_dir)
-        except project_workspace.ProjectWorkspaceError as exc:
+        except project_workspace.ProjectPathError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid work_dir: {exc}") from exc
 
     conversation: Optional[Conversation] = None

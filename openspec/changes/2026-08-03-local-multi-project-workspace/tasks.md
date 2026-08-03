@@ -69,9 +69,9 @@
       repository-relative path. Add traversal/symlink escape tests.
 - [x] 3.4 Remove the global `.agentweave/session.json` roster fallback and render canonical context
       from Hub-owned project/agent/runner/charter/instruction state without cross-project leakage.
-- [ ] 3.5 Write unavailable-directory tests: new operator input refused, existing queue retained,
+- [x] 3.5 Write unavailable-directory tests: new operator input refused, existing queue retained,
       autonomous/scheduled starts paused with events, repair re-evaluates work without disabling jobs.
-- [ ] 3.6 Implement unavailable/repair scheduling behavior and safe relocation guards.
+- [x] 3.6 Implement unavailable/repair scheduling behavior and safe relocation guards.
 - [ ] 3.7 Verify project-correct runtime paths and no cross-project file/process effects.
 - [ ] 3.8 `/handoff`.
 

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import project_workspace
 from ...auth import get_project
 from ...conversations import latest_open_conversation, new_conversation
 from ...db.engine import get_session
@@ -112,6 +113,11 @@ async def answer_question(
     if question is None or question.project_id != project_id:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    try:
+        await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        project_workspace.raise_workspace_http_error(exc)
+
     from_agent = question.from_agent
     q_text = question.question
 
@@ -122,9 +128,7 @@ async def answer_question(
     # Operator answers are typed depth-zero queue entries, not magic "user"
     # messages or inbox-poll triggers. They resume autonomous chains in the same
     # governed path as every other operator input.
-    conversation = await latest_open_conversation(
-        session, project_id=project_id, agent=from_agent
-    )
+    conversation = await latest_open_conversation(session, project_id=project_id, agent=from_agent)
     if conversation is None:
         conversation = new_conversation(project_id=project_id, agent=from_agent)
         session.add(conversation)
