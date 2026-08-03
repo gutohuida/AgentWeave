@@ -17,9 +17,11 @@ from .models import (  # noqa: F401
     AIJob,
     ApiKey,
     Base,
+    Charter,
     JobRun,
     Project,
     ProjectInstructions,
+    Runner,
 )
 
 logger = logging.getLogger(__name__)

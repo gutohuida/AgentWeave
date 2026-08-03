@@ -54,6 +54,8 @@ class Project(Base):
     queue_entries: Mapped[List["InboundQueueEntry"]] = relationship(back_populates="project")
     conversations: Mapped[List["Conversation"]] = relationship(back_populates="project")
     turn_usages: Mapped[List["TurnUsage"]] = relationship(back_populates="project")
+    runners: Mapped[List["Runner"]] = relationship(back_populates="project")
+    charters: Mapped[List["Charter"]] = relationship(back_populates="project")
 
 
 class Agent(Base):
@@ -74,6 +76,12 @@ class Agent(Base):
     # lives on this row, not in memory. The palette cycles once index >= palette length.
     color_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    runner_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("runners.id"), nullable=True
+    )
+    charter_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("charters.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
@@ -84,6 +92,68 @@ class Agent(Base):
     project: Mapped["Project"] = relationship(back_populates="agents")
 
     __table_args__ = (Index("ix_agents_project_name", "project_id", "name"),)
+
+
+RUNNER_CLIS = ("claude", "codex")
+
+
+class Runner(Base):
+    """Reusable execution capability an agent is bound to: which CLI, which model.
+
+    Project-scoped. Distinct from `Agent` (roster identity) and `Charter` (behavior) —
+    see openspec/changes/runner-agent-charter-separation/design.md for the three-way
+    split this replaces the old fixed-role system with. `flags` is a freeform,
+    optional escape hatch for future per-runner CLI-flag overrides; nothing populates
+    it yet.
+    """
+
+    __tablename__ = "runners"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    cli: Mapped[str] = mapped_column(String(16), nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    flags: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="runners")
+
+    __table_args__ = (
+        CheckConstraint("cli IN ('claude', 'codex')", name="ck_runners_cli"),
+        Index("ix_runners_project_name", "project_id", "name"),
+    )
+
+
+class Charter(Base):
+    """Authored behavior content an agent is bound to.
+
+    Project-scoped. Replaces the fixed 21-entry role-guide list; seeded once from the
+    previously-bundled role guides (see runner-agent-charter-separation design.md) and
+    freely editable thereafter through the Hub UI.
+    """
+
+    __tablename__ = "charters"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+    project: Mapped["Project"] = relationship(back_populates="charters")
+
+    __table_args__ = (Index("ix_charters_project_name", "project_id", "name"),)
 
 
 class ApiKey(Base):

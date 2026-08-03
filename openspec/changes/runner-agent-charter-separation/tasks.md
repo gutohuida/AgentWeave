@@ -13,13 +13,32 @@
 
 ## 0. Data model
 
-- [ ] 0.1 Write failing tests for new `Runner` and `Charter` SQLAlchemy models (project-scoped,
-      `Agent.runner_id`/`Agent.charter_id` nullable FKs) in `hub/tests/`.
-- [ ] 0.2 Add `Runner` and `Charter` tables to `hub/hub/db/models.py`; add `runner_id`/`charter_id`
-      columns to `Agent`. Write the Alembic-equivalent migration this project uses (check
-      `hub/hub/db/engine.py` for the current schema-creation mechanism before assuming Alembic).
-- [ ] 0.3 Verify: new tables/columns created on fresh DB; existing `Agent` rows load with null
-      `runner_id`/`charter_id` on an upgraded DB. Hand off and commit.
+- [x] 0.1 Added `hub/tests/test_runner_charter_models.py`: ORM round-trip tests for `Runner`
+      (including the `cli IN ('claude','codex')` check constraint) and `Charter`, agent
+      binding/unbound-binding tests, and a migration test (`test_migration_0023_...`) that
+      stamps a pre-change DB at 0022 and asserts the upgrade adds `runners`/`charters` tables plus
+      nullable `agents.runner_id`/`charter_id` columns with existing rows loading null.
+- [x] 0.2 Added `Runner` and `Charter` to `hub/hub/db/models.py` (project-scoped; `Runner` has
+      `cli`/`model`/`flags`, `Charter` has `name`/`content`); added nullable `runner_id`/`charter_id`
+      FK columns to `Agent`; registered both new models in `hub/hub/db/engine.py`'s side-effect
+      import list (required for `create_all` to pick them up — see the comment already there
+      warning about this). Wrote `hub/hub/migrations/versions/0023_add_runner_charter.py` following
+      the existing idempotent create-if-missing pattern (0022's style), including a SQLite-safe FK
+      addition (no `create_foreign_key` on SQLite, matching 0017's `conversation_id` precedent) and
+      a downgrade that drops the new agent columns before dropping the referenced tables.
+      **Decision on design.md's open question**: `Runner.flags` exists as a freeform, optional JSON
+      column but nothing populates it yet — `RUNNER_CONFIGS` in `src/agentweave/constants.py` turned
+      out to hold CLI-invocation structure (session flags, output format, model flag syntax) that's
+      derived from `cli` itself, not a per-runner-instance override an operator would set; only
+      `cli` and `model` are meaningfully operator-facing today. Revisit if a real need for per-runner
+      flag overrides appears.
+- [x] 0.3 Verified: `hub/tests/test_runner_charter_models.py` (6 new tests) plus full
+      `hub/tests/test_migrations.py` (including the two pre-existing tests whose hardcoded
+      `alembic_version == "0022"` assertions were updated to `"0023"`) all pass. Full Hub regression:
+      460 passed, 4 skipped. (This phase's own baseline wasn't independently re-measured before
+      starting — the single-runtime successor's own handoffs reported 453–454/4 at various points —
+      so the exact delta isn't reconciled here; what's confirmed is that the full suite is green
+      now, including every pre-existing test.) Hand off and commit.
 
 ## 1. Runner registry
 
