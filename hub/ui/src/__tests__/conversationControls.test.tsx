@@ -10,13 +10,16 @@ let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
 let recordedEntries: TimelineEntry[] = []
 let sseConnectionState: 'closed' | 'connecting' | 'open' | 'reconnecting' = 'open'
+let roster: AgentSummary[] = []
+let launchability: Record<string, { present: boolean; authorized: boolean; runnable: boolean; reason?: string }> = {}
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
   return {
     ...actual,
     useAgentOutput: () => ({ lines: outputLines, isLoading: false }),
-    useAgents: () => ({ data: [] }),
+    useAgents: () => ({ data: roster }),
+    useAgentLaunchability: () => ({ data: { agents: launchability } }),
     useAgentTimeline: () => ({ data: [] }),
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
   }
@@ -41,6 +44,10 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
 vi.mock('@/api/queue', () => ({
   useQueueStatus: () => ({ data: { waiting_count: 0 } }),
   withdrawQueueEntry: vi.fn(),
+}))
+
+vi.mock('@/api/workspace', () => ({
+  useWorkspacePaths: () => ({ data: [] }),
 }))
 
 vi.mock('@/hooks/useSSE', async (importOriginal) => {
@@ -79,6 +86,10 @@ describe('conversation controls — placement and overflow menu', () => {
     outputLines = []
     conversations = [conversation]
     recordedEntries = []
+    roster = [idleAgent]
+    launchability = {
+      claude: { present: true, authorized: true, runnable: true },
+    }
     sseConnectionState = 'open'
     fetchMock.mockReset()
     useConfigStore.setState({
@@ -205,6 +216,40 @@ describe('conversation controls — placement and overflow menu', () => {
     await user.click(screen.getByRole('button', { name: 'Close details' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
+  it('targets a selected agent with no conversation id and leaves the open conversation scoped to claude', async () => {
+    const codexAgent: AgentSummary = { ...idleAgent, name: 'codex', runner: 'codex' }
+    roster = [idleAgent, codexAgent]
+    launchability.codex = { present: true, authorized: true, runnable: true }
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      status: 'started',
+      conversation_id: 'conv-codex',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const onAgentConversationChange = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <AgentOutputPanel
+        agent={idleAgent}
+        onAgentConversationChange={onAgentConversationChange}
+      />,
+    )
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+
+    await user.click(screen.getByRole('button', { name: 'Target agent: claude' }))
+    await user.click(screen.getByRole('option', { name: /codex/i }))
+    await user.type(screen.getByRole('textbox'), 'redirect this')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const request = fetchMock.mock.calls[0][1] as RequestInit
+    expect(JSON.parse(request.body as string)).toEqual({
+      agent: 'codex',
+      message: 'redirect this',
+    })
+    expect(onAgentConversationChange).toHaveBeenCalledWith('codex', 'conv-codex')
+    expect(conversation.agent).toBe('claude')
   })
 })
 

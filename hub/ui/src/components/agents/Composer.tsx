@@ -8,6 +8,8 @@ import {
 } from '@/lib/composerTrigger'
 import { resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
+import { ComposerAgentSelector } from './ComposerAgentSelector'
+import type { AgentLaunchability, AgentSummary } from '@/api/agents'
 
 export const COMPOSER_MIN_ROWS = 3
 const COMPOSER_MAX_ROWS = 12
@@ -26,6 +28,10 @@ export interface ComposerProps {
   /** Workspace paths backing the `@path`/`$skill` trigger sources — fetched once by the
    *  caller (design.md's caching mitigation), filtered client-side here per keystroke. */
   workspacePaths?: string[]
+  agents?: AgentSummary[]
+  launchability?: Record<string, AgentLaunchability>
+  targetAgent?: string
+  onTargetAgentChange?: (agent: string) => void
 }
 
 /**
@@ -40,6 +46,10 @@ export function Composer({
   isRunning,
   onSubmit,
   workspacePaths = [],
+  agents = [],
+  launchability = {},
+  targetAgent = agent,
+  onTargetAgentChange = () => undefined,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -165,6 +175,17 @@ export function Composer({
 
   return (
     <div className="flex gap-2">
+      <ComposerAgentSelector
+        agents={agents.length > 0 ? agents : [{
+          name: agent,
+          status: 'idle',
+          message_count: 0,
+          active_task_count: 0,
+        }]}
+        launchability={launchability}
+        selectedAgent={targetAgent}
+        onSelect={onTargetAgentChange}
+      />
       <div className="relative flex-1">
         {trigger && (
           <ComposerTriggerMenu

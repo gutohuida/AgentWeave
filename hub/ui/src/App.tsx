@@ -170,6 +170,9 @@ export default function App() {
           }
           return { ...current, conversationId }
         })}
+        onAgentConversationChange={(agent, conversationId) =>
+          setDestination(agentDestination(destination.projectId, agent, conversationId))
+        }
         onBackToProject={() => setDestination(projectDestination(destination.projectId))}
       />
     ) : (

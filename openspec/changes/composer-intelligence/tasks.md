@@ -81,17 +81,18 @@
 
 ## 5. In-place agent selector
 
-- [ ] 5.1 Write tests for the selector: lists every configured agent with a launchability
+- [x] 5.1 Write tests for the selector: lists every configured agent with a launchability
       indicator from `GET /api/v1/agents/launchability`, search filters the list, and — critically
       — selecting a different agent then submitting does not alter the current conversation's
       `agent` field (asserted against the conversation-immutability contract in
       `hub/tests/test_conversation_contract.py`, not just a UI-level check).
-- [ ] 5.2 Build the agent selector component consuming the existing launchability endpoint (no new
+- [x] 5.2 Build the agent selector component consuming the existing launchability endpoint (no new
       backend route — design.md Goals).
-- [ ] 5.3 Wire the selector into the composer chrome: selecting a different agent than the current
+- [x] 5.3 Wire the selector into the composer chrome: selecting a different agent than the current
       conversation's own changes what the *next* submission targets (new conversation, no
       `conversation_id`), per design.md Decision 4 — never mutates the open conversation.
-- [ ] 5.4 Verify against `agent-composer`'s "In-place agent selector" requirement.
+- [x] 5.4 Verify against `agent-composer`'s "In-place agent selector" requirement. Frontend
+      selector/routing suites: 17/17 passing; backend immutable-scope contract: 8/8 passing.
 
 ## 6. Integration
 

@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useSSEConnectionState } from '@/hooks/useSSE'
-import { AgentSummary, useAgentOutput, useAgents, useAgentTimeline } from '@/api/agents'
+import {
+  AgentSummary,
+  useAgentLaunchability,
+  useAgentOutput,
+  useAgents,
+  useAgentTimeline,
+} from '@/api/agents'
 import { useAgentChatHistory, useAgentConversations, useAgentRecentChat } from '@/api/agentChat'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useWorkspacePaths } from '@/api/workspace'
@@ -16,6 +22,7 @@ interface AgentOutputPanelProps {
   onBackToProject?: () => void
   initialConversationId?: string | null
   onConversationChange?: (conversationId: string | null) => void
+  onAgentConversationChange?: (agent: string, conversationId: string) => void
 }
 
 const NEW_CONVERSATION_VALUE = '__new__'
@@ -45,6 +52,7 @@ export function AgentOutputPanel({
   onBackToProject,
   initialConversationId = null,
   onConversationChange,
+  onAgentConversationChange,
 }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
@@ -62,6 +70,7 @@ export function AgentOutputPanel({
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
+  const [targetAgent, setTargetAgent] = useState(agent.name)
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
   const { data: conversations = [] } = useAgentConversations(agent.name)
@@ -72,6 +81,7 @@ export function AgentOutputPanel({
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
+    setTargetAgent(agent.name)
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
   }, [agent.name, initialConversationId])
@@ -136,6 +146,7 @@ export function AgentOutputPanel({
       : undefined
 
   const { data: roster = [] } = useAgents()
+  const { data: launchabilityData } = useAgentLaunchability()
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
   const { data: workspacePaths = [] } = useWorkspacePaths()
@@ -166,6 +177,7 @@ export function AgentOutputPanel({
   const postTrigger = async (
     triggerMessage: string,
     conversationId?: string,
+    agentName: string = agent.name,
   ): Promise<TriggerResult> => {
     const response = await fetch('/api/v1/agent/trigger', {
       method: 'POST',
@@ -174,7 +186,7 @@ export function AgentOutputPanel({
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        agent: agent.name,
+        agent: agentName,
         message: triggerMessage,
         conversation_id: conversationId,
       }),
@@ -278,9 +290,12 @@ export function AgentOutputPanel({
     if (!apiKey) throw new Error('Not configured')
     setIsSending(true)
     setSubmissionError(null)
-    const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
+    const redirectsAgent = targetAgent !== agent.name
+    const isNew = redirectsAgent
+      || !selectedConversationId
+      || selectedConversationId === NEW_CONVERSATION_VALUE
     const outgoingMessage =
-      isNew && handoffState === 'ready'
+      isNew && !redirectsAgent && handoffState === 'ready'
         ? `${RESUME_HANDOFF_PREFIX}\n\n${typedMessage}`
         : typedMessage
     if (isNew) setSessionNotice('Starting new conversation…')
@@ -288,8 +303,17 @@ export function AgentOutputPanel({
       const result = await postTrigger(
         outgoingMessage,
         isNew ? undefined : selectedConversationId,
+        targetAgent,
       )
-      setSelectedConversationId(result.conversation_id)
+      if (redirectsAgent) {
+        onAgentConversationChange?.(targetAgent, result.conversation_id)
+        if (!onAgentConversationChange) {
+          setSessionNotice(`Started ${targetAgent} conversation ${result.conversation_id.slice(0, 12)}…`)
+          setTargetAgent(agent.name)
+        }
+      } else {
+        setSelectedConversationId(result.conversation_id)
+      }
       if (isNew) setHandoffState('idle')
       const notice = queuedNotice(result, `${agent.name} is not available to receive it right now`)
       if (notice) {
@@ -439,6 +463,10 @@ export function AgentOutputPanel({
           isRunning={isRunning}
           onSubmit={handleComposerSubmit}
           workspacePaths={workspacePaths}
+          agents={roster}
+          launchability={launchabilityData?.agents ?? {}}
+          targetAgent={targetAgent}
+          onTargetAgentChange={setTargetAgent}
         />
       </div>
     </div>

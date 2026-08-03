@@ -13,6 +13,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
     ...actual,
     useAgentOutput: () => ({ lines: [], isLoading: false }),
     useAgents: () => ({ data: [] }),
+    useAgentLaunchability: () => ({ data: { agents: {} } }),
     useAgentTimeline: () => ({ data: [] }),
   }
 })
@@ -45,6 +46,10 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
 vi.mock('@/api/queue', () => ({
   useQueueStatus: () => ({ data: { waiting_count: recordedEntries.length } }),
   withdrawQueueEntry: vi.fn(),
+}))
+
+vi.mock('@/api/workspace', () => ({
+  useWorkspacePaths: () => ({ data: [] }),
 }))
 
 const fetchMock = vi.fn()

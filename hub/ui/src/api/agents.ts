@@ -27,6 +27,18 @@ export interface AgentSummary {
   color_index?: number | null  // Stable palette index, assigned once at registration
 }
 
+export interface AgentLaunchability {
+  runner?: string
+  present: boolean
+  authorized: boolean
+  runnable: boolean
+  reason?: string | null
+}
+
+export interface AgentLaunchabilityResponse {
+  agents: Record<string, AgentLaunchability>
+}
+
 export interface ContextUsage {
   status: ContextUsageStatus
   source: string
@@ -109,6 +121,16 @@ export function useAgents() {
     queryKey: ['agents'],
     queryFn: () => getJson<AgentSummary[]>('/api/v1/agents'),
     enabled: isConfigured,
+  })
+}
+
+export function useAgentLaunchability() {
+  const { isConfigured } = useConfigStore()
+  return useQuery<AgentLaunchabilityResponse>({
+    queryKey: ['agents', 'launchability'],
+    queryFn: () => getJson<AgentLaunchabilityResponse>('/api/v1/agents/launchability'),
+    enabled: isConfigured,
+    staleTime: 30_000,
   })
 }
 
