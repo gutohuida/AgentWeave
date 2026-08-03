@@ -1294,6 +1294,15 @@ before concurrency does.*
 
 ## 9. Accounting and budgets
 
+> **Update (2026-08-03) — closed by verified successor implementation.** The archived
+> `openspec/changes/archive/2026-08-03-accounting-and-budgets/` change closes all of phase 9:
+> normalized Claude/Codex/OpenCode telemetry, immutable measured-or-unavailable turn outcomes,
+> agent/project aggregates, allowance-first and explicitly API-equivalent presentation, and a
+> project token budget that retains autonomous queue work while operator turns remain available.
+> Evidence: 432 Hub tests, 289 UI tests, production build, and strict OpenSpec validation. These
+> superseded checkboxes remain unchanged per the reconciliation rule; the archived successor's
+> completed task list is authoritative.
+
 > **SUPERSEDED (2026-08-02).** Re-cut as its own change; see the slice table in
 > `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Ready to propose, and
 > independent of the conversation slice, so it may be picked up in parallel. Do not implement from

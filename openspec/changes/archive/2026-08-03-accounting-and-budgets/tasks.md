@@ -64,5 +64,8 @@
       and configuration; the global status bar keeps exhaustion visible without disabling input.
 - [x] 4.3 Run full Hub backend tests, full frontend tests, production build, and strict OpenSpec
       validation.
-- [ ] 4.4 Sync the authoritative capability spec, archive this change, annotate umbrella phase 9,
-      write final slice handoff, and commit.
+- [x] 4.4 Sync the authoritative capability spec, archive this change, annotate umbrella phase 9,
+      write final slice handoff, and commit. Authoritative spec:
+      `openspec/specs/usage-accounting/spec.md`; archive:
+      `openspec/changes/archive/2026-08-03-accounting-and-budgets/`; handoff:
+      `.claude/handoffs/2026-08-03-0147-accounting-slice-archived.md`.
