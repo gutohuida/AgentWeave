@@ -199,4 +199,4 @@ agent returned the typed no-runner waiting result. Strict OpenSpec validation pa
 - [x] 5.5 Archive this change; annotate
       `openspec/changes/2026-07-30-hub-native-experience/tasks.md` 16.2 with what this successor
       synced, matching the pattern of prior successors' annotations.
-- [ ] 5.6 Final handoff and commit.
+- [x] 5.6 Final handoff and commit.
