@@ -124,7 +124,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0019. The full
+    migration runs cleanly and the version lands at 0020. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -132,7 +132,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0019).
+    # Verify alembic_version is at the latest revision (0020).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -143,7 +143,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0019", f"expected alembic_version=0019, got {version}"
+    assert version == "0020", f"expected alembic_version=0020, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -254,7 +254,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0019", f"expected alembic_version=0019, got {version}"
+    assert version == "0020", f"expected alembic_version=0020, got {version}"
 
 
 @pytest.mark.asyncio
@@ -721,6 +721,60 @@ def test_migration_0019_allows_scheduled_queue_origin(tmp_path) -> None:
     _run(_create_old_state())
     _run_alembic_with(db_url)
     assert _run(_insert_job()) == "job"
+
+
+def test_migration_0020_adds_empty_unique_run_token_digest(tmp_path) -> None:
+    db_file = tmp_path / "run-capability-0019.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    async def _create_old_state() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sa.text(
+                        "CREATE TABLE runs (id VARCHAR(64) PRIMARY KEY, "
+                        "project_id VARCHAR(64) NOT NULL, agent VARCHAR(64) NOT NULL, "
+                        "status VARCHAR(32) NOT NULL)"
+                    )
+                )
+                await conn.execute(
+                    sa.text(
+                        "INSERT INTO runs (id, project_id, agent, status) "
+                        "VALUES ('run-old', 'proj-old', 'claude', 'completed')"
+                    )
+                )
+                await conn.execute(
+                    sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+                )
+                await conn.execute(
+                    sa.text("INSERT INTO alembic_version (version_num) VALUES ('0019')")
+                )
+        finally:
+            await engine.dispose()
+
+    async def _inspect_upgraded_state() -> tuple[object, list[dict[str, object]]]:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.connect() as conn:
+                digest = await conn.scalar(
+                    sa.text(
+                        "SELECT capability_token_hash FROM runs WHERE id = 'run-old'"
+                    )
+                )
+                indexes = await conn.run_sync(
+                    lambda sync_conn: sa.inspect(sync_conn).get_indexes("runs")
+                )
+                return digest, indexes
+        finally:
+            await engine.dispose()
+
+    _run(_create_old_state())
+    _run_alembic_with(db_url)
+    digest, indexes = _run(_inspect_upgraded_state())
+    assert digest is None
+    token_index = next(i for i in indexes if i["name"] == "ix_runs_capability_token_hash")
+    assert token_index["unique"] == 1
 
 
 @pytest.mark.asyncio

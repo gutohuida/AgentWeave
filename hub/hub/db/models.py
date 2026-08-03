@@ -439,6 +439,9 @@ class Run(Base):
     initiator: Mapped[str] = mapped_column(
         String(16), default="operator", server_default="operator", nullable=False
     )
+    capability_token_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
 
     __table_args__ = (
         CheckConstraint(

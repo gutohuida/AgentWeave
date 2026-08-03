@@ -312,6 +312,9 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app,
     spawned_env = fake_spawn.call_args.kwargs["env"]
     assert spawned_env["AW_AGENT_IDENTITY"] == "identity-claude"
     assert spawned_env["AW_RUN_ID"] == run_id
+    run_token = spawned_env["AW_RUN_TOKEN"]
+    assert run_token.startswith("aw_run_")
+    assert run_token not in resp.text
     # The Hub's own environment must be inherited, not replaced, by adding these keys.
     assert "PATH" in spawned_env or "Path" in spawned_env
 
@@ -319,6 +322,15 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(app,
     assert "do the thing" in prompt
     assert "the `agentweave` MCP tools are available" in prompt
     assert captured_kwargs["mcp_command"][-1].endswith("mcp_server.py")
+
+    from hub.agent_auth import hash_run_token
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.capability_token_hash == hash_run_token(run_token)
+        assert run.capability_token_hash != run_token
 
 
 @pytest.mark.asyncio

@@ -38,6 +38,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import worktrees
+from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
 from ...config import settings
 from ...conversations import (
@@ -265,6 +266,7 @@ async def trigger_agent_directly(
         raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
 
     run_id = f"run-{short_id()}"
+    run_token = mint_run_token()
 
     # Task 4.1: identity is established here, once, by the Hub — never asserted by the
     # agent itself. Every tool call this run makes reads AW_AGENT_IDENTITY from its own
@@ -274,6 +276,7 @@ async def trigger_agent_directly(
     env = dict(env) if env is not None else dict(os.environ)
     env["AW_AGENT_IDENTITY"] = agent
     env["AW_RUN_ID"] = run_id
+    env["AW_RUN_TOKEN"] = run_token
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
     if access_path == "mcp":
@@ -302,6 +305,7 @@ async def trigger_agent_directly(
         status="running",
         turn_depth=turn_depth,
         initiator=initiator,
+        capability_token_hash=hash_run_token(run_token),
     )
     delivered = []
     if queue_entry_ids:

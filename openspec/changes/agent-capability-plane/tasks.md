@@ -9,11 +9,11 @@
 
 ## 0. Run-scoped authentication
 
-- [ ] 0.1 Add migration/model/auth tests for hashed per-run tokens, active-run resolution, project
+- [x] 0.1 Add migration/model/auth tests for hashed per-run tokens, active-run resolution, project
       key refusal on agent routes, run-token refusal on operator routes, and terminal revocation.
-- [ ] 0.2 Mint/inject run credentials without exposing them in output, events, args, or responses.
-- [ ] 0.3 Implement the authenticated `AgentActor` dependency and empty agent-action namespace.
-- [ ] 0.4 Verify authentication scenarios; hand off and commit.
+- [x] 0.2 Mint/inject run credentials without exposing them in output, events, args, or responses.
+- [x] 0.3 Implement the authenticated `AgentActor` dependency and empty agent-action namespace.
+- [x] 0.4 Verify authentication scenarios; hand off and commit.
 
 ## 1. Messaging, tasks, and questions
 
@@ -44,4 +44,3 @@
 - [ ] 4.2 Live-verify one real spawned run using the injected plane with no project credential.
 - [ ] 4.3 Sync authoritative specs, archive the successor, annotate the umbrella/tool-surface
       reconciliation, write final handoff, and commit.
-
