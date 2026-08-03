@@ -50,6 +50,36 @@ def _no_real_mcp_probe(monkeypatch):
     monkeypatch.setattr(launchability, "probe_mcp_registered", lambda cli: False)
 
 
+@pytest.fixture
+def bind_runner(app, auth_headers):
+    """Returns an async helper: `await bind_runner(agent_name, cli="claude")`.
+
+    Creates a Runner and binds it to *agent_name*. Since runner-agent-charter-separation
+    phase 1.3, `trigger_agent_directly` refuses to spawn an agent with no bound Runner —
+    the old session/sync `agents.<name>.runner` string no longer selects which CLI/model
+    to launch, only `Agent.runner_id` does. Any test that expects a real spawn (or to
+    reach spawn-adjacent pre-flight checks) must bind one first, after the agent row
+    exists (self-registered or session-synced).
+    """
+
+    async def _bind(agent_name, cli="claude", model=None):
+        payload = {"name": f"{agent_name}-runner", "cli": cli}
+        if model:
+            payload["model"] = model
+        created = await app.post("/api/v1/runners", json=payload, headers=auth_headers)
+        assert created.status_code == 201, created.text
+        runner_id = created.json()["id"]
+        bound = await app.patch(
+            f"/api/v1/agents/{agent_name}",
+            json={"runner_id": runner_id},
+            headers=auth_headers,
+        )
+        assert bound.status_code == 200, bound.text
+        return runner_id
+
+    return _bind
+
+
 @pytest.fixture(autouse=True)
 def _no_real_worktree_provision(monkeypatch):
     """Every agent trigger calls worktrees.resolve_agent_workspace, which (for a

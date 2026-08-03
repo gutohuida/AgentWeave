@@ -32,6 +32,7 @@ from ...db.models import (
     ProjectRolesConfig,
     ProjectSession,
     Run,
+    Runner,
     Task,
 )
 from ...inbound_queue import new_entry
@@ -1073,9 +1074,17 @@ async def patch_agent(
     """
     project_id, _ = project
 
-    # Reject collision with configured agents
+    # Reject collision with configured agents — except for runner_id/charter_id, which
+    # the CLI's legacy session-sync config never owned (they're new,
+    # runner-agent-charter-separation-only fields) and a configured agent needs
+    # bindable exactly like a self-registered one.
+    _unrestricted_fields = {"runner_id", "charter_id"}
     session_data = await _get_session_data(project_id, session)
-    if session_data and name in session_data.get("agents", {}):
+    if (
+        session_data
+        and name in session_data.get("agents", {})
+        and not set(body.keys()) <= _unrestricted_fields
+    ):
         raise HTTPException(
             status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
         )
@@ -1102,6 +1111,14 @@ async def patch_agent(
     if "spawn_cmd" in body:
         agent_row.spawn_cmd = body["spawn_cmd"]
 
+    if "runner_id" in body:
+        runner_id = body["runner_id"]
+        if runner_id is not None:
+            runner_row = await session.get(Runner, runner_id)
+            if runner_row is None or runner_row.project_id != project_id:
+                raise HTTPException(status_code=404, detail=f"Runner '{runner_id}' not found")
+        agent_row.runner_id = runner_id
+
     # Merge config if provided
     if "config" in body:
         new_config = body["config"] or {}
@@ -1118,6 +1135,8 @@ async def patch_agent(
         "mcp_endpoint": agent_row.mcp_endpoint,
         "spawn_cmd": agent_row.spawn_cmd,
         "config": agent_row.config,
+        "runner_id": agent_row.runner_id,
+        "charter_id": agent_row.charter_id,
     }
 
 

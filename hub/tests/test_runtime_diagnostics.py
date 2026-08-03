@@ -1,21 +1,32 @@
 """Hub runtime diagnostics visibility tests."""
 
+from unittest.mock import patch
+
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers):
+async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers, bind_runner):
     """Decision 2: the trigger endpoint reports what actually happened, not a guess about
     whether some other process (the watchdog) might eventually notice a queued message.
-    An agent with no configured runner (defaults to "native", CLI = the agent's own name)
-    and no matching binary on PATH is refused with a stated reason — execution_confidence
-    and watchdog-heartbeat staleness no longer factor into the response at all.
+    An agent bound to a runner whose CLI has no matching binary on PATH is refused with a
+    stated reason — execution_confidence and watchdog-heartbeat staleness no longer factor
+    into the response at all.
     """
-    resp = await app.post(
-        "/api/v1/agent/trigger",
-        json={"agent": "diag-no-such-cli", "message": "hello", "session_mode": "new"},
+    sync = await app.post(
+        "/api/v1/session/sync",
+        json={"data": {"agents": {"diag-no-such-cli": {}}}},
         headers=auth_headers,
     )
+    assert sync.status_code == 200
+    await bind_runner("diag-no-such-cli", cli="claude")
+
+    with patch("hub.launchability.shutil.which", return_value=None):
+        resp = await app.post(
+            "/api/v1/agent/trigger",
+            json={"agent": "diag-no-such-cli", "message": "hello", "session_mode": "new"},
+            headers=auth_headers,
+        )
 
     assert resp.status_code == 200
     assert resp.json()["status"] == "queued"

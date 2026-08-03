@@ -13,13 +13,14 @@ from hub.inbound_queue import new_entry
 from hub.turn_scheduler import schedule_agent
 
 
-async def _configure_agent(app, auth_headers, name: str) -> None:
+async def _configure_agent(app, auth_headers, bind_runner, name: str) -> None:
     response = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {name: {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert response.status_code == 200
+    await bind_runner(name, cli="claude")
 
 
 async def _set_budget_and_usage(*, limit: int, used: int) -> None:
@@ -82,10 +83,10 @@ def _completed_claude_spawn(session_id: str):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("origin_type", ["agent", "job"])
 async def test_exhausted_budget_keeps_autonomous_entries_queued(
-    app, auth_headers, origin_type
+    app, auth_headers, bind_runner, origin_type
 ) -> None:
     name = f"paused-{origin_type}"
-    await _configure_agent(app, auth_headers, name)
+    await _configure_agent(app, auth_headers, bind_runner, name)
     await _set_budget_and_usage(limit=100, used=100)
     entry_id = await _queue(name, origin_type)
 
@@ -110,9 +111,11 @@ async def test_exhausted_budget_keeps_autonomous_entries_queued(
 
 
 @pytest.mark.asyncio
-async def test_operator_turn_starts_while_budget_is_exhausted(app, auth_headers) -> None:
+async def test_operator_turn_starts_while_budget_is_exhausted(
+    app, auth_headers, bind_runner
+) -> None:
     name = "operator-over-budget"
-    await _configure_agent(app, auth_headers, name)
+    await _configure_agent(app, auth_headers, bind_runner, name)
     await _set_budget_and_usage(limit=100, used=100)
     await _queue(name, "operator")
 
@@ -132,9 +135,11 @@ async def test_operator_turn_starts_while_budget_is_exhausted(app, auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_autonomous_turn_below_budget_persists_initiator(app, auth_headers) -> None:
+async def test_autonomous_turn_below_budget_persists_initiator(
+    app, auth_headers, bind_runner
+) -> None:
     name = "autonomous-under-budget"
-    await _configure_agent(app, auth_headers, name)
+    await _configure_agent(app, auth_headers, bind_runner, name)
     await _set_budget_and_usage(limit=101, used=100)
     await _queue(name, "agent")
 
@@ -153,9 +158,11 @@ async def test_autonomous_turn_below_budget_persists_initiator(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_increasing_budget_reschedules_retained_autonomous_work(app, auth_headers) -> None:
+async def test_increasing_budget_reschedules_retained_autonomous_work(
+    app, auth_headers, bind_runner
+) -> None:
     name = "resume-after-budget"
-    await _configure_agent(app, auth_headers, name)
+    await _configure_agent(app, auth_headers, bind_runner, name)
     await _set_budget_and_usage(limit=100, used=100)
     entry_id = await _queue(name, "agent")
     assert (await schedule_agent("proj-test", name)).waiting_reason == "token budget exhausted"

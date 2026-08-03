@@ -119,12 +119,15 @@ async def test_conversation_cannot_be_used_for_another_agent(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_provider_binding_updates_conversation_without_changing_identity(app, auth_headers):
+async def test_provider_binding_updates_conversation_without_changing_identity(
+    app, auth_headers, bind_runner
+):
     await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
+    await bind_runner("claude", cli="claude")
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )

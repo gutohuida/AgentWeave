@@ -242,7 +242,9 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
 
 
 @pytest.mark.asyncio
-async def test_provider_binding_is_idempotent_for_repeated_session_id(app, auth_headers):
+async def test_provider_binding_is_idempotent_for_repeated_session_id(
+    app, auth_headers, bind_runner
+):
     """A provider re-announcing the same session id it was already bound to
     (a resumed CLI echoing its own session on every line) must not be treated
     as a conflict."""
@@ -251,6 +253,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(app, auth_
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
+    await bind_runner("claude", cli="claude")
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
@@ -306,7 +309,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(app, auth_
 
 @pytest.mark.asyncio
 async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails_run(
-    app, auth_headers
+    app, auth_headers, bind_runner
 ):
     """A provider reporting a *different* session id than the one already bound
     must fail that run without corrupting the conversation's existing binding —
@@ -318,6 +321,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
+    await bind_runner("claude", cli="claude")
     fake_spawn_1 = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']
     )
@@ -376,7 +380,9 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
 
 
 @pytest.mark.asyncio
-async def test_stop_and_retry_retain_conversation_and_resume_bound_session(app, auth_headers):
+async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
+    app, auth_headers, bind_runner
+):
     """design.md: 'A conversation remains open across run completion, failure,
     interruption, stop, and retry... Retry creates a new run under the same
     conversation. It resumes the bound provider session.' Exercises that whole
@@ -387,6 +393,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(app, 
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
+    await bind_runner("claude", cli="claude")
 
     fake_spawn_1 = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"provider-1"}\n']

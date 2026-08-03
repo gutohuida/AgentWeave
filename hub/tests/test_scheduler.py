@@ -36,13 +36,16 @@ async def _make_job(db, *, suffix, agent, session_mode="new"):
 
 
 @pytest.mark.asyncio
-async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(app, auth_headers):
+async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(
+    app, auth_headers, bind_runner
+):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"job-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("job-claude", cli="claude")
 
     fake_session = MagicMock()
     fake_session.pid = 4242
@@ -126,13 +129,14 @@ async def test_job_for_self_registered_poll_agent_is_skipped(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers):
+async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"busy-job-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("busy-job-claude", cli="claude")
 
     async with async_session_factory() as db:
         db.add(

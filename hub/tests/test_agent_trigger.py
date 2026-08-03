@@ -73,10 +73,14 @@ def _fake_pty(lines, exit_code=0, pid=4242):
 
 
 @pytest.mark.asyncio
-async def test_manual_runner_accumulates_queue_with_visible_reason(app, auth_headers):
+async def test_unbound_agent_accumulates_queue_with_visible_reason(app, auth_headers):
+    """An agent with no bound Runner cannot be spawned — it queues with a stated reason
+    rather than failing the request outright. Replaces the old "manual runner" scenario:
+    Runner.cli only supports claude/codex now, so "no execution capability configured" is
+    expressed as no binding at all, not a runner value of "manual"."""
     sync = await app.post(
         "/api/v1/session/sync",
-        json={"data": {"agents": {"offline-agent": {"runner": "manual"}}}},
+        json={"data": {"agents": {"offline-agent": {}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
@@ -88,7 +92,8 @@ async def test_manual_runner_accumulates_queue_with_visible_reason(app, auth_hea
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "queued"
-    assert "manual" in resp.json()["waiting_reason"].lower()
+    assert "runner" in resp.json()["waiting_reason"].lower()
+    assert "bound" in resp.json()["waiting_reason"].lower()
 
 
 @pytest.mark.asyncio
@@ -113,13 +118,14 @@ async def test_invalid_session_mode_is_rejected(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers):
+async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"trigger-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("trigger-claude", cli="claude")
 
     fake_spawn = _fake_pty(
         [
@@ -158,7 +164,7 @@ async def test_successful_trigger_returns_run_id_and_spawns(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_writing_agent_worktree_exists_before_first_spawn(
-    app, auth_headers, tmp_path, monkeypatch
+    app, auth_headers, bind_runner, tmp_path, monkeypatch
 ):
     repo = _init_repo(tmp_path / "repo")
     monkeypatch.chdir(repo)
@@ -169,6 +175,7 @@ async def test_writing_agent_worktree_exists_before_first_spawn(
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("writer", cli="claude")
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
@@ -189,7 +196,9 @@ async def test_writing_agent_worktree_exists_before_first_spawn(
 
 
 @pytest.mark.asyncio
-async def test_read_only_agent_spawns_in_primary_checkout(app, auth_headers, tmp_path, monkeypatch):
+async def test_read_only_agent_spawns_in_primary_checkout(
+    app, auth_headers, bind_runner, tmp_path, monkeypatch
+):
     repo = _init_repo(tmp_path / "repo")
     monkeypatch.chdir(repo)
     monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
@@ -199,6 +208,7 @@ async def test_read_only_agent_spawns_in_primary_checkout(app, auth_headers, tmp
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("reader", cli="claude")
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
     )
@@ -243,7 +253,7 @@ async def test_writing_agent_cannot_bypass_isolation_with_work_dir(
 
 @pytest.mark.asyncio
 async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
-    app, auth_headers, tmp_path, monkeypatch
+    app, auth_headers, bind_runner, tmp_path, monkeypatch
 ):
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
@@ -255,6 +265,7 @@ async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("writer", cli="claude")
 
     with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
         response = await app.post(
@@ -270,7 +281,7 @@ async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
 
 @pytest.mark.asyncio
 async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
-    app, auth_headers, monkeypatch
+    app, auth_headers, bind_runner, monkeypatch
 ):
     """Task 4.1: the Hub — not the agent — establishes identity at spawn, as an env var
     the tool surface reads rather than a caller-supplied parameter. Task 4.5: the agent is
@@ -286,6 +297,7 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("identity-claude", cli="claude")
 
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-identity-1"}\n']
@@ -341,7 +353,7 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
 
 @pytest.mark.asyncio
 async def test_trigger_respects_explicit_mcp_override_without_probing(
-    app, auth_headers, monkeypatch
+    app, auth_headers, bind_runner, monkeypatch
 ):
     """An operator's explicit `hub_client: "mcp"` override must be honored even though
     conftest's autouse fixture defaults the probe to False — the override skips probing
@@ -358,6 +370,7 @@ async def test_trigger_respects_explicit_mcp_override_without_probing(
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("override-claude", cli="claude")
 
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-override-1"}\n']
@@ -384,13 +397,14 @@ async def test_trigger_respects_explicit_mcp_override_without_probing(
 
 
 @pytest.mark.asyncio
-async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers):
+async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"trigger-codex": {"runner": "codex"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("trigger-codex", cli="codex")
 
     fake_spawn = _fake_pty(
         [
@@ -430,13 +444,14 @@ async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_run_without_usage_records_unavailable_once(app, auth_headers):
+async def test_run_without_usage_records_unavailable_once(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"no-usage": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("no-usage", cli="claude")
 
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"s-none"}\n']
@@ -470,13 +485,14 @@ async def test_run_without_usage_records_unavailable_once(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_second_trigger_while_first_is_running_is_queued(app, auth_headers):
+async def test_second_trigger_while_first_is_running_is_queued(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"busy-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("busy-claude", cli="claude")
 
     # A spawn whose read() never returns EOF on its own — simulates a run still in
     # progress when the second trigger request arrives.
@@ -524,13 +540,14 @@ async def test_second_trigger_while_first_is_running_is_queued(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_spawn_failure_marks_run_failed(app, auth_headers):
+async def test_spawn_failure_marks_run_failed(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"missing-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("missing-claude", cli="claude")
 
     with patch(  # noqa: SIM117
         "hub.api.v1.agent_trigger.PtySession.spawn",
@@ -592,13 +609,16 @@ def _drain(queue):
 
 
 @pytest.mark.asyncio
-async def test_successful_run_broadcasts_started_and_completed_lifecycle_events(app, auth_headers):
+async def test_successful_run_broadcasts_started_and_completed_lifecycle_events(
+    app, auth_headers, bind_runner
+):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"lifecycle-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("lifecycle-claude", cli="claude")
     project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
     queue = sse_manager.subscribe(project_id)
 
@@ -650,13 +670,14 @@ async def test_successful_run_broadcasts_started_and_completed_lifecycle_events(
 
 
 @pytest.mark.asyncio
-async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_headers):
+async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"failing-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("failing-claude", cli="claude")
     project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
     queue = sse_manager.subscribe(project_id)
 
@@ -682,13 +703,14 @@ async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_he
 
 
 @pytest.mark.asyncio
-async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers):
+async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"missing-claude-2": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("missing-claude-2", cli="claude")
     project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
     queue = sse_manager.subscribe(project_id)
 
@@ -741,13 +763,16 @@ def _stoppable_pty(pid=555, exit_code=15):
 
 
 @pytest.mark.asyncio
-async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(app, auth_headers):
+async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(
+    app, auth_headers, bind_runner
+):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"stoppable-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("stoppable-claude", cli="claude")
     project_id = (await app.get("/api/v1/status", headers=auth_headers)).json()["project_id"]
     queue = sse_manager.subscribe(project_id)
 
@@ -837,13 +862,14 @@ async def test_stop_with_no_run_in_progress_returns_404(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_shutdown_terminates_all_active_runs(app, auth_headers):
+async def test_shutdown_terminates_all_active_runs(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"shutdown-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("shutdown-claude", cli="claude")
 
     import threading
 
@@ -897,7 +923,9 @@ async def test_terminate_all_active_runs_with_nothing_running_returns_zero(app, 
 
 
 @pytest.mark.asyncio
-async def test_trigger_resolves_claude_proxy_env_at_spawn_time(app, auth_headers, monkeypatch):
+async def test_trigger_resolves_claude_proxy_env_at_spawn_time(
+    app, auth_headers, bind_runner, monkeypatch
+):
     """Task 3.11: the Hub resolves a claude_proxy agent's provider env at spawn time —
     no `eval $(agentweave switch <agent>)` needed first."""
     monkeypatch.setenv("MINIMAX_API_KEY", "sk-minimax-secret")
@@ -920,6 +948,7 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(app, auth_headers
         headers=auth_headers,
     )
     assert sync.status_code == 200
+    await bind_runner("minimax-env-agent", cli="claude")
 
     fake_spawn = _fake_pty(
         ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-env-1"}\n']
@@ -941,28 +970,11 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(app, auth_headers
     assert spawned_env["ANTHROPIC_API_KEY"] == "sk-minimax-secret"
     assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
 
-
-@pytest.mark.asyncio
-async def test_trigger_unsupported_runner_accumulates_queue(app, auth_headers):
-    """Kimi isn't wired to direct spawn yet (task 3.5 scoped to claude/codex only) — the
-    queue must retain its entry and explain why it cannot launch.
-    """
-    sync = await app.post(
-        "/api/v1/session/sync",
-        json={"data": {"agents": {"kimi-agent": {"runner": "kimi"}}}},
-        headers=auth_headers,
-    )
-    assert sync.status_code == 200
-
-    resp = await app.post(
-        "/api/v1/agent/trigger",
-        json={
-            "agent": "kimi-agent",
-            "message": "Hello from test",
-            "session_mode": "new",
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "queued"
-    assert "kimi" in resp.json()["waiting_reason"].lower()
+# test_trigger_unsupported_runner_accumulates_queue (kimi-agent, runner="kimi") was
+# removed here: since runner-agent-charter-separation phase 1, Runner.cli is
+# schema-constrained to claude|codex (POST /api/v1/runners rejects anything else, see
+# test_runners_api.py::test_create_runner_rejects_unsupported_cli) — there is no longer
+# any way, through the real API, to bind an agent to a "kimi" runner and reach the
+# "unimplemented runner" 501 path this test exercised. The equivalent "cannot launch,
+# queues with a stated reason" behavior for an agent with no execution capability
+# configured is covered by test_unbound_agent_accumulates_queue_with_visible_reason above.

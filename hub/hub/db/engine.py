@@ -105,6 +105,38 @@ async def _run_alembic_upgrade() -> None:
         logger.warning("Alembic upgrade failed (continuing startup): %s", exc)
 
 
+async def _seed_default_runners(session: AsyncSession) -> None:
+    """Seed one default runner per supported CLI for every project that has none.
+
+    Runs on every `init_db()` call, not just first boot — idempotent per project (a
+    project with any existing runner rows is left untouched). See
+    openspec/changes/runner-agent-charter-separation/specs/runner-registry/spec.md's
+    "Built-in runners are seeded on first use" requirement.
+    """
+    from sqlalchemy import func, select
+
+    from ..utils import short_id
+    from .models import RUNNER_CLIS, Runner
+
+    projects = (await session.execute(select(Project.id))).scalars().all()
+    for project_id in projects:
+        count = await session.scalar(
+            select(func.count()).select_from(Runner).where(Runner.project_id == project_id)
+        )
+        if count:
+            continue
+        for cli in RUNNER_CLIS:
+            session.add(
+                Runner(
+                    id=f"runner-{short_id()}",
+                    project_id=project_id,
+                    name=f"{cli.capitalize()} (default)",
+                    cli=cli,
+                )
+            )
+    await session.commit()
+
+
 async def init_db() -> None:
     """Create tables and bootstrap API key if none exist."""
     if settings.database_url.startswith("sqlite"):
@@ -123,35 +155,35 @@ async def init_db() -> None:
 
         # Check if any keys exist
         count = await session.scalar(select(func.count()).select_from(ApiKey))
-        if count > 0:
-            return
+        if count == 0:
+            # No keys exist - need to bootstrap
+            # Determine API key: use env value unless it's empty or placeholder
+            api_key = settings.aw_bootstrap_api_key
+            auto_generated = False
 
-        # No keys exist - need to bootstrap
-        # Determine API key: use env value unless it's empty or placeholder
-        api_key = settings.aw_bootstrap_api_key
-        auto_generated = False
+            if not api_key or api_key == _PLACEHOLDER_API_KEY:
+                api_key = _generate_api_key()
+                auto_generated = True
+                logger.info("Bootstrap API key auto-generated")
 
-        if not api_key or api_key == _PLACEHOLDER_API_KEY:
-            api_key = _generate_api_key()
-            auto_generated = True
-            logger.info("Bootstrap API key auto-generated")
+            # Create project
+            project = Project(
+                id=settings.aw_bootstrap_project_id,
+                name=settings.aw_bootstrap_project_name,
+            )
+            session.add(project)
 
-        # Create project
-        project = Project(
-            id=settings.aw_bootstrap_project_id,
-            name=settings.aw_bootstrap_project_name,
-        )
-        session.add(project)
+            # Create API key
+            key = ApiKey(
+                id=api_key,
+                project_id=settings.aw_bootstrap_project_id,
+                label="bootstrap" if not auto_generated else "auto-generated",
+                revoked=False,
+            )
+            session.add(key)
+            await session.commit()
 
-        # Create API key
-        key = ApiKey(
-            id=api_key,
-            project_id=settings.aw_bootstrap_project_id,
-            label="bootstrap" if not auto_generated else "auto-generated",
-            revoked=False,
-        )
-        session.add(key)
-        await session.commit()
+            if auto_generated:
+                logger.info("Bootstrap API key stored in database")
 
-        if auto_generated:
-            logger.info("Bootstrap API key stored in database")
+        await _seed_default_runners(session)

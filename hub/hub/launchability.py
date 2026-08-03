@@ -146,10 +146,16 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
                 else:
                     proc_env.pop(var_name, None)
 
-    # Native Claude must not silently inherit a proxy's ANTHROPIC_BASE_URL from
-    # whatever shell the Hub itself happened to be started from — its own auth and
-    # endpoint selection are Claude Code's to make, not the Hub's.
-    if runner == "claude":
+    # Claude must not silently inherit a proxy's ANTHROPIC_BASE_URL from whatever shell
+    # the Hub itself happened to be started from — its own auth and endpoint selection
+    # are Claude Code's to make, not the Hub's. This must strip only an *ambient* value
+    # (present in the Hub's own os.environ but not explicitly set by this agent's own
+    # env_vars) — an agent that explicitly configures its own ANTHROPIC_BASE_URL (e.g. a
+    # proxy provider) is deliberately opting in, and that must survive regardless of
+    # which runner-agent-charter-separation Runner record this agent is bound to (Runner
+    # only distinguishes `claude` vs `codex`, not the old claude/claude_proxy/native
+    # runner-type taxonomy this guard predates).
+    if runner == "claude" and "ANTHROPIC_BASE_URL" not in env_vars:
         base = proc_env if proc_env is not None else os.environ
         if base.get("ANTHROPIC_BASE_URL"):
             proc_env = dict(base)

@@ -42,17 +42,54 @@
 
 ## 1. Runner registry
 
-- [ ] 1.1 Write failing tests for runner CRUD API (`POST`/`GET`/`PATCH`/`DELETE` on a new
-      `/api/v1/runners` route) and the first-boot seed behavior (project with zero runners gets one
-      `claude` and one `codex` runner).
-- [ ] 1.2 Implement the CRUD API and the seed step. Confirm against `design.md`'s open question
-      whether `RUNNER_CONFIGS`' existing flags are worth carrying into seeded runner rows — inspect
-      current `RUNNER_CONFIGS` in `src/agentweave/constants.py` and `hub/hub/runner_commands.py`
-      before deciding, and record the decision here once made.
-- [ ] 1.3 Wire agent triggering (`hub/hub/api/v1/agent_trigger.py` and whatever calls
-      `runner_commands.py`) to resolve CLI/flags/model from the agent's bound runner instead of
-      `RUNNER_CONFIGS`. An agent with no bound runner refuses launch with a typed error (per the
-      `runner-registry` spec's "Agent has no bound runner" scenario).
+- [x] 1.1/1.2 Added `hub/hub/schemas/runners.py` (`RunnerCreate`/`RunnerUpdate`/`RunnerResponse`,
+      `cli` validated against `RUNNER_CLIS`) and `hub/hub/api/v1/runners.py` (`POST`/`GET list`/
+      `GET one`/`PATCH`/`DELETE` on `/api/v1/runners`, registered in `api/v1/__init__.py`; delete
+      refuses with 409 if any agent is still bound, per an implementation-level safety decision not
+      required by the spec). Added `_seed_default_runners()` to `hub/hub/db/engine.py::init_db()`,
+      run unconditionally (not gated behind the API-key bootstrap's early-return) so it seeds on
+      every restart, idempotent per project. Added `hub/tests/test_runner_charter_models.py`-sibling
+      `hub/tests/test_runners_api.py` (10 tests: CRUD, seed, seed-doesn't-duplicate,
+      delete-refused-when-bound, bind-to-unknown-runner-refused).
+      **`RUNNER_CONFIGS` decision**: did not carry its flags into seeded runners — inspection showed
+      `RUNNER_CONFIGS` holds CLI-invocation structure (session-resume flag syntax, output format,
+      model-flag syntax) derived from *which CLI*, not a per-runner-instance override; only `cli` and
+      `model` are meaningfully operator-facing. `Runner.flags` exists as an unused freeform escape
+      hatch (recorded in phase 0's own task note too).
+- [x] 1.3 Wired `hub/hub/api/v1/agent_trigger.py::trigger_agent_directly`: loads the agent's
+      `Agent.runner_id`, refuses with a 409 `TriggerAgentError` ("has no runner bound...") if unset
+      or dangling, otherwise overrides `config["runner"]`/`config["model"]` from the bound `Runner`
+      row before calling `probe_agent`/`build_command` — the bound Runner is now the sole source of
+      which CLI/model to launch; legacy config-dict `runner`/`model` keys are superseded, not merged.
+      Added `PATCH /api/v1/agents/{name}` support for `runner_id` (validates the runner exists and
+      belongs to the project).
+      **Real bug found and fixed during this wiring, not just a test artifact**: forcing
+      `config["runner"]` to `Runner.cli` ("claude"/"codex" only) collapsed the old
+      claude/claude_proxy/native distinction that `launchability.resolve_agent_env`'s
+      `ANTHROPIC_BASE_URL`-stripping guard depended on (`if runner == "claude": strip
+      ANTHROPIC_BASE_URL`) — a claude-cli-bound proxy agent's own explicitly-configured base URL
+      would have been silently stripped, breaking proxy routing. Fixed by decoupling the guard from
+      the runner-type string entirely: it now only strips an *ambient* `ANTHROPIC_BASE_URL` (present
+      in the Hub's own environment but not explicitly set by the agent's own `env_vars`), which is
+      what the guard's own docstring already said it was for.
+      **Also found and fixed**: `PATCH /api/v1/agents/{name}` unconditionally rejected any edit to a
+      session-synced ("configured") agent with 409 — which would have made `runner_id`/`charter_id`
+      unbindable for any agent the CLI's legacy session-sync ever touched. Narrowed the rejection to
+      exclude `runner_id`/`charter_id` (fields the CLI never owned).
+      **Test fallout, all fixed**: 16 tests across `test_agent_trigger.py`, `test_scheduler.py`,
+      `test_accounting_budget.py`, `test_conversation_contract.py`, `test_conversations.py`,
+      `test_inbound_queue.py`, `test_runtime_diagnostics.py` assumed an agent could spawn without a
+      bound runner — added a shared `bind_runner` fixture in `conftest.py` and called it wherever a
+      test needed a real spawn or spawn-adjacent pre-flight check to be reached. Two tests were
+      retired, not just patched: `test_manual_runner_accumulates_queue_with_visible_reason`
+      (`runner="manual"`) was rewritten as `test_unbound_agent_accumulates_queue_with_visible_reason`
+      — Runner.cli can't express "manual" anymore, so "no execution capability configured" is now
+      expressed as no binding, which is the real equivalent behavior.
+      `test_trigger_unsupported_runner_accumulates_queue` (`runner="kimi"`) was deleted outright —
+      Runner.cli is schema-constrained to claude/codex, so there is no longer any way, through the
+      real API, to construct the scenario it tested; a comment at its old location explains why and
+      points to the unbound-agent test as the surviving equivalent coverage.
+      Full Hub regression after this task: 469 passed, 4 skipped.
 - [ ] 1.4 Build the Hub UI runner screen (list/create/edit/delete) and a runner picker on the agent
       detail view, following the `project-instructions` Instructions-screen pattern.
 - [ ] 1.5 Verify: runner CRUD, seed-on-first-boot, and trigger-resolves-from-binding scenarios all

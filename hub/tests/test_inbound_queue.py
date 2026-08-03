@@ -222,7 +222,7 @@ async def test_undelivered_entry_can_be_withdrawn(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_operator_input_does_not_drain_another_conversation(app, auth_headers):
+async def test_operator_input_does_not_drain_another_conversation(app, auth_headers, bind_runner):
     await app.post(
         "/api/v1/session/sync",
         json={
@@ -235,6 +235,7 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
         },
         headers=auth_headers,
     )
+    await bind_runner("hop-target", cli="claude")
     async with async_session_factory() as db:
         db.add(
             Run(
@@ -300,12 +301,13 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
 
 
 @pytest.mark.asyncio
-async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers):
+async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers, bind_runner):
     await app.post(
         "/api/v1/session/sync",
         json={"data": {"agents": {"cap-target": {"runner": "claude"}}}},
         headers=auth_headers,
     )
+    await bind_runner("cap-target", cli="claude")
     from hub.db.models import Project
 
     async with async_session_factory() as db:

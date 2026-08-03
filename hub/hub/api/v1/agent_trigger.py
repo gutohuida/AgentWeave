@@ -41,7 +41,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Conversation, Run
+from ...db.models import Agent, Conversation, Run, Runner
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
@@ -170,15 +170,31 @@ async def trigger_agent_directly(
     if work_dir and (".." in work_dir or "~" in work_dir or any(ord(c) < 32 for c in work_dir)):
         raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, "Invalid work_dir")
 
+    agent_row_result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    agent_row = agent_row_result.scalars().first()
+    if agent_row is None or agent_row.runner_id is None:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"{agent} has no runner bound. Bind one via PATCH /api/v1/agents/{agent} "
+            "(runner_id) or the Hub UI before triggering.",
+        )
+    runner_row = await session.get(Runner, agent_row.runner_id)
+    if runner_row is None:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT, f"{agent}'s bound runner no longer exists."
+        )
+
     config = await get_agent_config(project_id, agent, session)
+    # The bound Runner record is now the sole source of which CLI/model to launch —
+    # legacy config-dict runner/model keys (from session-synced or self-registered
+    # config) are superseded, not merged. See
+    # openspec/changes/runner-agent-charter-separation/specs/runner-registry/spec.md.
+    config["runner"] = runner_row.cli
+    config["model"] = runner_row.model
     probe = probe_agent(agent, config)
     runner = probe["runner"]
-
-    # "manual" is a permanent, deliberate no-CLI declaration, not an unimplemented runner —
-    # give it probe_agent's specific reason rather than the generic "not implemented yet"
-    # 501 below, which would misleadingly suggest support is just missing today.
-    if runner == "manual":
-        raise TriggerAgentError(status.HTTP_409_CONFLICT, probe["reason"])
 
     # Checked before launchability: whether we know how to spawn this runner at all is a
     # more fundamental, permanent gate than whether its CLI happens to be on PATH right
