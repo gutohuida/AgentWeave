@@ -3,7 +3,7 @@ import { resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { detectComposerTrigger } from '@/lib/composerTrigger'
 
 const WORKSPACE_PATHS = [
-  '.claude/skills/aw-status.md',
+  '.claude/skills/aw-status/SKILL.md',
   '.claude/skills/aw-delegate.md',
   'src/index.ts',
   'src/components/agents/Composer.tsx',

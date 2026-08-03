@@ -4,6 +4,13 @@ import type { ComposerTriggerMenuItem } from '@/components/agents/ComposerTrigge
 const SKILLS_DIR_PREFIX = '.claude/skills/'
 const MAX_RESULTS = 50
 
+function skillNameFromPath(path: string): string {
+  const relative = path.slice(SKILLS_DIR_PREFIX.length)
+  return relative.endsWith('/SKILL.md')
+    ? relative.slice(0, -'/SKILL.md'.length)
+    : relative.replace(/\.md$/, '')
+}
+
 // The commands the composer itself supports — no backend registry exists (or is
 // needed) for this fixed, code-defined list (design.md Decision 3).
 export const COMPOSER_BUILT_IN_COMMANDS: ComposerTriggerMenuItem[] = [{ value: 'model', label: '/model' }]
@@ -31,7 +38,7 @@ export function resolveTriggerResults(
   if (trigger.kind === 'skill') {
     return workspacePaths
       .filter((path) => path.startsWith(SKILLS_DIR_PREFIX))
-      .map((path) => path.slice(SKILLS_DIR_PREFIX.length).replace(/\.md$/, ''))
+      .map(skillNameFromPath)
       .filter((name) => name.toLowerCase().includes(query))
       .slice(0, MAX_RESULTS)
       .map((name) => ({ value: name, label: name }))

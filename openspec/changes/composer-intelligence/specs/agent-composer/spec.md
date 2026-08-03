@@ -79,7 +79,9 @@ empty list rather than an error.
 ### Requirement: Trigger result sources
 The `path` trigger SHALL source its results from the workspace path listing endpoint,
 unfiltered. The `skill` trigger SHALL source its results from the same endpoint, filtered to
-paths under `.claude/skills/`, with that prefix and any `.md` suffix stripped for display. The
+paths under `.claude/skills/`, with that prefix and any `.md` suffix stripped for display. For
+the generated directory layout `.claude/skills/<name>/SKILL.md`, the displayed value SHALL be
+`<name>` rather than `<name>/SKILL`. The
 `slash-command` trigger SHALL source its results from a fixed, composer-defined list of built-in
 commands, requiring no backend request.
 
@@ -92,6 +94,10 @@ commands, requiring no backend request.
 #### Scenario: No skills directory yields no skill results, not an error
 - **WHEN** the workspace path listing contains no path under `.claude/skills/`
 - **THEN** a `$` trigger returns zero results and the menu shows its normal empty state
+
+#### Scenario: Generated skill directories display the skill name
+- **WHEN** the workspace path listing includes `.claude/skills/aw-status/SKILL.md`
+- **THEN** a `$` trigger displays `aw-status`, not `aw-status/SKILL`
 
 ### Requirement: In-place agent selector
 The composer SHALL offer a searchable selector listing every configured agent, showing each

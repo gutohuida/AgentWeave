@@ -6,7 +6,7 @@ import { Composer, type ComposerProps } from '@/components/agents/Composer'
 const WORKSPACE_PATHS = [
   'src/index.ts',
   'src/components/agents/Composer.tsx',
-  '.claude/skills/aw-status.md',
+  '.claude/skills/aw-status/SKILL.md',
   '.claude/skills/aw-delegate.md',
 ]
 

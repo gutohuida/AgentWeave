@@ -96,10 +96,14 @@
 
 ## 6. Integration
 
-- [ ] 6.1 Wire trigger detection, range replacement, the menu, all three sources, and the agent
+- [x] 6.1 Wire trigger detection, range replacement, the menu, all three sources, and the agent
       selector together into `Composer.tsx` end-to-end.
-- [ ] 6.2 Manually verify in a running instance under `testbed/` (never at the repo root — see
+- [x] 6.2 Manually verify in a running instance under `testbed/` (never at the repo root — see
       CLAUDE.md): typing `@`, `/`, `$` each open the right source; accepting a result inserts and
       repositions the cursor correctly; the agent selector shows real launchability state.
-- [ ] 6.3 Full `hub/ui` and `hub` test suites green.
+      Verified through T3 preview against `testbed/scratch`: `@agent` listed real workspace paths,
+      `$aw` listed generated skill names, `/mod` accepted with Tab as `/model` with focus/cursor
+      retained, and the selector listed both configured agents as runnable and filtered by search.
+- [x] 6.3 Full `hub/ui` and `hub` test suites green. UI: 35 files / 285 tests; Hub: 405 passed,
+      4 skipped. Production UI build also passes.
 - [ ] 6.4 `/handoff`

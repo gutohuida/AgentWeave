@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
@@ -29,21 +29,30 @@ describe('M20 — useAgentChatHistory gates on NEW_SESSION_ID, not the literal "
   })
 
   it('disables the query when sessionId === NEW_SESSION_ID (not just any non-empty value)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      () => new Promise<Response>(() => undefined),
+    )
     // First, with sessionId = a real-looking id, the query is enabled.
     const enabled = renderHook(
       () => useAgentChatHistory('claude', 'ses_real_123'),
       { wrapper: makeWrapper() }
     )
-    await new Promise((r) => setTimeout(r, 10))
-    expect(enabled.result.current.fetchStatus).toBe('fetching')
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
+    expect(fetchSpy.mock.calls.some(
+      ([url]) => url === 'http://hub.test/api/v1/agent/claude/chat/ses_real_123',
+    )).toBe(true)
     enabled.unmount()
 
     // Then with sessionId = NEW_SESSION_ID, the query is disabled.
+    fetchSpy.mockClear()
     const disabled = renderHook(
       () => useAgentChatHistory('claude', NEW_SESSION_ID),
       { wrapper: makeWrapper() }
     )
     await new Promise((r) => setTimeout(r, 10))
+    expect(fetchSpy.mock.calls.some(
+      ([url]) => String(url).includes(`/api/v1/agent/claude/chat/${NEW_SESSION_ID}`),
+    )).toBe(false)
     expect(disabled.result.current.fetchStatus).toBe('idle')
     expect(disabled.result.current.isLoading).toBe(false)
     expect(disabled.result.current.data).toBeUndefined()
