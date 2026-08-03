@@ -2,19 +2,23 @@
 
 ### Requirement: Bare invocation is the only entry point
 
-Running `agentweave` with no subcommand SHALL register the current directory as a project if it is
-not already registered, then launch the Hub-owned runtime against that project in app mode. This
-SHALL be the only supported way to begin using AgentWeave in a directory.
+Running `agentweave` with no subcommand SHALL launch the Hub-owned runtime in app mode. This SHALL
+be the only supported way to begin using AgentWeave.
 
-#### Scenario: First run in an unregistered directory
+Directory-to-project registration is out of scope for this requirement — today there is exactly one
+project, bootstrapped on first native start, independent of invocation directory. Per-directory
+project registration is deferred to the "Local multi-project workspace" slice; when it lands, it
+changes what "the project" means for this entry point, not the entry point itself.
 
-- **WHEN** a user runs bare `agentweave` in a directory with no registered project
-- **THEN** the system registers the directory as a project
-- **AND** launches the native Hub runtime against it in app mode
+#### Scenario: First run
+
+- **WHEN** a user runs bare `agentweave` for the first time
+- **THEN** the system scaffolds local Hub state, runs migrations, and launches the native Hub
+  runtime in app mode
 
 #### Scenario: Repeated invocation is idempotent
 
-- **WHEN** a user runs bare `agentweave` while the Hub is already running for the current directory
+- **WHEN** a user runs bare `agentweave` while the Hub is already running
 - **THEN** the system opens the app window against the running instance rather than starting a
   second instance
 

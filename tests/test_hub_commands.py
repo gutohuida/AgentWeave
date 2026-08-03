@@ -7,8 +7,8 @@ from agentweave.cli import (
     _fetch_setup_token,
     _hub_health_check,
     cmd_hub_start,
-    cmd_hub_status,
-    cmd_hub_stop,
+    cmd_status,
+    cmd_stop,
 )
 
 
@@ -212,25 +212,25 @@ class TestAppModeBrowser:
                 mock_open.assert_called_once_with("http://localhost:8000")
 
 
-class TestHubStopCommand:
-    """Tests for cmd_hub_stop."""
+class TestStopCommand:
+    """Tests for cmd_stop."""
 
-    def test_hub_stop_not_running(self, capsys):
-        """Test that hub stop reports success when Hub is not running."""
+    def test_stop_not_running(self, capsys):
+        """Test that stop reports success when Hub is not running."""
         with patch(
             "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
         ):
-            result = cmd_hub_stop(MagicMock())
+            result = cmd_stop(MagicMock())
             assert result == 0
             captured = capsys.readouterr()
             assert "not running" in captured.out.lower()
 
 
-class TestHubStatusCommand:
-    """Tests for cmd_hub_status."""
+class TestStatusCommand:
+    """Tests for cmd_status."""
 
-    def test_hub_status_running(self, capsys):
-        """Test that hub status reports running when Hub is healthy."""
+    def test_status_running(self, capsys):
+        """Test that status reports running when Hub is healthy."""
         import json
 
         mock_response = MagicMock()
@@ -240,16 +240,16 @@ class TestHubStatusCommand:
         mock_response.__exit__ = MagicMock(return_value=None)
 
         with patch("agentweave.cli.urllib.request.urlopen", return_value=mock_response):
-            result = cmd_hub_status(MagicMock())
+            result = cmd_status(MagicMock())
             assert result == 0
             captured = capsys.readouterr()
             assert "running" in captured.out.lower()
 
-    def test_hub_status_stopped(self, capsys):
-        """Test that hub status reports stopped when Hub is not responding."""
+    def test_status_stopped(self, capsys):
+        """Test that status reports stopped when Hub is not responding."""
         with patch(
             "agentweave.cli.urllib.request.urlopen", side_effect=Exception("Connection refused")
         ):
-            cmd_hub_status(MagicMock())
+            cmd_status(MagicMock())
             captured = capsys.readouterr()
             assert "stopped" in captured.out.lower()

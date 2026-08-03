@@ -1,7 +1,7 @@
 """Runtime readiness diagnostics for AgentWeave.
 
-These helpers intentionally use only the Python standard library so they can be
-used by the zero-dependency CLI, watchdog, and tests.
+These helpers intentionally use only the Python standard library so they can be used by the
+zero-dependency CLI and tests.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import shutil
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -26,8 +25,6 @@ from .constants import (
     RUNNER_CONFIGS,
     SESSION_FILE,
     TRANSPORT_CONFIG_FILE,
-    WATCHDOG_HEARTBEAT_FILE,
-    WATCHDOG_PID_FILE,
 )
 
 SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.I)
@@ -204,7 +201,6 @@ def check_session() -> list[DiagnosticResult]:
                 "session_missing",
                 "session",
                 "No AgentWeave session found.",
-                hint="Run agentweave init or agentweave activate.",
                 category="session",
             )
         ]
@@ -240,7 +236,6 @@ def check_project_config() -> list[DiagnosticResult]:
                     "config_missing",
                     "agentweave.yml",
                     "agentweave.yml is missing.",
-                    hint="Run agentweave init to create a declarative config.",
                     category="config",
                 )
             ]
@@ -260,7 +255,7 @@ def check_project_config() -> list[DiagnosticResult]:
                 "config_invalid",
                 "agentweave.yml",
                 f"agentweave.yml is invalid: {exc}",
-                hint="Fix the configuration error and rerun agentweave activate.",
+                hint="Fix the configuration error in agentweave.yml.",
                 category="config",
             )
         ]
@@ -284,7 +279,7 @@ def check_project_context() -> list[DiagnosticResult]:
                 "project_context_missing",
                 ".agentweave/ai_context.md",
                 "Project context source is missing.",
-                hint="Run agentweave init or create .agentweave/ai_context.md.",
+                hint="Create .agentweave/ai_context.md.",
                 category="context",
             )
         ]
@@ -333,7 +328,7 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
             "transport_http_url_missing",
             "transport",
             "HTTP transport is missing its Hub URL.",
-            hint="Run agentweave transport setup --type http.",
+            hint="Set url in .agentweave/transport.json.",
             category="transport",
         )
     if not api_key:
@@ -341,7 +336,7 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
             "transport_http_api_key_missing",
             "transport",
             "HTTP transport is missing its API key.",
-            hint="Run agentweave transport setup --type http or agentweave activate.",
+            hint="Set api_key in .agentweave/transport.json.",
             category="transport",
         )
     if not project_id:
@@ -349,7 +344,7 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
             "transport_http_project_missing",
             "transport",
             "HTTP transport has no project_id.",
-            hint="Refresh transport configuration with agentweave activate.",
+            hint="Set project_id in .agentweave/transport.json.",
             category="transport",
         )
 
@@ -373,7 +368,7 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
                 "hub_auth_failed",
                 "transport",
                 f"Hub rejected the configured API key with HTTP {exc.code}.",
-                hint="Refresh the transport API key with agentweave activate.",
+                hint="Refresh the api_key in .agentweave/transport.json.",
                 category="transport",
             )
         if exc.code == 404:
@@ -410,13 +405,19 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
 
 
 def check_transport() -> list[DiagnosticResult]:
+    """Report on the project-key HTTP transport, if configured.
+
+    Single-runtime (`openspec/changes/single-runtime`) removed local and git transport — HTTP is
+    the only supported type. A missing transport.json is not itself a problem; several surviving
+    commands don't need one.
+    """
     config, error = _load_json_raw(TRANSPORT_CONFIG_FILE)
     if error == "missing":
         return [
             ok(
-                "transport_local",
+                "transport_not_configured",
                 "transport",
-                "No transport.json found; local filesystem transport is active.",
+                "No transport.json found.",
                 category="transport",
             )
         ]
@@ -426,11 +427,11 @@ def check_transport() -> list[DiagnosticResult]:
                 "transport_config_invalid",
                 "transport",
                 f"Could not parse {TRANSPORT_CONFIG_FILE}: {error}",
-                hint="Regenerate transport config with agentweave transport setup.",
+                hint="Fix or delete .agentweave/transport.json.",
                 category="transport",
             )
         ]
-    transport_type = str((config or {}).get("type", "local"))
+    transport_type = str((config or {}).get("type", ""))
     if transport_type == "http":
         return [
             ok(
@@ -445,142 +446,15 @@ def check_transport() -> list[DiagnosticResult]:
             ),
             _http_status_check(config or {}),
         ]
-    if transport_type == "git":
-        return [
-            ok(
-                "transport_git_configured",
-                "transport",
-                "Git transport is configured.",
-                category="transport",
-            )
-        ]
     return [
-        ok(
-            "transport_local",
+        fail(
+            "transport_type_unsupported",
             "transport",
-            f"Transport type is {transport_type}.",
+            f"Unsupported transport type {transport_type!r}; only 'http' is supported.",
+            hint="Set type to 'http' in .agentweave/transport.json.",
             category="transport",
         )
     ]
-
-
-def _process_exists(pid: int) -> bool:
-    if os.name == "nt":
-        # ``os.kill(pid, 0)`` is not a reliable existence check on Windows;
-        # on some Python builds it raises an internal exception even when the
-        # process is alive. Query the process handle directly instead.
-        try:
-            import ctypes
-
-            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-            handle = kernel32.OpenProcess(0x1000, False, pid)
-            if handle:
-                kernel32.CloseHandle(handle)
-                return True
-            return False
-        except (AttributeError, OSError):
-            return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
-
-
-def check_watchdog(stale_after_seconds: int = 120) -> list[DiagnosticResult]:
-    results: list[DiagnosticResult] = []
-    if not WATCHDOG_PID_FILE.exists():
-        results.append(
-            warn(
-                "watchdog_pid_missing",
-                "watchdog",
-                "No watchdog PID file found.",
-                hint="Run agentweave start to enable automatic agent execution.",
-                category="watchdog",
-            )
-        )
-    else:
-        try:
-            pid = int(WATCHDOG_PID_FILE.read_text(encoding="utf-8").strip())
-            if _process_exists(pid):
-                results.append(
-                    ok(
-                        "watchdog_process_running",
-                        "watchdog",
-                        f"Watchdog process is running with PID {pid}.",
-                        category="watchdog",
-                        data={"pid": pid},
-                    )
-                )
-            else:
-                results.append(
-                    warn(
-                        "watchdog_process_stale",
-                        "watchdog",
-                        f"Watchdog PID file points at a non-running process ({pid}).",
-                        hint="Run agentweave start to refresh the watchdog.",
-                        category="watchdog",
-                        data={"pid": pid},
-                    )
-                )
-        except (OSError, ValueError) as exc:
-            results.append(
-                warn(
-                    "watchdog_pid_invalid",
-                    "watchdog",
-                    f"Could not read watchdog PID: {exc}",
-                    hint="Run agentweave start to recreate the PID file.",
-                    category="watchdog",
-                )
-            )
-
-    if not WATCHDOG_HEARTBEAT_FILE.exists():
-        results.append(
-            warn(
-                "watchdog_heartbeat_missing",
-                "watchdog",
-                "No watchdog heartbeat has been recorded.",
-                hint="Start or restart the watchdog.",
-                category="watchdog",
-            )
-        )
-        return results
-    try:
-        raw_ts = WATCHDOG_HEARTBEAT_FILE.read_text(encoding="utf-8").strip()
-        heartbeat_at = datetime.fromisoformat(raw_ts)
-        age = (datetime.now(heartbeat_at.tzinfo) - heartbeat_at).total_seconds()
-        if age > stale_after_seconds:
-            results.append(
-                warn(
-                    "watchdog_heartbeat_stale",
-                    "watchdog",
-                    f"Watchdog heartbeat is stale ({int(age)}s old).",
-                    hint="Restart the watchdog if automatic execution is not working.",
-                    category="watchdog",
-                    data={"age_seconds": int(age)},
-                )
-            )
-        else:
-            results.append(
-                ok(
-                    "watchdog_heartbeat_fresh",
-                    "watchdog",
-                    f"Watchdog heartbeat is fresh ({int(age)}s old).",
-                    category="watchdog",
-                    data={"age_seconds": int(age)},
-                )
-            )
-    except (OSError, ValueError) as exc:
-        results.append(
-            warn(
-                "watchdog_heartbeat_invalid",
-                "watchdog",
-                f"Could not parse watchdog heartbeat: {exc}",
-                hint="Restart the watchdog to refresh heartbeat state.",
-                category="watchdog",
-            )
-        )
-    return results
 
 
 def _runner_cli(agent: str, runner: str) -> Optional[str]:
@@ -619,7 +493,6 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
                 "session_missing",
                 agent,
                 "Cannot check agent readiness because no session is loaded.",
-                hint="Run agentweave init or agentweave activate.",
                 category="agent",
             )
         ]
@@ -938,9 +811,9 @@ def collect_diagnostics(*, include_network: bool = True) -> list[DiagnosticResul
         if error == "missing":
             results.append(
                 ok(
-                    "transport_local",
+                    "transport_not_configured",
                     "transport",
-                    "Local transport is active.",
+                    "No transport.json found.",
                     category="transport",
                 )
             )
@@ -954,15 +827,22 @@ def collect_diagnostics(*, include_network: bool = True) -> list[DiagnosticResul
                 )
             )
         else:
+            transport_type = (config or {}).get("type", "")
             results.append(
                 ok(
-                    f"transport_{(config or {}).get('type', 'local')}_configured",
+                    f"transport_{transport_type}_configured",
                     "transport",
-                    f"Transport type is {(config or {}).get('type', 'local')}.",
+                    f"Transport type is {transport_type}.",
+                    category="transport",
+                )
+                if transport_type == "http"
+                else fail(
+                    "transport_type_unsupported",
+                    "transport",
+                    f"Unsupported transport type {transport_type!r}; only 'http' is supported.",
                     category="transport",
                 )
             )
-    results.extend(check_watchdog())
     results.extend(check_agents())
     results.extend(check_jobs())
     return results

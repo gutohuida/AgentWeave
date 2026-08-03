@@ -21,7 +21,6 @@ except _PackageNotFoundError:
 __author__ = "AgentWeave Team"
 
 from .cli import main
-from .messaging import Message, MessageBus
 from .roles import (
     add_role_to_agent,
     get_agent_roles,
@@ -37,8 +36,6 @@ __all__ = [
     "Session",
     "Task",
     "TaskStatus",
-    "Message",
-    "MessageBus",
     "get_agent_roles",
     "add_role_to_agent",
     "remove_role_from_agent",

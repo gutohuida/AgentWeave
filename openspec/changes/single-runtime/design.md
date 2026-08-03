@@ -82,18 +82,24 @@ needs deleting rather than adapting. Concretely:
    they describe are real — per this repo's standing rule, specs follow implementation, never the
    reverse.
 
-### 2. Bare `agentweave` is `_hub_native_start` plus auto-registration, not new orchestration
+### 2. Bare `agentweave` is `_hub_native_start`, unconditionally in app mode — no per-directory registration
 
-`_hub_native_start(port, detach=True, app=True)` already does everything the exploration doc asks of
-the bare command except decide *which* directory to register as a project. The new top-level
-handler:
+**Correction from this proposal's first draft**: it assumed bare invocation would "register the
+current directory as a project if not already registered." That capability does not exist anywhere
+today — `hub.db.models.Project` exists, but there is no create-project API, no Hub UI flow for it,
+and native start (`_hub_native_scaffold`) bootstraps exactly one global `proj-default` under
+`~/.agentweave/hub/`, independent of the directory `agentweave` is invoked from. Building
+directory-to-project registration is real, separate scope — it is the not-yet-proposed "Local
+multi-project workspace" slice from the umbrella's slice table (`openspec/changes/archive/
+2026-08-02-agent-conversation-workspace/design.md`), not something to smuggle into this change.
 
-- If the current directory has no registered project (checked against the Hub's own project table,
-  not a local `agentweave.yml` — there is no more local-only project state), create one scoped to
-  `Path.cwd()`, the same way the app's own "add project" UI flow will.
-- Then call `_hub_native_start` with `app=True` unconditionally (an operator running the bare command
-  wants the window; `--no-detach`/headless remains an explicit flag for scripting/CI, not the
-  default).
+Bare `agentweave` therefore does exactly what `agentweave hub start --app` already does today —
+`cmd_hub_start` unchanged, just reachable with no subcommand — against the single global project,
+in app mode unconditionally (an operator running the bare command wants the window; `--no-detach`
+remains an explicit flag for scripting/CI, not the default). `--port`, `--docker`, `--local` remain
+available as optional flags on the bare invocation, unchanged from `hub start`'s existing ones.
+When multi-project support is eventually built, it changes what "the project" means for this same
+entry point — it does not need a different entry point.
 
 Rejected alternative: keep `init`/`activate`/`quick` as separate subcommands that call into shared
 logic. Rejected because the exploration doc's whole point is removing ceremony — three names for one

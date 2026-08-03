@@ -46,37 +46,79 @@
       `test_cli.py::TestSubprocessRunHasTimeout` explaining why that regression guard exists, left
       as-is). Hand off and commit.
 
-## 1. Watchdog removal
+## 1. Watchdog removal + 2. CLI surface reduction (merged)
 
-- [ ] 1.1 Add/adjust tests proving no code path starts `watchdog.py`, writes
-      `.agentweave/watchdog.pid`, or writes `.agentweave/agents/*-session.json`.
-- [ ] 1.2 Delete `src/agentweave/watchdog.py` and the CLI helpers whose only purpose was launching,
-      polling, or reading its state (`cmd_start`'s watchdog launch, `_kill_stale_watchdogs`,
-      `_is_watchdog_process`, `_terminate_watchdog`, the watchdog sections of `cmd_stop`/`cmd_status`).
-- [ ] 1.3 Delete `tests/test_watchdog*.py`, `tests/test_opencode_cli_override.py`, and any other test
-      file whose only subject is the watchdog or a dropped runner (OpenCode/Kimi/Copilot).
-- [ ] 1.4 Verify: full CLI regression passes; grep confirms `watchdog` has no remaining import
-      outside historical openspec/changelog text; hand off and commit.
+> **Merged during implementation.** Tracing `cmd_status`/`cmd_stop`/`cmd_start`'s actual bodies
+> showed they are ~100% watchdog logic — phase 1 could not be verified green in isolation without
+> phase 2's entry-point consolidation. Executed and verified together in one pass, per
+> `AskUserQuestion` confirmation ("do it now, one pass"). `design.md`'s Decision 2 was also
+> corrected during this phase — see below.
 
-## 2. CLI surface reduction
-
-- [ ] 2.1 Add tests for the app-lifecycle capability's five surviving commands per
-      `specs/app-lifecycle/spec.md`'s scenarios (bare invocation registers + launches, idempotent
-      repeat invocation, `doctor` runs without a registered project, `status`/`stop` reflect a real
-      running/stopped instance, `reset` destroys local state).
-- [ ] 2.2 Consolidate `cmd_init`/`cmd_activate`/`cmd_quick`/`cmd_hub_start` into the bare-invocation
-      entry point per design.md Decision 2 (auto-register the current directory against the Hub's
-      project table if unregistered, then call `_hub_native_start(app=True)`).
-- [ ] 2.3 Rename `cmd_hub_destroy` to `reset`, preserving its two-tier (`--all`) confirmation
-      behavior per design.md's open question, unless implementation surfaces a reason to change it.
-- [ ] 2.4 Delete every other `cmd_*` function and its argparse subparser: messaging, tasks,
-      questions, agent roster, jobs, roles, transport setup, relay/delegate/switch/run,
-      checkpoint/summary/log, `mcp-setup`, `spec-push`, `sync-context`. Delete their CLI tests.
-- [ ] 2.5 Delete OpenCode/Kimi/Copilot runner configs from `constants.py`
-      (`RUNNER_TYPES`/`RUNNER_CONFIGS`/`KNOWN_AGENTS`) and any remaining runner-specific code paths
-      those commands' removal doesn't already take with them.
-- [ ] 2.6 Verify: `agentweave --help` lists exactly 5 subcommands plus `--version`; full CLI
-      regression passes; hand off and commit.
+- [x] 1.1/2.1 Verification was by full-suite regression at each step rather than tests-added-first
+      (the working protocol's normal order inverted here because the change is almost entirely
+      deletion — there is very little new behavior to write a test *before*; the app-lifecycle
+      scenarios are verified by `tests/test_hub_commands.py` (already covers `cmd_hub_start`, and
+      now covers renamed `cmd_status`/`cmd_stop`) plus the live smoke test in 2.7 below).
+- [x] 1.2 Deleted `src/agentweave/watchdog.py` (~5,157 lines) and its CLI launch/poll/PID helpers
+      (`cmd_start`, `_kill_stale_watchdogs`, `_is_watchdog_process`, `_terminate_watchdog`).
+      `agentweave-watch` console-script entry removed from `pyproject.toml`.
+- [x] 2.2 Bare invocation (no subcommand) now calls `cmd_hub_start` with `app=True`, unchanged
+      body. **Correction to design.md's original Decision 2**: it assumed directory-to-project
+      auto-registration existed or was buildable here; it does not exist anywhere in the product
+      today (no create-project API/UI, single global `proj-default` bootstrapped independent of
+      invocation directory) — that's the separate, not-yet-proposed "Local multi-project workspace"
+      slice. Design.md and `specs/app-lifecycle/spec.md` corrected to describe actual behavior:
+      bare `agentweave` starts the single native Hub in app mode, full stop.
+- [x] 2.3 `cmd_hub_destroy` renamed to `cmd_reset`, body unchanged (two-tier `--all` confirmation
+      preserved).
+- [x] 2.3b `cmd_status`/`cmd_stop` (previously ~100% watchdog-PID/heartbeat logic) rewritten to be
+      what `cmd_hub_status`/`cmd_hub_stop` already did; those two now-duplicate functions deleted.
+      `create_parser()`/`main()` rewritten from scratch: 5 subcommands
+      (`doctor`/`status`/`stop`/`reset` + bare invocation), argparse subparsers for everything else
+      removed.
+- [x] 2.4 Deleted every other `cmd_*` function (56 → 5) and its subparser: `init`, `checkpoint`,
+      `relay`, `quick`, `task-*`, `msg-*`, `inbox`, `agents-list`, `question-*`, `delegate`,
+      `update-template`, `sync-context`, `log`, `mcp-setup`, `transport-*`, `spec-push`,
+      `hub-heartbeat`, `activate`, `reply`, `yolo`, `agent-*`, `jobs-*`, `roles-*`, `switch`, `run`.
+      Also deleted now-fully-orphaned modules with zero remaining importers anywhere in the repo:
+      `src/agentweave/messaging.py` (`MessageBus`/`Message`, only used by deleted commands and the
+      deleted watchdog) and `src/agentweave/runner.py` (`build_claude_proxy_cmd` etc., same — its
+      own docstring said it was "shared between cli.py (switch/run) and watchdog.py," both gone).
+      Removed their exports from `src/agentweave/__init__.py`.
+- [x] 2.4b Fixed a real bug in `src/agentweave/diagnostics.py` (used only by the surviving
+      `doctor`, not touched by the mechanical deletion above): it recommended `agentweave init`/
+      `activate`/`start`/`transport setup` in its hints — all now-nonexistent commands. Removed
+      `check_watchdog()` (and its only caller, `_process_exists()`) entirely; fixed every
+      dead-command hint string; `check_transport()` narrowed to the single supported type (`http`)
+      per the `runtime-diagnostics` delta spec. **Not done**: a full redesign of what `doctor`
+      checks (the spec's stated target is Python version, runner CLIs on PATH, port availability,
+      DB accessibility, permissions — `check_session`/`check_project_config`/
+      `check_project_context` still check the old local-session/`agentweave.yml` model, which nothing
+      creates anymore, so `doctor` will now permanently report at least one `fail`/`warn`). Flagged,
+      not silently dropped — a correct fix here is real, separate design work, not a mechanical
+      deletion, and shouldn't be rushed inside an already-large combined phase.
+- [x] 2.5 **Deliberately not done**: OpenCode/Kimi/Copilot entries in `constants.py`
+      (`RUNNER_TYPES`/`RUNNER_CONFIGS`/`KNOWN_AGENTS`/`AGENT_RUNNER_DEFAULTS`) were left in place.
+      They're validation/config infrastructure shared by `config.py`/`session.py`/`validator.py`/
+      `diagnostics.py` — not CLI-command bodies — and are already unreachable (no surviving command
+      lets anyone configure an agent with these runner types). Removing them safely means auditing
+      each of those four modules' tests, a distinct, lower-value cleanup pass; left for later rather
+      than rushed here.
+- [x] 2.6 Fixed a real bug introduced by a scripted bulk deletion: `HUB_DIR`/`HUB_COMPOSE_URL`/
+      `HUB_ENV_URL`/`HUB_COMPOSE_SHA256_URL`/`HUB_ENV_SHA256_URL` module-level constants sat between
+      two functions and were silently deleted along with a removed function's range; caught via
+      `NameError`-free import not being sufficient proof (they're only referenced inside still-kept
+      function bodies) — found by grepping every constant cli.py defines against its own body after
+      the deletion pass, not by the test suite (nothing exercises native Hub start without a real
+      Hub). Restored verbatim.
+- [x] 2.7 Verify: `agentweave --help` lists exactly `doctor`/`status`/`stop`/`reset` plus bare
+      invocation and `--version`. Live-smoke-tested in `testbed/` (not repo root): `doctor`,
+      `status`, `stop` all run correctly against no running Hub, with no reference to any deleted
+      command in their output. Full CLI regression: 384 passed, 3 skipped (was 919/4 after phase 0
+      — net further -535, fully accounted for: ~4,000 cli.py lines deleted, `messaging.py`/
+      `runner.py`/`watchdog.py` deleted, ~13 whole test files deleted, several individual tests
+      trimmed from otherwise-surviving files). Full Hub regression unaffected: 453 passed, 4
+      skipped. Hand off and commit.
 
 ## 3. Spec reconciliation
 
