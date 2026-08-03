@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from .accounting import router as accounting_router
 from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
@@ -21,6 +22,7 @@ from .workspace import router as workspace_router
 from .worktrees import router as worktrees_router
 
 v1_router = APIRouter(prefix="/api/v1")
+v1_router.include_router(accounting_router)
 v1_router.include_router(messages_router)
 v1_router.include_router(tasks_router)
 v1_router.include_router(questions_router)

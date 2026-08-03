@@ -34,11 +34,14 @@
 
 ## 2. Aggregation and API
 
-- [ ] 2.1 Add API tests for project/agent totals, unavailable counts, allowance precedence,
+- [x] 2.1 Add API tests for project/agent totals, unavailable counts, allowance precedence,
       API-equivalent labelling, and budget validation.
-- [ ] 2.2 Implement aggregation and project-scoped accounting routes.
-- [ ] 2.3 Verify accounting presentation scenarios.
-- [ ] 2.4 Write handoff and commit the phase.
+- [x] 2.2 Implement aggregation and project-scoped accounting routes. `GET /api/v1/accounting`
+      derives facts from immutable rows; `PATCH /api/v1/accounting/budget` accepts positive or null.
+- [x] 2.3 Verify accounting presentation scenarios. Focused API suite: 5 passed; full Hub suite:
+      425 passed, 4 skipped; targeted Ruff and `git diff --check` pass.
+- [x] 2.4 Write handoff and commit the phase. Handoff:
+      `.claude/handoffs/2026-08-03-0135-accounting-phase2-api.md`.
 
 ## 3. Autonomous budget enforcement
 

@@ -1,1 +1,1 @@
-.claude/handoffs/2026-08-03-0131-accounting-phase1-runner-usage.md
+.claude/handoffs/2026-08-03-0135-accounting-phase2-api.md
