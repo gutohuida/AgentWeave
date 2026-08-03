@@ -242,7 +242,7 @@ export function ConversationControls({
               {agent.name} details
             </Dialog.Title>
             <Dialog.Description className="sr-only">
-              Status, sessions, roles, and statistics for {agent.name}.
+              Status, sessions, configuration, and statistics for {agent.name}.
             </Dialog.Description>
             <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
               <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{agent.name}</span>

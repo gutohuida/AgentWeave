@@ -15,10 +15,6 @@ export interface AgentSummary {
   yolo?: boolean
   runner?: string  // "native" | "claude_proxy" | "kimi" | "manual"
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
-  dev_role?: string        // Primary dev role (backward compatibility)
-  dev_role_label?: string  // Primary dev role label
-  dev_roles?: string[]        // All role IDs (new multi-role support)
-  dev_role_labels?: string[]  // Labels for all roles
   context_usage?: ContextUsage
   session_started_at?: string  // ISO timestamp when current session started
   self_registered?: boolean  // True if agent joined via self-registration

@@ -36,8 +36,8 @@ include = ["hub*"]
 [tool.setuptools.package-data]
 hub = [
     "alembic.ini",
-    "data/roles/*.md",
-    "data/roles/*.json",
+    "data/charters/*.md",
+    "data/charters/*.json",
     "migrations/env.py",
     "migrations/script.py.mako",
     "migrations/versions/*.py",

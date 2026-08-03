@@ -4,7 +4,7 @@ import { useBindAgentRunner, useRunners } from '@/api/runners'
 import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
 import { formatDistanceToNow } from 'date-fns'
-import { getStatusConfig, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { getStatusConfig, StatusDot } from '@/lib/agentStatus'
 
 interface AgentInfoTabProps {
   agent: AgentSummary
@@ -109,18 +109,6 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
             >
               {agent.role}
             </span>
-          </div>
-        )}
-
-        {/* Dev Roles */}
-        {(agent.dev_roles?.length || agent.dev_role) && (
-          <div className="mb-4">
-            <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-              Development Roles
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              <DevRoleTagList agent={agent} size="md" />
-            </div>
           </div>
         )}
 

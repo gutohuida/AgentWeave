@@ -15,6 +15,7 @@ fix is applied. After the fix, every test in this file must pass.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -124,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0024. The full
+    migration runs cleanly and the version lands at 0025. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -132,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0024).
+    # Verify alembic_version is at the latest revision (0025).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -143,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0024", f"expected alembic_version=0024, got {version}"
+    assert version == "0025", f"expected alembic_version=0025, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -170,6 +171,28 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             await engine.dispose()
 
     assert "ix_agent_outputs_project_agent_run_sequence" in _run(_check_indexes())
+
+
+def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
+    db_file = tmp_path / "old_0024.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0024')")
+        conn.execute(
+            "CREATE TABLE project_roles_config "
+            "(project_id VARCHAR(64) PRIMARY KEY, data JSON NOT NULL, synced_at DATETIME NOT NULL)"
+        )
+
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+    assert "project_roles_config" not in tables
+    assert version == "0025"
 
 
 def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
@@ -254,7 +277,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0024", f"expected alembic_version=0024, got {version}"
+    assert version == "0025", f"expected alembic_version=0025, got {version}"
 
 
 @pytest.mark.asyncio

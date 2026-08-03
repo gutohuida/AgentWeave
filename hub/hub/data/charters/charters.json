@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "charters": {
+    "tech_lead": {"name": "Tech Lead"},
+    "architect": {"name": "Architect"},
+    "backend_dev": {"name": "Backend Developer"},
+    "frontend_dev": {"name": "Frontend Developer"},
+    "fullstack_dev": {"name": "Full Stack Developer"},
+    "qa_engineer": {"name": "QA / Test Engineer"},
+    "devops_engineer": {"name": "DevOps Engineer"},
+    "security_engineer": {"name": "Security Engineer"},
+    "data_engineer": {"name": "Data Engineer"},
+    "ml_engineer": {"name": "ML / AI Engineer"},
+    "technical_writer": {"name": "Technical Writer"},
+    "code_reviewer": {"name": "Code Reviewer"},
+    "project_manager": {"name": "Project Manager"},
+    "coordinator": {"name": "Coordinator"},
+    "model_router": {"name": "Model Router"},
+    "explorer": {"name": "Explorer"},
+    "implementer": {"name": "Implementer"},
+    "verifier": {"name": "Verifier"},
+    "guardian": {"name": "Guardian"},
+    "context_keeper": {"name": "Context Keeper"},
+    "spec": {"name": "Spec Author"}
+  }
+}

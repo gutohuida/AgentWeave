@@ -6,8 +6,8 @@ zero-dependency CLI and tests.
 
 from __future__ import annotations
 
-import json
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -25,7 +25,6 @@ from .constants import (
     AGENT_CONTEXT_FILES,
     AGENT_CONTEXT_FILES_DEFAULT,
     AGENTWEAVE_DIR,
-    ROLES_CONFIG_FILE,
     RUNNER_CONFIGS,
     SESSION_FILE,
     TRANSPORT_CONFIG_FILE,
@@ -33,6 +32,19 @@ from .constants import (
 
 SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.I)
 SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
+PLACEHOLDER_CONTEXT_MARKERS = (
+    "[Replace with:",
+    "<!-- Explain",
+    "<!-- Describe",
+    "<!-- requirement",
+)
+
+
+def _is_placeholder_ai_context(content: str) -> bool:
+    stripped = content.strip()
+    return bool(stripped) and any(marker in stripped for marker in PLACEHOLDER_CONTEXT_MARKERS)
+
+
 NATIVE_HUB_DIR = Path.home() / ".agentweave" / "hub"
 MINIMUM_PYTHON = (3, 8)
 
@@ -308,7 +320,6 @@ def _context_source_paths() -> list[Path]:
     return [
         Path("agentweave.yml"),
         SESSION_FILE,
-        ROLES_CONFIG_FILE,
         AGENTWEAVE_DIR / "ai_context.md",
         AGENTWEAVE_DIR / "project_instructions.md",
     ]
@@ -345,14 +356,6 @@ def _is_context_stale(context_path: Path) -> bool:
                 return True
         except OSError:
             continue
-    role_dir = AGENTWEAVE_DIR / "roles"
-    if role_dir.exists():
-        for role_file in role_dir.glob("*.md"):
-            try:
-                if role_file.stat().st_mtime > context_mtime:
-                    return True
-            except OSError:
-                continue
     return False
 
 
@@ -465,21 +468,16 @@ def check_project_context() -> list[DiagnosticResult]:
                 category="context",
             )
         ]
-    try:
-        from .context_builder import is_placeholder_ai_context
-
-        if is_placeholder_ai_context(content):
-            return [
-                warn(
-                    "project_context_placeholder",
-                    ".agentweave/ai_context.md",
-                    "Project context still contains template placeholders.",
-                    hint="Update .agentweave/ai_context.md and run agentweave sync-context.",
-                    category="context",
-                )
-            ]
-    except Exception:
-        pass
+    if _is_placeholder_ai_context(content):
+        return [
+            warn(
+                "project_context_placeholder",
+                ".agentweave/ai_context.md",
+                "Project context still contains template placeholders.",
+                hint="Update .agentweave/ai_context.md and run agentweave sync-context.",
+                category="context",
+            )
+        ]
     return [
         ok(
             "project_context_present",

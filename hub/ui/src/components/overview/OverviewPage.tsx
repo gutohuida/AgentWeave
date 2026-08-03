@@ -6,7 +6,6 @@ import { useTasks } from '@/api/tasks'
 import { useStatus } from '@/api/status'
 import { getBufferedEvents } from '@/hooks/useSSE'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
-import { DevRoleTagList } from '@/lib/agentStatus'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 
@@ -46,13 +45,6 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
           {agent.name}
         </span>
       </div>
-
-      {/* Role tags */}
-      {(agent.dev_roles?.length || agent.dev_role) && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          <DevRoleTagList agent={agent} maxItems={2} />
-        </div>
-      )}
 
       {/* Stats */}
       <div className="flex items-center gap-3 mb-2" style={{ fontSize: 11, color: 'var(--text-3)' }}>

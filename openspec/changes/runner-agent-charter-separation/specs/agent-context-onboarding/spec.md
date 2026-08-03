@@ -1,5 +1,22 @@
 ## MODIFIED Requirements
 
+### Requirement: Project operating profile generation
+The system SHALL generate a concise project operating profile from validated AgentWeave configuration and runtime state.
+
+#### Scenario: Profile includes project and team facts
+- **WHEN** generated context is built
+- **THEN** the project operating profile includes project name, collaboration mode, principal agent, agents, runners, configured models, yolo markers, and safe environment variable names without secret values
+
+#### Scenario: Profile includes quality gates
+- **WHEN** `agentweave.yml` or session state contains `quality` settings
+- **THEN** generated context includes actionable quality gate instructions for docs threshold, docs path, review requirement, echo-chamber guard, attribution tagging, and dependency checking
+
+#### Scenario: Profile includes scheduled job summary
+- **WHEN** `agentweave.yml` contains scheduled jobs
+- **THEN** generated context includes a compact summary of job names, target agents, schedules, and enabled state without expanding full long prompts unless needed for the target agent
+
+---
+
 ### Requirement: Layered project and role context
 The system SHALL layer stable charter guidance, generated project facts, long-lived project context, project-wide instructions, and live session state without duplicating stale information across files.
 
@@ -14,6 +31,27 @@ The system SHALL layer stable charter guidance, generated project facts, long-li
 #### Scenario: Live shared context is prompt-level for Hub-triggered runs
 - **WHEN** the Hub triggers an agent from a peer message and `.agentweave/shared/context.md` is non-empty
 - **THEN** the system prepends the shared context to the prompt as current session focus without requiring regeneration of `.agentweave/context/<agent>.md`
+
+---
+
+### Requirement: Agent context onboarding API
+The Hub/MCP interface SHALL provide `get_agent_context(agent)` for retrieving full onboarding or runtime context by agent name.
+
+#### Scenario: Declared agent receives runtime context
+- **WHEN** `get_agent_context(agent)` is called for an agent declared in the active AgentWeave session
+- **THEN** the response includes structured metadata indicating the agent is declared and returns the same canonical context content that would be generated for `.agentweave/context/<agent>.md`
+
+#### Scenario: Registered undeclared agent receives provisional context
+- **WHEN** `get_agent_context(agent)` is called for an agent registered with Hub but not declared in `agentweave.yml`
+- **THEN** the response includes provisional onboarding context with project summary, communication rules, bound charter guidance or a clear no-charter notice, and explicit restrictions against modifying files or claiming tasks until assigned
+
+#### Scenario: Unknown agent receives registration guidance
+- **WHEN** `get_agent_context(agent)` is called for an unknown agent
+- **THEN** the response explains how to register with AgentWeave and does not provide work-taking instructions beyond read-only orientation
+
+#### Scenario: Agent context response exposes machine-readable status
+- **WHEN** `get_agent_context(agent)` returns successfully
+- **THEN** the response includes machine-readable fields for agent name, known status, declared status, registered status, provisional status, charter identity, missing context inputs, and markdown context content
 
 ---
 

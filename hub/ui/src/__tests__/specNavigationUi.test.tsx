@@ -35,7 +35,7 @@ vi.mock('@/api/spec', () => ({
 }))
 
 vi.mock('@/api/agents', () => ({
-  useAgents: () => ({ data: [{ name: 'spec', status: 'idle', dev_roles: ['spec'] }] }),
+  useAgents: () => ({ data: [{ name: 'spec', status: 'idle' }] }),
   useAgentOutput: () => ({ lines: [], isLoading: false }),
   useAgentSessions: () => ({ data: { sessions: [] } }),
 }))

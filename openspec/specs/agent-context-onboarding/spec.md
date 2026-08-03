@@ -27,7 +27,7 @@ The system SHALL generate a concise project operating profile from validated Age
 
 #### Scenario: Profile includes project and team facts
 - **WHEN** generated context is built
-- **THEN** the project operating profile includes project name, collaboration mode, principal agent, agents, runners, configured models, assigned roles, yolo markers, and safe environment variable names without secret values
+- **THEN** the project operating profile includes project name, collaboration mode, principal agent, agents, runners, configured models, yolo markers, and safe environment variable names without secret values
 
 #### Scenario: Profile includes quality gates
 - **WHEN** `agentweave.yml` or session state contains `quality` settings
@@ -65,7 +65,7 @@ The Hub/MCP interface SHALL provide `get_agent_context(agent)` for retrieving fu
 
 #### Scenario: Registered undeclared agent receives provisional context
 - **WHEN** `get_agent_context(agent)` is called for an agent registered with Hub but not declared in `agentweave.yml`
-- **THEN** the response includes provisional onboarding context with project summary, communication rules, available roles, requested role guidance when present, and explicit restrictions against modifying files or claiming tasks until assigned
+- **THEN** the response includes provisional onboarding context with project summary, communication rules, bound charter guidance or a clear no-charter notice, and explicit restrictions against modifying files or claiming tasks until assigned
 
 #### Scenario: Unknown agent receives registration guidance
 - **WHEN** `get_agent_context(agent)` is called for an unknown agent
@@ -73,7 +73,7 @@ The Hub/MCP interface SHALL provide `get_agent_context(agent)` for retrieving fu
 
 #### Scenario: Agent context response exposes machine-readable status
 - **WHEN** `get_agent_context(agent)` returns successfully
-- **THEN** the response includes machine-readable fields for agent name, known status, declared status, registered status, provisional status, roles, missing context inputs, and markdown context content
+- **THEN** the response includes machine-readable fields for agent name, known status, declared status, registered status, provisional status, charter identity, missing context inputs, and markdown context content
 
 ---
 

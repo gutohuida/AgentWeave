@@ -95,14 +95,11 @@ export function SpecPage() {
   const queryClient = useQueryClient()
   const [selectedAgent, setSelectedAgent] = useState<string>('')
 
-  // Default agent: first with a 'spec' dev role, else one named 'spec', else first
+  // Default agent: one named 'spec', else the first available agent.
   useEffect(() => {
     if (!agents || agents.length === 0) return
     if (selectedAgent && agents.some((a) => a.name === selectedAgent)) return
-    const preferred =
-      agents.find((a) => a.dev_roles?.includes('spec')) ??
-      agents.find((a) => a.name === 'spec') ??
-      agents[0]
+    const preferred = agents.find((a) => a.name === 'spec') ?? agents[0]
     setSelectedAgent(preferred.name)
   }, [agents, selectedAgent])
 
@@ -193,9 +190,8 @@ export function SpecPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPicker])
 
-  // Repair target: an idle spec-role agent first, else the currently
-  // selected chat agent (matching the existing session-mode control).
-  const idleSpecAgent = agents?.find((a) => a.dev_roles?.includes('spec') && a.status !== 'running')
+  // Repair target: an idle agent named `spec` first, else the selected chat agent.
+  const idleSpecAgent = agents?.find((a) => a.name === 'spec' && a.status !== 'running')
   const repairTarget = idleSpecAgent ?? agent
   const repairTargetBusy = repairTarget?.status === 'running'
   const [isRepairing, setIsRepairing] = useState(false)

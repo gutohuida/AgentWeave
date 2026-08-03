@@ -3,7 +3,7 @@
 Accepts the full session.json payload pushed from the CLI or watchdog and
 stores it in the database. This lets the Hub (running in Docker with no
 host filesystem access) know the complete agent configuration — names,
-roles, yolo flags, and any future fields — without needing volume mounts.
+runner metadata, yolo flags, and any future fields — without needing volume mounts.
 
 The CLI calls this automatically on every Session.save(); the watchdog also
 calls it on startup as a safety net.

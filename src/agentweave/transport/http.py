@@ -532,7 +532,7 @@ class HttpTransport(BaseTransport):
         """POST /api/v1/session/sync — push session.json config to the Hub.
 
         Called on every Session.save() and at watchdog startup so the Hub
-        always has the latest agent configuration (names, roles, yolo flags).
+        always has the latest agent configuration (names, runners, yolo flags).
         """
         try:
             self._request("POST", "/session/sync", {"data": session_data})
@@ -602,24 +602,6 @@ class HttpTransport(BaseTransport):
                 },
             )
             return None
-
-    def push_roles_config(self, roles_config: Dict[str, Any]) -> bool:
-        """PUT /api/v1/agents/roles/config — push roles.json to the Hub.
-
-        Called at agentweave init so the Hub knows each agent's dev role.
-        """
-        try:
-            self._request("PUT", "/agents/roles/config", roles_config)
-            return True
-        except RuntimeError as exc:
-            logger.warning(
-                "transport_error",
-                extra={
-                    "event": "transport_error",
-                    "data": _transport_error_data("push_roles_config", exc),
-                },
-            )
-            return False
 
     def is_agent_registered(self, agent: str) -> bool:
         """Check whether an agent exists in the Hub (configured or self-registered)."""

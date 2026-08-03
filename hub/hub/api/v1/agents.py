@@ -1,7 +1,6 @@
 """Agent monitor endpoints."""
 
 import asyncio
-import contextlib
 import json
 import os
 import re
@@ -30,7 +29,6 @@ from ...db.models import (
     Message,
     Project,
     ProjectInstructions,
-    ProjectRolesConfig,
     ProjectSession,
     Run,
     Runner,
@@ -81,7 +79,7 @@ async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]
 
     # Filesystem state has no project_id, so it can only represent the local bootstrap
     # project. Falling back for any other API-key project leaks the bootstrap project's
-    # configured agents and roles across the project boundary.
+    # configured agents across the project boundary.
     if project_id != os.environ.get("AW_BOOTSTRAP_PROJECT_ID"):
         return None
 
@@ -164,22 +162,6 @@ async def list_agents(
     # Load session config (DB-first, filesystem fallback) for agent metadata
     session_data = await _get_session_data(project_id, session)
     session_agents_meta: dict = session_data.get("agents", {}) if session_data else {}
-
-    # Load roles config for dev_role / dev_role_label
-    roles_result = await session.execute(
-        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
-    )
-    roles_row = roles_result.scalars().first()
-    roles_data = roles_row.data if roles_row else {}
-    agent_assignments: dict = roles_data.get("agent_assignments", {})
-    roles_defs: dict = roles_data.get("roles", {})
-
-    # Fallback to bundled roles.json (works in Docker without CLI sync)
-    if not roles_defs:
-        bundled_roles = Path(__file__).parent.parent.parent / "data" / "roles" / "roles.json"
-        if bundled_roles.exists():
-            with contextlib.suppress(OSError, json.JSONDecodeError):
-                roles_defs = json.loads(bundled_roles.read_text(encoding="utf-8")).get("roles", {})
 
     # If no session.json, fall back to agents seen in DB activity (last 24h).
     # This covers the Docker case where the hub can't read the host's session.json —
@@ -392,39 +374,6 @@ async def list_agents(
         context_usage = context_usage_map.get(agent_name)
         session_started_at = session_started_map.get(agent_name)
 
-        # Get dev roles - support both new 'agent_roles' (list) and legacy 'agent_assignments' (single)
-        dev_role_keys: list[str] = []
-        agent_roles_data = roles_data.get("agent_roles", {})
-        if agent_name in agent_roles_data:
-            # New format: agent_roles is a dict of lists
-            roles_entry = agent_roles_data[agent_name]
-            dev_role_keys = roles_entry if isinstance(roles_entry, list) else [roles_entry]
-        elif agent_name in agent_assignments:
-            # Legacy format: agent_assignments is a dict of single role strings
-            legacy_role = agent_assignments[agent_name]
-            if isinstance(legacy_role, list):
-                dev_role_keys = legacy_role
-            else:
-                dev_role_keys = [legacy_role] if legacy_role else []
-
-        # Fallback to roles stored in agent config (self-registered agents)
-        if not dev_role_keys and agent_meta.get("roles"):
-            _meta_roles = agent_meta["roles"]
-            dev_role_keys = _meta_roles if isinstance(_meta_roles, list) else [_meta_roles]
-
-        # Get primary role (first one) for single-role display
-        dev_role_key = dev_role_keys[0] if dev_role_keys else None
-        dev_role_meta = roles_defs.get(dev_role_key, {}) if dev_role_key else {}
-
-        # Build list of role labels for all roles
-        dev_role_labels = []
-        for role_key in dev_role_keys:
-            role_def = roles_defs.get(role_key, {})
-            if role_def:
-                dev_role_labels.append(role_def.get("label", role_key))
-            else:
-                dev_role_labels.append(role_key)
-
         _runner = agent_meta.get("runner", "native")
         _display_model = {
             "claude": agent_meta.get("model", "Claude"),
@@ -461,10 +410,6 @@ async def list_agents(
                 yolo=bool(agent_meta.get("yolo", False)),
                 runner=_runner,
                 display_model=_display_model,
-                dev_role=dev_role_key,
-                dev_role_label=dev_role_meta.get("label"),
-                dev_roles=dev_role_keys,
-                dev_role_labels=dev_role_labels,
                 context_usage=context_usage,
                 session_started_at=session_started_at,
                 self_registered=_self_registered,
@@ -477,46 +422,6 @@ async def list_agents(
         )
 
     return summaries
-
-
-@router.put("/roles/config", status_code=200)
-async def put_roles_config(
-    body: dict,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Upsert the roles.json config pushed from the CLI at init time."""
-    project_id, _ = project
-    result = await session.execute(
-        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
-    )
-    row = result.scalars().first()
-    if row:
-        row.data = body
-        from datetime import datetime, timezone
-
-        row.synced_at = datetime.now(timezone.utc)
-    else:
-        row = ProjectRolesConfig(project_id=project_id, data=body)
-        session.add(row)
-    await session.commit()
-    return {"status": "ok"}
-
-
-@router.get("/roles/config")
-async def get_roles_config(
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Return the stored roles.json config for this project."""
-    project_id, _ = project
-    result = await session.execute(
-        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
-    )
-    row = result.scalars().first()
-    if not row:
-        return {}
-    return row.data
 
 
 def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[str]:
@@ -623,99 +528,6 @@ async def agent_timeline(
     return events[:50]
 
 
-async def _load_role_content(role: str, project_id: str, db: AsyncSession) -> str:
-    """Load role guide markdown content, prepending project instructions if set.
-
-    Tries, in order:
-    1. .agentweave/roles/{role}.md (synced by CLI — may be customized)
-    2. Bundled templates inside the Hub package (works in Docker)
-    3. agentweave.templates package (when CLI is co-installed)
-    4. Project-relative fallback for local dev
-
-    If ProjectInstructions row exists for the project, its content is prepended
-    with a '---' separator before the role guide.
-    """
-    if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", role):
-        raise FileNotFoundError(f"Invalid role ID: {role}")
-
-    role_file = Path(".agentweave/roles") / f"{role}.md"
-    if role_file.exists():
-        role_content = role_file.read_text(encoding="utf-8")
-    else:
-        # Bundled templates shipped with the Hub package
-        bundled = Path(__file__).parent.parent.parent / "data" / "roles" / f"{role}.md"
-        if bundled.exists():
-            role_content = bundled.read_text(encoding="utf-8")
-        else:
-            try:
-                from agentweave.templates import get_role_md
-
-                role_content = get_role_md(role)
-            except Exception as exc:
-                # Fallback for local dev when agentweave isn't installed as a package
-                pkg_file = (
-                    Path(__file__).parent.parent.parent.parent.parent.parent
-                    / "src"
-                    / "agentweave"
-                    / "templates"
-                    / "roles"
-                    / f"{role}.md"
-                )
-                if pkg_file.exists():
-                    role_content = pkg_file.read_text(encoding="utf-8")
-                else:
-                    raise FileNotFoundError(f"Role template not found: {role}") from exc
-
-    # Fetch project instructions from DB
-    result = await db.execute(
-        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
-    )
-    instr_row = result.scalars().first()
-    if instr_row and instr_row.content:
-        return instr_row.content + "\n\n---\n\n" + role_content
-    return role_content
-
-
-async def _load_roles_data(project_id: str, db: AsyncSession) -> dict:
-    result = await db.execute(
-        select(ProjectRolesConfig).where(ProjectRolesConfig.project_id == project_id)
-    )
-    row = result.scalars().first()
-    if row and row.data:
-        return row.data
-
-    bundled_roles = Path(__file__).parent.parent.parent / "data" / "roles" / "roles.json"
-    if bundled_roles.exists():
-        try:
-            return json.loads(bundled_roles.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            return {}
-    return {}
-
-
-def _roles_for_agent(agent: str, roles_data: dict, agent_meta: Optional[dict] = None) -> List[str]:
-    agent_roles = roles_data.get("agent_roles", {})
-    roles_entry = agent_roles.get(agent)
-    if isinstance(roles_entry, list):
-        return [str(role) for role in roles_entry]
-    if isinstance(roles_entry, str):
-        return [roles_entry]
-
-    legacy = roles_data.get("agent_assignments", {}).get(agent)
-    if isinstance(legacy, str):
-        return [legacy]
-    if isinstance(legacy, list):
-        return [str(role) for role in legacy]
-
-    if agent_meta:
-        meta_roles = agent_meta.get("roles")
-        if isinstance(meta_roles, list):
-            return [str(role) for role in meta_roles]
-        if isinstance(meta_roles, str):
-            return [meta_roles]
-    return []
-
-
 def _runner_summary(agent_meta: dict) -> str:
     parts = [f"runner={agent_meta.get('runner') or 'native'}"]
     if agent_meta.get("model"):
@@ -744,15 +556,11 @@ async def _render_hub_agent_context(
     project_id: str,
     db: AsyncSession,
     session_data: Optional[dict],
-    roles_data: dict,
     agent_row: Optional[Agent],
 ) -> Dict[str, Any]:
     session_agents = (session_data or {}).get("agents", {})
     declared = agent in session_agents
     registered = agent_row is not None
-    agent_meta = session_agents.get(agent, {})
-    registered_config = agent_row.config if agent_row and isinstance(agent_row.config, dict) else {}
-    roles = _roles_for_agent(agent, roles_data, agent_meta if declared else registered_config)
     missing: List[str] = []
 
     instructions_result = await db.execute(
@@ -788,10 +596,7 @@ async def _render_hub_agent_context(
     lines.append("### Team")
     if session_agents:
         for name, meta in sorted(session_agents.items()):
-            team_roles = _roles_for_agent(name, roles_data, meta)
             details = [_runner_summary(meta)]
-            if team_roles:
-                details.append("roles=" + ",".join(team_roles))
             if name == session_data.get("principal"):
                 details.append("principal")
             marker = " <- you" if name == agent else ""
@@ -863,7 +668,6 @@ async def _render_hub_agent_context(
         "declared": declared,
         "registered": registered,
         "provisional": not declared,
-        "roles": roles,
         "charter_id": charter.id if charter else None,
         "charter_name": charter.name if charter else None,
         "missing": sorted(set(missing)),
@@ -1004,7 +808,6 @@ async def register_agent(
     project_id, _ = project
     name = body.get("name")
     contact_mode = body.get("contact_mode")
-    role_request = body.get("role_request")
     mcp_endpoint = body.get("mcp_endpoint")
     spawn_cmd = body.get("spawn_cmd")
     config = body.get("config") or {}
@@ -1028,12 +831,6 @@ async def register_agent(
         raise HTTPException(
             status_code=409, detail=f"Agent name '{name}' is reserved for a configured agent"
         )
-
-    # Sync role_request and config.roles
-    if role_request and not config.get("roles"):
-        config["roles"] = [role_request]
-    elif config.get("roles") and not role_request:
-        role_request = config["roles"][0]
 
     result = await session.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == name)
@@ -1065,14 +862,14 @@ async def register_agent(
 
     await session.commit()
 
-    role = role_request or "collaborator"
-
-    try:
-        context = await _load_role_content(role, project_id, session)
-    except FileNotFoundError:
-        context = ""
-
-    return {"role": role, "context": context}
+    rendered = await _render_hub_agent_context(
+        agent=name,
+        project_id=project_id,
+        db=session,
+        session_data=session_data,
+        agent_row=agent_row,
+    )
+    return {"charter_id": agent_row.charter_id, "context": rendered["context"]}
 
 
 @router.patch("/{name}")
@@ -1199,7 +996,6 @@ async def get_agent_runtime_context(
 
     project_id, _ = project
     session_data = await _get_session_data(project_id, session)
-    roles_data = await _load_roles_data(project_id, session)
     result = await session.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
     )
@@ -1209,7 +1005,6 @@ async def get_agent_runtime_context(
         project_id=project_id,
         db=session,
         session_data=session_data,
-        roles_data=roles_data,
         agent_row=agent_row,
     )
 

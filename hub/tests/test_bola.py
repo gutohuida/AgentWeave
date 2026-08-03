@@ -158,14 +158,6 @@ async def project_a_resources(app, project_a):
     )
     assert instr_resp.status_code == 200
 
-    # Roles config
-    roles_resp = await app.put(
-        "/api/v1/agents/roles/config",
-        json={"roles": {"backend_dev": {"label": "Backend"}}},
-        headers=auth_headers,
-    )
-    assert roles_resp.status_code == 200
-
     return {
         "agent": "alice",
         "session_id": "sess-a",
@@ -252,14 +244,10 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
     assert status["task_counts"] == {}
     assert status["question_counts"]["total"] == 0
 
-    # Configured agents and roles config for Project B should be empty.
+    # Configured agents for Project B should be empty.
     configured_resp = await app.get("/api/v1/agents/configured", headers=b)
     assert configured_resp.status_code == 200
     assert configured_resp.json()["agents"] == []
-
-    roles_resp = await app.get("/api/v1/agents/roles/config", headers=b)
-    assert roles_resp.status_code == 200
-    assert roles_resp.json() == {}
 
     session_resp = await app.get("/api/v1/session/sync", headers=b)
     assert session_resp.status_code == 200

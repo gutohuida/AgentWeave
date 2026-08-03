@@ -139,13 +139,13 @@ async def _seed_default_runners(session: AsyncSession) -> None:
 
 
 async def _seed_default_charters(session: AsyncSession) -> None:
-    """Seed bundled role guides as editable charters for projects with none."""
+    """Seed bundled starter charters for projects that have not been seeded."""
     from sqlalchemy import func, select
 
     from ..utils import short_id
 
-    roles_dir = Path(__file__).parent.parent / "data" / "roles"
-    roles_config = json.loads((roles_dir / "roles.json").read_text(encoding="utf-8"))
+    charters_dir = Path(__file__).parent.parent / "data" / "charters"
+    charter_manifest = json.loads((charters_dir / "charters.json").read_text(encoding="utf-8"))
     projects = (await session.execute(select(Project))).scalars().all()
     for project in projects:
         if project.charters_seeded:
@@ -154,13 +154,13 @@ async def _seed_default_charters(session: AsyncSession) -> None:
             select(func.count()).select_from(Charter).where(Charter.project_id == project.id)
         )
         if count == 0:
-            for role_id, metadata in roles_config["roles"].items():
+            for charter_key, metadata in charter_manifest["charters"].items():
                 session.add(
                     Charter(
                         id=f"charter-{short_id()}",
                         project_id=project.id,
-                        name=metadata["label"],
-                        content=(roles_dir / f"{role_id}.md").read_text(encoding="utf-8"),
+                        name=metadata["name"],
+                        content=(charters_dir / f"{charter_key}.md").read_text(encoding="utf-8"),
                     )
                 )
         project.charters_seeded = True

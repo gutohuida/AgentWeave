@@ -6,7 +6,7 @@ import { AgentCard } from './AgentCard'
 import { AgentDetailPanel } from './AgentDetailPanel'
 import { QuestionInterruptCard } from '@/components/questions/QuestionInterruptCard'
 import { EmptyState } from '@/components/common/EmptyState'
-import { StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { StatusDot } from '@/lib/agentStatus'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 type AgentFilter = 'all' | 'active' | 'idle'
@@ -31,11 +31,6 @@ function GridCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void
         <StatusDot status={agent.status} size="sm" />
         <span className="font-medium text-sm truncate" style={{ color: 'var(--text)' }}>{agent.name}</span>
       </div>
-      {(agent.dev_roles?.length || agent.dev_role) && (
-        <div className="flex flex-wrap gap-1 mb-2">
-          <DevRoleTagList agent={agent} maxItems={2} />
-        </div>
-      )}
       <div className="flex items-center gap-3 mb-2" style={{ fontSize: 11, color: 'var(--text-3)' }}>
         <span>{agent.active_task_count} tasks</span>
         <span>{agent.message_count} msgs</span>

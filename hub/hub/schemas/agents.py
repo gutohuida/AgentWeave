@@ -4,7 +4,7 @@ import contextlib
 import json
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -51,14 +51,6 @@ class AgentSummary(BaseModel):
     display_model: Optional[str] = Field(
         default=None, max_length=128
     )  # e.g. "Claude", "Kimi", "Minimax" — derived from runner
-    dev_role: Optional[str] = Field(
-        default=None, max_length=64
-    )  # e.g. "tech_lead", "backend_dev" (primary role)
-    dev_role_label: Optional[str] = Field(
-        default=None, max_length=128
-    )  # e.g. "Tech Lead", "Backend Developer"
-    dev_roles: Optional[List[str]] = None  # All role IDs (new multi-role support)
-    dev_role_labels: Optional[List[str]] = None  # Labels for all roles
     context_usage: Optional[Dict[str, Any]] = (
         None  # {percent, warning, model, threshold_warning, updated_at}
     )

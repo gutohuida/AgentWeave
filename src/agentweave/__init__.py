@@ -21,13 +21,6 @@ except _PackageNotFoundError:
 __author__ = "AgentWeave Team"
 
 from .cli import main
-from .roles import (
-    add_role_to_agent,
-    get_agent_roles,
-    get_available_roles,
-    remove_role_from_agent,
-    set_agent_roles,
-)
 from .session import Session
 from .task import Task, TaskStatus
 
@@ -36,9 +29,4 @@ __all__ = [
     "Session",
     "Task",
     "TaskStatus",
-    "get_agent_roles",
-    "add_role_to_agent",
-    "remove_role_from_agent",
-    "set_agent_roles",
-    "get_available_roles",
 ]

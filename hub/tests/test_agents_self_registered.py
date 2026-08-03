@@ -12,13 +12,13 @@ async def test_agents_list_includes_self_registered_with_liveness(app, auth_head
         json={
             "name": "hermes-test",
             "contact_mode": "poll",
-            "role_request": "backend_dev",
         },
         headers=auth_headers,
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["role"] == "backend_dev"
+    assert data["charter_id"] is None
+    assert "No charter is assigned" in data["context"]
 
     # Post a heartbeat for the agent
     resp = await app.post(
@@ -43,13 +43,6 @@ async def test_agents_list_includes_self_registered_with_liveness(app, auth_head
 async def test_register_agent_rejects_configured_agent_name(app, auth_headers):
     """Test that registering with a configured agent name is rejected."""
     # First push a session with configured agents
-    resp = await app.put(
-        "/api/v1/agents/roles/config",
-        json={},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-
     # Push session config so 'claude' appears as configured
     resp = await app.post(
         "/api/v1/session/sync",
@@ -118,16 +111,6 @@ async def test_get_context_unknown_charter(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_get_agent_context_declared_agent(app, auth_headers):
-    resp = await app.put(
-        "/api/v1/agents/roles/config",
-        json={
-            "agent_roles": {"claude": ["tech_lead"]},
-            "roles": {"tech_lead": {"label": "Tech Lead", "file": "roles/tech_lead.md"}},
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-
     resp = await app.post(
         "/api/v1/session/sync",
         json={
@@ -158,7 +141,7 @@ async def test_get_agent_context_declared_agent(app, auth_headers):
     assert data["declared"] is True
     assert data["registered"] is True
     assert data["provisional"] is False
-    assert data["roles"] == ["tech_lead"]
+    assert "roles" not in data
     assert "Project Operating Profile" in data["context"]
     assert "review_required: `true`" in data["context"]
 
@@ -167,7 +150,7 @@ async def test_get_agent_context_declared_agent(app, auth_headers):
 async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
     resp = await app.post(
         "/api/v1/agents/register",
-        json={"name": "hermes-context", "contact_mode": "poll", "role_request": "backend_dev"},
+        json={"name": "hermes-context", "contact_mode": "poll"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -181,7 +164,7 @@ async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
     assert data["declared"] is False
     assert data["registered"] is True
     assert data["provisional"] is True
-    assert data["roles"] == ["backend_dev"]
+    assert "roles" not in data
     assert "do not modify files" in data["context"]
 
 
@@ -213,43 +196,18 @@ async def test_register_agent_with_config(app, auth_headers):
                 "runner": "kimi",
                 "model": "kimi-k2",
                 "yolo": True,
-                "roles": ["backend_dev", "code_reviewer"],
             },
         },
         headers=auth_headers,
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["role"] == "backend_dev"
-
-
-@pytest.mark.asyncio
-async def test_register_agent_role_request_becomes_config_roles(app, auth_headers):
-    """Test that role_request populates config['roles'] when config.roles is empty."""
-    resp = await app.post(
-        "/api/v1/agents/register",
-        json={
-            "name": "hermes-role-only",
-            "contact_mode": "poll",
-            "role_request": "architect",
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-
-    # List agents and verify the role appears in dev_roles
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
-    assert resp.status_code == 200
-    agents = resp.json()
-    hermes = next((a for a in agents if a["name"] == "hermes-role-only"), None)
-    assert hermes is not None
-    assert hermes["dev_roles"] == ["architect"]
-    assert hermes["dev_role"] == "architect"
+    assert data["charter_id"] is None
 
 
 @pytest.mark.asyncio
 async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
-    """Test that list_agents populates runner, model, yolo, and roles from stored config."""
+    """Test that list_agents populates runner, model, and yolo from stored config."""
     resp = await app.post(
         "/api/v1/agents/register",
         json={
@@ -259,7 +217,6 @@ async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
                 "runner": "claude_proxy",
                 "model": "MiniMax-Text-01",
                 "yolo": True,
-                "roles": ["backend_dev"],
             },
         },
         headers=auth_headers,
@@ -276,8 +233,8 @@ async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
     assert hermes["runner"] == "claude_proxy"
     assert hermes["display_model"] == "MiniMax-Text-01"
     assert hermes["yolo"] is True
-    assert hermes["dev_role"] == "backend_dev"
-    assert hermes["dev_roles"] == ["backend_dev"]
+    assert "dev_role" not in hermes
+    assert "dev_roles" not in hermes
     assert hermes["self_registered"] is True
 
 
@@ -290,7 +247,7 @@ async def test_re_register_updates_config(app, auth_headers):
         json={
             "name": "hermes-update",
             "contact_mode": "poll",
-            "config": {"runner": "kimi", "roles": ["backend_dev"]},
+            "config": {"runner": "kimi"},
         },
         headers=auth_headers,
     )
@@ -302,7 +259,7 @@ async def test_re_register_updates_config(app, auth_headers):
         json={
             "name": "hermes-update",
             "contact_mode": "mcp-push",
-            "config": {"runner": "glm", "model": "glm-5", "roles": ["frontend_dev"]},
+            "config": {"runner": "glm", "model": "glm-5"},
         },
         headers=auth_headers,
     )
@@ -316,7 +273,7 @@ async def test_re_register_updates_config(app, auth_headers):
     assert hermes is not None
     assert hermes["runner"] == "glm"
     assert hermes["display_model"] == "glm-5"
-    assert hermes["dev_role"] == "frontend_dev"
+    assert "dev_role" not in hermes
 
 
 @pytest.mark.asyncio

@@ -36,7 +36,6 @@ vi.mock('@/api/agents', () => ({
         status: agentStatus,
         message_count: 0,
         active_task_count: 0,
-        dev_roles: ['spec'],
       },
       { name: 'other', status: 'idle', message_count: 0, active_task_count: 0 },
     ],

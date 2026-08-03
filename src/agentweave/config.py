@@ -72,7 +72,6 @@ class AgentConfig:
 
     runner: str = "claude"
     model: Optional[str] = None
-    roles: List[str] = field(default_factory=list)
     env: List[str] = field(default_factory=list)
     yolo: bool = False
     read_only: bool = False
@@ -86,8 +85,6 @@ class AgentConfig:
         result: Dict[str, Any] = {"runner": self.runner}
         if self.model:
             result["model"] = self.model
-        if self.roles:
-            result["roles"] = self.roles
         if self.env:
             result["env"] = self.env
         if self.yolo:
@@ -296,7 +293,6 @@ def _validate_agent_config(name: str, data: Any, line_map: Dict[str, int]) -> Ag
     return AgentConfig(
         runner=runner,
         model=data.get("model"),
-        roles=data.get("roles", []),
         env=env_list,
         yolo=data.get("yolo", False),
         read_only=read_only,
@@ -539,7 +535,6 @@ def _format_agent_block(
         lines.append(f"    model: {model}")
     if is_principal:
         lines.append("    principal: true")
-    lines.append("    roles: []              # add roles: [tech_lead, backend_dev, ...]")
     if env_vars:
         env_str = ", ".join(env_vars)
         lines.append(f"    env: [{env_str}]")
@@ -653,20 +648,9 @@ hub:
 #   native      Use the agent name as the CLI command
 #   manual      No CLI -- relay prompts only
 #
-# Available roles (add to any agent):
-#   Human-title (developer) roles:
-#     tech_lead | architect | backend_dev | frontend_dev | fullstack_dev
-#     qa_engineer | devops_engineer | security_engineer | data_engineer
-#     ml_engineer | technical_writer | code_reviewer | project_manager
-#   AI-native (function-first) roles:
-#     coordinator | model_router | explorer | implementer | verifier
-#     guardian | context_keeper | spec
-#   Both sets are supported and can be combined (e.g. [implementer, frontend_dev]).
-#
 # Common per-agent fields:
 #   runner:         (required) Which CLI to invoke -- see list above
 #   model:          Model name passed with --model (format varies by runner)
-#   roles:          Developer role list -- adds behavioral guides at session start
 #   env:            Env var NAMES (not values) to forward to the subprocess
 #   yolo:           true = skip confirmation prompts (autonomous mode). Default: false
 #   read_only:      true = share the primary checkout; only for agents that never write
@@ -685,7 +669,6 @@ agents:
   # claude:
   #   runner: claude
   #   model: claude-sonnet-4-5        # optional; defaults to Anthropic's latest
-  #   roles: [tech_lead, backend_dev]
   #   principal: true                 # this agent delegates to others
   #   yolo: false                     # true = no confirmation prompts
 
@@ -693,13 +676,11 @@ agents:
   # kimi:
   #   runner: kimi
   #   model: kimi-k2                  # optional; defaults to kimi-k2
-  #   roles: [frontend_dev]
 
   # -- OpenAI Codex CLI --
   # codex:
   #   runner: codex
   #   model: gpt-5.5                  # optional; defaults to codex default
-  #   roles: [backend_dev]
   #   yolo: true                      # codex works best with yolo enabled
   #   runner_options:
   #     memory: true                  # false = disable cross-session Codex memory
@@ -708,7 +689,6 @@ agents:
   # codex-mcp:
   #   runner: codex_mcp
   #   model: gpt-5.5
-  #   roles: [backend_dev]
   #   yolo: true
   #   runner_options:
   #     memory: false
@@ -721,7 +701,6 @@ agents:
   #   # model: openai/gpt-4o
   #   # model: ollama/qwen2.5-coder:7b   # local, no API key needed
   #   # model: minimax-coding-plan/MiniMax-M3
-  #   roles: [backend_dev]
   #   env: [MINIMAX_API_KEY]          # forward provider key to subprocess (if needed)
   #   # cli: /abs/path/to/opencode    # pin binary -- prevents WSL PATH confusion
   #   # Run `agentweave doctor` if you see ProviderModelNotFoundError
@@ -730,7 +709,6 @@ agents:
   # copilot:
   #   runner: copilot
   #   model: claude-sonnet-4-5        # optional; choose e.g. claude-opus-4.5, gpt-5.5
-  #   roles: [backend_dev]
   #   env: [COPILOT_GITHUB_TOKEN]     # fine-grained PAT with 'Copilot Requests' permission
   #   yolo: false
   #   # hub_client: cli               # uncomment if MCP is blocked by company policy
@@ -760,7 +738,6 @@ agents:
   # -- Manual relay (no CLI integration) --
   # gemini:
   #   runner: manual
-  #   roles: [frontend_dev]
   #   # Use `agentweave relay --agent gemini` to generate relay prompts manually
 
 # -- JOBS -------------------------------------------------------

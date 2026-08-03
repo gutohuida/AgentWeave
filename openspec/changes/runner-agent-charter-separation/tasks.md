@@ -149,19 +149,31 @@ tests passed, production frontend build passed, Ruff passed on the changed Pytho
 
 ## 4. Delete the legacy role system
 
-- [ ] 4.1 Re-run the caller grep from the working protocol's rule 5. Confirm the actual current
+- [x] 4.1 Re-run the caller grep from the working protocol's rule 5. Confirm the actual current
       caller set of `roles.py`, `context_builder.py`, `VALID_ROLE_IDS`, and the role-list constants
       matches (or note how it has drifted from) `design.md`'s point-in-time list.
-- [ ] 4.2 Delete `src/agentweave/roles.py`, `src/agentweave/context_builder.py` (confirm zero
+- [x] 4.2 Delete `src/agentweave/roles.py`, `src/agentweave/context_builder.py` (confirm zero
       remaining callers first — design.md's premise is that `session.py` was its only caller and
       `session.py`'s role calls are removed in 4.3), `templates/roles/*.md`, `hub/data/roles/*.md`
       (only after phase 2's seed step no longer reads it), `_load_role_content`'s file-lookup tiers
       in `hub/hub/api/v1/agents.py`, and `VALID_ROLE_IDS`/role-list constants in
       `src/agentweave/constants.py`.
-- [ ] 4.3 Remove the now-dead role-sync calls in `src/agentweave/session.py` (the `set_agent_roles`/
+- [x] 4.3 Remove the now-dead role-sync calls in `src/agentweave/session.py` (the `set_agent_roles`/
       `save_roles_config` call sites found during design-phase grep).
-- [ ] 4.4 Verify: full CLI and Hub regression suites pass; grep confirms no remaining import of
+- [x] 4.4 Verify: full CLI and Hub regression suites pass; grep confirms no remaining import of
       `roles.py` or `context_builder.py` anywhere in `src/`, `tests/`, `hub/`. Hand off and commit.
+
+**Phase 4 evidence:** The fresh caller audit found more legacy surface than design-time grep had
+recorded: diagnostics imported the placeholder helper, Hub still stored and served
+`ProjectRolesConfig`, self-registration still accepted `role_request`, the agent summaries/UI still
+exposed development-role badges, and Spec UI selection still depended on the `spec` role. Removed
+those consumers along with the CLI role modules, config field, templates, sync transport, Hub role
+endpoints/model, and role-derived UI. Migration 0025 drops the obsolete table. The 21 starter
+documents moved to `hub/hub/data/charters/` with a charter-only manifest so fresh projects retain
+the seed experience without a role runtime or fallback tier. Full verification: CLI 349 passed
+(3 skipped), Hub 489 passed (4 skipped), frontend 286 passed, production build passed, changed-file
+Ruff passed, strict OpenSpec validation passed 21/21, and zero imports/callers remain for
+`roles.py`, `context_builder.py`, `VALID_ROLE_IDS`, `ROLES_CONFIG_FILE`, or `ROLES_DIR`.
 
 ## 5. Regression, live verification, and docs
 

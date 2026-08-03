@@ -7,7 +7,7 @@ import { AgentActivityTab } from './AgentActivityTab'
 import { AgentInfoTab } from './AgentInfoTab'
 import { EmptyState } from '@/components/common/EmptyState'
 import { StatusBadge } from '@/components/common/Badge'
-import { StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { StatusDot } from '@/lib/agentStatus'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 interface AgentDetailPanelProps {
@@ -41,11 +41,6 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
           <span className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
             {agent.name}
           </span>
-
-          {/* Role tags */}
-          <div className="flex flex-wrap gap-1">
-            <DevRoleTagList agent={agent} />
-          </div>
 
           <div className="flex-1" />
 

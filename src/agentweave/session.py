@@ -270,14 +270,12 @@ class Session:
 
         Args:
             declared_agents: Dict mapping agent name to agent config dict.
-                Each config dict may contain: runner, model, roles, yolo, read_only, env,
+                Each config dict may contain: runner, model, yolo, read_only, env,
                 base_url
 
         Returns:
             Tuple of (added_agents, updated_agents, orphaned_agents)
         """
-        from .roles import set_agent_roles
-
         added: List[str] = []
         updated: List[str] = []
 
@@ -358,15 +356,6 @@ class Session:
                 if agent_data.get("env_vars") != new_env_vars:
                     agent_data["env_vars"] = new_env_vars
                     was_updated = True
-
-            # Sync roles if specified in config
-            if "roles" in config and config["roles"]:
-                from .roles import save_roles_config
-
-                _ok, _msg, _updated_cfg = set_agent_roles(agent_name, config["roles"])
-                if _ok and _updated_cfg:
-                    save_roles_config(_updated_cfg)
-                was_updated = True
 
             # Track as updated if modified (but not if just added)
             if not is_new and was_updated:

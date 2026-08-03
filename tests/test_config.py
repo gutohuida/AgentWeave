@@ -123,9 +123,6 @@ agents:
   claude:
     runner: claude
     model: claude-test-model
-    roles:
-      - tech_lead
-      - backend_dev
     yolo: true
   minimax:
     runner: claude_proxy
@@ -147,7 +144,6 @@ jobs:
         assert config.project.mode == "peer"
         assert config.agents["claude"].yolo is True
         assert config.agents["claude"].model == "claude-test-model"
-        assert config.agents["claude"].roles == ["tech_lead", "backend_dev"]
         assert config.agents["minimax"].runner == "claude_proxy"
         assert config.agents["minimax"].env == ["MINIMAX_API_KEY"]
 
@@ -272,7 +268,6 @@ class TestSaveAgentweaveYml:
             agents={
                 "claude": AgentConfig(
                     runner="claude",
-                    roles=["tech_lead"],
                     yolo=True,
                 ),
                 "kimi": AgentConfig(
@@ -648,8 +643,8 @@ agents:
         assert config.agents["opencode-default"].runner == "opencode"
         assert config.agents["opencode-default"].model is None
 
-    def test_load_opencode_with_roles_and_env(self, tmp_path):
-        """opencode agents support roles and env like other runners."""
+    def test_load_opencode_with_env(self, tmp_path):
+        """opencode agents support forwarded environment variables."""
         config_file = tmp_path / "agentweave.yml"
         config_file.write_text("""
 project:
@@ -659,11 +654,9 @@ project:
 agents:
   opencode-dev:
     runner: opencode
-    roles: [developer]
     env: [SOME_VAR]
 """)
         config = load_agentweave_yml(config_file)
-        assert config.agents["opencode-dev"].roles == ["developer"]
         assert config.agents["opencode-dev"].env == ["SOME_VAR"]
 
     def test_generate_roundtrips_opencode(self, tmp_path):

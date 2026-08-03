@@ -1,5 +1,3 @@
-import type { AgentSummary } from '@/api/agents'
-
 /**
  * Single source of truth for agent status presentation. Previously duplicated
  * in 2 components (AgentCard, AgentInfoTab) — Q6.
@@ -67,55 +65,5 @@ export function StatusDot({ status, size = 'sm' }: { status: string; size?: Stat
         style={{ background: cfg.dotColor }}
       />
     </span>
-  )
-}
-
-const DEV_ROLE_PILL_STYLE_SM: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 500,
-  padding: '1px 5px',
-  borderRadius: 9999,
-  background: 'rgba(168,85,247,0.1)',
-  color: 'var(--purple)',
-}
-
-const DEV_ROLE_PILL_STYLE_MD: React.CSSProperties = {
-  fontSize: 11,
-  padding: '4px 8px',
-  borderRadius: 9999,
-  background: 'rgba(168,85,247,0.1)',
-  color: 'var(--purple)',
-}
-
-type DevRolePillSize = 'sm' | 'md'
-
-/**
- * The standard "purple pill" dev-role badge. Handles both the modern
- * `dev_roles[]` array and the legacy single `dev_role` field. Pass
- * `maxItems` to cap the visible pills (used by compact card views like
- * OverviewPage and AgentsPage). Renders nothing when the agent has no
- * dev-role info. Use `size="md"` for the more spacious variant rendered
- * in detail sections (AgentInfoTab) and `size="sm"` (the default) for
- * compact list/card headers.
- */
-export function DevRoleTagList({ agent, maxItems, size = 'sm' }: { agent: AgentSummary; maxItems?: number; size?: DevRolePillSize }) {
-  const roles = agent.dev_roles
-  const legacyRole = agent.dev_role
-  if (!roles?.length && !legacyRole) return null
-  const visible = maxItems != null ? (roles ?? []).slice(0, maxItems) : (roles ?? [])
-  const style = size === 'md' ? DEV_ROLE_PILL_STYLE_MD : DEV_ROLE_PILL_STYLE_SM
-  return (
-    <>
-      {visible.map((role, idx) => (
-        <span key={role} style={style}>
-          {agent.dev_role_labels?.[idx] ?? role}
-        </span>
-      ))}
-      {!visible.length && legacyRole && (
-        <span style={style}>
-          {agent.dev_role_label ?? legacyRole}
-        </span>
-      )}
-    </>
   )
 }

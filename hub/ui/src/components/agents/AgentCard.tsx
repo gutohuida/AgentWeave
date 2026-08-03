@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { AgentSummary } from '@/api/agents'
-import { getStatusConfig, StatusDot, DevRoleTagList } from '@/lib/agentStatus'
+import { getStatusConfig, StatusDot } from '@/lib/agentStatus'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
 interface AgentCardProps {
@@ -49,10 +49,8 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
         </span>
       </div>
 
-      {/* Role badges */}
-      {(agent.dev_roles?.length || agent.dev_role || agent.runner) && (
+      {agent.runner && (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          <DevRoleTagList agent={agent} />
           {agent.display_model && (
             <span
               className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"

@@ -10,14 +10,14 @@ from pathlib import Path
 
 import pytest
 
-ROLE_DIR = Path(__file__).parent.parent / "hub" / "data" / "roles"
+CHARTER_DIR = Path(__file__).parent.parent / "hub" / "data" / "charters"
 
 
 def _bundled_charters() -> dict[str, str]:
-    roles = json.loads((ROLE_DIR / "roles.json").read_text(encoding="utf-8"))["roles"]
+    charters = json.loads((CHARTER_DIR / "charters.json").read_text(encoding="utf-8"))["charters"]
     return {
-        metadata["label"]: (ROLE_DIR / f"{role_id}.md").read_text(encoding="utf-8")
-        for role_id, metadata in roles.items()
+        metadata["name"]: (CHARTER_DIR / f"{charter_key}.md").read_text(encoding="utf-8")
+        for charter_key, metadata in charters.items()
     }
 
 

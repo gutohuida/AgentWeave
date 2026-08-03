@@ -1,23 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import {
   STATUS_CONFIG,
   getStatusConfig,
   StatusDot,
-  DevRoleTagList,
 } from '@/lib/agentStatus'
-import type { AgentSummary } from '@/api/agents'
-
-function makeAgent(overrides: Partial<AgentSummary> = {}): AgentSummary {
-  return {
-    name: 'test-agent',
-    status: 'idle',
-    message_count: 0,
-    active_task_count: 0,
-    ...overrides,
-  }
-}
-
 describe('Q6 / Q13 — lib/agentStatus: deduplicated helpers and components', () => {
   describe('STATUS_CONFIG and getStatusConfig', () => {
     it('covers the known statuses with consistent shape', () => {
@@ -86,74 +73,6 @@ describe('Q6 / Q13 — lib/agentStatus: deduplicated helpers and components', ()
       const { container } = render(<StatusDot status="waiting" />)
       const dot = container.querySelector('span span:last-child') as HTMLElement
       expect(dot.style.background).toBe('var(--amber)')
-    })
-  })
-
-  describe('<DevRoleTagList />', () => {
-    it('renders nothing when the agent has neither dev_roles nor dev_role', () => {
-      const { container } = render(<DevRoleTagList agent={makeAgent()} />)
-      expect(container.firstChild).toBeNull()
-    })
-
-    it('renders one pill per role from dev_roles[] with the matching label', () => {
-      render(
-        <DevRoleTagList
-          agent={makeAgent({
-            dev_roles: ['backend_dev', 'tech_lead'],
-            dev_role_labels: ['Backend Dev', 'Tech Lead'],
-          })}
-        />
-      )
-      expect(screen.getByText('Backend Dev')).toBeInTheDocument()
-      expect(screen.getByText('Tech Lead')).toBeInTheDocument()
-    })
-
-    it('falls back to the role id when no matching label is present', () => {
-      render(
-        <DevRoleTagList agent={makeAgent({ dev_roles: ['qa_engineer'] })} />
-      )
-      expect(screen.getByText('qa_engineer')).toBeInTheDocument()
-    })
-
-    it('renders the legacy single dev_role with its label', () => {
-      render(
-        <DevRoleTagList
-          agent={makeAgent({ dev_role: 'qa', dev_role_label: 'QA Engineer' })}
-        />
-      )
-      expect(screen.getByText('QA Engineer')).toBeInTheDocument()
-      expect(screen.queryByText('qa')).not.toBeInTheDocument()
-    })
-
-    it('falls back to the role id when no label is provided (legacy)', () => {
-      render(<DevRoleTagList agent={makeAgent({ dev_role: 'qa' })} />)
-      expect(screen.getByText('qa')).toBeInTheDocument()
-    })
-
-    it('caps visible pills to maxItems when provided', () => {
-      render(
-        <DevRoleTagList
-          agent={makeAgent({
-            dev_roles: ['a', 'b', 'c', 'd'],
-            dev_role_labels: ['A', 'B', 'C', 'D'],
-          })}
-          maxItems={2}
-        />
-      )
-      expect(screen.getByText('A')).toBeInTheDocument()
-      expect(screen.getByText('B')).toBeInTheDocument()
-      expect(screen.queryByText('C')).not.toBeInTheDocument()
-      expect(screen.queryByText('D')).not.toBeInTheDocument()
-    })
-
-    it('uses the purple color scheme on every pill', () => {
-      const { container } = render(
-        <DevRoleTagList agent={makeAgent({ dev_roles: ['x'] })} />
-      )
-      const pill = container.querySelector('span') as HTMLElement
-      expect(pill.style.color).toBe('var(--purple)')
-      // jsdom normalizes the rgba spacing, so match the digits with a regex.
-      expect(pill.style.background).toMatch(/rgba\(\s*168\s*,\s*85\s*,\s*247\s*,\s*0\.1\s*\)/)
     })
   })
 })

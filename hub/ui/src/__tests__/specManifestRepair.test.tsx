@@ -35,7 +35,6 @@ let agents: {
   status: string
   message_count: number
   active_task_count: number
-  dev_roles?: string[]
 }[]
 
 vi.mock('@/api/agents', () => ({
@@ -70,7 +69,7 @@ describe('Spec tab — manifest drift and repair', () => {
     fetchWithAuth.mockReset()
     fetchWithAuth.mockResolvedValue({ ok: true, status: 200 })
     agents = [
-      { name: 'spec', status: 'idle', message_count: 0, active_task_count: 0, dev_roles: ['spec'] },
+      { name: 'spec', status: 'idle', message_count: 0, active_task_count: 0 },
       { name: 'other', status: 'idle', message_count: 0, active_task_count: 0 },
     ]
     specListResult = {
@@ -150,7 +149,7 @@ describe('Spec tab — manifest drift and repair', () => {
 
   it('falls back to the selected chat agent when no spec-role agent is idle', async () => {
     agents = [
-      { name: 'spec', status: 'running', message_count: 0, active_task_count: 0, dev_roles: ['spec'] },
+      { name: 'spec', status: 'running', message_count: 0, active_task_count: 0 },
       { name: 'other', status: 'idle', message_count: 0, active_task_count: 0 },
     ]
     specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
@@ -168,7 +167,7 @@ describe('Spec tab — manifest drift and repair', () => {
 
   it('disables the repair button when no eligible agent exists', () => {
     agents = [
-      { name: 'spec', status: 'running', message_count: 0, active_task_count: 0, dev_roles: ['spec'] },
+      { name: 'spec', status: 'running', message_count: 0, active_task_count: 0 },
     ]
     specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
     render(withQueryClient(<SpecPage />))
