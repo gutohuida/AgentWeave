@@ -61,7 +61,7 @@ const WRAPPER_CLASS: Record<PageWrapper, string> = {
 }
 
 export default function App() {
-  const { isConfigured, theme, mode, bootstrapState, projectId } = useConfigStore()
+  const { isConfigured, theme, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
   const { data: agents = [] } = useAgents()
   const [setupOpen, setSetupOpen] = useState(false)
   const [destination, setDestination] = useState<WorkspaceDestination>(() =>

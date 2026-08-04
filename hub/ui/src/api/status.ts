@@ -31,31 +31,32 @@ export interface SessionSyncData {
 }
 
 export function useStatus() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   // Invalidated by message/task/question SSE events in useSSE.ts's central
   // switch, plus the reconciliation invalidateQueries() on every reconnect.
   return useQuery<StatusData>({
-    queryKey: ['status'],
-    queryFn: () => getJson<StatusData>('/api/v1/status'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'status'],
+    queryFn: () => getJson<StatusData>(`/api/v1/projects/${projectId}/status`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useSessionSync() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   // session_synced is broadcast by POST /api/v1/session/sync on every CLI
   // sync — exactly the moment this data changes.
   useSSE((event) => {
-    if (event.type === 'session_synced') {
-      queryClient.invalidateQueries({ queryKey: ['session-sync'] })
+    const d = (event.data ?? {}) as { project_id?: string }
+    if (event.type === 'session_synced' && d.project_id === projectId) {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'session-sync'] })
     }
   })
 
   return useQuery<SessionSyncData>({
-    queryKey: ['session-sync'],
-    queryFn: () => getJson<SessionSyncData>('/api/v1/session/sync'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'session-sync'],
+    queryFn: () => getJson<SessionSyncData>(`/api/v1/projects/${projectId}/session/sync`),
+    enabled: isConfigured && !!projectId,
   })
 }

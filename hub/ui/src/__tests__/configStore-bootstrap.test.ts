@@ -13,7 +13,7 @@ function resetStore() {
   useConfigStore.setState({
     apiKey: '',
     hubUrl: 'http://localhost:8000',
-    projectId: 'proj-default',
+    selectedProjectId: null,
     theme: 'cosmic',
     mode: 'light',
     isConfigured: false,
@@ -46,16 +46,25 @@ describe('configStore.bootstrap — distinguishing unreachable from unconfigured
   })
 
   it('sets bootstrapState to "ready" and stores the key when the Hub returns a token', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ api_key: 'aw_live_fresh', project_id: 'proj-x' }),
-    })
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ api_key: 'aw_live_fresh' }),
+      })
+      // The instance credential carries no project selection (api/setup.ts);
+      // bootstrap() separately fetches the project collection to auto-select.
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [{ id: 'proj-x', name: 'Project X' }],
+      })
 
     await useConfigStore.getState().bootstrap()
 
     const state = useConfigStore.getState()
     expect(state.bootstrapState).toBe('ready')
     expect(state.apiKey).toBe('aw_live_fresh')
+    expect(state.selectedProjectId).toBe('proj-x')
   })
 })

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Icon } from '@/components/common/Icon'
 import { fetchWithAuth } from '@/api/client'
 import { useAgentOutput, useAgentSessions } from '@/api/agents'
+import { useConfigStore } from '@/store/configStore'
 import { SharedStreamRenderer } from '@/components/stream/SharedStreamRenderer'
 
 interface ChatAgent {
@@ -36,6 +37,7 @@ export function SpecChatPane({
   apiKey,
 }: SpecChatPaneProps) {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   const agent = agents?.find((a) => a.name === selectedAgent)
   const isRunning = agent?.status === 'running'
 
@@ -83,7 +85,7 @@ export function SpecChatPane({
   const inputDisabled = !selectedAgent || isRunning || isSending || triggerState !== 'idle'
 
   const handleSend = async () => {
-    if (!message.trim() || !apiKey || !selectedAgent) return
+    if (!message.trim() || !apiKey || !projectId || !selectedAgent) return
     setIsSending(true)
     setSendError(null)
     setSendWarning(null)
@@ -92,7 +94,7 @@ export function SpecChatPane({
     try {
       // Use the configured Hub URL. A relative URL targets the Vite dev
       // server when the UI runs on port 5173, causing the request to hang.
-      const res = await fetchWithAuth('/api/v1/agent/trigger', {
+      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/agent/trigger`, {
         method: 'POST',
         // `resume` with no session_id makes the trigger endpoint emit no
         // session tag, so the watchdog falls back to the agent's last saved

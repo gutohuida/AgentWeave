@@ -105,7 +105,7 @@ describe('conversation controls — placement and overflow menu', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })
@@ -272,7 +272,7 @@ describe('conversation controls — context usage placement', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })
@@ -311,7 +311,7 @@ describe('conversation controls — banner stack', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })
@@ -353,7 +353,7 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })

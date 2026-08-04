@@ -55,23 +55,24 @@ export interface AccountingSnapshot {
 }
 
 export function useAccounting() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<AccountingSnapshot>({
-    queryKey: ['accounting'],
-    queryFn: () => getJson<AccountingSnapshot>('/api/v1/accounting'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'accounting'],
+    queryFn: () => getJson<AccountingSnapshot>(`/api/v1/projects/${projectId}/accounting`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useUpdateTokenBudget() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation<TokenBudgetState, Error, number | null>({
     mutationFn: (tokenBudget) => patchJson<TokenBudgetState>(
-      '/api/v1/accounting/budget',
+      `/api/v1/projects/${projectId}/accounting/budget`,
       { token_budget: tokenBudget },
     ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounting'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'accounting'] })
     },
   })
 }

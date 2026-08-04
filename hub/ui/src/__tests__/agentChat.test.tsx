@@ -18,7 +18,7 @@ describe('M20 — useAgentChatHistory gates on NEW_SESSION_ID, not the literal "
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })
@@ -39,7 +39,7 @@ describe('M20 — useAgentChatHistory gates on NEW_SESSION_ID, not the literal "
     )
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled())
     expect(fetchSpy.mock.calls.some(
-      ([url]) => url === 'http://hub.test/api/v1/agent/claude/chat/ses_real_123',
+      ([url]) => url === 'http://hub.test/api/v1/projects/proj-test/agent/claude/chat/ses_real_123',
     )).toBe(true)
     enabled.unmount()
 
@@ -51,7 +51,7 @@ describe('M20 — useAgentChatHistory gates on NEW_SESSION_ID, not the literal "
     )
     await new Promise((r) => setTimeout(r, 10))
     expect(fetchSpy.mock.calls.some(
-      ([url]) => String(url).includes(`/api/v1/agent/claude/chat/${NEW_SESSION_ID}`),
+      ([url]) => String(url).includes(`/api/v1/projects/proj-test/agent/claude/chat/${NEW_SESSION_ID}`),
     )).toBe(false)
     expect(disabled.result.current.fetchStatus).toBe('idle')
     expect(disabled.result.current.isLoading).toBe(false)

@@ -7,21 +7,22 @@ export interface Instructions {
 }
 
 export function useInstructions() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Instructions>({
-    queryKey: ['instructions'],
-    queryFn: () => getJson<Instructions>('/api/v1/project/instructions'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'instructions'],
+    queryFn: () => getJson<Instructions>(`/api/v1/projects/${projectId}/project/instructions`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useSaveInstructions() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: (content: string) =>
-      putJson<Instructions>('/api/v1/project/instructions', { content }),
+      putJson<Instructions>(`/api/v1/projects/${projectId}/project/instructions`, { content }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['instructions'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'instructions'] })
     },
   })
 }

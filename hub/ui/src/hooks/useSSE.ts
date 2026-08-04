@@ -46,6 +46,10 @@ const SSE_EVENT_TYPES = [
   'queue_entry_withdrawn',
   'accounting_budget_updated',
   'queue_chain_suspended',
+  'project_created',
+  'project_opened',
+  'project_relocated',
+  'project_settings_updated',
 ]
 
 const MAX_BUFFERED = 200
@@ -396,25 +400,33 @@ export function useSSE(onEvent?: SSEListener) {
 
   useEffect(() => {
     const invalidateHandler: SSEListener = (event) => {
+      // The one stream is instance-wide — every project's events, each
+      // stamped server-side with its own project_id (hub/hub/sse.py). Every
+      // invalidation below targets THAT event's project, not necessarily the
+      // one currently selected, so an inactive project's cache is already
+      // fresh by the time the operator switches to it (design.md: "the rail
+      // summary updates without switching to it").
+      const pid = (event.data as { project_id?: string } | null)?.project_id
       switch (event.type) {
         case 'message_created':
         case 'message_read':
-          queryClient.invalidateQueries({ queryKey: ['messages'] })
-          queryClient.invalidateQueries({ queryKey: ['status'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'messages'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
         case 'task_created':
         case 'task_updated':
-          queryClient.invalidateQueries({ queryKey: ['tasks'] })
-          queryClient.invalidateQueries({ queryKey: ['status'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
         case 'question_asked':
         case 'question_answered':
-          queryClient.invalidateQueries({ queryKey: ['questions'] })
-          queryClient.invalidateQueries({ queryKey: ['status'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'questions'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
         case 'agent_heartbeat':
-          queryClient.invalidateQueries({ queryKey: ['tasks'] })
-          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
           break
         case 'run_started':
         case 'run_completed':
@@ -425,30 +437,31 @@ export function useSSE(onEvent?: SSEListener) {
           // agents_with_active_run), and a Hub-triggered run never posts a
           // heartbeat — without this, the running/idle badge would never
           // update for a direct-spawn run.
-          queryClient.invalidateQueries({ queryKey: ['agents'] })
-          queryClient.invalidateQueries({ queryKey: ['accounting'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
           break
         case 'accounting_budget_updated':
-          queryClient.invalidateQueries({ queryKey: ['accounting'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
           break
         case 'queue_entry_queued':
         case 'queue_entry_delivered':
         case 'queue_entry_withdrawn':
         case 'queue_chain_suspended': {
           const d = event.data as { agent?: string }
-          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
           if (d?.agent) {
-            queryClient.invalidateQueries({ queryKey: ['queue', d.agent] })
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'queue', d.agent] })
           }
           break
         }
         case 'context_warning':
-          queryClient.invalidateQueries({ queryKey: ['agents'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
           break
         case 'agent_session_changed': {
           const d = event.data as { agent?: string }
           if (d?.agent) {
-            queryClient.invalidateQueries({ queryKey: ['agent', d.agent, 'sessions'] })
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'agent', d.agent, 'sessions'] })
           }
           break
         }
@@ -456,13 +469,19 @@ export function useSSE(onEvent?: SSEListener) {
         case 'job_updated':
         case 'job_deleted':
         case 'job_fired': {
-          queryClient.invalidateQueries({ queryKey: ['jobs'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs'] })
           const d = event.data as { id?: string }
           if (d?.id) {
-            queryClient.invalidateQueries({ queryKey: ['jobs', d.id] })
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs', d.id] })
           }
           break
         }
+        case 'project_created':
+        case 'project_opened':
+        case 'project_relocated':
+        case 'project_settings_updated':
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
+          break
       }
       onEventRef.current?.(event)
     }

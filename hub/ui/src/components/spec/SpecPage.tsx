@@ -90,7 +90,7 @@ export function SpecPage() {
   // Auto-refresh list + open spec when a spec_updated SSE event arrives
   useSpecEvents()
 
-  const { mode, apiKey } = useConfigStore()
+  const { mode, apiKey, selectedProjectId: projectId } = useConfigStore()
   const { data: agents } = useAgents()
   const queryClient = useQueryClient()
   const [selectedAgent, setSelectedAgent] = useState<string>('')
@@ -200,13 +200,13 @@ export function SpecPage() {
   const repairDisabled = !hasDrift || !repairTarget || repairTargetBusy || isRepairing
 
   const handleRepair = async () => {
-    if (repairDisabled || !repairTarget || !apiKey) return
+    if (repairDisabled || !repairTarget || !apiKey || !projectId) return
     setIsRepairing(true)
     setRepairError(null)
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), 15000)
     try {
-      const res = await fetchWithAuth('/api/v1/agent/trigger', {
+      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/agent/trigger`, {
         method: 'POST',
         body: JSON.stringify({
           agent: repairTarget.name,

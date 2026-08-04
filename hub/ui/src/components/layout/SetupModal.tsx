@@ -16,10 +16,12 @@ const THEMES: { id: ThemeId; label: string; primary: string; bg: string; bgDark:
 ]
 
 export function SetupModal({ open, onClose }: SetupModalProps) {
-  const { hubUrl, apiKey, projectId, theme, mode, setConfig, setTheme, setMode } = useConfigStore()
+  const {
+    hubUrl, apiKey, selectedProjectId, theme, mode, setConfig, setSelectedProject, setTheme, setMode,
+  } = useConfigStore()
   const [url,           setUrl]           = useState(hubUrl || 'http://localhost:8000')
   const [key,           setKey]           = useState(apiKey || '')
-  const [proj,          setProj]          = useState(projectId || 'proj-default')
+  const [proj,          setProj]          = useState(selectedProjectId || '')
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>(theme)
   const [selectedMode,  setSelectedMode]  = useState<ModeId>(mode)
 
@@ -27,7 +29,8 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setConfig(key.trim(), url.trim(), proj.trim())
+    setConfig(key.trim(), url.trim())
+    if (proj.trim()) setSelectedProject(proj.trim())
     if (selectedTheme !== theme) {
       setTheme(selectedTheme)
       document.documentElement.dataset.theme = selectedTheme
@@ -116,17 +119,18 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
             />
           </div>
 
-          {/* Project ID */}
+          {/* Project ID — optional manual override; normally auto-selected
+              from the instance's project collection on bootstrap. */}
           <div>
             <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>
-              Project ID
+              Project ID (optional)
             </label>
             <input
               type="text"
               value={proj}
               onChange={(e) => setProj(e.target.value)}
               style={inputStyle}
-              placeholder="proj-default"
+              placeholder="auto-selected"
             />
           </div>
 

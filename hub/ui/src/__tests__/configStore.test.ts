@@ -3,6 +3,7 @@ import { useConfigStore } from '@/store/configStore'
 
 const SESSION_KEY = 'agentweave-session'
 const PREFS_KEY = 'agentweave-prefs'
+const SELECTED_PROJECT_KEY = 'agentweave-selected-project'
 
 describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStorage', () => {
   beforeEach(() => {
@@ -11,7 +12,7 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
     useConfigStore.setState({
       apiKey: '',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-default',
+      selectedProjectId: null,
       theme: 'cosmic',
       mode: 'light',
       isConfigured: false,
@@ -19,15 +20,15 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
     })
   })
 
-  it('setConfig writes apiKey/hubUrl/projectId to sessionStorage and never to localStorage', () => {
-    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test', 'proj-x')
+  it('setConfig writes apiKey/hubUrl to sessionStorage and never to localStorage', () => {
+    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test')
 
     const sessionRaw = sessionStorage.getItem(SESSION_KEY)
     expect(sessionRaw).not.toBeNull()
     const session = JSON.parse(sessionRaw!) as Record<string, unknown>
     expect(session.apiKey).toBe('aw_live_SECRET')
     expect(session.hubUrl).toBe('http://hub.test')
-    expect(session.projectId).toBe('proj-x')
+    expect(session.projectId).toBeUndefined()
 
     const localRaw = localStorage.getItem(SESSION_KEY)
     expect(localRaw).toBeNull()
@@ -38,8 +39,19 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
     }
   })
 
+  it('setSelectedProject writes the project ID to its own localStorage key, not the session', () => {
+    useConfigStore.getState().setSelectedProject('proj-x')
+
+    expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBe('proj-x')
+    expect(useConfigStore.getState().selectedProjectId).toBe('proj-x')
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull()
+
+    useConfigStore.getState().setSelectedProject(null)
+    expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBeNull()
+  })
+
   it('setTheme writes only theme/mode to localStorage and never touches sessionStorage', () => {
-    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test', 'proj-x')
+    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test')
     sessionStorage.clear()
     useConfigStore.getState().setTheme('forest')
 
@@ -58,13 +70,16 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull()
   })
 
-  it('clearConfig removes apiKey from sessionStorage and resets isConfigured', () => {
-    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test', 'proj-x')
+  it('clearConfig removes apiKey from sessionStorage, clears the selected project, and resets isConfigured', () => {
+    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test')
+    useConfigStore.getState().setSelectedProject('proj-x')
     useConfigStore.getState().clearConfig()
 
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull()
+    expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBeNull()
     const state = useConfigStore.getState()
     expect(state.apiKey).toBe('')
+    expect(state.selectedProjectId).toBeNull()
     expect(state.isConfigured).toBe(false)
   })
 })

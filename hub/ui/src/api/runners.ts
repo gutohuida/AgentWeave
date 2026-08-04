@@ -27,49 +27,56 @@ export interface RunnerUpdate {
 }
 
 export function useRunners() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Runner[]>({
-    queryKey: ['runners'],
-    queryFn: () => getJson<Runner[]>('/api/v1/runners'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'runners'],
+    queryFn: () => getJson<Runner[]>(`/api/v1/projects/${projectId}/runners`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useCreateRunner() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: (runner: RunnerCreate) => postJson<Runner>('/api/v1/runners', runner),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['runners'] }),
+    mutationFn: (runner: RunnerCreate) =>
+      postJson<Runner>(`/api/v1/projects/${projectId}/runners`, runner),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'runners'] }),
   })
 }
 
 export function useUpdateRunner() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: RunnerUpdate }) =>
-      patchJson<Runner>(`/api/v1/runners/${id}`, updates),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['runners'] }),
+      patchJson<Runner>(`/api/v1/projects/${projectId}/runners/${id}`, updates),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'runners'] }),
   })
 }
 
 export function useDeleteRunner() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetchWithAuth(`/api/v1/runners/${id}`, { method: 'DELETE' })
+      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/runners/${id}`, {
+        method: 'DELETE',
+      })
       return res.ok
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['runners'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'runners'] }),
   })
 }
 
 export function useBindAgentRunner() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: ({ agent, runnerId }: { agent: string; runnerId: string | null }) =>
-      patchJson(`/api/v1/agents/${agent}`, { runner_id: runnerId }),
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { runner_id: runnerId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
     },
   })
 }

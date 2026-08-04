@@ -23,7 +23,7 @@ export interface LogsOpts {
 }
 
 export function useLogs(opts: LogsOpts = {}) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   const params = new URLSearchParams()
@@ -34,17 +34,20 @@ export function useLogs(opts: LogsOpts = {}) {
   params.set('limit', String(opts.limit ?? 500))
 
   const query = useQuery<EventLogEntry[]>({
-    queryKey: ['logs', opts.agent, opts.event_type, opts.severity],
-    queryFn: () => getJson<EventLogEntry[]>(`/api/v1/logs?${params}`),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'logs', opts.agent, opts.event_type, opts.severity],
+    queryFn: () => getJson<EventLogEntry[]>(`/api/v1/projects/${projectId}/logs?${params}`),
+    enabled: isConfigured && !!projectId,
     staleTime: 0,
   })
 
   // Invalidate immediately when any SSE event arrives (live mode)
   useSSE(
     opts.live
-      ? () => {
-          queryClient.invalidateQueries({ queryKey: ['logs'] })
+      ? (event) => {
+          const d = (event.data ?? {}) as { project_id?: string }
+          if (d.project_id === projectId) {
+            queryClient.invalidateQueries({ queryKey: ['project', projectId, 'logs'] })
+          }
         }
       : undefined
   )
@@ -53,11 +56,11 @@ export function useLogs(opts: LogsOpts = {}) {
 }
 
 export function useLogAgents() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<string[]>({
-    queryKey: ['logs', 'agents'],
-    queryFn: () => getJson<string[]>('/api/v1/logs/agents'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'logs', 'agents'],
+    queryFn: () => getJson<string[]>(`/api/v1/projects/${projectId}/logs/agents`),
+    enabled: isConfigured && !!projectId,
     staleTime: 10_000,
   })
 }

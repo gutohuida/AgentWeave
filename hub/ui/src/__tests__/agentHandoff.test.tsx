@@ -76,7 +76,7 @@ describe('agent conversation handoff', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })

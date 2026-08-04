@@ -17,12 +17,12 @@ export interface Message {
 }
 
 export function useMessages(agent?: string) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const params = agent ? `?agent=${encodeURIComponent(agent)}` : ''
   return useQuery<Message[]>({
-    queryKey: ['messages', agent],
-    queryFn: () => getJson<Message[]>(`/api/v1/messages${params}`),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'messages', agent],
+    queryFn: () => getJson<Message[]>(`/api/v1/projects/${projectId}/messages${params}`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
@@ -32,22 +32,25 @@ export interface MessageHistoryOpts {
 }
 
 export function useMessageHistory(opts: MessageHistoryOpts = {}) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const params = new URLSearchParams({ history: 'true' })
   if (opts.sort) params.set('sort', opts.sort)
   if (opts.conversation) params.set('conversation', opts.conversation)
   return useQuery<Message[]>({
-    queryKey: ['messages', 'history', opts],
-    queryFn: () => getJson<Message[]>(`/api/v1/messages?${params}`),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'messages', 'history', opts],
+    queryFn: () => getJson<Message[]>(`/api/v1/projects/${projectId}/messages?${params}`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useMarkRead() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: (messageId: string) =>
-      fetchWithAuth(`/api/v1/messages/${messageId}/read`, { method: 'PATCH' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['messages'] }),
+      fetchWithAuth(`/api/v1/projects/${projectId}/messages/${messageId}/read`, {
+        method: 'PATCH',
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'messages'] }),
   })
 }

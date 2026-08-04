@@ -73,7 +73,7 @@ describe('phase 1 conversation-first shell', () => {
     cleanup()
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
       theme: 'cosmic',

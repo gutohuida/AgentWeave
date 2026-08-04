@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import { fetchSetupToken } from '@/api/setup'
+import { fetchProjectSummaries } from '@/api/projects'
 
 const SESSION_STORAGE_KEY = 'agentweave-session'
 const PREFS_STORAGE_KEY = 'agentweave-prefs'
+const SELECTED_PROJECT_STORAGE_KEY = 'agentweave-selected-project'
 
 export type ThemeId = 'ocean' | 'cosmic' | 'solar' | 'forest' | 'rose'
 export type ModeId  = 'light' | 'dark'
@@ -11,7 +13,6 @@ export type BootstrapState = 'pending' | 'ready' | 'failed' | 'unreachable'
 interface StoredSession {
   apiKey: string
   hubUrl: string
-  projectId: string
 }
 
 interface StoredPrefs {
@@ -44,16 +45,33 @@ function loadConfig(): StoredConfig {
   return {
     apiKey: session.apiKey ?? '',
     hubUrl: session.hubUrl ?? window.location?.origin ?? '',
-    projectId: session.projectId ?? 'proj-default',
     theme: prefs.theme ?? 'cosmic',
     mode: prefs.mode ?? 'light',
   }
 }
 
+function loadSelectedProject(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem(SELECTED_PROJECT_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
 interface ConfigState extends StoredConfig {
+  /** The project currently open in the workspace, or null before the
+   * project collection has loaded / when none is registered yet. Every
+   * project-scoped API hook reads this reactively rather than an
+   * imperative getState() call, so an in-flight request keeps the project
+   * ID it started with even if the operator switches projects before the
+   * response arrives (design.md: "Mutations receive project ID as an
+   * immutable argument"). */
+  selectedProjectId: string | null
   isConfigured: boolean
   bootstrapState: BootstrapState
-  setConfig: (apiKey: string, hubUrl: string, projectId: string) => void
+  setConfig: (apiKey: string, hubUrl: string) => void
+  setSelectedProject: (projectId: string | null) => void
   setTheme: (theme: ThemeId) => void
   setMode:  (mode: ModeId) => void
   clearConfig: () => void
@@ -62,12 +80,12 @@ interface ConfigState extends StoredConfig {
 
 const initial = loadConfig()
 
-function writeSession(apiKey: string, hubUrl: string, projectId: string): void {
+function writeSession(apiKey: string, hubUrl: string): void {
   if (typeof window === 'undefined') return
   try {
     window.sessionStorage.setItem(
       SESSION_STORAGE_KEY,
-      JSON.stringify({ apiKey, hubUrl, projectId } satisfies StoredSession)
+      JSON.stringify({ apiKey, hubUrl } satisfies StoredSession)
     )
   } catch {
     // storage full or disabled — ignore
@@ -80,6 +98,19 @@ function clearSession(): void {
     window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
   } catch {
     // ignore
+  }
+}
+
+function writeSelectedProject(projectId: string | null): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (projectId) {
+      window.localStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, projectId)
+    } else {
+      window.localStorage.removeItem(SELECTED_PROJECT_STORAGE_KEY)
+    }
+  } catch {
+    // storage full or disabled — ignore
   }
 }
 
@@ -97,12 +128,18 @@ function writePrefs(theme: ThemeId, mode: ModeId): void {
 
 export const useConfigStore = create<ConfigState>()((set, get) => ({
   ...initial,
+  selectedProjectId: loadSelectedProject(),
   isConfigured: !!initial.apiKey,
   bootstrapState: 'pending',
 
-  setConfig: (apiKey, hubUrl, projectId) => {
-    writeSession(apiKey, hubUrl, projectId)
-    set({ apiKey, hubUrl, projectId, isConfigured: !!apiKey })
+  setConfig: (apiKey, hubUrl) => {
+    writeSession(apiKey, hubUrl)
+    set({ apiKey, hubUrl, isConfigured: !!apiKey })
+  },
+
+  setSelectedProject: (projectId) => {
+    writeSelectedProject(projectId)
+    set({ selectedProjectId: projectId })
   },
 
   setTheme: (theme) => {
@@ -119,7 +156,13 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
 
   clearConfig: () => {
     clearSession()
-    set({ apiKey: '', hubUrl: window.location?.origin ?? '', projectId: 'proj-default', isConfigured: false })
+    writeSelectedProject(null)
+    set({
+      apiKey: '',
+      hubUrl: window.location?.origin ?? '',
+      selectedProjectId: null,
+      isConfigured: false,
+    })
   },
 
   bootstrap: async () => {
@@ -129,14 +172,26 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
 
     // For a local Hub, reconcile stale sessionStorage with the Hub's current
     // setup token. This prevents normal browser sessions from getting stuck
-    // on an old project/key while private mode appears to work.
+    // on an old key while private mode appears to work. The instance
+    // credential carries no project selection — see api/setup.ts.
     const result = localHub ? await fetchSetupToken() : null
     if (result?.status === 'ok' && result.apiKey !== get().apiKey) {
-      get().setConfig(result.apiKey, get().hubUrl || window.location.origin, result.projectId)
+      get().setConfig(result.apiKey, get().hubUrl || window.location.origin)
     }
 
     if (get().apiKey) {
       set({ bootstrapState: 'ready' })
+      // Auto-select a project if none is persisted, or the persisted one no
+      // longer exists in this instance's collection (e.g. after a reset).
+      // Phase 5's rail is what lets the operator change this deliberately;
+      // until then, the most-recently-opened project keeps the workspace
+      // usable the same way the old implicit single project did.
+      const { hubUrl, apiKey, selectedProjectId } = get()
+      const projects = await fetchProjectSummaries(hubUrl, apiKey)
+      const stillExists = projects.some((project) => project.id === selectedProjectId)
+      if (!stillExists) {
+        get().setSelectedProject(projects[0]?.id ?? null)
+      }
     } else if (result?.status === 'unreachable') {
       // The Hub process itself didn't respond — asking the operator to paste
       // an API key can't fix that. Report the connection failure instead.

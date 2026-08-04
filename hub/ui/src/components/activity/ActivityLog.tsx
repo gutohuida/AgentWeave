@@ -49,9 +49,11 @@ const chipBase = {
 
 export function ActivityLog() {
   const counterRef = useRef(0)
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const [events, setEvents] = useState<StoredEvent[]>(() =>
-    getBufferedEvents().map((e) => ({ ...e, localId: counterRef.current++ }))
+    getBufferedEvents()
+      .filter((e) => (e.data as { project_id?: string } | null)?.project_id === projectId)
+      .map((e) => ({ ...e, localId: counterRef.current++ }))
   )
   const [paused, setPaused] = useState(false)
   // Defensive: useSSE registers the callback once and dispatches from a ref
@@ -65,8 +67,9 @@ export function ActivityLog() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!isConfigured) return
-    getJson<SSEEvent[]>('/api/v1/events/history?limit=200')
+    if (!isConfigured || !projectId) return
+    setEvents([])
+    getJson<SSEEvent[]>(`/api/v1/projects/${projectId}/events/history?limit=200`)
       .then((history) => {
         setEvents((prev) => {
           const existingIds = new Set(prev.map((e) => e.timestamp + e.type))
@@ -77,10 +80,15 @@ export function ActivityLog() {
         })
       })
       .catch(() => {})
-  }, [isConfigured])
+  }, [isConfigured, projectId])
 
+  // The shared SSE stream is instance-wide (every project's events, per
+  // hub/hub/sse.py's operator fan-out) — filter to the selected project so
+  // switching projects doesn't blend two projects' activity into one feed.
   useSSE((event) => {
     if (pausedRef.current) return
+    const d = (event.data ?? {}) as { project_id?: string }
+    if (d.project_id !== projectId) return
     setEvents((prev) => {
       const next = [...prev, { ...event, localId: counterRef.current++ }]
       return next.slice(-MAX_EVENTS)

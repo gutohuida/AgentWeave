@@ -47,7 +47,7 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY123',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
     })
   })

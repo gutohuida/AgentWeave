@@ -1,10 +1,9 @@
 export interface SetupConfig {
   apiKey: string
-  projectId: string
 }
 
 export type SetupTokenResult =
-  | { status: 'ok'; apiKey: string; projectId: string }
+  | { status: 'ok'; apiKey: string }
   // The Hub process could not be reached at all (connection refused, DNS
   // failure, etc.) — distinct from a reachable Hub that declines to hand
   // out a token, since the operator can't fix "server is not running" by
@@ -23,5 +22,8 @@ export async function fetchSetupToken(): Promise<SetupTokenResult> {
   }
   if (!resp.ok) return { status: 'unavailable' }
   const data = await resp.json()
-  return { status: 'ok', apiKey: data.api_key, projectId: data.project_id ?? 'proj-default' }
+  // The instance credential carries no project selection — see
+  // hub/hub/api/v1/setup.py. Project selection lives in configStore's own
+  // selectedProjectId, sourced from the project collection.
+  return { status: 'ok', apiKey: data.api_key }
 }

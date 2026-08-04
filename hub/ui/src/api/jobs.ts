@@ -52,71 +52,84 @@ export interface JobUpdate {
 }
 
 export function useJobs() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Job[]>({
-    queryKey: ['jobs'],
-    queryFn: () => getJson<Job[]>('/api/v1/jobs'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'jobs'],
+    queryFn: () => getJson<Job[]>(`/api/v1/projects/${projectId}/jobs`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useJob(jobId: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Job>({
-    queryKey: ['jobs', jobId],
-    queryFn: () => getJson<Job>(`/api/v1/jobs/${jobId}`),
-    enabled: isConfigured && !!jobId,
+    queryKey: ['project', projectId, 'jobs', jobId],
+    queryFn: () => getJson<Job>(`/api/v1/projects/${projectId}/jobs/${jobId}`),
+    enabled: isConfigured && !!projectId && !!jobId,
   })
 }
 
 export function useCreateJob() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: (job: JobCreate) => postJson<Job>('/api/v1/jobs', job),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    mutationFn: (job: JobCreate) => postJson<Job>(`/api/v1/projects/${projectId}/jobs`, job),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }
 
 export function useUpdateJob() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: JobUpdate }) =>
-      patchJson<Job>(`/api/v1/jobs/${id}`, updates),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+      patchJson<Job>(`/api/v1/projects/${projectId}/jobs/${id}`, updates),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }
 
 export function usePauseJob() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: (id: string) => patchJson<Job>(`/api/v1/jobs/${id}`, { enabled: false }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    mutationFn: (id: string) =>
+      patchJson<Job>(`/api/v1/projects/${projectId}/jobs/${id}`, { enabled: false }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }
 
 export function useResumeJob() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: (id: string) => patchJson<Job>(`/api/v1/jobs/${id}`, { enabled: true }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    mutationFn: (id: string) =>
+      patchJson<Job>(`/api/v1/projects/${projectId}/jobs/${id}`, { enabled: true }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }
 
 export function useDeleteJob() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetchWithAuth(`/api/v1/jobs/${id}`, { method: 'DELETE' })
+      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/jobs/${id}`, {
+        method: 'DELETE',
+      })
       return res.ok
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }
 
 export function useRunJob() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: (id: string) => postJson<{ success: boolean; job_id: string; run_id: string }>(`/api/v1/jobs/${id}/run`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    mutationFn: (id: string) =>
+      postJson<{ success: boolean; job_id: string; run_id: string }>(
+        `/api/v1/projects/${projectId}/jobs/${id}/run`,
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
   })
 }

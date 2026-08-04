@@ -100,13 +100,14 @@ export interface AgentSession {
 }
 
 export function useAgents() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   // Invalidate immediately when the CLI pushes a session_synced SSE event
   useSSE((event) => {
-    if (event.type === 'session_synced') {
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    const d = (event.data ?? {}) as { project_id?: string }
+    if (event.type === 'session_synced' && d.project_id === projectId) {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
     }
   })
 
@@ -116,18 +117,19 @@ export function useAgents() {
   // invalidateQueries() reconciliation on reconnect, so the poll fallback
   // this used to need is no longer necessary.
   return useQuery<AgentSummary[]>({
-    queryKey: ['agents'],
-    queryFn: () => getJson<AgentSummary[]>('/api/v1/agents'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'agents'],
+    queryFn: () => getJson<AgentSummary[]>(`/api/v1/projects/${projectId}/agents`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useAgentLaunchability() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<AgentLaunchabilityResponse>({
-    queryKey: ['agents', 'launchability'],
-    queryFn: () => getJson<AgentLaunchabilityResponse>('/api/v1/agents/launchability'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'agents', 'launchability'],
+    queryFn: () =>
+      getJson<AgentLaunchabilityResponse>(`/api/v1/projects/${projectId}/agents/launchability`),
+    enabled: isConfigured && !!projectId,
     staleTime: 30_000,
   })
 }
@@ -153,27 +155,30 @@ export function eventBelongsToTimeline(event: SSEEvent, name: string): boolean {
 }
 
 export function useAgentTimeline(name: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   useSSE((event) => {
-    if (name && eventBelongsToTimeline(event, name)) {
-      queryClient.invalidateQueries({ queryKey: ['agents', name, 'timeline'] })
+    const d = (event.data ?? {}) as { project_id?: string }
+    if (name && d.project_id === projectId && eventBelongsToTimeline(event, name)) {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'timeline'] })
     }
   })
 
   return useQuery<AgentTimelineEvent[]>({
-    queryKey: ['agents', name, 'timeline'],
-    queryFn: () => getJson<AgentTimelineEvent[]>(`/api/v1/agents/${name}/timeline`),
-    enabled: isConfigured && !!name,
+    queryKey: ['project', projectId, 'agents', name, 'timeline'],
+    queryFn: () => getJson<AgentTimelineEvent[]>(`/api/v1/projects/${projectId}/agents/${name}/timeline`),
+    enabled: isConfigured && !!projectId && !!name,
   })
 }
 
-// Global cache for agent output lines that persists across component mounts
+// Global cache for agent output lines that persists across component mounts.
+// Keyed by "<projectId>:<agentName>" — an agent name is only unique within
+// its own project, so two projects' same-named agents must not share a slot.
 const linesCache = new Map<string, AgentOutputLine[]>()
 
 export function useAgentOutput(name: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
   const nameRef = useRef(name)
   const isInitialMount = useRef(true)
@@ -187,13 +192,14 @@ export function useAgentOutput(name: string | null) {
   const pollRef = useRef<(() => void) | null>(null)
   nameRef.current = name
 
-  const cacheKey = name || 'null'
+  const cacheKey = `${projectId ?? 'null'}:${name ?? 'null'}`
 
   // Seed from REST on mount / agent change - using React Query for caching
   const { data: initialData, isLoading: isLoadingInitial } = useQuery<AgentOutputLine[]>({
-    queryKey: ['agents', name, 'output', 'seed'],
-    queryFn: () => getJson<AgentOutputLine[]>(`/api/v1/agents/${name}/output?limit=200`),
-    enabled: isConfigured && !!name,
+    queryKey: ['project', projectId, 'agents', name, 'output', 'seed'],
+    queryFn: () =>
+      getJson<AgentOutputLine[]>(`/api/v1/projects/${projectId}/agents/${name}/output?limit=200`),
+    enabled: isConfigured && !!projectId && !!name,
     staleTime: 1000 * 60 * 5, // 5 minutes
   })
 
@@ -213,22 +219,22 @@ export function useAgentOutput(name: string | null) {
         merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
         linesCache.set(cacheKey, merged)
         // Trigger re-render by invalidating the custom query key
-        queryClient.invalidateQueries({ queryKey: ['agents', name, 'lines'] })
+        queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'lines'] })
       }
       isInitialMount.current = false
     }
-  }, [name, cacheKey, initialData, queryClient])
+  }, [name, projectId, cacheKey, initialData, queryClient])
 
   // Reset isInitialMount when agent changes
   useEffect(() => {
     isInitialMount.current = true
-  }, [name])
+  }, [name, projectId])
 
   // Get current lines from cache (using a dummy query to trigger re-renders)
   const { data: lines = [] } = useQuery<AgentOutputLine[]>({
-    queryKey: ['agents', name, 'lines'],
+    queryKey: ['project', projectId, 'agents', name, 'lines'],
     queryFn: () => linesCache.get(cacheKey) || [],
-    enabled: !!name,
+    enabled: !!projectId && !!name,
     staleTime: Infinity,
     initialData: () => linesCache.get(cacheKey) || [],
   })
@@ -242,7 +248,7 @@ export function useAgentOutput(name: string | null) {
   // poll; any subsequent SSE event resets it again. SSE reconnects also
   // fire a poll since events may have arrived while the stream was down.
   useEffect(() => {
-    if (!isConfigured || !name) return
+    if (!isConfigured || !projectId || !name) return
 
     let disposed = false
 
@@ -264,7 +270,7 @@ export function useAgentOutput(name: string | null) {
           ? `&since=${encodeURIComponent(lastTimestamp)}`
           : ''
         const newLines = await getJson<AgentOutputLine[]>(
-          `/api/v1/agents/${name}/output?limit=50${since}`,
+          `/api/v1/projects/${projectId}/agents/${name}/output?limit=50${since}`,
         )
         if (!disposed && newLines.length > 0) {
           const existingIds = new Set((linesCache.get(cacheKey) || []).map(l => l.id))
@@ -273,7 +279,7 @@ export function useAgentOutput(name: string | null) {
             const merged = [...(linesCache.get(cacheKey) || []), ...uniqueNew]
             merged.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
             linesCache.set(cacheKey, merged)
-            queryClient.invalidateQueries({ queryKey: ['agents', name, 'lines'] })
+            queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', name, 'lines'] })
           }
         }
       } catch {
@@ -306,17 +312,17 @@ export function useAgentOutput(name: string | null) {
       pollRef.current = null
       unsubscribe()
     }
-  }, [isConfigured, name, cacheKey, queryClient])
+  }, [isConfigured, projectId, name, cacheKey, queryClient])
 
   // Append new lines from SSE and reset the gap timer on each event so the
   // poll only fires when the stream is actually quiet.
   const handleSSE = useRef<(e: SSEEvent) => void>(() => {})
   handleSSE.current = (event: SSEEvent) => {
     if (event.type !== 'agent_output') return
-    const d = event.data as AgentOutputLine
-    if (d.agent !== nameRef.current) return
+    const d = event.data as AgentOutputLine & { project_id?: string }
+    if (d.agent !== nameRef.current || d.project_id !== projectId) return
 
-    const agentKey = d.agent
+    const agentKey = cacheKey
     const newLine: AgentOutputLine = {
       id: d.id,
       agent: d.agent,
@@ -342,7 +348,7 @@ export function useAgentOutput(name: string | null) {
     const current = linesCache.get(agentKey) || []
     if (current.some(l => l.id === newLine.id)) return
     linesCache.set(agentKey, [...current, newLine])
-    queryClient.invalidateQueries({ queryKey: ['agents', d.agent, 'lines'] })
+    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents', d.agent, 'lines'] })
   }
 
   useSSE((event) => handleSSE.current(event))
@@ -351,10 +357,13 @@ export function useAgentOutput(name: string | null) {
 }
 
 export function useAgentSessions(agentName: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<{ sessions: AgentSession[] }>({
-    queryKey: ['agent', agentName, 'sessions'],
-    queryFn: () => getJson<{ sessions: AgentSession[] }>(`/api/v1/agent/sessions/${agentName}`),
-    enabled: isConfigured && !!agentName,
+    queryKey: ['project', projectId, 'agent', agentName, 'sessions'],
+    queryFn: () =>
+      getJson<{ sessions: AgentSession[] }>(
+        `/api/v1/projects/${projectId}/agent/sessions/${agentName}`,
+      ),
+    enabled: isConfigured && !!projectId && !!agentName,
   })
 }

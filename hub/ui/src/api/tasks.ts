@@ -23,19 +23,20 @@ export interface Task {
 }
 
 export function useTasks() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Task[]>({
-    queryKey: ['tasks'],
-    queryFn: () => getJson<Task[]>('/api/v1/tasks'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'tasks'],
+    queryFn: () => getJson<Task[]>(`/api/v1/projects/${projectId}/tasks`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useUpdateTask() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
-      patchJson<Task>(`/api/v1/tasks/${id}`, { status }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+      patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, { status }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
   })
 }

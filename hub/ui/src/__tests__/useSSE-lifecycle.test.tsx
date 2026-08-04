@@ -35,7 +35,7 @@ describe('M22 — useSSE reconnect lifecycle: clear on cancel, clear on unmount'
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })
@@ -183,7 +183,7 @@ describe('stream-health: connection state and reconciliation on reconnect (task 
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })

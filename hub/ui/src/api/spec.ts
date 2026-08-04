@@ -57,34 +57,37 @@ export interface SpecListResponse {
 }
 
 export function useSpecList() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<SpecListResponse>({
-    queryKey: ['specs'],
-    queryFn: () => getJson<SpecListResponse>('/api/v1/project/specs'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'specs'],
+    queryFn: () => getJson<SpecListResponse>(`/api/v1/projects/${projectId}/project/specs`),
+    enabled: isConfigured && !!projectId,
   })
 }
 
 export function useSpec(path: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<SpecDocument>({
-    queryKey: ['spec', path],
+    queryKey: ['project', projectId, 'spec', path],
     queryFn: () =>
-      getJson<SpecDocument>(`/api/v1/project/spec?path=${encodeURIComponent(path ?? '')}`),
-    enabled: isConfigured && !!path,
+      getJson<SpecDocument>(
+        `/api/v1/projects/${projectId}/project/spec?path=${encodeURIComponent(path ?? '')}`,
+      ),
+    enabled: isConfigured && !!projectId && !!path,
   })
 }
 
 export function useSpecEvents() {
   const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
 
   // Invalidate spec queries when the Hub broadcasts a spec_updated SSE event
   useSSE((event) => {
-    if (event.type === 'spec_updated') {
-      queryClient.invalidateQueries({ queryKey: ['specs'] })
-      const d = event.data as { path?: string }
+    const d = event.data as { path?: string; project_id?: string }
+    if (event.type === 'spec_updated' && d.project_id === projectId) {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
       if (d?.path) {
-        queryClient.invalidateQueries({ queryKey: ['spec', d.path] })
+        queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }
     }
   })

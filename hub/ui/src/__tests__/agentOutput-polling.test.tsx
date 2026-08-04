@@ -73,7 +73,7 @@ describe('M21 — useAgentOutput polls only on detected SSE gaps, not on a 2s in
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })

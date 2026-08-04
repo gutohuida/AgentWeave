@@ -58,7 +58,7 @@ function withQueryClient(node: ReactNode) {
 
 function triggerBody(call = 0): Record<string, unknown> {
   const [path, init] = fetchWithAuth.mock.calls[call] as [string, RequestInit]
-  expect(path).toBe('/api/v1/agent/trigger')
+  expect(path).toBe('/api/v1/projects/proj-test/agent/trigger')
   return JSON.parse(init.body as string)
 }
 
@@ -85,7 +85,7 @@ describe('Spec tab — manifest drift and repair', () => {
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
       theme: 'cosmic',

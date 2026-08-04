@@ -52,20 +52,22 @@ export interface AgentConversation {
 }
 
 export function useAgentConversations(agent: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   useSSE((event) => {
     const data = (event.data ?? {}) as Record<string, unknown>
+    if (data.project_id !== projectId) return
     if (agent && data.agent === agent && data.conversation_id) {
-      queryClient.invalidateQueries({ queryKey: ['agent', agent, 'conversations'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agent', agent, 'conversations'] })
     }
   })
 
   return useQuery<AgentConversation[]>({
-    queryKey: ['agent', agent, 'conversations'],
-    queryFn: () => getJson<AgentConversation[]>(`/api/v1/agent/${agent}/conversations`),
-    enabled: isConfigured && !!agent,
+    queryKey: ['project', projectId, 'agent', agent, 'conversations'],
+    queryFn: () =>
+      getJson<AgentConversation[]>(`/api/v1/projects/${projectId}/agent/${agent}/conversations`),
+    enabled: isConfigured && !!projectId && !!agent,
   })
 }
 
@@ -89,35 +91,46 @@ export function eventTargetsAgent(eventType: string, data: unknown, agent: strin
 }
 
 export function useAgentChatHistory(agent: string | null, conversationId: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   useSSE((event) => {
-    if (agent && eventTargetsAgent(event.type, event.data, agent)) {
-      queryClient.invalidateQueries({ queryKey: ['agent', agent, 'chat', conversationId] })
+    const d = (event.data ?? {}) as { project_id?: string }
+    if (agent && d.project_id === projectId && eventTargetsAgent(event.type, event.data, agent)) {
+      queryClient.invalidateQueries({
+        queryKey: ['project', projectId, 'agent', agent, 'chat', conversationId],
+      })
     }
   })
 
   return useQuery<ChatHistoryResponse>({
-    queryKey: ['agent', agent, 'chat', conversationId],
-    queryFn: () => getJson<ChatHistoryResponse>(`/api/v1/agent/${agent}/chat/${conversationId}`),
-    enabled: isConfigured && !!agent && !!conversationId && conversationId !== NEW_SESSION_ID,
+    queryKey: ['project', projectId, 'agent', agent, 'chat', conversationId],
+    queryFn: () =>
+      getJson<ChatHistoryResponse>(
+        `/api/v1/projects/${projectId}/agent/${agent}/chat/${conversationId}`,
+      ),
+    enabled:
+      isConfigured && !!projectId && !!agent && !!conversationId && conversationId !== NEW_SESSION_ID,
   })
 }
 
 export function useAgentRecentChat(agent: string | null, limit: number = 50) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   useSSE((event) => {
-    if (agent && eventTargetsAgent(event.type, event.data, agent)) {
-      queryClient.invalidateQueries({ queryKey: ['agent', agent, 'chat', 'recent', limit] })
+    const d = (event.data ?? {}) as { project_id?: string }
+    if (agent && d.project_id === projectId && eventTargetsAgent(event.type, event.data, agent)) {
+      queryClient.invalidateQueries({
+        queryKey: ['project', projectId, 'agent', agent, 'chat', 'recent', limit],
+      })
     }
   })
 
   return useQuery<ChatHistoryResponse>({
-    queryKey: ['agent', agent, 'chat', 'recent', limit],
-    queryFn: () => getJson<ChatHistoryResponse>(`/api/v1/agent/${agent}/chat?limit=${limit}`),
-    enabled: isConfigured && !!agent,
+    queryKey: ['project', projectId, 'agent', agent, 'chat', 'recent', limit],
+    queryFn: () =>
+      getJson<ChatHistoryResponse>(`/api/v1/projects/${projectId}/agent/${agent}/chat?limit=${limit}`),
+    enabled: isConfigured && !!projectId && !!agent,
   })
 }

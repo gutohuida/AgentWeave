@@ -8,11 +8,11 @@ import { useConfigStore } from '@/store/configStore'
  * rather than issuing a request per query.
  */
 export function useWorkspacePaths() {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<string[]>({
-    queryKey: ['workspace', 'paths'],
-    queryFn: () => getJson<string[]>('/api/v1/workspace/paths'),
-    enabled: isConfigured,
+    queryKey: ['project', projectId, 'workspace', 'paths'],
+    queryFn: () => getJson<string[]>(`/api/v1/projects/${projectId}/workspace/paths`),
+    enabled: isConfigured && !!projectId,
     staleTime: 60_000,
   })
 }

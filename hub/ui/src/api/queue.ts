@@ -14,30 +14,34 @@ export interface QueueStatus {
  * both fields already computed server-side by the Phase 6 queue endpoint, so
  * this is a thin read hook, not new logic. */
 export function useQueueStatus(agent: string | null) {
-  const { isConfigured } = useConfigStore()
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
   useSSE((event) => {
-    const d = (event.data ?? {}) as { agent?: string }
-    if (agent && d.agent === agent) {
-      queryClient.invalidateQueries({ queryKey: ['queue', agent, 'status'] })
-    }
-    if (agent && (event.type === 'run_started' || event.type === 'run_completed'
+    const d = (event.data ?? {}) as { agent?: string; project_id?: string }
+    if (d.project_id !== projectId || !agent || d.agent !== agent) return
+    if (
+      event.type === 'run_started' || event.type === 'run_completed'
       || event.type === 'run_failed' || event.type === 'run_stopped'
-      || event.type === 'run_interrupted') && d.agent === agent) {
-      queryClient.invalidateQueries({ queryKey: ['queue', agent, 'status'] })
+      || event.type === 'run_interrupted'
+      || event.type === 'queue_entry_queued' || event.type === 'queue_entry_delivered'
+      || event.type === 'queue_entry_withdrawn' || event.type === 'queue_chain_suspended'
+    ) {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'queue', agent, 'status'] })
     }
   })
 
   return useQuery<QueueStatus>({
-    queryKey: ['queue', agent, 'status'],
-    queryFn: () => getJson<QueueStatus>(`/api/v1/queue/${agent}/status`),
-    enabled: isConfigured && !!agent,
+    queryKey: ['project', projectId, 'queue', agent, 'status'],
+    queryFn: () => getJson<QueueStatus>(`/api/v1/projects/${projectId}/queue/${agent}/status`),
+    enabled: isConfigured && !!projectId && !!agent,
   })
 }
 
 /** Withdraws an undelivered queue entry (spec: "Undelivered entries can be
  * withdrawn"). The Phase 6 endpoint already enforces "not yet delivered". */
-export async function withdrawQueueEntry(entryId: string): Promise<void> {
-  await fetchWithAuth(`/api/v1/queue/entries/${entryId}`, { method: 'DELETE' })
+export async function withdrawQueueEntry(projectId: string, entryId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/projects/${projectId}/queue/entries/${entryId}`, {
+    method: 'DELETE',
+  })
 }

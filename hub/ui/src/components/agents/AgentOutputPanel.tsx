@@ -59,7 +59,7 @@ export function AgentOutputPanel({
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoscroll, setAutoscroll] = useState(true)
 
-  const { apiKey, projectId } = useConfigStore()
+  const { apiKey, selectedProjectId: projectId } = useConfigStore()
   const [isSending, setIsSending] = useState(false)
   const [selectedConversationId, setSelectedConversationId] = useState<string>(
     initialConversationId ?? '',
@@ -171,7 +171,8 @@ export function AgentOutputPanel({
   ].filter((banner): banner is ConversationBanner => banner !== null)
 
   const handleWithdraw = (entryId: string) => {
-    void withdrawQueueEntry(entryId)
+    if (!projectId) return
+    void withdrawQueueEntry(projectId, entryId)
   }
 
   const postTrigger = async (
@@ -179,7 +180,7 @@ export function AgentOutputPanel({
     conversationId?: string,
     agentName: string = agent.name,
   ): Promise<TriggerResult> => {
-    const response = await fetch('/api/v1/agent/trigger', {
+    const response = await fetch(`/api/v1/projects/${projectId}/agent/trigger`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -205,10 +206,10 @@ export function AgentOutputPanel({
     result.status === 'queued' ? (result.waiting_reason ?? fallback) : null
 
   const handleStop = async () => {
-    if (!apiKey || !isRunning || isStopping) return
+    if (!apiKey || !projectId || !isRunning || isStopping) return
     setIsStopping(true)
     try {
-      const response = await fetch(`/api/v1/agent/${agent.name}/stop`, {
+      const response = await fetch(`/api/v1/projects/${projectId}/agent/${agent.name}/stop`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}` },
       })
@@ -230,7 +231,7 @@ export function AgentOutputPanel({
     // chain and drains it in the same turn (design.md: "operator input resets
     // the chain") — this reuses that existing behavior rather than adding a
     // dedicated force-deliver endpoint.
-    if (!apiKey || isRunning || isSending) return
+    if (!apiKey || !projectId || isRunning || isSending) return
     const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
     setIsSending(true)
     try {
@@ -249,7 +250,7 @@ export function AgentOutputPanel({
   }
 
   const handleHandoff = async () => {
-    if (!apiKey || !currentConversationId || isRunning || isSending) return
+    if (!apiKey || !projectId || !currentConversationId || isRunning || isSending) return
     setIsSending(true)
     setHandoffState('preparing')
     setSessionNotice('Preparing durable handoff…')
@@ -287,7 +288,7 @@ export function AgentOutputPanel({
   }
 
   const handleComposerSubmit = async (typedMessage: string): Promise<void> => {
-    if (!apiKey) throw new Error('Not configured')
+    if (!apiKey || !projectId) throw new Error('Not configured')
     setIsSending(true)
     setSubmissionError(null)
     const redirectsAgent = targetAgent !== agent.name
@@ -458,7 +459,7 @@ export function AgentOutputPanel({
         <Composer
           key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_VALUE}`}
           agent={agent.name}
-          projectId={projectId}
+          projectId={projectId ?? ''}
           conversationId={currentConversationId ?? null}
           isRunning={isRunning}
           onSubmit={handleComposerSubmit}

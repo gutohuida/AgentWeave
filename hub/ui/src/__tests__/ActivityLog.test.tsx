@@ -40,8 +40,10 @@ function withQueryClient(node: ReactNode) {
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
+// The operator stream stamps every event with project_id server-side
+// (hub/hub/sse.py); ActivityLog filters on it to avoid blending projects.
 function fakeEvent(type: string, data: Record<string, unknown> = {}): SSEEvent {
-  return { type, data, timestamp: new Date().toISOString() }
+  return { type, data: { project_id: 'proj-test', ...data }, timestamp: new Date().toISOString() }
 }
 
 describe('M19 — ActivityLog uses a ref to read the latest paused value', () => {
@@ -50,7 +52,7 @@ describe('M19 — ActivityLog uses a ref to read the latest paused value', () =>
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
-      projectId: 'proj-test',
+      selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
     })

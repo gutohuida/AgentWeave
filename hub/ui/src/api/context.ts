@@ -1,9 +1,9 @@
 import { postJson } from './client'
 
-export async function requestCompact(agentName: string): Promise<void> {
-  await postJson(`/api/v1/agents/${agentName}/compact`)
+export async function requestCompact(projectId: string, agentName: string): Promise<void> {
+  await postJson(`/api/v1/projects/${projectId}/agents/${agentName}/compact`)
 }
 
-export async function requestNewSession(agentName: string): Promise<void> {
-  await postJson(`/api/v1/agents/${agentName}/new-session`)
+export async function requestNewSession(projectId: string, agentName: string): Promise<void> {
+  await postJson(`/api/v1/projects/${projectId}/agents/${agentName}/new-session`)
 }
