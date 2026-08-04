@@ -22,5 +22,10 @@ class Settings(BaseSettings):
     # Request body size cap
     aw_max_body_size: int = 1_048_576  # 1 MB
 
+    # Explicit container workspace root (Docker mode). When set, project
+    # registrations are accepted only beneath this container-visible root;
+    # empty means native local mode with no containment restriction.
+    aw_workspace_root: str = ""
+
 
 settings = Settings()

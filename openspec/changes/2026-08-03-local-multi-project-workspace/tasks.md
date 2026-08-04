@@ -115,7 +115,7 @@
 
 ## 6. Docker, cleanup, documentation, and closeout
 
-- [ ] 6.1 Write Docker configuration tests for an explicitly mounted workspace root and typed refusal
+- [x] 6.1 Write Docker configuration tests for an explicitly mounted workspace root and typed refusal
       of inaccessible host paths; implement/document the configured root without path guessing.
 - [ ] 6.2 Remove obsolete one-project adapters, bootstrap-project assumptions, completed auth code,
       and dead session fallback; use repository search to account for every remaining `Path.cwd()`

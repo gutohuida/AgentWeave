@@ -83,14 +83,51 @@ def canonical_path_key(path: Union[str, Path], *, platform: Optional[str] = None
     raise ValueError(f"unsupported path platform: {target}")
 
 
+def configured_workspace_root() -> Optional[Path]:
+    """Return the explicitly configured container workspace root, or None.
+
+    Native local mode leaves ``AW_WORKSPACE_ROOT`` unset and imposes no
+    containment restriction; the Hub never guesses host/container mappings.
+    """
+    from .config import settings
+
+    raw = settings.aw_workspace_root.strip()
+    if not raw:
+        return None
+    _reject_control_characters(raw)
+    root = Path(raw).expanduser()
+    if not root.is_absolute():
+        raise ProjectPathError("configured workspace root must be an absolute path")
+    return root.resolve(strict=False)
+
+
+def _require_workspace_containment(candidate: Path, root: Path) -> None:
+    if not _is_within(candidate, root):
+        raise ProjectWorkspaceUnavailable(
+            f"project directory is not visible beneath the configured workspace root: "
+            f"{root}; mount the host directory into the container at that root "
+            f"(AW_WORKSPACE_ROOT) before registering it",
+            code="project_workspace_not_mounted",
+            directory_state="not_mounted",
+        )
+
+
 def canonicalize_project_directory(
-    raw_path: Union[str, Path], *, hub_data_directory: Optional[Union[str, Path]] = None
+    raw_path: Union[str, Path],
+    *,
+    hub_data_directory: Optional[Union[str, Path]] = None,
+    workspace_root: Optional[Union[str, Path]] = None,
 ) -> CanonicalProjectPath:
     raw = str(raw_path)
     _reject_control_characters(raw)
     supplied = Path(raw).expanduser()
     if not supplied.is_absolute():
         raise ProjectPathError("project directory must be an absolute path")
+
+    root: Optional[Path] = None
+    if workspace_root is not None:
+        root = Path(workspace_root).expanduser().resolve(strict=False)
+        _require_workspace_containment(supplied.resolve(strict=False), root)
 
     try:
         canonical = supplied.resolve(strict=True)
@@ -113,6 +150,8 @@ def canonicalize_project_directory(
             code="project_workspace_not_directory",
             directory_state="not_directory",
         )
+    if root is not None:
+        _require_workspace_containment(canonical, root)
     if canonical == Path(canonical.anchor):
         raise ProjectPathError("filesystem root cannot be registered as a project")
     if not os.access(canonical, os.R_OK | os.X_OK):
@@ -140,7 +179,10 @@ async def resolve_project_workspace(
     project_id: str,
     *,
     hub_data_directory: Optional[Union[str, Path]] = None,
+    workspace_root: Optional[Union[str, Path]] = None,
 ) -> ProjectWorkspace:
+    if workspace_root is None:
+        workspace_root = configured_workspace_root()
     project = await session.get(Project, project_id)
     if project is None:
         raise ProjectPathError("unknown project", code="project_not_found")
@@ -154,7 +196,9 @@ async def resolve_project_workspace(
 
     try:
         canonical = canonicalize_project_directory(
-            project.working_directory, hub_data_directory=hub_data_directory
+            project.working_directory,
+            hub_data_directory=hub_data_directory,
+            workspace_root=workspace_root,
         )
     except ProjectWorkspaceUnavailable as exc:
         project.directory_state = exc.directory_state

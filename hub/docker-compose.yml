@@ -8,10 +8,18 @@ services:
       - "${AW_PORT:-8000}:8000"
     volumes:
       - hub-data:/app/data
+      # Explicit workspace root: project directories are accepted only
+      # beneath the container-visible AW_WORKSPACE_ROOT. Point
+      # AW_WORKSPACE_HOST_ROOT at the host directory that holds your
+      # projects; paths outside it are refused with a typed mount
+      # diagnostic. The Hub never mounts the Docker socket or guesses
+      # host/container path mappings.
+      - ${AW_WORKSPACE_HOST_ROOT:-./workspaces}:/workspaces
     env_file:
       - .env
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db
+      - AW_WORKSPACE_ROOT=/workspaces
     restart: unless-stopped
     healthcheck:
       test:
