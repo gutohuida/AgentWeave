@@ -138,6 +138,39 @@ def test_http_transport_classifies_auth_failure():
     assert exc.value.classification == "hub_auth_failed"
 
 
+def test_http_status_check_uses_the_project_scoped_status_route(monkeypatch):
+    """The Hub mounts /status only beneath /api/v1/projects/{project_id}; the
+    doctor check must not call the removed unscoped route with a project_id
+    query parameter (local multi-project workspace phase 6.2 cleanup)."""
+    from agentweave import diagnostics
+
+    captured = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    def fake_urlopen(request, timeout=0):
+        captured["url"] = request.full_url
+        return _Response()
+
+    monkeypatch.setattr(diagnostics.urllib.request, "urlopen", fake_urlopen)
+
+    result = diagnostics._http_status_check(
+        {"url": "http://hub:8000", "api_key": "aw_live_x", "project_id": "proj-abc"}
+    )
+
+    assert result.status == "pass"
+    assert captured["url"] == "http://hub:8000/api/v1/projects/proj-abc/status"
+    assert "project_id=" not in captured["url"]
+
+
 def test_diagnostics_warns_for_placeholder_ai_context(tmp_path, monkeypatch):
     from agentweave.diagnostics import check_project_context
 

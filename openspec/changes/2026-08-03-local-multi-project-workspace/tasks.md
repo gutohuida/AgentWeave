@@ -117,7 +117,7 @@
 
 - [x] 6.1 Write Docker configuration tests for an explicitly mounted workspace root and typed refusal
       of inaccessible host paths; implement/document the configured root without path guessing.
-- [ ] 6.2 Remove obsolete one-project adapters, bootstrap-project assumptions, completed auth code,
+- [x] 6.2 Remove obsolete one-project adapters, bootstrap-project assumptions, completed auth code,
       and dead session fallback; use repository search to account for every remaining `Path.cwd()`
       and project-scoped `ApiKey` reference.
 - [ ] 6.3 Update README, CLI/environment/configuration docs, AGENTS.md/CLAUDE.md architecture notes,

@@ -412,6 +412,62 @@ class TestHttpTransportResponseSizeCap(unittest.TestCase):
         self.assertEqual(HUB_MAX_RESPONSE_BODY, 10 * 1024 * 1024)
 
 
+class TestHttpTransportProjectScopedRoutes(unittest.TestCase):
+    """Operator-mode requests must target the explicit project routes
+    (/api/v1/projects/{project_id}/...). The unscoped one-project routes and
+    their project_id query parameter were removed when every operator
+    resource moved beneath explicit project paths (local multi-project
+    workspace phase 6.2 cleanup).
+    """
+
+    def setUp(self):
+        self.transport = HttpTransport(
+            url="http://localhost:8000",
+            api_key="aw_live_testkey",
+            project_id="proj-test",
+        )
+
+    @patch("urllib.request.urlopen")
+    def test_operator_get_uses_the_project_path(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response([])
+        self.transport.get_pending_messages("kimi")
+        url = mock_urlopen.call_args.args[0].full_url
+        self.assertTrue(
+            url.startswith("http://localhost:8000/api/v1/projects/proj-test/messages"),
+            url,
+        )
+        self.assertNotIn("project_id=", url)
+        self.assertIn("agent=kimi", url)
+
+    @patch("urllib.request.urlopen")
+    def test_operator_post_uses_the_project_path(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response({"id": "msg-1"})
+        self.transport.send_message({"from": "claude", "to": "kimi", "content": "x"})
+        request = mock_urlopen.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "http://localhost:8000/api/v1/projects/proj-test/messages",
+        )
+
+    @patch("urllib.request.urlopen")
+    def test_operator_get_without_params_has_no_query_string(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response([])
+        self.transport.get_active_tasks()
+        url = mock_urlopen.call_args.args[0].full_url
+        self.assertEqual(url, "http://localhost:8000/api/v1/projects/proj-test/tasks")
+
+    @patch.dict("os.environ", {"AW_RUN_TOKEN": "aw_run_bound-secret"}, clear=False)
+    @patch("urllib.request.urlopen")
+    def test_run_token_mode_still_uses_agent_actions(self, mock_urlopen):
+        mock_urlopen.return_value = _make_response([])
+        self.transport.get_active_tasks()
+        url = mock_urlopen.call_args.args[0].full_url
+        self.assertTrue(
+            url.startswith("http://localhost:8000/api/v1/agent-actions/tasks"),
+            url,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
 

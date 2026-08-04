@@ -517,7 +517,7 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
             category="transport",
         )
 
-    status_url = f"{url}/api/v1/status?project_id={project_id}"
+    status_url = f"{url}/api/v1/projects/{project_id}/status"
     req = urllib.request.Request(status_url, method="GET")
     req.add_header("Authorization", f"Bearer {api_key}")
     req.add_header("Accept", "application/json")

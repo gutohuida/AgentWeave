@@ -7,7 +7,7 @@ Expected transport.json:
         "type": "http",
         "url": "http://localhost:8000",
         "api_key": "aw_live_...",
-        "project_id": "proj-default"
+        "project_id": "proj-abc123"
     }
 """
 
@@ -135,32 +135,36 @@ class HttpTransport(BaseTransport):
     ) -> Any:
         """Make an authenticated request to the Hub.
 
-        Injects project_id into every GET query string. POST bodies are sent as-is
-        because the Hub's get_project auth dependency already extracts project_id
-        from the API key, and most writeable schemas use extra="forbid".
+        Hub-owned runs (AW_RUN_TOKEN set) call the capability-scoped
+        /api/v1/agent-actions routes. Operator-mode calls carry the project
+        identity in the route itself (/api/v1/projects/{project_id}/...) —
+        the Hub mounts every operator resource beneath an explicit project
+        path and rejects query-param or implicit selection.
         Retries on 5xx, 408, 425, 429, and URLError with exponential backoff
         (honors Retry-After header on 429). Raises HubTransportError on
         non-2xx, non-retryable errors or after exhausting retries.
         """
         run_token = self._run_token()
         agent_mode = bool(run_token)
-        route_prefix = "/api/v1/agent-actions" if agent_mode else "/api/v1"
+        if agent_mode:
+            route_prefix = "/api/v1/agent-actions"
+        elif self.project_id:
+            route_prefix = f"/api/v1/projects/{self.project_id}"
+        else:
+            route_prefix = "/api/v1"
         url = f"{self.url}{route_prefix}{path}"
 
-        # Inject project_id into GET params
         if method == "GET":
-            qs: Dict[str, str] = {} if agent_mode else {"project_id": self.project_id}
-            if params:
-                qs.update(params)
-            url += "?" + urllib.parse.urlencode({k: v for k, v in qs.items() if v is not None})
+            qs: Dict[str, str] = dict(params) if params else {}
+            if qs:
+                url += "?" + urllib.parse.urlencode({k: v for k, v in qs.items() if v is not None})
 
         payload: Optional[bytes] = None
         if body is not None:
-            # NOTE: do NOT inject project_id into the body. The Hub's
-            # get_project auth dependency extracts project_id from the API
-            # key (see hub/hub/auth.py), and most writeable schemas use
-            # extra="forbid" — injecting here triggers 422 on POST /tasks,
-            # /messages, /jobs and PATCH /tasks/{id}, /jobs/{id}.
+            # NOTE: do NOT inject project_id into the body. The route path
+            # already carries the project identity, and most writeable
+            # schemas use extra="forbid" — injecting here triggers 422 on
+            # POST /tasks, /messages, /jobs and PATCH /tasks/{id}, /jobs/{id}.
             if agent_mode:
                 body = dict(body)
                 for identity_field in (
