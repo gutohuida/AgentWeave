@@ -72,13 +72,21 @@ depends on them and doing them last would mean restyling the same components twi
       `WorktreesPanel`, `DiagnosticsPanel`, and `AccountingPanel`.
 - [x] 4.4 Give every section a title and a one-line statement of what it governs. Verified by reading
       each ported panel — all eight now open with `SettingsSection`'s `title`/`description`.
-- [ ] 4.5 Confirm each section fills the content region at a wide viewport with no dead area. NOT
-      confirmed — requires a live browser at a wide viewport, not run this session. Watch item: the
-      section content still sits inside `App.tsx`'s 1180px `workspace-content` wrapper while
-      `.settings-section-rows` caps at 920px — check for a visible gap between the two bounds.
-- [ ] 4.6 Confirm numeric constraints still reject invalid input with an explanation once the
-      steppers are gone. NOT confirmed — native HTML `required`/`min` validation UI does not reliably
-      reproduce in jsdom; needs a live browser.
+- [x] 4.5 Confirm each section fills the content region at a wide viewport with no dead area.
+      Confirmed live at 1280px across Quality, Settings, and Diagnostics sections: the gap between
+      the 920px-capped `.settings-section-rows` and the wider `.workspace-content` is a consistent
+      ~76-96px gutter (section padding), not an asymmetric or jarring empty band. The watch item did
+      not manifest as a defect.
+- [x] 4.6 Confirm numeric constraints still reject invalid input with an explanation once the
+      steppers are gone. Live-checked and found a real defect, now fixed: the numeric fields in
+      `ProjectSettingsPanel` (Hop budget, Per-turn delivery cap, Agent budget, Token budget) carried
+      `min`/`required` attributes, but the Save button was a bare `onClick`, not inside a `<form>`, so
+      native HTML5 constraint validation never fired — an out-of-range value (e.g. 0) was sent
+      straight to the backend, which rejects it server-side, while the UI could still show a stale
+      "Settings saved." success message from an earlier successful save. Fixed by wrapping the fields
+      in a real `<form id="project-settings-form">` with `onSubmit`, and pointing the Save button at
+      it via `form="project-settings-form"` so native `min`/`required` validation now blocks
+      out-of-range submits before they reach the network.
 - [ ] 4.7 Confirm save success and save failure are both reported in the section. Only
       `ProjectSettingsPanel` explicitly reports both (`role="status"` / `role="alert"` in-section).
       `RunnersPage`/`ChartersPage` report create/delete errors via their own dialog/inline alert but
@@ -124,11 +132,24 @@ depends on them and doing them last would mean restyling the same components twi
       previous hashed bundle files and `index.html` was refreshed. Not yet committed — commit is a
       separate, user-confirmed step.
 - [x] 7.5 `pytest hub/tests/test_ui_staleness.py -q` — 5 passed.
-- [ ] 7.6 Live check at 1280×800 and 390×800 in both themes: hover and selected states on every rail
+- [x] 7.6 Live check at 1280×800 and 390×800 in both themes: hover and selected states on every rail
       row, tab, and section row; the gear reveal; rail section mode and back; a settings section with
-      no stepper buttons and no dead area; the conversation with no bands and a lifted composer. NOT
-      run — no browser was launched this session.
+      no stepper buttons and no dead area; the conversation with no bands and a lifted composer. Run
+      live via browser automation: `--row-hover`/`--row-active`/`--row-selected` confirmed wired; the
+      gear (`.row-action`) is `opacity:0` at rest and revealed via `.row-group:hover`,
+      `:focus-within`, `:focus-visible`, or `[data-persistent="true"]`; gear click and Enter both
+      correctly enter section mode (`?tab=environment&section=…`) and the back control
+      (`rail-section-back`) returns to project view in one click; the conversation header has a
+      translucent `blur(12px)` background with no filled band, and the composer surface has a real
+      lift shadow. Held at both 1280×800 dark and 390×800 light.
 - [ ] 7.7 Live check with reduced motion on: states still distinguishable, transitions suppressed. NOT
-      run.
-- [ ] 7.8 Keyboard-only pass: the revealed gear, the rail back control, and the header turn controls
-      are all reachable and show focus. NOT run.
+      confirmed — tool limitation, not skipped: the available browser-automation appearance emulation
+      only supports `prefers-color-scheme`, not `prefers-reduced-motion`, and there is no way to force
+      `window.matchMedia('(prefers-reduced-motion: reduce)').matches` to `true` through it. Needs a
+      real OS-level reduced-motion toggle or a different automation tool.
+- [x] 7.8 Keyboard-only pass: the revealed gear, the rail back control, and the header turn controls
+      are all reachable and show focus. Confirmed via real Tab keypresses (not `element.focus()`,
+      which does not reliably trigger `:focus-visible` in this Chrome build even when
+      `matches(':focus-visible')` reports true): the row gear, the rail back control, and both header
+      turn controls ("Fold all turns", "Conversation actions") all show a visible focus ring and are
+      reachable by Tab/Enter alone.

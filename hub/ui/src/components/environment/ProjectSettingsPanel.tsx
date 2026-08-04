@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { ApiError } from '@/api/client'
 import { useProjects, useRelocateProject, useUpdateProjectSettings } from '@/api/projects'
 import { Button } from '@/components/ui/button'
@@ -35,25 +35,32 @@ export function ProjectSettingsPanel() {
   const fieldStyle = { background: 'var(--surface-2)', border: '1px solid var(--border)' }
   const error = update.error ?? relocate.error
 
+  const handleSave = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    update.mutate({
+      name: name.trim(), hop_budget: Number(hopBudget), turn_delivery_cap: Number(deliveryCap),
+      agent_budget: Number(agentBudget), token_budget: tokenBudget ? Number(tokenBudget) : null,
+      allow_agent_jobs: allowAgentJobs,
+    })
+  }
+
   return (
     <SettingsSection
       title="Settings"
       description="Identity, collaboration limits, and where this project lives on disk."
       actions={(
         <Button
+          type="submit"
+          form="project-settings-form"
           variant="primary"
           size="sm"
           disabled={update.isPending || !name.trim()}
-          onClick={() => update.mutate({
-            name: name.trim(), hop_budget: Number(hopBudget), turn_delivery_cap: Number(deliveryCap),
-            agent_budget: Number(agentBudget), token_budget: tokenBudget ? Number(tokenBudget) : null,
-            allow_agent_jobs: allowAgentJobs,
-          })}
         >
           Save settings
         </Button>
       )}
     >
+      <form id="project-settings-form" onSubmit={handleSave}>
       <SettingsRow label="Project name" description="The name used throughout the Hub to identify this project.">
         <input aria-label="Project name" value={name} onChange={(event) => setName(event.target.value)} className={inputClass} style={fieldStyle} />
       </SettingsRow>
@@ -79,13 +86,14 @@ export function ProjectSettingsPanel() {
           <div className="flex items-center gap-2">
             <span className="sr-only">Directory unavailable</span>
             <input aria-label="New directory path" value={newPath} onChange={(event) => setNewPath(event.target.value)} className="block w-64 rounded px-2 py-1.5 text-xs" style={fieldStyle} />
-            <Button variant="outline" size="sm" disabled={!newPath.trim() || relocate.isPending} onClick={() => relocate.mutate({ path: newPath.trim() })}>Locate project</Button>
+            <Button type="button" variant="outline" size="sm" disabled={!newPath.trim() || relocate.isPending} onClick={() => relocate.mutate({ path: newPath.trim() })}>Locate project</Button>
           </div>
         )}
       </SettingsRow>
       {update.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Settings saved.</div>}
       {relocate.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Project directory updated.</div>}
       {error && <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>{error instanceof ApiError ? error.message : 'The update could not be saved.'}</div>}
+      </form>
     </SettingsSection>
   )
 }
