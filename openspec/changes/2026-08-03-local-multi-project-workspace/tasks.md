@@ -111,7 +111,7 @@
       with name text; add exact mapping tests across rail/conversation/task/activity.
 - [x] 5.9 Verify modified `agent-conversation-workspace` and referenced `hub-visual-language`
       navigation/color scenarios, including keyboard, narrow/wide, and reduced-motion behavior.
-- [ ] 5.10 `/handoff`.
+- [x] 5.10 `/handoff`.
 
 ## 6. Docker, cleanup, documentation, and closeout
 
