@@ -3,6 +3,8 @@ import { useTasks } from '@/api/tasks'
 import { TaskCard } from './TaskCard'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
+import { useAgents } from '@/api/agents'
+import { agentColorVars } from '@/lib/agentColors'
 
 const COLUMNS = [
   { key: 'pending',         label: 'Pending',        accentColor: null as string | null },
@@ -16,6 +18,11 @@ const COLUMNS = [
 
 export function TasksBoard() {
   const { data: tasks, isLoading } = useTasks()
+  const { data: agents = [] } = useAgents()
+  const colorsByAgent = useMemo(
+    () => new Map(agents.map((agent) => [agent.name, agent.color_index])),
+    [agents],
+  )
   const [activeFilter, setActiveFilter] = useState<string | null>(null)
   const [rejectedExpanded, setRejectedExpanded] = useState(false)
 
@@ -73,6 +80,7 @@ export function TasksBoard() {
                 cursor: 'pointer',
               }}
             >
+              <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full" style={{ background: agentColorVars(colorsByAgent.get(name)).accent }} />
               {name}
             </button>
           ))}
@@ -116,7 +124,7 @@ export function TasksBoard() {
                 </div>
                 <div className="space-y-2 overflow-y-auto">
                   {col.map((task) => (
-                    <TaskCard key={task.id} task={task} />
+                    <TaskCard key={task.id} task={task} assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')} />
                   ))}
                 </div>
               </div>
@@ -155,7 +163,7 @@ export function TasksBoard() {
                   ? rejectedTasks.filter((t) => t.assignee === activeFilter)
                   : rejectedTasks
                 ).map((task) => (
-                  <TaskCard key={task.id} task={task} />
+                  <TaskCard key={task.id} task={task} assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')} />
                 ))}
               </div>
             )}

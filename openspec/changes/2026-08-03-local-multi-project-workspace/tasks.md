@@ -94,22 +94,22 @@
 
 ## 5. URL navigation, rail, tabs, and project management
 
-- [ ] 5.1 Write URL/navigation tests for reload, back/forward, invalid project fallback, project
+- [x] 5.1 Write URL/navigation tests for reload, back/forward, invalid project fallback, project
       switching, direct agent conversation, and no provider session IDs.
-- [ ] 5.2 Synchronize `WorkspaceDestination` with URL search parameters using browser history, without
+- [x] 5.2 Synchronize `WorkspaceDestination` with URL search parameters using browser history, without
       adding a routing dependency.
-- [ ] 5.3 Write rail tests for multiple projects, duplicate-name path hints, live agent/directory
+- [x] 5.3 Write rail tests for multiple projects, duplicate-name path hints, live agent/directory
       state, independent expand/navigation controls, persisted collapse, and open/create actions.
-- [ ] 5.4 Feed the rail from the project-summary collection and build explicit open-existing/create-new
+- [x] 5.4 Feed the rail from the project-summary collection and build explicit open-existing/create-new
       flows with path preview and typed errors.
-- [ ] 5.5 Write project-tab reachability tests proving Tasks, Spec, Jobs, Activity, and Environment
+- [x] 5.5 Write project-tab reachability tests proving Tasks, Spec, Jobs, Activity, and Environment
       require no rail entry; Overview contains Questions, Activity contains Logs, and Environment
       contains Quality/Instructions/Runners/Charters/worktrees/diagnostics/settings.
-- [ ] 5.6 Recompose existing pages into the project tab shell and remove their top-level rail entries.
-- [ ] 5.7 Build missing-directory/locate/settings views and preserve one-action conversation return.
-- [ ] 5.8 Apply `Agent.color_index` consistently to task assignees/selectors and activity actors,
+- [x] 5.6 Recompose existing pages into the project tab shell and remove their top-level rail entries.
+- [x] 5.7 Build missing-directory/locate/settings views and preserve one-action conversation return.
+- [x] 5.8 Apply `Agent.color_index` consistently to task assignees/selectors and activity actors,
       with name text; add exact mapping tests across rail/conversation/task/activity.
-- [ ] 5.9 Verify modified `agent-conversation-workspace` and referenced `hub-visual-language`
+- [x] 5.9 Verify modified `agent-conversation-workspace` and referenced `hub-visual-language`
       navigation/color scenarios, including keyboard, narrow/wide, and reduced-motion behavior.
 - [ ] 5.10 `/handoff`.
 

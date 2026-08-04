@@ -1,6 +1,7 @@
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { summaryForEvent } from '@/lib/eventSummary'
+import { agentColorVars } from '@/lib/agentColors'
 
 interface EventRowProps {
   event: {
@@ -10,6 +11,8 @@ interface EventRowProps {
     severity?: string
     localId: number
   }
+  actorName?: string | null
+  actorColorIndex?: number | null
 }
 
 function iconForType(type: string): string {
@@ -37,7 +40,7 @@ const SEVERITY_BORDER: Record<string, string> = {
   warn:  'var(--amber)',
 }
 
-export function EventRow({ event }: EventRowProps) {
+export function EventRow({ event, actorName, actorColorIndex }: EventRowProps) {
   const iconName   = iconForType(event.type)
   const container  = containerForType(event.type)
   const severity   = event.severity ?? 'info'
@@ -62,6 +65,12 @@ export function EventRow({ event }: EventRowProps) {
 
       {/* Text */}
       <div className="flex-1 min-w-0">
+        {actorName && (
+          <span className="mr-2 inline-flex items-center gap-1 text-xs font-medium">
+            <span data-testid={`activity-actor-color-${actorName}`} className="h-1.5 w-1.5 rounded-full" style={{ background: agentColorVars(actorColorIndex).accent }} />
+            {actorName}
+          </span>
+        )}
         <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{event.type}</span>
         <span className="ml-2 text-xs" style={{ color: 'var(--text-3)' }}>
           {summaryForEvent(event.type, event.data as Record<string, unknown>)}

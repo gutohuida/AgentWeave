@@ -1,12 +1,18 @@
-import { useEffect, useState, type ComponentType } from 'react'
+import { useEffect, useState } from 'react'
+import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { useAgents } from '@/api/agents'
+import { useProjects } from '@/api/projects'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 import { ActivityLog } from '@/components/activity/ActivityLog'
 import { ChartersPage } from '@/components/charters/ChartersPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
 import { JobsPage } from '@/components/jobs/JobsPage'
 import { LogsView } from '@/components/logs/LogsView'
+import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
+import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
+import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
 import { PaneResizer } from '@/components/layout/PaneResizer'
+import { ProjectTabs } from '@/components/layout/ProjectTabs'
 import { SetupModal } from '@/components/layout/SetupModal'
 import {
   Sidebar,
@@ -17,56 +23,36 @@ import {
 } from '@/components/layout/Sidebar'
 import { StatusBar } from '@/components/layout/StatusBar'
 import { OverviewPage } from '@/components/overview/OverviewPage'
+import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { RunnersPage } from '@/components/runners/RunnersPage'
 import { SpecPage } from '@/components/spec/SpecPage'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { useSSE } from '@/hooks/useSSE'
+import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
   agentDestination,
+  environmentDestination,
   projectDestination,
-  type WorkspaceDestination,
+  type EnvironmentSection,
 } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
 
-export type Page = 'overview' | SidebarPage
-
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
-
-type PageWrapper = 'scroll' | 'flex-col'
-
-interface PageMeta {
-  Component: ComponentType<{ onNavigate: (destination: string) => void }>
-  wrapper: PageWrapper
-}
-
-const PAGES: Record<Page, PageMeta> = {
-  overview: { Component: OverviewPage, wrapper: 'scroll' },
-  tasks: { Component: TasksBoard, wrapper: 'scroll' },
-  questions: { Component: QuestionsPanel, wrapper: 'scroll' },
-  activity: { Component: ActivityLog, wrapper: 'scroll' },
-  quality: { Component: QualityHealthPanel, wrapper: 'scroll' },
-  logs: { Component: LogsView, wrapper: 'flex-col' },
-  jobs: { Component: JobsPage, wrapper: 'flex-col' },
-  instructions: { Component: InstructionsPage, wrapper: 'flex-col' },
-  charters: { Component: ChartersPage, wrapper: 'flex-col' },
-  runners: { Component: RunnersPage, wrapper: 'flex-col' },
-  spec: { Component: SpecPage, wrapper: 'flex-col' },
-}
-
-const WRAPPER_CLASS: Record<PageWrapper, string> = {
-  scroll: 'h-full overflow-auto',
-  'flex-col': 'h-full flex flex-col',
-}
 
 export default function App() {
   const { isConfigured, theme, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
+  const { data: projects } = useProjects()
   const { data: agents = [] } = useAgents()
   const [setupOpen, setSetupOpen] = useState(false)
-  const [destination, setDestination] = useState<WorkspaceDestination>(() =>
-    projectDestination(projectId || ''),
-  )
+  const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
+  const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
+  const [activitySubview, setActivitySubview] = useState<'activity' | 'logs'>('activity')
+  const { destination, navigate: navigateTo } = useWorkspaceNavigation({
+    availableProjectIds: projects ? projects.map((project) => project.id) : null,
+    lastOpenedProjectId: projectId,
+  })
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     try {
       const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
@@ -95,6 +81,13 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.mode = mode
   }, [theme, mode])
+
+  useEffect(() => {
+    const destinationProjectId = destination.kind === 'zero' ? null : destination.projectId
+    if (destinationProjectId !== projectId) {
+      useConfigStore.getState().setSelectedProject(destinationProjectId)
+    }
+  }, [destination, projectId])
 
   useSSE()
 
@@ -137,29 +130,41 @@ export default function App() {
     )
   }
 
-  const activePage: Page | null = destination.kind === 'project'
-    ? 'overview'
-    : destination.kind === 'page'
-      ? destination.page as SidebarPage
-      : null
+  const activePage: SidebarPage | 'overview' | null = destination.kind === 'project'
+    ? destination.tab === 'environment'
+      ? (destination.environmentSection as SidebarPage)
+      : destination.tab
+    : null
   const selectedAgent = destination.kind === 'conversation'
     ? agents.find((agent) => agent.name === destination.agent) ?? null
     : null
-  const currentProjectId = destination.kind === 'page'
-    ? projectId || ''
-    : destination.projectId
+  const currentProjectId = destination.kind === 'zero' ? projectId || '' : destination.projectId
   const railResizable = activePage !== 'spec'
 
   const navigate = (value: string) => {
     if (value.startsWith('agent:')) {
-      setDestination(agentDestination(currentProjectId, value.slice('agent:'.length)))
+      navigateTo(agentDestination(currentProjectId, value.slice('agent:'.length)))
       return
     }
     if (value === 'overview') {
-      setDestination(projectDestination(currentProjectId))
+      navigateTo(projectDestination(currentProjectId))
       return
     }
-    setDestination({ kind: 'page', page: value })
+    if (value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
+      navigateTo(projectDestination(currentProjectId, value))
+      return
+    }
+    if (value === 'questions') {
+      setOverviewQuestionsOpen(true)
+      navigateTo(projectDestination(currentProjectId, 'overview'))
+      return
+    }
+    if (value === 'logs') {
+      setActivitySubview('logs')
+      navigateTo(projectDestination(currentProjectId, 'activity'))
+      return
+    }
+    navigateTo(environmentDestination(currentProjectId, value as Parameters<typeof environmentDestination>[1]))
   }
 
   let content: React.ReactNode
@@ -168,29 +173,104 @@ export default function App() {
       <AgentOutputPanel
         agent={selectedAgent}
         initialConversationId={destination.conversationId}
-        onConversationChange={(conversationId) => setDestination((current) => {
-          if (current.kind !== 'conversation' || current.conversationId === conversationId) {
-            return current
+        onConversationChange={(conversationId) => {
+          if (destination.conversationId !== conversationId) {
+            navigateTo(agentDestination(destination.projectId, destination.agent, conversationId))
           }
-          return { ...current, conversationId }
-        })}
+        }}
         onAgentConversationChange={(agent, conversationId) =>
-          setDestination(agentDestination(destination.projectId, agent, conversationId))
+          navigateTo(agentDestination(destination.projectId, agent, conversationId))
         }
-        onBackToProject={() => setDestination(projectDestination(destination.projectId))}
+        onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
       />
     ) : (
       <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>
         Agent unavailable.
       </div>
     )
-  } else {
-    const page = activePage ?? 'overview'
-    const active = PAGES[page]
-    const ActivePage = active.Component
+  } else if (destination.kind === 'project') {
+    let projectContent: React.ReactNode
+    if (destination.tab === 'overview') {
+      projectContent = overviewQuestionsOpen
+        ? <QuestionsPanel />
+        : <OverviewPage onNavigate={navigate} />
+    } else if (destination.tab === 'tasks') {
+      projectContent = <TasksBoard />
+    } else if (destination.tab === 'spec') {
+      projectContent = <SpecPage />
+    } else if (destination.tab === 'jobs') {
+      projectContent = <JobsPage />
+    } else if (destination.tab === 'activity') {
+      projectContent = (
+        <div className="flex h-full flex-col">
+          <div className="flex gap-1 px-4 pt-3">
+            {(['activity', 'logs'] as const).map((view) => (
+              <button
+                key={view}
+                type="button"
+                data-testid={`activity-subview-${view}`}
+                onClick={() => setActivitySubview(view)}
+                className="px-3 py-1.5 text-xs capitalize"
+                aria-pressed={activitySubview === view}
+              >
+                {view}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto">
+            {activitySubview === 'activity' ? <ActivityLog /> : <LogsView />}
+          </div>
+        </div>
+      )
+    } else {
+      const section = destination.environmentSection ?? 'quality'
+      const environmentPages: Record<EnvironmentSection, React.ReactNode> = {
+        quality: <QualityHealthPanel />,
+        instructions: <InstructionsPage />,
+        runners: <RunnersPage />,
+        charters: <ChartersPage />,
+        worktrees: <WorktreesPanel />,
+        diagnostics: <DiagnosticsPanel />,
+        budgets: <AccountingPanel />,
+        settings: <ProjectSettingsPanel />,
+      }
+      projectContent = (
+        <div className="flex h-full">
+          <nav aria-label="Environment sections" className="w-40 shrink-0 p-3" style={{ borderRight: '1px solid var(--border)' }}>
+            {(Object.keys(environmentPages) as EnvironmentSection[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                data-testid={`environment-section-${item}`}
+                onClick={() => navigateTo(environmentDestination(destination.projectId, item))}
+                className="block w-full rounded px-2 py-1.5 text-left text-xs capitalize"
+                aria-current={section === item ? 'page' : undefined}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
+          <div className="min-w-0 flex-1 overflow-auto">{environmentPages[section]}</div>
+        </div>
+      )
+    }
     content = (
-      <div className={WRAPPER_CLASS[active.wrapper]} data-testid="active-page-wrapper">
-        <ActivePage onNavigate={navigate} />
+      <div className="flex h-full flex-col" data-testid="active-page-wrapper">
+        <ProjectTabs
+          active={destination.tab}
+          onSelect={(tab) => {
+            setOverviewQuestionsOpen(false)
+            if (tab === 'activity') setActivitySubview('activity')
+            navigateTo(projectDestination(destination.projectId, tab))
+          }}
+        />
+        <div className="min-h-0 flex-1 overflow-auto">{projectContent}</div>
+      </div>
+    )
+  } else {
+    content = (
+      <div className="flex h-full items-center justify-center text-sm" style={{ color: 'var(--text-3)' }}>
+        Open or create a project to begin.
       </div>
     )
   }
@@ -203,10 +283,10 @@ export default function App() {
           <Sidebar
             activePage={activePage}
             activeAgent={destination.kind === 'conversation' ? destination.agent : null}
-            onNavigate={(page) => setDestination({ kind: 'page', page })}
-            onOpenProject={(id) => setDestination(projectDestination(id))}
-            onOpenAgent={(id, agent) => setDestination(agentDestination(id, agent))}
-            onOpenSetup={() => setSetupOpen(true)}
+            onOpenProject={(id) => navigateTo(projectDestination(id))}
+            onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent))}
+            onOpenExisting={() => setProjectManagerMode('open')}
+            onCreateProject={() => setProjectManagerMode('create')}
             compact={activePage === 'spec'}
             width={sidebarWidth}
           />
@@ -225,6 +305,15 @@ export default function App() {
         </div>
       </div>
       <SetupModal open={!isConfigured || setupOpen} onClose={() => setSetupOpen(false)} />
+      <ProjectManagerModal
+        mode={projectManagerMode}
+        onClose={() => setProjectManagerMode(null)}
+        onComplete={(project) => {
+          useConfigStore.getState().setSelectedProject(project.id)
+          navigateTo(projectDestination(project.id))
+          setProjectManagerMode(null)
+        }}
+      />
     </div>
   )
 }

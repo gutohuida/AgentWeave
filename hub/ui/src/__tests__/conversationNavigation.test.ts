@@ -22,7 +22,11 @@ describe('phase 1 conversation navigation contract', () => {
   })
 
   it('keeps project-name activation separate from expansion state', () => {
-    expect(projectDestination('proj-1')).toEqual({ kind: 'project', projectId: 'proj-1' })
+    expect(projectDestination('proj-1')).toEqual({
+      kind: 'project',
+      projectId: 'proj-1',
+      tab: 'overview',
+    })
   })
 
   it('opens an agent-scoped conversation without using a provider session id', () => {
@@ -40,6 +44,7 @@ describe('phase 1 conversation navigation contract', () => {
     expect(projectDestination(destination.projectId)).toEqual({
       kind: 'project',
       projectId: 'proj-1',
+      tab: 'overview',
     })
   })
 })

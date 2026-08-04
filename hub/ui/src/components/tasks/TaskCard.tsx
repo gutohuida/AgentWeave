@@ -3,9 +3,11 @@ import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { Task } from '@/api/tasks'
 import { StatusBadge } from '@/components/common/Badge'
+import { agentColorVars } from '@/lib/agentColors'
 
 interface TaskCardProps {
   task: Task
+  assigneeColorIndex?: number | null
 }
 
 const AGENT_STATUS_STYLES: Record<string, { color: string; bg: string; border: string }> = {
@@ -43,7 +45,7 @@ function agentStatusTitle(task: Task): string {
   return details.join(' · ')
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false)
   const assigneeStatus = task.assignee_status ?? (task.assignee ? 'idle' : null)
   const assigneeStatusStyle = assigneeStatus
@@ -123,6 +125,11 @@ export function TaskCard({ task }: TaskCardProps) {
                 color: 'var(--text-2)',
               }}
             >
+              <span
+                data-testid={`task-assignee-color-${task.assignee}`}
+                className="mr-1 h-1.5 w-1.5 rounded-full"
+                style={{ background: agentColorVars(assigneeColorIndex).accent }}
+              />
               @{task.assignee}
             </span>
           )}

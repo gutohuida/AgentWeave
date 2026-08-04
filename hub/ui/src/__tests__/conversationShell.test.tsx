@@ -19,6 +19,23 @@ vi.mock('@/api/agents', () => ({
     isLoading: false,
   }),
 }))
+vi.mock('@/api/projects', () => ({
+  useProjects: () => ({
+    data: [{
+      id: 'proj-test', name: 'AgentWeave', working_directory: 'C:/work/AgentWeave',
+      path_display: 'C:/work/AgentWeave', directory_state: 'available', last_opened_at: null,
+      last_seen_at: null, hop_budget: 20, turn_delivery_cap: 20, agent_budget: 10,
+      token_budget: null, allow_agent_jobs: true,
+      agents: [{ id: 'agent-claude', name: 'claude', color_index: 2, status: 'idle', last_seen: null }],
+    }],
+    isLoading: false,
+  }),
+  fetchProjectSummaries: vi.fn(async () => [{ id: 'proj-test' }]),
+  useOpenProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
+  useCreateProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
+  useUpdateProjectSettings: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+  useRelocateProject: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+}))
 vi.mock('@/api/status', () => ({
   useStatus: () => ({ data: { project_id: 'proj-test', project_name: 'AgentWeave' } }),
   useSessionSync: () => ({ data: undefined }),
@@ -71,6 +88,7 @@ function withClient(node: ReactNode) {
 describe('phase 1 conversation-first shell', () => {
   beforeEach(() => {
     cleanup()
+    window.history.pushState(null, '', '/')
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       selectedProjectId: 'proj-test',
@@ -84,11 +102,11 @@ describe('phase 1 conversation-first shell', () => {
   it('keeps project-name navigation separate from expansion', () => {
     render(withClient(<App />))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
-    expect(screen.getByTestId('rail-agent-color-claude')).toHaveStyle({
+    expect(screen.getByTestId('rail-agent-color-proj-test-claude')).toHaveStyle({
       background: 'var(--agent-3)',
     })
     fireEvent.click(screen.getByTestId('project-expander-proj-test'))
-    expect(screen.queryByTestId('rail-agent-claude')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rail-agent-proj-test-claude')).not.toBeInTheDocument()
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('project-name-proj-test'))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
@@ -97,7 +115,7 @@ describe('phase 1 conversation-first shell', () => {
   it.each(['rail', 'overview'])('opens claude directly from the %s', (source) => {
     render(withClient(<App />))
     fireEvent.click(source === 'rail'
-      ? screen.getByTestId('rail-agent-claude')
+      ? screen.getByTestId('rail-agent-proj-test-claude')
       : screen.getByText('Open claude from overview'))
     expect(screen.getByTestId('agent-conversation')).toBeInTheDocument()
     expect(screen.queryByTestId('project-overview')).not.toBeInTheDocument()
@@ -107,7 +125,7 @@ describe('phase 1 conversation-first shell', () => {
 
   it('returns to the containing project in one action', () => {
     render(withClient(<App />))
-    fireEvent.click(screen.getByTestId('rail-agent-claude'))
+    fireEvent.click(screen.getByTestId('rail-agent-proj-test-claude'))
     fireEvent.click(screen.getByText('Back to project'))
     expect(screen.getByTestId('project-overview')).toBeInTheDocument()
   })

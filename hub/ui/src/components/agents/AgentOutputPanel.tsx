@@ -16,6 +16,7 @@ import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
 import { Composer } from './Composer'
 import { ConversationControls, type HandoffState } from './ConversationControls'
+import { agentColorVars } from '@/lib/agentColors'
 
 interface AgentOutputPanelProps {
   agent: AgentSummary
@@ -350,7 +351,10 @@ export function AgentOutputPanel({
             ←
           </button>
         )}
-        <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{agent.name}</span>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+          <span data-testid={`conversation-agent-color-${agent.name}`} className="h-2 w-2 rounded-full" style={{ background: agentColorVars(agent.color_index).accent }} />
+          {agent.name}
+        </span>
 
         {/* Status chip. Provider session identity is not shown here — see
             "Conversation identity is readable without exposing provider

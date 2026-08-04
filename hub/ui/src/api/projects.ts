@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 export interface ProjectAgentSummary {
@@ -35,6 +35,65 @@ export function useProjects() {
     queryKey: ['projects'],
     queryFn: () => getJson<ProjectSummary[]>('/api/v1/projects'),
     enabled: isConfigured,
+  })
+}
+
+export interface ProjectPathInput {
+  path: string
+  name?: string
+  register_copy_as_new?: boolean
+}
+
+function useProjectPathMutation(action: 'open' | 'create') {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ProjectPathInput) =>
+      postJson<ProjectSummary>(`/api/v1/projects/${action}`, input),
+    onSuccess: (project) => {
+      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) => [
+        project,
+        ...current.filter((item) => item.id !== project.id),
+      ])
+    },
+  })
+}
+
+export function useOpenProject() {
+  return useProjectPathMutation('open')
+}
+
+export function useCreateProject() {
+  return useProjectPathMutation('create')
+}
+
+export type ProjectSettingsInput = Pick<
+  ProjectSummary,
+  'name' | 'hop_budget' | 'turn_delivery_cap' | 'agent_budget' | 'token_budget' | 'allow_agent_jobs'
+>
+
+export function useUpdateProjectSettings(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ProjectSettingsInput) =>
+      putJson<ProjectSettingsInput>(`/api/v1/projects/${projectId}/settings`, input),
+    onSuccess: (settings) => {
+      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
+        current.map((project) => project.id === projectId ? { ...project, ...settings } : project),
+      )
+    },
+  })
+}
+
+export function useRelocateProject(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { path: string }) =>
+      postJson<ProjectSummary>(`/api/v1/projects/${projectId}/relocate`, input),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
+        current.map((project) => project.id === projectId ? updated : project),
+      )
+    },
   })
 }
 

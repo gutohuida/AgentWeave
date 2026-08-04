@@ -13,42 +13,93 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
-// Stub every page component with a marker div that includes the page id in its
-// testid. This lets us assert which page is mounted without depending on the
-// real components' data fetching.
+// Real network calls must never escape a mounted-App test — App.tsx's real,
+// unmocked hooks (useAgents, useProjects, etc.) would otherwise fire genuine
+// fetch() requests and produce unhandled rejections against a fake host.
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () => ({ ok: true, status: 200, json: async () => [] }) as unknown as Response),
+)
+
+vi.mock('@/api/projects', () => ({
+  useProjects: () => ({
+    data: [{
+      id: 'proj-test', name: 'AgentWeave', working_directory: 'C:/work/AgentWeave',
+      path_display: 'C:/work/AgentWeave', directory_state: 'available', last_opened_at: null,
+      last_seen_at: null, hop_budget: 20, turn_delivery_cap: 20, agent_budget: 10,
+      token_budget: null, allow_agent_jobs: true,
+      agents: [{ id: 'agent-claude', name: 'claude', color_index: 2, status: 'idle', last_seen: null }],
+    }],
+    isLoading: false,
+  }),
+  fetchProjectSummaries: vi.fn(async () => [{ id: 'proj-test' }]),
+  useOpenProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
+  useCreateProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
+  useUpdateProjectSettings: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+  useRelocateProject: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+}))
+vi.mock('@/api/agents', () => ({
+  useAgents: () => ({
+    data: [{ name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, color_index: 2 }],
+    isLoading: false,
+  }),
+}))
+
+// Stub every page component with a marker div that includes the page id in
+// its testid. This lets us assert which page is mounted without depending
+// on the real components' data fetching.
 vi.mock('@/components/overview/OverviewPage', () => ({
   OverviewPage: ({ onNavigate }: { onNavigate?: (p: string) => void }) => (
     <div data-testid="page-overview">
       <button onClick={() => onNavigate?.('tasks')}>go to tasks</button>
+      <button onClick={() => onNavigate?.('questions')}>Answer</button>
     </div>
   ),
-}))
-vi.mock('@/components/messages/MessagesFeed', () => ({
-  MessagesFeed: () => <div data-testid="page-messages" />,
 }))
 vi.mock('@/components/tasks/TasksBoard', () => ({
   TasksBoard: () => <div data-testid="page-tasks" />,
 }))
-vi.mock('@/components/questions/QuestionsPanel', () => ({
-  QuestionsPanel: () => <div data-testid="page-questions" />,
-}))
-vi.mock('@/components/activity/ActivityLog', () => ({
-  ActivityLog: () => <div data-testid="page-activity" />,
-}))
-vi.mock('@/components/quality/QualityHealthPanel', () => ({
-  QualityHealthPanel: () => <div data-testid="page-quality" />,
-}))
-vi.mock('@/components/logs/LogsView', () => ({
-  LogsView: () => <div data-testid="page-logs" />,
-}))
-vi.mock('@/components/agents/AgentsPage', () => ({
-  AgentsPage: () => <div data-testid="page-agents" />,
+vi.mock('@/components/spec/SpecPage', () => ({
+  SpecPage: () => <div data-testid="page-spec" />,
 }))
 vi.mock('@/components/jobs/JobsPage', () => ({
   JobsPage: () => <div data-testid="page-jobs" />,
 }))
+vi.mock('@/components/questions/QuestionsPanel', () => ({
+  QuestionsPanel: () => <div data-testid="page-questions-inline" />,
+}))
+vi.mock('@/components/activity/ActivityLog', () => ({
+  ActivityLog: () => <div data-testid="page-activity" />,
+}))
+vi.mock('@/components/logs/LogsView', () => ({
+  LogsView: () => <div data-testid="page-logs" />,
+}))
+vi.mock('@/components/quality/QualityHealthPanel', () => ({
+  QualityHealthPanel: () => <div data-testid="page-quality" />,
+}))
 vi.mock('@/components/instructions/InstructionsPage', () => ({
   InstructionsPage: () => <div data-testid="page-instructions" />,
+}))
+vi.mock('@/components/runners/RunnersPage', () => ({
+  RunnersPage: () => <div data-testid="page-runners" />,
+}))
+vi.mock('@/components/charters/ChartersPage', () => ({
+  ChartersPage: () => <div data-testid="page-charters" />,
+}))
+vi.mock('@/components/environment/WorktreesPanel', () => ({
+  WorktreesPanel: () => <div data-testid="page-worktrees" />,
+}))
+vi.mock('@/components/environment/DiagnosticsPanel', () => ({
+  DiagnosticsPanel: () => <div data-testid="page-diagnostics" />,
+}))
+vi.mock('@/components/accounting/AccountingPanel', () => ({
+  AccountingPanel: () => <div data-testid="page-budgets" />,
+}))
+vi.mock('@/components/environment/ProjectSettingsPanel', () => ({
+  ProjectSettingsPanel: () => <div data-testid="page-settings" />,
+}))
+vi.mock('@/components/agents/AgentOutputPanel', () => ({
+  AgentOutputPanel: () => <div data-testid="page-conversation" />,
 }))
 
 // Stub the layout chrome too so the test focuses on routing.
@@ -66,9 +117,10 @@ function withQueryClient(node: ReactNode) {
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
-describe('Q15 — App.tsx: only the active page is mounted (data-driven routing)', () => {
+describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () => {
   beforeEach(() => {
     cleanup()
+    window.history.pushState(null, '', '/')
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
       hubUrl: 'http://hub.test',
@@ -80,66 +132,85 @@ describe('Q15 — App.tsx: only the active page is mounted (data-driven routing)
     })
   })
 
-  it('renders the default page (overview) on initial mount', () => {
+  it('renders the default tab (overview) on initial mount', () => {
     render(withQueryClient(<App />))
     expect(screen.getByTestId('page-overview')).toBeInTheDocument()
   })
 
-  it('does NOT mount any of the other pages on initial mount', () => {
+  it('does not mount any project page not selected', () => {
+    render(withQueryClient(<App />))
+    for (const id of ['page-tasks', 'page-spec', 'page-jobs', 'page-activity']) {
+      expect(screen.queryByTestId(id)).not.toBeInTheDocument()
+    }
+  })
+
+  it('the rail carries no top-level destinations for project pages', () => {
     render(withQueryClient(<App />))
     for (const id of [
-      'page-tasks',
-      'page-questions',
-      'page-activity',
-      'page-quality',
-      'page-logs',
-      'page-jobs',
-      'page-instructions',
+      'nav-tasks', 'nav-spec', 'nav-jobs', 'nav-activity', 'nav-environment',
+      'nav-questions', 'nav-logs', 'nav-quality', 'nav-instructions',
+      'nav-runners', 'nav-charters',
     ]) {
       expect(screen.queryByTestId(id)).not.toBeInTheDocument()
     }
   })
 
-  it('unmounts the previous page when the active page changes (via onNavigate)', () => {
+  it('switches tabs via the project tab bar', () => {
     render(withQueryClient(<App />))
-    expect(screen.getByTestId('page-overview')).toBeInTheDocument()
-
-    // Click the stub OverviewPage's "go to agents" button — this exercises
-    // the onNavigate callback App wires into every page.
-    fireEvent.click(screen.getByText('go to tasks'))
-
-    // OverviewPage is gone; AgentsPage is mounted.
+    fireEvent.click(screen.getByTestId('project-tab-tasks'))
     expect(screen.queryByTestId('page-overview')).not.toBeInTheDocument()
     expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
-  })
 
-  it('navigating twice mounts the third page and unmounts the second', () => {
-    render(withQueryClient(<App />))
-    fireEvent.click(screen.getByText('go to tasks'))
-    expect(screen.getByTestId('page-tasks')).toBeInTheDocument()
-
-    // The Sidebar's nav button click should swap to messages.
-    fireEvent.click(screen.getByTestId('nav-questions'))
+    fireEvent.click(screen.getByTestId('project-tab-jobs'))
     expect(screen.queryByTestId('page-tasks')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-questions')).toBeInTheDocument()
+    expect(screen.getByTestId('page-jobs')).toBeInTheDocument()
   })
 
-  it('uses the scroll wrapper class for scroll pages and flex-col for flex pages', () => {
+  it('reflects the active tab in the URL', () => {
     render(withQueryClient(<App />))
-    // overview -> scroll wrapper
-    const overviewWrapper = screen.getByTestId('page-overview').parentElement
-    expect(overviewWrapper?.className).toContain('overflow-auto')
-    expect(overviewWrapper?.className).not.toContain('flex flex-col')
+    fireEvent.click(screen.getByTestId('project-tab-spec'))
+    expect(window.location.search).toContain('tab=spec')
+  })
 
-    // agents -> flex-col wrapper
-    fireEvent.click(screen.getByTestId('nav-logs'))
-    const logsWrapper = screen.getByTestId('page-logs').parentElement
-    expect(logsWrapper?.className).toContain('flex flex-col')
-    expect(logsWrapper?.className).not.toContain('overflow-auto')
+  it('Overview surfaces Questions inline without changing tab', () => {
+    render(withQueryClient(<App />))
+    fireEvent.click(screen.getByText('Answer'))
+    expect(screen.getByTestId('page-questions-inline')).toBeInTheDocument()
+    expect(window.location.search).toContain('tab=overview')
+  })
 
-    // messages -> scroll wrapper
-    fireEvent.click(screen.getByTestId('nav-tasks'))
-    const tasksWrapper = screen.getByTestId('page-tasks').parentElement
-    expect(tasksWrapper?.className).toContain('overflow-auto')
+  it('Activity contains Logs as an internal sub-view', () => {
+    render(withQueryClient(<App />))
+    fireEvent.click(screen.getByTestId('project-tab-activity'))
+    expect(screen.getByTestId('page-activity')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('activity-subview-logs'))
+    expect(screen.queryByTestId('page-activity')).not.toBeInTheDocument()
+    expect(screen.getByTestId('page-logs')).toBeInTheDocument()
+  })
+
+  it('Environment contains Quality, Instructions, Runners, Charters, Worktrees, Diagnostics, Budgets, and Settings', () => {
+    render(withQueryClient(<App />))
+    fireEvent.click(screen.getByTestId('project-tab-environment'))
+    const sections: Array<[string, string]> = [
+      ['environment-section-quality', 'page-quality'],
+      ['environment-section-instructions', 'page-instructions'],
+      ['environment-section-runners', 'page-runners'],
+      ['environment-section-charters', 'page-charters'],
+      ['environment-section-worktrees', 'page-worktrees'],
+      ['environment-section-diagnostics', 'page-diagnostics'],
+      ['environment-section-budgets', 'page-budgets'],
+      ['environment-section-settings', 'page-settings'],
+    ]
+    for (const [sectionTestId, pageTestId] of sections) {
+      fireEvent.click(screen.getByTestId(sectionTestId))
+      expect(screen.getByTestId(pageTestId)).toBeInTheDocument()
+    }
+  })
+
+  it('mounts a direct agent conversation URL straight into the conversation view', () => {
+    window.history.pushState(null, '', '?project=proj-test&agent=claude&conversation=conv-1')
+    render(withQueryClient(<App />))
+    expect(screen.getByTestId('page-conversation')).toBeInTheDocument()
+    expect(screen.queryByTestId('page-overview')).not.toBeInTheDocument()
   })
 })

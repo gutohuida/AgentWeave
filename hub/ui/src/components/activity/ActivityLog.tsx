@@ -5,6 +5,7 @@ import { EventRow } from './EventRow'
 import { EmptyState } from '@/components/common/EmptyState'
 import { getJson } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
+import { useAgents } from '@/api/agents'
 
 interface SSEEvent {
   type: string
@@ -14,6 +15,15 @@ interface SSEEvent {
 }
 
 type StoredEvent = SSEEvent & { localId: number }
+
+function eventActor(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null
+  const record = data as Record<string, unknown>
+  for (const key of ['agent', 'actor', 'from', 'assignee']) {
+    if (typeof record[key] === 'string' && record[key]) return record[key]
+  }
+  return null
+}
 
 const MAX_EVENTS = 200
 
@@ -50,6 +60,8 @@ const chipBase = {
 export function ActivityLog() {
   const counterRef = useRef(0)
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const { data: agents = [] } = useAgents()
+  const colorsByAgent = new Map(agents.map((agent) => [agent.name, agent.color_index]))
   const [events, setEvents] = useState<StoredEvent[]>(() =>
     getBufferedEvents()
       .filter((e) => (e.data as { project_id?: string } | null)?.project_id === projectId)
@@ -145,7 +157,12 @@ export function ActivityLog() {
         ) : (
           <>
             {[...visibleEvents].reverse().map((event) => (
-              <EventRow key={event.localId} event={event} />
+              <EventRow
+                key={event.localId}
+                event={event}
+                actorName={eventActor(event.data)}
+                actorColorIndex={colorsByAgent.get(eventActor(event.data) ?? '')}
+              />
             ))}
             <div ref={bottomRef} />
           </>
