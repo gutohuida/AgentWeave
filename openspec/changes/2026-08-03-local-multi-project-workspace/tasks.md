@@ -122,7 +122,7 @@
       and project-scoped `ApiKey` reference.
 - [x] 6.3 Update README, CLI/environment/configuration docs, AGENTS.md/CLAUDE.md architecture notes,
       and UI copy for local project workflow and Docker limits.
-- [ ] 6.4 Live-verify under `testbed/`: migrate one legacy project, open/create a second, run agents
+- [x] 6.4 Live-verify under `testbed/`: migrate one legacy project, open/create a second, run agents
       concurrently, switch during output, move/repair one directory, observe one SSE stream, and
       confirm no framework-root state appears.
 - [ ] 6.5 Run complete CLI, Hub, and UI suites; frontend production build; changed-file Ruff/Black;

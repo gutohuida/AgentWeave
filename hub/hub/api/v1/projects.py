@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -19,6 +20,7 @@ from ...project_workspace import (
     ProjectPathError,
     ProjectWorkspaceError,
     raise_workspace_http_error,
+    resolve_project_workspace,
 )
 from ...sse import sse_manager
 
@@ -136,6 +138,16 @@ async def _project_summary(session: AsyncSession, project: Project) -> ProjectSu
     )
 
 
+async def _refresh_project_observation(session: AsyncSession, project: Project) -> None:
+    """Refresh directory state without making collection reads fail.
+
+    Missing and conflicting projects remain listable so the operator can reach their
+    repair action. The workspace resolver records the typed state before raising.
+    """
+    with contextlib.suppress(ProjectWorkspaceError):
+        await resolve_project_workspace(session, project.id)
+
+
 @router.get("", response_model=List[ProjectSummary])
 async def list_projects(
     operator: OperatorCredential = Depends(get_operator),
@@ -147,6 +159,9 @@ async def list_projects(
         .scalars()
         .all()
     )
+    for project in projects:
+        await _refresh_project_observation(session, project)
+    await session.commit()
     return [await _project_summary(session, project) for project in projects]
 
 
@@ -208,9 +223,10 @@ async def get_project_detail(
     project_identity: Tuple[str, str] = Depends(get_operator_project),
     session: AsyncSession = Depends(get_session),
 ) -> ProjectSummary:
-    return await _project_summary(
-        session, await _operator_project_row(project_identity[0], session)
-    )
+    project = await _operator_project_row(project_identity[0], session)
+    await _refresh_project_observation(session, project)
+    await session.commit()
+    return await _project_summary(session, project)
 
 
 @router.get("/{project_id}/settings", response_model=ProjectSettings)
