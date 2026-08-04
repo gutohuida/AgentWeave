@@ -77,9 +77,9 @@
 
 ## 4. Multi-project SSE and frontend data identity
 
-- [ ] 4.1 Write backend tests for an instance operator ticket/stream, server-stamped `project_id`,
+- [x] 4.1 Write backend tests for an instance operator ticket/stream, server-stamped `project_id`,
       inactive-project events, collection lifecycle events, and reconnect behavior.
-- [ ] 4.2 Implement operator SSE fan-out while retaining internal project channels and stamping
+- [x] 4.2 Implement operator SSE fan-out while retaining internal project channels and stamping
       identity outside caller payloads.
 - [ ] 4.3 Write frontend contract tests that enumerate every API hook and fail if a project-scoped
       query/mutation key lacks project ID; include delayed response and rapid-switch races.

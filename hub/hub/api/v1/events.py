@@ -1,4 +1,4 @@
-"""GET /api/v1/events — SSE stream and history."""
+"""Project-scoped SSE stream, ticket, and history endpoints."""
 
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Optional, Tuple
@@ -8,12 +8,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from ...auth import _make_ticket, get_project, get_project_for_sse
+from ...auth import (
+    _make_operator_ticket,
+    _make_ticket,
+    get_operator,
+    get_operator_for_sse,
+    get_project,
+    get_project_for_sse,
+)
 from ...db.engine import get_session
-from ...db.models import EventLog
+from ...db.models import EventLog, OperatorCredential
 from ...sse import make_connected_event, sse_manager
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+# One instance-level operator stream, mounted directly on the API root rather
+# than under /projects/{project_id} — see "instance_events_router" in
+# api/v1/__init__.py. Kept in this module (not a new file) since it shares
+# make_connected_event()/EventSourceResponse wiring with the project stream.
+instance_router = APIRouter(prefix="/events", tags=["events"])
 
 
 @router.get("/history")
@@ -48,7 +61,7 @@ async def get_event_ticket(project: Tuple[str, str] = Depends(get_project)):
     """Issue a short-lived signed ticket for the SSE stream.
 
     Clients using EventSource (which cannot send custom headers) should call this
-    first with their API key, then connect to /api/v1/events?token=<ticket>.
+    first with their operator credential, then connect to the explicit project event URL.
     """
     project_id, _ = project
     token, expires = _make_ticket(project_id)
@@ -91,5 +104,51 @@ async def event_stream(
                 yield message
         finally:
             sse_manager.unsubscribe(project_id, queue)
+
+    return EventSourceResponse(generator(), ping=15)
+
+
+@instance_router.get("/ticket")
+async def get_operator_event_ticket(operator: OperatorCredential = Depends(get_operator)):
+    """Issue a short-lived signed ticket for the one instance-level operator stream.
+
+    Unlike `/projects/{project_id}/events/ticket`, this ticket is scoped to the
+    operator, not to any single project — it unlocks `/api/v1/events`, which
+    carries every project's events with a server-stamped `project_id`.
+    """
+    del operator
+    token, expires = _make_operator_ticket()
+    return {
+        "token": token,
+        "expires_at": datetime.fromtimestamp(expires, tz=timezone.utc).isoformat(),
+    }
+
+
+@instance_router.get("")
+async def operator_event_stream(
+    request: Request,
+    operator: OperatorCredential = Depends(get_operator_for_sse),
+):
+    """The one instance-level operator Server-Sent Events stream.
+
+    Carries every project's broadcasts, each envelope stamped with that
+    project's `project_id` by `SSEManager.broadcast` — so the operator sees
+    events for projects it has no other open connection to (an inactive
+    project changing in the rail, a project being created), not only the
+    project currently open in a project-scoped stream.
+    """
+    del operator
+    queue = sse_manager.subscribe_operator()
+
+    async def generator() -> AsyncGenerator:
+        try:
+            yield make_connected_event()
+            while True:
+                if await request.is_disconnected():
+                    break
+                message = await queue.get()
+                yield message
+        finally:
+            sse_manager.unsubscribe_operator(queue)
 
     return EventSourceResponse(generator(), ping=15)

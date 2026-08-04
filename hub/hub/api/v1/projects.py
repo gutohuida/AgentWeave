@@ -20,6 +20,7 @@ from ...project_workspace import (
     ProjectWorkspaceError,
     raise_workspace_http_error,
 )
+from ...sse import sse_manager
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -168,6 +169,11 @@ async def open_project(
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(project.id)
+    await sse_manager.broadcast(
+        project.id,
+        "project_opened",
+        {"id": project.id, "name": project.name, "directory_state": project.directory_state},
+    )
     return await _project_summary(session, project)
 
 
@@ -182,6 +188,11 @@ async def create_project(
         project = await ProjectLifecycleService(session).create_new(body.path, name=body.name)
     except ProjectWorkspaceError as exc:
         raise_workspace_http_error(exc)
+    await sse_manager.broadcast(
+        project.id,
+        "project_created",
+        {"id": project.id, "name": project.name, "directory_state": project.directory_state},
+    )
     return await _project_summary(session, project)
 
 
@@ -226,6 +237,7 @@ async def update_project_settings(
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(resolved_project_id)
+    await sse_manager.broadcast(resolved_project_id, "project_settings_updated", body.model_dump())
     return body
 
 
@@ -249,4 +261,9 @@ async def relocate_project(
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(project.id)
+    await sse_manager.broadcast(
+        project.id,
+        "project_relocated",
+        {"id": project.id, "name": project.name, "directory_state": project.directory_state},
+    )
     return await _project_summary(session, project)
