@@ -15,6 +15,7 @@ from .instructions import router as instructions_router
 from .jobs import router as jobs_router
 from .logs import router as logs_router
 from .messages import router as messages_router
+from .model_catalog import router as model_catalog_router
 from .projects import router as projects_router
 from .questions import router as questions_router
 from .runners import router as runners_router
@@ -29,6 +30,7 @@ from .worktrees import router as worktrees_router
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(projects_router)
 v1_router.include_router(instance_events_router)
+v1_router.include_router(model_catalog_router)
 
 project_resources_router = APIRouter(prefix="/projects/{project_id}")
 project_resources_router.include_router(accounting_router)

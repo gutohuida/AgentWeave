@@ -16,9 +16,25 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+from .model_catalog import render_control_args
 
 SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
+
+# claude_proxy and native both invoke the claude CLI (see _build_claude_command) under a
+# different auth/proxy setup — their catalog identity for control-override rendering is
+# still "claude", the provider the catalog actually declares controls for.
+_CATALOG_PROVIDER_BY_RUNNER: Dict[str, str] = {
+    "claude": "claude",
+    "claude_proxy": "claude",
+    "native": "claude",
+    "codex": "codex",
+}
+
+
+def catalog_provider_for_runner(runner: str) -> Optional[str]:
+    return _CATALOG_PROVIDER_BY_RUNNER.get(runner)
 
 
 class UnsupportedRunnerError(ValueError):
@@ -36,6 +52,7 @@ def build_command(
     yolo: bool = False,
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
+    control_overrides: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     """Build the full CLI invocation for one turn.
 
@@ -43,7 +60,20 @@ def build_command(
     `pty_runner.resolve_executable`) — this function only builds the argument list.
     ``session_id`` set means resume; unset means a new session. Raises
     ``UnsupportedRunnerError`` for any runner other than claude/claude_proxy/native/codex.
+
+    ``control_overrides`` (control id -> value, e.g. ``{"effort": "high"}``) must already be
+    validated against the model catalog by the caller (`model_catalog.validate_overrides`) —
+    this function only renders each control's declared `ApplySpec` into argv
+    (`model_catalog.render_control_args`); it does not itself reject an invalid value. Model
+    selection is not part of this dict — it stays the dedicated ``model`` parameter above,
+    which every runner already threads through its own command shape.
     """
+    provider = catalog_provider_for_runner(runner)
+    control_args = (
+        render_control_args(provider, control_overrides)
+        if provider and control_overrides
+        else []
+    )
     if runner == "codex":
         return _build_codex_command(
             cli=cli,
@@ -54,6 +84,7 @@ def build_command(
             yolo=yolo,
             mcp_command=mcp_command,
             extra_flags=extra_flags,
+            control_args=control_args,
         )
     if runner in ("claude", "claude_proxy", "native"):
         return _build_claude_command(
@@ -65,6 +96,7 @@ def build_command(
             yolo=yolo,
             mcp_command=mcp_command,
             extra_flags=extra_flags,
+            control_args=control_args,
         )
     raise UnsupportedRunnerError(
         f"runner {runner!r} is not yet supported for direct Hub spawn "
@@ -82,10 +114,13 @@ def _build_claude_command(
     yolo: bool,
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
+    control_args: Optional[List[str]] = None,
 ) -> List[str]:
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
         cmd += ["--model", model]
+    if control_args:
+        cmd += control_args
     if context_file is not None and context_file.exists():
         cmd += ["--append-system-prompt-file", str(context_file)]
     if mcp_command:
@@ -119,6 +154,7 @@ def _build_codex_command(
     yolo: bool,
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
+    control_args: Optional[List[str]] = None,
 ) -> List[str]:
     cmd = [cli, "exec"]
     cmd += ["--json", "--skip-git-repo-check"]
@@ -139,13 +175,17 @@ def _build_codex_command(
         cmd += ["-c", f"model_instructions_file={context_file}"]
     if model:
         cmd += ["--model", model]
+    if control_args:
+        cmd += control_args
     if yolo:
         cmd += ["--dangerously-bypass-approvals-and-sandbox"]
     else:
         cmd += ["--sandbox", "workspace-write"]
-    # `--sandbox` belongs to `codex exec`, not its `resume` subcommand. Keep all
-    # exec-level options before `resume`; newer Codex releases reject a sandbox
-    # flag placed after the subcommand with "unexpected argument '--sandbox'".
+    # `--sandbox` (and every other exec-level option above, including control_args)
+    # belongs to `codex exec`, not its `resume` subcommand. Keep all exec-level options
+    # before `resume`; newer Codex releases reject a sandbox flag placed after the
+    # subcommand with "unexpected argument '--sandbox'" — the same ordering constraint
+    # applies to `-c model_reasoning_effort=...`.
     if session_id:
         cmd += ["resume", session_id]
     if extra_flags:
