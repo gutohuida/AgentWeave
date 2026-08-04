@@ -9,7 +9,7 @@ import posixpath
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NoReturn, Optional, Union
+from typing import NoReturn, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,11 +34,11 @@ class ProjectPathError(ProjectWorkspaceError):
         super().__init__(message, code=code, directory_state="unbound")
 
 
-class ProjectWorkspaceUnavailable(ProjectWorkspaceError):
+class ProjectWorkspaceUnavailable(ProjectWorkspaceError):  # noqa: N818 - stable public API
     pass
 
 
-class ProjectIdentityConflict(ProjectWorkspaceError):
+class ProjectIdentityConflict(ProjectWorkspaceError):  # noqa: N818 - stable public API
     def __init__(self, message: str, *, code: str = "project_identity_conflict") -> None:
         super().__init__(message, code=code, directory_state="identity_conflict")
 
@@ -59,7 +59,7 @@ class ProjectWorkspace:
     def worktree_root(self) -> Path:
         return self.root / ".agentweave" / "worktrees"
 
-    def resolve_relative(self, relative: Union[str, Path]) -> Path:
+    def resolve_relative(self, relative: str | Path) -> Path:
         raw = str(relative)
         _reject_control_characters(raw)
         candidate = Path(raw)
@@ -71,7 +71,7 @@ class ProjectWorkspace:
         return resolved
 
 
-def canonical_path_key(path: Union[str, Path], *, platform: Optional[str] = None) -> str:
+def canonical_path_key(path: str | Path, *, platform: Optional[str] = None) -> str:
     """Return a host-semantic comparison key for an already canonical absolute path."""
     raw = str(path)
     target = platform or ("windows" if os.name == "nt" else "posix")
@@ -113,10 +113,10 @@ def _require_workspace_containment(candidate: Path, root: Path) -> None:
 
 
 def canonicalize_project_directory(
-    raw_path: Union[str, Path],
+    raw_path: str | Path,
     *,
-    hub_data_directory: Optional[Union[str, Path]] = None,
-    workspace_root: Optional[Union[str, Path]] = None,
+    hub_data_directory: Optional[str | Path] = None,
+    workspace_root: Optional[str | Path] = None,
 ) -> CanonicalProjectPath:
     raw = str(raw_path)
     _reject_control_characters(raw)
@@ -178,8 +178,8 @@ async def resolve_project_workspace(
     session: AsyncSession,
     project_id: str,
     *,
-    hub_data_directory: Optional[Union[str, Path]] = None,
-    workspace_root: Optional[Union[str, Path]] = None,
+    hub_data_directory: Optional[str | Path] = None,
+    workspace_root: Optional[str | Path] = None,
 ) -> ProjectWorkspace:
     if workspace_root is None:
         workspace_root = configured_workspace_root()

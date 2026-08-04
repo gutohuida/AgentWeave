@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +32,7 @@ class ProjectLifecycleService:
         session: AsyncSession,
         *,
         hub_data_directory: Optional[Path] = None,
-        workspace_root: Optional[Union[str, Path]] = None,
+        workspace_root: Optional[str | Path] = None,
     ) -> None:
         self.session = session
         self.hub_data_directory = hub_data_directory
@@ -41,7 +42,7 @@ class ProjectLifecycleService:
 
     async def open_existing(
         self,
-        directory: Union[str, Path],
+        directory: str | Path,
         *,
         name: Optional[str] = None,
         register_copy_as_new: bool = False,
@@ -91,9 +92,7 @@ class ProjectLifecycleService:
         await self._write_marker_and_commit(project, canonical.path)
         return project
 
-    async def create_new(
-        self, directory: Union[str, Path], *, name: Optional[str] = None
-    ) -> Project:
+    async def create_new(self, directory: str | Path, *, name: Optional[str] = None) -> Project:
         target = Path(directory).expanduser()
         if not target.is_absolute():
             raise ProjectPathError("new project directory must be an absolute path")
@@ -120,7 +119,7 @@ class ProjectLifecycleService:
             _remove_created_project_directory(target)
             raise
 
-    async def relocate(self, project_id: str, directory: Union[str, Path]) -> Project:
+    async def relocate(self, project_id: str, directory: str | Path) -> Project:
         canonical = canonicalize_project_directory(
             directory,
             hub_data_directory=self.hub_data_directory,
@@ -218,10 +217,8 @@ class ProjectLifecycleService:
             await self.session.rollback()
             _restore_marker(marker_path, previous)
             if previous is None:
-                try:
+                with contextlib.suppress(OSError):
                     marker_path.parent.rmdir()
-                except OSError:
-                    pass
             raise ProjectPathError(
                 f"could not write project marker: {exc}", code="project_marker_write_failed"
             ) from exc
@@ -292,11 +289,7 @@ def _remove_created_project_directory(target: Path) -> None:
             candidate.unlink(missing_ok=True)
         except OSError:
             return
-    try:
+    with contextlib.suppress(OSError):
         marker_dir.rmdir()
-    except OSError:
-        pass
-    try:
+    with contextlib.suppress(OSError):
         target.rmdir()
-    except OSError:
-        pass

@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 import hub.config
 from hub.config import Settings
@@ -25,7 +26,6 @@ from hub.project_workspace import (
     canonicalize_project_directory,
     resolve_project_workspace,
 )
-from sqlalchemy import select
 
 
 def test_workspace_root_setting_defaults_to_unset() -> None:
@@ -110,17 +110,13 @@ async def test_open_existing_beneath_the_root_registers(app, tmp_path) -> None:
     project.mkdir(parents=True)
 
     async with async_session_factory() as session:
-        opened = await ProjectLifecycleService(session, workspace_root=root).open_existing(
-            project
-        )
+        opened = await ProjectLifecycleService(session, workspace_root=root).open_existing(project)
         assert opened.working_directory == str(project.resolve())
         assert opened.directory_state == "available"
 
 
 @pytest.mark.asyncio
-async def test_open_existing_outside_the_root_is_refused_without_persisting(
-    app, tmp_path
-) -> None:
+async def test_open_existing_outside_the_root_is_refused_without_persisting(app, tmp_path) -> None:
     root = tmp_path / "workspaces"
     root.mkdir()
     outside = tmp_path / "host-only"
@@ -135,9 +131,7 @@ async def test_open_existing_outside_the_root_is_refused_without_persisting(
 
 
 @pytest.mark.asyncio
-async def test_create_new_outside_the_root_is_refused_and_creates_nothing(
-    app, tmp_path
-) -> None:
+async def test_create_new_outside_the_root_is_refused_and_creates_nothing(app, tmp_path) -> None:
     root = tmp_path / "workspaces"
     root.mkdir()
     target = tmp_path / "host-only" / "new-project"
@@ -171,9 +165,7 @@ async def test_relocate_outside_the_root_is_refused_and_keeps_the_old_binding(
 
 
 @pytest.mark.asyncio
-async def test_resolve_revalidates_containment_against_the_configured_root(
-    app, tmp_path
-) -> None:
+async def test_resolve_revalidates_containment_against_the_configured_root(app, tmp_path) -> None:
     root = tmp_path / "workspaces"
     project_dir = root / "demo"
     project_dir.mkdir(parents=True)
@@ -184,27 +176,21 @@ async def test_resolve_revalidates_containment_against_the_configured_root(
         )
 
     async with async_session_factory() as session:
-        workspace = await resolve_project_workspace(
-            session, project.id, workspace_root=root
-        )
+        workspace = await resolve_project_workspace(session, project.id, workspace_root=root)
         assert workspace.root == project_dir.resolve()
 
     other_root = tmp_path / "other-root"
     other_root.mkdir()
     async with async_session_factory() as session:
         with pytest.raises(ProjectWorkspaceUnavailable) as caught:
-            await resolve_project_workspace(
-                session, project.id, workspace_root=other_root
-            )
+            await resolve_project_workspace(session, project.id, workspace_root=other_root)
         assert caught.value.code == "project_workspace_not_mounted"
         refreshed = await session.get(Project, project.id)
         assert refreshed.directory_state == "not_mounted"
 
 
 @pytest.mark.asyncio
-async def test_service_reads_the_configured_root_from_settings(
-    app, tmp_path, monkeypatch
-) -> None:
+async def test_service_reads_the_configured_root_from_settings(app, tmp_path, monkeypatch) -> None:
     root = tmp_path / "workspaces"
     root.mkdir()
     outside = tmp_path / "host-only"
