@@ -90,7 +90,7 @@
 - [x] 4.6 Implement one operator SSE connection and project-aware invalidation, including full
       reconciliation on reconnect.
 - [x] 4.7 Verify no cache/event from project A changes project B's rendered state.
-- [ ] 4.8 `/handoff`.
+- [x] 4.8 `/handoff`.
 
 ## 5. URL navigation, rail, tabs, and project management
 
