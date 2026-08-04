@@ -4,6 +4,7 @@ import {
   entryCategory,
   findPairedResult,
   groupIntoTurns,
+  reduceTurnBlocks,
   runStatusByRunId,
 } from '@/lib/agentTimelineModel'
 
@@ -82,6 +83,57 @@ describe('findPairedResult', () => {
   it('returns undefined when no matching result exists yet', () => {
     const use = entry({ id: 'use-2', output_kind: 'tool_use', payload: { call_id: 'c2' } })
     expect(findPairedResult([use], use)).toBeUndefined()
+  })
+})
+
+describe('reduceTurnBlocks (2026-08-04-hub-charcoal-visual-refresh)', () => {
+  it('produces blocks in execution order, never hoisting work ahead of preceding text', () => {
+    const entries = [
+      entry({ id: 'text_a', output_kind: 'text' }),
+      entry({ id: 'tool_1', output_kind: 'tool_use', payload: { call_id: 'c1' } }),
+      entry({ id: 'text_b', output_kind: 'text' }),
+      entry({ id: 'tool_2', output_kind: 'tool_use', payload: { call_id: 'c2' } }),
+      entry({ id: 'result', output_kind: 'status' }),
+    ]
+    const blocks = reduceTurnBlocks(entries)
+    expect(blocks.map((b) => (b.kind === 'work' ? `work:${b.entries.map((e) => e.id).join(',')}` : `entry:${b.entry.id}`)))
+      .toEqual(['entry:text_a', 'work:tool_1', 'entry:text_b', 'work:tool_2', 'entry:result'])
+  })
+
+  it('collapses consecutive work entries into one block', () => {
+    const entries = [
+      entry({ id: 'thinking', output_kind: 'thinking' }),
+      entry({ id: 'tool_1', output_kind: 'tool_use', payload: { call_id: 'c1' } }),
+      entry({ id: 'tool_result_1', output_kind: 'tool_result', payload: { call_id: 'c1' } }),
+    ]
+    const blocks = reduceTurnBlocks(entries)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].kind).toBe('work')
+    expect(blocks[0].kind === 'work' && blocks[0].entries.map((e) => e.id)).toEqual([
+      'thinking', 'tool_1', 'tool_result_1',
+    ])
+  })
+
+  it('leaves a work-only turn as a single block, unchanged in substance', () => {
+    const entries = [
+      entry({ id: 'tool_1', output_kind: 'tool_use' }),
+      entry({ id: 'tool_2', output_kind: 'tool_use' }),
+    ]
+    const blocks = reduceTurnBlocks(entries)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].kind).toBe('work')
+  })
+
+  it('gives each work block a distinct, stable id derived from its first entry', () => {
+    const entries = [
+      entry({ id: 'text_a', output_kind: 'text' }),
+      entry({ id: 'tool_1', output_kind: 'tool_use' }),
+      entry({ id: 'text_b', output_kind: 'text' }),
+      entry({ id: 'tool_2', output_kind: 'tool_use' }),
+    ]
+    const blocks = reduceTurnBlocks(entries)
+    const workBlockIds = blocks.filter((b) => b.kind === 'work').map((b) => b.id)
+    expect(new Set(workBlockIds).size).toBe(workBlockIds.length)
   })
 })
 

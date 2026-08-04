@@ -54,7 +54,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
           {agent.display_model && (
             <span
               className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(161,161,170,0.1)', color: 'var(--text-2)' }}
+              style={{ background: 'color-mix(in srgb, var(--text-2) 10%, transparent)', color: 'var(--text-2)' }}
             >
               {agent.display_model}
             </span>
@@ -62,7 +62,7 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
           {agent.self_registered && (
             <span
               className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ background: 'rgba(34,197,94,0.1)', color: 'var(--green)' }}
+              style={{ background: 'color-mix(in srgb, var(--green) 10%, transparent)', color: 'var(--green)' }}
             >
               EXT
             </span>

@@ -44,7 +44,7 @@ import { useConfigStore } from '@/store/configStore'
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
 
 export default function App() {
-  const { isConfigured, theme, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
+  const { isConfigured, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
   const { data: projects } = useProjects()
   const { data: agents = [] } = useAgents()
   const [setupOpen, setSetupOpen] = useState(false)
@@ -81,9 +81,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
     document.documentElement.dataset.mode = mode
-  }, [theme, mode])
+  }, [mode])
 
   useEffect(() => {
     const destinationProjectId = destination.kind === 'zero' ? null : destination.projectId

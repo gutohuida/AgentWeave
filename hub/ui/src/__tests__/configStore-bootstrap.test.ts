@@ -14,7 +14,6 @@ function resetStore() {
     apiKey: '',
     hubUrl: 'http://localhost:8000',
     selectedProjectId: null,
-    theme: 'cosmic',
     mode: 'light',
     isConfigured: false,
     bootstrapState: 'pending',

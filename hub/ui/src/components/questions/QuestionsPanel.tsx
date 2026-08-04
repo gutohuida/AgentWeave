@@ -22,7 +22,7 @@ export function QuestionsPanel() {
       {blocking.length > 0 && (
         <div
           className="rounded-xl p-4"
-          style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}
+          style={{ background: 'color-mix(in srgb, var(--red) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--red) 20%, transparent)' }}
         >
           <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--red)' }}>
             <Icon name="warning" size={18} fill={1} />

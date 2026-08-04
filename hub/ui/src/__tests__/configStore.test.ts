@@ -13,7 +13,6 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
       apiKey: '',
       hubUrl: 'http://hub.test',
       selectedProjectId: null,
-      theme: 'cosmic',
       mode: 'light',
       isConfigured: false,
       bootstrapState: 'pending',
@@ -50,24 +49,23 @@ describe('S4 — configStore: apiKey lives in sessionStorage, prefs in localStor
     expect(localStorage.getItem(SELECTED_PROJECT_KEY)).toBeNull()
   })
 
-  it('setTheme writes only theme/mode to localStorage and never touches sessionStorage', () => {
-    useConfigStore.getState().setConfig('aw_live_SECRET', 'http://hub.test')
-    sessionStorage.clear()
-    useConfigStore.getState().setTheme('forest')
-
-    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Record<string, unknown>
-    expect(prefs.theme).toBe('forest')
-    expect(prefs.apiKey).toBeUndefined()
-    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull()
-  })
-
-  it('setMode writes only theme/mode to localStorage and never touches sessionStorage', () => {
+  it('setMode writes only mode to localStorage and never touches sessionStorage', () => {
     useConfigStore.getState().setMode('dark')
 
     const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Record<string, unknown>
     expect(prefs.mode).toBe('dark')
     expect(prefs.apiKey).toBeUndefined()
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull()
+  })
+
+  it('a stale persisted theme key from the removed picker is ignored, not a load failure', () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: 'forest', mode: 'dark' }))
+    useConfigStore.getState().setMode('dark')
+
+    // The store's shape carries no `theme` field to read back, regardless of what
+    // stray keys an older build left in localStorage.
+    expect('theme' in useConfigStore.getState()).toBe(false)
+    expect(useConfigStore.getState().mode).toBe('dark')
   })
 
   it('clearConfig removes apiKey from sessionStorage, clears the selected project, and resets isConfigured', () => {

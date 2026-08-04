@@ -175,19 +175,10 @@ export function Composer({
   }
 
   return (
-    <div className="flex items-end gap-2">
-      <ComposerAgentSelector
-        agents={agents.length > 0 ? agents : [{
-          name: agent,
-          status: 'idle',
-          message_count: 0,
-          active_task_count: 0,
-        }]}
-        launchability={launchability}
-        selectedAgent={targetAgent}
-        onSelect={onTargetAgentChange}
-      />
-      <div className="relative flex-1">
+    <div className="flex flex-col gap-2">
+      {/* Row one: the text area, full width, on its own row — text begins at the
+          composer's leading edge (2026-08-04-hub-charcoal-visual-refresh). */}
+      <div className="relative">
         {trigger && (
           <ComposerTriggerMenu
             items={menuItems}
@@ -231,15 +222,37 @@ export function Composer({
           }}
         />
       </div>
-      <Button
-        variant="primary"
-        size="icon"
-        onClick={() => void handleSend()}
-        aria-label="Send message"
-        disabled={!text.trim() || submitting}
-      >
-        <Icon name="send" size={18} />
-      </Button>
+
+      {/* Row two: the control row — a leading slot and a trailing slot, not a fixed
+          arrangement, so 2026-08-04-hub-model-control-and-provisioning's model/effort
+          controls can join the leading slot beside the agent selector without
+          re-laying-out the composer. */}
+      <div className="flex items-center justify-between gap-2" data-slot="composer-control-row">
+        <div className="flex items-center gap-2" data-slot="composer-control-row-leading">
+          <ComposerAgentSelector
+            agents={agents.length > 0 ? agents : [{
+              name: agent,
+              status: 'idle',
+              message_count: 0,
+              active_task_count: 0,
+            }]}
+            launchability={launchability}
+            selectedAgent={targetAgent}
+            onSelect={onTargetAgentChange}
+          />
+        </div>
+        <div className="flex items-center gap-2" data-slot="composer-control-row-trailing">
+          <Button
+            variant="primary"
+            size="icon-sm"
+            onClick={() => void handleSend()}
+            aria-label="Send message"
+            disabled={!text.trim() || submitting}
+          >
+            <Icon name="send" size={18} />
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

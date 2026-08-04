@@ -88,7 +88,6 @@ describe('Spec tab — manifest drift and repair', () => {
       selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
-      theme: 'cosmic',
       mode: 'light',
     })
   })

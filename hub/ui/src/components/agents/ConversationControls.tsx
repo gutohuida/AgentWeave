@@ -184,7 +184,7 @@ export function ConversationControls({
 
       <Dialog.Root open={detailsOpen} onOpenChange={setDetailsOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 60 }} />
+          <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--scrim)', zIndex: 60 }} />
           <Dialog.Content
             aria-label={`${agent.name} details`}
             onCloseAutoFocus={(event) => {

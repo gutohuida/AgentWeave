@@ -65,6 +65,31 @@ export function findPairedResult(
   )
 }
 
+/** A turn's entries, reduced into blocks in execution order — never partitioned into "all
+ * work first, then everything else" (2026-08-04-hub-charcoal-visual-refresh). A block is
+ * either one non-work entry, or a run of *consecutive* work entries collapsed into a group,
+ * so work never moves ahead of the text that preceded it. */
+export type TurnBlock =
+  | { kind: 'entry'; id: string; entry: TimelineEntry }
+  | { kind: 'work'; id: string; entries: TimelineEntry[] }
+
+export function reduceTurnBlocks(entries: TimelineEntry[]): TurnBlock[] {
+  const blocks: TurnBlock[] = []
+  for (const entry of entries) {
+    if (entryCategory(entry) === 'work') {
+      const last = blocks[blocks.length - 1]
+      if (last && last.kind === 'work') {
+        last.entries.push(entry)
+        continue
+      }
+      blocks.push({ kind: 'work', id: `work-${entry.id}`, entries: [entry] })
+    } else {
+      blocks.push({ kind: 'entry', id: entry.id, entry })
+    }
+  }
+  return blocks
+}
+
 export type RunLifecycleStatus =
   | 'started'
   | 'completed'

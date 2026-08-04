@@ -5,22 +5,23 @@ import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
 import { formatDistanceToNow } from 'date-fns'
 import { getStatusConfig, StatusDot } from '@/lib/agentStatus'
+import { tint } from '@/lib/colorTint'
 
 interface AgentInfoTabProps {
   agent: AgentSummary
 }
 
 const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
-  principal: { bg: 'rgba(59,130,246,0.1)', color: 'var(--blue)' },
-  delegate: { bg: 'rgba(34,197,94,0.1)', color: 'var(--green)' },
-  collaborator: { bg: 'rgba(161,161,170,0.1)', color: 'var(--text-3)' },
+  principal: { bg: tint('var(--blue)'), color: 'var(--blue)' },
+  delegate: { bg: tint('var(--green)'), color: 'var(--green)' },
+  collaborator: { bg: tint('var(--text-3)'), color: 'var(--text-3)' },
 }
 
 const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
-  claude_proxy: { bg: 'rgba(245,158,11,0.1)', color: 'var(--amber)', label: 'proxy' },
-  manual: { bg: 'rgba(161,161,170,0.1)', color: 'var(--text-3)', label: 'manual' },
-  native: { bg: 'rgba(34,197,94,0.1)', color: 'var(--green)', label: 'native' },
-  copilot: { bg: 'rgba(36,160,242,0.1)', color: '#24a0f2', label: 'copilot' },
+  claude_proxy: { bg: tint('var(--amber)'), color: 'var(--amber)', label: 'proxy' },
+  manual: { bg: tint('var(--text-3)'), color: 'var(--text-3)', label: 'manual' },
+  native: { bg: tint('var(--green)'), color: 'var(--green)', label: 'native' },
+  copilot: { bg: tint('var(--blue)'), color: 'var(--blue)', label: 'copilot' },
 }
 
 export function AgentInfoTab({ agent }: AgentInfoTabProps) {
@@ -123,7 +124,7 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
               <span
                 className="text-[11px] font-medium px-2 py-1 rounded-full flex items-center gap-1"
                 style={{
-                  background: 'rgba(245,158,11,0.1)',
+                  background: tint('var(--amber)'),
                   color: 'var(--amber)',
                 }}
               >
@@ -246,7 +247,7 @@ function RunnerPicker({ agent }: { agent: AgentSummary }) {
         ))}
       </select>
       {bindRunner.isError && (
-        <p className="text-xs mt-2" style={{ color: 'var(--red, #ef4444)' }}>
+        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update runner binding.
         </p>
       )}
@@ -286,7 +287,7 @@ function CharterPicker({ agent }: { agent: AgentSummary }) {
         ))}
       </select>
       {bindCharter.isError && (
-        <p className="text-xs mt-2" style={{ color: 'var(--red, #ef4444)' }}>
+        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update charter binding.
         </p>
       )}
@@ -310,7 +311,7 @@ function SessionRow({ session }: { session: { id: string; type: string; path: st
         <code
           className="block truncate text-xs"
           style={{
-            background: copied ? 'rgba(34,197,94,0.1)' : 'var(--surface-2)',
+            background: copied ? tint('var(--green)') : 'var(--surface-2)',
             color: copied ? 'var(--green)' : 'var(--text-3)',
             padding: '4px 8px',
             borderRadius: '4px',

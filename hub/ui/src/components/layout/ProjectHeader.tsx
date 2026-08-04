@@ -1,6 +1,7 @@
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { useConfigStore } from '@/store/configStore'
+import { elidePathSegments } from '@/lib/pathDisplay'
 
 interface ProjectHeaderProps {
   projectName: string
@@ -25,12 +26,19 @@ export function ProjectHeader({
     document.documentElement.dataset.mode = next
   }
 
+  const pathSegments = pathDisplay ? elidePathSegments(pathDisplay) : []
+
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 px-5" style={{ background: 'var(--top)', borderBottom: '1px solid var(--border-region)' }}>
+    <header className="flex h-14 shrink-0 items-center gap-3 px-5" style={{ background: 'var(--bg)' }}>
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{projectName}</h1>
         {directoryAvailable ? (
-          <p className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>{agentCount} agent{agentCount === 1 ? '' : 's'}{pathDisplay ? ` · ${pathDisplay}` : ''}</p>
+          <p className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
+            {agentCount} agent{agentCount === 1 ? '' : 's'}
+            {pathSegments.length > 0 && (
+              <span title={pathDisplay ?? undefined}> · {pathSegments.join(' › ')}</span>
+            )}
+          </p>
         ) : (
           <p role="status" className="truncate text-[10px]" style={{ color: 'var(--amber)' }}>
             Directory unavailable

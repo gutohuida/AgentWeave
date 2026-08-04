@@ -41,7 +41,7 @@ export function ComposerAgentSelector({
   }, [open])
 
   return (
-    <div ref={rootRef} className="relative self-end">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         aria-label={`Target agent: ${selectedAgent}`}

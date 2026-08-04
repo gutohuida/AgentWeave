@@ -125,7 +125,7 @@ export function MessageCard({ message }: MessageCardProps) {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                background: 'rgba(168,85,247,0.1)',
+                background: 'color-mix(in srgb, var(--purple) 10%, transparent)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '2px 8px',
                 fontSize: 11,

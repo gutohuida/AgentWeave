@@ -10,8 +10,8 @@ type Severity = (typeof SEVERITIES)[number]
 
 const SEVERITY_ACTIVE_STYLE: Record<Severity, { bg: string; color: string }> = {
   all:   { bg: 'var(--surface-3)', color: 'var(--text)' },
-  error: { bg: 'rgba(239,68,68,0.15)', color: 'var(--red)' },
-  warn:  { bg: 'rgba(245,158,11,0.15)', color: 'var(--amber)' },
+  error: { bg: 'color-mix(in srgb, var(--red) 15%, transparent)', color: 'var(--red)' },
+  warn:  { bg: 'color-mix(in srgb, var(--amber) 15%, transparent)', color: 'var(--amber)' },
   info:  { bg: 'var(--surface-3)', color: 'var(--text)' },
   debug: { bg: 'var(--surface-3)', color: 'var(--text-2)' },
 }

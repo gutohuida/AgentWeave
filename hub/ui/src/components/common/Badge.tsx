@@ -1,3 +1,5 @@
+import { tint } from '@/lib/colorTint'
+
 interface BadgeProps {
   children: React.ReactNode
   variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'secondary'
@@ -5,24 +7,42 @@ interface BadgeProps {
   pill?: boolean
 }
 
+// Every status/variant colour is a semantic token (--green/--amber/--red/--blue/--text-2), never a
+// raw literal — the badge palette must recolour automatically with the ground plane, not survive it
+// unchanged. bg/border are derived from the same token via color-mix rather than authored separately,
+// so a status can never drift into a colour its text doesn't share.
+function tone(token: string): { bg: string; border: string; color: string } {
+  return {
+    bg: tint(token, 10),
+    border: tint(token, 20),
+    color: token,
+  }
+}
+
+const NEUTRAL = tone('var(--text-2)')
+const INFO = tone('var(--blue)')
+const WARNING = tone('var(--amber)')
+const SUCCESS = tone('var(--green)')
+const DANGER = tone('var(--red)')
+
 const STATUS_STYLES: Record<string, { bg: string; border: string; color: string }> = {
-  pending:         { bg: 'rgba(161,161,170,0.1)',  border: 'rgba(161,161,170,0.2)',  color: '#a1a1aa' },
-  assigned:        { bg: 'rgba(161,161,170,0.1)',  border: 'rgba(161,161,170,0.2)',  color: '#a1a1aa' },
-  in_progress:     { bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.2)',  color: '#3b82f6' },
-  under_review:    { bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.2)',  color: '#f59e0b' },
-  completed:       { bg: 'rgba(161,161,170,0.1)',  border: 'rgba(161,161,170,0.2)',  color: '#a1a1aa' },
-  approved:        { bg: 'rgba(34,197,94,0.1)',   border: 'rgba(34,197,94,0.2)',   color: '#22c55e' },
-  rejected:        { bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.2)',   color: '#ef4444' },
-  revision_needed: { bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.2)',   color: '#ef4444' },
+  pending:         NEUTRAL,
+  assigned:        NEUTRAL,
+  in_progress:     INFO,
+  under_review:    WARNING,
+  completed:       NEUTRAL,
+  approved:        SUCCESS,
+  rejected:        DANGER,
+  revision_needed: DANGER,
 }
 
 const VARIANT_STYLES: Record<string, { bg: string; border: string; color: string }> = {
-  default:   { bg: 'rgba(161,161,170,0.1)',  border: 'rgba(161,161,170,0.2)',  color: '#a1a1aa' },
-  success:   { bg: 'rgba(34,197,94,0.1)',   border: 'rgba(34,197,94,0.2)',   color: '#22c55e' },
-  warning:   { bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.2)',  color: '#f59e0b' },
-  danger:    { bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.2)',   color: '#ef4444' },
-  info:      { bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.2)',  color: '#3b82f6' },
-  secondary: { bg: 'rgba(161,161,170,0.1)',  border: 'rgba(161,161,170,0.2)',  color: '#a1a1aa' },
+  default:   NEUTRAL,
+  success:   SUCCESS,
+  warning:   WARNING,
+  danger:    DANGER,
+  info:      INFO,
+  secondary: NEUTRAL,
 }
 
 export function Badge({ children, variant = 'default', className, pill = false }: BadgeProps) {

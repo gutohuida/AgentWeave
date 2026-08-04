@@ -46,7 +46,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       >
         <div
           className="flex items-center justify-center rounded-full"
-          style={{ width: 64, height: 64, background: 'rgba(239,68,68,0.15)' }}
+          style={{ width: 64, height: 64, background: 'color-mix(in srgb, var(--red) 15%, transparent)' }}
         >
           <Icon name="error_outline" size={32} style={{ color: 'var(--red)' }} />
         </div>

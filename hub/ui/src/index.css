@@ -19,12 +19,12 @@
     /* Backgrounds — one ground plane. --surface is for things that LIFT
        (menus, popovers, dialogs, composer, content cards), not for marking
        a region as a region. */
-    --bg:          #10131b;
-    --rail:        #171b2a;
-    --top:         #141827;
-    --surface:     #1b2030;
-    --surface-2:   #242a3c;
-    --surface-3:   #2c3348;
+    --bg:          #0a0a0b;
+    --rail:        #101012;
+    --top:         #0d0d0f;
+    --surface:     #151518;
+    --surface-2:   #1d1d21;
+    --surface-3:   #26262b;
 
     /* Borders */
     --border:      rgba(255,255,255,0.07);
@@ -58,21 +58,27 @@
     --row-selected: color-mix(in srgb, var(--text)  7%, transparent);
 
     /* Legacy compatibility */
-    --background:  #10131b;
+    --background:  #0a0a0b;
     --foreground:  #f5f5f6;
-    --primary:     #7c8cff;
-    --primary-foreground: #ffffff;
-    --primary-hover: #6b89ff;
-    --primary-active: #5273ef;
+    /* Monochrome emphasis — the accent hue never fills a control (design.md). */
+    --primary:     #fafafa;
+    --primary-foreground: #0a0a0b;
+    --primary-hover: #e4e4e7;
+    --primary-active: #d4d4d8;
     --accent:      rgba(255,255,255,0.055);
     --muted:       #232329;
     --muted-foreground: #8e8e98;
+    /* Accent hue, demoted to state only: focus ring, rail active marker, selection. */
     --ring:        #7c8cff;
+    --rail-marker: var(--ring);
     --outline:     rgba(255,255,255,0.13);
     --outline-variant: rgba(255,255,255,0.07);
     --scrim:       rgba(0,0,0,0.6);
     --error-cont:  rgba(244,82,95,0.15);
     --on-error-cont: #f4525f;
+    /* Fixed white text for a chromatic accent fill (e.g. a pressed toggle). Mode-independent
+       because the fill itself, not the ground plane, sets the contrast requirement. */
+    --on-accent-fill: #ffffff;
 
     /* Agent identity palette — authored, not reused from the status colours
        above, which already carry meaning. Assigned by registration order. */
@@ -87,12 +93,12 @@
   }
 
   [data-mode="light"] {
-    --bg:          #f5f6fa;
-    --rail:        #e9ecf5;
+    --bg:          #fafafa;
+    --rail:        #f4f4f5;
     --top:         #ffffff;
     --surface:     #ffffff;
-    --surface-2:   #eef1f7;
-    --surface-3:   #e4e8f2;
+    --surface-2:   #f4f4f5;
+    --surface-3:   #e9e9ec;
 
     --border:      rgba(0,0,0,0.09);
     --border-hi:   rgba(0,0,0,0.15);
@@ -119,16 +125,19 @@
     --row-active:   color-mix(in srgb, var(--text)  9%, transparent);
     --row-selected: color-mix(in srgb, var(--text)  6%, transparent);
 
-    --background:  #f5f6fa;
+    --background:  #fafafa;
     --foreground:  #18181b;
-    --primary:     #5063d8;
-    --primary-foreground: #ffffff;
-    --primary-hover: #3a51c7;
-    --primary-active: #3247b0;
+    /* Monochrome emphasis — the accent hue never fills a control (design.md). */
+    --primary:     #18181b;
+    --primary-foreground: #fafafa;
+    --primary-hover: #27272a;
+    --primary-active: #333336;
     --accent:      rgba(0,0,0,0.045);
     --muted:       #efeff1;
     --muted-foreground: #5c5c66;
+    /* Accent hue, demoted to state only: focus ring, rail active marker, selection. */
     --ring:        #5063d8;
+    --rail-marker: var(--ring);
     --outline:     rgba(0,0,0,0.15);
     --outline-variant: rgba(0,0,0,0.09);
     --scrim:       rgba(0,0,0,0.4);
@@ -317,7 +326,12 @@
     gap: 8px;
     width: 100%;
     padding: 5px 8px;
+    /* The marker is a border, not an overlay: a 2px transparent left edge is reserved at
+       rest for every row, so the active row's marker (below) gains colour without shifting
+       anything — the same "reserve at rest" principle the Button primitive uses for its
+       own transparent border. */
     border: 1px solid transparent;
+    border-left-width: 2px;
     border-radius: var(--radius-md);
     background: transparent;
     color: var(--text-2);
@@ -336,13 +350,19 @@
   .row-item:active {
     background: var(--row-active);
   }
+  /* Marked, not filled: the open row is identified by a leading accent bar and
+     heavier label text, not a resting background fill — the fill is reserved for
+     hover/press alone (2026-08-04-hub-charcoal-visual-refresh). */
   .row-item[data-active="true"] {
-    background: var(--row-selected);
+    border-left-color: var(--rail-marker);
     color: var(--text);
     font-weight: 550;
   }
   .row-item[data-active="true"]:hover {
     background: var(--row-hover);
+  }
+  .row-item[data-active="true"]:active {
+    background: var(--row-active);
   }
   .row-item:focus-visible {
     box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);

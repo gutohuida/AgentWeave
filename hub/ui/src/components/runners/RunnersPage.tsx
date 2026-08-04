@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { tint } from '@/lib/colorTint'
 import {
   useRunners,
   useCreateRunner,
@@ -72,7 +73,7 @@ export function RunnersPage() {
         <div
           role="alert"
           className="mb-3 px-3 py-2 rounded-md text-xs"
-          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red, #ef4444)' }}
+          style={{ background: tint('var(--red)'), color: 'var(--red)' }}
         >
           {deleteError}
         </div>
@@ -181,7 +182,7 @@ function RunnerForm({
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
+      style={{ background: 'var(--scrim)' }}
       onClick={onCancel}
     >
       <div

@@ -213,7 +213,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.08)' }}>
+            <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'color-mix(in srgb, var(--red) 8%, transparent)' }}>
               <Icon name="error" size={18} style={{ color: 'var(--red)' }} />
               <span className="text-xs" style={{ color: 'var(--red)' }}>{error}</span>
             </div>

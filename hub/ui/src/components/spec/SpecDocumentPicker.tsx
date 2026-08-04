@@ -77,7 +77,7 @@ export function SpecDocumentPicker({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)' }} />
+        <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--scrim)' }} />
         <Dialog.Content
           aria-label="Search documents"
           onCloseAutoFocus={(event) => {

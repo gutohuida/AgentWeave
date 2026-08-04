@@ -134,7 +134,7 @@ export function TasksBoard() {
               </span>
               <span
                 className="text-[10px] font-semibold rounded-full px-2 py-0.5"
-                style={{ background: 'rgba(239,68,68,0.15)', color: 'var(--red)' }}
+                style={{ background: 'color-mix(in srgb, var(--red) 15%, transparent)', color: 'var(--red)' }}
               >
                 {rejectedTasks.length}
               </span>

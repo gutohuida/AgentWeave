@@ -94,7 +94,6 @@ describe('phase 1 conversation-first shell', () => {
       selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
-      theme: 'cosmic',
       mode: 'light',
     })
   })

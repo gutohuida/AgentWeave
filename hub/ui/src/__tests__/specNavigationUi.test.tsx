@@ -87,7 +87,6 @@ beforeEach(() => {
     selectedProjectId: 'proj-test',
     isConfigured: true,
     bootstrapState: 'ready',
-    theme: 'cosmic',
     mode: 'light',
   })
 })

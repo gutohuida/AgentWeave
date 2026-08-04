@@ -93,7 +93,6 @@ describe('Spec tab chat — session resume', () => {
       selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
-      theme: 'cosmic',
       mode: 'light',
     })
   })

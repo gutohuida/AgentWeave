@@ -70,7 +70,7 @@ function Drawer({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)' }} />
+        <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--scrim)' }} />
         <Dialog.Content
           aria-label={title}
           // Restore focus to the control that opened the drawer rather than

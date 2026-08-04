@@ -66,7 +66,7 @@ const badgeStyle = (danger: boolean): CSSProperties => ({
   borderRadius: 9999,
   padding: '1px 5px',
   background: danger ? 'var(--red)' : 'var(--surface-3)',
-  color: danger ? '#fff' : 'var(--text-2)',
+  color: danger ? 'var(--destructive-fg)' : 'var(--text-2)',
   fontWeight: 600,
 })
 

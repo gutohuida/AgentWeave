@@ -223,3 +223,80 @@ describe('AgentTimeline', () => {
     expect(screen.queryByText(/Turn folded/)).not.toBeInTheDocument()
   })
 })
+
+describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal-visual-refresh)', () => {
+  const interleavedEntries = [
+    entry({ id: 'text_a', kind: 'agent_output', output_kind: 'text', content: 'let me check the file', run_id: 'run-x', timestamp: '2026-08-02T00:00:00Z' }),
+    entry({ id: 'tool_1', kind: 'agent_output', output_kind: 'tool_use', content: 'Read', payload: { call_id: 'c1' }, run_id: 'run-x', timestamp: '2026-08-02T00:00:01Z' }),
+    entry({ id: 'text_b', kind: 'agent_output', output_kind: 'text', content: 'now i will edit', run_id: 'run-x', timestamp: '2026-08-02T00:00:02Z' }),
+    entry({ id: 'tool_2', kind: 'agent_output', output_kind: 'tool_use', content: 'Edit', payload: { call_id: 'c2' }, run_id: 'run-x', timestamp: '2026-08-02T00:00:03Z' }),
+  ]
+
+  it('renders work in execution order, never hoisted above the text that preceded it', () => {
+    const { container } = render(
+      <AgentTimeline agent={agent} entries={interleavedEntries} roster={[agent]} timelineEvents={[]} isRunning={false} />,
+    )
+    const text = container.textContent ?? ''
+    const idxA = text.indexOf('let me check the file')
+    const idxWork1 = text.indexOf('Work · 1 step')
+    const idxB = text.indexOf('now i will edit')
+    const idxWork2 = text.lastIndexOf('Work · 1 step')
+
+    expect(idxA).toBeGreaterThanOrEqual(0)
+    expect(idxA).toBeLessThan(idxWork1)
+    expect(idxWork1).toBeLessThan(idxB)
+    expect(idxB).toBeLessThan(idxWork2)
+    expect(screen.getAllByText('Work · 1 step')).toHaveLength(2)
+  })
+
+  it('collapses a run of consecutive work entries into one block', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'thinking', kind: 'agent_output', output_kind: 'thinking', content: 'thinking', run_id: 'run-y', timestamp: '2026-08-02T00:00:00Z' }),
+          entry({ id: 'tool_1', kind: 'agent_output', output_kind: 'tool_use', content: 'Read', payload: { call_id: 'c1' }, run_id: 'run-y', timestamp: '2026-08-02T00:00:01Z' }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText(/Work · 2 steps/)).toBeInTheDocument()
+  })
+
+  it('tracks each work block\'s disclosure state independently', () => {
+    render(
+      <AgentTimeline agent={agent} entries={interleavedEntries} roster={[agent]} timelineEvents={[]} isRunning={false} />,
+    )
+    const [firstBlock, secondBlock] = screen.getAllByText('Work · 1 step')
+
+    fireEvent.click(firstBlock)
+    expect(screen.getByText('Read')).toBeInTheDocument()
+    expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+
+    fireEvent.click(secondBlock)
+    expect(screen.getByText('Edit')).toBeInTheDocument()
+  })
+
+  it('does not pair a tool_use with a tool_result across a block boundary', () => {
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'tool_1', kind: 'agent_output', output_kind: 'tool_use', content: 'Read', payload: { call_id: 'c1' }, run_id: 'run-z', timestamp: '2026-08-02T00:00:00Z' }),
+          entry({ id: 'text_between', kind: 'agent_output', output_kind: 'text', content: 'narration in between', run_id: 'run-z', timestamp: '2026-08-02T00:00:01Z' }),
+          entry({ id: 'tool_result_1', kind: 'agent_output', output_kind: 'tool_result', content: 'file contents', payload: { call_id: 'c1' }, run_id: 'run-z', timestamp: '2026-08-02T00:00:02Z' }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    // Two separate work blocks (the tool_use, then — after intervening text — the
+    // tool_result). Opening the first must show "awaiting result", not "completed",
+    // proving the pairing lookup did not reach into the second block.
+    fireEvent.click(screen.getAllByText('Work · 1 step')[0])
+    expect(screen.getByText('awaiting result')).toBeInTheDocument()
+  })
+})

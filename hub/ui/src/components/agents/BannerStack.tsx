@@ -25,8 +25,8 @@ export function BannerStack({ banners }: BannerStackProps) {
           data-banner-id={banner.id}
           className="rounded-lg border px-3 py-2 text-xs"
           style={{
-            background: 'rgba(239,68,68,0.08)',
-            borderColor: 'rgba(239,68,68,0.28)',
+            background: 'color-mix(in srgb, var(--red) 8%, transparent)',
+            borderColor: 'color-mix(in srgb, var(--red) 28%, transparent)',
             color: 'var(--red)',
           }}
         >

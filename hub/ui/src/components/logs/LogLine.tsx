@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { useCopy } from '@/hooks/useCopy'
 import { summaryForEvent } from '@/lib/eventSummary'
+import { tint } from '@/lib/colorTint'
 
 interface LogLineProps {
   entry: {
@@ -16,8 +17,8 @@ interface LogLineProps {
 }
 
 const SEVERITY_CHIP: Record<string, { bg: string; color: string }> = {
-  error: { bg: 'rgba(239,68,68,0.1)', color: 'var(--red)' },
-  warn:  { bg: 'rgba(245,158,11,0.1)', color: 'var(--amber)' },
+  error: { bg: tint('var(--red)'), color: 'var(--red)' },
+  warn:  { bg: tint('var(--amber)'), color: 'var(--amber)' },
   info:  { bg: 'var(--surface-3)', color: 'var(--text-2)' },
   debug: { bg: 'var(--surface-3)', color: 'var(--text-3)' },
 }

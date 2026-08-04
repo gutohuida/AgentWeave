@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest'
 // @ts-expect-error Vitest runs in Node; the browser bundle never includes this contract test.
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+// @ts-expect-error Vitest runs in Node; the browser bundle never includes this contract test.
+import { join } from 'node:path'
 
 import appSource from '@/App.tsx?raw'
 import projectManagerSource from '@/components/projects/ProjectManagerModal.tsx?raw'
@@ -14,20 +16,20 @@ import composerSource from '@/components/agents/Composer.tsx?raw'
 const cssSource = readFileSync('src/index.css', 'utf8')
 
 describe('Hub UI mock alignment contracts', () => {
-  it('uses the approved mock palette and related shell planes in both modes', () => {
+  it('uses the neutral graphite palette and related shell planes in both modes', () => {
     for (const declaration of [
-      '--bg:          #10131b',
-      '--rail:        #171b2a',
-      '--top:         #141827',
-      '--surface:     #1b2030',
-      '--surface-2:   #242a3c',
-      '--primary:     #7c8cff',
-      '--bg:          #f5f6fa',
-      '--rail:        #e9ecf5',
+      '--bg:          #0a0a0b',
+      '--rail:        #101012',
+      '--top:         #0d0d0f',
+      '--surface:     #151518',
+      '--surface-2:   #1d1d21',
+      '--primary:     #fafafa',
+      '--bg:          #fafafa',
+      '--rail:        #f4f4f5',
       '--top:         #ffffff',
       '--surface:     #ffffff',
-      '--surface-2:   #eef1f7',
-      '--primary:     #5063d8',
+      '--surface-2:   #f4f4f5',
+      '--primary:     #18181b',
     ]) {
       expect(cssSource).toContain(declaration)
     }
@@ -81,5 +83,47 @@ describe('Hub UI mock alignment contracts', () => {
     expect(projectTabsSource).toContain("from '@/components/ui/button'")
     expect(conversationControlsSource).toContain("from '@/components/ui/button'")
     expect(composerSource).toContain("from '@/components/ui/button'")
+  })
+
+  it('declares no raw hex colour outside the mode-preview swatch exemption (2026-08-04-hub-charcoal-visual-refresh)', () => {
+    // A raw hex or rgba() literal survives a ramp swap unchanged, silently keeping the old
+    // palette embedded in whatever it colours (this is how Badge.tsx's status palette was
+    // found). SetupModal's light/dark mode-preview swatches are the one legitimate exception:
+    // they show what each mode looks like regardless of which mode is currently active, so
+    // they cannot be expressed as a token that itself changes per mode.
+    const HEX_EXEMPT = new Set(['components/layout/SetupModal.tsx'])
+    const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/
+
+    function listTsxFiles(dir: string): string[] {
+      const out: string[] = []
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry)
+        if (statSync(full).isDirectory()) out.push(...listTsxFiles(full))
+        else if (entry.endsWith('.tsx')) out.push(full)
+      }
+      return out
+    }
+
+    for (const file of listTsxFiles('src/components')) {
+      const relative = file.replace(/\\/g, '/').replace(/^src\//, '')
+      if (HEX_EXEMPT.has(relative)) continue
+      const source = readFileSync(file, 'utf8')
+      const match = source.match(HEX_COLOR_RE)
+      expect(match, `${relative} should not declare a raw hex colour (found ${match?.[0]})`).toBeNull()
+    }
+  })
+
+  it('the project header sheds its box and presents a segmented, middle-elided path (2026-08-04-hub-charcoal-visual-refresh)', () => {
+    expect(projectHeaderSource).not.toContain('borderBottom')
+    expect(projectHeaderSource).not.toContain('border-region')
+    expect(projectHeaderSource).toContain('elidePathSegments')
+    expect(projectHeaderSource).toMatch(/title=\{pathDisplay/)
+  })
+
+  it('writes no data-theme attribute to the application document (2026-08-04-hub-charcoal-visual-refresh)', () => {
+    // SpecFrame.tsx writes data-theme into an *embedded spec document*, which has its own
+    // :root[data-theme] CSS layer — that write is untouched and correctly out of scope here.
+    expect(appSource).not.toMatch(/dataset\.theme/)
+    expect(appSource).not.toMatch(/data-theme=/)
   })
 })

@@ -109,9 +109,9 @@ export function QualityHealthPanel() {
                   className="flex items-start justify-between rounded-lg px-3 py-2"
                   style={{
                     background: stale
-                      ? 'rgba(239,68,68,0.06)'
+                      ? 'color-mix(in srgb, var(--red) 6%, transparent)'
                       : 'var(--surface-2)',
-                    border: stale ? '1px solid rgba(239,68,68,0.2)' : '1px solid var(--border)',
+                    border: stale ? '1px solid color-mix(in srgb, var(--red) 20%, transparent)' : '1px solid var(--border)',
                   }}
                 >
                   <div className="flex flex-col gap-0.5">
@@ -147,8 +147,8 @@ export function QualityHealthPanel() {
         <div
           className="rounded-xl p-4 flex flex-col gap-3"
           style={{
-            background: 'rgba(245,158,11,0.04)',
-            border: '1px solid rgba(245,158,11,0.2)',
+            background: 'color-mix(in srgb, var(--amber) 4%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--amber) 20%, transparent)',
           }}
         >
           <div className="flex items-center justify-between">

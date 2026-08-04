@@ -13,18 +13,18 @@ interface TaskCardProps {
 const AGENT_STATUS_STYLES: Record<string, { color: string; bg: string; border: string }> = {
   running: {
     color: 'var(--green)',
-    bg: 'rgba(34,197,94,0.1)',
-    border: 'rgba(34,197,94,0.25)',
+    bg: 'color-mix(in srgb, var(--green) 10%, transparent)',
+    border: 'color-mix(in srgb, var(--green) 25%, transparent)',
   },
   active: {
     color: 'var(--blue)',
-    bg: 'rgba(59,130,246,0.1)',
-    border: 'rgba(59,130,246,0.25)',
+    bg: 'color-mix(in srgb, var(--blue) 10%, transparent)',
+    border: 'color-mix(in srgb, var(--blue) 25%, transparent)',
   },
   waiting: {
     color: 'var(--amber)',
-    bg: 'rgba(245,158,11,0.1)',
-    border: 'rgba(245,158,11,0.25)',
+    bg: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+    border: 'color-mix(in srgb, var(--amber) 25%, transparent)',
   },
   idle: {
     color: 'var(--text-3)',

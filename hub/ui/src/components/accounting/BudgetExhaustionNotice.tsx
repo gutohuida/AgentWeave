@@ -25,8 +25,8 @@ export function BudgetExhaustionNotice({
     <div
       role="alert"
       style={{
-        border: '1px solid rgba(245,158,11,0.35)',
-        background: 'rgba(245,158,11,0.08)',
+        border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)',
+        background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
         borderRadius: 'var(--radius)',
         color: 'var(--amber)',
         padding: '8px 10px',

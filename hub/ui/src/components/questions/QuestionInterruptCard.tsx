@@ -20,8 +20,8 @@ export function QuestionInterruptCard({ questions, compact = false, onNavigateTo
   return (
     <div
       style={{
-        background: 'rgba(245,158,11,0.06)',
-        border: '1px solid rgba(245,158,11,0.25)',
+        background: 'color-mix(in srgb, var(--amber) 6%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
         borderRadius: 'var(--radius)',
         padding: compact ? '8px 10px' : '12px 14px',
         marginBottom: 8,

@@ -283,7 +283,7 @@ export function SpecPage() {
         <div
           className="flex flex-col gap-1.5 px-6 py-2 shrink-0 text-xs"
           style={{
-            background: 'rgba(234,179,8,0.08)',
+            background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
             borderBottom: '1px solid var(--border)',
             color: 'var(--text-2)',
           }}

@@ -84,8 +84,8 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
         <div
           style={{
             ...chipBase,
-            background: unanswered > 0 ? 'rgba(245,158,11,0.06)' : 'var(--surface-2)',
-            borderColor: unanswered > 0 ? 'rgba(245,158,11,0.3)' : 'var(--border)',
+            background: unanswered > 0 ? 'color-mix(in srgb, var(--amber) 6%, transparent)' : 'var(--surface-2)',
+            borderColor: unanswered > 0 ? 'color-mix(in srgb, var(--amber) 30%, transparent)' : 'var(--border)',
             color: unanswered > 0 ? 'var(--amber)' : 'var(--text-2)',
           }}
         >
@@ -106,8 +106,8 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
           <div
             style={{
               ...chipBase,
-              background: 'rgba(239,68,68,0.08)',
-              borderColor: 'rgba(239,68,68,0.25)',
+              background: 'color-mix(in srgb, var(--red) 8%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--red) 25%, transparent)',
               color: 'var(--red)',
             }}
             title="One or more agents need context management"
@@ -130,8 +130,8 @@ export function StatusBar({ onOpenSetup }: StatusBarProps) {
           <div
             style={{
               ...chipBase,
-              background: 'rgba(239,68,68,0.08)',
-              borderColor: 'rgba(239,68,68,0.25)',
+              background: 'color-mix(in srgb, var(--red) 8%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--red) 25%, transparent)',
               color: 'var(--red)',
             }}
             role="status"

@@ -41,6 +41,36 @@ describe('Composer — bounded autosizing', () => {
   })
 })
 
+describe('Composer — column layout (2026-08-04-hub-charcoal-visual-refresh)', () => {
+  it('renders the text area with no control preceding it, and the control row beneath it', () => {
+    const { view } = renderComposer()
+    const root = view.container.firstElementChild as HTMLElement
+    const textarea = screen.getByRole('textbox')
+    const controlRow = root.querySelector('[data-slot="composer-control-row"]') as HTMLElement
+
+    // The text area's row is the column's first child — nothing (agent selector, send
+    // button) sits before it in the DOM, matching the requirement that the composer's
+    // leading edge belongs to text, not a control.
+    expect(root.firstElementChild?.contains(textarea)).toBe(true)
+    expect(controlRow).not.toBeNull()
+    expect(root.contains(controlRow)).toBe(true)
+    // The control row is a later sibling of the text area's row, so it renders beneath it.
+    const textareaRowIndex = Array.from(root.children).findIndex((child) => child.contains(textarea))
+    const controlRowIndex = Array.from(root.children).indexOf(controlRow)
+    expect(controlRowIndex).toBeGreaterThan(textareaRowIndex)
+  })
+
+  it('places the agent selector in the leading slot and send in the trailing slot', () => {
+    const { view } = renderComposer()
+    const root = view.container.firstElementChild as HTMLElement
+    const leading = root.querySelector('[data-slot="composer-control-row-leading"]') as HTMLElement
+    const trailing = root.querySelector('[data-slot="composer-control-row-trailing"]') as HTMLElement
+
+    expect(leading.querySelector('[aria-haspopup="listbox"]')).not.toBeNull()
+    expect(trailing.querySelector('[aria-label="Send message"]')).not.toBeNull()
+  })
+})
+
 describe('Composer — project- and conversation-scoped drafts', () => {
   beforeEach(() => {
     localStorage.clear()

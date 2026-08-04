@@ -194,7 +194,7 @@ export function SpecChatPane({
             alignItems: 'center',
             background: startNewSession ? 'var(--blue)' : 'var(--surface)',
             border: '1px solid var(--border)',
-            color: startNewSession ? '#fff' : 'var(--text-3)',
+            color: startNewSession ? 'var(--on-accent-fill)' : 'var(--text-3)',
             cursor: selectedAgent ? 'pointer' : 'not-allowed',
             borderRadius: 'var(--radius-sm)',
           }}
@@ -212,7 +212,7 @@ export function SpecChatPane({
               padding: '2px 8px',
               fontSize: 11,
               fontWeight: 500,
-              background: isRunning ? 'rgba(34,197,94,0.1)' : 'var(--surface-3)',
+              background: isRunning ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'var(--surface-3)',
               color: isRunning ? 'var(--green)' : 'var(--text-3)',
             }}
           >

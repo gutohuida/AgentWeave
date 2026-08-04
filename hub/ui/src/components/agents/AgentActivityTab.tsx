@@ -3,6 +3,7 @@ import { useAgentOutput, useAgentTimeline, AgentSummary } from '@/api/agents'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { streamActivityEvents } from '@/components/stream/streamModel'
+import { tint } from '@/lib/colorTint'
 
 interface AgentActivityTabProps {
   agent: AgentSummary
@@ -77,8 +78,8 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
             className="text-[11px] px-2 py-0.5 rounded-full capitalize"
             style={{
               background: agent.status === 'running'
-                ? 'rgba(34,197,94,0.1)'
-                : 'rgba(161,161,170,0.1)',
+                ? tint('var(--green)')
+                : tint('var(--text-3)'),
               color: agent.status === 'running' ? 'var(--green)' : 'var(--text-3)',
             }}
           >
@@ -89,7 +90,7 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
           onClick={() => setIsPaused(!isPaused)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-colors"
           style={{
-            background: isPaused ? 'rgba(239,68,68,0.1)' : 'var(--surface-3)',
+            background: isPaused ? tint('var(--red)') : 'var(--surface-3)',
             color: isPaused ? 'var(--red)' : 'var(--text-3)',
           }}
         >
@@ -136,16 +137,7 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         : item.eventType === 'run_interrupted'
         ? 'var(--purple)'
         : 'var(--blue)'
-    const eventBg =
-      item.eventType === 'run_failed'
-        ? 'rgba(239,68,68,0.1)'
-        : item.eventType === 'run_completed'
-        ? 'rgba(34,197,94,0.1)'
-        : item.eventType === 'run_stopped'
-        ? 'rgba(245,158,11,0.1)'
-        : item.eventType === 'run_interrupted'
-        ? 'rgba(168,85,247,0.1)'
-        : 'rgba(59,130,246,0.1)'
+    const eventBg = tint(eventColor)
     const eventIcon =
       item.eventType === 'run_started'
         ? 'play_arrow'

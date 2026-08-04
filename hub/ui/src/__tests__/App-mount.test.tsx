@@ -127,7 +127,6 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
       selectedProjectId: 'proj-test',
       isConfigured: true,
       bootstrapState: 'ready',
-      theme: 'cosmic',
       mode: 'light',
     })
   })

@@ -1,30 +1,20 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { useConfigStore, type ThemeId, type ModeId } from '@/store/configStore'
+import { useConfigStore, type ModeId } from '@/store/configStore'
 
 interface SetupModalProps {
   open: boolean
   onClose: () => void
 }
 
-const THEMES: { id: ThemeId; label: string; primary: string; bg: string; bgDark: string }[] = [
-  { id: 'cosmic', label: 'Purple', primary: '#6750a4', bg: '#fffbfe', bgDark: '#1c1b1f' },
-  { id: 'ocean',  label: 'Blue',   primary: '#0061a4', bg: '#fafcff', bgDark: '#001d36' },
-  { id: 'forest', label: 'Green',  primary: '#006e21', bg: '#f7fdf7', bgDark: '#002106' },
-  { id: 'solar',  label: 'Orange', primary: '#9c4100', bg: '#fffbff', bgDark: '#201a18' },
-  { id: 'rose',   label: 'Rose',   primary: '#984061', bg: '#fffbff', bgDark: '#201318' },
-]
-
 export function SetupModal({ open, onClose }: SetupModalProps) {
-  const {
-    hubUrl, apiKey, selectedProjectId, theme, mode, setConfig, setSelectedProject, setTheme, setMode,
-  } = useConfigStore()
-  const [url,           setUrl]           = useState(hubUrl || 'http://localhost:8000')
-  const [key,           setKey]           = useState(apiKey || '')
-  const [proj,          setProj]          = useState(selectedProjectId || '')
-  const [selectedTheme, setSelectedTheme] = useState<ThemeId>(theme)
-  const [selectedMode,  setSelectedMode]  = useState<ModeId>(mode)
+  const { hubUrl, apiKey, selectedProjectId, mode, setConfig, setSelectedProject, setMode } =
+    useConfigStore()
+  const [url,          setUrl]          = useState(hubUrl || 'http://localhost:8000')
+  const [key,          setKey]          = useState(apiKey || '')
+  const [proj,         setProj]         = useState(selectedProjectId || '')
+  const [selectedMode, setSelectedMode] = useState<ModeId>(mode)
 
   if (!open) return null
 
@@ -32,10 +22,6 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
     e.preventDefault()
     setConfig(key.trim(), url.trim())
     if (proj.trim()) setSelectedProject(proj.trim())
-    if (selectedTheme !== theme) {
-      setTheme(selectedTheme)
-      document.documentElement.dataset.theme = selectedTheme
-    }
     if (selectedMode !== mode) {
       setMode(selectedMode)
       document.documentElement.dataset.mode = selectedMode
@@ -43,19 +29,10 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
     onClose()
   }
 
-  function handleThemePreview(id: ThemeId) {
-    setSelectedTheme(id)
-    document.documentElement.dataset.theme = id
-  }
-
   function handleModePreview(m: ModeId) {
     setSelectedMode(m)
     document.documentElement.dataset.mode = m
   }
-
-  const currentBg = selectedMode === 'dark'
-    ? (THEMES.find(t => t.id === selectedTheme)?.bgDark ?? '#09090b')
-    : (THEMES.find(t => t.id === selectedTheme)?.bg ?? '#ffffff')
 
   const inputStyle: React.CSSProperties = {
     background: 'var(--surface-2)',
@@ -135,7 +112,8 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
             />
           </div>
 
-          {/* Mode selector */}
+          {/* Mode selector — light/dark is the only appearance choice; the palette
+              itself is fixed (2026-08-04-hub-charcoal-visual-refresh). */}
           <div>
             <label className="mb-2 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>Mode</label>
             <div className="flex gap-2">
@@ -146,63 +124,18 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
                   onClick={() => handleModePreview(m)}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-medium transition-all"
                   style={{
-                    background: m === 'light' ? '#ffffff' : '#09090b',
-                    color:      m === 'light' ? '#18181b' : '#fafafa',
-                    outline:    selectedMode === m ? '2px solid var(--blue)' : '1px solid var(--border)',
+                    background: m === 'light' ? '#ffffff' : '#0a0a0b',
+                    color:      m === 'light' ? '#18181b' : '#f5f5f6',
+                    outline:    selectedMode === m ? '2px solid var(--ring)' : '1px solid var(--border)',
                     outlineOffset: '2px',
                   }}
                 >
                   <Icon
                     name={m === 'light' ? 'light_mode' : 'dark_mode'}
                     size={18}
-                    style={{ color: m === 'light' ? '#18181b' : '#fafafa' }}
+                    style={{ color: m === 'light' ? '#18181b' : '#f5f5f6' }}
                   />
                   {m === 'light' ? 'Light' : 'Dark'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Theme palette picker */}
-          <div>
-            <label className="mb-2 block text-xs font-medium" style={{ color: 'var(--text-3)' }}>Color Palette</label>
-            <div className="flex gap-2">
-              {THEMES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  title={t.label}
-                  onClick={() => handleThemePreview(t.id)}
-                  className="relative flex-1 rounded-xl overflow-hidden transition-all"
-                  style={{
-                    background:    currentBg,
-                    height:        52,
-                    outline:       selectedTheme === t.id ? '2px solid var(--blue)' : '1px solid var(--border)',
-                    outlineOffset: '2px',
-                    transform:     selectedTheme === t.id ? 'scale(1.05)' : 'scale(1)',
-                  }}
-                >
-                  {/* Color dot */}
-                  <span
-                    className="absolute bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full"
-                    style={{ background: t.primary }}
-                  />
-                  {/* Label */}
-                  <span
-                    className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[11px] whitespace-nowrap"
-                    style={{ color: selectedMode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)' }}
-                  >
-                    {t.label}
-                  </span>
-                  {/* Checkmark */}
-                  {selectedTheme === t.id && (
-                    <span
-                      className="absolute top-1 right-1 w-4 h-4 rounded-full flex items-center justify-center"
-                      style={{ background: 'var(--blue)' }}
-                    >
-                      <Icon name="check" size={11} style={{ color: '#fff' }} />
-                    </span>
-                  )}
                 </button>
               ))}
             </div>

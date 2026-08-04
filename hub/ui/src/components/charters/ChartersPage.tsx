@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { tint } from '@/lib/colorTint'
 import {
   Charter,
   CharterCreate,
@@ -57,7 +58,7 @@ export function ChartersPage() {
         <div
           role="alert"
           className="mb-3 rounded-md px-3 py-2 text-xs"
-          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red, #ef4444)' }}
+          style={{ background: tint('var(--red)'), color: 'var(--red)' }}
         >
           {deleteError}
         </div>
@@ -155,7 +156,7 @@ function CharterForm({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
+      style={{ background: 'var(--scrim)' }}
       onClick={onCancel}
     >
       <div

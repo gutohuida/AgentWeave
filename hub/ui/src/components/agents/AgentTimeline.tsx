@@ -9,6 +9,7 @@ import {
   entryCategory,
   findPairedResult,
   groupIntoTurns,
+  reduceTurnBlocks,
   runStatusByRunId,
   type RunLifecycleStatus,
   type TimelineTurn,
@@ -55,7 +56,6 @@ export function AgentTimeline({
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
   const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
   const [foldOverride, setFoldOverride] = useState<Record<string, boolean>>({})
-  const [workOpen, setWorkOpen] = useState<Record<string, boolean>>({})
 
   // The caller always passes a defined counter (never undefined) that starts
   // at 0, so the effect must only react the SECOND time it sees a given
@@ -144,8 +144,6 @@ export function AgentTimeline({
               turnKey={key}
               agentName={agent.name}
               colorByName={colorByName}
-              workOpen={workOpen[key] ?? false}
-              onToggleWork={() => setWorkOpen((old) => ({ ...old, [key]: !old[key] }))}
             />
             {terminalLabel && (
               <div
@@ -230,68 +228,77 @@ function TurnBody({
   turnKey,
   agentName,
   colorByName,
-  workOpen,
-  onToggleWork,
 }: {
   turn: TimelineTurn
   turnKey: string
   agentName: string
   colorByName: ColorLookup
-  workOpen: boolean
-  onToggleWork: () => void
 }) {
-  const work = turn.entries.filter((e) => entryCategory(e) === 'work')
-  const rest = turn.entries.filter((e) => entryCategory(e) !== 'work')
-  // A tool_result is rendered inline with its tool_use, never as its own row.
-  const pairedResultIds = new Set(
-    work
-      .filter((e) => e.output_kind === 'tool_use')
-      .map((e) => findPairedResult(work, e)?.id)
-      .filter((id): id is string => Boolean(id)),
-  )
-  const workRows = work.filter((e) => !pairedResultIds.has(e.id))
-  const workDuration =
-    work.length > 1
-      ? ((new Date(work[work.length - 1].timestamp).getTime() - new Date(work[0].timestamp).getTime()) / 1000).toFixed(1)
-      : null
+  // Walked in execution order — a block is never hoisted ahead of the text that
+  // preceded it (2026-08-04-hub-charcoal-visual-refresh).
+  const blocks = useMemo(() => reduceTurnBlocks(turn.entries), [turn.entries])
 
   return (
     <>
-      {work.length > 0 && (
-        <details open={workOpen} className="work-disclosure rounded-lg overflow-hidden">
-          <summary
-            onClick={(e) => {
-              e.preventDefault()
-              onToggleWork()
-            }}
-            className="flex items-center gap-2 px-[11px] py-[7px] text-[12.5px] cursor-pointer list-none"
-            style={{ color: 'var(--text-2)' }}
-          >
-            <Icon
-              name="expand_more"
-              size={13}
-              style={{ opacity: 0.6, transform: workOpen ? undefined : 'rotate(-90deg)' }}
-            />
-            Work · {work.length} step{work.length === 1 ? '' : 's'}
-            {workDuration ? ` · ${workDuration}s` : ''}
-          </summary>
-          {workOpen && (
-            <div className="px-[11px] py-[9px] text-[12.5px]" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>
-              {workRows.map((entry) => (
-                <WorkRow key={entry.id} entry={entry} paired={findPairedResult(work, entry)} />
-              ))}
-            </div>
-          )}
-        </details>
-      )}
-
-      {rest.map((entry) => {
+      {blocks.map((block) => {
+        if (block.kind === 'work') {
+          return <WorkBlockDisclosure key={block.id} entries={block.entries} />
+        }
+        const entry = block.entry
         if (entryCategory(entry) === 'result') {
           return <ResultCard key={entry.id} entry={entry} turnKey={turnKey} />
         }
         return <MessageEntry key={entry.id} entry={entry} agentName={agentName} colorByName={colorByName} />
       })}
     </>
+  )
+}
+
+function WorkBlockDisclosure({ entries }: { entries: TimelineEntry[] }) {
+  // Disclosure state is local to this block: a turn with several work groups
+  // tracks each one independently rather than toggling as one.
+  const [open, setOpen] = useState(false)
+  // A tool_result is rendered inline with its tool_use, never as its own row — pairing is
+  // computed within this block, not across the whole turn, so it can never reach across a
+  // block boundary into a different run of work.
+  const pairedResultIds = new Set(
+    entries
+      .filter((e) => e.output_kind === 'tool_use')
+      .map((e) => findPairedResult(entries, e)?.id)
+      .filter((id): id is string => Boolean(id)),
+  )
+  const workRows = entries.filter((e) => !pairedResultIds.has(e.id))
+  const duration =
+    entries.length > 1
+      ? ((new Date(entries[entries.length - 1].timestamp).getTime() - new Date(entries[0].timestamp).getTime()) / 1000).toFixed(1)
+      : null
+
+  return (
+    <details open={open} className="work-disclosure rounded-lg overflow-hidden">
+      <summary
+        onClick={(e) => {
+          e.preventDefault()
+          setOpen((v) => !v)
+        }}
+        className="flex items-center gap-2 px-[11px] py-[7px] text-[12.5px] cursor-pointer list-none"
+        style={{ color: 'var(--text-2)' }}
+      >
+        <Icon
+          name="expand_more"
+          size={13}
+          style={{ opacity: 0.6, transform: open ? undefined : 'rotate(-90deg)' }}
+        />
+        Work · {entries.length} step{entries.length === 1 ? '' : 's'}
+        {duration ? ` · ${duration}s` : ''}
+      </summary>
+      {open && (
+        <div className="px-[11px] py-[9px] text-[12.5px]" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-2)' }}>
+          {workRows.map((entry) => (
+            <WorkRow key={entry.id} entry={entry} paired={findPairedResult(entries, entry)} />
+          ))}
+        </div>
+      )}
+    </details>
   )
 }
 

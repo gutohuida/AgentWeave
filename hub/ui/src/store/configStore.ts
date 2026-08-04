@@ -6,7 +6,6 @@ const SESSION_STORAGE_KEY = 'agentweave-session'
 const PREFS_STORAGE_KEY = 'agentweave-prefs'
 const SELECTED_PROJECT_STORAGE_KEY = 'agentweave-selected-project'
 
-export type ThemeId = 'ocean' | 'cosmic' | 'solar' | 'forest' | 'rose'
 export type ModeId  = 'light' | 'dark'
 export type BootstrapState = 'pending' | 'ready' | 'failed' | 'unreachable'
 
@@ -15,8 +14,10 @@ interface StoredSession {
   hubUrl: string
 }
 
+// A previously persisted `theme` key (the removed 5-theme picker) is simply
+// not read — readJSON only pulls the fields this shape declares, so stale
+// localStorage from an older build loads without failing.
 interface StoredPrefs {
-  theme: ThemeId
   mode: ModeId
 }
 
@@ -45,7 +46,6 @@ function loadConfig(): StoredConfig {
   return {
     apiKey: session.apiKey ?? '',
     hubUrl: session.hubUrl ?? window.location?.origin ?? '',
-    theme: prefs.theme ?? 'cosmic',
     mode: prefs.mode ?? 'light',
   }
 }
@@ -72,7 +72,6 @@ interface ConfigState extends StoredConfig {
   bootstrapState: BootstrapState
   setConfig: (apiKey: string, hubUrl: string) => void
   setSelectedProject: (projectId: string | null) => void
-  setTheme: (theme: ThemeId) => void
   setMode:  (mode: ModeId) => void
   clearConfig: () => void
   bootstrap: () => Promise<void>
@@ -114,12 +113,12 @@ function writeSelectedProject(projectId: string | null): void {
   }
 }
 
-function writePrefs(theme: ThemeId, mode: ModeId): void {
+function writePrefs(mode: ModeId): void {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem(
       PREFS_STORAGE_KEY,
-      JSON.stringify({ theme, mode } satisfies StoredPrefs)
+      JSON.stringify({ mode } satisfies StoredPrefs)
     )
   } catch {
     // storage full or disabled — ignore
@@ -142,15 +141,8 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
     set({ selectedProjectId: projectId })
   },
 
-  setTheme: (theme) => {
-    const { mode } = get()
-    writePrefs(theme, mode)
-    set({ theme })
-  },
-
   setMode: (mode) => {
-    const { theme } = get()
-    writePrefs(theme, mode)
+    writePrefs(mode)
     set({ mode })
   },
 
