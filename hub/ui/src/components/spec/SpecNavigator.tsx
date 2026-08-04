@@ -16,18 +16,7 @@ interface SpecNavigatorProps {
 }
 
 const rowBase: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  width: '100%',
-  padding: '4px 8px',
-  border: 'none',
-  background: 'none',
-  color: 'var(--text-2)',
   fontSize: 12,
-  textAlign: 'left',
-  cursor: 'pointer',
-  borderRadius: 'var(--radius-sm)',
 }
 
 function DocumentRow({
@@ -47,12 +36,9 @@ function DocumentRow({
       onClick={() => onSelect(node.path)}
       title={node.path}
       aria-current={selected ? 'true' : undefined}
-      style={{
-        ...rowBase,
-        paddingLeft: 8 + depth * 12,
-        background: selected ? 'var(--surface-3)' : 'none',
-        color: selected ? 'var(--text)' : 'var(--text-2)',
-      }}
+      data-active={selected ? 'true' : 'false'}
+      className="row-item"
+      style={{ ...rowBase, paddingLeft: 8 + depth * 12 }}
     >
       <span className="truncate">{node.title}</span>
     </button>
@@ -130,13 +116,8 @@ export function SpecNavigator({
         <button
           type="button"
           onClick={onOpenSearch}
-          className="flex-1 truncate"
-          style={{
-            ...rowBase,
-            border: '1px solid var(--border)',
-            background: 'var(--surface)',
-            color: 'var(--text-3)',
-          }}
+          className="flex flex-1 items-center gap-1.5 truncate rounded-[var(--radius-sm)] px-2 py-1 bg-[var(--surface)] hover:bg-[var(--row-hover)]"
+          style={{ ...rowBase, border: '1px solid var(--border)', color: 'var(--text-3)' }}
         >
           <Icon name="search" size={14} />
           <span>Search documents</span>
@@ -155,15 +136,10 @@ export function SpecNavigator({
             type="button"
             role="tab"
             aria-selected={mode === value}
+            data-active={mode === value ? 'true' : 'false'}
             onClick={() => onModeChange(value)}
-            style={{
-              ...rowBase,
-              width: 'auto',
-              flex: 1,
-              justifyContent: 'center',
-              background: mode === value ? 'var(--surface-3)' : 'none',
-              color: mode === value ? 'var(--text)' : 'var(--text-3)',
-            }}
+            className="row-item justify-center"
+            style={{ ...rowBase, width: 'auto', flex: 1 }}
           >
             {value === 'library' ? 'Library' : 'History'}
           </button>
@@ -212,6 +188,7 @@ export function SpecNavigator({
                     <span
                       key={node.path}
                       title={`${node.path} — declared in the manifest, file not found`}
+                      className="row-item"
                       style={{ ...rowBase, cursor: 'not-allowed', opacity: 0.55 }}
                     >
                       <span className="truncate">{node.title}</span>
@@ -247,12 +224,9 @@ export function SpecNavigator({
                 type="button"
                 onClick={() => onOutlineSelect(anchor.id)}
                 aria-current={activeSection === anchor.id ? 'true' : undefined}
-                style={{
-                  ...rowBase,
-                  fontSize: 11,
-                  color: activeSection === anchor.id ? 'var(--text)' : 'var(--text-3)',
-                  background: activeSection === anchor.id ? 'var(--surface-3)' : 'none',
-                }}
+                data-active={activeSection === anchor.id ? 'true' : 'false'}
+                className="row-item"
+                style={{ fontSize: 11 }}
               >
                 <span className="truncate">{anchor.label}</span>
               </button>

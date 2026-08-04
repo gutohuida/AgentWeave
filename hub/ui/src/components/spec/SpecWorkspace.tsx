@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 
 // Fixed dimensions rather than a splitter: deterministic minimums solve the
 // document squeeze with far less interaction and persistence surface, and the
@@ -238,14 +239,9 @@ export function SpecWorkspace({
             className="shrink-0 flex flex-col items-center pt-2"
             style={{ width: 36, borderLeft: '1px solid var(--border)' }}
           >
-            <button
-              type="button"
-              onClick={() => onChatCollapsedChange(false)}
-              aria-label="Expand chat"
-              style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}
-            >
+            <Button variant="ghost" size="icon-xs" onClick={() => onChatCollapsedChange(false)} aria-label="Expand chat">
               <Icon name="chat" size={16} />
-            </button>
+            </Button>
           </div>
         ) : (
           <div
@@ -254,14 +250,9 @@ export function SpecWorkspace({
             style={{ width: SPEC_CHAT_WIDTH, borderLeft: '1px solid var(--border)' }}
           >
             <div className="flex justify-end px-1 pt-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => onChatCollapsedChange(true)}
-                aria-label="Collapse chat"
-                style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}
-              >
+              <Button variant="ghost" size="icon-xs" onClick={() => onChatCollapsedChange(true)} aria-label="Collapse chat">
                 <Icon name="right_panel_close" size={16} />
-              </button>
+              </Button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">{chat}</div>
           </div>

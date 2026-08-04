@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en" data-mode="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgentWeave Hub — contextual navigation, settings rows, conversation surface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Companion to mock-full.html. Covers ONLY what that mock does
+   not: the contextual rail (project mode / section mode), the
+   settings-row layout, and the corrected conversation chrome.
+   Everything else — palette, density, radii, overview, tasks,
+   spec, jobs — stays governed by mock-full.html.
+   Sample data only. Fonts load from CDN because this is a
+   single-file mock; the spec requires self-hosted .woff2.
+   ───────────────────────────────────────────────────────────── */
+
+:root{
+  --radius:.625rem;
+  --radius-sm:calc(var(--radius) - 4px);
+  --radius-md:calc(var(--radius) - 2px);
+  --radius-lg:var(--radius);
+  --radius-xl:calc(var(--radius) + 4px);
+  --radius-content:24px;
+  --side-w:252px;
+
+  --dur-fast:150ms;
+  --dur-base:250ms;
+  --ease:cubic-bezier(.16,1,.3,1);
+
+  --bg:#10131b;
+  --rail:#171b2a;
+  --top:#141827;
+  --surface:#1b2030;
+  --surface-2:#242a3c;
+  --card:#1d2232;
+  --border:rgba(218,224,255,.11);
+  --border-hi:rgba(218,224,255,.20);
+  --border-region:rgba(155,168,235,.16);
+  --fg:#f7f8fc;
+  --fg-muted:#b2b8c9;
+  --fg-dim:#7f879b;
+  --accent:rgba(124,140,255,.13);
+  --primary:#7c8cff;
+  --primary-fg:#fff;
+  --ring:#9aa7ff;
+  --danger:#f4525f;
+  --ok:#3ecf8e;
+  --amber:#f7b955;
+
+  /* NEW — the three row states. Ratios follow T3's sidebar-row tokens
+     (dark: 8% / 11% / 7% of foreground), expressed against our own
+     foreground so the palette stays AgentWeave's. */
+  --row-hover:    color-mix(in srgb, var(--fg)  8%, transparent);
+  --row-active:   color-mix(in srgb, var(--fg) 11%, transparent);
+  --row-selected: color-mix(in srgb, var(--fg)  7%, transparent);
+
+  --agent-1:#7c8cff;
+  --agent-2:#2fd4c8;
+  --agent-3:#f7b955;
+  --agent-4:#f4708f;
+}
+
+[data-mode="light"]{
+  --bg:#f5f6fa;--rail:#e9ecf5;--top:#fff;--surface:#fff;
+  --surface-2:#eef1f7;--card:#fff;
+  --border:rgba(35,42,68,.12);--border-hi:rgba(35,42,68,.22);
+  --border-region:rgba(65,76,125,.16);
+  --fg:#1b2030;--fg-muted:#525b70;--fg-dim:#687187;
+  --accent:rgba(78,93,190,.10);--primary:#5063d8;--primary-fg:#fff;
+  --ring:#4054d0;--danger:#c93645;--ok:#087b50;--amber:#a86405;
+  --row-hover:    color-mix(in srgb, var(--fg)  5%, transparent);
+  --row-active:   color-mix(in srgb, var(--fg)  9%, transparent);
+  --row-selected: color-mix(in srgb, var(--fg)  6%, transparent);
+  --agent-1:#5364d8;--agent-2:#087f78;--agent-3:#9b6408;--agent-4:#bf3d62;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--fg);
+  font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased;font-optical-sizing:auto;
+}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ─── THE ROW TREATMENT ────────────────────────────────────────
+   One rule, used by every list row in the product. Fill only —
+   no border is added on hover, so nothing can shift. Selected
+   survives an unrelated hover because the two fills differ. */
+.row{
+  display:flex;align-items:center;gap:7px;width:100%;
+  padding:5px 7px;border:1px solid transparent;border-radius:var(--radius-md);
+  background:transparent;color:var(--fg-muted);
+  font:inherit;font-size:12.5px;text-align:left;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease);
+}
+.row:hover{background:var(--row-hover);color:var(--fg)}
+.row:active{background:var(--row-active)}
+.row[data-active="true"]{background:var(--row-selected);color:var(--fg);font-weight:550}
+.row[data-active="true"]:hover{background:var(--row-hover)}
+.row .dot{width:8px;height:8px;border-radius:99px;flex:none;background:var(--c,var(--fg-dim))}
+.row .trail{margin-left:auto;font-size:10px;color:var(--fg-dim)}
+.row .trail.run{color:var(--ok)}
+
+/* Row actions occupy layout at rest and are revealed on group hover,
+   so revealing them displaces nothing. Focus reveals them too. */
+.rowgroup{position:relative}
+.rowact{
+  opacity:0;display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;flex:none;border:1px solid transparent;border-radius:var(--radius-sm);
+  background:transparent;color:var(--fg-dim);cursor:pointer;
+  transition:opacity var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease);
+}
+.rowgroup:hover .rowact,.rowact:focus-visible,.rowgroup:focus-within .rowact,.rowact[data-persistent="true"]{opacity:1}
+.rowact:hover{background:var(--row-active);color:var(--fg)}
+.rowact svg{width:14px;height:14px}
+
+/* ─── control system (unchanged from mock-full) ───────────────*/
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  height:32px;padding:0 calc(.75rem - 1px);border:1px solid transparent;border-radius:var(--radius-lg);
+  background:transparent;color:var(--fg);font:inherit;font-weight:500;font-size:13px;white-space:nowrap;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),
+  box-shadow var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.btn svg{width:16px;height:16px;opacity:.8;flex:none;margin:0 -2px}
+.btn-ghost:hover{background:var(--accent);border-color:var(--border)}
+.btn-ghost:active{background:var(--accent);border-color:var(--border-hi);box-shadow:inset 0 1px 0 rgba(0,0,0,.28)}
+.btn-primary{border-color:var(--primary);background:var(--primary);color:var(--primary-fg);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 1px 3px rgba(91,124,250,.34)}
+.btn-primary:hover{background:color-mix(in oklab,var(--primary) 88%,white)}
+.btn-danger{border-color:rgba(244,82,95,.5);background:rgba(244,82,95,.13);color:#ff8b95}
+.btn-danger:hover{background:rgba(244,82,95,.2);border-color:rgba(244,82,95,.75)}
+.btn-icon{width:32px;height:32px;padding:0}
+.btn-sm{height:26px;padding:0 calc(.5rem - 1px);font-size:12px;border-radius:var(--radius-md)}
+.chip{display:inline-flex;align-items:center;gap:.35rem;height:24px;padding:0 calc(.5rem - 1px);
+  border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-weight:500;
+  color:var(--fg-muted);background:var(--surface-2)}
+.pulse{width:6px;height:6px;border-radius:99px;background:var(--ok);animation:p 2s infinite}
+@keyframes p{0%{box-shadow:0 0 0 0 rgba(62,207,142,.6)}70%{box-shadow:0 0 0 6px rgba(62,207,142,0)}100%{box-shadow:0 0 0 0 rgba(62,207,142,0)}}
+.spacer{margin-left:auto}
+
+/* ─── shell ───────────────────────────────────────────────────*/
+.shell{display:flex;flex-direction:column;height:100vh}
+.demobar{display:flex;align-items:center;gap:.4rem;height:40px;flex:none;padding:0 12px;
+  background:var(--top);border-bottom:1px solid var(--border-region);font-size:11px;color:var(--fg-dim)}
+.demobar b{color:var(--fg-muted);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:10px}
+.app{display:grid;grid-template-columns:var(--side-w) 1fr;flex:1;min-height:0}
+.side{display:flex;flex-direction:column;min-height:0;background:var(--rail);
+  padding:10px 8px;border-right:1px solid var(--border-region)}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.kicker{display:flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.09em;
+  color:var(--fg-dim);padding:2px 4px 8px 8px}
+.kicker .acts{display:flex;margin-left:auto;gap:2px}
+
+/* ── rail: project mode ───────────────────────────────────────*/
+.tree{display:flex;flex:1;flex-direction:column;gap:2px;overflow:auto;min-height:0}
+.project{border:1px solid transparent;border-radius:var(--radius-lg);padding:3px}
+.project.active{background:rgba(124,140,255,.08);border-color:var(--border-region)}
+.project-head .caret{width:13px;height:13px;opacity:.6;flex:none;transition:transform var(--dur-fast) var(--ease)}
+.project.active .project-head .caret{transform:rotate(90deg)}
+.project-head .name{font-size:13px;font-weight:650;color:var(--fg)}
+.project-head .count{color:var(--fg-dim);font-size:10.5px}
+.agents{margin-left:13px;padding-left:8px;border-left:1px solid var(--border-region);display:flex;flex-direction:column;gap:1px}
+.addrow{color:var(--fg-dim)}
+.addrow svg{width:13px;height:13px;flex:none}
+.foot-add{margin-top:6px;justify-content:flex-start;width:100%;color:var(--fg-muted)}
+
+/* ── rail: section mode ───────────────────────────────────────*/
+.sectionhead{display:flex;align-items:center;gap:6px;padding:2px 2px 10px}
+.backbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:none;
+  border:1px solid transparent;border-radius:var(--radius-md);background:transparent;color:var(--fg-muted);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.backbtn:hover{background:var(--row-hover);color:var(--fg)}
+.backbtn svg{width:15px;height:15px}
+.sectionhead .ttl{font-size:13px;font-weight:650;color:var(--fg);line-height:1.15}
+.sectionhead .scope{font-size:10.5px;color:var(--fg-dim)}
+.sectionlist{display:flex;flex-direction:column;gap:1px;overflow:auto;min-height:0}
+
+/* ─── main / page header (borderless, floats) ─────────────────*/
+.head{display:flex;align-items:center;gap:.55rem;padding:15px 26px 8px;
+  background:color-mix(in oklab,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border:0;position:relative;z-index:3}
+.head .title{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:14px;letter-spacing:-.012em}
+.head .crumb{color:var(--fg-dim);font-weight:400;cursor:pointer}
+.head .sub{font-size:12px;color:var(--fg-dim);font-weight:400;margin-left:.35rem}
+.pane{flex:1;overflow:auto;padding:8px 0 32px}
+
+/* ─── settings rows ───────────────────────────────────────────
+   The section fills the content region; only the measure is
+   bounded. Rows are separated by a hairline and are NOT boxed. */
+.section{width:100%;max-width:1180px;margin:0 auto;padding:0 28px}
+.section-intro{padding:10px 0 4px}
+.section-intro h2{margin:0;font-size:15px;font-weight:600;letter-spacing:-.012em}
+.section-intro p{margin:3px 0 0;font-size:12px;color:var(--fg-dim);max-width:60ch}
+.setrows{margin-top:10px;border-top:1px solid var(--border)}
+.setrow{display:flex;align-items:flex-start;gap:24px;padding:15px 2px;border-bottom:1px solid var(--border)}
+.setrow .label{flex:1;min-width:0;max-width:62ch}
+.setrow .label b{display:block;font-size:13px;font-weight:550;color:var(--fg)}
+.setrow .label span{display:block;margin-top:2px;font-size:11.5px;color:var(--fg-dim)}
+.setrow .control{flex:none;display:flex;align-items:center;gap:8px;padding-top:1px}
+.setrow input[type=text],.setrow input[type=number]{
+  width:150px;height:32px;border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-2);color:var(--fg);padding:0 11px;font:inherit;font-size:13px;
+  transition:border-color var(--dur-fast) var(--ease),box-shadow var(--dur-fast) var(--ease)}
+.setrow input[type=text]{width:280px}
+.setrow input:focus{outline:none;border-color:color-mix(in oklab,var(--primary) 55%,transparent);
+  box-shadow:0 0 0 3px color-mix(in oklab,var(--primary) 14%,transparent)}
+/* Steppers are removed deliberately — values are typed. */
+.setrow input[type=number]{-moz-appearance:textfield;appearance:textfield}
+.setrow input[type=number]::-webkit-inner-spin-button,
+.setrow input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;appearance:none;margin:0}
+.setrow .unit{font-size:11.5px;color:var(--fg-dim)}
+.switch{width:38px;height:22px;flex:none;border:1px solid var(--border-hi);border-radius:99px;
+  background:var(--surface-2);position:relative;cursor:pointer;transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:99px;
+  background:var(--fg-dim);transition:transform var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease)}
+.switch[data-on="true"]{background:var(--primary);border-color:var(--primary)}
+.switch[data-on="true"]::after{transform:translateX(16px);background:#fff}
+.section-actions{display:flex;gap:.5rem;padding:18px 2px 0}
+
+/* ─── conversation ────────────────────────────────────────────
+   No filled bands. No dividing rules. One lifted surface. */
+.stream{flex:1;overflow:auto;padding:26px 0 10px;background:var(--bg)}
+.wrap{max-width:960px;margin:0 auto;padding:0 30px;display:flex;flex-direction:column;gap:21px}
+.msg{display:flex;flex-direction:column;gap:5px}
+.msg .who{display:flex;align-items:center;gap:.4rem;font-size:11.5px;font-weight:600;color:var(--fg-muted)}
+.msg .who .t{font-weight:400;color:var(--fg-dim)}
+.msg .who .dot{width:8px;height:8px;border-radius:99px;background:var(--c)}
+.bub{border:1px solid var(--border);border-radius:var(--radius-xl);padding:10px 13px;background:var(--surface);line-height:1.6}
+.msg.me{align-items:flex-end}
+.msg.me .bub{background:color-mix(in oklab,var(--primary) 17%,var(--surface));
+  border-color:color-mix(in oklab,var(--primary) 42%,transparent);max-width:74%}
+.msg.ai .bub{background:transparent;border-color:transparent;padding-left:0;padding-right:0}
+.work{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface);overflow:hidden}
+.work summary{display:flex;align-items:center;gap:.5rem;padding:7px 11px;cursor:pointer;list-style:none;
+  font-size:12.5px;color:var(--fg-muted);transition:background-color var(--dur-fast) var(--ease)}
+.work summary::-webkit-details-marker{display:none}
+.work summary:hover{background:var(--row-hover);color:var(--fg)}
+.work summary .caret{width:13px;height:13px;opacity:.6;transition:transform var(--dur-fast) var(--ease)}
+.work[open] summary .caret{transform:rotate(90deg)}
+.work .body{border-top:1px solid var(--border);padding:9px 11px;font-size:12.5px;color:var(--fg-muted)}
+.work .body .line{display:flex;gap:.55rem;padding:2.5px 0}
+.work .body .line b{color:var(--fg);font-weight:500;min-width:56px}
+.fold{display:flex;align-items:center;gap:.55rem;padding:6px 11px;border:1px dashed var(--border);
+  border-radius:var(--radius-lg);background:transparent;color:var(--fg-dim);font:inherit;font-size:12.5px;cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.fold:hover{background:var(--row-hover);border-color:var(--border-hi);color:var(--fg-muted)}
+.fold svg{width:13px;height:13px}
+.continuity{display:flex;align-items:center;gap:6px;max-width:820px;margin:0 auto;padding:0 4px 6px;font-size:11px;color:var(--fg-dim)}
+/* The fade replaces the old filled strip and its top border. */
+.composer-wrap{padding:10px 30px 20px;background:linear-gradient(to top,var(--bg) 70%,transparent);border:0}
+.composer{max-width:820px;min-height:132px;margin:0 auto;border:1px solid var(--border-hi);border-radius:var(--radius-content);
+  background:var(--surface);overflow:hidden;box-shadow:0 20px 52px rgba(2,5,18,.28),inset 0 1px rgba(255,255,255,.05);
+  transition:border-color var(--dur-base) var(--ease),box-shadow var(--dur-base) var(--ease)}
+.composer:focus-within{border-color:color-mix(in oklab,var(--primary) 55%,transparent);
+  box-shadow:0 0 0 3px color-mix(in oklab,var(--primary) 14%,transparent),0 20px 52px rgba(2,5,18,.28)}
+.composer textarea{width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:inherit;
+  min-height:76px;line-height:1.6;padding:16px 17px 8px}
+.composer textarea::placeholder{color:var(--fg-dim)}
+.composer-meta{display:flex;align-items:center;gap:10px;padding:0 17px 3px;color:var(--fg-dim);font-size:10.5px}
+.composer-meta .keys{margin-left:auto}
+.composer-meta kbd{padding:1px 4px;border:1px solid var(--border);border-radius:4px;background:var(--surface-2);font:10px "JetBrains Mono",monospace}
+.bar{display:flex;align-items:center;gap:.35rem;padding:8px 10px 10px}
+
+/* ─── annotation ──────────────────────────────────────────────*/
+.note{max-width:1180px;margin:0 auto;padding:14px 28px 0;font-size:11.5px;color:var(--fg-dim)}
+.note b{color:var(--amber);font-weight:600}
+.screen{display:none;flex-direction:column;min-height:0;flex:1}
+.screen.on{display:flex}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="demobar">
+    <b>Mock</b>
+    <button class="btn btn-ghost btn-sm" onclick="show('project')">1 · Rail: project mode</button>
+    <button class="btn btn-ghost btn-sm" onclick="show('env')">2 · Rail: section mode + settings</button>
+    <button class="btn btn-ghost btn-sm" onclick="show('chat')">3 · Conversation surface</button>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost btn-sm" onclick="toggleMode()">Toggle light/dark</button>
+  </div>
+
+  <div class="app">
+
+    <!-- ══ RAIL ══════════════════════════════════════════════ -->
+    <aside class="side">
+
+      <!-- project mode -->
+      <div id="rail-project">
+        <div class="kicker">PROJECTS
+          <span class="acts">
+            <button class="rowact" data-persistent="true" title="Open existing project" aria-label="Open existing project">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            </button>
+          </span>
+        </div>
+        <div class="tree">
+          <section class="project active">
+            <div class="rowgroup">
+              <div class="row project-head" data-active="true">
+                <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+                <span class="name">AgentWeave</span>
+                <span class="count">5 agents</span>
+                <span class="spacer"></span>
+                <!-- THE single configuration affordance. Revealed on row hover /
+                     focus; persistent for the active project. -->
+                <button class="rowact" data-persistent="true" title="Configure AgentWeave" aria-label="Configure AgentWeave" onclick="show('env')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="agents">
+              <button class="row" style="--c:var(--agent-1)" onclick="show('chat')"><span class="dot"></span>claude<span class="trail run">running</span></button>
+              <button class="row" style="--c:var(--agent-3)" onclick="show('chat')"><span class="dot"></span>codex<span class="trail">idle</span></button>
+              <button class="row" style="--c:var(--agent-2)" onclick="show('chat')"><span class="dot"></span>opencode<span class="trail">2 queued</span></button>
+              <!-- Add agent lives with the agents, mirroring + Add project. -->
+              <button class="row addrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Add agent
+              </button>
+            </div>
+          </section>
+
+          <section class="project">
+            <div class="rowgroup">
+              <div class="row project-head">
+                <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+                <span class="name">IFiance</span><span class="count">2 agents</span>
+                <span class="spacer"></span>
+                <button class="rowact" title="Configure IFiance" aria-label="Configure IFiance">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="project">
+            <div class="rowgroup">
+              <div class="row project-head">
+                <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+                <span class="name">GalaxySpec</span><span class="count">4 agents</span>
+                <span class="spacer"></span>
+                <button class="rowact" title="Configure GalaxySpec" aria-label="Configure GalaxySpec">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <button class="btn btn-ghost foot-add">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>
+          Add project
+        </button>
+      </div>
+
+      <!-- section mode -->
+      <div id="rail-env" style="display:none">
+        <div class="sectionhead">
+          <button class="backbtn" title="Back to AgentWeave" aria-label="Back to AgentWeave" onclick="show('project')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <span>
+            <span class="ttl">Environment</span><br>
+            <span class="scope">AgentWeave</span>
+          </span>
+        </div>
+        <div class="sectionlist">
+          <button class="row">Quality</button>
+          <button class="row">Instructions</button>
+          <button class="row">Runners</button>
+          <button class="row">Charters</button>
+          <button class="row">Worktrees</button>
+          <button class="row">Diagnostics</button>
+          <button class="row">Budgets</button>
+          <button class="row" data-active="true">Settings</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ══ MAIN ══════════════════════════════════════════════ -->
+    <main class="main">
+
+      <!-- 1 · project mode: unchanged shell, shown for context -->
+      <div class="screen on" id="page-project">
+        <header class="head">
+          <div class="title">AgentWeave <span class="sub">5 agents · 7 tasks · ~/projects/AgentWeave</span></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-icon" title="Toggle appearance" aria-label="Toggle appearance" onclick="toggleMode()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+          </button>
+        </header>
+        <div class="pane">
+          <div class="note">
+            <b>What changed here.</b> The project header no longer carries <i>Add agent</i> or a settings gear —
+            both moved into the rail. Hover any project row to see its gear reveal; hover any agent to see the
+            row treatment. The project tab strip keeps Overview / Tasks / Spec / Jobs / Activity and loses
+            Environment.
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 · settings rows -->
+      <div class="screen" id="page-env">
+        <header class="head">
+          <div class="title"><span class="crumb" onclick="show('project')">AgentWeave</span><span class="crumb">/</span>Settings</div>
+        </header>
+        <div class="pane">
+          <div class="section">
+            <div class="section-intro">
+              <h2>Settings</h2>
+              <p>Identity, collaboration limits, and where this project lives on disk.</p>
+            </div>
+
+            <div class="setrows">
+              <div class="setrow">
+                <div class="label"><b>Project name</b><span>Shown in the rail and in every agent's context.</span></div>
+                <div class="control"><input type="text" value="AgentWeave"></div>
+              </div>
+              <div class="setrow">
+                <div class="label"><b>Hop budget</b><span>How many agent-to-agent hops a chain may take before it pauses and waits for you.</span></div>
+                <div class="control"><input type="number" value="6" min="1"><span class="unit">hops</span></div>
+              </div>
+              <div class="setrow">
+                <div class="label"><b>Per-turn delivery cap</b><span>The most queued messages that will be delivered into a single turn.</span></div>
+                <div class="control"><input type="number" value="4" min="1"><span class="unit">messages</span></div>
+              </div>
+              <div class="setrow">
+                <div class="label"><b>Agent budget</b><span>How many agents this project may run at once.</span></div>
+                <div class="control"><input type="number" value="8" min="1"><span class="unit">agents</span></div>
+              </div>
+              <div class="setrow">
+                <div class="label"><b>Token budget</b><span>Total tokens this project may spend. Leave empty for no limit.</span></div>
+                <div class="control"><input type="number" placeholder="No limit" min="1"><span class="unit">tokens</span></div>
+              </div>
+              <div class="setrow">
+                <div class="label"><b>Allow agent jobs</b><span>Agents may create and run scheduled jobs without you starting them.</span></div>
+                <div class="control"><div class="switch" data-on="true" role="switch" aria-checked="true" tabindex="0" onclick="this.dataset.on=this.dataset.on==='true'?'false':'true';this.setAttribute('aria-checked',this.dataset.on)"></div></div>
+              </div>
+              <div class="setrow">
+                <div class="label"><b>Directory</b><span class="mono">~/projects/AgentWeave</span></div>
+                <div class="control"><button class="btn btn-ghost btn-sm">Relocate…</button></div>
+              </div>
+            </div>
+
+            <div class="section-actions">
+              <button class="btn btn-primary btn-sm">Save changes</button>
+              <button class="btn btn-ghost btn-sm">Reset</button>
+            </div>
+
+            <div class="note" style="padding-left:0;padding-right:0">
+              <b>What changed here.</b> The eight section links moved out of the content area and into the rail.
+              Number fields have no stepper buttons. The section fills the content region — only the text measure
+              is bounded — so there is no dead zone on the right, and a short section still reads as deliberate
+              because of the title, the description, and the hairlines.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 · conversation -->
+      <div class="screen" id="page-chat">
+        <header class="head">
+          <button class="backbtn" title="Back to AgentWeave" aria-label="Back to AgentWeave" onclick="show('project')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <div class="title">
+            <span class="crumb" onclick="show('project')">AgentWeave</span><span class="crumb">/</span>
+            <span style="width:9px;height:9px;border-radius:99px;background:var(--agent-1);display:inline-block"></span>claude
+          </div>
+          <span class="chip mono">sonnet-4.5</span>
+          <span class="chip"><span class="pulse"></span>turn 4 running</span>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm">Fold all turns</button>
+          <button class="btn btn-danger btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            Stop turn
+          </button>
+          <button class="btn btn-ghost btn-icon" title="Conversation actions" aria-label="Conversation actions">
+            <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+          </button>
+        </header>
+
+        <section class="stream">
+          <div class="wrap">
+            <button class="fold">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+              Turns 1–3 folded · 18 messages · 4 files changed
+            </button>
+
+            <div class="msg me">
+              <div class="who">you <span class="t">14:02</span></div>
+              <div class="bub">Wire the inbound queue into the trigger endpoint. Keep the hop budget configurable — I don't want agents ping-ponging overnight.</div>
+            </div>
+
+            <div class="msg ai">
+              <div class="who"><span class="dot" style="--c:var(--agent-1)"></span>claude <span class="t">14:02</span></div>
+              <div class="bub">Starting with the queue entry model, then the scheduler. Depth lives on the entry rather than the turn so continuation turns caused by the drain cap cost no hops.</div>
+            </div>
+
+            <details class="work">
+              <summary>
+                <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                Work · 7 steps · 12.4s
+              </summary>
+              <div class="body">
+                <div class="line"><b>read</b><span class="mono">hub/hub/api/v1/agent_trigger.py</span></div>
+                <div class="line"><b>edit</b><span class="mono">hub/hub/db/models.py</span> <span style="color:var(--ok)">+34</span> <span style="color:var(--danger)">−2</span></div>
+                <div class="line"><b>bash</b><span class="mono">pytest hub/tests/test_queue.py -q</span></div>
+                <div class="line"><b>result</b><span style="color:var(--ok)">14 passed</span></div>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <div class="continuity">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+          Continuing conv-71112661…
+        </div>
+
+        <div class="composer-wrap">
+          <div class="composer">
+            <textarea rows="3" placeholder="Message claude…"></textarea>
+            <div class="composer-meta">
+              <span><b style="color:var(--fg-muted)">@</b> files</span>
+              <span><b style="color:var(--fg-muted)">/</b> commands</span>
+              <span><b style="color:var(--fg-muted)">$</b> skills</span>
+              <span class="keys"><kbd>Enter</kbd> send · <kbd>Shift Enter</kbd> newline</span>
+            </div>
+            <div class="bar">
+              <button class="btn btn-ghost btn-icon" title="Add files or context" aria-label="Add files or context">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <button class="btn btn-ghost btn-sm">
+                <span style="width:7px;height:7px;border-radius:99px;background:var(--agent-1);display:inline-block"></span>claude · sonnet-4.5
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="spacer"></div>
+              <span style="font-size:11px;color:var(--fg-muted)">60%</span>
+              <button class="btn btn-danger btn-icon" title="Stop turn" aria-label="Stop turn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script>
+function show(which){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.getElementById('page-'+which).classList.add('on');
+  const env = which === 'env';
+  document.getElementById('rail-project').style.display = env ? 'none' : '';
+  document.getElementById('rail-env').style.display     = env ? '' : 'none';
+}
+function toggleMode(){
+  const el = document.documentElement;
+  el.dataset.mode = el.dataset.mode === 'dark' ? 'light' : 'dark';
+}
+</script>
+</body>
+</html>

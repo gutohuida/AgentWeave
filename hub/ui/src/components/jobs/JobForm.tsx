@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
+import { Button } from '@/components/ui/button'
 import { JobCreate } from '@/api/jobs'
 
 interface JobFormProps {
@@ -88,13 +89,9 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
           <h2 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
             Create New Job
           </h2>
-          <button
-            onClick={onCancel}
-            className="p-1 rounded-full transition-colors"
-            style={{ color: 'var(--text-3)' }}
-          >
+          <Button variant="ghost" size="icon-xs" onClick={onCancel} className="rounded-full" aria-label="Close">
             <Icon name="close" size={24} />
-          </button>
+          </Button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -169,18 +166,9 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   key={example.value}
                   type="button"
                   onClick={() => setCron(example.value)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    borderRadius: 'var(--radius-sm)',
-                    padding: '3px 10px',
-                    fontSize: 11,
-                    fontWeight: 500,
-                    background: cron === example.value ? 'var(--surface-3)' : 'var(--surface-2)',
-                    color: cron === example.value ? 'var(--text)' : 'var(--text-2)',
-                    border: '1px solid var(--border)',
-                    cursor: 'pointer',
-                  }}
+                  data-active={cron === example.value ? 'true' : 'false'}
+                  className="row-item w-auto rounded-sm px-2.5 py-0.5 text-[11px] font-medium"
+                  style={{ border: '1px solid var(--border)' }}
                 >
                   {example.label}
                 </button>
@@ -233,35 +221,10 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={isPending}
-              style={{
-                ...inputStyle,
-                width: 'auto',
-                padding: '0 16px',
-                height: 36,
-                cursor: 'pointer',
-              }}
-            >
+            <Button variant="outline" size="md" type="button" onClick={onCancel} disabled={isPending}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="flex items-center gap-2"
-              style={{
-                ...inputStyle,
-                width: 'auto',
-                padding: '0 16px',
-                height: 36,
-                background: 'var(--blue)',
-                color: '#fff',
-                borderColor: 'transparent',
-                cursor: 'pointer',
-              }}
-            >
+            </Button>
+            <Button variant="primary" size="md" type="submit" disabled={isPending}>
               {isPending ? (
                 <>
                   <Icon name="sync" size={18} className="animate-spin" />
@@ -273,7 +236,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   Create Job
                 </>
               )}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

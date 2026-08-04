@@ -4,6 +4,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Icon } from '@/components/common/Icon'
 import { AgentSummary } from '@/api/agents'
 import { AgentConversation } from '@/api/agentChat'
+import { Button } from '@/components/ui/button'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { StatusDot, getStatusConfig } from '@/lib/agentStatus'
 import { AgentInfoTab } from './AgentInfoTab'
@@ -97,52 +98,24 @@ export function ConversationControls({
       <div className="flex-1" />
 
       {isRunning && (
-        <button
-          type="button"
-          onClick={onStop}
-          disabled={isStopping}
-          title="Terminate the in-progress run"
-          className="transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            borderRadius: 'var(--radius-sm)',
-            padding: '2px 8px',
-            fontSize: 11,
-            fontWeight: 500,
-            background: 'rgba(239,68,68,0.1)',
-            color: 'var(--red)',
-            cursor: isStopping ? 'default' : 'pointer',
-          }}
-        >
+        <Button variant="destructive" size="xs" onClick={onStop} disabled={isStopping} title="Terminate the in-progress run">
           <Icon name="stop" size={12} />
-          {isStopping ? 'Stopping…' : 'Stop'}
-        </button>
+          {isStopping ? 'Stopping…' : 'Stop turn'}
+        </Button>
       )}
+
+      <Button variant="ghost" size="xs" onClick={onFoldAll}>Fold all turns</Button>
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button
+          <Button
             ref={menuTriggerRef}
-            type="button"
+            variant="ghost"
+            size="icon-xs"
             aria-label="Conversation actions"
-            className="transition-colors"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--radius-sm)',
-              width: 24,
-              height: 24,
-              background: 'var(--surface-3)',
-              color: 'var(--text-2)',
-              border: 'none',
-              cursor: 'pointer',
-            }}
           >
             <Icon name="more_vert" size={16} />
-          </button>
+          </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
@@ -202,10 +175,6 @@ export function ConversationControls({
               )}
             </DropdownMenu.Item>
 
-            <DropdownMenu.Item style={itemStyle} onSelect={() => onFoldAll()}>
-              Fold all turns
-            </DropdownMenu.Item>
-
             <DropdownMenu.Item style={itemStyle} onSelect={() => setDetailsOpen(true)}>
               Agent details
             </DropdownMenu.Item>
@@ -247,13 +216,9 @@ export function ConversationControls({
             <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
               <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{agent.name}</span>
               <Dialog.Close asChild>
-                <button
-                  type="button"
-                  aria-label="Close details"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)' }}
-                >
+                <Button variant="ghost" size="icon-xs" aria-label="Close details">
                   <Icon name="close" size={16} />
-                </button>
+                </Button>
               </Dialog.Close>
             </div>
             <AgentInfoTab agent={agent} />

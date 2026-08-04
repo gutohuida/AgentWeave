@@ -54,15 +54,9 @@ export function TasksBoard() {
         <div className="shrink-0 flex items-center gap-2 px-4 py-2 flex-wrap" style={{ borderBottom: '1px solid var(--border)' }}>
           <button
             onClick={() => setActiveFilter(null)}
-            style={{
-              background: activeFilter === null ? 'var(--surface-3)' : 'var(--surface-2)',
-              border: `1px solid ${activeFilter === null ? 'var(--border-hi)' : 'var(--border)'}`,
-              borderRadius: 9999,
-              fontSize: 11,
-              padding: '3px 10px',
-              color: activeFilter === null ? 'var(--text)' : 'var(--text-2)',
-              cursor: 'pointer',
-            }}
+            data-active={activeFilter === null ? 'true' : 'false'}
+            className="row-item w-auto rounded-full px-2.5 py-0.5 text-[11px]"
+            style={{ border: `1px solid ${activeFilter === null ? 'var(--border-hi)' : 'var(--border)'}` }}
           >
             All
           </button>
@@ -70,15 +64,9 @@ export function TasksBoard() {
             <button
               key={name}
               onClick={() => setActiveFilter(name)}
-              style={{
-                background: activeFilter === name ? 'var(--surface-3)' : 'var(--surface-2)',
-                border: `1px solid ${activeFilter === name ? 'var(--border-hi)' : 'var(--border)'}`,
-                borderRadius: 9999,
-                fontSize: 11,
-                padding: '3px 10px',
-                color: activeFilter === name ? 'var(--text)' : 'var(--text-2)',
-                cursor: 'pointer',
-              }}
+              data-active={activeFilter === name ? 'true' : 'false'}
+              className="row-item w-auto rounded-full px-2.5 py-0.5 text-[11px]"
+              style={{ border: `1px solid ${activeFilter === name ? 'var(--border-hi)' : 'var(--border)'}` }}
             >
               <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full" style={{ background: agentColorVars(colorsByAgent.get(name)).accent }} />
               {name}

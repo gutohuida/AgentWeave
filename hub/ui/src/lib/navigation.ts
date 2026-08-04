@@ -6,7 +6,7 @@ export interface RailProject {
   agents: AgentSummary[]
 }
 
-export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'jobs', 'activity', 'environment'] as const
+export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 export const ENVIRONMENT_SECTIONS = [
@@ -25,7 +25,8 @@ const DEFAULT_TAB: ProjectTab = 'overview'
 const DEFAULT_ENVIRONMENT_SECTION: EnvironmentSection = ENVIRONMENT_SECTIONS[0]
 
 export type WorkspaceDestination =
-  | { kind: 'project'; projectId: string; tab: ProjectTab; environmentSection?: EnvironmentSection }
+  | { kind: 'project'; projectId: string; tab: ProjectTab }
+  | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   | { kind: 'conversation'; projectId: string; agent: string; conversationId: string | null }
   | { kind: 'zero' }
 
@@ -41,9 +42,6 @@ export function projectDestination(
   projectId: string,
   tab: ProjectTab = DEFAULT_TAB,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
-  if (tab === 'environment') {
-    return { kind: 'project', projectId, tab, environmentSection: DEFAULT_ENVIRONMENT_SECTION }
-  }
   return { kind: 'project', projectId, tab }
 }
 
@@ -62,10 +60,20 @@ export function agentDestination(
   return { kind: 'conversation', projectId, agent, conversationId }
 }
 
+/** Returns true when the destination has entered an area with its own
+ *  navigation (configuration). The Sidebar derives its section mode from
+ *  this; the destination itself still uses `tab: 'environment'` so deep
+ *  links continue to resolve. */
+export function isConfigurationDestination(
+  destination: WorkspaceDestination,
+): destination is Extract<WorkspaceDestination, { kind: 'project'; tab: 'environment' }> {
+  return destination.kind === 'project' && destination.tab === 'environment'
+}
+
 /** Serializes a destination into a URL search string (including the leading
- * `?`, or `''` for the zero-project state). No provider session identifier is
- * ever part of this shape — only AgentWeave's own project/agent/conversation
- * identity. */
+ *  `?`, or `''` for the zero-project state). No provider session identifier is
+ *  ever part of this shape — only AgentWeave's own project/agent/conversation
+ *  identity. */
 export function serializeDestination(destination: WorkspaceDestination): string {
   if (destination.kind === 'zero') return ''
   const params = new URLSearchParams()
@@ -83,11 +91,11 @@ export function serializeDestination(destination: WorkspaceDestination): string 
 }
 
 /** Parses a URL search string into a requested destination, or `null` when no
- * project is named at all (the zero-project / unspecified case). Unknown or
- * missing tab/section values are coerced to their defaults; validating the
- * project ID itself against the registered collection is `resolveDestination`'s
- * job, not this function's — parsing must not require knowing what projects
- * exist. */
+ *  project is named at all (the zero-project / unspecified case). Unknown or
+ *  missing tab/section values are coerced to their defaults; validating the
+ *  project ID itself against the registered collection is `resolveDestination`'s
+ *  job, not this function's — parsing must not require knowing what projects
+ *  exist. */
 export function parseDestination(search: string): WorkspaceDestination | null {
   const params = new URLSearchParams(search)
   const projectId = params.get('project')
@@ -99,10 +107,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   }
 
   const rawTab = params.get('tab')
-  const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
-    ? (rawTab as ProjectTab)
-    : DEFAULT_TAB
-  if (tab === 'environment') {
+  if (rawTab === 'environment') {
     const rawSection = params.get('section')
     const section: EnvironmentSection = (ENVIRONMENT_SECTIONS as readonly string[]).includes(
       rawSection ?? '',
@@ -111,6 +116,9 @@ export function parseDestination(search: string): WorkspaceDestination | null {
       : DEFAULT_ENVIRONMENT_SECTION
     return environmentDestination(projectId, section)
   }
+  const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
+    ? (rawTab as ProjectTab)
+    : DEFAULT_TAB
   return projectDestination(projectId, tab)
 }
 

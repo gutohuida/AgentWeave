@@ -184,17 +184,10 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
                 <button
                   key={status}
                   onClick={() => onNavigate('tasks')}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs hover:bg-[var(--row-hover)]"
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    background: 'var(--surface-2)',
                     border: '1px solid var(--border)',
-                    borderRadius: 9999,
-                    padding: '3px 10px',
-                    fontSize: 12,
                     color: 'var(--text-2)',
-                    cursor: 'pointer',
                   }}
                 >
                   <span className="inline-flex rounded-full" style={{ width: 6, height: 6, background: color }} />

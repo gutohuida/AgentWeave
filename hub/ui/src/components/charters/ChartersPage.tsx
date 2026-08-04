@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
+import { SettingsSection } from '@/components/environment/SettingsSection'
 import {
   Charter,
   CharterCreate,
@@ -31,46 +33,37 @@ export function ChartersPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center gap-3">
-        <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
-        <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading charters...</span>
-      </div>
+      <SettingsSection title="Charters" description="Authored behavior and boundaries that can be assigned to an agent.">
+        <div className="flex items-center gap-3 py-6">
+          <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
+          <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading charters...</span>
+        </div>
+      </SettingsSection>
     )
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div
-        className="flex items-center justify-between p-4"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <div>
-          <h1 className="text-lg font-normal" style={{ color: 'var(--text)' }}>Charters</h1>
-          <p className="mt-0.5 text-xs" style={{ color: 'var(--text-3)' }}>
-            Authored behavior and boundaries that can be assigned to an agent.
-          </p>
-        </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="flex h-10 items-center gap-2 rounded-md px-4 text-[13px] font-medium"
-          style={{ background: 'var(--blue)', color: '#fff' }}
-        >
+    <SettingsSection
+      title="Charters"
+      description="Authored behavior and boundaries that can be assigned to an agent."
+      actions={(
+        <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
           <Icon name="add" size={18} />
           New Charter
-        </button>
-      </div>
-
+        </Button>
+      )}
+    >
       {deleteError && (
         <div
           role="alert"
-          className="mx-4 mt-3 rounded-md px-3 py-2 text-xs"
+          className="mb-3 rounded-md px-3 py-2 text-xs"
           style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red, #ef4444)' }}
         >
           {deleteError}
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="py-4">
         {charters.length === 0 ? (
           <EmptyState
             icon="assignment_ind"
@@ -78,12 +71,12 @@ export function ChartersPage() {
             description="Create authored guidance, then bind it from an agent's detail view."
           />
         ) : (
-          <div className="grid max-w-3xl gap-2">
+          <div className="flex flex-col">
             {charters.map((charter) => (
               <div
                 key={charter.id}
-                className="flex items-start justify-between gap-4 rounded-md p-3"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                className="flex items-start justify-between gap-4 border-b py-2.5"
+                style={{ borderColor: 'var(--border)' }}
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
@@ -94,15 +87,12 @@ export function ChartersPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    onClick={() => setEditing(charter)}
-                    className="rounded-md p-2"
-                    style={{ color: 'var(--text-3)' }}
-                    aria-label={`Edit ${charter.name}`}
-                  >
+                  <Button variant="ghost" size="icon-xs" onClick={() => setEditing(charter)} aria-label={`Edit ${charter.name}`}>
                     <Icon name="edit" size={16} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={() => {
                       setDeleteError(null)
                       deleteCharter.mutate(charter.id, {
@@ -110,12 +100,10 @@ export function ChartersPage() {
                       })
                     }}
                     disabled={deleteCharter.isPending}
-                    className="rounded-md p-2"
-                    style={{ color: 'var(--text-3)' }}
                     aria-label={`Delete ${charter.name}`}
                   >
                     <Icon name="delete" size={16} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -144,7 +132,7 @@ export function ChartersPage() {
           )}
         />
       )}
-    </div>
+    </SettingsSection>
   )
 }
 
@@ -201,17 +189,15 @@ function CharterForm({
           style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
         />
         <div className="mt-5 flex justify-end gap-2">
-          <button onClick={onCancel} className="rounded-md px-4 py-2 text-sm" style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}>
-            Cancel
-          </button>
-          <button
+          <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => onSubmit({ name: name.trim(), content })}
             disabled={isPending || !name.trim()}
-            className="rounded-md px-4 py-2 text-sm font-medium"
-            style={{ background: 'var(--blue)', color: '#fff', opacity: isPending || !name.trim() ? 0.6 : 1 }}
           >
             {isPending ? 'Saving...' : 'Save'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

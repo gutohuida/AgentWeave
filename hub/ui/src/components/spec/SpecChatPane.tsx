@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Icon } from '@/components/common/Icon'
 import { fetchWithAuth } from '@/api/client'
 import { useAgentOutput, useAgentSessions } from '@/api/agents'
+import { Button } from '@/components/ui/button'
 import { useConfigStore } from '@/store/configStore'
 import { SharedStreamRenderer } from '@/components/stream/SharedStreamRenderer'
 
@@ -301,19 +302,9 @@ export function SpecChatPane({
               t.style.height = `${Math.min(t.scrollHeight, 96)}px`
             }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!message.trim() || inputDisabled}
-            className="px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: message.trim() && !inputDisabled ? 'var(--blue)' : 'var(--surface)',
-              color: message.trim() && !inputDisabled ? '#fff' : 'var(--text-3)',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
+          <Button variant="primary" size="icon" onClick={handleSend} disabled={!message.trim() || inputDisabled} aria-label="Send message">
             <Icon name="send" size={18} />
-          </button>
+          </Button>
         </div>
       </div>
     </div>

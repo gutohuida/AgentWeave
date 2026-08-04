@@ -29,11 +29,9 @@ describe('operator agent creation dialog', () => {
     mutationError = null
   })
 
-  it('exposes agent creation as a project-header action', () => {
-    const onAddAgent = vi.fn()
-    render(<ProjectHeader projectName="Website" directoryAvailable onAddAgent={onAddAgent} onOpenSettings={vi.fn()} onOpenSetup={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Add agent' }))
-    expect(onAddAgent).toHaveBeenCalledOnce()
+  it('keeps agent creation out of the project header', () => {
+    render(<ProjectHeader projectName="Website" directoryAvailable onOpenSetup={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Add agent' })).not.toBeInTheDocument()
   })
 
   it('collects a name, launchable runner, and optional charter', () => {

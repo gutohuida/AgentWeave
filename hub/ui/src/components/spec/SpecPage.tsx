@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Button } from '@/components/ui/button'
 import { fetchWithAuth } from '@/api/client'
 import { useSpec, useSpecEvents, useSpecList, type SpecDiagnostic, type SpecMissingEntry } from '@/api/spec'
 import { useQueryClient } from '@tanstack/react-query'
@@ -271,23 +272,9 @@ export function SpecPage() {
               Archived{selectedNode.archiveDate ? ` · ${selectedNode.archiveDate}` : ''}
             </span>
           )}
-          <button
-            onClick={handleRefresh}
-            title="Refresh spec"
-            className="px-2 py-1.5 rounded-md transition-colors"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-2)',
-              cursor: 'pointer',
-              borderRadius: 'var(--radius)',
-            }}
-          >
+          <Button variant="outline" size="icon-sm" onClick={handleRefresh} title="Refresh spec" aria-label="Refresh spec">
             <Icon name="refresh" size={16} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -323,20 +310,9 @@ export function SpecPage() {
                     ? `${repairTarget.name} is busy`
                     : `Target: ${repairTarget.name}`}
               </span>
-              <button
-                onClick={handleRepair}
-                disabled={repairDisabled}
-                className="px-2 py-1 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text)',
-                  cursor: repairDisabled ? 'not-allowed' : 'pointer',
-                  borderRadius: 'var(--radius-sm)',
-                }}
-              >
+              <Button variant="outline" size="xs" onClick={handleRepair} disabled={repairDisabled}>
                 {isRepairing ? 'Sending…' : 'Repair manifest'}
-              </button>
+              </Button>
             </div>
           </div>
           {showDriftDetails && (
@@ -367,14 +343,9 @@ export function SpecPage() {
         >
           <Icon name="info" size={14} />
           <span className="flex-1">{navStatus}</span>
-          <button
-            type="button"
-            onClick={() => setNavStatus(null)}
-            aria-label="Dismiss navigation message"
-            style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}
-          >
+          <Button variant="ghost" size="icon-xs" onClick={() => setNavStatus(null)} aria-label="Dismiss navigation message">
             <Icon name="close" size={14} />
-          </button>
+          </Button>
         </div>
       )}
 

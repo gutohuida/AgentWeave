@@ -190,7 +190,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
 
   it('Environment contains Quality, Instructions, Runners, Charters, Worktrees, Diagnostics, Budgets, and Settings', () => {
     render(withQueryClient(<App />))
-    fireEvent.click(screen.getByTestId('project-tab-environment'))
+    fireEvent.click(screen.getAllByRole('button', { name: /^Configure /i })[0])
     const sections: Array<[string, string]> = [
       ['environment-section-quality', 'page-quality'],
       ['environment-section-instructions', 'page-instructions'],

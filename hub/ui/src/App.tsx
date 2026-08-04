@@ -30,6 +30,7 @@ import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { RunnersPage } from '@/components/runners/RunnersPage'
 import { SpecPage } from '@/components/spec/SpecPage'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
+import { Button } from '@/components/ui/button'
 import { useSSE } from '@/hooks/useSSE'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
@@ -48,7 +49,7 @@ export default function App() {
   const { data: agents = [] } = useAgents()
   const [setupOpen, setSetupOpen] = useState(false)
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
-  const [agentCreateOpen, setAgentCreateOpen] = useState(false)
+  const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
   const [activitySubview, setActivitySubview] = useState<'activity' | 'logs'>('activity')
   const { destination, navigate: navigateTo } = useWorkspaceNavigation({
@@ -109,24 +110,14 @@ export default function App() {
           <div className="text-xs opacity-70" style={{ maxWidth: 320 }}>
             The dashboard couldn&apos;t connect to the Hub server. Make sure it&apos;s running, then retry.
           </div>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => useConfigStore.getState().bootstrap()}
             className="mt-1"
-            style={{
-              height: 32,
-              borderRadius: 'var(--radius)',
-              padding: '0 16px',
-              background: 'var(--blue)',
-              color: '#fff',
-              border: 'none',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
           >
             Retry
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -225,8 +216,8 @@ export default function App() {
           </div>
         </div>
       )
-    } else {
-      const section = destination.environmentSection ?? 'quality'
+    } else if (destination.tab === 'environment') {
+      const section = destination.environmentSection
       const environmentPages: Record<EnvironmentSection, React.ReactNode> = {
         quality: <QualityHealthPanel />,
         instructions: <InstructionsPage />,
@@ -237,36 +228,20 @@ export default function App() {
         budgets: <AccountingPanel />,
         settings: <ProjectSettingsPanel />,
       }
-      projectContent = (
-        <div className="flex h-full">
-          <nav aria-label="Environment sections" className="w-40 shrink-0 p-3" style={{ borderRight: '1px solid var(--border)' }}>
-            {(Object.keys(environmentPages) as EnvironmentSection[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                data-testid={`environment-section-${item}`}
-                onClick={() => navigateTo(environmentDestination(destination.projectId, item))}
-                className="block w-full rounded px-2 py-1.5 text-left text-xs capitalize"
-                aria-current={section === item ? 'page' : undefined}
-              >
-                {item}
-              </button>
-            ))}
-          </nav>
-          <div className="min-w-0 flex-1 overflow-auto">{environmentPages[section]}</div>
-        </div>
-      )
+      projectContent = <div className="min-w-0 h-full overflow-auto">{environmentPages[section]}</div>
     }
     content = (
       <div className="flex h-full flex-col" data-testid="active-page-wrapper">
-        <ProjectTabs
-          active={destination.tab}
-          onSelect={(tab) => {
-            setOverviewQuestionsOpen(false)
-            if (tab === 'activity') setActivitySubview('activity')
-            navigateTo(projectDestination(destination.projectId, tab))
-          }}
-        />
+        {destination.tab !== 'environment' && (
+          <ProjectTabs
+            active={destination.tab}
+            onSelect={(tab) => {
+              setOverviewQuestionsOpen(false)
+              if (tab === 'activity') setActivitySubview('activity')
+              navigateTo(projectDestination(destination.projectId, tab))
+            }}
+          />
+        )}
         <div className={destination.tab === 'spec' ? 'min-h-0 flex-1 overflow-auto' : 'workspace-content min-h-0 flex-1 overflow-auto'}>{projectContent}</div>
       </div>
     )
@@ -282,10 +257,13 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div className="workspace-shell flex h-full overflow-hidden">
           <Sidebar
+            destination={destination}
             activePage={activePage}
             activeAgent={destination.kind === 'conversation' ? destination.agent : null}
             onOpenProject={(id) => navigateTo(projectDestination(id))}
             onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent))}
+            onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
+            onAddAgent={(id) => setAgentCreateProjectId(id)}
             onOpenExisting={() => setProjectManagerMode('open')}
             onCreateProject={() => setProjectManagerMode('create')}
             compact={activePage === 'spec'}
@@ -307,8 +285,6 @@ export default function App() {
                 pathDisplay={currentProject.path_display}
                 agentCount={currentProject.agents.length}
                 directoryAvailable={currentProject.directory_state === 'available'}
-                onAddAgent={() => setAgentCreateOpen(true)}
-                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'settings'))}
                 onOpenSetup={() => setSetupOpen(true)}
               />
             )}
@@ -325,13 +301,14 @@ export default function App() {
           setProjectManagerMode(null)
         }}
       />
-      {agentCreateOpen && (
+      {agentCreateProjectId && (
         <AgentCreateDialog
           open
-          onClose={() => setAgentCreateOpen(false)}
+          onClose={() => setAgentCreateProjectId(null)}
           onCreated={(name) => {
-            setAgentCreateOpen(false)
-            if (currentProject) navigateTo(agentDestination(currentProject.id, name))
+            const createdProjectId = agentCreateProjectId
+            setAgentCreateProjectId(null)
+            navigateTo(agentDestination(createdProjectId, name))
           }}
         />
       )}

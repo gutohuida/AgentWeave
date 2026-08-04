@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
+import { Button } from '@/components/ui/button'
 import { Job, JobRun } from '@/api/jobs'
 
 interface JobCardProps {
@@ -79,23 +80,6 @@ function RunHistory({ runs }: { runs?: JobRun[] }) {
   )
 }
 
-const btnSmall = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '4px',
-  height: 28,
-  borderRadius: 'var(--radius-sm)',
-  padding: '0 10px',
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  border: '1px solid var(--border)',
-  background: 'var(--surface-2)',
-  color: 'var(--text-2)',
-  transition: 'opacity 0.15s',
-} as React.CSSProperties
-
 export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: JobCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -136,13 +120,15 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
           </div>
 
           {/* Expand button */}
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={() => setExpanded(!expanded)}
-            className="shrink-0 p-1 rounded-full transition-colors"
-            style={{ color: 'var(--text-3)' }}
+            className="shrink-0 rounded-full"
+            aria-label={expanded ? 'Collapse job details' : 'Expand job details'}
           >
             <Icon name={expanded ? 'expand_less' : 'expand_more'} size={20} />
-          </button>
+          </Button>
         </div>
 
         {/* Badges row */}
@@ -168,63 +154,36 @@ export function JobCard({ job, onRun, onPause, onResume, onDelete, isPending }: 
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 mt-3">
-          <button
-            onClick={() => onRun(job.id)}
-            disabled={isPending || !job.enabled}
-            style={{ ...btnSmall, opacity: (isPending || !job.enabled) ? 0.5 : 1 }}
-            title="Run now"
-          >
+          <Button variant="outline" size="xs" onClick={() => onRun(job.id)} disabled={isPending || !job.enabled} title="Run now">
             <Icon name="play_arrow" size={16} />
             Run
-          </button>
+          </Button>
 
           {job.enabled ? (
-            <button
-              onClick={() => onPause(job.id)}
-              disabled={isPending}
-              style={{ ...btnSmall, opacity: isPending ? 0.5 : 1 }}
-              title="Pause"
-            >
+            <Button variant="outline" size="xs" onClick={() => onPause(job.id)} disabled={isPending} title="Pause">
               <Icon name="pause" size={16} />
               Pause
-            </button>
+            </Button>
           ) : (
-            <button
-              onClick={() => onResume(job.id)}
-              disabled={isPending}
-              style={{ ...btnSmall, opacity: isPending ? 0.5 : 1 }}
-              title="Resume"
-            >
+            <Button variant="outline" size="xs" onClick={() => onResume(job.id)} disabled={isPending} title="Resume">
               <Icon name="play_arrow" size={16} />
               Resume
-            </button>
+            </Button>
           )}
 
           {showDeleteConfirm ? (
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => onDelete(job.id)}
-                disabled={isPending}
-                style={{ ...btnSmall, background: 'var(--red)', color: '#fff', borderColor: 'transparent', opacity: isPending ? 0.5 : 1 }}
-              >
+              <Button variant="destructive" size="xs" onClick={() => onDelete(job.id)} disabled={isPending}>
                 Confirm
-              </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                style={btnSmall}
-              >
+              </Button>
+              <Button variant="outline" size="xs" onClick={() => setShowDeleteConfirm(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isPending}
-              style={{ ...btnSmall, color: 'var(--red)' }}
-              title="Delete"
-            >
+            <Button variant="outline" size="xs" onClick={() => setShowDeleteConfirm(true)} disabled={isPending} title="Delete" aria-label="Delete" style={{ color: 'var(--red)' }}>
               <Icon name="delete" size={16} />
-            </button>
+            </Button>
           )}
         </div>
       </div>

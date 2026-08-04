@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { clearComposerDraft, getComposerDraft, setComposerDraft } from '@/lib/composerDrafts'
 import {
   acceptTriggerResult,
@@ -174,7 +175,7 @@ export function Composer({
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex items-end gap-2">
       <ComposerAgentSelector
         agents={agents.length > 0 ? agents : [{
           name: agent,
@@ -214,11 +215,10 @@ export function Composer({
           placeholder={isRunning ? `${agent} is responding…` : `Message ${agent}…`}
           rows={COMPOSER_MIN_ROWS}
           disabled={submitting}
-          className="w-full px-3 py-2 rounded-lg text-xs resize-none border disabled:opacity-50"
+          className="w-full px-2 py-2 text-xs resize-none border-0 bg-transparent disabled:opacity-50"
           style={{
-            background: 'var(--surface)',
-            borderColor: 'var(--border)',
-            color: 'var(--text-3)',
+            background: 'transparent',
+            color: 'var(--text)',
             maxHeight: `${COMPOSER_MAX_HEIGHT_PX}px`,
             overflowY: 'auto',
             outline: 'none',
@@ -231,20 +231,15 @@ export function Composer({
           }}
         />
       </div>
-      <button
+      <Button
+        variant="primary"
+        size="icon"
         onClick={() => void handleSend()}
         aria-label="Send message"
         disabled={!text.trim() || submitting}
-        className="px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{
-          background: text.trim() && !submitting ? 'var(--blue)' : 'var(--surface)',
-          color: text.trim() && !submitting ? '#fff' : 'var(--text-3)',
-          border: 'none',
-          cursor: 'pointer',
-        }}
       >
         <Icon name="send" size={18} />
-      </button>
+      </Button>
     </div>
   )
 }

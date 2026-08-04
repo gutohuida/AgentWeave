@@ -111,7 +111,7 @@ describe('conversation controls — placement and overflow menu', () => {
     })
   })
 
-  it('shows only submit, the active-agent indicator, and context usage at rest when idle', async () => {
+  it('shows turn actions, the active-agent indicator, and context usage in the header at rest', async () => {
     render(<AgentOutputPanel agent={idleAgent} />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
 
@@ -121,8 +121,8 @@ describe('conversation controls — placement and overflow menu', () => {
 
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Handoff/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Fold all turns' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fold all turns' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Stop turn/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Pause scroll|Resume scroll/ })).not.toBeInTheDocument()
   })
 
@@ -157,8 +157,8 @@ describe('conversation controls — placement and overflow menu', () => {
     expect(items[0]).toContain('New conversation')
     expect(items[1]).toContain('conv-old')
     expect(items[2]).toContain('Handoff')
-    expect(items[3]).toContain('Fold all turns')
-    expect(items[4]).toContain('Agent details')
+    expect(items[3]).toContain('Agent details')
+    expect(items).toHaveLength(4)
 
     // On open, focus lands on the menu content itself; one ArrowDown moves
     // it to the first item, which can then be activated by the keyboard alone.

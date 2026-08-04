@@ -105,7 +105,7 @@ export function AgentTimeline({
   }
 
   return (
-    <div className="max-w-[760px] mx-auto flex flex-col gap-[18px] px-5">
+    <div className="max-w-[960px] mx-auto flex flex-col gap-[21px] px-[30px]">
       {turns.map((turn, turnIndex) => {
         const key = turn.runId ?? `turn-${turnIndex}`
         const isLastTurn = turnIndex === turns.length - 1
@@ -127,11 +127,11 @@ export function AgentTimeline({
         const terminalLabel = runStatus ? TERMINAL_LABEL[runStatus] : undefined
 
         return (
-          <div key={key} className="flex flex-col gap-[18px]">
+          <div key={key} className="flex flex-col gap-[21px]">
             {!isLastTurn && (
               <button
                 onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
-                className="self-start flex items-center gap-1 text-[10.5px]"
+                className="fold-control self-start flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
                 style={{ color: 'var(--text-3)', opacity: 0.55 }}
                 title="Fold this turn"
               >
@@ -216,7 +216,7 @@ function FoldedTurnPill({ turn, onClick }: { turn: TimelineTurn; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 self-stretch px-[11px] py-[6px] rounded-lg text-[12.5px] text-left"
+      className="fold-control flex items-center gap-2 self-stretch px-[11px] py-[6px] rounded-lg text-[12.5px] text-left"
       style={{ border: '1px dashed var(--border)', color: 'var(--text-3)' }}
     >
       <Icon name="expand_more" size={13} style={{ transform: 'rotate(-90deg)' }} />
@@ -258,7 +258,7 @@ function TurnBody({
   return (
     <>
       {work.length > 0 && (
-        <details open={workOpen} className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+        <details open={workOpen} className="work-disclosure rounded-lg overflow-hidden">
           <summary
             onClick={(e) => {
               e.preventDefault()

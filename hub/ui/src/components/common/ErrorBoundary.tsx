@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Icon } from './Icon'
+import { Button } from '@/components/ui/button'
 
 interface ErrorBoundaryProps {
   children: ReactNode
@@ -62,14 +63,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             {error.message}
           </pre>
         )}
-        <button
-          type="button"
-          onClick={this.reset}
-          className="rounded-lg px-4 py-2 text-sm"
-          style={{ background: 'var(--blue)', color: '#fff' }}
-        >
+        <Button variant="primary" size="md" onClick={this.reset}>
           Try again
-        </button>
+        </Button>
       </div>
     )
   }

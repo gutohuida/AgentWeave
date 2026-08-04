@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { useSSEConnectionState } from '@/hooks/useSSE'
 import {
   AgentSummary,
@@ -333,23 +334,14 @@ export function AgentOutputPanel({
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
-      {/* Header bar */}
       <div
-        className="flex items-center gap-2 px-4 py-2.5 shrink-0 border-b"
+        className="conversation-header-surface flex shrink-0 items-center gap-2 px-4 py-2.5"
         data-testid="conversation-header"
-        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
       >
         {onBackToProject && (
-          <button
-            type="button"
-            onClick={onBackToProject}
-            aria-label="Back to project"
-            title="Back to project"
-            className="text-sm"
-            style={{ color: 'var(--text-2)' }}
-          >
-            ←
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={onBackToProject} aria-label="Back to project" title="Back to project">
+            <Icon name="arrow_left" size={16} />
+          </Button>
         )}
         <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
           <span data-testid={`conversation-agent-color-${agent.name}`} className="h-2 w-2 rounded-full" style={{ background: agentColorVars(agent.color_index).accent }} />
@@ -379,6 +371,22 @@ export function AgentOutputPanel({
           )}
           {agent.status}
         </span>
+        <div className="flex-1" />
+        <ConversationControls
+          agent={agent}
+          isRunning={isRunning}
+          isStopping={isStopping}
+          onStop={handleStop}
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onSelectConversation={selectConversation}
+          onNewConversation={() => selectConversation(NEW_CONVERSATION_VALUE)}
+          handoffState={handoffState}
+          handoffUnavailable={handoffUnavailable}
+          interactionLocked={interactionLocked}
+          onHandoff={handleHandoff}
+          onFoldAll={() => setFoldAllSignal((s) => s + 1)}
+        />
       </div>
 
       {/* Output body */}
@@ -407,30 +415,11 @@ export function AgentOutputPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Send message footer */}
-      <div
-        className="shrink-0 border-t px-3 py-2 flex flex-col gap-2"
-        style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}
-      >
-        <ConversationControls
-          agent={agent}
-          isRunning={isRunning}
-          isStopping={isStopping}
-          onStop={handleStop}
-          conversations={conversations}
-          currentConversationId={currentConversationId}
-          onSelectConversation={selectConversation}
-          onNewConversation={() => selectConversation(NEW_CONVERSATION_VALUE)}
-          handoffState={handoffState}
-          handoffUnavailable={handoffUnavailable}
-          interactionLocked={interactionLocked}
-          onHandoff={handleHandoff}
-          onFoldAll={() => setFoldAllSignal((s) => s + 1)}
-        />
+      <div className="conversation-composer-fade shrink-0">
+        <div className="mx-auto flex w-full max-w-[820px] flex-col gap-2">
+          <BannerStack banners={banners} />
 
-        <BannerStack banners={banners} />
-
-        <span
+          <span
           data-testid="session-continuity"
           className="flex items-center gap-1"
           style={{
@@ -457,22 +446,24 @@ export function AgentOutputPanel({
               : currentConversationId
                 ? `Continuing ${currentConversationId.slice(0, 12)}…`
                 : 'No conversation yet')}
-        </span>
+          </span>
 
-        {/* Input row */}
-        <Composer
-          key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_VALUE}`}
-          agent={agent.name}
-          projectId={projectId ?? ''}
-          conversationId={currentConversationId ?? null}
-          isRunning={isRunning}
-          onSubmit={handleComposerSubmit}
-          workspacePaths={workspacePaths}
-          agents={roster}
-          launchability={launchabilityData?.agents ?? {}}
-          targetAgent={targetAgent}
-          onTargetAgentChange={setTargetAgent}
-        />
+          <div className="conversation-composer-surface">
+            <Composer
+              key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_VALUE}`}
+              agent={agent.name}
+              projectId={projectId ?? ''}
+              conversationId={currentConversationId ?? null}
+              isRunning={isRunning}
+              onSubmit={handleComposerSubmit}
+              workspacePaths={workspacePaths}
+              agents={roster}
+              launchability={launchabilityData?.agents ?? {}}
+              targetAgent={targetAgent}
+              onTargetAgentChange={setTargetAgent}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )

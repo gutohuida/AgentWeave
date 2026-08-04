@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Button } from '@/components/ui/button'
 import { JobCard } from './JobCard'
 import { JobForm } from './JobForm'
 import {
@@ -49,19 +50,6 @@ export function JobsPage() {
     )
   }
 
-  const btnBase = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    height: 40,
-    borderRadius: 'var(--radius)',
-    padding: '0 16px',
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
-    border: 'none',
-  } as React.CSSProperties
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -74,13 +62,10 @@ export function JobsPage() {
             Recurring tasks that trigger agents automatically
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          style={{ ...btnBase, background: 'var(--blue)', color: '#fff' }}
-        >
+        <Button variant="primary" size="md" onClick={() => setShowForm(true)}>
           <Icon name="add" size={18} />
           New Job
-        </button>
+        </Button>
       </div>
 
       {/* Filter tabs */}
@@ -89,11 +74,8 @@ export function JobsPage() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className="px-3 py-1.5 rounded-full text-[11px] font-medium capitalize transition-colors"
-            style={{
-              background: filter === f ? 'var(--surface-3)' : 'transparent',
-              color: filter === f ? 'var(--text)' : 'var(--text-3)',
-            }}
+            data-active={filter === f ? 'true' : 'false'}
+            className="row-item w-auto rounded-full px-3 py-1.5 text-[11px] font-medium capitalize"
           >
             {f}
             {f !== 'all' && jobs && (
@@ -114,13 +96,10 @@ export function JobsPage() {
               title="No jobs yet"
               description="Create scheduled jobs to automatically trigger agents on a cron schedule."
             />
-            <button
-              onClick={() => setShowForm(true)}
-              style={{ ...btnBase, background: 'var(--blue)', color: '#fff', marginTop: 16 }}
-            >
+            <Button variant="primary" size="md" onClick={() => setShowForm(true)} className="mt-4">
               <Icon name="add" size={18} />
               Create First Job
-            </button>
+            </Button>
           </div>
         ) : filteredJobs?.length === 0 ? (
           <EmptyState

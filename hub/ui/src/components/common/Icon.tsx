@@ -4,6 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowDown,
+  ArrowLeft,
   BadgeCheck,
   BarChart3,
   BookOpen,
@@ -67,6 +68,7 @@ import {
 const ICONS: Record<string, LucideIcon> = {
   add: Plus,
   arrow_downward: ArrowDown,
+  arrow_left: ArrowLeft,
   article: FileText,
   badge: BadgeCheck,
   bar_chart: BarChart3,

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useCreateAgent } from '@/api/agents'
 import { useCharters } from '@/api/charters'
 import { useRunners, useRunnerLaunchability } from '@/api/runners'
+import { Button } from '@/components/ui/button'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
 function errorDetail(error: unknown): string {
@@ -99,8 +100,8 @@ export function AgentCreateDialog({
 
         {createAgent.error && <div role="alert" className="mt-3 rounded-md px-3 py-2 text-xs" style={{ background: 'var(--error-cont)', color: 'var(--red)' }}>{errorDetail(createAgent.error)}</div>}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="rounded-md px-3 py-2 text-xs">Cancel</button>
-          <button type="button" onClick={submit} disabled={!canSubmit || createAgent.isPending} className="rounded-md px-3 py-2 text-xs font-semibold" style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>{createAgent.isPending ? 'Creating…' : 'Create agent'}</button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="sm" onClick={submit} disabled={!canSubmit || createAgent.isPending}>{createAgent.isPending ? 'Creating…' : 'Create agent'}</Button>
         </div>
       </div>
     </div>

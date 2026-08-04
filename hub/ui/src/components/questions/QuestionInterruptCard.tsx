@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
+import { Button } from '@/components/ui/button'
 import { Question } from '@/api/questions'
 
 interface QuestionInterruptCardProps {
@@ -55,34 +56,14 @@ export function QuestionInterruptCard({ questions, compact = false, onNavigateTo
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={onNavigateToQuestions}
-            style={{
-              background: 'var(--amber)',
-              color: '#000',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              padding: '4px 10px',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
+            className="rounded-[var(--radius-sm)] bg-[var(--amber)] px-2.5 py-1 text-xs font-semibold text-black hover:brightness-110 transition-[filter]"
           >
             Answer
           </button>
           {!compact && (
-            <button
-              onClick={() => setDismissed((prev) => new Set([...prev, first.id]))}
-              style={{
-                background: 'transparent',
-                color: 'var(--text-3)',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '4px 8px',
-                fontSize: 12,
-                cursor: 'pointer',
-              }}
-            >
+            <Button variant="ghost" size="xs" onClick={() => setDismissed((prev) => new Set([...prev, first.id]))}>
               Dismiss
-            </button>
+            </Button>
           )}
         </div>
       </div>

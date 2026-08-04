@@ -2,6 +2,7 @@ import { useTasks } from '@/api/tasks'
 import { useSessionSync, QualityConfig } from '@/api/status'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Icon } from '@/components/common/Icon'
+import { SettingsSection } from '@/components/environment/SettingsSection'
 
 function SettingBadge({ label, value }: { label: string; value: string }) {
   return (
@@ -25,19 +26,27 @@ export function QualityHealthPanel() {
 
   const quality: QualityConfig | undefined = sessionSync?.data?.quality
 
+  const description = 'Review gates, decision docs, and the echo-chamber guard configured for this project.'
+
   if (syncLoading) {
-    return <div className="p-6 text-sm" style={{ color: 'var(--text-3)' }}>Loading…</div>
+    return (
+      <SettingsSection title="Quality" description={description}>
+        <div className="py-6 text-sm" style={{ color: 'var(--text-3)' }}>Loading…</div>
+      </SettingsSection>
+    )
   }
 
   if (!quality || (!quality.review_required && !quality.docs_path && !quality.docs_threshold)) {
     return (
-      <div className="p-6">
-        <EmptyState
-          icon="verified"
-          title="No quality governance configured"
-          description="Add a quality: section to agentweave.yml to enable review gates, decision docs, and echo-chamber guard."
-        />
-      </div>
+      <SettingsSection title="Quality" description={description}>
+        <div className="py-6">
+          <EmptyState
+            icon="verified"
+            title="No quality governance configured"
+            description="Add a quality: section to agentweave.yml to enable review gates, decision docs, and echo-chamber guard."
+          />
+        </div>
+      </SettingsSection>
     )
   }
 
@@ -47,13 +56,8 @@ export function QualityHealthPanel() {
   const STALE_MIN = 15
 
   return (
-    <div className="p-6 flex flex-col gap-5 overflow-auto">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Icon name="verified_user" size={20} style={{ color: 'var(--blue)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Quality Health</span>
-      </div>
-
+    <SettingsSection title="Quality" description={description}>
+    <div className="py-4 flex flex-col gap-5 overflow-auto">
       {/* Active settings */}
       <div
         className="rounded-xl p-4 flex flex-col gap-3"
@@ -176,5 +180,6 @@ export function QualityHealthPanel() {
         </div>
       )}
     </div>
+    </SettingsSection>
   )
 }

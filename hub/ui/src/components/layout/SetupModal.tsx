@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { useConfigStore, type ThemeId, type ModeId } from '@/store/configStore'
 
 interface SetupModalProps {
@@ -207,27 +208,9 @@ export function SetupModal({ open, onClose }: SetupModalProps) {
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="w-full"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              height: 40,
-              borderRadius: 'var(--radius)',
-              padding: '0 24px',
-              background: 'var(--blue)',
-              color: '#fff',
-              border: 'none',
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
+          <Button type="submit" variant="primary" size="md" className="w-full">
             Connect
-          </button>
+          </Button>
         </form>
       </div>
     </div>

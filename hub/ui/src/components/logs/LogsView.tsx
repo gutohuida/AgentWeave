@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { useLogAgents, useLogs } from '@/api/logs'
+import { Button } from '@/components/ui/button'
 import { LogLine } from './LogLine'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -80,21 +81,13 @@ export function LogsView() {
 
   const lastUpdate = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : '—'
 
+  const chipBaseClassName = 'row-item w-auto whitespace-nowrap rounded-lg px-3 text-xs font-medium capitalize'
+
   const chipBase = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '4px',
     height: '32px',
-    borderRadius: '8px',
-    padding: '0 12px',
-    fontSize: '12px',
-    fontWeight: 500,
     letterSpacing: '0.5px',
     border: '1px solid var(--border)',
-    background: 'transparent',
     color: 'var(--text-3)',
-    transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
-    cursor: 'pointer',
     whiteSpace: 'nowrap',
     textTransform: 'capitalize',
   } as React.CSSProperties
@@ -146,24 +139,16 @@ export function LogsView() {
           </select>
 
           {/* Refresh */}
-          <button
-            onClick={refresh}
-            className="flex items-center justify-center shrink-0"
-            style={{ width: 32, height: 32, border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text-3)', background: 'transparent', cursor: 'pointer' }}
-            title="Refresh"
-          >
+          <Button variant="outline" size="icon-sm" onClick={refresh} title="Refresh" aria-label="Refresh">
             <Icon name="refresh" size={16} />
-          </button>
+          </Button>
 
           {/* Live toggle */}
           <button
             onClick={() => setLive(!live)}
-            className="flex items-center gap-1.5 h-8 rounded-lg px-3 text-xs font-medium transition-colors border"
-            style={{
-              background:   live ? 'var(--surface-3)' : 'transparent',
-              color:        live ? 'var(--text)' : 'var(--text-3)',
-              borderColor:  live ? 'transparent' : 'var(--border)',
-            }}
+            data-active={live ? 'true' : 'false'}
+            className="row-item h-8 w-auto gap-1.5 rounded-lg px-3 text-xs font-medium"
+            style={{ border: '1px solid var(--border)' }}
           >
             {live && <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />}
             {live ? 'Live' : 'Paused'}
@@ -179,6 +164,7 @@ export function LogsView() {
               <button
                 key={s}
                 onClick={() => setSeverity(s)}
+                className={chipBaseClassName}
                 style={active ? { ...chipBase, background: style!.bg, color: style!.color, borderColor: 'transparent' } : chipBase}
               >
                 {s}
@@ -198,6 +184,7 @@ export function LogsView() {
               <button
                 key={c}
                 onClick={() => setCategory(c)}
+                className={chipBaseClassName}
                 style={active ? { ...chipBase, background: 'var(--surface-3)', color: 'var(--text)', borderColor: 'transparent' } : chipBase}
               >
                 {c}

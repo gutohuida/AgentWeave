@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
+import { Button } from '@/components/ui/button'
+import { SettingsSection } from '@/components/environment/SettingsSection'
 import {
   useRunners,
   useCreateRunner,
@@ -25,19 +27,6 @@ function extractErrorDetail(err: unknown): string {
   return 'Could not delete runner'
 }
 
-const btnBase = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '8px',
-  height: 40,
-  borderRadius: 'var(--radius)',
-  padding: '0 16px',
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: 'pointer',
-  border: 'none',
-} as React.CSSProperties
-
 export function RunnersPage() {
   const { data: runners, isLoading } = useRunners()
   const [showForm, setShowForm] = useState(false)
@@ -59,45 +48,37 @@ export function RunnersPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex items-center gap-3">
+      <SettingsSection title="Runners" description="Reusable execution capability — which CLI and model an agent launches with.">
+        <div className="flex items-center gap-3 py-6">
           <Icon name="sync" size={24} className="animate-spin" style={{ color: 'var(--text-3)' }} />
           <span className="text-sm" style={{ color: 'var(--text-3)' }}>Loading runners…</span>
         </div>
-      </div>
+      </SettingsSection>
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div>
-          <h1 className="text-lg font-normal" style={{ color: 'var(--text)' }}>
-            Runners
-          </h1>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-3)' }}>
-            Reusable execution capability — which CLI and model an agent launches with.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowForm(true)}
-          style={{ ...btnBase, background: 'var(--blue)', color: '#fff' }}
-        >
+    <SettingsSection
+      title="Runners"
+      description="Reusable execution capability — which CLI and model an agent launches with."
+      actions={(
+        <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
           <Icon name="add" size={18} />
           New Runner
-        </button>
-      </div>
-
+        </Button>
+      )}
+    >
       {deleteError && (
         <div
-          className="mx-4 mt-3 px-3 py-2 rounded-md text-xs"
+          role="alert"
+          className="mb-3 px-3 py-2 rounded-md text-xs"
           style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--red, #ef4444)' }}
         >
           {deleteError}
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="py-4">
         {!runners || runners.length === 0 ? (
           <EmptyState
             icon="dns"
@@ -105,12 +86,12 @@ export function RunnersPage() {
             description="Runners are seeded automatically on first start (one per supported CLI). Create a custom one to vary model or name."
           />
         ) : (
-          <div className="grid gap-2 max-w-2xl">
+          <div className="flex flex-col">
             {runners.map((runner) => (
               <div
                 key={runner.id}
-                className="flex items-center justify-between p-3 rounded-md"
-                style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+                className="flex items-center justify-between border-b py-2.5"
+                style={{ borderColor: 'var(--border)' }}
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -131,23 +112,12 @@ export function RunnersPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => setEditing(runner)}
-                    className="p-2 rounded-md"
-                    style={{ color: 'var(--text-3)' }}
-                    title="Edit"
-                  >
+                  <Button variant="ghost" size="icon-xs" onClick={() => setEditing(runner)} title="Edit" aria-label={`Edit ${runner.name}`}>
                     <Icon name="edit" size={16} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(runner.id)}
-                    disabled={deleteRunner.isPending}
-                    className="p-2 rounded-md"
-                    style={{ color: 'var(--text-3)' }}
-                    title="Delete"
-                  >
+                  </Button>
+                  <Button variant="ghost" size="icon-xs" onClick={() => handleDelete(runner.id)} disabled={deleteRunner.isPending} title="Delete" aria-label={`Delete ${runner.name}`}>
                     <Icon name="delete" size={16} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -181,7 +151,7 @@ export function RunnersPage() {
           }
         />
       )}
-    </div>
+    </SettingsSection>
   )
 }
 
@@ -267,25 +237,15 @@ function RunnerForm({
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 mt-5">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-md text-sm"
-            style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}
-          >
-            Cancel
-          </button>
-          <button
+          <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => onSubmit({ name, cli, model: model || undefined })}
             disabled={isPending || !name.trim()}
-            className="px-4 py-2 rounded-md text-sm font-medium"
-            style={{
-              background: 'var(--blue)',
-              color: '#fff',
-              opacity: isPending || !name.trim() ? 0.6 : 1,
-            }}
           >
             {isPending ? 'Saving…' : 'Save'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

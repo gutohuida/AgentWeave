@@ -86,6 +86,17 @@ SHALL be reached within the content area rather than by adding entries to the na
 
 Adding a further project-scoped view MUST NOT require adding a navigation entry.
 
+> **Superseded in part by `2026-08-04-hub-contextual-navigation`.** This requirement's wording
+> pre-dates the distinction between a project's *work* views (tasks, specs, jobs, activity — which
+> remain project tabs reached in the content area, unchanged) and its *configuration* (environment:
+> quality, instructions, runners, charters, worktrees, diagnostics, budgets, settings). The newer
+> change moves configuration's own internal navigation into the rail's section mode, entered through
+> a single gear on the project's row, rather than through a content-area tab or column — see that
+> change's `design.md` ("The contextual rail" § Reconciliation) and its `hub-workspace-shell` delta
+> requirement "The navigation region carries the navigation of whatever the operator has entered".
+> Configuration is not a peer navigation entry: it adds nothing to the rail's project mode, and the
+> scenarios below continue to hold for every *work* view.
+
 #### Scenario: Navigation shows live entities with their state
 
 - **WHEN** the navigation region is displayed
@@ -95,7 +106,10 @@ Adding a further project-scoped view MUST NOT require adding a navigation entry.
 #### Scenario: A project's views are reached from the project
 
 - **WHEN** the operator opens a project
-- **THEN** its tasks, specs, jobs, activity, and environment are reachable within the content area
+- **THEN** its tasks, specs, jobs, and activity are reachable within the content area
+- **AND** its environment (configuration) is reachable via the gear on the project's rail row, per
+  `2026-08-04-hub-contextual-navigation`'s `hub-workspace-shell` delta — see the superseded-in-part
+  note above
 
 #### Scenario: A project row both navigates and expands
 
@@ -106,7 +120,8 @@ Adding a further project-scoped view MUST NOT require adding a navigation entry.
 
 #### Scenario: Adding a view does not crowd navigation
 
-- **WHEN** a further project-scoped view is introduced
+- **WHEN** a further project-scoped *work* view is introduced (in the sense of the tasks/specs/
+  jobs/activity family, not configuration)
 - **THEN** it appears among the project's views
 - **AND** the navigation region gains no entry
 

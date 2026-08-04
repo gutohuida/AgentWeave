@@ -51,9 +51,8 @@ export function ComposerAgentSelector({
           setQuery('')
           setOpen((value) => !value)
         }}
-        className="h-8 px-2 rounded border text-xs"
+        className="h-8 rounded border bg-[var(--surface)] px-2 text-xs hover:bg-[var(--accent)]"
         style={{
-          background: 'var(--surface)',
           borderColor: 'var(--border)',
           color: 'var(--text-2)',
           fontFamily: "'JetBrains Mono', monospace",
@@ -105,11 +104,9 @@ export function ComposerAgentSelector({
                     onSelect(agent.name)
                     setOpen(false)
                   }}
-                  className="w-full flex items-start justify-between gap-3 px-2 py-1.5 rounded text-left"
-                  style={{
-                    background: agent.name === selectedAgent ? 'var(--surface-3)' : 'transparent',
-                    color: 'var(--text)',
-                  }}
+                  data-active={agent.name === selectedAgent ? 'true' : 'false'}
+                  className="row-item w-full items-start justify-between gap-3 text-left"
+                  style={{ color: 'var(--text)' }}
                 >
                   <span className="text-xs font-medium">{agent.name}</span>
                   <span className="text-[10px] text-right" style={{ color: state?.runnable ? 'var(--green)' : 'var(--text-3)' }}>

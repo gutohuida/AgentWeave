@@ -26,6 +26,8 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
     activeAgent: null,
     onOpenProject: vi.fn(),
     onOpenAgent: vi.fn(),
+    onOpenEnvironment: vi.fn(),
+    onAddAgent: vi.fn(),
     onOpenExisting: vi.fn(),
     onCreateProject: vi.fn(),
     ...overrides,
@@ -75,6 +77,33 @@ describe('phase 5 project collection rail', () => {
     renderRail()
     expect(screen.queryByTestId('rail-agent-proj-b-codex')).not.toBeInTheDocument()
     expect(screen.getByTestId('rail-agent-proj-a-claude')).toBeInTheDocument()
+  })
+
+  it('opens configuration and agent creation from the scoped project row', () => {
+    const onOpenEnvironment = vi.fn()
+    const onAddAgent = vi.fn()
+    renderRail({ onOpenEnvironment, onAddAgent })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Configure Website' })[0])
+    fireEvent.click(screen.getByTestId('rail-add-agent-proj-a'))
+    expect(onOpenEnvironment).toHaveBeenCalledWith('proj-a', 'quality')
+    expect(onAddAgent).toHaveBeenCalledWith('proj-a')
+  })
+
+  it('derives section mode from the environment destination and returns in one action', () => {
+    const onOpenProject = vi.fn()
+    const onOpenEnvironment = vi.fn()
+    renderRail({
+      destination: { kind: 'project', projectId: 'proj-a', tab: 'environment', environmentSection: 'runners' },
+      activePage: 'runners',
+      onOpenProject,
+      onOpenEnvironment,
+    })
+    expect(screen.getByTestId('sidebar')).toHaveAttribute('data-mode', 'section')
+    expect(screen.getByTestId('environment-section-runners')).toHaveAttribute('aria-current', 'page')
+    fireEvent.click(screen.getByTestId('environment-section-settings'))
+    fireEvent.click(screen.getByTestId('rail-section-back'))
+    expect(onOpenEnvironment).toHaveBeenCalledWith('proj-a', 'settings')
+    expect(onOpenProject).toHaveBeenCalledWith('proj-a')
   })
 
   it('offers distinct open-existing and create-new actions', () => {

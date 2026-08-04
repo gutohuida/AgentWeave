@@ -50,6 +50,13 @@
     --lift-hi:     rgba(255,255,255,0.16);
     --press-lo:    rgba(0,0,0,0.28);
 
+    /* Row interaction states. T3's sidebar-row-* ratios (dark 8/11/7% of
+       foreground) re-expressed against AgentWeave's own --text so the palette
+       stays ours and the three states never collapse onto each other. */
+    --row-hover:    color-mix(in srgb, var(--text)  8%, transparent);
+    --row-active:   color-mix(in srgb, var(--text) 11%, transparent);
+    --row-selected: color-mix(in srgb, var(--text)  7%, transparent);
+
     /* Legacy compatibility */
     --background:  #10131b;
     --foreground:  #f5f5f6;
@@ -105,6 +112,12 @@
 
     --lift-hi:     rgba(255,255,255,0.55);
     --press-lo:    rgba(0,0,0,0.10);
+
+    /* Light theme row fills — slightly lower opacity than dark because the
+       ground plane itself is closer to text colour. */
+    --row-hover:    color-mix(in srgb, var(--text)  5%, transparent);
+    --row-active:   color-mix(in srgb, var(--text)  9%, transparent);
+    --row-selected: color-mix(in srgb, var(--text)  6%, transparent);
 
     --background:  #f5f6fa;
     --foreground:  #18181b;
@@ -230,18 +243,27 @@
      primitive. Reserving a transparent border at rest is what lets a control
      gain emphasis on hover without displacing itself or its neighbours — the
      common alternative, adding a border on hover, shifts layout by a pixel and
-     is most of why an interface feels cheap.
-     Excludes [data-slot="button"], which carries its own full treatment. */
-  button:not([data-slot="button"]),
-  [role="button"]:not([data-slot="button"]) {
+     is most of why an interface feels cheap. A subtle hover fill is applied
+     by default so a control never reads as visually inert under the pointer;
+     controls that need a different treatment opt in via the Button primitive
+     or the .row-item class, both of which are excluded below.
+     Excludes [data-slot="button"] and .row-item, which carry their own full
+     treatments. */
+  button:not([data-slot="button"]):not(.row-item):not(.row-action),
+  [role="button"]:not([data-slot="button"]):not(.row-item):not(.row-action) {
     border: 1px solid transparent;
     outline: none;
     cursor: pointer;
+    background-color: transparent;
     transition: background-color var(--dur-fast) var(--ease),
                 border-color var(--dur-fast) var(--ease),
                 box-shadow var(--dur-fast) var(--ease),
                 color var(--dur-fast) var(--ease),
                 opacity var(--dur-fast) var(--ease);
+  }
+  button:not([data-slot="button"]):not(.row-item):not(.row-action):hover,
+  [role="button"]:not([data-slot="button"]):not(.row-item):not(.row-action):hover {
+    background-color: var(--accent);
   }
   button:not([data-slot="button"]):focus-visible,
   [role="button"]:not([data-slot="button"]):focus-visible {
@@ -251,6 +273,20 @@
     opacity: 0.64;
     pointer-events: none;
     box-shadow: none;
+  }
+
+  /* Numeric fields are typed, not stepped. Removing the native controls in
+     every engine keeps the visual language consistent — the form rows still
+     reject out-of-range input, the spinners just no longer render. */
+  input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
   }
 
   .workspace-content {
@@ -264,6 +300,157 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), inset 0 1px var(--lift-hi);
+  }
+
+  /* ─── Row treatment ─────────────────────────────────────────────
+     One rule, used by every list row in the product: project rail rows,
+     agents under each project, configuration section rows, list rows on
+     environment pages. Three distinct states — hover, pressed, selected
+     — drawn from shared tokens, so a row that is selected remains
+     distinguishable when an unrelated row is hovered.
+     The transparent border is reserved at rest: hover only changes its
+     colour, so the row never grows and nothing around it shifts. */
+  .row-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease);
+  }
+  .row-item:hover {
+    background: var(--row-hover);
+    color: var(--text);
+  }
+  .row-item:active {
+    background: var(--row-active);
+  }
+  .row-item[data-active="true"] {
+    background: var(--row-selected);
+    color: var(--text);
+    font-weight: 550;
+  }
+  .row-item[data-active="true"]:hover {
+    background: var(--row-hover);
+  }
+  .row-item:focus-visible {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  }
+
+  /* Group-hover reveal: a row's secondary actions live in layout at rest,
+     so revealing them on row hover or focus displaces nothing. Persistent
+     variants opt out of the reveal for the active row, where the action
+     must be visible without interaction. */
+  .row-action {
+    opacity: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: opacity var(--dur-fast) var(--ease),
+                background-color var(--dur-fast) var(--ease),
+                color var(--dur-fast) var(--ease);
+  }
+  .row-group:hover .row-action,
+  .row-group:focus-within .row-action,
+  .row-action:focus-visible,
+  .row-action[data-persistent="true"] {
+    opacity: 1;
+  }
+  .row-action:hover {
+    background: var(--row-active);
+    color: var(--text);
+  }
+
+  .settings-section {
+    width: 100%;
+    padding: 28px clamp(20px, 4vw, 48px) 40px;
+  }
+  .settings-section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    width: min(100%, 920px);
+    padding-bottom: 18px;
+  }
+  .settings-section-rows {
+    width: min(100%, 920px);
+    border-top: 1px solid var(--border);
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 28px;
+    min-height: 76px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-row-control {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 180px;
+  }
+
+  .conversation-header-surface {
+    position: relative;
+    z-index: 3;
+    background: color-mix(in oklab, var(--bg) 88%, transparent);
+    backdrop-filter: blur(12px);
+  }
+  .conversation-composer-fade {
+    padding: 10px 30px 20px;
+    background: linear-gradient(to top, var(--bg) 70%, transparent);
+  }
+  .conversation-composer-surface {
+    width: min(100%, 820px);
+    margin-inline: auto;
+    padding: 12px;
+    border: 1px solid var(--border-hi);
+    border-radius: var(--radius-content);
+    background: var(--surface);
+    box-shadow: 0 20px 52px rgba(2, 5, 18, 0.28), inset 0 1px rgba(255,255,255,0.05);
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+  }
+  .conversation-composer-surface:focus-within {
+    border-color: color-mix(in oklab, var(--primary) 55%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 14%, transparent), 0 20px 52px rgba(2,5,18,.28);
+  }
+  .work-disclosure {
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .work-disclosure summary,
+  .fold-control {
+    transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  }
+  .work-disclosure summary:hover,
+  .fold-control:hover {
+    background: var(--row-hover);
+    color: var(--text);
   }
 
   @media (max-width: 760px) {
