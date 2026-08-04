@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import { useCreateProject, useOpenProject, type ProjectSummary } from '@/api/projects'
+import { useDialogFocus } from '@/hooks/useDialogFocus'
 
 export type ProjectManagerMode = 'open' | 'create'
 
@@ -15,6 +16,7 @@ export function ProjectManagerModal({
 }) {
   const [path, setPath] = useState('')
   const [name, setName] = useState('')
+  const panelRef = useRef<HTMLDivElement>(null)
   const openProject = useOpenProject()
   const createProject = useCreateProject()
   const mutation = mode === 'create' ? createProject : openProject
@@ -30,6 +32,8 @@ export function ProjectManagerModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
+  useDialogFocus(!!mode, panelRef, onClose)
+
   const preview = useMemo(() => path.trim() || 'Enter an absolute local directory path', [path])
   if (!mode) return null
 
@@ -44,8 +48,8 @@ export function ProjectManagerModal({
   const error = mutation.error
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgb(0 0 0 / 0.45)' }} role="dialog" aria-modal="true" aria-labelledby="project-manager-title">
-      <div className="w-[min(520px,calc(100vw-32px))] rounded-lg p-5" style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="project-manager-title">
+      <div ref={panelRef} className="lifted-surface w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Open existing project'}</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
           {mode === 'create' ? 'The target must not already contain project files.' : 'The directory must already exist.'}
@@ -61,7 +65,7 @@ export function ProjectManagerModal({
           <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 block w-full rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
         </label>
         {error && (
-          <div role="alert" className="mt-3 rounded px-3 py-2 text-xs" style={{ background: 'var(--danger-bg)', color: 'var(--red)' }}>
+          <div role="alert" className="mt-3 rounded px-3 py-2 text-xs" style={{ background: 'var(--error-cont)', color: 'var(--red)' }}>
             {error instanceof ApiError ? error.message : 'The project could not be registered.'}
           </div>
         )}

@@ -21,7 +21,7 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
       onClick={onClick}
       className="text-left"
       style={{
-        background: 'var(--surface-2)',
+        background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
         padding: 10,
@@ -102,7 +102,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Overview</h1>
@@ -134,7 +134,7 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
       ) : (
         <div
           style={{
-            background: 'var(--surface-2)',
+            background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius)',
             padding: 24,
@@ -145,6 +145,19 @@ export function OverviewPage({ onNavigate }: OverviewPageProps) {
           No agents connected. Run <code>agentweave start</code> to connect agents.
         </div>
       )}
+
+      <div className="grid gap-2 sm:grid-cols-3" aria-label="Project workspace summary">
+        {[
+          { page: 'tasks', label: 'Tasks', detail: `${taskCount} total` },
+          { page: 'spec', label: 'Spec', detail: 'Requirements and evidence' },
+          { page: 'jobs', label: 'Jobs', detail: 'Scheduled agent work' },
+        ].map((item) => (
+          <button key={item.page} type="button" onClick={() => onNavigate(item.page)} className="lifted-surface flex items-center justify-between px-4 py-3 text-left">
+            <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{item.label}</span>
+            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>{item.detail}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Question interrupt */}
       {unanswered > 0 && (

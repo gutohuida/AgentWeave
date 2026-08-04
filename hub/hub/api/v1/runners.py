@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, Runner
+from ...launchability import probe_agent
 from ...schemas.runners import RunnerCreate, RunnerResponse, RunnerUpdate
 from ...utils import short_id
 
@@ -56,6 +57,24 @@ async def list_runners(
         select(Runner).where(Runner.project_id == project_id).order_by(Runner.created_at)
     )
     return result.scalars().all()
+
+
+@router.get("/launchability")
+async def list_runner_launchability(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    result = await session.execute(select(Runner).where(Runner.project_id == project_id))
+    return {
+        "runners": {
+            runner.id: probe_agent(
+                runner.name,
+                {"runner": runner.cli, "model": runner.model},
+            )
+            for runner in result.scalars().all()
+        }
+    }
 
 
 @router.get("/{runner_id}", response_model=RunnerResponse)

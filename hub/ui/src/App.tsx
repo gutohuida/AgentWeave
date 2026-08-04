@@ -3,6 +3,7 @@ import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { useAgents } from '@/api/agents'
 import { useProjects } from '@/api/projects'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { ActivityLog } from '@/components/activity/ActivityLog'
 import { ChartersPage } from '@/components/charters/ChartersPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
@@ -12,6 +13,7 @@ import { DiagnosticsPanel } from '@/components/environment/DiagnosticsPanel'
 import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
 import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
 import { PaneResizer } from '@/components/layout/PaneResizer'
+import { ProjectHeader } from '@/components/layout/ProjectHeader'
 import { ProjectTabs } from '@/components/layout/ProjectTabs'
 import { SetupModal } from '@/components/layout/SetupModal'
 import {
@@ -21,7 +23,6 @@ import {
   SIDEBAR_WIDTH,
   type SidebarPage,
 } from '@/components/layout/Sidebar'
-import { StatusBar } from '@/components/layout/StatusBar'
 import { OverviewPage } from '@/components/overview/OverviewPage'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
@@ -47,6 +48,7 @@ export default function App() {
   const { data: agents = [] } = useAgents()
   const [setupOpen, setSetupOpen] = useState(false)
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
+  const [agentCreateOpen, setAgentCreateOpen] = useState(false)
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
   const [activitySubview, setActivitySubview] = useState<'activity' | 'logs'>('activity')
   const { destination, navigate: navigateTo } = useWorkspaceNavigation({
@@ -139,6 +141,7 @@ export default function App() {
     ? agents.find((agent) => agent.name === destination.agent) ?? null
     : null
   const currentProjectId = destination.kind === 'zero' ? projectId || '' : destination.projectId
+  const currentProject = projects?.find((project) => project.id === currentProjectId)
   const railResizable = activePage !== 'spec'
 
   const navigate = (value: string) => {
@@ -264,7 +267,7 @@ export default function App() {
             navigateTo(projectDestination(destination.projectId, tab))
           }}
         />
-        <div className="min-h-0 flex-1 overflow-auto">{projectContent}</div>
+        <div className={destination.tab === 'spec' ? 'min-h-0 flex-1 overflow-auto' : 'workspace-content min-h-0 flex-1 overflow-auto'}>{projectContent}</div>
       </div>
     )
   } else {
@@ -277,9 +280,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <div className="flex flex-col h-full">
-        <StatusBar onOpenSetup={() => setSetupOpen(true)} />
-        <div className="flex flex-1 overflow-hidden">
+      <div className="workspace-shell flex h-full overflow-hidden">
           <Sidebar
             activePage={activePage}
             activeAgent={destination.kind === 'conversation' ? destination.agent : null}
@@ -299,10 +300,20 @@ export default function App() {
               max={SIDEBAR_MAX_WIDTH}
             />
           )}
-          <main className="flex-1 overflow-hidden" style={{ background: 'var(--bg)' }}>
-            {content}
+          <main className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+            {currentProject && (
+              <ProjectHeader
+                projectName={currentProject.name}
+                pathDisplay={currentProject.path_display}
+                agentCount={currentProject.agents.length}
+                directoryAvailable={currentProject.directory_state === 'available'}
+                onAddAgent={() => setAgentCreateOpen(true)}
+                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'settings'))}
+                onOpenSetup={() => setSetupOpen(true)}
+              />
+            )}
+            <div className="min-h-0 flex-1 overflow-hidden">{content}</div>
           </main>
-        </div>
       </div>
       <SetupModal open={!isConfigured || setupOpen} onClose={() => setSetupOpen(false)} />
       <ProjectManagerModal
@@ -314,6 +325,16 @@ export default function App() {
           setProjectManagerMode(null)
         }}
       />
+      {agentCreateOpen && (
+        <AgentCreateDialog
+          open
+          onClose={() => setAgentCreateOpen(false)}
+          onCreated={(name) => {
+            setAgentCreateOpen(false)
+            if (currentProject) navigateTo(agentDestination(currentProject.id, name))
+          }}
+        />
+      )}
     </div>
   )
 }

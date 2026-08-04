@@ -96,7 +96,7 @@ export function PaneResizer({
       aria-valuemax={max}
       tabIndex={0}
       data-testid="pane-resizer"
-      className="group relative z-20 w-[11px] shrink-0 cursor-col-resize
+      className="workspace-resizer group relative z-20 w-[11px] shrink-0 cursor-col-resize
                  focus-visible:outline-none"
       style={{ marginLeft: -5, marginRight: -5 }}
       onPointerDown={handlePointerDown}

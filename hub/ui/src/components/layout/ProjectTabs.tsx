@@ -11,7 +11,7 @@ const LABELS: Record<ProjectTab, string> = {
 
 export function ProjectTabs({ active, onSelect }: { active: ProjectTab; onSelect: (tab: ProjectTab) => void }) {
   return (
-    <nav aria-label="Project views" className="flex shrink-0 gap-1 overflow-x-auto px-4 pt-3" style={{ borderBottom: '1px solid var(--border)', scrollbarWidth: 'thin' }}>
+    <nav aria-label="Project views" className="flex h-10 shrink-0 gap-1 overflow-x-auto px-5" style={{ background: 'var(--top)', borderBottom: '1px solid var(--border-region)', scrollbarWidth: 'thin' }}>
       {PROJECT_TABS.map((tab) => (
         <button
           key={tab}
@@ -19,7 +19,7 @@ export function ProjectTabs({ active, onSelect }: { active: ProjectTab; onSelect
           data-testid={`project-tab-${tab}`}
           aria-current={active === tab ? 'page' : undefined}
           onClick={() => onSelect(tab)}
-          className="shrink-0 px-3 py-2 text-xs font-medium"
+          className="shrink-0 rounded-t-md px-3 text-xs font-medium"
           style={{
             color: active === tab ? 'var(--text)' : 'var(--text-3)',
             borderBottom: active === tab ? '2px solid var(--blue)' : '2px solid transparent',

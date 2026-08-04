@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import worktrees
+from ... import project_workspace, worktrees
 from ...agent_colors import next_color_index
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
@@ -58,6 +58,22 @@ class AgentRequest(BaseModel):
     template: str = Field(min_length=1, max_length=32)
     task: str = Field(min_length=1, max_length=100_000)
     run_id: str = Field(min_length=1, max_length=64)
+
+
+class OperatorAgentCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
+    runner_id: str = Field(min_length=1, max_length=64)
+    charter_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+class OperatorAgentResponse(BaseModel):
+    id: str
+    name: str
+    runner_id: str
+    charter_id: Optional[str]
+    color_index: int
+    contact_mode: str
+    self_registered: bool
 
 
 async def _get_session_data(project_id: str, db: AsyncSession) -> Optional[dict]:
@@ -399,6 +415,81 @@ async def list_agents(
         )
 
     return summaries
+
+
+@router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)
+async def create_operator_agent(
+    body: OperatorAgentCreate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Create a Hub-owned agent identity from existing project resources."""
+    project_id, _ = project
+    try:
+        await project_workspace.resolve_project_workspace(session, project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        project_workspace.raise_workspace_http_error(exc)
+
+    existing = await session.execute(
+        select(Agent.id).where(Agent.project_id == project_id, Agent.name == body.name)
+    )
+    session_data = await _get_session_data(project_id, session)
+    configured_names = (session_data or {}).get("agents", {})
+    if existing.scalar() is not None or body.name in configured_names:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Agent name '{body.name}' already exists in this project",
+        )
+
+    runner = await session.get(Runner, body.runner_id)
+    if runner is None or runner.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Runner '{body.runner_id}' not found")
+
+    if body.charter_id is not None:
+        charter = await session.get(Charter, body.charter_id)
+        if charter is None or charter.project_id != project_id:
+            raise HTTPException(status_code=404, detail=f"Charter '{body.charter_id}' not found")
+
+    probe = probe_agent(body.name, {"runner": runner.cli, "model": runner.model})
+    if not probe["runnable"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=probe.get("reason") or "Runner is not currently launchable",
+        )
+
+    agent = Agent(
+        id=f"agent-{short_id()}",
+        project_id=project_id,
+        name=body.name,
+        contact_mode="watchdog-spawn",
+        self_registered=False,
+        config={},
+        color_index=await next_color_index(session, project_id),
+        runner_id=runner.id,
+        charter_id=body.charter_id,
+    )
+    session.add(agent)
+    await session.commit()
+    await session.refresh(agent)
+
+    payload = {
+        "agent": agent.name,
+        "agent_id": agent.id,
+        "runner_id": agent.runner_id,
+        "charter_id": agent.charter_id,
+        "color_index": agent.color_index,
+    }
+    await persist_event(session, project_id, "agent_created", payload, agent=agent.name)
+    await sse_manager.broadcast(project_id, "agent_created", payload)
+    return OperatorAgentResponse(
+        id=agent.id,
+        name=agent.name,
+        runner_id=agent.runner_id,
+        charter_id=agent.charter_id,
+        color_index=agent.color_index,
+        contact_mode=agent.contact_mode,
+        self_registered=agent.self_registered,
+    )
 
 
 def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[str]:

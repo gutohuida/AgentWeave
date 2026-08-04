@@ -26,12 +26,30 @@ export interface RunnerUpdate {
   model?: string
 }
 
+export interface RunnerLaunchability {
+  runner?: string
+  present: boolean
+  authorized: boolean
+  runnable: boolean
+  reason?: string | null
+}
+
 export function useRunners() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Runner[]>({
     queryKey: ['project', projectId, 'runners'],
     queryFn: () => getJson<Runner[]>(`/api/v1/projects/${projectId}/runners`),
     enabled: isConfigured && !!projectId,
+  })
+}
+
+export function useRunnerLaunchability() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ runners: Record<string, RunnerLaunchability> }>({
+    queryKey: ['project', projectId, 'runners', 'launchability'],
+    queryFn: () => getJson(`/api/v1/projects/${projectId}/runners/launchability`),
+    enabled: isConfigured && !!projectId,
+    staleTime: 30_000,
   })
 }
 

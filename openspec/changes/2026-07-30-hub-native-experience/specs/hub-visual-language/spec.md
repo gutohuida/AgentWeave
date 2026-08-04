@@ -1,18 +1,19 @@
 ## ADDED Requirements
 
-### Requirement: The interface presents one continuous ground plane
+### Requirement: The interface presents related navigation and content planes
 
-Top-level regions such as navigation and content SHALL share a single background. A region MUST NOT
-be given its own fill merely to mark it as a distinct region.
+Top-level navigation and content SHALL use the approved mock's distinct but related indigo and ink
+planes. Their boundary SHALL remain subtle and MUST NOT combine a strong fill contrast with a
+strong dividing line.
 
 Surfaces that carry a distinct fill SHALL be limited to those that genuinely sit above the ground
 plane — menus, popovers, dialogs, the composer, and self-contained content surfaces.
 
-#### Scenario: Navigation is not a filled panel
+#### Scenario: Navigation remains related to content
 
 - **WHEN** navigation and content are displayed side by side
-- **THEN** they share the same background
-- **AND** neither reads as a panel inset into the other
+- **THEN** their related fills distinguish their roles
+- **AND** neither reads as a detached panel inset into the other
 
 #### Scenario: Lifted surfaces are distinguishable
 

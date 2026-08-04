@@ -117,6 +117,8 @@ five tables already carry `project_id`, but there is no `projects` API and no UI
 - [x] 1.12 Apply `tabular-nums` to every live numeric readout.
 - [x] 1.13 Collapse navigation and content onto one ground plane; reduce the boundary to a single
       hairline lighter than any control outline near it.
+      Superseded 2026-08-04: the approved full mock uses distinct related rail/content planes with
+      a subordinate boundary; see `2026-08-04-hub-ui-mock-alignment`.
 - [x] 1.14 Restrict distinct fills to menus, popovers, dialogs, the composer, and content surfaces.
 - [x] 1.15 Make the primary panes resizable — drag target wider than the visible line, clamped
       bounds, persistence across sessions, single-gesture reset.

@@ -26,6 +26,7 @@ const SSE_EVENT_TYPES = [
   'question_asked',
   'question_answered',
   'agent_heartbeat',
+  'agent_created',
   'agent_output',
   'agent_session_changed',
   'session_synced',
@@ -423,6 +424,7 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'questions'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
+        case 'agent_created':
         case 'agent_heartbeat':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })

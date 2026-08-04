@@ -124,7 +124,7 @@ studied reference rather than as an upstream to fork.
 
 **Workspace shell**
 
-- Navigation and content SHALL share **one ground plane**, separated by a **single** signal — a
+- Navigation and content SHALL use **distinct related planes**, separated by a **single** signal — a
   contrast in fill or a line, never both.
 - Primary panes SHALL be **resizable**, clamped, persisted, and resettable in one gesture.
 - Scrollbars SHALL be overlay handles: no track, no steppers.

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 
@@ -35,6 +35,22 @@ export interface AgentLaunchability {
 
 export interface AgentLaunchabilityResponse {
   agents: Record<string, AgentLaunchability>
+}
+
+export interface AgentCreate {
+  name: string
+  runner_id: string
+  charter_id?: string
+}
+
+export interface CreatedAgent {
+  id: string
+  name: string
+  runner_id: string
+  charter_id?: string | null
+  color_index: number
+  contact_mode: string
+  self_registered: boolean
 }
 
 export interface ContextUsage {
@@ -120,6 +136,19 @@ export function useAgents() {
     queryKey: ['project', projectId, 'agents'],
     queryFn: () => getJson<AgentSummary[]>(`/api/v1/projects/${projectId}/agents`),
     enabled: isConfigured && !!projectId,
+  })
+}
+
+export function useCreateAgent() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (agent: AgentCreate) =>
+      postJson<CreatedAgent>(`/api/v1/projects/${projectId}/agents`, agent),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'projects' })
+    },
   })
 }
 
