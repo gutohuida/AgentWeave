@@ -82,9 +82,8 @@ async def test_terminal_run_immediately_revokes_credential(app, run_status):
 @pytest.mark.asyncio
 async def test_operator_route_refuses_run_credential(app):
     response = await app.get(
-        "/api/v1/status",
+        "/api/v1/projects/proj-test/status",
         headers={"Authorization": "Bearer aw_run_not-an-operator-key"},
     )
 
     assert response.status_code == 401
-

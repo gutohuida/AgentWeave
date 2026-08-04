@@ -175,7 +175,7 @@ def test_job_mutation_preserves_forbidden_failure(hub):
     _, responses = hub
     responses.append(
         urllib.error.HTTPError(
-            "http://localhost/api/v1/jobs/job-1/run",
+            "http://localhost/api/v1/projects/proj-test/jobs/job-1/run",
             403,
             "Forbidden",
             {},

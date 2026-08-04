@@ -127,6 +127,6 @@
       confirm no framework-root state appears.
 - [x] 6.5 Run complete CLI, Hub, and UI suites; frontend production build; changed-file Ruff/Black;
       strict OpenSpec validation; and `git diff --check`.
-- [ ] 6.6 Sync implemented deltas into current specs, reconcile the umbrella phase-10 notes, and
+- [x] 6.6 Sync implemented deltas into current specs, reconcile the umbrella phase-10 notes, and
       archive only after every task and scenario is verified.
-- [ ] 6.7 `/handoff`.
+- [x] 6.7 `/handoff`.

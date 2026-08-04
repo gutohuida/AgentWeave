@@ -15,7 +15,7 @@ from hub.turn_scheduler import schedule_agent
 
 async def _configure_agent(app, auth_headers, bind_runner, name: str) -> None:
     response = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {name: {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -72,8 +72,7 @@ def _completed_claude_spawn(session_id: str):
     session = MagicMock()
     session.pid = 7001
     session.read.side_effect = [
-        '{"type":"result","subtype":"success","is_error":false,'
-        f'"session_id":"{session_id}"}}\n',
+        '{"type":"result","subtype":"success","is_error":false,' f'"session_id":"{session_id}"}}\n',
         "",
     ]
     session.wait.return_value = 0
@@ -96,17 +95,13 @@ async def test_exhausted_budget_keeps_autonomous_entries_queued(
 
     async with async_session_factory() as session:
         entry = (
-            await session.execute(
-                select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id)
-            )
+            await session.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
         ).scalar_one_or_none()
-        runs = (
-            await session.execute(select(Run).where(Run.agent == name))
-        ).scalars().all()
+        runs = (await session.execute(select(Run).where(Run.agent == name))).scalars().all()
         assert entry is not None and entry.state == "queued"
         assert runs == []
 
-    status = await app.get(f"/api/v1/queue/{name}/status", headers=auth_headers)
+    status = await app.get(f"/api/v1/projects/proj-test/queue/{name}/status", headers=auth_headers)
     assert status.json()["waiting_reason"] == "token budget exhausted"
 
 
@@ -127,9 +122,7 @@ async def test_operator_turn_starts_while_budget_is_exhausted(
         await asyncio_gather_background_runs()
 
     async with async_session_factory() as session:
-        run = (
-            await session.execute(select(Run).where(Run.agent == name))
-        ).scalar_one()
+        run = (await session.execute(select(Run).where(Run.agent == name))).scalar_one()
         assert run.initiator == "operator"
         assert run.status == "completed"
 
@@ -151,9 +144,7 @@ async def test_autonomous_turn_below_budget_persists_initiator(
         await asyncio_gather_background_runs()
 
     async with async_session_factory() as session:
-        run = (
-            await session.execute(select(Run).where(Run.agent == name))
-        ).scalar_one()
+        run = (await session.execute(select(Run).where(Run.agent == name))).scalar_one()
         assert run.initiator == "autonomous"
 
 
@@ -171,7 +162,7 @@ async def test_increasing_budget_reschedules_retained_autonomous_work(
         "hub.api.v1.agent_trigger.PtySession.spawn", _completed_claude_spawn("resumed-session")
     ), patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
         response = await app.patch(
-            "/api/v1/accounting/budget",
+            "/api/v1/projects/proj-test/accounting/budget",
             json={"token_budget": 200},
             headers=auth_headers,
         )
@@ -180,13 +171,9 @@ async def test_increasing_budget_reschedules_retained_autonomous_work(
 
     async with async_session_factory() as session:
         entry = (
-            await session.execute(
-                select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id)
-            )
+            await session.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
         ).scalar_one_or_none()
-        run = (
-            await session.execute(select(Run).where(Run.agent == name))
-        ).scalar_one()
+        run = (await session.execute(select(Run).where(Run.agent == name))).scalar_one()
         assert entry is not None and entry.state == "delivered"
         assert run.initiator == "autonomous"
 

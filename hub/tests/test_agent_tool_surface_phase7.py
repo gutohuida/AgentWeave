@@ -113,7 +113,7 @@ async def test_request_agent_copies_preapproved_template_and_queues_work(app, au
         await session.commit()
 
     response = await app.post(
-        "/api/v1/agents/request",
+        "/api/v1/projects/proj-test/agents/request",
         headers=auth_headers,
         json={
             "name": "worker-2",
@@ -167,7 +167,7 @@ async def test_request_agent_refuses_to_exceed_project_budget(app, auth_headers)
         await session.commit()
 
     response = await app.post(
-        "/api/v1/agents/request",
+        "/api/v1/projects/proj-test/agents/request",
         headers=auth_headers,
         json={"name": "extra", "template": "template", "task": "work", "run_id": "run-budget"},
     )
@@ -203,12 +203,12 @@ async def test_agent_job_mutation_requires_operator_allowance(app, auth_headers)
         "cron": "0 2 * * *",
         "session_mode": "new",
     }
-    denied = await app.post("/api/v1/jobs", headers=denied_headers, json=body)
+    denied = await app.post("/api/v1/projects/proj-test/jobs", headers=denied_headers, json=body)
     assert denied.status_code == 403
     assert "operator approval" in denied.json()["detail"].lower()
 
     settings = await app.patch(
-        "/api/v1/queue/settings",
+        "/api/v1/projects/proj-test/queue/settings",
         headers=auth_headers,
         json={
             "hop_budget": 6,
@@ -218,10 +218,10 @@ async def test_agent_job_mutation_requires_operator_allowance(app, auth_headers)
         },
     )
     assert settings.status_code == 200
-    allowed = await app.post("/api/v1/jobs", headers=denied_headers, json=body)
+    allowed = await app.post("/api/v1/projects/proj-test/jobs", headers=denied_headers, json=body)
     assert allowed.status_code == 201, allowed.text
     reset = await app.patch(
-        "/api/v1/queue/settings",
+        "/api/v1/projects/proj-test/queue/settings",
         headers=auth_headers,
         json={
             "hop_budget": 6,
@@ -268,7 +268,7 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
         await session.commit()
 
     task = await app.post(
-        "/api/v1/tasks",
+        "/api/v1/projects/proj-test/tasks",
         headers=auth_headers,
         json={
             "title": "Command-only task",
@@ -282,14 +282,14 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
     )
     assert task.status_code == 201
     updated = await app.patch(
-        f"/api/v1/tasks/{task.json()['id']}",
+        f"/api/v1/projects/proj-test/tasks/{task.json()['id']}",
         headers=auth_headers,
         json={"status": "in_progress"},
     )
     assert updated.status_code == 200
 
     message = await app.post(
-        "/api/v1/messages",
+        "/api/v1/projects/proj-test/messages",
         headers=auth_headers,
         json={
             "from": "cli-lead",
@@ -303,16 +303,18 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
     assert message.status_code == 201
 
     question = await app.post(
-        "/api/v1/questions",
+        "/api/v1/projects/proj-test/questions",
         headers=auth_headers,
         json={"from_agent": "cli-lead", "question": "Proceed?", "blocking": False},
     )
     assert question.status_code == 201
-    answer_poll = await app.get(f"/api/v1/questions/{question.json()['id']}", headers=auth_headers)
+    answer_poll = await app.get(
+        f"/api/v1/projects/proj-test/questions/{question.json()['id']}", headers=auth_headers
+    )
     assert answer_poll.status_code == 200
 
     requested = await app.post(
-        "/api/v1/agents/request",
+        "/api/v1/projects/proj-test/agents/request",
         headers=auth_headers,
         json={
             "name": "cli-worker-2",
@@ -324,5 +326,7 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
     assert requested.status_code == 201
     assert requested.json()["status"] == "queued"
 
-    worker_queue = await app.get("/api/v1/queue/cli-worker?state=queued", headers=auth_headers)
+    worker_queue = await app.get(
+        "/api/v1/projects/proj-test/queue/cli-worker?state=queued", headers=auth_headers
+    )
     assert any(entry["origin_agent"] == "cli-lead" for entry in worker_queue.json())

@@ -24,14 +24,14 @@ def _fake_pty(lines, exit_code=0):
 @pytest.mark.asyncio
 async def test_new_trigger_returns_conversation_before_provider_binding(app, auth_headers):
     sync = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"offline": {"runner": "manual"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
 
     response = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={"agent": "offline", "message": "first"},
         headers=auth_headers,
     )
@@ -44,7 +44,7 @@ async def test_new_trigger_returns_conversation_before_provider_binding(app, aut
     assert body["provider_session_id"] is None
 
     conversations = await app.get(
-        "/api/v1/agent/offline/conversations", headers=auth_headers
+        "/api/v1/projects/proj-test/agent/offline/conversations", headers=auth_headers
     )
     assert conversations.status_code == 200
     assert conversations.json()[0]["id"] == body["conversation_id"]
@@ -53,19 +53,19 @@ async def test_new_trigger_returns_conversation_before_provider_binding(app, aut
 @pytest.mark.asyncio
 async def test_follow_up_uses_returned_conversation_while_unbound(app, auth_headers):
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"offline": {"runner": "manual"}}}},
         headers=auth_headers,
     )
     first = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={"agent": "offline", "message": "first"},
         headers=auth_headers,
     )
     conversation_id = first.json()["conversation_id"]
 
     second = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={
             "agent": "offline",
             "message": "follow-up",
@@ -77,7 +77,7 @@ async def test_follow_up_uses_returned_conversation_while_unbound(app, auth_head
     assert second.status_code == 200
     assert second.json()["conversation_id"] == conversation_id
     history = await app.get(
-        f"/api/v1/agent/offline/chat/{conversation_id}", headers=auth_headers
+        f"/api/v1/projects/proj-test/agent/offline/chat/{conversation_id}", headers=auth_headers
     )
     assert [entry["content"] for entry in history.json()["entries"]] == [
         "first",
@@ -88,7 +88,7 @@ async def test_follow_up_uses_returned_conversation_while_unbound(app, auth_head
 @pytest.mark.asyncio
 async def test_conversation_cannot_be_used_for_another_agent(app, auth_headers):
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "agents": {
@@ -100,13 +100,13 @@ async def test_conversation_cannot_be_used_for_another_agent(app, auth_headers):
         headers=auth_headers,
     )
     first = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={"agent": "one", "message": "first"},
         headers=auth_headers,
     )
 
     response = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={
             "agent": "two",
             "message": "wrong target",
@@ -123,7 +123,7 @@ async def test_provider_binding_updates_conversation_without_changing_identity(
     app, auth_headers, bind_runner
 ):
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -135,7 +135,7 @@ async def test_provider_binding_updates_conversation_without_changing_identity(
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             response = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
                 headers=auth_headers,
             )
@@ -143,13 +143,13 @@ async def test_provider_binding_updates_conversation_without_changing_identity(
             await _await_background_runs()
 
     conversations = await app.get(
-        "/api/v1/agent/claude/conversations", headers=auth_headers
+        "/api/v1/projects/proj-test/agent/claude/conversations", headers=auth_headers
     )
     row = next(item for item in conversations.json() if item["id"] == conversation_id)
     assert row["provider_session_id"] == "provider-1"
 
     follow_up = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={
             "agent": "claude",
             "message": "second",

@@ -151,7 +151,7 @@ async def test_trigger_allocates_conversation_synchronously_before_provider_outp
     were deferred to background execution this test would find nothing instead
     of finding the row immediately after the response comes back."""
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -162,7 +162,7 @@ async def test_trigger_allocates_conversation_synchronously_before_provider_outp
         ):
             with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
                 response = await app.post(
-                    "/api/v1/agent/trigger",
+                    "/api/v1/projects/proj-test/agent/trigger",
                     json={"agent": "claude", "message": "hi"},
                     headers=auth_headers,
                 )
@@ -190,7 +190,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
     conversation exists — provider binding and follow-up turns only ever touch
     `provider_session_id`/`updated_at`."""
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -200,7 +200,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
                 headers=auth_headers,
             )
@@ -219,7 +219,7 @@ async def test_conversation_scope_is_immutable_across_binding_and_followups(app,
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_2):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={
                     "agent": "claude",
                     "message": "second",
@@ -249,7 +249,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(
     (a resumed CLI echoing its own session on every line) must not be treated
     as a conflict."""
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -260,7 +260,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
                 headers=auth_headers,
             )
@@ -276,7 +276,7 @@ async def test_provider_binding_is_idempotent_for_repeated_session_id(
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_2):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={
                     "agent": "claude",
                     "message": "second",
@@ -317,7 +317,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
     of "which provider session this is" stays trustworthy even when a CLI
     misbehaves."""
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -328,7 +328,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_1):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
                 headers=auth_headers,
             )
@@ -341,7 +341,7 @@ async def test_provider_binding_conflict_leaves_conversation_untouched_and_fails
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_2):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={
                     "agent": "claude",
                     "message": "second",
@@ -389,7 +389,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
     chain: bind a session, stop a subsequent run mid-flight, then retry — the
     conversation identity and its provider binding must survive every step."""
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -401,7 +401,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_1):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             first = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "claude", "message": "first"},
                 headers=auth_headers,
             )
@@ -414,7 +414,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
     ):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             second = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={
                     "agent": "claude",
                     "message": "interrupted",
@@ -425,7 +425,9 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
             second_run_id = second.json()["run_id"]
             await _wait_for_active_pty(second_run_id)
 
-            stop = await app.post("/api/v1/agent/claude/stop", headers=auth_headers)
+            stop = await app.post(
+                "/api/v1/projects/proj-test/agent/claude/stop", headers=auth_headers
+            )
             assert stop.status_code == 200
             await _await_background_runs()
 
@@ -444,7 +446,7 @@ async def test_stop_and_retry_retain_conversation_and_resume_bound_session(
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn_3):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             retry = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={
                     "agent": "claude",
                     "message": "retry",

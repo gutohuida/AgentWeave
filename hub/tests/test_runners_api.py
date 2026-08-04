@@ -1,12 +1,11 @@
-"""Tests for /api/v1/runners — runner-agent-charter-separation phase 1.
+"""Tests for /api/v1/projects/proj-test/runners — runner-agent-charter-separation phase 1.
 
 Covers the `runner-registry` capability spec: project-scoped runner CRUD,
 first-boot seeding of default claude/codex runners, and binding an agent to
-a runner via PATCH /api/v1/agents/{name}.
+a runner via PATCH /api/v1/projects/proj-test/agents/{name}.
 """
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Seed
@@ -17,7 +16,7 @@ import pytest
 async def test_default_runners_are_seeded_on_first_boot(app, auth_headers):
     """The `app` fixture's init_db() call must have already seeded one claude and
     one codex runner for the bootstrap project — no explicit action needed."""
-    resp = await app.get("/api/v1/runners", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
     assert resp.status_code == 200
     runners = resp.json()
     clis = sorted(r["cli"] for r in runners)
@@ -32,7 +31,7 @@ async def test_seeding_does_not_duplicate_on_repeat_init(app, auth_headers):
     await init_db()
     await init_db()
 
-    resp = await app.get("/api/v1/runners", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
     assert resp.status_code == 200
     runners = resp.json()
     assert len(runners) == 2
@@ -46,7 +45,7 @@ async def test_seeding_does_not_duplicate_on_repeat_init(app, auth_headers):
 @pytest.mark.asyncio
 async def test_create_runner(app, auth_headers):
     resp = await app.post(
-        "/api/v1/runners",
+        "/api/v1/projects/proj-test/runners",
         json={"name": "Claude Opus", "cli": "claude", "model": "claude-opus-5"},
         headers=auth_headers,
     )
@@ -62,7 +61,7 @@ async def test_create_runner(app, auth_headers):
 @pytest.mark.asyncio
 async def test_create_runner_rejects_unsupported_cli(app, auth_headers):
     resp = await app.post(
-        "/api/v1/runners",
+        "/api/v1/projects/proj-test/runners",
         json={"name": "Bogus", "cli": "opencode"},
         headers=auth_headers,
     )
@@ -73,18 +72,24 @@ async def test_create_runner_rejects_unsupported_cli(app, auth_headers):
 async def test_get_runner(app, auth_headers):
     created = (
         await app.post(
-            "/api/v1/runners", json={"name": "Codex Fast", "cli": "codex"}, headers=auth_headers
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Codex Fast", "cli": "codex"},
+            headers=auth_headers,
         )
     ).json()
 
-    resp = await app.get(f"/api/v1/runners/{created['id']}", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/runners/{created['id']}", headers=auth_headers
+    )
     assert resp.status_code == 200
     assert resp.json()["name"] == "Codex Fast"
 
 
 @pytest.mark.asyncio
 async def test_get_runner_404(app, auth_headers):
-    resp = await app.get("/api/v1/runners/runner-does-not-exist", headers=auth_headers)
+    resp = await app.get(
+        "/api/v1/projects/proj-test/runners/runner-does-not-exist", headers=auth_headers
+    )
     assert resp.status_code == 404
 
 
@@ -92,12 +97,14 @@ async def test_get_runner_404(app, auth_headers):
 async def test_update_runner(app, auth_headers):
     created = (
         await app.post(
-            "/api/v1/runners", json={"name": "Original", "cli": "claude"}, headers=auth_headers
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Original", "cli": "claude"},
+            headers=auth_headers,
         )
     ).json()
 
     resp = await app.patch(
-        f"/api/v1/runners/{created['id']}",
+        f"/api/v1/projects/proj-test/runners/{created['id']}",
         json={"name": "Renamed", "model": "claude-sonnet-5"},
         headers=auth_headers,
     )
@@ -112,14 +119,20 @@ async def test_update_runner(app, auth_headers):
 async def test_delete_runner(app, auth_headers):
     created = (
         await app.post(
-            "/api/v1/runners", json={"name": "Throwaway", "cli": "codex"}, headers=auth_headers
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Throwaway", "cli": "codex"},
+            headers=auth_headers,
         )
     ).json()
 
-    resp = await app.delete(f"/api/v1/runners/{created['id']}", headers=auth_headers)
+    resp = await app.delete(
+        f"/api/v1/projects/proj-test/runners/{created['id']}", headers=auth_headers
+    )
     assert resp.status_code == 204
 
-    resp = await app.get(f"/api/v1/runners/{created['id']}", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/runners/{created['id']}", headers=auth_headers
+    )
     assert resp.status_code == 404
 
 
@@ -127,26 +140,30 @@ async def test_delete_runner(app, auth_headers):
 async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
     runner = (
         await app.post(
-            "/api/v1/runners", json={"name": "Bound", "cli": "claude"}, headers=auth_headers
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Bound", "cli": "claude"},
+            headers=auth_headers,
         )
     ).json()
 
     reg = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "bound-agent", "contact_mode": "poll"},
         headers=auth_headers,
     )
     assert reg.status_code in (200, 201)
 
     bind = await app.patch(
-        "/api/v1/agents/bound-agent",
+        "/api/v1/projects/proj-test/agents/bound-agent",
         json={"runner_id": runner["id"]},
         headers=auth_headers,
     )
     assert bind.status_code == 200
     assert bind.json()["runner_id"] == runner["id"]
 
-    resp = await app.delete(f"/api/v1/runners/{runner['id']}", headers=auth_headers)
+    resp = await app.delete(
+        f"/api/v1/projects/proj-test/runners/{runner['id']}", headers=auth_headers
+    )
     assert resp.status_code == 409
 
 
@@ -154,23 +171,25 @@ async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
 async def test_agent_list_surfaces_bound_runner_id(app, auth_headers):
     runner = (
         await app.post(
-            "/api/v1/runners", json={"name": "Listed", "cli": "codex"}, headers=auth_headers
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Listed", "cli": "codex"},
+            headers=auth_headers,
         )
     ).json()
     reg = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "listed-agent", "contact_mode": "poll"},
         headers=auth_headers,
     )
     assert reg.status_code in (200, 201)
     bind = await app.patch(
-        "/api/v1/agents/listed-agent",
+        "/api/v1/projects/proj-test/agents/listed-agent",
         json={"runner_id": runner["id"]},
         headers=auth_headers,
     )
     assert bind.status_code == 200
 
-    listed = await app.get("/api/v1/agents", headers=auth_headers)
+    listed = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert listed.status_code == 200
     entry = next(a for a in listed.json() if a["name"] == "listed-agent")
     assert entry["runner_id"] == runner["id"]
@@ -180,14 +199,14 @@ async def test_agent_list_surfaces_bound_runner_id(app, auth_headers):
 @pytest.mark.asyncio
 async def test_bind_agent_to_unknown_runner_is_refused(app, auth_headers):
     reg = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "unbound-agent", "contact_mode": "poll"},
         headers=auth_headers,
     )
     assert reg.status_code in (200, 201)
 
     resp = await app.patch(
-        "/api/v1/agents/unbound-agent",
+        "/api/v1/projects/proj-test/agents/unbound-agent",
         json={"runner_id": "runner-does-not-exist"},
         headers=auth_headers,
     )

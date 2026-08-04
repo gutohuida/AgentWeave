@@ -10,9 +10,7 @@ behind one keyboard-operable overflow menu. AgentWeave owns a durable `conversat
 before any provider process starts and never changes across runs, retries, stops, or provider-session
 binding; the provider session is nullable continuation data beneath it, never the operator-facing
 identity.
-
 ## Requirements
-
 ### Requirement: AgentWeave owns the durable conversation identity
 
 The system SHALL allocate a stable `conversation_id` before starting a provider process. A
@@ -395,32 +393,6 @@ zero value, because a zero would assert a measurement that was never taken.
 - **WHEN** no context-usage event has been received for the displayed agent
 - **THEN** no usage indicator and no zero value is rendered
 
-### Requirement: Navigation reads from a project collection populated with one project
-
-Navigation SHALL read its project and agent tree from a single adapter whose shape is a collection of
-projects, populated with exactly the one authenticated project.
-
-No control may offer project creation or project switching, or otherwise imply that more than one
-project is reachable. Authentication binds one API key to one project, so such a control would be a
-claim the backend cannot honour.
-
-#### Scenario: One project is rendered from the collection
-
-- **WHEN** the rail is rendered from the adapter
-- **THEN** the adapter returns a collection containing exactly one project
-- **AND** the rail renders it
-
-#### Scenario: No project management is offered
-
-- **WHEN** the interface is inspected
-- **THEN** no control offering to add, create, or switch projects is present
-
-#### Scenario: The adapter shape accepts more projects without a rail change
-
-- **WHEN** the adapter is supplied a second project
-- **THEN** the rail renders both
-- **AND** the rail component is unchanged
-
 ### Requirement: Existing conversation behaviour is preserved
 
 Provider continuity, durable handoff, stop, withdraw, and deliver-now SHALL CONTINUE TO behave as
@@ -439,3 +411,47 @@ unchanged by this change.
 
 - **WHEN** an undelivered entry or hop-budget-blocked chain is shown
 - **THEN** the operator can still withdraw the undelivered entry or deliver the blocked chain now
+
+### Requirement: Navigation reads from the registered project collection
+
+Navigation SHALL read its project and agent tree from one adapter containing every registered
+project the local operator can reach. The operator SHALL be able to open an existing project
+directory, explicitly create a new one, and switch projects without changing credentials.
+
+The adapter SHALL preserve project and agent live state for inactive projects. Project switching
+MUST NOT leak conversations, drafts, cached server state, or in-flight mutation results across
+project identifiers.
+
+#### Scenario: Multiple projects are rendered from the collection
+
+- **WHEN** the local instance has two registered projects
+- **THEN** the adapter returns both projects with their agents
+- **AND** the unchanged collection rail renders both
+
+#### Scenario: Project management is offered
+
+- **WHEN** the operator inspects the project collection controls
+- **THEN** distinct actions to open an existing directory and create a new directory are available
+
+#### Scenario: Switching preserves isolation
+
+- **WHEN** the operator switches projects while a request or agent run remains active in the first
+  project
+- **THEN** the first project's state continues under its identity
+- **AND** none of it is rendered as belonging to the selected project
+
+### Requirement: Conversation navigation is URL-backed and project-scoped
+
+Normal project, agent, and conversation navigation SHALL be represented in the browser URL using
+stable project and AgentWeave conversation identity. Reload and back/forward navigation SHALL
+restore the represented destination. Provider session identifiers MUST NOT be used as URL identity.
+
+#### Scenario: A conversation URL reloads
+
+- **WHEN** the operator reloads an agent conversation in one project
+- **THEN** the same project, agent, and AgentWeave conversation are restored
+
+#### Scenario: Browser history crosses projects
+
+- **WHEN** the operator visits project A, then project B, then activates Back
+- **THEN** project A and its prior destination are restored without changing credentials

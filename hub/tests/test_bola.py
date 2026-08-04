@@ -4,44 +4,36 @@ PR 6 T5: every endpoint that returns project-scoped data must enforce isolation
 so that Project B's API key cannot read Project A's resources.
 """
 
-import secrets
-
 import pytest
 import pytest_asyncio
 
 from hub.db.engine import async_session_factory
-from hub.db.models import ApiKey, Project
+from hub.db.models import Project
 
 
 @pytest_asyncio.fixture
-async def project_a(app):
-    """First BOLA tenant with its own API key."""
-    project_id = f"proj-bola-a-{secrets.token_hex(4)}"
-    api_key = f"aw_live_{secrets.token_hex(16)}"
+async def project_a(app, auth_headers):
+    """First explicitly addressed project under the instance operator."""
+    project_id = "proj-bola-a"
     async with async_session_factory() as session:
         session.add(Project(id=project_id, name="BOLA Project A"))
-        session.add(ApiKey(id=api_key, project_id=project_id, revoked=False))
         await session.commit()
     return {
         "project_id": project_id,
-        "api_key": api_key,
-        "headers": {"Authorization": f"Bearer {api_key}"},
+        "headers": auth_headers,
     }
 
 
 @pytest_asyncio.fixture
-async def other_project(app):
-    """A second project with its own API key."""
-    project_id = f"proj-bola-other-{secrets.token_hex(4)}"
-    api_key = f"aw_live_{secrets.token_hex(16)}"
+async def other_project(app, auth_headers):
+    """A second explicitly addressed project under the same operator."""
+    project_id = "proj-bola-other"
     async with async_session_factory() as session:
         session.add(Project(id=project_id, name="Other Project"))
-        session.add(ApiKey(id=api_key, project_id=project_id, revoked=False))
         await session.commit()
     return {
         "project_id": project_id,
-        "api_key": api_key,
-        "headers": {"Authorization": f"Bearer {api_key}"},
+        "headers": auth_headers,
     }
 
 
@@ -49,9 +41,10 @@ async def other_project(app):
 async def project_a_resources(app, project_a):
     """Create a representative set of resources in Project A and return their IDs."""
     auth_headers = project_a["headers"]
+    base = f"/api/v1/projects/{project_a['project_id']}"
     # Sync a configured agent so the Agent row exists for heartbeat/output endpoints.
     sync_resp = await app.post(
-        "/api/v1/session/sync",
+        f"{base}/session/sync",
         json={
             "data": {
                 "name": "Project A",
@@ -66,7 +59,7 @@ async def project_a_resources(app, project_a):
 
     # Self-register another agent
     reg_resp = await app.post(
-        "/api/v1/agents/register",
+        f"{base}/agents/register",
         json={"name": "bob", "contact_mode": "poll"},
         headers=auth_headers,
     )
@@ -74,7 +67,7 @@ async def project_a_resources(app, project_a):
 
     # Message
     msg_resp = await app.post(
-        "/api/v1/messages",
+        f"{base}/messages",
         json={
             "from": "user",
             "to": "alice",
@@ -88,7 +81,7 @@ async def project_a_resources(app, project_a):
 
     # Task
     task_resp = await app.post(
-        "/api/v1/tasks",
+        f"{base}/tasks",
         json={"title": "project a task", "assignee": "alice"},
         headers=auth_headers,
     )
@@ -97,7 +90,7 @@ async def project_a_resources(app, project_a):
 
     # Question
     q_resp = await app.post(
-        "/api/v1/questions",
+        f"{base}/questions",
         json={"from_agent": "alice", "question": "project a question"},
         headers=auth_headers,
     )
@@ -106,7 +99,7 @@ async def project_a_resources(app, project_a):
 
     # Job
     job_resp = await app.post(
-        "/api/v1/jobs",
+        f"{base}/jobs",
         json={
             "name": "project a job",
             "agent": "alice",
@@ -120,7 +113,7 @@ async def project_a_resources(app, project_a):
 
     # Heartbeat
     hb_resp = await app.post(
-        "/api/v1/agents/alice/heartbeat",
+        f"{base}/agents/alice/heartbeat",
         json={"status": "active"},
         headers=auth_headers,
     )
@@ -128,7 +121,7 @@ async def project_a_resources(app, project_a):
 
     # Agent output with a session id (used by chat history)
     out_resp = await app.post(
-        "/api/v1/agents/alice/output",
+        f"{base}/agents/alice/output",
         json={"content": "project a output", "session_id": "sess-a"},
         headers=auth_headers,
     )
@@ -136,7 +129,7 @@ async def project_a_resources(app, project_a):
 
     # Context usage event
     ctx_resp = await app.post(
-        "/api/v1/agents/alice/context-usage",
+        f"{base}/agents/alice/context-usage",
         json={"percent": 50, "warning": False},
         headers=auth_headers,
     )
@@ -144,7 +137,7 @@ async def project_a_resources(app, project_a):
 
     # Log event
     log_resp = await app.post(
-        "/api/v1/logs",
+        f"{base}/logs",
         json={"event_type": "test", "agent": "alice", "data": {"x": 1}},
         headers=auth_headers,
     )
@@ -152,7 +145,7 @@ async def project_a_resources(app, project_a):
 
     # Instructions
     instr_resp = await app.put(
-        "/api/v1/project/instructions",
+        f"{base}/project/instructions",
         json={"content": "project a instructions"},
         headers=auth_headers,
     )
@@ -170,16 +163,17 @@ async def project_a_resources(app, project_a):
 
 @pytest.mark.asyncio
 async def test_cross_project_object_reads_return_404(app, other_project, project_a_resources):
-    """Project B's key must not be able to read Project A's individual resources."""
+    """Project B paths must not resolve Project A's individual resources."""
     b = other_project["headers"]
     ids = project_a_resources
+    base = f"/api/v1/projects/{other_project['project_id']}"
 
     object_endpoints = [
-        ("GET", f"/api/v1/tasks/{ids['task_id']}"),
-        ("GET", f"/api/v1/tasks/{ids['task_id']}/history"),
-        ("GET", f"/api/v1/questions/{ids['question_id']}"),
-        ("GET", f"/api/v1/jobs/{ids['job_id']}"),
-        ("GET", f"/api/v1/jobs/{ids['job_id']}/history"),
+        ("GET", f"{base}/tasks/{ids['task_id']}"),
+        ("GET", f"{base}/tasks/{ids['task_id']}/history"),
+        ("GET", f"{base}/questions/{ids['question_id']}"),
+        ("GET", f"{base}/jobs/{ids['job_id']}"),
+        ("GET", f"{base}/jobs/{ids['job_id']}/history"),
     ]
 
     for method, path in object_endpoints:
@@ -195,17 +189,18 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
     """Project B's key must see empty project-scoped lists, not Project A's data."""
     b = other_project["headers"]
     a_ids = set(project_a_resources.values())
+    base = f"/api/v1/projects/{other_project['project_id']}"
 
     list_endpoints = [
-        "/api/v1/messages",
-        "/api/v1/tasks",
-        "/api/v1/questions",
-        "/api/v1/jobs",
-        "/api/v1/events/history",
-        "/api/v1/logs",
-        "/api/v1/agents",
-        "/api/v1/agents/alice/timeline",
-        "/api/v1/agents/alice/output",
+        f"{base}/messages",
+        f"{base}/tasks",
+        f"{base}/questions",
+        f"{base}/jobs",
+        f"{base}/events/history",
+        f"{base}/logs",
+        f"{base}/agents",
+        f"{base}/agents/alice/timeline",
+        f"{base}/agents/alice/output",
     ]
 
     for path in list_endpoints:
@@ -219,24 +214,24 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         ), f"{path} leaked Project A resources"
 
     # Agent sessions returns a dict wrapper; ensure the inner list is empty.
-    sessions_resp = await app.get("/api/v1/agent/sessions/alice", headers=b)
+    sessions_resp = await app.get(f"{base}/agent/sessions/alice", headers=b)
     assert sessions_resp.status_code == 200
     assert sessions_resp.json()["sessions"] == []
 
     # The merged chat timeline also returns a dict wrapper (task 8.3) — both the
     # sessionless and session-scoped forms must report an empty entries list.
-    recent_chat_resp = await app.get("/api/v1/agent/alice/chat", headers=b)
+    recent_chat_resp = await app.get(f"{base}/agent/alice/chat", headers=b)
     assert recent_chat_resp.status_code == 200
     assert recent_chat_resp.json()["entries"] == []
 
     chat_resp = await app.get(
-        f"/api/v1/agent/alice/chat/{project_a_resources['session_id']}",
+        f"{base}/agent/alice/chat/{project_a_resources['session_id']}",
         headers=b,
     )
     assert chat_resp.status_code == 404
 
     # Status endpoint must report Project B, not Project A.
-    status_resp = await app.get("/api/v1/status", headers=b)
+    status_resp = await app.get(f"{base}/status", headers=b)
     assert status_resp.status_code == 200
     status = status_resp.json()
     assert status["project_id"] == other_project["project_id"]
@@ -245,15 +240,15 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
     assert status["question_counts"]["total"] == 0
 
     # Configured agents for Project B should be empty.
-    configured_resp = await app.get("/api/v1/agents/configured", headers=b)
+    configured_resp = await app.get(f"{base}/agents/configured", headers=b)
     assert configured_resp.status_code == 200
     assert configured_resp.json()["agents"] == []
 
-    session_resp = await app.get("/api/v1/session/sync", headers=b)
+    session_resp = await app.get(f"{base}/session/sync", headers=b)
     assert session_resp.status_code == 200
     assert session_resp.json()["synced"] is False
 
-    instructions_resp = await app.get("/api/v1/project/instructions", headers=b)
+    instructions_resp = await app.get(f"{base}/project/instructions", headers=b)
     assert instructions_resp.status_code == 200
     assert instructions_resp.json()["content"] == ""
 
@@ -263,14 +258,15 @@ async def test_project_a_can_still_read_its_own_resources(app, project_a, projec
     """Isolation must not break the legitimate owner's access."""
     ids = project_a_resources
     a_headers = project_a["headers"]
+    base = f"/api/v1/projects/{project_a['project_id']}"
 
-    assert (await app.get(f"/api/v1/tasks/{ids['task_id']}", headers=a_headers)).status_code == 200
+    assert (await app.get(f"{base}/tasks/{ids['task_id']}", headers=a_headers)).status_code == 200
     assert (
-        await app.get(f"/api/v1/questions/{ids['question_id']}", headers=a_headers)
+        await app.get(f"{base}/questions/{ids['question_id']}", headers=a_headers)
     ).status_code == 200
-    assert (await app.get(f"/api/v1/jobs/{ids['job_id']}", headers=a_headers)).status_code == 200
+    assert (await app.get(f"{base}/jobs/{ids['job_id']}", headers=a_headers)).status_code == 200
 
-    agents_resp = await app.get("/api/v1/agents", headers=a_headers)
+    agents_resp = await app.get(f"{base}/agents", headers=a_headers)
     assert agents_resp.status_code == 200
     names = {a["name"] for a in agents_resp.json()}
     assert ids["agent"] in names

@@ -1,6 +1,6 @@
 """Tests for the merged conversation timeline in hub.api.v1.agent_chat (task 8.3).
 
-`GET /api/v1/agent/{agent}/chat/{session_id}` (and the sessionless
+`GET /api/v1/projects/proj-test/agent/{agent}/chat/{session_id}` (and the sessionless
 `/chat?limit=`) merge four record types into one chronological, typed
 timeline:
 
@@ -32,7 +32,7 @@ from hub.db.models import AgentOutput, Conversation, InboundQueueEntry, Message,
 
 
 async def _project_id(app, auth_headers) -> str:
-    resp = await app.get("/api/v1/status", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     assert resp.status_code == 200
     return resp.json()["project_id"]
 
@@ -209,7 +209,9 @@ async def test_delivered_operator_input_placed_by_its_run(app, auth_headers):
     )
     await _add_output(project_id, out_id="o-t1", agent=agent, content="reply", session_id="sess-A")
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-A", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-A", headers=auth_headers
+    )
     assert resp.status_code == 200
     data = resp.json()
     entries = data["entries"]
@@ -246,7 +248,9 @@ async def test_untagged_entry_from_a_different_session_is_never_inferred_in(app,
         timestamp=now,
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-curr", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-curr", headers=auth_headers
+    )
     assert resp.status_code == 200
     ids = [e["id"] for e in resp.json()["entries"]]
     assert "entry-prev" not in ids
@@ -278,8 +282,12 @@ async def test_concurrent_sessions_do_not_cross_contaminate(app, auth_headers):
     await _add_output(project_id, out_id="o-a", agent=agent, content="a-out", session_id="sess-a")
     await _add_output(project_id, out_id="o-b", agent=agent, content="b-out", session_id="sess-b")
 
-    resp_a = await app.get(f"/api/v1/agent/{agent}/chat/sess-a", headers=auth_headers)
-    resp_b = await app.get(f"/api/v1/agent/{agent}/chat/sess-b", headers=auth_headers)
+    resp_a = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-a", headers=auth_headers
+    )
+    resp_b = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-b", headers=auth_headers
+    )
     ids_a = {e["id"] for e in resp_a.json()["entries"] if e["delivery_state"] == "delivered"}
     ids_b = {e["id"] for e in resp_b.json()["entries"] if e["delivery_state"] == "delivered"}
     assert ids_a == {"entry-a", "o-a"}
@@ -306,7 +314,9 @@ async def test_inbound_peer_message_tinted_with_sender(app, auth_headers):
         run_id="run-t4",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t4", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t4", headers=auth_headers
+    )
     entry = _by_id(resp.json()["entries"], "entry-t4")
     assert entry["kind"] == "inbound_peer"
     assert entry["participant"] == "sender_agent"
@@ -326,13 +336,17 @@ async def test_outbound_peer_message_placed_by_its_own_session_id(app, auth_head
         session_id="sess-t5",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t5", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t5", headers=auth_headers
+    )
     entry = _by_id(resp.json()["entries"], "msg-t5")
     assert entry["kind"] == "outbound_peer"
     assert entry["participant"] == "other_agent"
 
     # And it must NOT appear under an unrelated session for the same agent.
-    other_resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-other", headers=auth_headers)
+    other_resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-other", headers=auth_headers
+    )
     assert other_resp.status_code == 404
 
 
@@ -354,7 +368,9 @@ async def test_queued_entry_appears_in_its_conversation(app, auth_headers):
         conversation_id="sess-anything",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-anything", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-anything", headers=auth_headers
+    )
     entry = _by_id(resp.json()["entries"], "entry-t6-queued")
     assert entry["delivery_state"] == "queued"
     assert entry["hop_budget_exceeded"] is False
@@ -380,7 +396,7 @@ async def test_queued_agent_origin_entry_over_hop_budget_is_flagged_suspended(ap
         hop_depth=hop_budget + 1,
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat", headers=auth_headers)
+    resp = await app.get(f"/api/v1/projects/proj-test/agent/{agent}/chat", headers=auth_headers)
     entry = _by_id(resp.json()["entries"], "entry-t7-suspended")
     assert entry["delivery_state"] == "queued"
     assert entry["hop_budget_exceeded"] is True
@@ -400,7 +416,9 @@ async def test_delivered_entries_never_carry_hop_budget_exceeded(app, auth_heade
         run_id="run-t8",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t8", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t8", headers=auth_headers
+    )
     entry = _by_id(resp.json()["entries"], "entry-t8")
     assert entry["hop_budget_exceeded"] is None
 
@@ -425,7 +443,9 @@ async def test_empty_session_returns_empty_entries(app, auth_headers):
             )
         )
         await session.commit()
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-empty", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-empty", headers=auth_headers
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["conversation_id"] == "sess-empty"
@@ -475,7 +495,9 @@ async def test_entries_sorted_by_timestamp_with_queue_appended_last(app, auth_he
         conversation_id="sess-t10",
     )
 
-    resp = await app.get(f"/api/v1/agent/{agent}/chat/sess-t10", headers=auth_headers)
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t10", headers=auth_headers
+    )
     entries = resp.json()["entries"]
     delivered = [e for e in entries if e["delivery_state"] == "delivered"]
     ts = [e["timestamp"] for e in delivered]

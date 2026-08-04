@@ -1,5 +1,4 @@
-"""GET /api/v1/logs — persistent event log endpoint.
-POST /api/v1/logs — CLI→Hub log bridge."""
+"""Project-scoped persistent event log endpoints."""
 
 from datetime import datetime
 from typing import List, Optional, Tuple

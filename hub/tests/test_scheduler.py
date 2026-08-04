@@ -40,7 +40,7 @@ async def test_fired_job_creates_a_run_via_direct_execution_not_a_message(
     app, auth_headers, bind_runner
 ):
     sync = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"job-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -131,7 +131,7 @@ async def test_job_for_self_registered_poll_agent_is_skipped(app, auth_headers):
 @pytest.mark.asyncio
 async def test_job_arriving_while_agent_runs_is_queued(app, auth_headers, bind_runner):
     sync = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"busy-job-claude": {"runner": "claude"}}}},
         headers=auth_headers,
     )

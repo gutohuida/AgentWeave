@@ -9,7 +9,7 @@ import pytest
 async def test_get_charter_context_rejects_path_traversal_identifier(app, auth_headers):
     # Charter lookup is DB-backed; path-shaped identifiers must never read files.
     resp = await app.get(
-        "/api/v1/agents/context?charter=../../../../README",
+        "/api/v1/projects/proj-test/agents/context?charter=../../../../README",
         headers=auth_headers,
     )
     assert resp.status_code in (400, 404)
@@ -19,7 +19,7 @@ async def test_get_charter_context_rejects_path_traversal_identifier(app, auth_h
 @pytest.mark.asyncio
 async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_headers):
     resp = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={
             "agent": "claude",
             "message": "Hello",
@@ -34,7 +34,7 @@ async def test_agent_trigger_rejects_work_dir_with_parent_traversal(app, auth_he
 @pytest.mark.asyncio
 async def test_agent_trigger_rejects_work_dir_with_tilde(app, auth_headers):
     resp = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={
             "agent": "claude",
             "message": "Hello",
@@ -49,7 +49,7 @@ async def test_agent_trigger_rejects_work_dir_with_tilde(app, auth_headers):
 @pytest.mark.asyncio
 async def test_agent_trigger_rejects_work_dir_with_non_printable_chars(app, auth_headers):
     resp = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={
             "agent": "claude",
             "message": "Hello",
@@ -65,19 +65,19 @@ async def test_agent_trigger_rejects_work_dir_with_non_printable_chars(app, auth
 async def test_recent_chat_limit_is_bounded(app, auth_headers):
     # M14: limit must be between 1 and 500
     resp_low = await app.get(
-        "/api/v1/agent/claude/chat?limit=0",
+        "/api/v1/projects/proj-test/agent/claude/chat?limit=0",
         headers=auth_headers,
     )
     assert resp_low.status_code == 422
 
     resp_high = await app.get(
-        "/api/v1/agent/claude/chat?limit=501",
+        "/api/v1/projects/proj-test/agent/claude/chat?limit=501",
         headers=auth_headers,
     )
     assert resp_high.status_code == 422
 
     resp_ok = await app.get(
-        "/api/v1/agent/claude/chat?limit=50",
+        "/api/v1/projects/proj-test/agent/claude/chat?limit=50",
         headers=auth_headers,
     )
     assert resp_ok.status_code == 200
@@ -88,7 +88,7 @@ async def test_list_agents_avoids_n_plus_one(app, auth_headers):
     """M15: list_agents must not issue per-agent queries inside a loop."""
     agents = ["agent-a", "agent-b", "agent-c"]
     sync_resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {name: {"runner": "native"} for name in agents}}},
         headers=auth_headers,
     )
@@ -96,13 +96,13 @@ async def test_list_agents_avoids_n_plus_one(app, auth_headers):
 
     for name in agents:
         hb_resp = await app.post(
-            f"/api/v1/agents/{name}/heartbeat",
+            f"/api/v1/projects/proj-test/agents/{name}/heartbeat",
             json={"status": "active"},
             headers=auth_headers,
         )
         assert hb_resp.status_code == 201
         task_resp = await app.post(
-            "/api/v1/tasks",
+            "/api/v1/projects/proj-test/tasks",
             json={"title": f"task {name}", "assignee": name},
             headers=auth_headers,
         )
@@ -119,7 +119,7 @@ async def test_list_agents_avoids_n_plus_one(app, auth_headers):
 
     event.listen(engine.sync_engine, "before_cursor_execute", capture)
     try:
-        resp = await app.get("/api/v1/agents", headers=auth_headers)
+        resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     finally:
         event.remove(engine.sync_engine, "before_cursor_execute", capture)
 
@@ -139,7 +139,7 @@ async def test_list_agents_marks_expired_running_heartbeat_as_stalled(app, auth_
     from hub.db.models import AgentHeartbeat
 
     sync_resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"stale-agent": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -158,7 +158,7 @@ async def test_list_agents_marks_expired_running_heartbeat_as_stalled(app, auth_
         )
         await session.commit()
 
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     stale_agent = next(agent for agent in resp.json() if agent["name"] == "stale-agent")
     assert stale_agent["status"] == "stalled"
@@ -174,7 +174,7 @@ async def test_list_agents_shows_running_for_active_direct_spawn_run(app, auth_h
     from hub.db.models import Run
 
     sync_resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"direct-spawn-agent": {"runner": "claude"}}}},
         headers=auth_headers,
     )
@@ -191,7 +191,7 @@ async def test_list_agents_shows_running_for_active_direct_spawn_run(app, auth_h
         )
         await session.commit()
 
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     agent = next(a for a in resp.json() if a["name"] == "direct-spawn-agent")
     assert agent["status"] == "running"

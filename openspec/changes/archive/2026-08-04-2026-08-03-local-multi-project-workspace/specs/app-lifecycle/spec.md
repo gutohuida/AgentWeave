@@ -1,12 +1,5 @@
-# app-lifecycle Specification
+## MODIFIED Requirements
 
-## Purpose
-
-Defines the single supported way to begin and manage a local AgentWeave instance: bare `agentweave`
-invocation as the only entry point, plus `doctor`/`status`/`stop`/`reset` for diagnosing and managing
-that instance. Originated by `openspec/changes/single-runtime`, which also removed every CLI command
-that manipulated collaboration state directly.
-## Requirements
 ### Requirement: Bare invocation is the only entry point
 
 Running `agentweave` with no subcommand SHALL launch or reuse the one local AgentWeave runtime,
@@ -38,22 +31,6 @@ that project's overview. This SHALL be the only supported way to begin using Age
 - **THEN** there is no `init`, `activate`, `quick`, or `start` subcommand distinct from bare
   invocation
 
-### Requirement: Environment readiness is diagnosable without starting the app
-
-`agentweave doctor` SHALL report environment readiness — Python version, runner CLIs on PATH,
-port availability, database accessibility, and file permissions — without requiring the Hub to be
-running.
-
-#### Scenario: Doctor runs before first launch
-
-- **WHEN** a user runs `agentweave doctor` in a directory that has never been registered
-- **THEN** the system reports readiness checks without creating a project or starting the Hub
-
-#### Scenario: Doctor explains a failed install
-
-- **WHEN** a required dependency, port, or permission check fails
-- **THEN** the reported check names the failure and a remediation hint
-
 ### Requirement: Status, stop, and reset act on the local instance
 
 `agentweave status` SHALL report whether the local runtime is running, on what port, how many
@@ -77,14 +54,3 @@ confirmation and MUST NOT delete registered project directories or source conten
 - **WHEN** the user confirms `agentweave reset`
 - **THEN** local runtime/database state is removed
 - **AND** no registered working directory or project source content is deleted
-
-### Requirement: No CLI command manipulates collaboration state
-
-The CLI SHALL provide no command that sends a message, creates or updates a task, asks or answers a
-question, manages the agent roster, or manages scheduled jobs. Every such capability SHALL be
-reachable only through the app UI (for the operator) or the agent capability plane (for an agent).
-
-#### Scenario: Collaboration commands do not exist
-
-- **WHEN** a user inspects the CLI's available commands
-- **THEN** none of them sends a message, creates or updates a task, or manages agents or jobs

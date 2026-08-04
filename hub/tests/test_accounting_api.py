@@ -42,9 +42,7 @@ async def _seed_usage() -> None:
             allowance,
             observed_at,
         ) in enumerate(rows):
-            session.add(
-                Run(id=run_id, project_id=project.id, agent=agent, status="completed")
-            )
+            session.add(Run(id=run_id, project_id=project.id, agent=agent, status="completed"))
             session.add(
                 TurnUsage(
                     id=f"usage-{index}",
@@ -83,7 +81,7 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
 ) -> None:
     await _seed_usage()
 
-    response = await app.get("/api/v1/accounting", headers=auth_headers)
+    response = await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
 
@@ -130,7 +128,7 @@ async def test_allowance_precedes_api_equivalent_and_unavailable_is_not_zero(
 ) -> None:
     await _seed_usage()
 
-    data = (await app.get("/api/v1/accounting", headers=auth_headers)).json()
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
     assert data["preferred_display"] == {
         "kind": "allowance",
         "label": "Rate-limit allowance",
@@ -159,7 +157,7 @@ async def test_api_equivalent_label_is_explicit_when_no_allowance(app, auth_head
         )
         await session.commit()
 
-    display = (await app.get("/api/v1/accounting", headers=auth_headers)).json()[
+    display = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()[
         "preferred_display"
     ]
     assert display == {
@@ -174,7 +172,7 @@ async def test_budget_patch_accepts_positive_or_null_and_rejects_nonpositive(
     app, auth_headers
 ) -> None:
     enabled = await app.patch(
-        "/api/v1/accounting/budget",
+        "/api/v1/projects/proj-test/accounting/budget",
         json={"token_budget": 42},
         headers=auth_headers,
     )
@@ -183,14 +181,14 @@ async def test_budget_patch_accepts_positive_or_null_and_rejects_nonpositive(
 
     for invalid in (0, -1):
         response = await app.patch(
-            "/api/v1/accounting/budget",
+            "/api/v1/projects/proj-test/accounting/budget",
             json={"token_budget": invalid},
             headers=auth_headers,
         )
         assert response.status_code == 422
 
     disabled = await app.patch(
-        "/api/v1/accounting/budget",
+        "/api/v1/projects/proj-test/accounting/budget",
         json={"token_budget": None},
         headers=auth_headers,
     )
@@ -205,7 +203,7 @@ async def test_budget_patch_accepts_positive_or_null_and_rejects_nonpositive(
 
 @pytest.mark.asyncio
 async def test_accounting_routes_require_auth(app) -> None:
-    assert (await app.get("/api/v1/accounting")).status_code == 401
+    assert (await app.get("/api/v1/projects/proj-test/accounting")).status_code == 401
     assert (
-        await app.patch("/api/v1/accounting/budget", json={"token_budget": 10})
+        await app.patch("/api/v1/projects/proj-test/accounting/budget", json={"token_budget": 10})
     ).status_code == 401

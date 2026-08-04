@@ -119,13 +119,13 @@ async def test_launchability_endpoint_reports_configured_agents(app, auth_header
     monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
 
     sync_resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"claude": {"runner": "claude"}, "backup": {"runner": "manual"}}}},
         headers=auth_headers,
     )
     assert sync_resp.status_code == 200
 
-    resp = await app.get("/api/v1/agents/launchability", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents/launchability", headers=auth_headers)
     assert resp.status_code == 200
     agents = resp.json()["agents"]
 
@@ -281,7 +281,7 @@ async def test_get_agent_config_falls_back_to_session_wide_hub_client(app, auth_
     from hub.db.engine import async_session_factory
 
     sync = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "hub_client": "cli",

@@ -1,4 +1,4 @@
-"""GET /api/v1/status — project health snapshot."""
+"""GET /api/v1/projects/{project_id}/status — project health snapshot."""
 
 import asyncio
 from datetime import datetime, timedelta, timezone

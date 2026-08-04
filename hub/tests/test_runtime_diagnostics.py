@@ -14,7 +14,7 @@ async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers, bin
     into the response at all.
     """
     sync = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"diag-no-such-cli": {}}}},
         headers=auth_headers,
     )
@@ -23,7 +23,7 @@ async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers, bin
 
     with patch("hub.launchability.shutil.which", return_value=None):
         resp = await app.post(
-            "/api/v1/agent/trigger",
+            "/api/v1/projects/proj-test/agent/trigger",
             json={"agent": "diag-no-such-cli", "message": "hello", "session_mode": "new"},
             headers=auth_headers,
         )
@@ -38,7 +38,7 @@ async def test_agent_trigger_reports_missing_cli_directly(app, auth_headers, bin
 @pytest.mark.asyncio
 async def test_log_agents_endpoint_includes_configured_and_logged_agents(app, auth_headers):
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "minimax",
             "contact_mode": "poll",
@@ -49,7 +49,7 @@ async def test_log_agents_endpoint_includes_configured_and_logged_agents(app, au
     assert resp.status_code == 200
 
     log_resp = await app.post(
-        "/api/v1/logs",
+        "/api/v1/projects/proj-test/logs",
         json={
             "event_type": "proxy_api_key_missing",
             "agent": "glm",
@@ -60,7 +60,7 @@ async def test_log_agents_endpoint_includes_configured_and_logged_agents(app, au
     )
     assert log_resp.status_code == 201
 
-    agents_resp = await app.get("/api/v1/logs/agents", headers=auth_headers)
+    agents_resp = await app.get("/api/v1/projects/proj-test/logs/agents", headers=auth_headers)
     assert agents_resp.status_code == 200
     agents = agents_resp.json()
     assert "minimax" in agents
@@ -74,7 +74,7 @@ async def test_manual_job_run_failure_is_persisted(app, auth_headers, monkeypatc
 
     monkeypatch.setattr(hub.scheduler, "_scheduler_instance", None)
     create = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Diagnostics job",
             "agent": "claude",
@@ -87,10 +87,12 @@ async def test_manual_job_run_failure_is_persisted(app, auth_headers, monkeypatc
     assert create.status_code == 201
     job_id = create.json()["id"]
 
-    run = await app.post(f"/api/v1/jobs/{job_id}/run", headers=auth_headers)
+    run = await app.post(f"/api/v1/projects/proj-test/jobs/{job_id}/run", headers=auth_headers)
     assert run.status_code == 503
 
-    history = await app.get(f"/api/v1/jobs/{job_id}/history", headers=auth_headers)
+    history = await app.get(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/history", headers=auth_headers
+    )
     assert history.status_code == 200
     runs = history.json()
     assert runs[0]["status"] == "failed"

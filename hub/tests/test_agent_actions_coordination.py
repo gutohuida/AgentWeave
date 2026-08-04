@@ -114,20 +114,16 @@ async def test_agent_can_read_only_its_own_question_answer(app, auth_headers):
     question_id = asked.json()["id"]
 
     answered = await app.patch(
-        f"/api/v1/questions/{question_id}",
+        f"/api/v1/projects/proj-test/questions/{question_id}",
         headers=auth_headers,
         json={"answer": "Take the safe path."},
     )
     assert answered.status_code == 200
 
-    own = await app.get(
-        f"/api/v1/agent-actions/questions/{question_id}", headers=asker_headers
-    )
+    own = await app.get(f"/api/v1/agent-actions/questions/{question_id}", headers=asker_headers)
     assert own.status_code == 200
     assert own.json()["answer"] == "Take the safe path."
-    not_own = await app.get(
-        f"/api/v1/agent-actions/questions/{question_id}", headers=other_headers
-    )
+    not_own = await app.get(f"/api/v1/agent-actions/questions/{question_id}", headers=other_headers)
     assert not_own.status_code == 404
 
     async with async_session_factory() as session:
@@ -141,11 +137,11 @@ async def test_run_credential_cannot_read_operator_coordination_or_configuration
     headers, _ = await _active_run("run-denied-surface", "bounded")
 
     for path in (
-        "/api/v1/status",
-        "/api/v1/messages",
-        "/api/v1/queue/settings",
-        "/api/v1/agents",
-        "/api/v1/accounting",
+        "/api/v1/projects/proj-test/status",
+        "/api/v1/projects/proj-test/messages",
+        "/api/v1/projects/proj-test/queue/settings",
+        "/api/v1/projects/proj-test/agents",
+        "/api/v1/projects/proj-test/accounting",
     ):
         response = await app.get(path, headers=headers)
         assert response.status_code == 401, path

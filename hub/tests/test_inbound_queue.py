@@ -161,7 +161,7 @@ def test_scheduled_job_origin_is_typed_and_has_no_origin_agent():
 
 @pytest.mark.asyncio
 async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_headers):
-    defaults = await app.get("/api/v1/queue/settings", headers=auth_headers)
+    defaults = await app.get("/api/v1/projects/proj-test/queue/settings", headers=auth_headers)
     assert defaults.status_code == 200
     assert defaults.json() == {
         "hop_budget": 6,
@@ -171,7 +171,7 @@ async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_heade
     }
 
     updated = await app.patch(
-        "/api/v1/queue/settings",
+        "/api/v1/projects/proj-test/queue/settings",
         json={"hop_budget": 4, "turn_delivery_cap": 2},
         headers=auth_headers,
     )
@@ -184,14 +184,14 @@ async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_heade
     }
 
     invalid = await app.patch(
-        "/api/v1/queue/settings",
+        "/api/v1/projects/proj-test/queue/settings",
         json={"hop_budget": 0, "turn_delivery_cap": "many"},
         headers=auth_headers,
     )
     assert invalid.status_code == 422
 
     await app.patch(
-        "/api/v1/queue/settings",
+        "/api/v1/projects/proj-test/queue/settings",
         json={"hop_budget": 6, "turn_delivery_cap": 10},
         headers=auth_headers,
     )
@@ -200,31 +200,37 @@ async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_heade
 @pytest.mark.asyncio
 async def test_undelivered_entry_can_be_withdrawn(app, auth_headers):
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"withdraw-manual": {"runner": "manual"}}}},
         headers=auth_headers,
     )
     trigger = await app.post(
-        "/api/v1/agent/trigger",
+        "/api/v1/projects/proj-test/agent/trigger",
         json={"agent": "withdraw-manual", "message": "cancel me"},
         headers=auth_headers,
     )
     entry_id = trigger.json()["queue_entry_id"]
-    queue_status = await app.get("/api/v1/queue/withdraw-manual/status", headers=auth_headers)
+    queue_status = await app.get(
+        "/api/v1/projects/proj-test/queue/withdraw-manual/status", headers=auth_headers
+    )
     assert queue_status.json()["waiting_count"] == 1
     assert "manual" in queue_status.json()["waiting_reason"].lower()
 
-    withdrawn = await app.delete(f"/api/v1/queue/entries/{entry_id}", headers=auth_headers)
+    withdrawn = await app.delete(
+        f"/api/v1/projects/proj-test/queue/entries/{entry_id}", headers=auth_headers
+    )
     assert withdrawn.status_code == 200
     assert withdrawn.json()["state"] == "withdrawn"
-    second = await app.delete(f"/api/v1/queue/entries/{entry_id}", headers=auth_headers)
+    second = await app.delete(
+        f"/api/v1/projects/proj-test/queue/entries/{entry_id}", headers=auth_headers
+    )
     assert second.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_operator_input_does_not_drain_another_conversation(app, auth_headers, bind_runner):
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "agents": {
@@ -250,7 +256,7 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn") as spawn:
         peer = await app.post(
-            "/api/v1/messages",
+            "/api/v1/projects/proj-test/messages",
             json={
                 "from": "hop-source",
                 "to": "hop-target",
@@ -262,9 +268,13 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
         assert peer.status_code == 201
         spawn.assert_not_called()
 
-    queued = await app.get("/api/v1/queue/hop-target?state=queued", headers=auth_headers)
+    queued = await app.get(
+        "/api/v1/projects/proj-test/queue/hop-target?state=queued", headers=auth_headers
+    )
     assert [(row["content"], row["hop_depth"]) for row in queued.json()] == [("deep peer work", 7)]
-    queue_status = await app.get("/api/v1/queue/hop-target/status", headers=auth_headers)
+    queue_status = await app.get(
+        "/api/v1/projects/proj-test/queue/hop-target/status", headers=auth_headers
+    )
     assert queue_status.json()["waiting_reason"] == "hop budget exhausted"
 
     fake_session = MagicMock()
@@ -279,7 +289,7 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
     ):
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             reset = await app.post(
-                "/api/v1/agent/trigger",
+                "/api/v1/projects/proj-test/agent/trigger",
                 json={"agent": "hop-target", "message": "operator reset"},
                 headers=auth_headers,
             )
@@ -303,7 +313,7 @@ async def test_operator_input_does_not_drain_another_conversation(app, auth_head
 @pytest.mark.asyncio
 async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers, bind_runner):
     await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"cap-target": {"runner": "claude"}}}},
         headers=auth_headers,
     )

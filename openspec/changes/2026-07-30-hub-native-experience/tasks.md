@@ -1340,6 +1340,15 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > only for the rail and the conversation timeline (`tasks.md` 1.3); task-assignment and activity
 > colouring were not touched. 10.7 was verified against `agent-conversation-workspace`'s own spec,
 > not literally `hub-visual-language`. 10.1–10.2 remain undone.
+>
+> **Update (2026-08-04) — phase 10 is now closed by real successor implementation.** The local
+> multi-project workspace successor implemented and verified 10.1–10.3 and the remaining 10.6
+> surfaces, while retaining the already-complete 10.4–10.5 behavior. Its phase 5 verification
+> covered both `agent-conversation-workspace` and the referenced `hub-visual-language` navigation,
+> responsive, keyboard, reduced-motion, and exact color-mapping scenarios. Its phase 6 closeout
+> migrated a legacy project, created a second, ran both concurrently with isolated worktrees,
+> switched during output, and repaired a moved directory. The checkboxes below remain unchanged
+> under the reconciliation rule; durable phase handoffs exist in the successor change history.
 
 - [ ] 10.1 Add the projects API — list, create, open, and per-project settings including the hop,
       agent, and token budgets.

@@ -11,7 +11,7 @@ from hub.sse import sse_manager
 
 
 async def _project_id(app, auth_headers) -> str:
-    response = await app.get("/api/v1/status", headers=auth_headers)
+    response = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     assert response.status_code == 200
     return response.json()["project_id"]
 
@@ -57,20 +57,22 @@ async def test_structured_output_round_trip_and_legacy_row(app, auth_headers):
         "sequence": 2,
     }
     response = await app.post(
-        f"/api/v1/agents/{agent}/output",
+        f"/api/v1/projects/proj-test/agents/{agent}/output",
         json=structured,
         headers=auth_headers,
     )
     assert response.status_code == 201
 
     legacy_response = await app.post(
-        f"/api/v1/agents/{agent}/output",
+        f"/api/v1/projects/proj-test/agents/{agent}/output",
         json={"content": "legacy text", "session_id": "sess-stream"},
         headers=auth_headers,
     )
     assert legacy_response.status_code == 201
 
-    response = await app.get(f"/api/v1/agents/{agent}/output", headers=auth_headers)
+    response = await app.get(
+        f"/api/v1/projects/proj-test/agents/{agent}/output", headers=auth_headers
+    )
     assert response.status_code == 200
     rows = response.json()
     structured_row = next(row for row in rows if row["content"] == "Running tests")
@@ -89,7 +91,7 @@ async def test_structured_output_round_trip_and_legacy_row(app, auth_headers):
 @pytest.mark.asyncio
 async def test_output_ingress_rejects_unknown_kind_and_oversized_payload(app, auth_headers):
     unknown_kind = await app.post(
-        "/api/v1/agents/stream-reject/output",
+        "/api/v1/projects/proj-test/agents/stream-reject/output",
         json={
             "content": "bad kind",
             "kind": "progress",
@@ -100,7 +102,7 @@ async def test_output_ingress_rejects_unknown_kind_and_oversized_payload(app, au
     assert unknown_kind.status_code == 422
 
     oversized = await app.post(
-        "/api/v1/agents/stream-reject/output",
+        "/api/v1/projects/proj-test/agents/stream-reject/output",
         json={
             "content": "large payload",
             "kind": "diagnostic",
@@ -118,7 +120,7 @@ async def test_structured_output_is_carried_by_sse(app, auth_headers):
     queue = sse_manager.subscribe(project_id)
     try:
         response = await app.post(
-            "/api/v1/agents/stream-sse/output",
+            "/api/v1/projects/proj-test/agents/stream-sse/output",
             json={
                 "content": "Thinking",
                 "kind": "thinking",
@@ -143,7 +145,7 @@ async def test_structured_output_is_carried_by_sse(app, auth_headers):
 @pytest.mark.asyncio
 async def test_chat_history_preserves_structured_output_fields(app, auth_headers):
     response = await app.post(
-        "/api/v1/agents/stream-chat/output",
+        "/api/v1/projects/proj-test/agents/stream-chat/output",
         json={
             "content": "Done",
             "session_id": "sess-chat-stream",
@@ -157,11 +159,11 @@ async def test_chat_history_preserves_structured_output_fields(app, auth_headers
     assert response.status_code == 201
 
     conversations = await app.get(
-        "/api/v1/agent/stream-chat/conversations", headers=auth_headers
+        "/api/v1/projects/proj-test/agent/stream-chat/conversations", headers=auth_headers
     )
     conversation_id = conversations.json()[0]["id"]
     response = await app.get(
-        f"/api/v1/agent/stream-chat/chat/{conversation_id}", headers=auth_headers
+        f"/api/v1/projects/proj-test/agent/stream-chat/chat/{conversation_id}", headers=auth_headers
     )
     assert response.status_code == 200
     message = next(item for item in response.json()["entries"] if item["kind"] == "agent_output")
@@ -194,7 +196,7 @@ async def test_default_output_query_returns_newest_window_chronologically(app, a
         )
 
     response = await app.get(
-        f"/api/v1/agents/{agent}/output?limit=3",
+        f"/api/v1/projects/proj-test/agents/{agent}/output?limit=3",
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -220,7 +222,7 @@ async def test_content_bound_matches_the_cli_stream_contract(app, auth_headers):
     assert len(fields["content"]) > 10000
 
     accepted = await app.post(
-        "/api/v1/agents/stream-bounds/output",
+        "/api/v1/projects/proj-test/agents/stream-bounds/output",
         json={
             "content": fields["content"],
             "kind": fields["kind"],
@@ -232,7 +234,7 @@ async def test_content_bound_matches_the_cli_stream_contract(app, auth_headers):
     assert accepted.status_code == 201
 
     over_contract = await app.post(
-        "/api/v1/agents/stream-bounds/output",
+        "/api/v1/projects/proj-test/agents/stream-bounds/output",
         json={"content": "x" * (MAX_PAYLOAD_BYTES + 1), "kind": "text"},
         headers=auth_headers,
     )

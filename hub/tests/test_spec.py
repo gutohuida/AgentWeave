@@ -2,7 +2,7 @@
 
 import pytest
 
-BASE = "/api/v1/project"
+BASE = "/api/v1/projects/proj-test/project"
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,7 @@ from hub.db.models import InboundQueueEntry, Message
 async def test_ask_and_answer_question(app, auth_headers):
     # Ask a question
     resp = await app.post(
-        "/api/v1/questions",
+        "/api/v1/projects/proj-test/questions",
         json={
             "from_agent": "claude",
             "question": "Which approach should I use?",
@@ -27,12 +27,14 @@ async def test_ask_and_answer_question(app, auth_headers):
     q_id = data["id"]
 
     # List unanswered
-    resp2 = await app.get("/api/v1/questions?answered=false", headers=auth_headers)
+    resp2 = await app.get(
+        "/api/v1/projects/proj-test/questions?answered=false", headers=auth_headers
+    )
     assert any(q["id"] == q_id for q in resp2.json())
 
     # Answer it
     resp3 = await app.patch(
-        f"/api/v1/questions/{q_id}",
+        f"/api/v1/projects/proj-test/questions/{q_id}",
         json={"answer": "Use approach A"},
         headers=auth_headers,
     )
@@ -70,5 +72,7 @@ async def test_ask_and_answer_question(app, auth_headers):
         assert magic_user_messages == []
 
     # Should no longer appear in unanswered
-    resp4 = await app.get("/api/v1/questions?answered=false", headers=auth_headers)
+    resp4 = await app.get(
+        "/api/v1/projects/proj-test/questions?answered=false", headers=auth_headers
+    )
     assert not any(q["id"] == q_id for q in resp4.json())

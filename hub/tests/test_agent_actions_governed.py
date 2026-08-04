@@ -60,9 +60,7 @@ async def test_agent_request_uses_bound_requester_template_and_budget(app):
     assert response.json()["requester"] == "lead"
 
     async with async_session_factory() as session:
-        agent = (
-            await session.execute(select(Agent).where(Agent.name == "worker"))
-        ).scalar_one()
+        agent = (await session.execute(select(Agent).where(Agent.name == "worker"))).scalar_one()
         assert agent.created_by_run_id == "run-governed"
         assert agent.config["model"] == "small"
 
@@ -82,7 +80,7 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
     assert denied.status_code == 403
 
     settings = await app.patch(
-        "/api/v1/queue/settings",
+        "/api/v1/projects/proj-test/queue/settings",
         headers=auth_headers,
         json={
             "hop_budget": 8,
@@ -106,14 +104,10 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
     )
     assert toggled.status_code == 200
     assert toggled.json()["enabled"] is False
-    disabled_run = await app.post(
-        f"/api/v1/agent-actions/jobs/{job_id}/run", headers=headers
-    )
+    disabled_run = await app.post(f"/api/v1/agent-actions/jobs/{job_id}/run", headers=headers)
     assert disabled_run.status_code == 400
 
-    await app.patch(
-        f"/api/v1/agent-actions/jobs/{job_id}", headers=headers, json={"enabled": True}
-    )
+    await app.patch(f"/api/v1/agent-actions/jobs/{job_id}", headers=headers, json={"enabled": True})
     fired = await app.post(f"/api/v1/agent-actions/jobs/{job_id}/run", headers=headers)
     assert fired.status_code == 503
 
@@ -134,4 +128,3 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
         ).scalar_one()
         assert audit.run_id == "run-job-owner"
         assert audit.agent == "lead"
-

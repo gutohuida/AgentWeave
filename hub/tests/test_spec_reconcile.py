@@ -11,7 +11,6 @@ across tests would make one test's leftover snapshots pollute another's
 
 from __future__ import annotations
 
-import secrets
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
@@ -21,22 +20,17 @@ from sqlalchemy import select
 
 from hub.api.v1.spec import ACTIVE_SOURCE_TTL_SECONDS
 from hub.db.engine import async_session_factory
-from hub.db.models import ApiKey, Project, ProjectSpecSnapshot
+from hub.db.models import Project, ProjectSpecSnapshot
 
-BASE = "/api/v1/project"
+BASE = "/api/v1/projects/proj-test/project"
 
 
 @pytest_asyncio.fixture
-async def project(app):
-    project_id = f"proj-spec-{secrets.token_hex(4)}"
-    api_key = f"aw_live_{secrets.token_hex(16)}"
-    async with async_session_factory() as session:
-        session.add(Project(id=project_id, name="Spec Reconcile Test Project"))
-        session.add(ApiKey(id=api_key, project_id=project_id, revoked=False))
-        await session.commit()
+async def project(app, auth_headers):
     return {
-        "project_id": project_id,
-        "headers": {"Authorization": f"Bearer {api_key}"},
+        "project_id": "proj-test",
+        "headers": auth_headers,
+        "base": BASE,
     }
 
 
@@ -56,15 +50,15 @@ def _manifest_json(home="spec/agentweave-spec.html", extra_docs=None, home_kind=
     return {"version": 1, "home": home, "documents": docs}
 
 
-async def _sync(app, headers, path, content="<html><head></head></html>"):
+async def _sync(app, headers, path, content="<html><head></head></html>", base=BASE):
     resp = await app.post(
-        f"{BASE}/specs/sync", json={"path": path, "content": content}, headers=headers
+        f"{base}/specs/sync", json={"path": path, "content": content}, headers=headers
     )
     assert resp.status_code == 200
     return resp
 
 
-async def _reconcile(app, headers, source_id, manifest=None, paths=None, prune=False):
+async def _reconcile(app, headers, source_id, manifest=None, paths=None, prune=False, base=BASE):
     import json as _json
 
     body = {
@@ -74,7 +68,7 @@ async def _reconcile(app, headers, source_id, manifest=None, paths=None, prune=F
         "discovered_paths": paths or [],
         "prune": prune,
     }
-    return await app.post(f"{BASE}/specs/reconcile", json=body, headers=headers)
+    return await app.post(f"{base}/specs/reconcile", json=body, headers=headers)
 
 
 async def _expire_snapshot(project_id: str, source_id: str) -> None:
@@ -440,38 +434,56 @@ class TestSSEPayloads:
 
 class TestProjectIsolation:
     @pytest_asyncio.fixture
-    async def other_project(self, app):
-        project_id = f"proj-spec-other-{secrets.token_hex(4)}"
-        api_key = f"aw_live_{secrets.token_hex(16)}"
+    async def other_project(self, app, auth_headers):
+        project_id = "proj-spec-other"
         async with async_session_factory() as session:
             session.add(Project(id=project_id, name="Other Spec Project"))
-            session.add(ApiKey(id=api_key, project_id=project_id, revoked=False))
             await session.commit()
-        return {"project_id": project_id, "headers": {"Authorization": f"Bearer {api_key}"}}
+        return {
+            "project_id": project_id,
+            "headers": auth_headers,
+            "base": f"/api/v1/projects/{project_id}/project",
+        }
 
     @pytest.mark.asyncio
     async def test_snapshots_and_drift_are_isolated_per_project(self, app, project, other_project):
         await _sync(app, project["headers"], "spec/mine.html")
         await _reconcile(app, project["headers"], "src-a", paths=["spec/mine.html"])
 
-        other_list = await app.get(f"{BASE}/specs", headers=other_project["headers"])
+        other_list = await app.get(
+            f"{other_project['base']}/specs", headers=other_project["headers"]
+        )
         assert other_list.json()["specs"] == []
 
         other_get = await app.get(
-            f"{BASE}/spec", params={"path": "spec/mine.html"}, headers=other_project["headers"]
+            f"{other_project['base']}/spec",
+            params={"path": "spec/mine.html"},
+            headers=other_project["headers"],
         )
         assert other_get.status_code == 404
 
     @pytest.mark.asyncio
     async def test_prune_in_one_project_does_not_touch_another(self, app, project, other_project):
         await _sync(app, project["headers"], "spec/shared-name.html")
-        await _sync(app, other_project["headers"], "spec/shared-name.html")
+        await _sync(
+            app,
+            other_project["headers"],
+            "spec/shared-name.html",
+            base=other_project["base"],
+        )
         await _reconcile(app, project["headers"], "src-a", paths=["spec/shared-name.html"])
-        await _reconcile(app, other_project["headers"], "src-a", paths=[], prune=True)
+        await _reconcile(
+            app,
+            other_project["headers"],
+            "src-a",
+            paths=[],
+            prune=True,
+            base=other_project["base"],
+        )
 
         # other_project pruned its own copy...
         other_get = await app.get(
-            f"{BASE}/spec",
+            f"{other_project['base']}/spec",
             params={"path": "spec/shared-name.html"},
             headers=other_project["headers"],
         )

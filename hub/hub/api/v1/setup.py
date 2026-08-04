@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from ...db.engine import async_session_factory
-from ...db.models import ApiKey
+from ...db.models import OperatorCredential
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +119,10 @@ async def get_setup_token(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail="Forbidden: cross-origin request")
 
     async with async_session_factory() as session:
-        # Get the first non-revoked API key
-        result = await session.execute(select(ApiKey).where(ApiKey.revoked.is_(False)).limit(1))
+        # Return the instance credential; it deliberately carries no project selection.
+        result = await session.execute(
+            select(OperatorCredential).where(OperatorCredential.revoked.is_(False)).limit(1)
+        )
         api_key = result.scalar_one_or_none()
 
         if not api_key:

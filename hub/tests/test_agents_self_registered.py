@@ -5,10 +5,10 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_agents_list_includes_self_registered_with_liveness(app, auth_headers):
-    """Test that GET /api/v1/agents returns self-registered agents with liveness."""
+    """Test that GET /api/v1/projects/proj-test/agents returns self-registered agents with liveness."""
     # Register a self-registered agent
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "hermes-test",
             "contact_mode": "poll",
@@ -22,14 +22,14 @@ async def test_agents_list_includes_self_registered_with_liveness(app, auth_head
 
     # Post a heartbeat for the agent
     resp = await app.post(
-        "/api/v1/agents/hermes-test/heartbeat",
+        "/api/v1/projects/proj-test/agents/hermes-test/heartbeat",
         json={"status": "active"},
         headers=auth_headers,
     )
     assert resp.status_code == 201
 
     # List agents
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     agents = resp.json()
 
@@ -45,7 +45,7 @@ async def test_register_agent_rejects_configured_agent_name(app, auth_headers):
     # First push a session with configured agents
     # Push session config so 'claude' appears as configured
     resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "id": "sess-test",
@@ -64,7 +64,7 @@ async def test_register_agent_rejects_configured_agent_name(app, auth_headers):
 
     # Try to register as 'claude'
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "claude", "contact_mode": "poll"},
         headers=auth_headers,
     )
@@ -76,7 +76,7 @@ async def test_register_agent_rejects_configured_agent_name(app, auth_headers):
 async def test_register_agent_invalid_contact_mode(app, auth_headers):
     """Test that invalid contact_mode is rejected."""
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "bad-agent", "contact_mode": "invalid"},
         headers=auth_headers,
     )
@@ -87,10 +87,10 @@ async def test_register_agent_invalid_contact_mode(app, auth_headers):
 @pytest.mark.asyncio
 async def test_get_context_returns_charter_content(app, auth_headers):
     """The direct compatibility lookup resolves a stable charter ID."""
-    charters = (await app.get("/api/v1/charters", headers=auth_headers)).json()
+    charters = (await app.get("/api/v1/projects/proj-test/charters", headers=auth_headers)).json()
     charter = next(item for item in charters if item["name"] == "Backend Developer")
     resp = await app.get(
-        f"/api/v1/agents/context?charter={charter['id']}",
+        f"/api/v1/projects/proj-test/agents/context?charter={charter['id']}",
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -103,7 +103,7 @@ async def test_get_context_returns_charter_content(app, auth_headers):
 async def test_get_context_unknown_charter(app, auth_headers):
     """Unknown charter identifiers return 404."""
     resp = await app.get(
-        "/api/v1/agents/context?charter=charter-nonexistent",
+        "/api/v1/projects/proj-test/agents/context?charter=charter-nonexistent",
         headers=auth_headers,
     )
     assert resp.status_code == 404
@@ -112,7 +112,7 @@ async def test_get_context_unknown_charter(app, auth_headers):
 @pytest.mark.asyncio
 async def test_get_agent_context_declared_agent(app, auth_headers):
     resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "id": "sess-test",
@@ -134,7 +134,9 @@ async def test_get_agent_context_declared_agent(app, auth_headers):
     )
     assert resp.status_code == 200
 
-    resp = await app.get("/api/v1/agents/agent-context?agent=claude", headers=auth_headers)
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=claude", headers=auth_headers
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["agent"] == "claude"
@@ -149,14 +151,14 @@ async def test_get_agent_context_declared_agent(app, auth_headers):
 @pytest.mark.asyncio
 async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "hermes-context", "contact_mode": "poll"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
 
     resp = await app.get(
-        "/api/v1/agents/agent-context?agent=hermes-context",
+        "/api/v1/projects/proj-test/agents/agent-context?agent=hermes-context",
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -170,7 +172,9 @@ async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_get_agent_context_unknown_agent(app, auth_headers):
-    resp = await app.get("/api/v1/agents/agent-context?agent=unknown-agent", headers=auth_headers)
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=unknown-agent", headers=auth_headers
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["known"] is False
@@ -180,7 +184,9 @@ async def test_get_agent_context_unknown_agent(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_get_agent_context_invalid_agent_name(app, auth_headers):
-    resp = await app.get("/api/v1/agents/agent-context?agent=bad%20name", headers=auth_headers)
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=bad%20name", headers=auth_headers
+    )
     assert resp.status_code == 400
 
 
@@ -188,7 +194,7 @@ async def test_get_agent_context_invalid_agent_name(app, auth_headers):
 async def test_register_agent_with_config(app, auth_headers):
     """Test that register_agent stores the full config dict."""
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "hermes-config",
             "contact_mode": "poll",
@@ -209,7 +215,7 @@ async def test_register_agent_with_config(app, auth_headers):
 async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
     """Test that list_agents populates runner, model, and yolo from stored config."""
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "hermes-full",
             "contact_mode": "poll",
@@ -224,7 +230,7 @@ async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
     assert resp.status_code == 200
 
     # List agents
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     agents = resp.json()
 
@@ -243,7 +249,7 @@ async def test_re_register_updates_config(app, auth_headers):
     """Test that re-registering updates the stored config."""
     # First registration
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "hermes-update",
             "contact_mode": "poll",
@@ -255,7 +261,7 @@ async def test_re_register_updates_config(app, auth_headers):
 
     # Re-register with different config
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "hermes-update",
             "contact_mode": "mcp-push",
@@ -266,7 +272,7 @@ async def test_re_register_updates_config(app, auth_headers):
     assert resp.status_code == 200
 
     # Verify updated
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     agents = resp.json()
     hermes = next((a for a in agents if a["name"] == "hermes-update"), None)
@@ -281,7 +287,7 @@ async def test_patch_agent_config(app, auth_headers):
     """Test PATCH merges config without touching other fields."""
     # Register agent with initial config
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={
             "name": "hermes-patch",
             "contact_mode": "poll",
@@ -293,7 +299,7 @@ async def test_patch_agent_config(app, auth_headers):
 
     # Patch just yolo and model
     resp = await app.patch(
-        "/api/v1/agents/hermes-patch",
+        "/api/v1/projects/proj-test/agents/hermes-patch",
         json={"config": {"model": "kimi-k3", "yolo": True}},
         headers=auth_headers,
     )
@@ -304,7 +310,7 @@ async def test_patch_agent_config(app, auth_headers):
     assert data["config"]["yolo"] is True  # updated
 
     # Verify via list
-    resp = await app.get("/api/v1/agents", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     hermes = next((a for a in resp.json() if a["name"] == "hermes-patch"), None)
     assert hermes is not None
@@ -317,14 +323,14 @@ async def test_patch_agent_config(app, auth_headers):
 async def test_patch_agent_contact_mode(app, auth_headers):
     """Test PATCH can update top-level contact_mode."""
     resp = await app.post(
-        "/api/v1/agents/register",
+        "/api/v1/projects/proj-test/agents/register",
         json={"name": "hermes-patch-cm", "contact_mode": "poll"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
 
     resp = await app.patch(
-        "/api/v1/agents/hermes-patch-cm",
+        "/api/v1/projects/proj-test/agents/hermes-patch-cm",
         json={"contact_mode": "mcp-push"},
         headers=auth_headers,
     )
@@ -336,7 +342,7 @@ async def test_patch_agent_contact_mode(app, auth_headers):
 async def test_patch_agent_unknown(app, auth_headers):
     """Test PATCH returns 404 for non-existent agent."""
     resp = await app.patch(
-        "/api/v1/agents/nonexistent-agent",
+        "/api/v1/projects/proj-test/agents/nonexistent-agent",
         json={"config": {"yolo": True}},
         headers=auth_headers,
     )
@@ -348,7 +354,7 @@ async def test_patch_agent_configured_agent_rejected(app, auth_headers):
     """Test PATCH returns 409 for configured agents."""
     # Push session config so 'claude' is configured
     resp = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "id": "sess-patch",
@@ -363,7 +369,7 @@ async def test_patch_agent_configured_agent_rejected(app, auth_headers):
     assert resp.status_code == 200
 
     resp = await app.patch(
-        "/api/v1/agents/claude",
+        "/api/v1/projects/proj-test/agents/claude",
         json={"config": {"yolo": True}},
         headers=auth_headers,
     )

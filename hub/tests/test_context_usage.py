@@ -9,12 +9,12 @@ from hub.sse import sse_manager
 
 async def _configure(app, auth_headers, agent: str) -> str:
     response = await app.post(
-        "/api/v1/session/sync",
+        "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {agent: {}}}},
         headers=auth_headers,
     )
     assert response.status_code == 200
-    status = await app.get("/api/v1/status", headers=auth_headers)
+    status = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     return status.json()["project_id"]
 
 
@@ -36,7 +36,9 @@ async def test_canonical_context_round_trip_summary_and_sse(app, auth_headers):
     }
     try:
         response = await app.post(
-            f"/api/v1/agents/{agent}/context-usage", json=body, headers=auth_headers
+            f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
+            json=body,
+            headers=auth_headers,
         )
         assert response.status_code == 201
         event = queue.get_nowait()
@@ -44,7 +46,7 @@ async def test_canonical_context_round_trip_summary_and_sse(app, auth_headers):
         projected = json.loads(event.data)
         assert projected["percent"] == 25.0
 
-        response = await app.get("/api/v1/agents", headers=auth_headers)
+        response = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
         summary = next(item for item in response.json() if item["name"] == agent)
         assert summary["context_usage"] == projected
     finally:
@@ -84,10 +86,14 @@ async def test_context_states_and_legacy_normalization(app, auth_headers):
     for agent, body, expected in cases:
         await _configure(app, auth_headers, agent)
         response = await app.post(
-            f"/api/v1/agents/{agent}/context-usage", json=body, headers=auth_headers
+            f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
+            json=body,
+            headers=auth_headers,
         )
         assert response.status_code == 201, response.text
-        summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+        summaries = (
+            await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+        ).json()
         sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
         assert sample["status"] == expected
 
@@ -114,7 +120,9 @@ async def test_context_ingress_rejects_invalid_samples(app, auth_headers):
     ]
     for body in invalid:
         response = await app.post(
-            "/api/v1/agents/context-invalid/context-usage", json=body, headers=auth_headers
+            "/api/v1/projects/proj-test/agents/context-invalid/context-usage",
+            json=body,
+            headers=auth_headers,
         )
         assert response.status_code == 422
 
@@ -123,7 +131,7 @@ async def test_context_ingress_rejects_invalid_samples(app, auth_headers):
 async def test_stale_or_old_session_context_cannot_replace_latest(app, auth_headers):
     agent = "context-order"
     await _configure(app, auth_headers, agent)
-    endpoint = f"/api/v1/agents/{agent}/context-usage"
+    endpoint = f"/api/v1/projects/proj-test/agents/{agent}/context-usage"
     newest = {
         "status": "measured",
         "source": "collector",
@@ -137,7 +145,7 @@ async def test_stale_or_old_session_context_cannot_replace_latest(app, auth_head
     response = await app.post(endpoint, json=stale, headers=auth_headers)
     assert response.status_code == 201
     assert response.json()["status"] == "ignored"
-    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["session_id"] == "new-session"
     assert sample["context_tokens"] == 90
@@ -160,10 +168,10 @@ async def test_legacy_zero_percent_reset_becomes_unavailable(app, auth_headers):
         "updated_at": "2026-07-29T10:00:00+00:00",
     }
     response = await app.post(
-        f"/api/v1/agents/{agent}/context-usage", json=body, headers=auth_headers
+        f"/api/v1/projects/proj-test/agents/{agent}/context-usage", json=body, headers=auth_headers
     )
     assert response.status_code == 201
-    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["status"] == "unavailable"
     assert sample.get("percent") is None
@@ -176,12 +184,12 @@ async def test_legacy_payloads_without_usable_operands_degrade_not_reject(app, a
     agent = "context-legacy-limit-only"
     await _configure(app, auth_headers, agent)
     response = await app.post(
-        f"/api/v1/agents/{agent}/context-usage",
+        f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
         json={"agent": agent, "tokens_limit": 200000},
         headers=auth_headers,
     )
     assert response.status_code == 201
-    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["status"] == "unavailable"
     assert sample.get("limit_tokens") is None
@@ -193,12 +201,12 @@ async def test_legacy_positive_percent_is_still_measured(app, auth_headers):
     agent = "context-legacy-percent"
     await _configure(app, auth_headers, agent)
     response = await app.post(
-        f"/api/v1/agents/{agent}/context-usage",
+        f"/api/v1/projects/proj-test/agents/{agent}/context-usage",
         json={"agent": agent, "percent": 75, "updated_at": "2026-07-29T10:00:00+00:00"},
         headers=auth_headers,
     )
     assert response.status_code == 201
-    summaries = (await app.get("/api/v1/agents", headers=auth_headers)).json()
+    summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
     sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
     assert sample["status"] == "measured"
     assert sample["basis"] == "provider_reported_ratio"

@@ -12,7 +12,7 @@ CRONITER_AVAILABLE = importlib.util.find_spec("croniter") is not None
 async def test_create_job(app, auth_headers):
     """Test creating a new job."""
     resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Test Job",
             "agent": "kimi",
@@ -39,7 +39,7 @@ async def test_create_job_invalid_cron(app, auth_headers):
     if not CRONITER_AVAILABLE:
         pytest.skip("croniter not available")
     resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Bad Job",
             "agent": "kimi",
@@ -57,7 +57,7 @@ async def test_list_jobs(app, auth_headers):
     """Test listing all jobs."""
     # Create a couple of jobs
     await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Job 1",
             "agent": "kimi",
@@ -67,7 +67,7 @@ async def test_list_jobs(app, auth_headers):
         headers=auth_headers,
     )
     await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Job 2",
             "agent": "claude",
@@ -77,7 +77,7 @@ async def test_list_jobs(app, auth_headers):
         headers=auth_headers,
     )
 
-    resp = await app.get("/api/v1/jobs", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
     assert resp.status_code == 200
     jobs = resp.json()
     assert len(jobs) >= 2
@@ -90,7 +90,7 @@ async def test_list_jobs(app, auth_headers):
 async def test_get_job_by_id(app, auth_headers):
     """Test getting a specific job by ID."""
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Get Job",
             "agent": "kimi",
@@ -101,7 +101,7 @@ async def test_get_job_by_id(app, auth_headers):
     )
     job_id = create_resp.json()["id"]
 
-    resp = await app.get(f"/api/v1/jobs/{job_id}", headers=auth_headers)
+    resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     assert data["id"] == job_id
@@ -112,7 +112,7 @@ async def test_get_job_by_id(app, auth_headers):
 @pytest.mark.asyncio
 async def test_get_job_not_found(app, auth_headers):
     """Test getting a non-existent job."""
-    resp = await app.get("/api/v1/jobs/job-nonexistent123", headers=auth_headers)
+    resp = await app.get("/api/v1/projects/proj-test/jobs/job-nonexistent123", headers=auth_headers)
     assert resp.status_code == 404
 
 
@@ -120,7 +120,7 @@ async def test_get_job_not_found(app, auth_headers):
 async def test_update_job(app, auth_headers):
     """Test updating a job."""
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Update Job",
             "agent": "kimi",
@@ -133,7 +133,7 @@ async def test_update_job(app, auth_headers):
 
     # Update the job
     resp = await app.patch(
-        f"/api/v1/jobs/{job_id}",
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
         json={
             "name": "Updated Name",
             "message": "Updated message",
@@ -154,7 +154,7 @@ async def test_update_job_invalid_cron(app, auth_headers):
     if not CRONITER_AVAILABLE:
         pytest.skip("croniter not available")
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Update Job",
             "agent": "kimi",
@@ -166,7 +166,7 @@ async def test_update_job_invalid_cron(app, auth_headers):
     job_id = create_resp.json()["id"]
 
     resp = await app.patch(
-        f"/api/v1/jobs/{job_id}",
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
         json={"cron": "bad cron"},
         headers=auth_headers,
     )
@@ -177,7 +177,7 @@ async def test_update_job_invalid_cron(app, auth_headers):
 async def test_pause_and_resume_job(app, auth_headers):
     """Test pausing and resuming a job."""
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Toggle Job",
             "agent": "kimi",
@@ -192,7 +192,7 @@ async def test_pause_and_resume_job(app, auth_headers):
 
     # Pause the job
     resp = await app.patch(
-        f"/api/v1/jobs/{job_id}",
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
         json={"enabled": False},
         headers=auth_headers,
     )
@@ -201,7 +201,7 @@ async def test_pause_and_resume_job(app, auth_headers):
 
     # Resume the job
     resp = await app.patch(
-        f"/api/v1/jobs/{job_id}",
+        f"/api/v1/projects/proj-test/jobs/{job_id}",
         json={"enabled": True},
         headers=auth_headers,
     )
@@ -213,7 +213,7 @@ async def test_pause_and_resume_job(app, auth_headers):
 async def test_delete_job(app, auth_headers):
     """Test deleting a job."""
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Delete Job",
             "agent": "kimi",
@@ -225,11 +225,11 @@ async def test_delete_job(app, auth_headers):
     job_id = create_resp.json()["id"]
 
     # Delete the job
-    resp = await app.delete(f"/api/v1/jobs/{job_id}", headers=auth_headers)
+    resp = await app.delete(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
     assert resp.status_code == 204
 
     # Verify it's gone
-    get_resp = await app.get(f"/api/v1/jobs/{job_id}", headers=auth_headers)
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
     assert get_resp.status_code == 404
 
 
@@ -237,7 +237,7 @@ async def test_delete_job(app, auth_headers):
 async def test_run_job_disabled(app, auth_headers):
     """Test running a disabled job fails."""
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Disabled Job",
             "agent": "kimi",
@@ -250,7 +250,7 @@ async def test_run_job_disabled(app, auth_headers):
     job_id = create_resp.json()["id"]
 
     # Try to run the disabled job
-    resp = await app.post(f"/api/v1/jobs/{job_id}/run", headers=auth_headers)
+    resp = await app.post(f"/api/v1/projects/proj-test/jobs/{job_id}/run", headers=auth_headers)
     assert resp.status_code == 400
     assert "disabled" in resp.json()["detail"].lower()
 
@@ -258,7 +258,9 @@ async def test_run_job_disabled(app, auth_headers):
 @pytest.mark.asyncio
 async def test_run_job_not_found(app, auth_headers):
     """Test running a non-existent job."""
-    resp = await app.post("/api/v1/jobs/job-nonexistent/run", headers=auth_headers)
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs/job-nonexistent/run", headers=auth_headers
+    )
     assert resp.status_code == 404
 
 
@@ -266,7 +268,7 @@ async def test_run_job_not_found(app, auth_headers):
 async def test_job_with_custom_id_rejected(app, auth_headers):
     """Client-supplied IDs are rejected from Create schemas (S5)."""
     resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "id": "my-custom-job-id",
             "name": "Custom ID Job",
@@ -283,7 +285,7 @@ async def test_job_with_custom_id_rejected(app, auth_headers):
 async def test_job_ids_are_server_generated(app, auth_headers):
     """Job IDs are generated by the server, not accepted from clients."""
     resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Server Generated ID Job",
             "agent": "kimi",
@@ -301,7 +303,7 @@ async def test_job_source_field(app, auth_headers):
     """Test that source field is set correctly."""
     # Default should be "hub"
     resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Source Test",
             "agent": "kimi",
@@ -314,7 +316,7 @@ async def test_job_source_field(app, auth_headers):
 
     # Can set to "local"
     resp2 = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Local Job",
             "agent": "kimi",
@@ -332,7 +334,7 @@ async def test_job_session_modes(app, auth_headers):
     """Test creating jobs with different session modes."""
     # New session mode
     resp1 = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "New Session Job",
             "agent": "kimi",
@@ -346,7 +348,7 @@ async def test_job_session_modes(app, auth_headers):
 
     # Resume session mode
     resp2 = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "Resume Session Job",
             "agent": "claude",
@@ -364,7 +366,7 @@ async def test_job_history_tracks_runs(app, auth_headers):
     """Test that job history tracks runs."""
     # Create a job
     create_resp = await app.post(
-        "/api/v1/jobs",
+        "/api/v1/projects/proj-test/jobs",
         json={
             "name": "History Job",
             "agent": "kimi",
@@ -378,7 +380,7 @@ async def test_job_history_tracks_runs(app, auth_headers):
     assert create_resp.json()["run_count"] == 0
 
     # Run the job
-    run_resp = await app.post(f"/api/v1/jobs/{job_id}/run", headers=auth_headers)
+    run_resp = await app.post(f"/api/v1/projects/proj-test/jobs/{job_id}/run", headers=auth_headers)
 
     # If scheduler not available, skip this test
     if run_resp.status_code == 503:
@@ -389,7 +391,7 @@ async def test_job_history_tracks_runs(app, auth_headers):
     assert run_resp.json()["success"] is True
 
     # Check that run_count increased
-    get_resp = await app.get(f"/api/v1/jobs/{job_id}", headers=auth_headers)
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
     assert get_resp.json()["run_count"] == 1
     assert len(get_resp.json()["history"]) == 1
 
@@ -398,7 +400,7 @@ async def test_job_history_tracks_runs(app, auth_headers):
 async def test_update_job_not_found(app, auth_headers):
     """Test updating a non-existent job."""
     resp = await app.patch(
-        "/api/v1/jobs/job-nonexistent",
+        "/api/v1/projects/proj-test/jobs/job-nonexistent",
         json={"name": "New Name"},
         headers=auth_headers,
     )
@@ -408,5 +410,5 @@ async def test_update_job_not_found(app, auth_headers):
 @pytest.mark.asyncio
 async def test_delete_job_not_found(app, auth_headers):
     """Test deleting a non-existent job."""
-    resp = await app.delete("/api/v1/jobs/job-nonexistent", headers=auth_headers)
+    resp = await app.delete("/api/v1/projects/proj-test/jobs/job-nonexistent", headers=auth_headers)
     assert resp.status_code == 404

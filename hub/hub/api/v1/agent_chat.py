@@ -1,4 +1,4 @@
-"""Agent chat endpoints — GET /api/v1/agent/{agent}/chat[/{session_id}]
+"""Project-scoped agent chat endpoints.
 
 Returns the merged conversation timeline for one agent (task 8.3): operator
 input, the agent's own output, and agent-to-agent traffic in both
@@ -134,9 +134,7 @@ async def _queued_entries_for(
     if conversation_id is not None:
         predicates.append(InboundQueueEntry.conversation_id == conversation_id)
     result = await session.execute(
-        select(InboundQueueEntry)
-        .where(*predicates)
-        .order_by(InboundQueueEntry.sequence)
+        select(InboundQueueEntry).where(*predicates).order_by(InboundQueueEntry.sequence)
     )
     return [
         _queue_entry_to_timeline(entry, hop_budget, delivered=False)
@@ -157,7 +155,9 @@ async def list_conversations(
         .where(Conversation.project_id == project_id, Conversation.agent == agent)
         .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     )
-    return [ConversationResponse.model_validate(row, from_attributes=True) for row in result.scalars()]
+    return [
+        ConversationResponse.model_validate(row, from_attributes=True) for row in result.scalars()
+    ]
 
 
 @router.get("/{agent}/chat/{conversation_id}", response_model=ChatHistoryResponse)
@@ -171,11 +171,7 @@ async def get_chat_history(
     project_id, _ = project
 
     conversation = await session.get(Conversation, conversation_id)
-    if (
-        conversation is None
-        or conversation.project_id != project_id
-        or conversation.agent != agent
-    ):
+    if conversation is None or conversation.project_id != project_id or conversation.agent != agent:
         from fastapi import HTTPException
 
         raise HTTPException(status_code=404, detail="Conversation not found")

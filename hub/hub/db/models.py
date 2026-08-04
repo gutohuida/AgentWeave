@@ -25,6 +25,16 @@ class Base(DeclarativeBase):
     pass
 
 
+PROJECT_DIRECTORY_STATES = (
+    "unbound",
+    "available",
+    "missing",
+    "unreadable",
+    "not_directory",
+    "identity_conflict",
+)
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -47,6 +57,15 @@ class Project(Base):
     charters_seeded: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    working_directory: Mapped[Optional[str]] = mapped_column(String(4096), nullable=True)
+    path_key: Mapped[Optional[str]] = mapped_column(String(4096), nullable=True, unique=True)
+    directory_state: Mapped[str] = mapped_column(
+        String(32), default="unbound", server_default="unbound", nullable=False
+    )
+    last_opened_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
@@ -59,6 +78,14 @@ class Project(Base):
     turn_usages: Mapped[List["TurnUsage"]] = relationship(back_populates="project")
     runners: Mapped[List["Runner"]] = relationship(back_populates="project")
     charters: Mapped[List["Charter"]] = relationship(back_populates="project")
+
+    __table_args__ = (
+        CheckConstraint(
+            "directory_state IN ('unbound', 'available', 'missing', 'unreadable', "
+            "'not_directory', 'identity_conflict')",
+            name="ck_projects_directory_state",
+        ),
+    )
 
 
 class Agent(Base):
@@ -173,6 +200,19 @@ class ApiKey(Base):
     project: Mapped["Project"] = relationship(back_populates="api_keys")
 
 
+class OperatorCredential(Base):
+    """Instance-local operator secret; deliberately carries no project identity."""
+
+    __tablename__ = "operator_credentials"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    label: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+
 CONVERSATION_LIFECYCLES = ("open", "archived")
 
 
@@ -197,9 +237,7 @@ class Conversation(Base):
     project: Mapped["Project"] = relationship(back_populates="conversations")
 
     __table_args__ = (
-        CheckConstraint(
-            "lifecycle IN ('open', 'archived')", name="ck_conversations_lifecycle"
-        ),
+        CheckConstraint("lifecycle IN ('open', 'archived')", name="ck_conversations_lifecycle"),
         Index("ix_conversations_project_agent_updated", "project_id", "agent", "updated_at"),
         Index(
             "uq_conversations_project_agent_provider_session",
@@ -506,9 +544,7 @@ class Run(Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"
-        ),
+        CheckConstraint("initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"),
         Index("ix_runs_project_agent", "project_id", "agent"),
         Index("ix_runs_project_status", "project_id", "status"),
         Index("ix_runs_conversation_started", "conversation_id", "started_at"),
@@ -527,9 +563,7 @@ class TurnUsage(Base):
     run_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("runs.id"), unique=True, nullable=False
     )
-    project_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("projects.id"), nullable=False
-    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     runner: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
@@ -549,9 +583,7 @@ class TurnUsage(Base):
     project: Mapped["Project"] = relationship(back_populates="turn_usages")
 
     __table_args__ = (
-        CheckConstraint(
-            "status IN ('measured', 'unavailable')", name="ck_turn_usage_status"
-        ),
+        CheckConstraint("status IN ('measured', 'unavailable')", name="ck_turn_usage_status"),
         CheckConstraint(
             "(status = 'measured' AND total_tokens IS NOT NULL) OR "
             "(status = 'unavailable' AND input_tokens IS NULL AND output_tokens IS NULL "
@@ -660,7 +692,9 @@ class JobRun(Base):
     )  # "scheduled" or "manual"
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     error_summary: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    requested_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    requested_by_run_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
 
     __table_args__ = (Index("ix_job_runs_job_fired", "job_id", "fired_at"),)
 
