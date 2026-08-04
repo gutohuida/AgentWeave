@@ -23,9 +23,10 @@ Then start AgentWeave:
 agentweave
 ```
 
-The first launch creates user-local Hub state, runs database migrations, starts the native Hub, and
-opens the dashboard at `http://localhost:8000`. Configure agents and collaboration from the
-dashboard. Re-running `agentweave` opens the existing instance.
+The first launch creates user-local Hub state, runs database migrations, starts the native Hub,
+registers the current directory as a project, and opens its overview at `http://localhost:8000`.
+Run `agentweave` from another directory to add or reopen that project in the same instance.
+Projects keep separate agents, conversations, tasks, settings, caches, and runtime workspaces.
 
 ## CLI
 
@@ -34,7 +35,7 @@ The CLI manages only the local application instance:
 ```bash
 agentweave                 # Start or open the app
 agentweave doctor          # Check installation and runtime readiness
-agentweave status          # Show instance URL, port, and project
+agentweave status          # Show instance URL, port, and project collection
 agentweave stop            # Stop the local instance
 agentweave reset           # Delete local Hub state after confirmation
 agentweave --version
@@ -63,8 +64,10 @@ Important environment settings include:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Bootstrap project ID |
-| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Bootstrap project name |
+| `AW_BOOTSTRAP_API_KEY` | generated | Instance-local operator credential |
+| `AW_BOOTSTRAP_PROJECT_ID` | unset | Legacy migration bootstrap only |
+| `AW_WORKSPACE_ROOT` | unset | Container-visible project root in explicit Docker mode |
+| `AW_WORKSPACE_HOST_ROOT` | `./workspaces` | Host directory mounted at `/workspaces` by Compose |
 | `AW_PORT` | `8000` | Hub port |
 | `AW_HOST` | `127.0.0.1` | Native bind address |
 | `DATABASE_URL` | generated SQLite URL | Database connection |
@@ -76,7 +79,8 @@ never returned by readiness or diagnostic APIs.
 
 Every running agent receives a short-lived run token. That identity can access only the project and
 agent actions permitted to that run. HTTP, MCP, and CLI adapters expose the same action set and
-authorization semantics; operator APIs continue to use project credentials.
+authorization semantics. Operator APIs use one instance credential and carry project identity in
+their URL; choosing a project is navigation, not authentication.
 
 ## Development
 

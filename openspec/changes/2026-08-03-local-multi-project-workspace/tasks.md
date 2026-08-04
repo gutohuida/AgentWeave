@@ -120,7 +120,7 @@
 - [x] 6.2 Remove obsolete one-project adapters, bootstrap-project assumptions, completed auth code,
       and dead session fallback; use repository search to account for every remaining `Path.cwd()`
       and project-scoped `ApiKey` reference.
-- [ ] 6.3 Update README, CLI/environment/configuration docs, AGENTS.md/CLAUDE.md architecture notes,
+- [x] 6.3 Update README, CLI/environment/configuration docs, AGENTS.md/CLAUDE.md architecture notes,
       and UI copy for local project workflow and Docker limits.
 - [ ] 6.4 Live-verify under `testbed/`: migrate one legacy project, open/create a second, run agents
       concurrently, switch during output, move/repair one directory, observe one SSE stream, and

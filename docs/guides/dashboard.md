@@ -1,6 +1,19 @@
 # Using the Dashboard
 
-The AgentWeave Hub includes a web dashboard at **http://localhost:8000** that gives you real-time visibility into everything your agents are doing.
+The AgentWeave Hub includes a web dashboard at **http://localhost:8000** that gives you real-time
+visibility into every registered project and its agents.
+
+## Projects and navigation
+
+The left rail is a live collection of registered projects and their agents. Selecting a project
+opens project-scoped content tabs: **Overview**, **Tasks**, **Spec**, **Jobs**, **Activity**, and
+**Environment**. The browser URL records the selected project, view, agent, and AgentWeave
+conversation, so reload and back/forward navigation restore the same destination.
+
+Use the project controls in the rail to open an existing directory or explicitly create and
+register a new one. A missing or moved project remains visible; use **Locate** in Environment
+settings to rebind it without losing history. In Docker, submitted paths must be container-visible
+below the configured mounted workspace root.
 
 ## Dashboard Sections
 
@@ -30,7 +43,7 @@ Inter-agent messages with expand-to-read for long content. The message type and 
 
 Questions agents have asked you. Answer directly in the dashboard without switching to your terminal.
 
-### Agent Activity
+### Activity
 
 Live event stream and per-agent output log. See what each agent is doing in real time.
 
@@ -52,7 +65,7 @@ Each agent maintains separate conversation sessions. Use the session selector to
 - Start a new chat for a different topic
 - Review historical interactions
 
-### AI Jobs
+### Jobs
 
 View and manage scheduled recurring tasks:
 

@@ -49,6 +49,7 @@ export function ProjectManagerModal({
         <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Open existing project'}</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
           {mode === 'create' ? 'The target must not already contain project files.' : 'The directory must already exist.'}
+          {' '}The path must be visible to the Hub process — when the Hub runs in Docker, it must lie beneath the configured mounted workspace root.
         </p>
         <label className="mt-4 block text-xs">
           Directory path

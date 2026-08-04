@@ -6,9 +6,11 @@ Set these in the Hub's `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | API key for Hub authentication. Format: `aw_live_{32 hex chars}` |
-| `AW_BOOTSTRAP_PROJECT_ID` | `proj-default` | Default project ID |
-| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the default project |
+| `AW_BOOTSTRAP_API_KEY` | auto-generated if empty | Instance operator credential for Hub authentication. Format: `aw_live_{32 hex chars}`. A pre-multi-project value is promoted unchanged onto the instance operator plane |
+| `AW_BOOTSTRAP_PROJECT_ID` | *(unset)* | Legacy bootstrap only. When explicitly present, startup creates one unbound project with this ID so a pre-multi-project installation can be bound on first open. A fresh install leaves it unset and starts with zero projects |
+| `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the legacy bootstrap project |
+| `AW_WORKSPACE_ROOT` | *(empty — native mode)* | Container-visible workspace root. When set (explicit Docker mode), project open/create/relocate accept only directories beneath this root; anything else is refused with a typed `project_workspace_not_mounted` diagnostic. The Hub never guesses host/container path mappings |
+| `AW_WORKSPACE_HOST_ROOT` | `./workspaces` | Docker Compose only: host directory mounted at `AW_WORKSPACE_ROOT` (`/workspaces`) inside the container. Point it at the host directory that holds your projects |
 | `AW_HOST` | `127.0.0.1` | Interface the Hub binds to when started via the `agentweave-hub` console script (native/host mode). Docker always binds `0.0.0.0` inside the container regardless of this variable |
 | `AW_PORT` | `8000` | Port the Hub listens on |
 | `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS. Leave empty in production if UI is served from same origin |
@@ -40,3 +42,4 @@ AgentWeave automatically loads a `.env` file from the current working directory.
 - Never commit `AW_BOOTSTRAP_API_KEY` to version control
 - API keys for proxy agents are resolved at runtime from environment variables or a `.env` file in the project root
 - Only the environment variable *name* is stored in AgentWeave config files
+- The Docker deployment never mounts the Docker socket; project isolation comes from the single configured workspace-root mount

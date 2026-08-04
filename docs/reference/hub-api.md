@@ -158,12 +158,13 @@ See [AI Jobs Guide](../guides/ai-jobs.md) for detailed usage.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/setup/token` | Get the bootstrap API key from a local or Docker-internal client |
+| `GET` | `/setup/token` | Get the instance operator credential from a local or Docker-internal client |
 
 The Hub health check is available outside the API prefix at `GET /health`.
 
-Used by the native app bootstrap to obtain its local project credential without displaying or
-copying it through an operator command.
+Used by the native app bootstrap to obtain its local instance credential without displaying or
+copying it through an operator command. The credential selects no project; operator project
+resources carry explicit `/projects/{project_id}/...` identity.
 
 ### Project Instructions
 

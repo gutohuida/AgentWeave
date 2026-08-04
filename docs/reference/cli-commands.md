@@ -10,7 +10,8 @@ agentweave [--port PORT] [--docker] [--local] [--no-detach]
 ```
 
 Bare invocation starts the native Hub in app mode by default. If it is already running, AgentWeave
-opens that instance.
+opens that instance. The invocation directory is registered (or reopened) as a project; one Hub
+instance can serve many projects, each with its own agents, tasks, and settings.
 
 ## Doctor
 
@@ -27,8 +28,8 @@ IDs and never includes secret values.
 agentweave status [--port PORT]
 ```
 
-Reports whether the instance is running, its URL, native PID when applicable, and bootstrap project
-identity when available.
+Reports whether the instance is running, its URL, native PID when applicable, and the live
+instance/project collection state when available.
 
 ## Stop
 

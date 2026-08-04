@@ -217,7 +217,20 @@ mkdocs gh-deploy
 The CLI commands shown below are the **product surface you implement and test**, not a workflow to
 run in this repo. Read them as "this is what a user types." To exercise one, use `testbed/`.
 
-### 1. Runner, Agent, and Charter Separation
+### 1. Local Multi-Project Workspace
+
+One Hub instance owns a collection of directory-backed projects. `Project.id` is the durable
+identity; `working_directory` is a canonical, unique binding with a non-secret
+`.agentweave/project.json` marker. Operator routes carry an explicit
+`/api/v1/projects/{project_id}/...` prefix, frontend query keys begin with the project ID, and one
+operator SSE stream stamps every project event with trusted `project_id` context.
+
+All project filesystem access goes through `ProjectWorkspace`; project-aware Hub code must never
+use `Path.cwd()` as project identity. Native mode can register any valid local directory. Docker
+mode accepts only container-visible paths beneath `AW_WORKSPACE_ROOT`, mounted from
+`AW_WORKSPACE_HOST_ROOT`; it does not mount the Docker socket or infer host paths.
+
+### 2. Runner, Agent, and Charter Separation
 
 The Hub models execution capability, roster identity, and behavioral guidance independently:
 
@@ -229,7 +242,7 @@ Fresh projects seed two default runners and 21 starter charters. Operators autho
 the Hub's Runners, Charters, and agent-detail screens. There is no CLI role-assignment subsystem or
 fixed role enum; do not reintroduce `.agentweave/roles.json`, `roles.py`, or role-derived API fields.
 
-### 2. Claude-Proxy Agents (v0.12.0+)
+### 3. Claude-Proxy Agents (v0.12.0+)
 
 Run Minimax, GLM, or any OpenAI-compatible model through Claude Code CLI:
 
@@ -251,7 +264,7 @@ Built-in providers in `CLAUDE_PROXY_PROVIDERS`:
 - **minimax**: Default model `MiniMax-Text-01`
 - **glm**: Default model `glm-5`
 
-### 3. Transport Layer
+### 4. Transport Layer
 
 | Transport | Type | Use Case |
 |-----------|------|----------|
@@ -276,7 +289,7 @@ class BaseTransport(ABC):
     def get_transport_type(self) -> str: ...
 ```
 
-### 4. Task Lifecycle
+### 5. Task Lifecycle
 
 ```
 pending → assigned → in_progress → completed → under_review → approved
@@ -284,7 +297,7 @@ pending → assigned → in_progress → completed → under_review → approved
                                              ↘ rejected
 ```
 
-### 5. Hub MCP Server Tools (11 tools)
+### 6. Hub MCP Server Tools (11 tools)
 
 | Tool | Purpose |
 |------|---------|
@@ -300,7 +313,7 @@ pending → assigned → in_progress → completed → under_review → approved
 | `get_answer(question_id)` | Check human answer |
 | `get_agent_config(agent)` | Get agent runner config |
 
-### 6. Logging Architecture (v0.11.0+)
+### 7. Logging Architecture (v0.11.0+)
 
 Uses Python `logging` stdlib with two handlers:
 - `JSONRotatingFileHandler`: Writes to `.agentweave/logs/events.jsonl` (10MB rotation, 5 backups)
@@ -310,7 +323,7 @@ Environment variables:
 - `AW_LOG_LEVEL`: Default `WARNING`
 - `AW_LOG_FILE`: Optional custom log path
 
-### 7. Hub UI Components
+### 8. Hub UI Components
 
 Key React components in `hub/ui/src/components/`:
 

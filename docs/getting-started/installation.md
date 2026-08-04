@@ -58,6 +58,20 @@ agentweave hub start --docker
 This requires **Docker** and **Docker Compose**, downloads the configuration, starts the
 container, and fetches the API key.
 
+#### Mounted workspace root
+
+A containerized Hub can only see directories that are mounted into it. The Compose file maps
+one host directory — `AW_WORKSPACE_HOST_ROOT` (default `./workspaces`) — to the container
+workspace root `/workspaces`, and sets `AW_WORKSPACE_ROOT=/workspaces` so the Hub accepts
+project registrations only beneath that root.
+
+- Put (or move) every project you want to open somewhere beneath the host root, then register
+  it with its **container-visible** path, e.g. `/workspaces/my-project`.
+- A path that is not visible beneath the workspace root — for example a host-only path like
+  `/home/you/project` or `C:\Users\you\project` — is refused with a typed
+  `project_workspace_not_mounted` diagnostic that names the configured root.
+- The Hub never mounts the Docker socket and never guesses host/container path mappings.
+
 #### Manual Docker Setup
 
 If you prefer manual control:
@@ -72,6 +86,9 @@ cp .env.example .env
 
 # Optional: set a custom API key (auto-generated if not set)
 # Edit .env and set AW_BOOTSTRAP_API_KEY
+
+# Point the workspace root at the directory holding your projects
+# Edit .env and set AW_WORKSPACE_HOST_ROOT=/path/to/your/projects
 
 # Start the Hub
 docker compose up -d

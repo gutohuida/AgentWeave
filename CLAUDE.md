@@ -103,6 +103,19 @@ make test-all
 
 ## Architecture Overview
 
+### Local multi-project boundary
+
+One local Hub instance owns a collection of projects. A project's database ID is durable and its
+canonical working directory is a unique binding recorded by a non-secret
+`.agentweave/project.json` marker. Operator APIs include explicit project IDs in their routes,
+frontend server-state keys are project-prefixed, and the instance operator SSE stream stamps each
+event with its trusted project ID.
+
+Resolve every project filesystem path through `ProjectWorkspace`; never use the Hub process's
+`Path.cwd()` as project identity. Native mode can open valid local directories. Docker mode accepts
+only container-visible paths beneath `AW_WORKSPACE_ROOT`, mounted from
+`AW_WORKSPACE_HOST_ROOT`, without Docker-socket access or host-path guessing.
+
 ### CLI (`src/agentweave/`)
 
 ```
