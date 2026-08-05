@@ -11,6 +11,7 @@ import {
 } from '@/api/agents'
 import { useAgentChatHistory, useAgentConversations, useAgentRecentChat } from '@/api/agentChat'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
+import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
@@ -49,6 +50,10 @@ interface TriggerResult {
   provider_session_id?: string | null
 }
 
+function emptyToUndefined(overrides: Record<string, string>): Record<string, string> | undefined {
+  return Object.keys(overrides).length > 0 ? overrides : undefined
+}
+
 export function AgentOutputPanel({
   agent,
   onBackToProject,
@@ -73,9 +78,17 @@ export function AgentOutputPanel({
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
   const [targetAgent, setTargetAgent] = useState(agent.name)
+  const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
   const { data: conversations = [] } = useAgentConversations(agent.name)
+  // Read inside the effect below rather than as a dependency: useAgentConversations's
+  // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
+  // reference changes more often than the value it carries — depending on the array
+  // itself re-fires the effect on every such change and loops forever when the derived
+  // setState result is itself a new object each time.
+  const conversationsRef = useRef(conversations)
+  conversationsRef.current = conversations
 
   useEffect(() => {
     setSelectedConversationId(initialConversationId ?? '')
@@ -84,9 +97,31 @@ export function AgentOutputPanel({
     setSubmissionError(null)
     setIsStopping(false)
     setTargetAgent(agent.name)
+    setPendingOverrides({})
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
   }, [agent.name, initialConversationId])
+
+  // The composer's model/effort pills show the currently selected conversation's own
+  // persisted overrides (task: "An override survives reload"); redirecting to a
+  // different target agent has no conversation history to seed from, so it resets to
+  // that agent's own catalog defaults instead.
+  useEffect(() => {
+    if (targetAgent !== agent.name) {
+      setPendingOverrides({})
+      return
+    }
+    const current = conversationsRef.current.find((c) => c.id === selectedConversationId)
+    const seeded = current?.runtime_overrides ?? {}
+    // Skip the update when the seeded value is already equivalent — without this, a
+    // fresh-but-equal object from a react-query refetch would still trigger a render.
+    setPendingOverrides((existing) =>
+      JSON.stringify(existing) === JSON.stringify(seeded) ? existing : seeded,
+    )
+    // conversations.length (not the array itself) re-seeds once the list first arrives,
+    // without depending on an identity that changes more often than its content does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetAgent, agent.name, selectedConversationId, conversations.length])
 
   useEffect(() => {
     onConversationChangeRef.current?.(
@@ -148,6 +183,9 @@ export function AgentOutputPanel({
       : undefined
 
   const { data: roster = [] } = useAgents()
+  const { data: runners = [] } = useRunners()
+  const targetAgentRow = roster.find((a) => a.name === targetAgent)
+  const targetRunnerRow = runners.find((r) => r.id === targetAgentRow?.runner_id)
   const { data: launchabilityData } = useAgentLaunchability()
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
@@ -181,6 +219,7 @@ export function AgentOutputPanel({
     triggerMessage: string,
     conversationId?: string,
     agentName: string = agent.name,
+    overrides?: Record<string, string>,
   ): Promise<TriggerResult> => {
     const response = await fetch(`/api/v1/projects/${projectId}/agent/trigger`, {
       method: 'POST',
@@ -192,6 +231,7 @@ export function AgentOutputPanel({
         agent: agentName,
         message: triggerMessage,
         conversation_id: conversationId,
+        overrides,
       }),
     })
     if (!response.ok) {
@@ -307,6 +347,7 @@ export function AgentOutputPanel({
         outgoingMessage,
         isNew ? undefined : selectedConversationId,
         targetAgent,
+        emptyToUndefined(pendingOverrides),
       )
       if (redirectsAgent) {
         onAgentConversationChange?.(targetAgent, result.conversation_id)
@@ -461,6 +502,13 @@ export function AgentOutputPanel({
               launchability={launchabilityData?.agents ?? {}}
               targetAgent={targetAgent}
               onTargetAgentChange={setTargetAgent}
+              runner={targetRunnerRow?.cli ?? null}
+              effectiveModel={targetRunnerRow?.model ?? null}
+              pendingOverrides={pendingOverrides}
+              onPendingOverridesChange={setPendingOverrides}
+              conversations={conversations}
+              onSelectConversation={selectConversation}
+              onNewConversation={() => selectConversation(NEW_CONVERSATION_VALUE)}
             />
           </div>
         </div>

@@ -52,6 +52,15 @@ vi.mock('@/api/workspace', () => ({
   useWorkspacePaths: () => ({ data: [] }),
 }))
 
+vi.mock('@/api/runners', () => ({
+  useRunners: () => ({ data: [] }),
+}))
+
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: undefined }) }
+})
+
 const fetchMock = vi.fn()
 ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = fetchMock
 

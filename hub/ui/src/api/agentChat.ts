@@ -49,6 +49,9 @@ export interface AgentConversation {
   lifecycle: 'open' | 'archived'
   created_at: string
   updated_at: string
+  /** Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}). Null/empty
+   * means the conversation inherits its agent's runner and the catalog's defaults. */
+  runtime_overrides?: Record<string, string> | null
 }
 
 export function useAgentConversations(agent: string | null) {

@@ -8,6 +8,11 @@ import {
 } from '@/components/agents/Composer'
 import { getComposerDraft } from '@/lib/composerDrafts'
 
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: undefined }) }
+})
+
 function renderComposer(overrides: Partial<ComposerProps> = {}) {
   const onSubmit = vi.fn().mockResolvedValue(undefined)
   const props: ComposerProps = {

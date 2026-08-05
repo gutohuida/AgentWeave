@@ -51,6 +51,11 @@ vi.mock('@/api/runners', () => ({
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: undefined }) }
+})
+
 vi.mock('@/api/charters', () => ({
   useCharters: () => ({ data: [], isLoading: false }),
   useBindAgentCharter: () => ({ mutate: vi.fn(), isPending: false, isError: false }),

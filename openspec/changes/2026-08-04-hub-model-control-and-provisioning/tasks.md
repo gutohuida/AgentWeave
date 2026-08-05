@@ -119,16 +119,37 @@ investigation task precedes implementation.
 
 ## 5. Composer controls and routing
 
-- [ ] 5.1 Add a React Query hook for the catalog.
-- [ ] 5.2 Build a control component that renders any declared control by kind, with no hardcoded
-      provider knowledge.
-- [ ] 5.3 Place the model and control selectors in the composer control row's leading slot.
-- [ ] 5.4 Present the current model and control values at rest, without opening a menu.
-- [ ] 5.5 Re-derive the presented controls when the target agent's provider changes.
-- [ ] 5.6 Add conversation routing — continue the current conversation or begin a new one — and make
-      the destination visible before sending.
-- [ ] 5.7 Tests: controls follow the provider; a message routes to the stated conversation; the
-      interface hardcodes no provider models or control values.
+- [x] 5.1 Add a React Query hook for the catalog. (`useModelCatalog` in `api/modelCatalog.ts`,
+      instance-scoped like `useProjects` — exempted in `projectScopedApiContract.test.tsx` for the
+      same reason.)
+- [x] 5.2 Build a control component that renders any declared control by kind, with no hardcoded
+      provider knowledge. (`ComposerModelControls.tsx` — currently renders `kind: "enum"`; `boolean`/
+      `number` are declared in the schema but no catalog entry uses them yet, so no renderer exists
+      for them either. Add one when the catalog gains a control of that kind, not before.)
+- [x] 5.3 Place the model and control selectors in the composer control row's leading slot.
+- [x] 5.4 Present the current model and control values at rest, without opening a menu. (Each pill
+      shows "Label: Value" — the trigger itself, not a menu, carries the current value.)
+- [x] 5.5 Re-derive the presented controls when the target agent's provider changes. (`runner` prop
+      resolved from the *target* agent, not the panel's own agent, so redirecting the composer to a
+      different agent — the existing `ComposerAgentSelector` mechanism — re-derives the catalog
+      provider too.)
+- [x] 5.6 Add conversation routing — continue the current conversation or begin a new one — and make
+      the destination visible before sending. (`ComposerConversationRouting.tsx`, a "To: …" pill in
+      the composer itself. Note: `ConversationControls`' header menu already had New/select-existing
+      — this adds the same choice *in the composer*, visible without opening the header's separate
+      menu, per the requirement's literal text.)
+- [x] 5.7 Tests: controls follow the provider; a message routes to the stated conversation; the
+      interface hardcodes no provider models or control values. (`composerModelControls.test.tsx` —
+      10 tests, source-contract test strips comments before scanning so doc-comment examples like
+      `// e.g. "claude", "codex"` don't self-trigger.)
+
+**Bug found and fixed during this section, unrelated to the task list above:** seeding the
+composer's pending-overrides state from `conversations.find(...)` inside a `useEffect` that
+depended on the `conversations` array itself infinite-looped in `agentRunningComposer.test.tsx`
+(and would be fragile in production too, on any refetch that returns a new array reference for
+unchanged data). Fixed by reading `conversations` through a ref inside the effect and keying the
+effect's re-seed on `conversations.length` instead of the array's identity, plus a
+value-equality guard on the `setState` call itself (`AgentOutputPanel.tsx`).
 
 ## 6. Agent creation by provider and model
 

@@ -24,7 +24,10 @@ const API_SOURCES = import.meta.glob('../api/*.ts', {
   eager: true,
 }) as Record<string, string>
 
-const INSTANCE_LEVEL_FILES = new Set(['client.ts', 'setup.ts', 'projects.ts'])
+// modelCatalog.ts: the model/provider/control catalog is static and identical for every
+// project (2026-08-04-hub-model-control-and-provisioning design.md), same rationale as
+// projects.ts's own exemption below.
+const INSTANCE_LEVEL_FILES = new Set(['client.ts', 'setup.ts', 'projects.ts', 'modelCatalog.ts'])
 
 function apiFiles(): Array<[name: string, source: string]> {
   return Object.entries(API_SOURCES)

@@ -3,6 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Composer, type ComposerProps } from '@/components/agents/Composer'
 
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: undefined }) }
+})
+
 const WORKSPACE_PATHS = [
   'src/index.ts',
   'src/components/agents/Composer.tsx',

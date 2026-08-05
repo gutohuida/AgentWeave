@@ -10,7 +10,10 @@ import {
 import { resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerAgentSelector } from './ComposerAgentSelector'
+import { ComposerModelControls } from './ComposerModelControls'
+import { ComposerConversationRouting } from './ComposerConversationRouting'
 import type { AgentLaunchability, AgentSummary } from '@/api/agents'
+import type { AgentConversation } from '@/api/agentChat'
 
 export const COMPOSER_MIN_ROWS = 3
 const COMPOSER_MAX_ROWS = 12
@@ -33,6 +36,22 @@ export interface ComposerProps {
   launchability?: Record<string, AgentLaunchability>
   targetAgent?: string
   onTargetAgentChange?: (agent: string) => void
+  /** The target agent's bound runner CLI — resolves which catalog provider's models and
+   * controls the composer offers (2026-08-04-hub-model-control-and-provisioning). Omitted
+   * (or one the catalog doesn't declare) renders no model/control pills. */
+  runner?: string | null
+  /** The value each control will use if the operator sends without touching it — the
+   * runner's own model / the catalog's declared default, resolved by the caller. */
+  effectiveModel?: string | null
+  effectiveControls?: Record<string, string>
+  /** The overrides the operator has actively chosen this composer session; empty means
+   * "no override, inherit the resolved effective values above." Sent with the next
+   * message only when non-empty. */
+  pendingOverrides?: Record<string, string>
+  onPendingOverridesChange?: (overrides: Record<string, string>) => void
+  conversations?: AgentConversation[]
+  onSelectConversation?: (id: string) => void
+  onNewConversation?: () => void
 }
 
 /**
@@ -51,6 +70,14 @@ export function Composer({
   launchability = {},
   targetAgent = agent,
   onTargetAgentChange = () => undefined,
+  runner = null,
+  effectiveModel = null,
+  effectiveControls = {},
+  pendingOverrides = {},
+  onPendingOverridesChange = () => undefined,
+  conversations = [],
+  onSelectConversation = () => undefined,
+  onNewConversation = () => undefined,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -239,6 +266,23 @@ export function Composer({
             launchability={launchability}
             selectedAgent={targetAgent}
             onSelect={onTargetAgentChange}
+          />
+          <ComposerModelControls
+            runner={runner}
+            effectiveModel={pendingOverrides.model ?? effectiveModel}
+            effectiveControls={{ ...effectiveControls, ...pendingOverrides }}
+            onChangeModel={(modelId) =>
+              onPendingOverridesChange({ ...pendingOverrides, model: modelId })
+            }
+            onChangeControl={(controlId, value) =>
+              onPendingOverridesChange({ ...pendingOverrides, [controlId]: value })
+            }
+          />
+          <ComposerConversationRouting
+            conversations={conversations}
+            currentConversationId={conversationId}
+            onSelectConversation={onSelectConversation}
+            onNewConversation={onNewConversation}
           />
         </div>
         <div className="flex items-center gap-2" data-slot="composer-control-row-trailing">
