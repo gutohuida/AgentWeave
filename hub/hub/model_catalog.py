@@ -183,41 +183,55 @@ class OverrideRejection:
 def validate_overrides(
     provider: str, overrides: Dict[str, str]
 ) -> Tuple[Dict[str, str], Optional[OverrideRejection]]:
-    """Validate *overrides* (control id -> value) against *provider*'s declared controls.
+    """Validate *overrides* (control id -> value, plus the special key ``"model"``) against
+    *provider*'s catalog entry.
 
-    Returns `(accepted, None)` when every override names a control the provider declares and a
-    value that control permits, or `({}, OverrideRejection)` on the first violation — the Hub's
-    own backstop so an invalid value is refused before a provider process ever starts, rather
-    than passed through to a CLI that might silently discard it (see proposal.md's "What the
-    spike established").
+    ``"model"`` is validated against the provider's declared `models[]` (it is not itself a
+    member of `controls[]` in the schema — see `design.md`'s descriptor shape); every other key
+    is validated against `controls[]`. Returns `(accepted, None)` when every override is
+    permitted, or `({}, OverrideRejection)` on the first violation — the Hub's own backstop so
+    an invalid value is refused before a provider process ever starts, rather than passed
+    through to a CLI that might silently discard it (see proposal.md's "What the spike
+    established").
     """
     entry = get_provider(provider)
     if entry is None:
         return {}, OverrideRejection(control="*", reason=f"unknown provider {provider!r}")
 
     accepted: Dict[str, str] = {}
-    for control_id, value in overrides.items():
-        control = entry.control(control_id)
+    for key, value in overrides.items():
+        if key == "model":
+            if entry.model(value) is None:
+                return {}, OverrideRejection(
+                    control="model",
+                    reason=f"{value!r} is not a model {provider!r} declares",
+                )
+            accepted["model"] = value
+            continue
+        control = entry.control(key)
         if control is None:
             return {}, OverrideRejection(
-                control=control_id,
-                reason=f"{provider!r} does not declare a {control_id!r} control",
+                control=key,
+                reason=f"{provider!r} does not declare a {key!r} control",
             )
         permitted = {v.id for v in control.values}
         if control.kind == "enum" and value not in permitted:
             return {}, OverrideRejection(
-                control=control_id,
-                reason=f"{value!r} is not a permitted value for {provider!r}'s {control_id!r} "
+                control=key,
+                reason=f"{value!r} is not a permitted value for {provider!r}'s {key!r} "
                 f"(permitted: {', '.join(sorted(permitted))})",
             )
-        accepted[control_id] = value
+        accepted[key] = value
     return accepted, None
 
 
 def render_control_args(provider: str, overrides: Dict[str, str]) -> List[str]:
     """Render already-validated *overrides* into argv, per each control's `ApplySpec`.
 
-    Unknown controls or an unrecognised provider render nothing — callers that need the
+    ``"model"`` is not itself a control (see `validate_overrides`) and has its own dedicated
+    application path in `runner_commands.build_command` — it is skipped here, so a caller may
+    pass the full override dict without stripping it out first. An unrecognised provider or an
+    otherwise-unknown control also renders nothing rather than raising — callers that need the
     validation failure use `validate_overrides` first, which is what `agent_trigger.py` does
     before this ever runs; this function itself never rejects, it only renders.
     """
@@ -226,6 +240,8 @@ def render_control_args(provider: str, overrides: Dict[str, str]) -> List[str]:
         return []
     args: List[str] = []
     for control_id, value in overrides.items():
+        if control_id == "model":
+            continue
         control = entry.control(control_id)
         if control is None or control.apply.style == "none":
             continue

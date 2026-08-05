@@ -311,7 +311,9 @@ class TestParseCodexLine:
         assert completed.events[0].kind == "tool_result"
         assert completed.events[0].payload["is_error"] is False
 
-    def test_turn_completed_yields_usage_with_fallback_limit(self):
+    def test_turn_completed_yields_usage_from_the_catalogs_context_window(self):
+        # 2026-08-04-hub-model-control-and-provisioning: the limit comes from
+        # model_catalog.model_context_window, not a local fallback table.
         parsed = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.5")
         assert parsed.usage is not None
         assert parsed.usage.status == "estimated"
@@ -322,9 +324,29 @@ class TestParseCodexLine:
         assert parsed.accounting.cache_read_tokens == 11008
         assert parsed.accounting.reasoning_tokens == 0
 
-    def test_turn_completed_unknown_model_uses_default_limit(self):
+    def test_turn_completed_unrecognised_model_reports_usage_as_unknown(self):
+        # The live symptom this replaces: an unrecognised model used to silently borrow
+        # a 128000-token default and could report over 100% of a window that was never
+        # actually its own. It now reports unknown usage as unknown instead.
         parsed = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="some-future-model")
-        assert parsed.usage.limit_tokens == 128000
+        assert parsed.usage is not None
+        assert parsed.usage.status == "unavailable"
+        assert parsed.usage.limit_tokens is None
+        assert parsed.usage.percent is None
+
+    def test_turn_completed_usage_is_attributed_to_the_model_that_ran_the_turn(self):
+        # A conversation whose model changed between turns must not have one turn's
+        # usage silently attributed to a different model's window.
+        sol = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.6-sol")
+        mini = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.4-mini")
+        assert sol.usage.model == "gpt-5.6-sol"
+        assert mini.usage.model == "gpt-5.4-mini"
+
+    def test_turn_completed_usage_never_exceeds_its_own_catalog_window(self):
+        parsed = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.5")
+        assert parsed.usage is not None
+        assert parsed.usage.percent is not None
+        assert parsed.usage.percent <= 100.0
 
     def test_turn_failed_yields_error_event(self):
         parsed = parse_codex_line(CODEX_TURN_FAILED_LINE)

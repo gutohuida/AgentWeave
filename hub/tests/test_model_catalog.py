@@ -65,6 +65,24 @@ class TestValidateOverrides:
         assert accepted == {}
         assert rejection is not None
 
+    def test_model_is_validated_against_the_provider_models_not_controls(self):
+        accepted, rejection = validate_overrides("claude", {"model": "claude-opus-5"})
+        assert rejection is None
+        assert accepted == {"model": "claude-opus-5"}
+
+    def test_a_model_not_in_the_provider_catalog_is_refused(self):
+        accepted, rejection = validate_overrides("claude", {"model": "gpt-5.6-sol"})
+        assert accepted == {}
+        assert rejection is not None
+        assert rejection.control == "model"
+
+    def test_model_and_control_overrides_validate_together(self):
+        accepted, rejection = validate_overrides(
+            "codex", {"model": "gpt-5.6-sol", "effort": "high"}
+        )
+        assert rejection is None
+        assert accepted == {"model": "gpt-5.6-sol", "effort": "high"}
+
 
 class TestRenderControlArgs:
     def test_claude_effort_renders_as_a_flag(self):
@@ -83,6 +101,14 @@ class TestRenderControlArgs:
         # render_control_args trusts its caller validated first; an unknown control is
         # simply skipped rather than raising, since validate_overrides is the gate.
         assert render_control_args("claude", {"verbosity": "high"}) == []
+
+    def test_model_key_is_skipped_not_rendered_as_a_control(self):
+        # "model" has its own dedicated application path in build_command — a caller may
+        # pass the full override dict (including "model") without stripping it first.
+        assert render_control_args("claude", {"model": "claude-opus-5", "effort": "high"}) == [
+            "--effort",
+            "high",
+        ]
 
 
 class TestProviderLookup:

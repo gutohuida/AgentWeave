@@ -226,6 +226,11 @@ class Conversation(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     provider_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     lifecycle: Mapped[str] = mapped_column(String(16), default="open", nullable=False)
+    # Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}), keyed by
+    # control identity so a new catalog control needs no migration. Null/empty means "no
+    # override" — the conversation inherits its agent's runner and the catalog's control
+    # defaults (2026-08-04-hub-model-control-and-provisioning design.md).
+    runtime_overrides: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

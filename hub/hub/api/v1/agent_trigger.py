@@ -50,6 +50,7 @@ from ...launchability import (
     resolve_access_path,
     resolve_agent_env,
 )
+from ...model_catalog import validate_overrides
 from ...output_recording import record_agent_output, record_context_usage
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
@@ -105,6 +106,12 @@ class TriggerAgentRequest(BaseModel):
         max_length=4096,
         description="Project-relative working directory for the agent process (read-only "
         "agents only; refused for a writing agent, which always gets its isolated worktree)",
+    )
+    overrides: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Runtime control overrides (e.g. {'model': 'claude-opus-5', "
+        "'effort': 'high'}), validated against the model catalog and persisted onto the "
+        "conversation before it is scheduled.",
     )
 
 
@@ -232,7 +239,13 @@ async def trigger_agent_directly(
     if existing.scalar() is not None:
         raise TriggerAgentError(status.HTTP_409_CONFLICT, f"{agent} already has a run in progress.")
 
-    model = config.get("model")
+    # Resolution order (design.md): conversation.runtime_overrides -> runner.model / runner
+    # defaults -> catalog control defaults. Overrides were already validated against the
+    # catalog when the operator set them (`trigger_agent`'s /trigger handler), so they are
+    # trusted here rather than re-validated per turn.
+    conversation_overrides = dict(conversation.runtime_overrides or {})
+    model = conversation_overrides.get("model") or config.get("model")
+    control_overrides = {k: v for k, v in conversation_overrides.items() if k != "model"}
     try:
         workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -321,6 +334,7 @@ async def trigger_agent_directly(
             yolo=yolo,
             mcp_command=mcp_command,
             extra_flags=runner_row.flags,
+            control_overrides=control_overrides,
         )
     except UnsupportedRunnerError as exc:
         raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
@@ -439,6 +453,8 @@ async def trigger_agent(
     session: AsyncSession = Depends(get_session),
 ):
     """Append input to an AgentWeave conversation and schedule it when possible."""
+    from sqlalchemy import select
+
     project_id, _ = project
     try:
         worktrees.validate_agent_name(body.agent)
@@ -492,6 +508,28 @@ async def trigger_agent(
     else:
         conversation = new_conversation(project_id=project_id, agent=body.agent)
         session.add(conversation)
+
+    if body.overrides:
+        agent_row_result = await session.execute(
+            select(Agent).where(Agent.project_id == project_id, Agent.name == body.agent)
+        )
+        agent_row = agent_row_result.scalars().first()
+        if agent_row is None or agent_row.runner_id is None:
+            raise HTTPException(
+                status_code=409, detail=f"{body.agent} has no runner bound; cannot set overrides."
+            )
+        runner_row = await session.get(Runner, agent_row.runner_id)
+        if runner_row is None:
+            raise HTTPException(
+                status_code=409, detail=f"{body.agent}'s bound runner no longer exists."
+            )
+        accepted, rejection = validate_overrides(runner_row.cli, body.overrides)
+        if rejection is not None:
+            raise HTTPException(status_code=400, detail=rejection.reason)
+        # Overrides are stored per conversation, not per agent — the runner binding
+        # this validated against is unchanged (design.md: "Rejected: overrides on the
+        # agent").
+        conversation.runtime_overrides = accepted
 
     entry = new_entry(
         project_id=project_id,

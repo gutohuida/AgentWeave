@@ -69,28 +69,53 @@ investigation task precedes implementation.
 
 ## 3. Per-conversation overrides
 
-- [ ] 3.1 Migration `0027`: add `Conversation.runtime_overrides` as a nullable JSON column.
-- [ ] 3.2 Resolve a turn's effective settings as conversation overrides, then the agent's runner,
-      then the catalog's control defaults.
-- [ ] 3.3 Extend `TriggerAgentRequest` to accept overrides, validate them against the catalog before
-      spawning, and refuse with a stated reason on failure.
-- [ ] 3.4 Persist accepted overrides onto the conversation.
-- [ ] 3.5 Expose a conversation's current overrides on the endpoints the composer reads.
-- [ ] 3.6 Tests: overrides persist across turns and reload; a new conversation inherits runner and
+- [x] 3.1 Migration `0027`: add `Conversation.runtime_overrides` as a nullable JSON column.
+- [x] 3.2 Resolve a turn's effective settings as conversation overrides, then the agent's runner,
+      then the catalog's control defaults. (`trigger_agent_directly`: `conversation.runtime_overrides`
+      -> `runner_row.model` / catalog defaults inside `build_command`.)
+- [x] 3.3 Extend `TriggerAgentRequest` to accept overrides, validate them against the catalog before
+      spawning, and refuse with a stated reason on failure. (Validated in the `/trigger` HTTP
+      handler via `model_catalog.validate_overrides`, using the target agent's bound runner's `cli`
+      as the provider — "model" is validated against `models[]`, not `controls[]`, since it isn't
+      itself a declared control in the approved schema.)
+- [x] 3.4 Persist accepted overrides onto the conversation.
+- [x] 3.5 Expose a conversation's current overrides on the endpoints the composer reads.
+      (`ConversationResponse.runtime_overrides` on `GET /{agent}/conversations`.)
+- [x] 3.6 Tests: overrides persist across turns and reload; a new conversation inherits runner and
       catalog defaults; changing one conversation leaves the agent and its other conversations
       unchanged; an invalid override refuses the turn and starts no process.
+      (`test_agent_trigger_overrides.py` — 6 tests. One test-authoring pitfall found and fixed:
+      reusing one `_fake_pty` mock across two real trigger calls in the same test hangs the second
+      call — the mock's `session.read` `side_effect` list is shared and gets exhausted by the
+      first call, so the second call's read loop never sees EOF. Each call needs its own mock.)
 
 ## 4. Context windows from the catalog
 
-- [ ] 4.1 Replace `CODEX_MODEL_CONTEXT_LIMITS` and `CODEX_DEFAULT_CONTEXT_LIMIT` in
+- [x] 4.1 Replace `CODEX_MODEL_CONTEXT_LIMITS` and `CODEX_DEFAULT_CONTEXT_LIMIT` in
       `runner_parsing.py` with catalog lookup.
-- [ ] 4.2 Remove the stale Claude substring table described in that module's own docstring.
-- [ ] 4.3 Implement the resolution order: provider self-report, then catalog, then unknown.
-- [ ] 4.4 Report unknown usage as unknown — no proportion, no pressure state, no budget pause.
-- [ ] 4.5 Attribute usage to the model that ran each turn so a conversation whose model changed is
-      measured correctly.
-- [ ] 4.6 Tests at all three branches, plus: reported usage never exceeds its own window. Confirm
+- [x] 4.2 Remove the stale Claude substring table described in that module's own docstring.
+      (Already absent from this module — the docstring described *not porting* the CLI's own
+      `CLAUDE_CONTEXT_LIMITS` table, so there was nothing here to remove; verified by reading the
+      file, not assumed from the docstring's wording.)
+- [x] 4.3 Implement the resolution order: provider self-report, then catalog, then unknown.
+      (Codex has no self-report branch to implement — confirmed absent from `turn.completed`,
+      matching the existing docstring's claim — so this is catalog, then unknown.)
+- [x] 4.4 Report unknown usage as unknown — no proportion, no pressure state, no budget pause.
+      (`status="unavailable"`, `limit_tokens=None` — the frontend's existing
+      `contextPresentation.ts` `unavailable` branch already renders this with no percentage, and
+      no backend code path pauses a turn on context pressure at all, confirmed by grep — nothing
+      to disable.)
+- [x] 4.5 Attribute usage to the model that ran each turn so a conversation whose model changed is
+      measured correctly. (Structural, not new code: each `Run` carries one resolved `model`,
+      `parse_codex_line`/`parse_claude_line` tag every sample with it, and section 3's override
+      resolution already threads the correct per-turn model in — verified with an integration test
+      exercising two turns under two different models in one conversation.)
+- [x] 4.6 Tests at all three branches, plus: reported usage never exceeds its own window. Confirm
       the live symptom is gone — an agent must not report over 100% of a default window.
+      (`test_runner_parsing.py` — rewrote the test that asserted the *old* 128000-default behaviour
+      into one asserting `status="unavailable"` instead, which is the live symptom's actual
+      reproduction case; added a same-window-never-exceeded test and a per-turn model-attribution
+      test. `test_agent_trigger_overrides.py` adds an end-to-end version through `/trigger`.)
 
 ## 5. Composer controls and routing
 

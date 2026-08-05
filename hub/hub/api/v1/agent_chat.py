@@ -58,6 +58,10 @@ class ConversationResponse(BaseModel):
     lifecycle: str
     created_at: datetime
     updated_at: datetime
+    # Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}). None/empty
+    # means the conversation inherits its agent's runner and the catalog's control defaults —
+    # this is what the composer reads to show the values the next message will use.
+    runtime_overrides: Optional[Dict[str, str]] = None
 
 
 class ChatHistoryResponse(BaseModel):

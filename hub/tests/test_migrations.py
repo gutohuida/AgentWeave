@@ -125,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0026. The full
+    migration runs cleanly and the version lands at 0027. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -133,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0026).
+    # Verify alembic_version is at the latest revision (0027).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0026", f"expected alembic_version=0026, got {version}"
+    assert version == "0027", f"expected alembic_version=0027, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,42 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0026"
+    assert version == "0027"
+
+
+def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
+    """0027 applies to an existing database and existing conversations load with no overrides."""
+    db_file = tmp_path / "old_0026.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0026')")
+        conn.execute(
+            "CREATE TABLE conversations "
+            "(id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(64) NOT NULL, "
+            "agent VARCHAR(64) NOT NULL, provider_session_id VARCHAR(128), "
+            "lifecycle VARCHAR(16) NOT NULL, created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL, archived_at DATETIME)"
+        )
+        conn.execute(
+            "INSERT INTO conversations "
+            "(id, project_id, agent, lifecycle, created_at, updated_at) "
+            "VALUES ('conv-existing', 'proj-x', 'claude', 'open', "
+            "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+        )
+
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    columns = {column["name"]: column for column in _inspect_columns(db_url, "conversations")}
+    assert "runtime_overrides" in columns
+    assert columns["runtime_overrides"]["nullable"] is True
+
+    with sqlite3.connect(db_file) as conn:
+        row = conn.execute(
+            "SELECT runtime_overrides FROM conversations WHERE id = 'conv-existing'"
+        ).fetchone()
+    assert row is not None
+    assert row[0] is None
 
 
 def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
@@ -305,7 +340,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0026", f"expected alembic_version=0026, got {version}"
+    assert version == "0027", f"expected alembic_version=0027, got {version}"
 
 
 @pytest.mark.asyncio

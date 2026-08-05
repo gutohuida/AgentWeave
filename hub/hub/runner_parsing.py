@@ -14,8 +14,15 @@ window directly (`modelUsage.<model>.contextWindow`) — live-verified against S
 `CLAUDE_CONTEXT_LIMITS` substring table, which is stale (has no entry for Sonnet 5's actual
 1M window and silently falls back to a wrong 200K default) — self-reported beats hardcoded,
 and matches the T3-derived principle in design.md: "the meter never computes context itself
-— it renders the newest event the provider emitted." Codex has no equivalent self-report in
-`turn.completed`, so `CODEX_MODEL_CONTEXT_LIMITS` below is a small local fallback table.
+— it renders the newest event the provider emitted."
+
+Codex has no equivalent self-report in `turn.completed`, so its context window is resolved
+against `model_catalog.model_context_window` (2026-08-04-hub-model-control-and-provisioning),
+which replaces the two-entry `CODEX_MODEL_CONTEXT_LIMITS` table and its `128000` default that
+this module previously fell back to for every unrecognised model — the mechanism behind the
+live symptom that change fixed: an agent on an uncatalogued model reporting >100% of a window
+that was never actually its own. A model the catalog does not recognise now reports usage as
+unknown (`status="unavailable"`, no `limit_tokens`) rather than substituting that default.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .model_catalog import model_context_window
 from .runner_events import (
     AccountingSample,
     ContextUsageSample,
@@ -37,14 +45,6 @@ from .runner_events import (
     tool_result_event,
     tool_use_event,
 )
-
-# Fallback only — Codex's own stdout carries no self-reported context-window size the way
-# Claude's `result.modelUsage` does. Update as new models ship.
-CODEX_MODEL_CONTEXT_LIMITS: Dict[str, int] = {
-    "gpt-5.5": 272000,
-    "gpt-4o": 128000,
-}
-CODEX_DEFAULT_CONTEXT_LIMIT = 128000
 
 
 @dataclass
@@ -368,7 +368,27 @@ def _codex_usage_sample(
     output_tokens = usage.get("output_tokens") or 0
     reasoning_tokens = usage.get("reasoning_output_tokens") or 0
     context_tokens = int(input_tokens) + int(output_tokens)
-    limit = CODEX_MODEL_CONTEXT_LIMITS.get(model or "", CODEX_DEFAULT_CONTEXT_LIMIT)
+    breakdown = {
+        "input_tokens": int(input_tokens),
+        "cached_input_tokens": int(cached),
+        "cache_creation_tokens": int(cache_write),
+        "output_tokens": int(output_tokens),
+        "reasoning_tokens": int(reasoning_tokens),
+    }
+    # Resolution order (design.md): provider self-report (none for Codex — see module
+    # docstring) -> catalog -> unknown. A model the catalog does not declare a window for
+    # reports usage as unknown rather than substituting a default that does not describe it.
+    limit = model_context_window("codex", model) if model else None
+    if limit is None:
+        return ContextUsageSample(
+            status="unavailable",
+            source=source,
+            basis=None,
+            context_tokens=context_tokens,
+            limit_tokens=None,
+            model=model,
+            breakdown=breakdown,
+        )
     return ContextUsageSample(
         status="estimated",
         source=source,
@@ -376,13 +396,7 @@ def _codex_usage_sample(
         context_tokens=context_tokens,
         limit_tokens=limit,
         model=model,
-        breakdown={
-            "input_tokens": int(input_tokens),
-            "cached_input_tokens": int(cached),
-            "cache_creation_tokens": int(cache_write),
-            "output_tokens": int(output_tokens),
-            "reasoning_tokens": int(reasoning_tokens),
-        },
+        breakdown=breakdown,
     )
 
 
