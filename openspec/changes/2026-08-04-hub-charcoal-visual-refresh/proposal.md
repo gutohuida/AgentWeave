@@ -95,4 +95,4 @@ been inert for its whole life and misrepresents the product's capability.
 
 Implementation MUST NOT begin until the user explicitly approves this proposal.
 
-**Approved:** _pending_
+**Approved:** yes (2026-08-05, verbal: "Both approved. Implement both of those.")
