@@ -37,11 +37,11 @@ export interface AgentLaunchabilityResponse {
   agents: Record<string, AgentLaunchability>
 }
 
-export interface AgentCreate {
-  name: string
-  runner_id: string
-  charter_id?: string
-}
+/** Either `runner_id` or both `provider` and `model` — not both, not neither. See
+ * `OperatorAgentCreate` in hub/hub/api/v1/agents.py for the same contract. */
+export type AgentCreate =
+  | { name: string; runner_id: string; charter_id?: string }
+  | { name: string; provider: string; model: string; charter_id?: string }
 
 export interface CreatedAgent {
   id: string

@@ -178,7 +178,7 @@ async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_heade
             json={
                 "name": "Configured Claude",
                 "cli": "claude",
-                "model": "bound-model",
+                "model": "claude-opus-5",
                 "flags": ["--effort", "high"],
             },
             headers=auth_headers,
@@ -205,7 +205,7 @@ async def test_trigger_command_uses_bound_runner_model_and_flags(app, auth_heade
             await _await_background_run()
 
     command = fake_spawn.call_args.args[0]
-    assert command[command.index("--model") + 1] == "bound-model"
+    assert command[command.index("--model") + 1] == "claude-opus-5"
     assert command[command.index("--effort") + 1] == "high"
     assert "legacy-model" not in command
 

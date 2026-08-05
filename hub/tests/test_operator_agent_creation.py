@@ -126,6 +126,109 @@ async def test_operator_agent_requires_same_project_launchable_bindings(
 
 
 @pytest.mark.asyncio
+async def test_agent_creation_by_provider_and_model_provisions_a_runner(app, auth_headers, monkeypatch):
+    """2026-08-04-hub-model-control-and-provisioning: no runner need exist beforehand."""
+    monkeypatch.setattr(
+        "hub.api.v1.agents.probe_agent",
+        lambda *_: {"runnable": True, "reason": None},
+    )
+    before = (await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)).json()
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "provisioned-claude", "provider": "claude", "model": "claude-opus-5"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["runner_id"] is not None
+
+    after = (await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)).json()
+    assert len(after) == len(before) + 1
+    provisioned = next(r for r in after if r["id"] == body["runner_id"])
+    assert provisioned["cli"] == "claude"
+    assert provisioned["model"] == "claude-opus-5"
+
+
+@pytest.mark.asyncio
+async def test_a_second_agent_on_the_same_provider_and_model_reuses_the_runner(
+    app, auth_headers, monkeypatch
+):
+    monkeypatch.setattr(
+        "hub.api.v1.agents.probe_agent",
+        lambda *_: {"runnable": True, "reason": None},
+    )
+    first = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "reuse-first", "provider": "codex", "model": "gpt-5.6-sol"},
+        headers=auth_headers,
+    )
+    second = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "reuse-second", "provider": "codex", "model": "gpt-5.6-sol"},
+        headers=auth_headers,
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["runner_id"] == second.json()["runner_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_creation_leaves_no_runner_behind(app, auth_headers, monkeypatch):
+    monkeypatch.setattr(
+        "hub.api.v1.agents.probe_agent",
+        lambda *_: {"runnable": False, "reason": "CLI unavailable"},
+    )
+    before = (await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)).json()
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "will-fail", "provider": "claude", "model": "claude-sonnet-5"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 409
+
+    after = (await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)).json()
+    assert len(after) == len(before)
+
+
+@pytest.mark.asyncio
+async def test_an_undeclared_model_is_refused(app, auth_headers):
+    response = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "bad-model", "provider": "claude", "model": "not-a-real-model"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_both_runner_id_and_provider_model_is_refused(app, auth_headers):
+    runner = (await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)).json()[0]
+    response = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={
+            "name": "ambiguous",
+            "runner_id": runner["id"],
+            "provider": "claude",
+            "model": "claude-sonnet-5",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_neither_runner_id_nor_provider_model_is_refused(app, auth_headers):
+    response = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "nothing-given"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_operator_agent_color_assignment_is_stable(app, auth_headers, monkeypatch):
     monkeypatch.setattr(
         "hub.api.v1.agents.probe_agent",

@@ -6,9 +6,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...model_catalog import get_provider
 
 from ... import project_workspace, worktrees
 from ...agent_colors import next_color_index
@@ -61,9 +63,30 @@ class AgentRequest(BaseModel):
 
 
 class OperatorAgentCreate(BaseModel):
+    """Either `runner_id` (an existing runner) or both `provider` and `model` (find-or-create
+    one) must be given, not both and not neither — provider+model is the primary path the
+    Hub UI's Add-agent dialog uses (2026-08-04-hub-model-control-and-provisioning); runner_id
+    remains valid for a caller that already has a runner in hand, and is what
+    Runners-section-driven binding still uses.
+    """
+
     name: str = Field(min_length=1, max_length=32, pattern=r"^[a-zA-Z0-9_-]{1,32}$")
-    runner_id: str = Field(min_length=1, max_length=64)
+    runner_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    provider: Optional[str] = Field(default=None, max_length=16)
+    model: Optional[str] = Field(default=None, max_length=256)
     charter_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _exactly_one_capability_source(self) -> "OperatorAgentCreate":
+        has_runner = self.runner_id is not None
+        has_provider_model = self.provider is not None and self.model is not None
+        if self.provider is not None and self.model is None:
+            raise ValueError("model is required when provider is given")
+        if self.model is not None and self.provider is None:
+            raise ValueError("provider is required when model is given")
+        if has_runner == has_provider_model:
+            raise ValueError("Provide either runner_id or both provider and model, not both or neither")
+        return self
 
 
 class OperatorAgentResponse(BaseModel):
@@ -441,9 +464,39 @@ async def create_operator_agent(
             detail=f"Agent name '{body.name}' already exists in this project",
         )
 
-    runner = await session.get(Runner, body.runner_id)
-    if runner is None or runner.project_id != project_id:
-        raise HTTPException(status_code=404, detail=f"Runner '{body.runner_id}' not found")
+    if body.runner_id is not None:
+        runner = await session.get(Runner, body.runner_id)
+        if runner is None or runner.project_id != project_id:
+            raise HTTPException(status_code=404, detail=f"Runner '{body.runner_id}' not found")
+    else:
+        # provider + model: atomic find-or-create (design.md). Reuses a matching runner
+        # already in this project rather than creating a duplicate; a runner created here
+        # is added to the session but not committed until the same commit as the agent
+        # below, so a failure anywhere before that commit leaves neither record behind.
+        provider_entry = get_provider(body.provider)
+        model_entry = provider_entry.model(body.model) if provider_entry is not None else None
+        if provider_entry is None or model_entry is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{body.model!r} is not a model {body.provider!r} declares",
+            )
+        existing_runner = await session.execute(
+            select(Runner).where(
+                Runner.project_id == project_id,
+                Runner.cli == body.provider,
+                Runner.model == body.model,
+            )
+        )
+        runner = existing_runner.scalars().first()
+        if runner is None:
+            runner = Runner(
+                id=f"runner-{short_id()}",
+                project_id=project_id,
+                name=f"{provider_entry.label} — {model_entry.label}",
+                cli=body.provider,
+                model=body.model,
+            )
+            session.add(runner)
 
     if body.charter_id is not None:
         charter = await session.get(Charter, body.charter_id)

@@ -69,6 +69,103 @@ async def test_create_runner_rejects_unsupported_cli(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_create_runner_rejects_a_model_the_catalog_does_not_declare(app, auth_headers):
+    """runner-registry spec: 'An undeclared model is refused.'"""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": "Bogus model", "cli": "claude", "model": "not-a-real-model"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_update_runner_rejects_a_model_the_catalog_does_not_declare(app, auth_headers):
+    created = (
+        await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Valid start", "cli": "codex"},
+            headers=auth_headers,
+        )
+    ).json()
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/runners/{created['id']}",
+        json={"model": "not-a-real-model"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_an_existing_runner_with_an_unrecognised_model_stays_readable_and_flagged(
+    app, auth_headers
+):
+    """runner-registry spec: existing runners keep working; flagged as unrecognised on edit."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Runner
+
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-legacy-model",
+                project_id="proj-test",
+                name="Legacy",
+                cli="claude",
+                model="claude-2-legacy",
+            )
+        )
+        await session.commit()
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/runners/runner-legacy-model", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["model"] == "claude-2-legacy"
+    assert body["model_unrecognised"] is True
+
+    listing = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
+    assert any(r["id"] == "runner-legacy-model" for r in listing.json())
+
+    # Editing a field other than model does not require the model to be revalidated —
+    # the operator is only told it's unrecognised, not blocked from unrelated edits.
+    renamed = await app.patch(
+        "/api/v1/projects/proj-test/runners/runner-legacy-model",
+        json={"name": "Legacy Renamed"},
+        headers=auth_headers,
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["model"] == "claude-2-legacy"
+    assert renamed.json()["model_unrecognised"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_recognised_model_is_not_flagged(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/projects/proj-test/runners",
+        json={"name": "Recognised", "cli": "claude", "model": "claude-sonnet-5"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["model_unrecognised"] is False
+
+
+@pytest.mark.asyncio
+async def test_launchability_by_provider_probes_every_catalog_provider_with_no_runner_needed(
+    app, auth_headers
+):
+    resp = await app.get(
+        "/api/v1/projects/proj-test/runners/launchability-by-provider", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    providers = resp.json()["providers"]
+    assert set(providers.keys()) == {"claude", "codex"}
+    for verdict in providers.values():
+        assert "runnable" in verdict
+        assert "reason" in verdict
+
+
+@pytest.mark.asyncio
 async def test_get_runner(app, auth_headers):
     created = (
         await app.post(

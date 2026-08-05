@@ -153,17 +153,34 @@ value-equality guard on the `setState` call itself (`AgentOutputPanel.tsx`).
 
 ## 6. Agent creation by provider and model
 
-- [ ] 6.1 Replace the runner dropdown in `AgentCreateDialog.tsx` with provider and model selection
-      driven by the catalog.
-- [ ] 6.2 Probe and present launchability per provider, keeping an unlaunchable provider visible
-      with its reason.
-- [ ] 6.3 Implement find-or-create of the matching runner, creating runner and agent in one
-      transaction.
-- [ ] 6.4 Keep server-side launchability revalidation on submit.
-- [ ] 6.5 Constrain runner management to catalog models, keeping existing unrecognised models
-      readable and reporting them as unrecognised on edit.
-- [ ] 6.6 Tests: a second agent on the same provider and model reuses the runner; a failed creation
+- [x] 6.1 Replace the runner dropdown in `AgentCreateDialog.tsx` with provider and model selection
+      driven by the catalog. (Provider select drives a dependent model select, defaulting to the
+      catalog's `default: true` model on each provider change.)
+- [x] 6.2 Probe and present launchability per provider, keeping an unlaunchable provider visible
+      with its reason. (New `GET /runners/launchability-by-provider` — probes each catalog
+      provider directly via `probe_agent(cli, {"runner": cli})`, since no Runner row exists yet
+      to probe at this point in the flow; mirrors the existing per-runner launchability endpoint.)
+- [x] 6.3 Implement find-or-create of the matching runner, creating runner and agent in one
+      transaction. (`OperatorAgentCreate` now accepts `provider`+`model` as an alternative to
+      `runner_id` — exactly one of the two forms is required, enforced by a pydantic
+      model_validator. `runner_id` remains valid input for a caller that already has one.)
+- [x] 6.4 Keep server-side launchability revalidation on submit. (Unchanged — `probe_agent` still
+      runs server-side against the resolved runner immediately before the agent is created.)
+- [x] 6.5 Constrain runner management to catalog models, keeping existing unrecognised models
+      readable and reporting them as unrecognised on edit. (`_reject_undeclared_model` refuses a
+      *new* model value at create/update time only — an already-stored unrecognised model is
+      untouched. `RunnerResponse.model_unrecognised` flags it for the operator without blocking
+      unrelated edits, e.g. a rename.)
+- [x] 6.6 Tests: a second agent on the same provider and model reuses the runner; a failed creation
       leaves no runner; a provisioned runner appears in runner management.
+      (`test_operator_agent_creation.py` +6, `test_runners_api.py` +5.)
+
+**Found during this section, fixed in the same commit:** `test_agent_trigger.py`'s
+`test_trigger_command_uses_bound_runner_model_and_flags` created a runner with
+`model: "bound-model"` — a placeholder that isn't a real catalog entry. Task 6.5's new
+create-time validation now refuses that, so the fixture was updated to a real model
+(`claude-opus-5`); the test's actual assertions (bound runner's model wins over legacy
+session config, `--effort` flag passthrough) are unchanged.
 
 ## 7. Directory browsing
 

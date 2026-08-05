@@ -3,7 +3,7 @@
 See openspec/changes/runner-agent-charter-separation/specs/runner-registry/spec.md.
 """
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -14,10 +14,25 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, Runner
 from ...launchability import probe_agent
+from ...model_catalog import get_provider
 from ...schemas.runners import RunnerCreate, RunnerResponse, RunnerUpdate
 from ...utils import short_id
 
 router = APIRouter(prefix="/runners", tags=["runners"])
+
+
+def _reject_undeclared_model(cli: str, model: Optional[str]) -> None:
+    """Runner management offers catalog models, not free-typed text (runner-registry spec):
+    a model is refused only when it is being newly *set* — an already-stored, unrecognised
+    model (from before this catalog existed, or a future CLI release) is left alone."""
+    if model is None:
+        return
+    provider_entry = get_provider(cli)
+    if provider_entry is None or provider_entry.model(model) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{model!r} is not a model {cli!r} declares",
+        )
 
 
 @router.post("", response_model=RunnerResponse, status_code=status.HTTP_201_CREATED)
@@ -27,6 +42,7 @@ async def create_runner(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    _reject_undeclared_model(body.cli, body.model)
     runner = Runner(
         id=f"runner-{short_id()}",
         project_id=project_id,
@@ -77,6 +93,22 @@ async def list_runner_launchability(
     }
 
 
+@router.get("/launchability-by-provider")
+async def list_provider_launchability(
+    project: Tuple[str, str] = Depends(get_project),
+):
+    """Launchability per catalog provider, independent of whether a runner row exists yet.
+
+    Backs agent creation by provider and model (2026-08-04-hub-model-control-and-provisioning
+    design.md): the operator must see a provider's launchability *before* choosing a model, and
+    no runner exists yet to probe at that point.
+    """
+    del project
+    from ...db.models import RUNNER_CLIS
+
+    return {"providers": {cli: probe_agent(cli, {"runner": cli}) for cli in RUNNER_CLIS}}
+
+
 @router.get("/{runner_id}", response_model=RunnerResponse)
 async def get_runner(
     runner_id: str,
@@ -105,6 +137,7 @@ async def update_runner(
     if body.name is not None:
         runner.name = body.name
     if body.model is not None:
+        _reject_undeclared_model(runner.cli, body.model)
         runner.model = body.model
     if body.flags is not None:
         runner.flags = body.flags

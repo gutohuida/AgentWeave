@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCreateAgent } from '@/api/agents'
 import { useCharters } from '@/api/charters'
-import { useRunners, useRunnerLaunchability } from '@/api/runners'
+import { useProviderLaunchability } from '@/api/runners'
+import { useModelCatalog } from '@/api/modelCatalog'
 import { Button } from '@/components/ui/button'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
@@ -25,18 +26,20 @@ export function AgentCreateDialog({
   onCreated: (name: string) => void
 }) {
   const [name, setName] = useState('')
-  const [runnerId, setRunnerId] = useState('')
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
   const [charterId, setCharterId] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
-  const { data: runners = [], isLoading: runnersLoading } = useRunners()
-  const { data: launchability } = useRunnerLaunchability()
+  const { data: catalog } = useModelCatalog()
+  const { data: launchability } = useProviderLaunchability()
   const { data: charters = [], isLoading: chartersLoading } = useCharters()
   const createAgent = useCreateAgent()
 
   useEffect(() => {
     if (!open) return
     setName('')
-    setRunnerId('')
+    setProvider('')
+    setModel('')
     setCharterId('')
     createAgent.reset()
     // The mutation object changes identity as its state changes.
@@ -46,17 +49,28 @@ export function AgentCreateDialog({
 
   if (!open) return null
 
-  const selectedVerdict = launchability?.runners[runnerId]
+  const providers = catalog?.providers ?? []
+  const selectedProvider = providers.find((p) => p.provider === provider)
+  const models = selectedProvider?.models ?? []
+  const selectedVerdict = launchability?.providers[provider]
   const canSubmit = /^[a-zA-Z0-9_-]{1,32}$/.test(name.trim())
-    && !!runnerId
+    && !!provider
+    && !!model
     && selectedVerdict?.runnable === true
+
+  const handleProviderChange = (nextProvider: string) => {
+    setProvider(nextProvider)
+    const entry = providers.find((p) => p.provider === nextProvider)
+    setModel(entry?.models.find((m) => m.default)?.id ?? entry?.models[0]?.id ?? '')
+  }
 
   const submit = () => {
     if (!canSubmit) return
     createAgent.mutate(
       {
         name: name.trim(),
-        runner_id: runnerId,
+        provider,
+        model,
         ...(charterId ? { charter_id: charterId } : {}),
       },
       { onSuccess: (agent) => onCreated(agent.name) },
@@ -67,7 +81,7 @@ export function AgentCreateDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }} role="dialog" aria-modal="true" aria-labelledby="agent-create-title">
       <div ref={panelRef} className="lifted-surface w-[min(480px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="agent-create-title" className="text-sm font-semibold">Create agent</h2>
-        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Create an addressable agent from a runner already configured for this project.</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>Choose a provider and model — the Hub provisions the runner for you.</p>
 
         <label className="mt-4 block text-xs">
           Agent name
@@ -76,19 +90,28 @@ export function AgentCreateDialog({
         {name && !/^[a-zA-Z0-9_-]{1,32}$/.test(name.trim()) && <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>Use 1–32 letters, numbers, hyphens, or underscores.</p>}
 
         <label className="mt-3 block text-xs">
-          Runner
-          <select aria-label="Runner" value={runnerId} onChange={(event) => setRunnerId(event.target.value)} disabled={runnersLoading} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <option value="">Select a runner</option>
-            {runners.map((runner) => {
-              const verdict = launchability?.runners[runner.id]
-              return <option key={runner.id} value={runner.id} disabled={verdict?.runnable !== true}>{runner.name} · {runner.cli}{runner.model ? ` · ${runner.model}` : ''}</option>
+          Provider
+          <select aria-label="Provider" value={provider} onChange={(event) => handleProviderChange(event.target.value)} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <option value="">Select a provider</option>
+            {providers.map((entry) => {
+              const verdict = launchability?.providers[entry.provider]
+              return <option key={entry.provider} value={entry.provider} disabled={verdict?.runnable !== true}>{entry.label}</option>
             })}
           </select>
         </label>
-        {runners.map((runner) => {
-          const verdict = launchability?.runners[runner.id]
-          return verdict && !verdict.runnable && verdict.reason ? <p key={runner.id} className="mt-1 text-[11px]" style={{ color: 'var(--amber)' }}>{runner.name}: {verdict.reason}</p> : null
+        {providers.map((entry) => {
+          const verdict = launchability?.providers[entry.provider]
+          return verdict && !verdict.runnable && verdict.reason ? <p key={entry.provider} className="mt-1 text-[11px]" style={{ color: 'var(--amber)' }}>{entry.label}: {verdict.reason}</p> : null
         })}
+
+        {provider && (
+          <label className="mt-3 block text-xs">
+            Model
+            <select aria-label="Model" value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              {models.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+            </select>
+          </label>
+        )}
 
         <label className="mt-3 block text-xs">
           Charter <span style={{ color: 'var(--text-3)' }}>(optional)</span>
