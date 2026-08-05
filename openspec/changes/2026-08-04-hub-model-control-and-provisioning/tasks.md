@@ -184,16 +184,26 @@ session config, `--effort` flag passthrough) are unchanged.
 
 ## 7. Directory browsing
 
-- [ ] 7.1 Add `GET /api/v1/fs/list`, returning subdirectories with the listed path and its parent.
-- [ ] 7.2 Require the standard API key; never return file names or contents; do not traverse
-      symbolic links out of the listed directory.
-- [ ] 7.3 Where a workspace root is configured, bound listings to it and refuse anything outside
-      with a stated reason.
-- [ ] 7.4 Return an unreadable directory as an empty listing with a reason rather than an error that
+- [x] 7.1 Add `GET /api/v1/fs/list`, returning subdirectories with the listed path and its parent.
+      (`hub/hub/fs_browse.py` + `api/v1/fs_browse.py`, operator-authenticated, not project-scoped —
+      it backs choosing a project directory before a project exists.)
+- [x] 7.2 Require the standard API key; never return file names or contents; do not traverse
+      symbolic links out of the listed directory. (`os.scandir(...).is_dir(follow_symlinks=False)`
+      excludes a symlinked directory rather than special-casing it — a symlink entry simply isn't a
+      directory under that call, so it's never included or traversed.)
+- [x] 7.3 Where a workspace root is configured, bound listings to it and refuse anything outside
+      with a stated reason. (Reuses `project_workspace.configured_workspace_root()` /
+      `_is_within` — the same containment project registration already enforces, not a second
+      implementation of it.)
+- [x] 7.4 Return an unreadable directory as an empty listing with a reason rather than an error that
       ends browsing.
-- [ ] 7.5 Add the picker to `ProjectManagerModal.tsx`, keeping the text input for a known path.
-- [ ] 7.6 Tests: unauthenticated refusal; directories only; symlink not traversed; workspace-root
-      bound enforced; unreadable directory reports a reason.
+- [x] 7.5 Add the picker to `ProjectManagerModal.tsx`, keeping the text input for a known path.
+      (New `DirectoryPicker.tsx` — a popover under a "Browse…" button; typing/pasting the input
+      directly is untouched and still the faster path for a known path.)
+- [x] 7.6 Tests: unauthenticated refusal; directories only; symlink not traversed; workspace-root
+      bound enforced; unreadable directory reports a reason. (`test_fs_browse.py` — 10 passed, 1
+      skipped: symlink creation needs elevated privileges on Windows, the platform this session ran
+      on; `directoryPicker.test.tsx` — 6; `projectManagerDirectoryPicker.test.tsx` — 2.)
 
 ## 8. Verification
 

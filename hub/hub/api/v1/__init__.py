@@ -10,6 +10,7 @@ from .agents import router as agents_router
 from .charters import router as charters_router
 from .events import instance_router as instance_events_router
 from .events import router as events_router
+from .fs_browse import router as fs_browse_router
 from .inbound_queue import router as inbound_queue_router
 from .instructions import router as instructions_router
 from .jobs import router as jobs_router
@@ -31,6 +32,7 @@ v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(projects_router)
 v1_router.include_router(instance_events_router)
 v1_router.include_router(model_catalog_router)
+v1_router.include_router(fs_browse_router)
 
 project_resources_router = APIRouter(prefix="/projects/{project_id}")
 project_resources_router.include_router(accounting_router)

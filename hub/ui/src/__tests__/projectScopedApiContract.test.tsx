@@ -26,8 +26,15 @@ const API_SOURCES = import.meta.glob('../api/*.ts', {
 
 // modelCatalog.ts: the model/provider/control catalog is static and identical for every
 // project (2026-08-04-hub-model-control-and-provisioning design.md), same rationale as
-// projects.ts's own exemption below.
-const INSTANCE_LEVEL_FILES = new Set(['client.ts', 'setup.ts', 'projects.ts', 'modelCatalog.ts'])
+// projects.ts's own exemption below. fsBrowse.ts: directory listing backs choosing a
+// project directory *before* a project exists, so it cannot carry a project ID either.
+const INSTANCE_LEVEL_FILES = new Set([
+  'client.ts',
+  'setup.ts',
+  'projects.ts',
+  'modelCatalog.ts',
+  'fsBrowse.ts',
+])
 
 function apiFiles(): Array<[name: string, source: string]> {
   return Object.entries(API_SOURCES)

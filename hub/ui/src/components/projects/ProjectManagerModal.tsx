@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import { useCreateProject, useOpenProject, type ProjectSummary } from '@/api/projects'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
+import { Button } from '@/components/ui/button'
+import { DirectoryPicker } from './DirectoryPicker'
 
 export type ProjectManagerMode = 'open' | 'create'
 
@@ -16,6 +18,7 @@ export function ProjectManagerModal({
 }) {
   const [path, setPath] = useState('')
   const [name, setName] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const openProject = useOpenProject()
   const createProject = useCreateProject()
@@ -25,6 +28,7 @@ export function ProjectManagerModal({
     if (mode) {
       setPath('')
       setName('')
+      setPickerOpen(false)
       openProject.reset()
       createProject.reset()
     }
@@ -57,7 +61,22 @@ export function ProjectManagerModal({
         </p>
         <label className="mt-4 block text-xs">
           Directory path
-          <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="mt-1 block w-full rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
+          <div className="relative mt-1 flex gap-1.5">
+            <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="block w-full min-w-0 rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
+            <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen} aria-label="Browse for a directory">
+              Browse…
+            </Button>
+            {pickerOpen && (
+              <DirectoryPicker
+                startPath={/^([a-zA-Z]:[\\/]|\/)/.test(path.trim()) ? path.trim() : '/'}
+                onChoose={(chosen) => {
+                  setPath(chosen)
+                  setPickerOpen(false)
+                }}
+                onClose={() => setPickerOpen(false)}
+              />
+            )}
+          </div>
         </label>
         <div data-testid="project-path-preview" className="mt-2 truncate rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>{preview}</div>
         <label className="mt-3 block text-xs">
