@@ -36,6 +36,15 @@ class TestListDirectoryUnit:
         with pytest.raises(DirectoryBrowseError):
             list_directory("relative/path")
 
+    def test_a_bare_root_is_accepted_as_a_browsing_starting_point(self):
+        # Found via live verification: Windows' pathlib.is_absolute() requires a drive
+        # letter, so "/" alone (the directory picker's own default starting point) was
+        # being wrongly refused as "not absolute" on that platform. "/" is anchored (has a
+        # root) even without a drive, and resolve() fills the current drive in correctly.
+        listing = list_directory("/")  # must not raise DirectoryBrowseError
+        assert listing.path
+        assert isinstance(listing.entries, list)
+
     def test_an_unreadable_directory_returns_an_empty_listing_with_a_reason(self, tmp_path):
         root = _make_tree(tmp_path)
         with patch("hub.fs_browse.os.scandir", side_effect=PermissionError("denied")):

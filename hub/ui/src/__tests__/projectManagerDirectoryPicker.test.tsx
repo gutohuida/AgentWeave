@@ -39,7 +39,7 @@ describe('ProjectManagerModal — directory browsing supplements typing', () => 
 
   it('opens the picker and fills the path field when a directory is chosen', () => {
     render(<ProjectManagerModal mode="open" onClose={vi.fn()} onComplete={vi.fn()} />, { wrapper })
-    fireEvent.click(screen.getByRole('button', { name: 'Browse for a directory' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open directory browser' }))
     expect(screen.getByRole('dialog', { name: 'Browse for a directory' })).toBeInTheDocument()
     fireEvent.doubleClick(screen.getByText('agentweave'))
     expect(screen.getByLabelText('Directory path')).toHaveValue('/home/projects/agentweave')

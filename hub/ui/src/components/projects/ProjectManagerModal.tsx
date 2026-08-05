@@ -63,7 +63,7 @@ export function ProjectManagerModal({
           Directory path
           <div className="relative mt-1 flex gap-1.5">
             <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="block w-full min-w-0 rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
-            <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen} aria-label="Browse for a directory">
+            <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen} aria-label="Open directory browser">
               Browse…
             </Button>
             {pickerOpen && (

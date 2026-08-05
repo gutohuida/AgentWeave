@@ -54,7 +54,13 @@ def list_directory(raw_path: str) -> DirectoryListing:
     except ProjectPathError as exc:
         raise DirectoryBrowseError(str(exc)) from exc
     supplied = Path(raw_path).expanduser()
-    if not supplied.is_absolute():
+    # Windows' pathlib.is_absolute() requires a drive letter, so a bare "/" (or "/foo") is
+    # "anchored" (has a root) but not "absolute" by that definition — rejecting it here would
+    # refuse a reasonable browsing starting point on this platform (live-verified: the
+    # composer's own directory picker defaults new browsing to "/"). resolve() correctly fills
+    # in the current drive for an anchored-but-driveless path; a genuinely relative path
+    # (no leading separator at all, e.g. "relative/path") has no root and is still refused.
+    if not supplied.root:
         raise DirectoryBrowseError("path must be absolute")
     resolved = supplied.resolve(strict=False)
 

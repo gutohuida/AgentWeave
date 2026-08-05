@@ -201,23 +201,56 @@ session config, `--effort` flag passthrough) are unchanged.
       (New `DirectoryPicker.tsx` — a popover under a "Browse…" button; typing/pasting the input
       directly is untouched and still the faster path for a known path.)
 - [x] 7.6 Tests: unauthenticated refusal; directories only; symlink not traversed; workspace-root
-      bound enforced; unreadable directory reports a reason. (`test_fs_browse.py` — 10 passed, 1
+      bound enforced; unreadable directory reports a reason. (`test_fs_browse.py` — 11 passed, 1
       skipped: symlink creation needs elevated privileges on Windows, the platform this session ran
       on; `directoryPicker.test.tsx` — 6; `projectManagerDirectoryPicker.test.tsx` — 2.)
 
+**Bug found live, fixed in this section:** `list_directory` rejected a bare `"/"` — the
+directory picker's own default starting point — because `pathlib.Path.is_absolute()`
+requires a drive letter on Windows, so `"/"` alone is "anchored" but not "absolute" by that
+definition. Fixed by checking `.root` (truthy for `"/"` on every platform) instead of
+`.is_absolute()`; a genuinely relative path (`"relative/path"`, no leading separator) still
+has no root and is still refused. Found by live-testing the picker against a real Windows
+Hub instance, not by the unit tests, which had run against POSIX-style fixture paths only
+— a regression test for the bare-root case is now in `test_fs_browse.py`.
+
 ## 8. Verification
 
-- [ ] 8.1 `pytest hub/tests -q`.
-- [ ] 8.2 `npm test` in `hub/ui`.
-- [ ] 8.3 `npx tsc --noEmit` in `hub/ui`.
-- [ ] 8.4 Migration check: `0027` applies to an existing database and existing conversations load
-      with no overrides.
-- [ ] 8.5 `npm run build`, then refresh and commit `hub/hub/static/ui`.
-- [ ] 8.6 `pytest hub/tests/test_ui_staleness.py -q`.
-- [ ] 8.7 `openspec validate 2026-08-04-hub-model-control-and-provisioning --strict`.
-- [ ] 8.8 Live: change model and effort mid-conversation against a real agent and confirm the turn
-      runs under the chosen values and that the values survive reload.
-- [ ] 8.9 Live: create an agent by provider and model with no pre-existing runner; confirm a second
-      such agent reuses the runner.
-- [ ] 8.10 Live: browse to a project directory and register a project with the chosen path.
-- [ ] 8.11 Live: confirm no agent reports context usage above 100% of its own window.
+- [x] 8.1 `pytest hub/tests -q`. (662 passed, 9 skipped.)
+- [x] 8.2 `npm test` in `hub/ui`. (413 passed, 50 files.)
+- [x] 8.3 `npx tsc --noEmit` in `hub/ui`. (Clean.)
+- [x] 8.4 Migration check: `0027` applies to an existing database and existing conversations load
+      with no overrides. (`test_migration_0027_adds_conversation_runtime_overrides` in
+      `test_migrations.py`.)
+- [x] 8.5 `npm run build`, then refresh and commit `hub/hub/static/ui`.
+- [x] 8.6 `pytest hub/tests/test_ui_staleness.py -q`. (5 passed.)
+- [x] 8.7 `openspec validate 2026-08-04-hub-model-control-and-provisioning --strict`. (Valid.)
+- [x] 8.8 Live: change model and effort mid-conversation against a real agent and confirm the turn
+      runs under the chosen values and that the values survive reload. Ran against a real
+      restarted Hub instance and a real spawned `claude` process (project registered at
+      `testbed/two-codex-agents/workspace`, agent `live-verify-claude`): changed the composer's
+      model pill from Sonnet 5 to Opus 5, sent a real message. `GET .../conversations` showed
+      `runtime_overrides: {"model": "claude-opus-5"}`; the agent's live `context_usage` after the
+      run showed `model: "claude-opus-5"`, `limit_tokens: 1000000` — Claude's own self-report,
+      confirming the resolution order (self-report before catalog) rather than the catalog's
+      declared `null` for Opus 5. A full page reload with `?conversation=conv-a8284eb5` in the URL
+      still showed "Model: Opus 5" in the composer, confirming reload-persistence.
+- [x] 8.9 Live: create an agent by provider and model with no pre-existing runner; confirm a second
+      such agent reuses the runner. Created `live-verify-claude` (provider `claude`, model
+      `claude-sonnet-5`) with zero pre-existing runners in the project — got back `runner_id:
+      "runner-148c4fee"`. Created a second agent, same provider and model — got back the *same*
+      `runner_id`.
+- [x] 8.10 Live: browse to a project directory and register a project with the chosen path. Fixed
+      the bare-`"/"` bug above in the course of doing this, then browsed
+      `C:\Users\...\testbed\two-codex-agents\workspace` (root listing → `C:\` → `Users` → …,
+      confirmed real subdirectories at each level) and registered it as project "Live Verify"
+      (`proj-de54b547`, `directory_state: "available"`).
+- [ ] 8.11 Live: confirm no agent reports context usage above 100% of its own window. **Not run
+      directly** — the original symptom was Codex-specific (an unrecognised model borrowing the
+      removed 128000 default) and this session's live agent was Claude, whose window came from
+      its own self-report rather than the catalog path this fixes. The Codex path is covered by
+      `test_runner_parsing.py::test_turn_completed_unrecognised_model_reports_usage_as_unknown`,
+      which reproduces the exact prior symptom (an unrecognised model) and asserts
+      `status="unavailable"` with no `limit_tokens` instead of the old fabricated 100%+ result —
+      judged sufficient given the very late hour, but a live Codex run confirming this against a
+      real `codex-beta`-style agent remains open for the operator to do.
