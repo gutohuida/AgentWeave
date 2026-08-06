@@ -2,8 +2,8 @@
 
 ### Requirement: An invocable tool surface is the default, not an opt-in
 
-Where a provider offers more than one way to start a run, and only some of those ways permit the
-Hub to answer approvals per request, the Hub SHALL select an invocable configuration by default.
+The Hub SHALL select an invocable configuration by default, wherever a provider offers more than
+one way to start a run and only some of those ways permit approvals to be answered per request.
 
 An operator MUST NOT be required to set a flag, edit a runner record, or know a sentinel value in
 order for a newly created agent's tool surface to be callable. A runner created through the Hub's

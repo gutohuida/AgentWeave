@@ -94,21 +94,6 @@ no backend request.
 - **WHEN** paths include `.claude/skills/aw-status/SKILL.md`
 - **THEN** a `$` trigger displays `aw-status`, not `aw-status/SKILL`
 
-### Requirement: In-place agent selector
-The composer SHALL offer a searchable selector listing every configured agent and showing each
-agent's launchability from `GET /api/v1/agents/launchability`. Selecting a different agent SHALL
-NOT alter the current conversation's `agent`; the next message SHALL start a new conversation
-targeting the selected agent.
-
-#### Scenario: Selecting a different agent starts a new conversation
-- **WHEN** conversation C belongs to `claude` and the operator selects `codex` then submits
-- **THEN** the submission targets `codex` with no `conversation_id`
-- **AND** conversation C's agent remains `claude`
-
-#### Scenario: A non-launchable agent is visibly distinguished, not hidden
-- **WHEN** `minimax` is present but not authorized
-- **THEN** the selector lists `minimax` with an indicator reflecting that state
-
 ### Requirement: Composer controls are unbounded
 
 A composer control (model, effort, conversation routing, target agent) SHALL draw no border or fill
@@ -301,3 +286,20 @@ unchanged.
 
 - **WHEN** the operator dismisses the picker via the keyboard
 - **THEN** the previously selected model is unchanged
+
+---
+
+### Requirement: The composer addresses the conversation it belongs to
+
+A message submitted from a conversation SHALL be delivered to that conversation's agent. The
+composer MUST NOT offer a control that redirects a submission to a different agent.
+
+#### Scenario: A submission targets the current agent
+
+- **WHEN** the operator submits a message from agent `A`'s conversation
+- **THEN** the submission targets `A`
+
+#### Scenario: No redirect control is offered
+
+- **WHEN** the composer's control row is displayed
+- **THEN** it contains no control for selecting a different recipient agent

@@ -2,8 +2,9 @@
 
 ### Requirement: A runner's flags may select a transport, and unset means the safe default
 
-A runner's flags MAY carry sentinel values that select how the Hub starts a run rather than
-arguments passed to the runner's CLI. A sentinel SHALL NOT be forwarded to the CLI as an argument.
+A runner's flags MUST be allowed to carry sentinel values that select how the Hub starts a run
+rather than arguments passed to the runner's CLI. A sentinel SHALL NOT be forwarded to the CLI as
+an argument.
 
 A runner whose flags are unset SHALL receive the Hub's default transport for its CLI, and that
 default SHALL be the one whose tool surface the agent can actually call. Selecting a degraded
