@@ -102,6 +102,26 @@ structural, not incidental: `ServerRequest` declares `item/commandExecution/requ
 `item/fileChange/requestApproval`, `item/permissions/requestApproval`, and
 `mcpServer/elicitation/request` as distinct methods.
 
+### Verified 2026-08-06: existing session IDs resume cleanly through `thread/resume`
+
+Section 5's open question in `implications-codex-appserver.md` — "existing stored Codex session
+identifiers may not be resumable through the new path" — is resolved. Tested against a real
+session recorded by the *current* `codex exec resume <session_id>` production path: run
+`run-7c46ad24` (agent `codex-mini-1`, Hub `runs.session_id = 019fd481-71f1-7e90-98dc-9033753492bc`).
+
+A standalone probe (`initialize` → `thread/resume` with `{"threadId": "019fd481-…"}`, no other
+setup) returned a complete `ThreadResumeResponse`: full turn history (including the very
+`send_message` call this change fixes, its recorded failure `"Hub API error 405: Method Not
+Allowed"` preserved verbatim), `source: "exec"` correctly identifying the thread's origin, cwd,
+git info, sandbox settings, and model — everything `thread/start` needs to be unnecessary for a
+continuing conversation.
+
+**No migration and no breakage.** `codex exec`'s session ID and `app-server`'s `threadId` are the
+same identifier space — both resolve to the same on-disk rollout file
+(`~/.codex/sessions/…/rollout-…-<id>.jsonl`). Every value already stored in `Run.session_id` for a
+Codex run remains valid as `thread/resume`'s `threadId` after the transport swap; task 2.6 requires
+no translation layer and no data migration.
+
 ### Consequence
 
 **The original requirement stands and is restored.** Collaboration costs nothing. The Hub approves

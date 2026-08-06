@@ -39,7 +39,10 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 - [ ] 2.5 Map protocol events onto the existing output/timeline/usage model, replacing the
       `--json` stdout parsing in `runner_parsing.py` for this path.
 - [ ] 2.6 Preserve session resume via `thread/resume`, keeping the durable session identity agents
-      already rely on.
+      already rely on. **Feasibility verified 2026-08-06**: `thread/resume`'s `threadId` accepts an
+      existing `Run.session_id` recorded by the current `codex exec resume` path unchanged — same
+      identifier space, same on-disk rollout file, no translation layer needed. See `design.md`
+      Decision 1a. Implementation (wiring this into the runner) is still open.
 - [ ] 2.7 Handle process death, a hung turn, and `turn/interrupt` so a stuck app-server cannot wedge
       an agent.
 - [ ] 2.8 Keep the `exec` path intact and selectable until 8.x proves the app-server path

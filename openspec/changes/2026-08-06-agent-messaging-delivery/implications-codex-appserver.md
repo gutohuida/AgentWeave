@@ -80,9 +80,13 @@ with `2026-08-04-hub-model-control-and-provisioning` and should be checked, not 
 `exec` resumes via `codex exec resume <session_id>`. `app-server` has `thread/start`,
 `thread/resume`, and thread IDs of its own.
 
-**Existing stored Codex session identifiers may not be resumable through the new path.** Establish
-this rather than hope: if they are not, every existing Codex conversation either migrates or breaks,
-and which one happens is an operator-visible decision. Verify before implementing; record the answer.
+**Verified 2026-08-06, resolved: existing session identifiers resume cleanly.** A real session ID
+recorded by the current production `codex exec resume` path (`Run.session_id` from an actual Hub
+run) was passed as `thread/resume`'s `threadId` with no other setup, and the full prior turn history
+came back — `codex exec`'s session ID and `app-server`'s `threadId` are the same identifier space,
+both resolving to the same on-disk rollout file. No migration, no breakage, no operator-visible
+decision required. Full evidence in `design.md` Decision 1a, "Verified 2026-08-06: existing session
+IDs resume cleanly through `thread/resume`".
 
 ## 6. Two runner architectures now coexist
 
