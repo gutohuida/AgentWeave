@@ -547,6 +547,7 @@ class Run(Base):
     capability_token_hash: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, unique=True, index=True
     )
+    instance_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     __table_args__ = (
         CheckConstraint("initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"),

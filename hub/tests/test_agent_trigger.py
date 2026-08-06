@@ -520,6 +520,47 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
 
 
 @pytest.mark.asyncio
+async def test_trigger_stamps_the_new_run_with_this_hub_instances_id(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """Task 4.1: every newly minted run carries this process's own stable instance
+    identity, so `agent_auth.get_agent_actor` can later refuse a credential minted by a
+    different Hub instance (see design.md Decision 3)."""
+    from hub import instance_identity
+
+    monkeypatch.setattr(instance_identity, "_instance_id", "test-instance-id")
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"instance-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("instance-claude", cli="claude")
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-instance-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "instance-claude", "message": "do the thing"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.instance_id == "test-instance-id"
+
+
+@pytest.mark.asyncio
 async def test_trigger_respects_explicit_mcp_override_without_probing(
     app, auth_headers, bind_runner, monkeypatch
 ):

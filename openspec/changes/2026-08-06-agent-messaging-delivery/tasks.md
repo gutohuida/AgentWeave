@@ -186,11 +186,28 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 ## 4. Scope run credentials to the issuing instance
 
-- [ ] 4.1 Give each Hub instance a stable identity and carry it in the minted run credential.
-- [ ] 4.2 In `hub/hub/agent_auth.py`, reject a credential whose instance identity is not this
+- [x] 4.1 Give each Hub instance a stable identity and carry it in the minted run credential.
+      Implemented as `hub/hub/instance_identity.py`: a random id minted once and persisted to a
+      local marker file (`instance_identity.json`, next to the sqlite DB), read into a module-level
+      cache at startup (`main.py`'s `lifespan`, mirroring `bound_address.py`'s pattern), and stamped
+      onto `Run.instance_id` (new column, migration `0028_add_run_instance_id.py`) at mint time in
+      `agent_trigger.py`. Deliberately NOT a database row — the failure mode being defended against
+      is multiple Hub processes sharing one database, so the identity has to live outside it.
+- [x] 4.2 In `hub/hub/agent_auth.py`, reject a credential whose instance identity is not this
       instance's, with a distinct, diagnosable reason separate from "expired" or "unknown run".
-- [ ] 4.3 Unit test: a credential minted by another instance is refused and writes nothing.
-- [ ] 4.4 Unit test: an ordinary same-instance credential is unaffected.
+      `get_agent_actor` now checks `run.instance_id` against `instance_identity.get()` after
+      resolving the run, raising 401 "Run credential was issued by a different Hub instance" only
+      when both are set and differ — a run minted before this feature (`instance_id=None`) is not
+      treated as a mismatch, since an absent value isn't diagnosable as cross-instance the way a
+      recorded, differing one is.
+- [x] 4.3 Unit test: a credential minted by another instance is refused and writes nothing.
+      `test_run_credential_from_another_instance_is_refused` in `test_agent_capability_auth.py`.
+- [x] 4.4 Unit test: an ordinary same-instance credential is unaffected.
+      `test_run_credential_from_this_instance_is_unaffected` and
+      `test_run_with_no_recorded_instance_id_is_not_rejected` (the legacy-row case) in the same
+      file; `test_trigger_stamps_the_new_run_with_this_hub_instances_id` in `test_agent_trigger.py`
+      confirms a live-triggered run is actually stamped with the running instance's id, not just
+      that the auth check accepts a hand-constructed row.
 
 ## 5. Make failures visible
 

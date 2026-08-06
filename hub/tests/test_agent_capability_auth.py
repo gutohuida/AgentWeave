@@ -87,3 +87,83 @@ async def test_operator_route_refuses_run_credential(app):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_run_credential_from_another_instance_is_refused(app, monkeypatch):
+    from hub import instance_identity
+    from hub.agent_auth import get_agent_actor, hash_run_token
+
+    monkeypatch.setattr(instance_identity, "_instance_id", "this-instance")
+    token = "aw_run_test-other-instance"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-auth-other-instance",
+                project_id="proj-test",
+                agent="bound-agent",
+                status="running",
+                capability_token_hash=hash_run_token(token),
+                instance_id="some-other-instance",
+            )
+        )
+        await session.commit()
+
+        with pytest.raises(HTTPException) as raised:
+            await get_agent_actor(_bearer(token), session)
+
+    assert raised.value.status_code == 401
+    # Distinct reason from "unknown/expired" — see design.md Decision 3.
+    assert "different Hub instance" in raised.value.detail
+
+
+@pytest.mark.asyncio
+async def test_run_credential_from_this_instance_is_unaffected(app, monkeypatch):
+    from hub import instance_identity
+    from hub.agent_auth import get_agent_actor, hash_run_token
+
+    monkeypatch.setattr(instance_identity, "_instance_id", "this-instance")
+    token = "aw_run_test-same-instance"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-auth-same-instance",
+                project_id="proj-test",
+                agent="bound-agent",
+                status="running",
+                capability_token_hash=hash_run_token(token),
+                instance_id="this-instance",
+            )
+        )
+        await session.commit()
+
+        actor = await get_agent_actor(_bearer(token), session)
+
+    assert actor.run_id == "run-auth-same-instance"
+
+
+@pytest.mark.asyncio
+async def test_run_with_no_recorded_instance_id_is_not_rejected(app, monkeypatch):
+    """A run minted before this feature landed has instance_id=None. It must not be
+    treated as a mismatch — only a recorded, differing instance_id is diagnosable as
+    cross-instance; an absent one is simply unknown."""
+    from hub import instance_identity
+    from hub.agent_auth import get_agent_actor, hash_run_token
+
+    monkeypatch.setattr(instance_identity, "_instance_id", "this-instance")
+    token = "aw_run_test-legacy-run"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-auth-legacy",
+                project_id="proj-test",
+                agent="bound-agent",
+                status="running",
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+
+        actor = await get_agent_actor(_bearer(token), session)
+
+    assert actor.run_id == "run-auth-legacy"

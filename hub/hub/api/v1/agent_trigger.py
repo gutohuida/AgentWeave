@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import bound_address, project_workspace, worktrees
+from ... import bound_address, instance_identity, project_workspace, worktrees
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
 from ...codex_appserver import APP_SERVER_OPT_IN_FLAG, AppServerError, TurnOutcome
@@ -402,6 +402,7 @@ async def trigger_agent_directly(
         turn_depth=turn_depth,
         initiator=initiator,
         capability_token_hash=hash_run_token(run_token),
+        instance_id=instance_identity.get(),
     )
     delivered = []
     if queue_entry_ids:

@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import instance_identity
 from .auth import bearer_scheme
 from .db.engine import get_session
 from .db.models import Run
@@ -59,6 +60,17 @@ async def get_agent_actor(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or inactive run credential",
+        )
+
+    # A run whose instance_id was recorded (task 4 — see instance_identity.py) must match
+    # this process's own identity. A run minted before this feature landed has
+    # instance_id=None and is not rejected on that basis alone — only a recorded mismatch
+    # is distinguishable from "unknown/expired" and worth its own diagnosable reason.
+    this_instance = instance_identity.get()
+    if run.instance_id is not None and this_instance is not None and run.instance_id != this_instance:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Run credential was issued by a different Hub instance",
         )
 
     return AgentActor(project_id=run.project_id, agent=run.agent, run_id=run.id)
