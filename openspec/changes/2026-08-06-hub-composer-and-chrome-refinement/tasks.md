@@ -125,24 +125,44 @@ named in `proposal.md`; re-clone rather than guess if a detail is needed.
 
 Reference: t3code `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `modelPickerSearch.ts`.
 
-- [ ] 4b.1 Add search over the model list, matching label, identifier, and provider name.
-      Substring/fuzzy, not leading-prefix only.
-- [ ] 4b.2 Group entries by provider, with each entry attributable to its provider at a glance and a
-      provider's entries reachable as a group.
-- [ ] 4b.3 Ensure filtering never surfaces a model that is not otherwise selectable — filter the
-      offered set, never widen it.
-- [ ] 4b.4 Empty-result state that says nothing matched and can be cleared back to the full list.
-- [ ] 4b.5 Favourites: mark/unmark from the picker, marked models presented first.
-- [ ] 4b.6 Persist favourites across conversations and reloads. Decide and record where they live
-      (operator-local vs Hub-stored) — they are the operator's preference, not project data.
-- [ ] 4b.7 Guarantee favourites change ordering only: no agent's default or resolved model moves.
-- [ ] 4b.8 Full keyboard operation: open, type to narrow, move, select, dismiss. Dismiss selects
-      nothing.
-- [ ] 4b.9 Unit tests: non-prefix match found; provider-name search; grouping; no extra models via
+**Scope decision, not covered by design.md (operator confirmed via `AskUserQuestion` before starting
+this section):** the composer's model pill is scoped to one already-resolved provider (the target
+agent's bound runner) — `model-catalog`'s own spec is explicit that "the choices are the ones the
+catalog declares for the *relevant* provider" and control values never cross providers. Cross-
+provider switching through this control would mean rebinding the agent's runner, a bigger, separately
+specced action. Built single-provider, with the search/grouping/favourites mechanism generic enough
+that a labelled provider-group header works today (exactly one group) and is ready if a future
+catalog ever offers more than one group in one picker.
+
+- [x] 4b.1 Add search over the model list, matching label, identifier, and provider name.
+      Substring/fuzzy, not leading-prefix only. New `hub/ui/src/components/agents/ModelPicker.tsx`,
+      case-insensitive `.includes()` against all three.
+- [x] 4b.2 Group entries by provider, with each entry attributable to its provider at a glance and a
+      provider's entries reachable as a group. One labelled section (`ProviderMark` + provider label)
+      per the single resolved provider — see scope decision above.
+- [x] 4b.3 Ensure filtering never surfaces a model that is not otherwise selectable — filter the
+      offered set, never widen it. Filter operates on `provider.models` only, never adds to it.
+- [x] 4b.4 Empty-result state that says nothing matched and can be cleared back to the full list.
+- [x] 4b.5 Favourites: mark/unmark from the picker, marked models presented first.
+- [x] 4b.6 Persist favourites across conversations and reloads. **Decision: operator-local**
+      (`window.localStorage`, key `aw.composer.favouriteModels`) — the same mechanism
+      `configStore.ts` already uses for mode/selected-project, not a new Hub-stored table. They are
+      this browser's preference, not project state; keyed `${provider}:${modelId}` to avoid any
+      cross-provider id collision.
+- [x] 4b.7 Guarantee favourites change ordering only: no agent's default or resolved model moves.
+      The favourite toggle never calls `onChangeModel`; only the sort comparator reads `favourites`.
+- [x] 4b.8 Full keyboard operation: open, type to narrow, move, select, dismiss. Dismiss selects
+      nothing. Arrow-key roving highlight + Enter-to-select, intercepted on the popover's own
+      `onKeyDown` (search input keeps real DOM focus throughout — a lighter pattern than full
+      ARIA-combobox `aria-activedescendant`, consistent with this codebase's existing listbox
+      components, none of which implement that either).
+- [x] 4b.9 Unit tests: non-prefix match found; provider-name search; grouping; no extra models via
       search; empty state; favourite ordering; favourite persistence; favourites do not change
-      resolution; each keyboard action; dismiss leaves model unchanged.
-- [ ] 4b.10 Keep the picker's width content-derived per section 2 — search must not reintroduce a
-      fixed width.
+      resolution; each keyboard action; dismiss leaves model unchanged. All in `modelPicker.test.tsx`
+      (12 tests).
+- [x] 4b.10 Keep the picker's width content-derived per section 2 — search must not reintroduce a
+      fixed width. Popover is `max-w-72` (a cap, not a minimum); enforced by a source-contract test
+      that specifically excludes `max-w-` while catching a bare fixed-width `w-N` token.
 
 ## 5. Project header
 
