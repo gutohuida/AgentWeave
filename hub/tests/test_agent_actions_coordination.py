@@ -25,8 +25,18 @@ async def _active_run(run_id: str, agent: str) -> tuple[dict[str, str], str]:
     return {"Authorization": f"Bearer {token}"}, token
 
 
+async def _sync_agent(app, auth_headers, agent_name):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent_name: {}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+
+
 @pytest.mark.asyncio
-async def test_agent_message_derives_sender_and_run_and_rejects_identity_fields(app):
+async def test_agent_message_derives_sender_and_run_and_rejects_identity_fields(app, auth_headers):
+    await _sync_agent(app, auth_headers, "peer")
     headers, _ = await _active_run("run-msg-author", "author")
 
     rejected = await app.post(
@@ -49,6 +59,50 @@ async def test_agent_message_derives_sender_and_run_and_rejects_identity_fields(
         assert message.sender == "author"
         assert message.project_id == "proj-test"
         assert message.created_by_run_id == "run-msg-author"
+
+
+@pytest.mark.asyncio
+async def test_message_to_unknown_recipient_is_rejected_and_recorded_on_senders_timeline(app):
+    """Task 5.3/5.5: a send_message to a name no agent is registered under must be
+    rejected (not silently queued to nowhere, which was the previous behavior) and the
+    rejection must be visible on the sending agent's own timeline, not only as error text
+    the agent itself received."""
+    from hub.db.models import EventLog
+
+    headers, _ = await _active_run("run-msg-ghost", "sender-of-ghost-message")
+
+    response = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={"recipient": "no-such-agent", "content": "hello"},
+    )
+
+    assert response.status_code == 404
+    assert "no-such-agent" in response.json()["detail"]
+
+    async with async_session_factory() as session:
+        # No message/queue entry was actually created for the unknown recipient.
+        orphaned = (
+            (await session.execute(select(Message).where(Message.recipient == "no-such-agent")))
+            .scalars()
+            .all()
+        )
+        assert orphaned == []
+
+        events = (
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "agent_action_rejected")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(events) == 1
+        assert events[0].agent == "sender-of-ghost-message"
+        assert events[0].severity == "warn"
+        assert events[0].data["reason"] == "unknown_recipient"
+        assert events[0].data["recipient"] == "no-such-agent"
 
 
 @pytest.mark.asyncio

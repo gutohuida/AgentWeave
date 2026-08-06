@@ -42,12 +42,35 @@ def _bound_token() -> str:
 
 
 class HubAPIError(RuntimeError):
-    """Typed application failure preserved across the MCP adapter."""
+    """The Hub was reached and rejected this request — a validation or policy failure,
+    not a connectivity problem. Distinct from `HubUnreachableError` (task 5.2): a rejected
+    request means the Hub is right there and said no; an unreachable one means nothing
+    ever answered, possibly at the wrong address entirely."""
 
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(self, status_code: int, detail: str, method: str = "", path: str = "") -> None:
         self.status_code = status_code
         self.detail = detail
-        super().__init__(f"Hub API error {status_code}: {detail}")
+        self.method = method
+        self.path = path
+        endpoint = f"{method} {path}".strip()
+        prefix = f"Hub rejected {endpoint}" if endpoint else "Hub API error"
+        super().__init__(f"{prefix} ({status_code}): {detail}")
+
+
+class HubUnreachableError(RuntimeError):
+    """No Hub answered at this run's configured `HUB_URL` at all — a connectivity or
+    misconfiguration failure, distinguishable from `HubAPIError`'s "reached and rejected"
+    (task 5.2)."""
+
+    def __init__(self, url: str, method: str, path: str, reason: str) -> None:
+        self.url = url
+        self.method = method
+        self.path = path
+        self.reason = reason
+        super().__init__(
+            f"Cannot reach the Hub at {url} for {method} {path}: {reason}. "
+            "Check this run's HUB_URL — it may point at the wrong instance."
+        )
 
 
 def _hub_request(
@@ -80,9 +103,9 @@ def _hub_request(
             detail = str(parsed.get("detail", detail))
         except (ValueError, AttributeError):
             pass
-        raise HubAPIError(exc.code, detail) from exc
+        raise HubAPIError(exc.code, detail, method, path) from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"Hub connection error: {exc.reason}") from exc
+        raise HubUnreachableError(url, method, path, str(exc.reason)) from exc
 
 
 @mcp.tool()

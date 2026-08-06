@@ -3,8 +3,19 @@
 import pytest
 
 
+async def _sync_agent(app, auth_headers, agent_name):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent_name: {}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+
+
 @pytest.mark.asyncio
 async def test_create_and_list_message(app, auth_headers):
+    await _sync_agent(app, auth_headers, "kimi")
+
     # Create a message
     resp = await app.post(
         "/api/v1/projects/proj-test/messages",
@@ -32,6 +43,8 @@ async def test_create_and_list_message(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_mark_message_read(app, auth_headers):
+    await _sync_agent(app, auth_headers, "kimi")
+
     # Create
     resp = await app.post(
         "/api/v1/projects/proj-test/messages",

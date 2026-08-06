@@ -166,11 +166,12 @@ async def test_answering_question_is_refused_when_workspace_unavailable(
 
 @pytest.mark.asyncio
 async def test_agent_to_agent_message_is_not_refused_but_stays_queued_when_workspace_unavailable(
-    app, bind_project_workspace, tmp_path
+    app, auth_headers, bind_project_workspace, tmp_path
 ):
     directory = tmp_path / "proj"
     directory.mkdir(parents=True, exist_ok=True)
     await bind_project_workspace(directory)
+    await _sync_agent(app, auth_headers, "recipient")
     shutil.rmtree(directory)
 
     headers, _ = await _active_run("run-sender", "sender")

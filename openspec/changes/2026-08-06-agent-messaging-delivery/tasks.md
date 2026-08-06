@@ -211,15 +211,42 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 ## 5. Make failures visible
 
-- [ ] 5.1 In `hub/hub/mcp_server.py`, include the attempted endpoint in `HubAPIError` and connection
+- [x] 5.1 In `hub/hub/mcp_server.py`, include the attempted endpoint in `HubAPIError` and connection
+      error text. `HubAPIError` now carries `method`/`path` and renders `"Hub rejected {method}
+      {path} ({status}): {detail}"`.
+- [x] 5.2 Distinguish, in the message the agent receives, a rejected request from an unreachable or
+      unintended destination. Split into two exception types: `HubAPIError` ("the Hub was reached
+      and said no") vs. new `HubUnreachableError` ("nothing answered at this HUB_URL at all — check
+      it may point at the wrong instance"), raised from `HTTPError` vs. `URLError` respectively.
+- [x] 5.3 Record an event on the causing agent's timeline when the Hub observes a tool call fail.
+      Discovered while implementing this: `send_message` to a nonexistent recipient had **zero**
+      existence validation before this task — `create_message_for_actor` created a real
+      Message/InboundQueueEntry addressed to any string, no matter how implausible, and returned
+      201. That's the actual gap task 5.6's scenario needs to exist at all. Fixed in
+      `hub/hub/api/v1/messages.py`: `create_message_for_actor` now checks the recipient against
+      real `Agent` rows in the project before creating anything; an unknown recipient gets a 404
+      naming it, and a `persist_event(..., "agent_action_rejected", {endpoint, reason, recipient},
+      agent=sender, severity="warn")` call records it on the *sender's* timeline — visible through
+      the same `/logs` API the operator-facing UI already reads, not just in the agent's own tool
       error text.
-- [ ] 5.2 Distinguish, in the message the agent receives, a rejected request from an unreachable or
-      unintended destination.
-- [ ] 5.3 Record an event on the causing agent's timeline when the Hub observes a tool call fail.
-- [ ] 5.4 Unit test: a failing tool call produces an error naming the endpoint.
-- [ ] 5.5 Unit test: an observed failure appears as a timeline event with its reason.
-- [ ] 5.6 **Live:** trigger a `send_message` to a non-existent recipient; confirm the operator can
-      see the failure and its reason in the UI without reading a transcript.
+- [x] 5.4 Unit test: a failing tool call produces an error naming the endpoint.
+      `test_rejected_request_names_the_attempted_endpoint` and
+      `test_unreachable_hub_is_distinguishable_from_a_rejected_request` in `test_mcp_server.py`.
+- [x] 5.5 Unit test: an observed failure appears as a timeline event with its reason.
+      `test_message_to_unknown_recipient_is_rejected_and_recorded_on_senders_timeline` in
+      `test_agent_actions_coordination.py` — also asserts no Message/queue entry was created for
+      the unknown recipient (the rejection is real, not just error text).
+- [x] 5.6 **Live:** trigger a `send_message` to a non-existent recipient; confirm the operator can
+      see the failure and its reason in the UI without reading a transcript. Triggered a real
+      non-yolo Claude agent (`live-verify-claude`, project `proj-de54b547`) through the real Hub;
+      its own charter led it to message "principal" — itself not a registered agent in this
+      project, an organic real-world hit of exactly this scenario. Transcript showed `is_error:
+      true` with `"Hub rejected POST /messages (404): Unknown recipient 'principal': no agent by
+      that name is registered in this project"`. Confirmed separately, as the operator would see
+      it: `GET /api/v1/projects/proj-de54b547/logs?event_type=agent_action_rejected` returned the
+      event with `agent: "live-verify-claude"`, `severity: "warn"`, and
+      `data: {endpoint, reason: "unknown_recipient", recipient: "principal"}` — visible through the
+      Hub's REST API independent of the agent's own transcript.
 
 ## 6. Collaboration readiness reporting
 

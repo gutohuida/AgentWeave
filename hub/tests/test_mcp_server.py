@@ -222,3 +222,49 @@ def test_hub_request_timeout_is_ten_seconds(monkeypatch):
     monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_test")
     _hub_request("GET", "/tasks")
     assert captured["timeout"] == 10
+
+
+def test_rejected_request_names_the_attempted_endpoint(hub):
+    """Task 5.1/5.4: a request the Hub reached and rejected must name which endpoint was
+    attempted, not just the bare status code and detail."""
+    from hub.mcp_server import HubAPIError, _hub_request
+
+    _, responses = hub
+    responses.append(
+        urllib.error.HTTPError(
+            "http://localhost/api/v1/agent-actions/messages",
+            404,
+            "Not Found",
+            {},
+            MagicMock(read=lambda: b'{"detail":"Unknown recipient \'ghost\'"}'),
+        )
+    )
+
+    with pytest.raises(HubAPIError) as raised:
+        _hub_request("POST", "/messages")
+
+    assert raised.value.method == "POST"
+    assert raised.value.path == "/messages"
+    assert "POST /messages" in str(raised.value)
+    assert "Unknown recipient" in str(raised.value)
+
+
+def test_unreachable_hub_is_distinguishable_from_a_rejected_request(hub):
+    """Task 5.2: an unreachable destination (no Hub answered at all) must be
+    distinguishable, by exception type and by message, from a reached-and-rejected
+    request — the two point at different problems (network/misconfiguration vs. a
+    validation or policy failure the Hub itself raised)."""
+    from hub.mcp_server import HubAPIError, HubUnreachableError, _hub_request
+
+    _, responses = hub
+    responses.append(urllib.error.URLError("Connection refused"))
+
+    with pytest.raises(HubUnreachableError) as raised:
+        _hub_request("POST", "/messages")
+
+    assert not isinstance(raised.value, HubAPIError)
+    assert "Cannot reach the Hub" in str(raised.value)
+    assert "POST /messages" in str(raised.value)
+    assert "HUB_URL" in str(raised.value)
+    # Distinguishable phrasing from the rejected case, not just a distinguishable type.
+    assert "rejected" not in str(raised.value)

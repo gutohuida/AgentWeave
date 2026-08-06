@@ -256,6 +256,12 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
             session_row.data = data
         else:
             session.add(ProjectSession(project_id="proj-test", data=data))
+        for agent_name in ("cli-lead", "cli-worker", "cli-template"):
+            existing = await session.get(Agent, agent_name)
+            if existing is None:
+                session.add(
+                    Agent(id=agent_name, project_id="proj-test", name=agent_name)
+                )
         session.add(
             Run(
                 id="run-cli-session",

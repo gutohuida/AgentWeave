@@ -11,7 +11,7 @@ from ... import project_workspace
 from ...auth import get_project
 from ...conversations import latest_open_conversation, new_conversation
 from ...db.engine import get_session
-from ...db.models import Message, Run
+from ...db.models import Agent, Message, Run
 from ...inbound_queue import new_entry, project_limits
 from ...schemas.common import SuccessResponse
 from ...schemas.messages import MessageCreate, MessageResponse
@@ -60,6 +60,35 @@ async def create_message_for_actor(
         msg.session_id = source_run.session_id
         msg.conversation_id = source_run.conversation_id
         source_conversation_id = source_run.conversation_id
+
+    recipient_exists = await session.scalar(
+        select(Agent.id).where(Agent.project_id == project_id, Agent.name == body.recipient)
+    )
+    if recipient_exists is None:
+        # Recorded on the SENDER's timeline — task 5.3: the Hub, not just the agent's own
+        # tool-call error text, must make this visible to the operator. Without this,
+        # send_message to a nonexistent recipient used to succeed silently (201, a real
+        # message_id): the Message/InboundQueueEntry got created and queued, addressed to
+        # a name no agent would ever poll.
+        await persist_event(
+            session,
+            project_id,
+            "agent_action_rejected",
+            {
+                "endpoint": "POST /messages",
+                "reason": "unknown_recipient",
+                "recipient": body.recipient,
+            },
+            agent=sender,
+            severity="warn",
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Unknown recipient '{body.recipient}': no agent by that name is "
+                "registered in this project"
+            ),
+        )
 
     recipient_conversation = await latest_open_conversation(
         session, project_id=project_id, agent=body.recipient
