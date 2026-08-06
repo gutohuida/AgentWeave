@@ -226,13 +226,15 @@ def access_path_notice(access_path: str) -> str:
             "[AgentWeave] Tool access: the `agentweave` MCP tools are available — call "
             "send_message / create_task / update_task / ask_user directly."
         )
+    # No CLI equivalents are offered any more. This branch used to name `agentweave msg send`,
+    # `task create`, `question ask` and `agent request`; `2026-08-03-single-runtime` reduced the
+    # CLI to five app-lifecycle commands, so every one of those instructions was wrong. Saying so
+    # plainly is better than sending an agent after commands that do not exist.
     return (
-        "[AgentWeave] Tool access: MCP tools are not available in this environment. Use "
-        "`agentweave` CLI commands instead — e.g. `agentweave msg send --to <agent> -m "
-        '"..."`, `agentweave task create --title "..."`, `agentweave task update <id> '
-        '--status <status>`, `agentweave question ask -q "..."`, or `agentweave agent '
-        'request <name> --template <template> --task "..."`. Inbound content is already '
-        "included in this turn; no retrieval command is needed."
+        "[AgentWeave] Tool access: no AgentWeave tool surface is available this turn, so you "
+        "cannot send messages, create or update tasks, or ask the operator. Report what you "
+        "would have sent as part of your reply instead. Inbound content is already included in "
+        "this turn; no retrieval is needed."
     )
 
 

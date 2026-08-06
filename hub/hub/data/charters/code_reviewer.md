@@ -19,7 +19,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Check for tasks marked `under_review` — those are your primary queue
 
 ### When reviewing — zero-trust sequence (AI-generated code)

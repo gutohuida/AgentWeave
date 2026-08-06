@@ -192,6 +192,64 @@ async def test_get_agent_context_never_tells_a_known_agent_to_stand_down(app, au
 
 
 @pytest.mark.asyncio
+async def test_get_agent_context_describes_the_tool_surface(app, auth_headers):
+    """Naming a tool without its accepted values is what made Codex guess `message_type="text"`,
+    and the four job tools were never mentioned to agents at all."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "tools-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=tools-agent", headers=auth_headers
+    )
+    context = resp.json()["context"]
+
+    assert "## Your tools" in context
+    # Every callable tool is described, including the ones agents could not previously see.
+    for tool in (
+        "send_message",
+        "create_task",
+        "list_tasks",
+        "get_task",
+        "update_task",
+        "ask_user",
+        "get_answer",
+        "request_agent",
+        "create_job",
+        "delete_job",
+        "toggle_job",
+        "run_job",
+    ):
+        assert tool in context, f"{tool} is callable but undescribed"
+
+    # Constrained parameters carry their values, which is the actual fix.
+    assert "`direct_trigger`" in context
+    assert "`revision_needed`" in context
+    assert "`critical`" in context
+
+
+@pytest.mark.asyncio
+async def test_get_agent_context_does_not_point_at_its_own_context_file(app, auth_headers):
+    """That pointer produced the first permission denial of the operator's test: the agent read
+    a file whose contents it had already been given."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "pointer-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=pointer-agent", headers=auth_headers
+    )
+    context = resp.json()["context"]
+    assert ".agentweave/context/" not in context
+
+
+@pytest.mark.asyncio
 async def test_get_agent_context_lists_the_real_roster(app, auth_headers):
     """An agent must be told its peers' exact names, or it cannot address them."""
     for name in ("roster-one", "roster-two"):

@@ -21,7 +21,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Understand the deployment target (cloud, self-hosted, local Docker, etc.) before writing any config
 3. Check what environment variables are expected by the application
 

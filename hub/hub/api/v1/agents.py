@@ -4,7 +4,7 @@ import asyncio
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
@@ -754,6 +754,44 @@ def _runner_summary(agent_meta: dict) -> str:
     return "; ".join(parts)
 
 
+def _tool_surface_lines() -> List[str]:
+    """Describe every tool an agent can call, with the values its constrained parameters take.
+
+    Naming a tool without its accepted values is what produced the Codex failure: the turn
+    preamble listed four tool names and nothing else, so agents guessed `message_type="text"` and
+    were rejected. Four job tools were never mentioned at all. Constrained values are taken from
+    `mcp_server`'s own `Literal` aliases, so this cannot drift from the schema clients receive.
+    """
+    from ...mcp_server import JobSessionMode, MessageType, TaskPriority, TaskStatus
+
+    def values(alias: Any) -> str:
+        return ", ".join(f"`{value}`" for value in get_args(alias))
+
+    return [
+        "## Your tools",
+        "",
+        "Names below are as injected; with an MCP surface they are prefixed `mcp__agentweave__`.",
+        "",
+        f"- `send_message(to_agent, subject, content, message_type=message, task_id=None)` — "
+        f"message_type is one of {values(MessageType)}.",
+        "- `create_task(title, description, assignee, priority=medium, requirements, "
+        f"acceptance_criteria)` — priority is one of {values(TaskPriority)}.",
+        "- `list_tasks(agent=None)` — read the shared task ledger.",
+        "- `get_task(task_id)` — read one ledger entry.",
+        f"- `update_task(task_id, status)` — status is required, one of {values(TaskStatus)}.",
+        "- `ask_user(question, blocking=False)` — ask the operator.",
+        "- `get_answer(question_id)` — collect an answer to an earlier question.",
+        "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
+        f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
+        f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
+        "- `delete_job(job_id)`, `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
+        "",
+        "Address a peer by its exact name from the roster above. There is no inbox tool: "
+        "everything addressed to you already appears in this turn.",
+        "",
+    ]
+
+
 async def _render_hub_agent_context(
     *,
     agent: str,
@@ -761,6 +799,8 @@ async def _render_hub_agent_context(
     db: AsyncSession,
     session_data: Optional[dict],
     agent_row: Optional[Agent],
+    work_dir: Optional[str] = None,
+    isolated: bool = False,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -776,6 +816,14 @@ async def _render_hub_agent_context(
     `session_data` is still consulted for quality gates, which have no Hub-native home yet and are
     surfaced read-only by the UI's own quality panel. It no longer decides anything about identity
     or the roster.
+
+    `work_dir`/`isolated` describe the directory the run will execute in. They are supplied by
+    `trigger_agent_directly`, which already computes them, so the text cannot disagree with the
+    process. Without them an agent had no idea it was in a worktree and addressed the project root
+    instead, and every such read and write was refused
+    (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`). They are optional because the
+    same renderer serves `GET /agents/agent-context`, which is asked outside any run and so has no
+    workspace to describe.
     """
     registered = agent_row is not None
     missing: List[str] = []
@@ -812,8 +860,28 @@ async def _render_hub_agent_context(
     lines.append("")
     project_name = (project_row.name if project_row else None) or project_id
     lines.append(f"- Project: {project_name}")
-    lines.append(f"- Canonical runtime context: `.agentweave/context/{agent}.md`")
+    # Deliberately no pointer to `.agentweave/context/<agent>.md`. Its contents *are* this text,
+    # already delivered as the system prompt, and following that pointer is what produced the
+    # first permission denial of the operator's 2026-08-06 test.
     lines.append("")
+
+    if work_dir:
+        lines.append("### Your workspace")
+        lines.append(f"- Working directory: `{work_dir}`")
+        if isolated:
+            lines.append(
+                f"- This is an isolated git worktree on branch `{worktrees.branch_name(agent)}`."
+            )
+            lines.append(
+                "- Other agents work in separate worktrees on their own branches. You cannot see "
+                "their changes, and they cannot see yours until branches are merged."
+            )
+        else:
+            lines.append("- This is the project's shared checkout, not an isolated worktree.")
+        lines.append(
+            "- Resolve every path against this directory. Files outside it are normally refused."
+        )
+        lines.append("")
 
     lines.append("### Team")
     if roster:
@@ -860,6 +928,7 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
+        lines.extend(_tool_surface_lines())
     else:
         lines.append("## Registration")
         lines.append("")
@@ -1338,7 +1407,7 @@ async def post_new_session_request(
         content=(
             "**Context management: New session requested**\n\n"
             "1. Run `/aw-checkpoint` to save your session state.\n"
-            "2. Your principal will start a fresh session for you.\n"
+            "2. The operator will start a fresh session for you.\n"
             "3. The new session will read your checkpoint as its first action."
         ),
         type="message",

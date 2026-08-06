@@ -21,7 +21,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Locate the API contract in `shared/design-*.md` — if missing, ask Backend Dev for it
 3. Build against mocks initially; integrate with real API when it is ready
 
@@ -31,7 +31,7 @@
 - Keep component logic thin: data fetching and transformation belong in hooks or services
 - **Write tests before implementation (TDD)** — at least smoke tests for every new component
 
-### Quality governance (when `quality:` is configured in agentweave.yml)
+### Quality governance (when the project configures quality gates)
 - Check `docs_threshold` setting. If `all` or `non_trivial` (and this task qualifies), produce a decision doc **before** marking the task `completed`:
   - Path: `<docs_path>/<task-id>.md` (or `.agentweave/code-docs/<task-id>.md` if `docs_path` is unset)
   - Use the `code_decision.md` template

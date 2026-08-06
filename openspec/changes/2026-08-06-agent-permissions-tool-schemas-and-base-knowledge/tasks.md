@@ -45,35 +45,35 @@
 
 ## 4. Canonical context tells an agent where it is and what its tools accept
 
-- [ ] 4.1 Thread `effective_work_dir` from `trigger_agent_directly` into
+- [x] 4.1 Thread `effective_work_dir` from `trigger_agent_directly` into
       `_render_hub_agent_context` rather than recomputing it.
-- [ ] 4.2 Add a "Your workspace" section: absolute working directory, whether it is an isolated
+- [x] 4.2 Add a "Your workspace" section: absolute working directory, whether it is an isolated
       worktree (branch `agentweave/<agent>`, siblings invisible) or the shared repo root for a
       read-only agent, and that paths resolve against it.
-- [ ] 4.3 Add a "Your tools" section generated from the same Literal aliases as §1, including the
+- [x] 4.3 Add a "Your tools" section generated from the same Literal aliases as §1, including the
       four job tools currently invisible to agents.
-- [ ] 4.4 Delete the `Canonical runtime context: .agentweave/context/<agent>.md` line.
-- [ ] 4.5 Test: context names the real working directory and the worktree branch.
-- [ ] 4.6 Test: context lists each tool's constrained parameters with their valid values.
-- [ ] 4.7 Test: context contains no pointer to its own context file.
+- [x] 4.4 Delete the `Canonical runtime context: .agentweave/context/<agent>.md` line.
+- [x] 4.5 Test: context names the real working directory and the worktree branch.
+- [x] 4.6 Test: context lists each tool's constrained parameters with their valid values.
+- [x] 4.7 Test: context contains no pointer to its own context file.
 
 ## 5. Preamble and operator-facing text
 
-- [ ] 5.1 Correct `access_path_notice`'s CLI-fallback branch (`hub/hub/launchability.py`), which
+- [x] 5.1 Correct `access_path_notice`'s CLI-fallback branch (`hub/hub/launchability.py`), which
       names commands removed when the CLI was reduced to five.
-- [ ] 5.2 Remove "Your principal" from `post_new_session_request` (`hub/hub/api/v1/agents.py`).
-- [ ] 5.3 Correct `agent_status.py:STALLED_STATUS_MESSAGE`, which tells the operator to restart the
+- [x] 5.2 Remove "Your principal" from `post_new_session_request` (`hub/hub/api/v1/agents.py`).
+- [x] 5.3 Correct `agent_status.py:STALLED_STATUS_MESSAGE`, which tells the operator to restart the
       removed watchdog.
-- [ ] 5.4 Test: no shipped agent-facing string references a removed subsystem.
+- [x] 5.4 Test: no shipped agent-facing string references a removed subsystem.
 
 ## 6. The seeded charters stop citing files that do not exist
 
-- [ ] 6.1 Replace the shared `Read roles.json, protocol.md, shared/context.md` opener across
+- [x] 6.1 Replace the shared `Read roles.json, protocol.md, shared/context.md` opener across
       `hub/hub/data/charters/` with what is true: roster, instructions, and charter arrive in the
       turn context; nothing needs reading to start.
-- [ ] 6.2 Remove references to `agentweave.yml`, `agentweave status`, and "principal".
-- [ ] 6.3 Remove the watchdog reference in `spec.md`.
-- [ ] 6.4 Test: no seeded charter mentions a removed subsystem or a file the Hub never creates.
+- [x] 6.2 Remove references to `agentweave.yml`, `agentweave status`, and "principal".
+- [x] 6.3 Remove the watchdog reference in `spec.md`.
+- [x] 6.4 Test: no seeded charter mentions a removed subsystem or a file the Hub never creates.
 
 ## 7. Verification
 

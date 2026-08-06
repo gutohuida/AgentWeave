@@ -21,7 +21,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Check for a design spec in `shared/design-*.md` — implement from it, not from assumptions
 3. If no spec exists for your task, ask the Architect or Tech Lead before writing code
 
@@ -31,7 +31,7 @@
 - Validate all input at the API boundary — never trust client data
 - Use parameterized queries — no string interpolation in SQL
 
-### Quality governance (when `quality:` is configured in agentweave.yml)
+### Quality governance (when the project configures quality gates)
 - Check `docs_threshold` setting. If `all` or `non_trivial` (and this task qualifies), produce a decision doc **before** marking the task `completed`:
   - Path: `<docs_path>/<task-id>.md` (or `.agentweave/code-docs/<task-id>.md` if `docs_path` is unset)
   - Use the `code_decision.md` template

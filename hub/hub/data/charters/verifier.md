@@ -19,7 +19,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `.agentweave/roles.json`, `.agentweave/protocol.md`, and `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Read the acceptance criteria for the work you are about to review
 
 ### When reviewing

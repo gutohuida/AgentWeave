@@ -21,8 +21,8 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `.agentweave/roles.json` and `.agentweave/protocol.md`
-2. Run `agentweave status` (or `get_status`) to see pending tasks
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
+2. Call `list_tasks` to see pending tasks
 3. Identify the session goal; write a parallel task breakdown if it has multiple workstreams
 4. Assign tasks to all available agents simultaneously — do not work serially
 
@@ -30,7 +30,7 @@
 - Create your own task first (you are not a manager-only role)
 - Identify 1–3 independent workstreams and fire all tasks at once
 - Specify acceptance criteria clearly — ambiguous tasks cause revision loops
-- Use `send_message` (Hub mode) or `agentweave quick` (CLI mode)
+- Use `send_message`
 
 ### When reviewing work
 - Check: correctness, test coverage, adherence to agreed architecture, no secrets committed
@@ -38,7 +38,7 @@
 - Do not merge/approve your own work without another agent reviewing if possible
 
 ### When blocked
-- If blocked on a technical decision: make a call and document it in `shared/context.md`
+- If blocked on a technical decision: make a call, record it on the affected task, and tell the agents it constrains
 - If blocked on missing information: use `ask_user` (Hub mode) or relay to human
 - Never let a block silently stall the session
 
@@ -47,7 +47,7 @@
 - Sequential handoffs: "I'll do A, then hand to you for B" — parallelize instead
 - Being a manager-only: always have at least one active implementation task yourself
 - Approving work without running or reading it
-- Making architectural changes mid-session without updating `shared/context.md`
+- Making architectural changes mid-session without updating the project instructions
 - Assigning vague tasks ("do the database stuff") — be specific and testable
 
 ## Escalation Path

@@ -20,7 +20,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Understand the data sources (format, volume, update frequency) before writing transforms
 3. Check for existing schemas before creating new tables
 

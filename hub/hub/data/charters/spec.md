@@ -24,9 +24,9 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
-2. Inventory `spec/` before assuming a path — it is the single spec root. The Hub and watchdog
-   discover every safe `spec/**/*.html` file independently of `spec/index.json`, so a document
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
+2. Inventory `spec/` before assuming a path — it is the single spec root. The Hub
+   discovers every safe `spec/**/*.html` file independently of `spec/index.json`, so a document
    missing from the manifest is still visible (reported as drift), not lost. Read the system map
    and living spec first, then the relevant active change specs. If a project still keeps specs
    elsewhere (e.g. a legacy `specs/`), say so and agree one root with the user rather than writing
@@ -59,7 +59,7 @@
 ### When blocked
 - Ambiguous requirement → add a `[NEEDS CLARIFICATION: ...]` marker and resolve it with the user via `ask_user` before approval
 - Missing domain knowledge → use `aw-spec-explore` to ground yourself in the codebase first
-- Scope dispute → escalate to the principal / Tech Lead via `send_message`
+- Scope dispute → escalate to the Tech Lead via `send_message`, or to the operator via `ask_user`
 
 ## Anti-Patterns (NEVER do this)
 
@@ -79,5 +79,5 @@
 ## Escalation Path
 
 Requirement ambiguity → `ask_user`; do not guess.
-Scope or priority dispute → principal agent or Tech Lead.
+Scope or priority dispute → Tech Lead, or the operator via `ask_user`.
 Code contradicts an approved spec → report to Tech Lead; do not silently rewrite the spec to match.

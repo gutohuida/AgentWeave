@@ -452,8 +452,15 @@ class TestAccessPath:
 
     def test_access_path_notice_names_the_available_tools(self):
         assert "send_message" in access_path_notice("mcp")
-        assert "agentweave msg send" in access_path_notice("cli")
-        assert "not available" in access_path_notice("cli")
+
+    def test_access_path_notice_offers_no_removed_cli_commands(self):
+        """The fallback used to instruct `agentweave msg send`, `task create`, `question ask`
+        and `agent request`; 2026-08-03-single-runtime left five app-lifecycle commands, so all
+        of those were wrong. Saying no tools are available is better than a false instruction."""
+        notice = access_path_notice("cli")
+        assert "no AgentWeave tool surface is available" in notice
+        for removed in ("agentweave msg", "agentweave task", "agentweave question"):
+            assert removed not in notice
 
 
 @pytest.mark.asyncio

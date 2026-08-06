@@ -7,8 +7,8 @@ from .db.models import AgentHeartbeat
 
 HEARTBEAT_STALE_AFTER = timedelta(seconds=120)
 STALLED_STATUS_MESSAGE = (
-    "No heartbeat received for more than 2 minutes. The run may have stopped; "
-    "check or restart the host watchdog."
+    "No heartbeat received for more than 2 minutes. The run may have stopped — "
+    "check the agent's conversation for its last output."
 )
 
 

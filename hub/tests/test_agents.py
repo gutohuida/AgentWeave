@@ -162,7 +162,10 @@ async def test_list_agents_marks_expired_running_heartbeat_as_stalled(app, auth_
     assert resp.status_code == 200
     stale_agent = next(agent for agent in resp.json() if agent["name"] == "stale-agent")
     assert stale_agent["status"] == "stalled"
-    assert "restart the host watchdog" in stale_agent["latest_status_msg"]
+    # The message used to tell the operator to restart the watchdog, deleted in
+    # 2026-08-03-single-runtime. It now points at somewhere that exists.
+    assert "watchdog" not in stale_agent["latest_status_msg"].lower()
+    assert "may have stopped" in stale_agent["latest_status_msg"]
 
 
 @pytest.mark.asyncio

@@ -316,6 +316,12 @@ async def trigger_agent_directly(
         db=session,
         session_data=session_data,
         agent_row=agent_row,
+        # The directory the run will actually execute in. Passed rather than recomputed so the
+        # text an agent reads cannot disagree with the process's own cwd — agents were resolving
+        # paths against the project root while running in a worktree, and every such read and
+        # write was refused.
+        work_dir=effective_work_dir,
+        isolated=isolated_workspace is not None,
     )
     context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
     try:

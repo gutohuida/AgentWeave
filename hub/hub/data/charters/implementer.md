@@ -20,7 +20,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `.agentweave/roles.json`, `.agentweave/protocol.md`, and `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Read your assigned task and its acceptance criteria in full before writing any code
 3. If any acceptance criterion is ambiguous, resolve it before starting — do not guess
 

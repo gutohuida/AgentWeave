@@ -342,6 +342,14 @@ async def test_trigger_materializes_bound_charter_context(app, auth_headers, bin
     assert "## Charter: Live Charter" in context
     assert "LIVE_CHARTER_MARKER" in context
 
+    # The agent is told the directory it is actually running in. Without this it resolved paths
+    # against the project root while executing in a worktree, and every read and write outside
+    # that worktree was refused (2026-08-06-agent-permissions-tool-schemas-and-base-knowledge).
+    work_dir = str(context_path.parent.parent.parent)
+    assert "### Your workspace" in context
+    assert f"- Working directory: `{work_dir}`" in context
+    assert "Resolve every path against this directory" in context
+
 
 @pytest.mark.asyncio
 async def test_writing_agent_worktree_exists_before_first_spawn(

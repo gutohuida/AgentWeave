@@ -20,7 +20,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Confirm training data is available and validated by Data Engineer before starting
 3. Define evaluation metrics and baselines before training any model
 

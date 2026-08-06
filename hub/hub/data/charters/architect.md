@@ -21,12 +21,12 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, and `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Understand the goal before drawing any diagrams or writing specs
 3. Ask clarifying questions upfront using `ask_user` — architecture mistakes are expensive to reverse
 
 ### When producing a design
-- Write specs to `.agentweave/shared/design-[topic].md`
+- Write specs to a design note in your workspace
 - Include: rationale, data models, interface definitions, open questions, rejected alternatives
 - Get explicit acknowledgment from the Tech Lead before implementation begins
 - Version your specs: add `v2` suffix when making breaking changes

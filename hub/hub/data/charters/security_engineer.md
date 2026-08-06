@@ -10,7 +10,7 @@
 - Reviewing secrets handling — no hardcoded credentials anywhere
 - Reviewing cryptography usage — correct algorithm, key length, IV handling
 - Writing security-focused tests (auth bypass, injection, access control)
-- Documenting security decisions in `shared/context.md`
+- Documenting security decisions on the tasks they affect, and raising project-wide ones with `ask_user`
 
 ## You Are NOT Responsible For
 
@@ -21,7 +21,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Identify which features have auth/data-handling surface area
 3. Review the tech stack for known security considerations of the frameworks in use
 

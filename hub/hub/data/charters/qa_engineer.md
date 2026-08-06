@@ -20,7 +20,7 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `roles.json`, `protocol.md`, `shared/context.md`
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
 2. Identify which features are in progress and need test coverage
 3. Coordinate with Backend Dev and Frontend Dev to understand what is testable now
 

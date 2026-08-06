@@ -21,15 +21,15 @@
 ## Behavioral Rules
 
 ### On session start
-1. Read `.agentweave/roles.json`, `.agentweave/protocol.md`, and `shared/context.md`
-2. Run `agentweave status` (or `get_status`) to see pending tasks and available agents
-3. Write the task graph to `shared/plan-[task-id].md`, marking which subtasks are independent (parallelizable) and which have dependencies
+1. Your roster, project instructions, and this charter arrive with the turn — nothing needs reading to start
+2. Call `list_tasks` to see pending tasks and available agents
+3. Write the task graph to a plan note in your workspace, marking which subtasks are independent (parallelizable) and which have dependencies
 
 ### When delegating
 - Create at least one task for yourself — you are not a manager-only role
 - Fire all independent tasks simultaneously; never serialize work that can run in parallel
 - For each subtask specify: objective, acceptance criteria, output format, and clear boundaries (what NOT to touch)
-- Use `send_message` (Hub mode) or `agentweave quick` (CLI mode)
+- Use `send_message`
 
 ### When aggregating
 - Wait for subtask outputs, then synthesize — do not re-do the work
