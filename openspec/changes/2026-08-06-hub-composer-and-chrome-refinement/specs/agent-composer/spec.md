@@ -126,3 +126,93 @@ A provider name MUST NOT be hardcoded in the composer's control components.
 
 - **WHEN** the composer's control components are inspected
 - **THEN** no provider name is hardcoded in them
+
+### Requirement: The model picker is searchable and organised by provider
+
+The list a model control opens SHALL support finding a model by typing, and SHALL organise its
+entries by provider.
+
+Typing SHALL match against a model's label, its identifier, and its provider's name, so that typing
+a provider's name reaches that provider's models. Matching MUST NOT require the operator to type a
+prefix of the label exactly.
+
+The list SHALL indicate which provider each entry belongs to without the operator having to open
+anything further, and SHALL make a provider's entries reachable as a group.
+
+Searching MUST NOT offer a model that could not be selected without it. Filtering is a view over the
+same choices, not a way to reach a different set.
+
+#### Scenario: A model is found by typing part of its name
+
+- **WHEN** the operator types part of a model's label
+- **THEN** matching models are shown
+- **AND** a match that is not a leading prefix is still found
+
+#### Scenario: Typing a provider's name reaches its models
+
+- **WHEN** the operator types a provider's name
+- **THEN** that provider's models are shown
+
+#### Scenario: Entries are attributable to a provider at a glance
+
+- **WHEN** the list is displayed
+- **THEN** each entry's provider is identifiable without further interaction
+
+#### Scenario: Search reaches nothing extra
+
+- **WHEN** a search matches a model the operator could not otherwise select
+- **THEN** that model is not offered
+
+#### Scenario: An empty search is not a dead end
+
+- **WHEN** a search matches no model
+- **THEN** the operator is told nothing matched
+- **AND** can clear the search and see the full list again
+
+### Requirement: Frequently-used models are reachable without searching
+
+The model picker SHALL let the operator mark models for quick access, and SHALL present marked
+models ahead of unmarked ones.
+
+A marking SHALL persist across conversations and across reloads, and SHALL be the operator's alone —
+it MUST NOT change which models exist, which are offered, or which is default for any agent.
+
+Marking and unmarking SHALL be reversible from the picker itself.
+
+#### Scenario: A marked model is reachable immediately
+
+- **WHEN** the operator has marked a model and opens the picker
+- **THEN** that model is presented ahead of unmarked models
+
+#### Scenario: A marking survives a reload
+
+- **WHEN** the operator marks a model and reloads
+- **THEN** the marking is still in effect
+
+#### Scenario: Marking changes nothing but ordering
+
+- **WHEN** a model is marked or unmarked
+- **THEN** the set of models offered is unchanged
+- **AND** no agent's default or resolved model changes
+
+#### Scenario: Marking is reversible in place
+
+- **WHEN** the operator unmarks a model from the picker
+- **THEN** it stops being presented ahead of unmarked models
+
+### Requirement: The model picker is fully operable from the keyboard
+
+The model picker SHALL be operable without a pointer. The operator SHALL be able to open it, type to
+narrow it, move between entries, select an entry, and dismiss it, using the keyboard alone.
+
+Dismissing the picker without selecting SHALL leave the current model unchanged.
+
+#### Scenario: The picker is driven entirely by keyboard
+
+- **WHEN** the operator uses only the keyboard
+- **THEN** they can open the picker, narrow it by typing, move between entries, and select one
+
+#### Scenario: Dismissing selects nothing
+
+- **WHEN** the operator dismisses the picker without selecting
+- **THEN** the current model is unchanged

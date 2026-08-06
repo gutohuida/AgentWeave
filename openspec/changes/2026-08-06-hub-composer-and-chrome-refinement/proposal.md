@@ -67,6 +67,10 @@ cloned and read. The relevant patterns:
 - `apps/web/src/components/ui/button.tsx` — their `ghost` variant is
   `border-transparent text-foreground [:hover]:bg-accent`. It never colours the border on hover.
   This is the single line that separates their feel from ours.
+- `apps/web/src/components/chat/ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, and
+  `modelPickerSearch.ts` — the picker is a provider-grouped list with a favourites rail and
+  tokenised fuzzy search that indexes the provider's display name as well as the model's, so typing
+  a provider's name finds its models.
 - `apps/web/src/components/chat/ProviderInstanceIcon.tsx` and `Icons.tsx` — provider marks are plain
   inline SVG components with the brand's fill baked in, keyed by provider, with a text-initials
   fallback for an unknown provider. No icon library, no webfont, no network fetch.
@@ -87,6 +91,9 @@ Electron app. See design.md.
   typing goes.
 - **Provider identity is shown as the provider's own mark**, in the composer's model control and in
   the agent-creation dialog, with a labelled fallback for a provider that has no mark.
+- **The model list becomes a real picker** — searchable by model or provider name, grouped by
+  provider, with operator-marked favourites first, fully keyboard-operable. Today it is a flat
+  popover, which is tolerable at six models and is not what the catalog is growing into.
 - **The project path becomes real navigable structure**, not concatenated text, and stops sharing a
   line with the agent count.
 - **The tab strip's dividing line goes away**, leaving the plane change to do the work the shell

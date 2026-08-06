@@ -10,34 +10,50 @@ because unit tests passed while the feature was completely broken in reality.
       results table in `design.md` Decision 1.
 - [x] 1.2 Record the finding and the version it was verified against — in `design.md`. Still to be
       repeated as a comment at the construction site when 2.1 lands.
-- [x] 1.3 Establish whether a sandbox-preserving configuration exists. **It does not.** All three
-      settings that permit the call (`approvals_reviewer="auto_review"`,
-      `approvals_reviewer="guardian_subagent"`, `--sandbox danger-full-access`) also permit writes
-      outside the workspace, verified by a direct breach test. There is no per-server MCP trust key.
+- [x] 1.3 Establish whether a sandbox-preserving configuration exists **within `codex exec`**. It
+      does not: `auto_review`, `guardian_subagent`, and `danger-full-access` all permit writes
+      outside the workspace, verified by direct breach test, and no per-server MCP trust key exists.
+- [x] 1.4 Establish whether another Codex transport avoids the trade. **`codex app-server` does.**
+      Verified by driving the real JSON-RPC protocol: MCP tool calls arrive as a distinct
+      client-answerable request identifying the server, and approving one does not approve a
+      sandbox escape. See `design.md` Decision 1a. This is what section 2 implements.
 
-## 2. Make the Codex tool surface invocable as an explicit operator choice
+## 2. Move the Codex runner to the app-server protocol
 
-Requires the operator decision on how the trade is presented — see "Open decision" at the foot of
-this file. Do not start section 2 before that is settled.
+Verified in `design.md` Decision 1a: `app-server` sends each approval to the client as a distinct
+request, so the Hub can approve its own MCP server's tool calls and deny everything else. The
+sandbox is fully preserved. This replaces the trade `exec` would have forced.
 
-- [ ] 2.1 Apply `approvals_reviewer="auto_review"` in `_build_codex_command`
-      (`hub/hub/runner_commands.py`) **only** for agents whose operator has chosen collaboration,
-      in the same `-c` block that already registers the server. Comment it with the 1.1 findings.
-- [ ] 2.2 Add the per-agent setting that carries that choice. It is distinct from `yolo`: `yolo`
-      removes the sandbox outright, this keeps `--sandbox workspace-write` while auto-approving
-      escalations. Both are weaker than the default; they are not the same weakening.
-- [ ] 2.3 Confirm an agent without the setting is byte-for-byte unchanged from today.
-- [ ] 2.4 Unit test: an agent with the setting gets `auto_review` and still gets
-      `--sandbox workspace-write`.
-- [ ] 2.5 Unit test: an agent without the setting gets neither.
-- [ ] 2.6 Unit test: `yolo` and the collaboration setting remain independently expressible.
-- [ ] 2.7 Check whether the Claude runner has the same defect — run the same probe-MCP-server
-      experiment against `claude`. If it does, fix it; if it does not, record how that was
-      established. Do not assume parity in either direction.
-- [ ] 2.8 **Live:** a collaboration-enabled codex agent's `send_message` completes, with no
-      "cancelled" line.
-- [ ] 2.9 **Live:** re-run the breach test through the Hub — confirm the documented sandbox
-      consequence is exactly what the operator was told, no more and no less.
+Land section 3 first — it is independent, smaller, and fixes mis-delivery on its own.
+
+- [ ] 2.1 Add an app-server client: spawn `codex app-server`, speak JSON-RPC over stdio, handle
+      `initialize` / `initialized` / `thread/start` / `turn/start`, and answer server→client
+      requests. Registering the AgentWeave MCP server keeps its existing `-c` form.
+- [ ] 2.2 Approve `mcpServer/elicitation/request` **only** when `_meta.codex_approval_kind` is
+      `mcp_tool_call` and `serverName` is the Hub's own server. Anything else is denied.
+- [ ] 2.3 Answer `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, and
+      `item/permissions/requestApproval` from the operator's selected sandbox — `yolo` approves,
+      otherwise deny. `yolo` keeps its current meaning and is not required for messaging.
+- [ ] 2.4 Deny any server→client request the Hub does not recognise. An unrecognised approval is
+      never granted by default.
+- [ ] 2.5 Map protocol events onto the existing output/timeline/usage model, replacing the
+      `--json` stdout parsing in `runner_parsing.py` for this path.
+- [ ] 2.6 Preserve session resume via `thread/resume`, keeping the durable session identity agents
+      already rely on.
+- [ ] 2.7 Handle process death, a hung turn, and `turn/interrupt` so a stuck app-server cannot wedge
+      an agent.
+- [ ] 2.8 Keep the `exec` path intact and selectable until 8.x proves the app-server path
+      equivalent. Do not delete it in this change.
+- [ ] 2.9 Unit test: an MCP elicitation for the Hub's own server is approved.
+- [ ] 2.10 Unit test: an MCP elicitation naming a *different* server is denied.
+- [ ] 2.11 Unit test: command-execution and file-change approvals are denied for a non-`yolo` run
+      and approved for a `yolo` run.
+- [ ] 2.12 Unit test: an unrecognised server→client request is denied.
+- [ ] 2.13 Unit test: `yolo` is not required for a tool call to be approved.
+- [ ] 2.14 **Live:** the breach test through the Hub — one turn that calls a tool *and* attempts a
+      write outside the workspace. The tool call succeeds; the write is refused; no file appears.
+- [ ] 2.15 Check whether the Claude runner has an equivalent defect, using the same probe-MCP-server
+      method. Record what was established; do not assume parity in either direction.
 
 ## 3. Derive the callback address from the served address
 
@@ -97,28 +113,12 @@ this file. Do not start section 2 before that is settled.
 - [ ] 8.1 `pytest hub/tests -q` — full pass, count recorded.
 - [ ] 8.2 `npm test -- --run` and `npx tsc --noEmit` in `hub/ui` — clean (only if UI files changed).
 - [ ] 8.3 **Live, the original failure:** on a Hub started on a non-default port, with two
-      collaboration-enabled non-`yolo` codex agents, ask agent one to message agent two. Confirm:
+      default-configuration (non-`yolo`, sandboxed) codex agents, ask agent one to message agent two. Confirm:
       the tool call completes; the message row exists with the right sender, recipient, and project;
       a queue entry was created for the recipient; and the recipient is scheduled for a turn.
 - [ ] 8.4 **Live:** the recipient actually runs its turn and its transcript contains the message.
 - [ ] 8.5 **Live:** repeat 8.3 with two claude agents.
 - [ ] 8.6 **Live:** repeat 8.3 across providers — a codex agent messaging a claude agent.
-- [ ] 8.7 Confirm a codex agent *without* collaboration enabled still cannot write outside its
-      workspace, so the default posture is genuinely unchanged by this change.
+- [ ] 8.7 Confirm the agents in 8.3 still cannot write outside their workspace — collaboration
+      working must not have cost the sandbox.
 - [ ] 8.8 `openspec validate 2026-08-06-agent-messaging-delivery --strict` — clean.
-
-## Open decision — blocks section 2
-
-Task 1.3 established that on Codex 0.146.0, a Codex agent that can collaborate is a Codex agent
-whose sandbox escalations are auto-approved. There is no third option on this provider.
-
-The operator must decide how that trade is presented before section 2 is implemented:
-
-- Per-agent opt-in, default off — collaboration is off until enabled per agent; safest default,
-  but agent-to-agent messaging silently does nothing until someone finds the switch.
-- Per-project opt-in, default off — one decision covers a project's agents.
-- Default on for Codex agents, clearly labelled — messaging works out of the box; the operator is
-  told at creation what a Codex agent's sandbox actually guarantees.
-
-Whichever is chosen, the requirement stands that the cost is named, not implied, and that declining
-leaves a working sandboxed agent that is reported as unable to collaborate.

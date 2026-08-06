@@ -63,6 +63,29 @@ named in `proposal.md`; re-clone rather than guess if a detail is needed.
 - [ ] 4.6 Unit test: an unknown provider renders a text label and no mark.
 - [ ] 4.7 Unit test: a launchable provider with no mark is still selectable.
 
+## 4b. Model picker — search, grouping, favourites
+
+Reference: t3code `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `modelPickerSearch.ts`.
+
+- [ ] 4b.1 Add search over the model list, matching label, identifier, and provider name.
+      Substring/fuzzy, not leading-prefix only.
+- [ ] 4b.2 Group entries by provider, with each entry attributable to its provider at a glance and a
+      provider's entries reachable as a group.
+- [ ] 4b.3 Ensure filtering never surfaces a model that is not otherwise selectable — filter the
+      offered set, never widen it.
+- [ ] 4b.4 Empty-result state that says nothing matched and can be cleared back to the full list.
+- [ ] 4b.5 Favourites: mark/unmark from the picker, marked models presented first.
+- [ ] 4b.6 Persist favourites across conversations and reloads. Decide and record where they live
+      (operator-local vs Hub-stored) — they are the operator's preference, not project data.
+- [ ] 4b.7 Guarantee favourites change ordering only: no agent's default or resolved model moves.
+- [ ] 4b.8 Full keyboard operation: open, type to narrow, move, select, dismiss. Dismiss selects
+      nothing.
+- [ ] 4b.9 Unit tests: non-prefix match found; provider-name search; grouping; no extra models via
+      search; empty state; favourite ordering; favourite persistence; favourites do not change
+      resolution; each keyboard action; dismiss leaves model unchanged.
+- [ ] 4b.10 Keep the picker's width content-derived per section 2 — search must not reintroduce a
+      fixed width.
+
 ## 5. Project header
 
 - [ ] 5.1 Replace `pathSegments.join(' › ')` in `ProjectHeader.tsx` with per-segment elements.
@@ -132,6 +155,8 @@ named in `proposal.md`; re-clone rather than guess if a detail is needed.
 - [ ] 10.10 **Live:** the native folder dialog opens, returns a real path, and registers a project
       with it. Also exercise cancel.
 - [ ] 10.11 **Live:** keyboard-only traversal of the composer control row.
+- [ ] 10.11b **Live:** open the model picker, search by provider name and by partial model name,
+      favourite a model, reload, and confirm it is still presented first.
 - [ ] 10.12 Narrow viewport (390×800) — **carried forward as unverifiable** without interactive
       resize control. State this rather than leaving it blank.
 - [ ] 10.13 Numeric contrast ratios — **carried forward as unverifiable**; no checker available.

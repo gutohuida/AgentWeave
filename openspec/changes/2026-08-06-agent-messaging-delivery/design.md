@@ -55,34 +55,79 @@ the default reviewer the file was never created. Under **both** `auto_review` an
 - **It is not a network restriction.** Granting `network_access` under `workspace-write` changes
   nothing.
 
-### The consequence — a requirement had to change
+### Within `codex exec`, the trade is unavoidable
 
-**On Codex 0.146.0 there is no configuration that permits MCP tool calls while preserving the
-filesystem sandbox.** The three settings that permit the call all do so by permitting *every*
-escalation.
+**Within headless `exec` there is no configuration that permits MCP tool calls while preserving the
+filesystem sandbox.** Every setting that permits the call permits *every* escalation. That is a
+property of `exec`, not of Codex — and the distinction turns out to matter enormously.
 
-This invalidates the original requirement that collaboration must not cost the sandbox. It was
-written before the behaviour was measured and it is not satisfiable on this provider. Pretending
-otherwise would either block the feature indefinitely or produce an implementation that quietly
-claims a protection it does not have.
+## Decision 1a — `codex exec` is the wrong transport; use `codex app-server`
 
-**Chosen: make the trade explicit, operator-owned, and visible, rather than implicit.**
+`exec` is one-shot and headless. There is no client attached to it, so anything requiring approval
+is resolved by a policy rather than by an answer, and the only policies available are "deny
+everything" (default, kills MCP) or "approve everything" (kills the sandbox).
 
-A Codex agent that can collaborate is a Codex agent whose escalations are auto-approved. The Hub's
-obligation is therefore to (a) never make that choice silently on the operator's behalf, (b) state
-plainly what is given up, and (c) keep the sandboxed-and-non-collaborating configuration available
-and working for operators who prefer it.
+**`codex app-server` is a different protocol with a client attached.** It speaks JSON-RPC over
+stdio, and approval requests are sent *to the client*, which answers each one individually. The Hub
+is a client. It can answer them.
 
-`auto_review` is preferred over `guardian_subagent` for this purpose: both failed the sandbox test
-identically, and `guardian_subagent` additionally spends model calls per approval for a protection
-it did not provide.
+### Verified against Codex CLI 0.146.0 on 2026-08-06
 
-### Not closed
+The app-server protocol was driven directly — `initialize` → `thread/start` (with
+`sandbox: "workspace-write"` and the probe MCP server registered) → `turn/start` — and every
+server→client request was logged.
 
-Per-server MCP trust is the setting this actually needs, and Codex does not have it. This is worth
-raising upstream. If a future Codex version adds it, the requirement reverts to the stronger form
-and the operator-facing trade disappears — the spec should be re-tightened at that point, not left
-permanently relaxed.
+**MCP tool calls arrive as `mcpServer/elicitation/request`**, carrying:
+
+```json
+{"serverName": "probe", "mode": "form",
+ "_meta": {"codex_approval_kind": "mcp_tool_call",
+           "persist": ["session", "always"],
+           "tool_description": "...", "tool_params": {"note": "appserver"}}}
+```
+
+They are **distinguishable by server name and by `codex_approval_kind`**, which is exactly the
+per-server granularity `exec` does not have. Answering `{"action": "accept"}` executed the tool.
+
+**The decisive test** put both in one turn: call the MCP tool, *then* write a file outside the
+workspace. Approving only the MCP elicitation and denying everything else produced:
+
+| Server→client request | Answer | Outcome |
+|---|---|---|
+| `mcpServer/elicitation/request` (`kind: mcp_tool_call`, `server: probe`) | accept | tool executed, token returned |
+| `item/commandExecution/requestApproval` ("write … outside the sandboxed workspace") | deny | **file never created** |
+
+The sandbox held completely while collaboration worked. The schema confirms the separation is
+structural, not incidental: `ServerRequest` declares `item/commandExecution/requestApproval`,
+`item/fileChange/requestApproval`, `item/permissions/requestApproval`, and
+`mcpServer/elicitation/request` as distinct methods.
+
+### Consequence
+
+**The original requirement stands and is restored.** Collaboration costs nothing. The Hub approves
+tool calls for the one MCP server it installed, and answers every other approval according to the
+sandbox the operator selected. `approvals_reviewer` is not used, `yolo` keeps its current meaning
+and is not required for messaging, and no new operator-facing trade is introduced.
+
+### Cost, stated honestly
+
+This is a **transport rearchitecture of the Codex runner**, not a flag. `codex exec` is a one-shot
+subprocess whose `--json` stdout is parsed; `app-server` is a persistent JSON-RPC peer with threads,
+turns, and a request/response obligation in both directions. It touches command construction, output
+parsing, session resume, and the run lifecycle.
+
+It is worth it beyond this bug: structured protocol events replace stdout scraping, thread and turn
+identity become first-class instead of inferred, and usage reporting arrives as data.
+
+`app-server` is marked `[experimental]` in `codex --help`. That is a real risk and is recorded
+below. It is mitigated by keeping the `exec` path until the app-server path is verified equivalent,
+not by adopting on faith.
+
+### Staging
+
+Section 3 (the callback address) is independent of this and much smaller. It should land first: it
+is a correctness fix that stands on its own, and it is what turns a mis-delivered write into a
+refusal.
 
 ## Decision 2 — the Hub's own address
 

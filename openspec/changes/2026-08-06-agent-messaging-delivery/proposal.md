@@ -39,6 +39,13 @@ Hub therefore currently offers exactly two states: *sandboxed and unable to coll
 *able to collaborate and completely unsandboxed*. Collaboration is not a dangerous capability and
 must not be priced at the sandbox.
 
+**This is a property of `codex exec`, not of Codex.** Measured against the CLI, no `exec`
+configuration grants MCP tool calls while keeping the sandbox. But `codex app-server` — a
+JSON-RPC protocol with a client attached — sends each approval to the client individually, and
+was verified to let the Hub approve its own MCP server's tool calls while denying a write outside
+the workspace in the same turn. The fix is therefore to change transport, not to loosen a policy.
+See design.md Decision 1a.
+
 ### Defect 2 — the Hub tells agents to call a URL it is not serving
 
 With `yolo` enabled the call left the agent and reached *something*:
@@ -77,9 +84,10 @@ process."
 
 ## What changes
 
-- **Codex agents can invoke the AgentWeave tool surface without being unsandboxed.** The Hub
-  configures the run so that the tool surface it installed is callable, while leaving the
-  filesystem sandbox exactly as the operator chose it.
+- **The Codex runner moves from headless `exec` to the `app-server` protocol.** The Hub becomes the
+  client that answers approvals: it approves tool calls for the one MCP server it installed and
+  answers everything else according to the sandbox the operator selected. Codex agents can
+  collaborate with the sandbox fully intact, and `yolo` is not required for messaging.
 - **The Hub derives the agent callback URL from the address it is actually serving on**, never from
   a configured default. If it cannot determine that address it refuses to start the run rather than
   handing out a guess.
@@ -93,8 +101,13 @@ process."
 ## Impact
 
 - **Affected specs:** `agent-tool-surface`, `runtime-diagnostics`
-- **Affected code:** `hub/hub/runner_commands.py`, `hub/hub/api/v1/agent_trigger.py`,
-  `hub/hub/api/v1/agents.py`, `hub/hub/mcp_server.py`, `hub/hub/agent_auth.py`, `hub/hub/config.py`
+- **Affected code:** `hub/hub/runner_commands.py`, `hub/hub/runner_parsing.py`,
+  `hub/hub/api/v1/agent_trigger.py`, `hub/hub/api/v1/agents.py`, `hub/hub/mcp_server.py`,
+  `hub/hub/agent_auth.py`, `hub/hub/config.py`; a new app-server JSON-RPC client module
+- **Scope note:** section 2 is a transport rearchitecture of the Codex runner, not a flag change.
+  Section 3 (the callback address) is independent, much smaller, and should land first.
+  `codex app-server` is marked experimental; the `exec` path is kept until the new path is verified
+  equivalent.
 - **Not affected:** the transport layer, the CLI, and the messaging data model — the message
   never reached `create_message_for_actor`, whose logic is correct.
 
