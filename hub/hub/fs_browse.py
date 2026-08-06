@@ -15,7 +15,9 @@ browsing from where they were, per design.md.
 
 from __future__ import annotations
 
+import ctypes
 import os
+import string
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -46,6 +48,35 @@ class DirectoryBrowseError(RuntimeError):
     """Raised only for a request the Hub refuses outright (bad path, outside workspace
     root) — never for an unreadable directory, which returns a listing with a reason
     instead (see module docstring)."""
+
+
+def list_roots() -> List[DirectoryEntry]:
+    """The available starting points for browsing (composer/chrome refinement §9.1) — every
+    mounted drive letter on Windows via `GetLogicalDrives`'s bitmask (stdlib `ctypes`, no new
+    dependency), or the single `/` root elsewhere.
+
+    A configured workspace root (`AW_WORKSPACE_ROOT`, Docker mode) replaces the OS-level
+    roots entirely rather than filtering them: an OS root is always an *ancestor* of a real
+    workspace root, never a descendant, so filtering by containment would silently return no
+    roots at all. The workspace root itself is the only real starting point browsing can
+    offer in that mode — the OS root exists but `list_directory` would refuse it anyway."""
+    if os.name == "nt":
+        try:
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()  # type: ignore[attr-defined]
+        except Exception:
+            bitmask = 0
+        roots = [
+            DirectoryEntry(name=f"{letter}:\\", path=f"{letter}:\\")
+            for index, letter in enumerate(string.ascii_uppercase)
+            if bitmask & (1 << index)
+        ]
+    else:
+        roots = [DirectoryEntry(name="/", path="/")]
+
+    configured_root = configured_workspace_root()
+    if configured_root is None:
+        return roots
+    return [DirectoryEntry(name=str(configured_root), path=str(configured_root))]
 
 
 def list_directory(raw_path: str) -> DirectoryListing:

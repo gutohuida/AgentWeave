@@ -24,3 +24,16 @@ export function useDirectoryListing(path: string | null) {
     enabled: isConfigured && !!path,
   })
 }
+
+/** The available browsing starting points (drive letters, or the configured workspace
+ * root) — composer/chrome refinement §9.1. Rarely changes within a session; a longer
+ * staleTime avoids refetching it every time the picker reopens. */
+export function useFilesystemRoots() {
+  const { isConfigured } = useConfigStore()
+  return useQuery<{ roots: DirectoryEntry[] }>({
+    queryKey: ['fs-roots'],
+    queryFn: () => getJson<{ roots: DirectoryEntry[] }>('/api/v1/fs/roots'),
+    enabled: isConfigured,
+    staleTime: 60_000,
+  })
+}

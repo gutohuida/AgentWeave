@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from hub.fs_browse import DirectoryBrowseError, list_directory
+from hub.fs_browse import DirectoryBrowseError, list_directory, list_roots
 
 
 def _make_tree(tmp_path: Path) -> Path:
@@ -76,6 +76,51 @@ class TestListDirectoryUnit:
         with patch("hub.fs_browse.configured_workspace_root", return_value=None):
             listing = list_directory(str(root))
         assert {e.name for e in listing.entries} == {"alpha", "beta"}
+
+
+class TestListRootsUnit:
+    """composer/chrome refinement §9.1."""
+
+    def test_windows_reports_only_drives_present_in_the_logical_drive_bitmask(self):
+        # Bit 0 (A) and bit 2 (C) set — B and every other letter absent.
+        with patch("hub.fs_browse.os.name", "nt"):  # noqa: SIM117
+            with patch(
+                "hub.fs_browse.ctypes.windll.kernel32.GetLogicalDrives", return_value=0b101
+            ):
+                with patch("hub.fs_browse.configured_workspace_root", return_value=None):
+                    roots = list_roots()
+        assert [r.path for r in roots] == ["A:\\", "C:\\"]
+
+    def test_posix_reports_the_single_root(self):
+        with patch("hub.fs_browse.os.name", "posix"):  # noqa: SIM117
+            with patch("hub.fs_browse.configured_workspace_root", return_value=None):
+                roots = list_roots()
+        assert [r.path for r in roots] == ["/"]
+
+    def test_a_configured_workspace_root_replaces_the_os_roots(self, tmp_path):
+        # An OS root is always an ancestor of a real workspace root, never a descendant —
+        # filtering by containment would silently return nothing; the workspace root itself
+        # is the only real starting point browsing can offer in that mode.
+        with patch("hub.fs_browse.configured_workspace_root", return_value=tmp_path):
+            roots = list_roots()
+        assert [r.path for r in roots] == [str(tmp_path)]
+
+
+class TestFsRootsEndpoint:
+    @pytest.mark.asyncio
+    async def test_requires_authentication(self, app):
+        response = await app.get("/api/v1/fs/roots")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_returns_the_configured_roots(self, app, auth_headers):
+        with patch("hub.api.v1.fs_browse.list_roots") as mocked:
+            from hub.fs_browse import DirectoryEntry
+
+            mocked.return_value = [DirectoryEntry(name="/", path="/")]
+            response = await app.get("/api/v1/fs/roots", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json() == {"roots": [{"name": "/", "path": "/"}]}
 
 
 class TestFsListEndpoint:

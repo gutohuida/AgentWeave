@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from ...auth import get_operator
 from ...db.models import OperatorCredential
-from ...fs_browse import DirectoryBrowseError, list_directory
-from ...schemas.fs_browse import DirectoryEntryResponse, DirectoryListingResponse
+from ...fs_browse import DirectoryBrowseError, list_directory, list_roots
+from ...schemas.fs_browse import DirectoryEntryResponse, DirectoryListingResponse, RootsResponse
 
 router = APIRouter(prefix="/fs", tags=["fs"])
 
@@ -32,3 +32,9 @@ async def list_fs_directory(
         entries=[DirectoryEntryResponse(name=e.name, path=e.path) for e in listing.entries],
         reason=listing.reason,
     )
+
+
+@router.get("/roots", response_model=RootsResponse)
+async def list_fs_roots(operator: OperatorCredential = Depends(get_operator)):
+    del operator
+    return RootsResponse(roots=[DirectoryEntryResponse(name=e.name, path=e.path) for e in list_roots()])

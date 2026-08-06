@@ -246,13 +246,31 @@ catalog ever offers more than one group in one picker.
 
 ## 9. Directory browser improvements (the fallback path)
 
-- [ ] 9.1 Present the available filesystem roots.
-- [ ] 9.2 Show the current location as navigable structure with direct return to an ancestor.
-- [ ] 9.3 Give choosing the current directory its own visible control. Remove the undisclosed
-      double-click-to-choose behaviour.
-- [ ] 9.4 Keyboard operation: move between entries, enter, go to parent, choose.
-- [ ] 9.5 Unit tests for roots, ancestor navigation, the explicit choose control, and each keyboard
-      action.
+- [x] 9.1 Present the available filesystem roots. New `hub/hub/fs_browse.py::list_roots()` — every
+      Windows drive letter via `GetLogicalDrives`'s bitmask (stdlib `ctypes`), or the single `/` on
+      other platforms. A configured workspace root *replaces* the OS roots rather than filtering
+      them (an OS root is always an ancestor of a real workspace root, never a descendant — filtering
+      by containment would silently return none). New `GET /api/v1/fs/roots`,
+      `useFilesystemRoots()`, rendered as a quick-access row in `DirectoryPicker.tsx`.
+- [x] 9.2 Show the current location as navigable structure with direct return to an ancestor.
+      New `pathAncestors()` in `pathDisplay.ts` (the navigable counterpart of the existing
+      display-only `elidePathSegments`) — every segment gets its own cumulative path, rendered as a
+      clickable breadcrumb; nothing is elided since the picker's own popover scrolls.
+- [x] 9.3 Give choosing the current directory its own visible control. Remove the undisclosed
+      double-click-to-choose behaviour. The visible "Choose this directory" button already existed;
+      `onDoubleClick` is now removed from `DirectoryPicker.tsx`'s entry rows entirely — a single click
+      always navigates, never chooses.
+- [x] 9.4 Keyboard operation: move between entries, enter, go to parent, choose. Roving highlight on
+      the popover's own `onKeyDown` (same shape as §4b's `ModelPicker`): ArrowUp/Down move, Enter
+      navigates into the highlighted entry, Backspace goes to parent, Escape closes without choosing.
+      "Choose" itself needed no new binding — the visible button is already a real, Tab-reachable
+      `<button>`.
+- [x] 9.5 Unit tests for roots, ancestor navigation, the explicit choose control, and each keyboard
+      action. Backend: `test_fs_browse.py`, `TestListRootsUnit` (3) + `TestFsRootsEndpoint` (2).
+      Frontend: `directoryPicker.test.tsx` rebuilt — roots, breadcrumb (adjacent and distant
+      ancestor), double-click confirmed inert, and all four keyboard actions (11 tests total, up from
+      6). `projectManagerDirectoryPicker.test.tsx`'s integration test updated to the new
+      click-then-choose interaction.
 
 ## 10. Verification
 

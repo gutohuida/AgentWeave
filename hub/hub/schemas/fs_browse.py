@@ -13,3 +13,7 @@ class DirectoryListingResponse(BaseModel):
     parent: Optional[str]
     entries: List[DirectoryEntryResponse]
     reason: Optional[str] = None
+
+
+class RootsResponse(BaseModel):
+    roots: List[DirectoryEntryResponse]

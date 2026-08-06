@@ -54,12 +54,16 @@ describe('ProjectManagerModal — directory browsing supplements typing', () => 
     expect(screen.queryByRole('dialog', { name: 'Browse for a directory' })).not.toBeInTheDocument()
   })
 
-  it('opens the picker and fills the path field when a directory is chosen (native dialog unavailable)', () => {
+  it('opens the picker and fills the path field via the explicit choose control (native dialog unavailable)', () => {
     render(<ProjectManagerModal mode="open" onClose={vi.fn()} onComplete={vi.fn()} />, { wrapper })
     fireEvent.click(screen.getByRole('button', { name: 'Open directory browser' }))
     expect(screen.getByRole('dialog', { name: 'Browse for a directory' })).toBeInTheDocument()
-    fireEvent.doubleClick(screen.getByText('agentweave'))
-    expect(screen.getByLabelText('Directory path')).toHaveValue('/home/projects/agentweave')
+    // A single click always navigates, never chooses (task 9.3 — the undisclosed
+    // double-click-to-choose shortcut is gone). Choosing has exactly one path: the
+    // visible "Choose this directory" control.
+    fireEvent.click(screen.getByText('agentweave'))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose this directory' }))
+    expect(screen.getByLabelText('Directory path')).toHaveValue('/home/projects')
     expect(screen.queryByRole('dialog', { name: 'Browse for a directory' })).not.toBeInTheDocument()
   })
 })
