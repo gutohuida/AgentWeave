@@ -27,8 +27,13 @@ this was confirmed live: a real out-of-workspace write attempt, declined with
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import asyncio
+import json
+import logging
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from .pty_runner import resolve_executable
 from .runner_events import (
     AccountingSample,
     ContextUsageSample,
@@ -325,3 +330,336 @@ def map_turn_failure(params: Dict[str, Any]) -> RunEvent:
     error = params.get("error") or {}
     message = error.get("message", str(error)) if isinstance(error, dict) else str(error)
     return error_event(code="codex_turn_failed", message=message or "turn failed")
+
+
+logger = logging.getLogger(__name__)
+
+# No protocol-level turn timeout exists (implications.md §2) — the Hub enforces its own so a
+# stuck app-server cannot wedge an agent forever (task 2.7).
+DEFAULT_TURN_TIMEOUT_SECONDS = 600.0
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
+
+
+class AppServerError(RuntimeError):
+    """Transport-level app-server failure: spawn, protocol violation, or timeout."""
+
+
+def mcp_server_config(mcp_command: List[str], *, env_vars: List[str]) -> Dict[str, Any]:
+    """Build the `config.mcp_servers.<name>` entry `thread/start`/`thread/resume` accept.
+
+    Verified live: `thread/start`'s `config` param (schema: passthrough object,
+    `additionalProperties: true`) registers a per-turn MCP server exactly like `codex exec`'s
+    `-c mcp_servers.<name>.*` does — a throwaway one-tool server registered this way reached
+    `mcpServer/startupStatus/updated` status `"ready"`. `env_vars` lists names only, mirroring
+    `_build_codex_command`: Codex resolves values from its own environment, so secrets are
+    never embedded in this config object.
+    """
+    return {"command": mcp_command[0], "args": mcp_command[1:], "env_vars": env_vars}
+
+
+class AppServerProcess:
+    """A bidirectional JSON-RPC session over one `codex app-server` subprocess's stdio.
+
+    One process per turn (implications-codex-appserver.md §1's "per-turn process"
+    recommendation, task 2.1) — spawned, driven through `initialize` and one turn, then
+    closed. Not reused across turns or shared between agents; a long-lived per-agent process
+    is an explicit follow-on with its own evidence, not attempted here.
+
+    Framing is newline-delimited JSON, decoded as UTF-8 explicitly — `subprocess`/`asyncio`
+    default to the platform locale encoding when not told otherwise, which is CP-1252 on
+    Windows and silently mangles the smart quotes and em dashes Codex's own text routinely
+    contains. `pty_runner.PipeSession` already guards against exactly this; this class does
+    the same rather than repeating the mistake made (and caught) while probing this protocol
+    live — see `testbed/scratch/probe_appserver_mcp_config.py`'s `UnicodeDecodeError`.
+    """
+
+    def __init__(self, proc: "asyncio.subprocess.Process") -> None:
+        self._proc = proc
+        self._next_id = 0
+        self._pending: Dict[int, "asyncio.Future[Dict[str, Any]]"] = {}
+        self._notifications: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+        self._reader_task: Optional[asyncio.Task] = None
+        self._closed = False
+
+    @classmethod
+    async def spawn(
+        cls,
+        cmd: List[str],
+        *,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> "AppServerProcess":
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=cwd,
+            env=env,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        session = cls(proc)
+        session._reader_task = asyncio.get_running_loop().create_task(session._read_loop())
+        return session
+
+    async def _read_loop(self) -> None:
+        assert self._proc.stdout is not None
+        try:
+            while True:
+                raw = await self._proc.stdout.readline()
+                if not raw:
+                    break
+                line = raw.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    logger.warning(
+                        "codex app-server emitted a non-JSON stdout line: %r", line[:200]
+                    )
+                    continue
+                msg_id = msg.get("id")
+                if msg_id is not None and ("result" in msg or "error" in msg):
+                    future = self._pending.pop(msg_id, None)
+                    if future is not None and not future.done():
+                        future.set_result(msg)
+                else:
+                    await self._notifications.put(msg)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            # Unblock any still-pending request rather than hanging it forever — the process
+            # is gone, so no response is ever coming (task 2.7: process death mid-turn).
+            for future in self._pending.values():
+                if not future.done():
+                    future.set_exception(AppServerError("app-server process ended"))
+            self._pending.clear()
+
+    async def _write(self, message: Dict[str, Any]) -> None:
+        if self._proc.stdin is None:
+            raise AppServerError("app-server stdin is not available")
+        data = (json.dumps(message) + "\n").encode("utf-8")
+        self._proc.stdin.write(data)
+        await self._proc.stdin.drain()
+
+    async def request(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        *,
+        timeout: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    ) -> Dict[str, Any]:
+        """Send a client->server request and await its response."""
+        self._next_id += 1
+        msg_id = self._next_id
+        future: "asyncio.Future[Dict[str, Any]]" = asyncio.get_running_loop().create_future()
+        self._pending[msg_id] = future
+        try:
+            await self._write({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params})
+            return await asyncio.wait_for(future, timeout=timeout)
+        finally:
+            self._pending.pop(msg_id, None)
+
+    async def notify(self, method: str, params: Dict[str, Any]) -> None:
+        """Send a client->server notification (no response expected)."""
+        await self._write({"jsonrpc": "2.0", "method": method, "params": params})
+
+    async def respond(self, request_id: Any, result: Dict[str, Any]) -> None:
+        """Answer one server->client request (an approval/elicitation decision)."""
+        await self._write({"jsonrpc": "2.0", "id": request_id, "result": result})
+
+    async def next_notification(self, *, timeout: Optional[float] = None) -> Dict[str, Any]:
+        """Return the next server->client notification or unsolicited request.
+
+        A message with both ``id`` and ``method`` and no ``result``/``error`` is a
+        server->client *request* (an approval/elicitation) — the caller distinguishes it from
+        a plain notification by checking for ``"id"`` in the returned dict, and must answer it
+        via :meth:`respond` (see implications.md §2: every request must be answered).
+        """
+        if timeout is None:
+            return await self._notifications.get()
+        return await asyncio.wait_for(self._notifications.get(), timeout=timeout)
+
+    @property
+    def pid(self) -> Optional[int]:
+        return self._proc.pid
+
+    def is_running(self) -> bool:
+        return self._proc.returncode is None
+
+    async def close(self, *, force: bool = False) -> None:
+        """Terminate the process and stop the reader task. Idempotent."""
+        if self._closed:
+            return
+        self._closed = True
+        if self._reader_task is not None:
+            self._reader_task.cancel()
+        if self._proc.stdin is not None:
+            try:
+                self._proc.stdin.close()
+            except Exception:
+                pass
+        if self.is_running():
+            if force:
+                self._proc.kill()
+            else:
+                self._proc.terminate()
+            try:
+                await asyncio.wait_for(self._proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                self._proc.kill()
+                await self._proc.wait()
+
+
+@dataclass
+class TurnOutcome:
+    """Result of one `run_turn` call — the app-server equivalent of `PipeSession`'s
+    (exit_code, session_id) pair that `_execute_run` reads after its read loop ends."""
+
+    thread_id: Optional[str]
+    status: str  # "completed" | "failed" | "interrupted"
+    error: Optional[str] = None
+
+
+async def run_turn(
+    *,
+    cli: str,
+    cwd: Optional[str],
+    env: Optional[Dict[str, str]],
+    prompt: str,
+    model: Optional[str],
+    resume_thread_id: Optional[str],
+    yolo: bool,
+    mcp_command: Optional[List[str]],
+    own_server_name: str = "agentweave",
+    on_event: "Callable[[RunEvent], Awaitable[None]]",
+    on_usage: "Optional[Callable[[ContextUsageSample], Awaitable[None]]]" = None,
+    on_accounting: "Optional[Callable[[AccountingSample], Awaitable[None]]]" = None,
+    should_interrupt: "Optional[Callable[[], bool]]" = None,
+    turn_timeout: float = DEFAULT_TURN_TIMEOUT_SECONDS,
+) -> TurnOutcome:
+    """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
+    start a turn, answer every server request, map every item/usage notification to the
+    Hub's existing model via the callbacks, and return when the turn ends.
+
+    Per-turn process (task 2.1's recommendation): this spawns fresh and closes at the end,
+    never reused across turns. `resume_thread_id`, when given, is a `Run.session_id` recorded
+    by either transport — `codex exec`'s session ID and `app-server`'s `threadId` are the same
+    identifier space (design.md Decision 1a, verified 2026-08-06), so no translation is needed.
+
+    The protocol supplies no turn-level timeout (implications.md §2) — `turn_timeout` is the
+    Hub's own, and a process that dies mid-turn (crash, `close()` from a stop request) fails
+    the turn immediately rather than waiting out the full budget (task 2.7).
+    """
+    resolved = resolve_executable([cli, "app-server"])
+    session = await AppServerProcess.spawn(resolved, cwd=cwd, env=env)
+    interrupted = False
+    try:
+        await session.request(
+            "initialize",
+            {"clientInfo": {"name": "agentweave-hub", "title": "AgentWeave Hub", "version": "0"}},
+        )
+        await session.notify("initialized", {})
+
+        thread_params: Dict[str, Any] = {
+            "cwd": cwd,
+            "sandbox": "danger-full-access" if yolo else "workspace-write",
+            "approvalPolicy": "never" if yolo else "on-request",
+        }
+        if model:
+            thread_params["model"] = model
+        if mcp_command:
+            thread_params["config"] = {
+                "mcp_servers": {
+                    own_server_name: mcp_server_config(
+                        mcp_command,
+                        env_vars=["AW_RUN_TOKEN", "AW_AGENT_IDENTITY", "AW_RUN_ID", "AW_TURN_DEPTH", "HUB_URL"],
+                    )
+                }
+            }
+
+        if resume_thread_id:
+            start_response = await session.request(
+                "thread/resume", {**thread_params, "threadId": resume_thread_id}
+            )
+        else:
+            start_response = await session.request("thread/start", thread_params)
+        thread_id = start_response["result"]["thread"]["id"]
+
+        turn_response = await session.request(
+            "turn/start",
+            {"threadId": thread_id, "input": [{"type": "text", "text": prompt}]},
+        )
+        turn_id = turn_response["result"]["turn"]["id"]
+
+        deadline = asyncio.get_running_loop().time() + turn_timeout
+        status = "failed"
+        error: Optional[str] = None
+
+        while True:
+            if should_interrupt is not None and should_interrupt() and not interrupted:
+                interrupted = True
+                try:
+                    await session.request(
+                        "turn/interrupt", {"threadId": thread_id, "turnId": turn_id}, timeout=10
+                    )
+                except (AppServerError, asyncio.TimeoutError):
+                    # Best-effort: if interrupt itself can't be delivered, the deadline/process-
+                    # death checks below still guarantee this loop ends.
+                    pass
+
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                status, error = "failed", "turn timed out with no turn/completed notification"
+                break
+            if not session.is_running():
+                status, error = "failed", "app-server process ended before the turn completed"
+                break
+
+            try:
+                msg = await session.next_notification(timeout=min(remaining, 1.0))
+            except asyncio.TimeoutError:
+                continue
+
+            msg_id = msg.get("id")
+            method = msg.get("method")
+            if msg_id is not None and method is not None and "result" not in msg and "error" not in msg:
+                # A server->client request (approval/elicitation) — must always be answered
+                # (implications.md §2: an unanswered request hangs the turn indefinitely).
+                decision = decide_approval(
+                    method, msg.get("params") or {}, yolo=yolo, own_server_name=own_server_name
+                )
+                await session.respond(msg_id, decision)
+                continue
+
+            params = msg.get("params") or {}
+            if method in ("item/started", "item/completed"):
+                item = params.get("item") or {}
+                for event in map_item_to_events(item, is_start=(method == "item/started")):
+                    await on_event(event)
+            elif method == "thread/tokenUsage/updated":
+                mapped = map_token_usage_notification(params, model=model)
+                if on_usage is not None and mapped["usage"] is not None:
+                    await on_usage(mapped["usage"])
+                if on_accounting is not None and mapped["accounting"] is not None:
+                    await on_accounting(mapped["accounting"])
+            elif method == "turn/completed":
+                status = "interrupted" if interrupted else "completed"
+                break
+            elif method == "turn/failed":
+                await on_event(map_turn_failure(params))
+                error_obj = params.get("error") or {}
+                error = (
+                    error_obj.get("message", str(error_obj))
+                    if isinstance(error_obj, dict)
+                    else str(error_obj)
+                )
+                status = "failed"
+                break
+            # Anything else (mcpServer/startupStatus/updated, thread/status/changed,
+            # account/rateLimits/updated, item/agentMessage/delta, remoteControl/status/changed,
+            # serverRequest/resolved) carries no timeline-relevant content for this pass.
+
+        return TurnOutcome(thread_id=thread_id, status=status, error=error)
+    finally:
+        await session.close(force=interrupted)
