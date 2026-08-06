@@ -325,7 +325,10 @@ async def test_trigger_materializes_bound_charter_context(app, auth_headers, bin
     context_path = Path(command[context_flag + 1])
     assert context_path.exists()
     context = context_path.read_text(encoding="utf-8")
-    assert "Live Context Project" in context
+    # The profile names the Hub's own project record. It used to name the synced session's
+    # "Live Context Project" instead, but nothing writes that table any more — see
+    # 2026-08-06-hub-collaboration-and-conversation-fixes.
+    assert "- Project: Test Project" in context
     assert "## Charter: Live Charter" in context
     assert "LIVE_CHARTER_MARKER" in context
 

@@ -2,8 +2,13 @@
 
 ### Requirement: Project operating profile generation
 The system SHALL generate a concise project operating profile from Hub-owned project, agent, runner,
-and charter records. It MUST NOT depend on `agentweave.yml` or on synced session state, neither of
-which exists in a Hub-owned project.
+and charter records. The project's identity and its agent roster MUST be derived from those records
+and MUST NOT depend on `agentweave.yml` or on synced session state, neither of which a Hub-owned
+project has.
+
+Configuration that the Hub does not yet own natively MAY continue to be read from synced session
+state where that is its only home, provided it never determines an agent's identity, its roster, or
+what work it is permitted to do.
 
 The profile SHALL name every agent registered in the project, so that an agent can address a peer
 without guessing. For each agent it SHALL state that agent's name, its bound runner's CLI, and its

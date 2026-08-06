@@ -327,6 +327,14 @@ async def list_agents(
         if agent_row.name not in session_agents_meta:
             session_agents_meta[agent_row.name] = {}
 
+    # The bound Runner is the truth about what a Hub-spawned agent actually runs. Without it
+    # `_runner`/`_display_model` below fall through to their "native"/"Native" defaults, because
+    # neither the (now unwritten) session config nor `Agent.config` carries the binding — see
+    # `get_agents_launchability`, which applies the same override for the same reason.
+    runners_q = select(Runner).where(Runner.project_id == project_id)
+    runners_res = await session.execute(runners_q)
+    runners_by_id: dict[str, Runner] = {r.id: r for r in runners_res.scalars().all()}
+
     if not session_agents_meta:
         return []
 
@@ -452,6 +460,17 @@ async def list_agents(
         task_count = active_task_counts.get(agent_name, 0)
         context_usage = context_usage_map.get(agent_name)
         session_started_at = session_started_map.get(agent_name)
+
+        # A Runner-bound agent reports its runner's cli/model; an agent with no binding
+        # (self-registered, launched outside the Hub's spawn path) keeps deriving from its own
+        # stored config, because for those agents that path is still the real one.
+        bound_runner = runners_by_id.get(agent_row.runner_id) if agent_row else None
+        if bound_runner is not None:
+            agent_meta = {
+                **agent_meta,
+                "runner": bound_runner.cli,
+                **({"model": bound_runner.model} if bound_runner.model else {}),
+            }
 
         _runner = agent_meta.get("runner", "native")
         _display_model = {
@@ -742,8 +761,21 @@ async def _render_hub_agent_context(
     session_data: Optional[dict],
     agent_row: Optional[Agent],
 ) -> Dict[str, Any]:
-    session_agents = (session_data or {}).get("agents", {})
-    declared = agent in session_agents
+    """Render the canonical model-facing context for one agent.
+
+    The Hub's own records decide what an agent is told. Whether the Hub knows an agent is
+    `agent_row is not None` — nothing else. This used to key off `declared`, meaning "present in
+    the synced session config", but `project_sessions` lost both of its writers (the CLI's
+    `Session.save()` push and the watchdog) in `2026-08-03-single-runtime`. Every Hub-native agent
+    was therefore permanently undeclared and received a stand-down block telling it not to modify
+    files, not to claim tasks, and to report to a `principal` that does not exist in a Hub-owned
+    project — so agents ignored the operator's instructions and 404'd addressing a phantom peer.
+    See `2026-08-06-hub-collaboration-and-conversation-fixes`.
+
+    `session_data` is still consulted for quality gates, which have no Hub-native home yet and are
+    surfaced read-only by the UI's own quality panel. It no longer decides anything about identity
+    or the roster.
+    """
     registered = agent_row is not None
     missing: List[str] = []
 
@@ -759,34 +791,46 @@ async def _render_hub_agent_context(
         if candidate is not None and candidate.project_id == project_id:
             charter = candidate
 
+    project_row = await db.get(Project, project_id)
+
+    # The roster is the part that makes collaboration possible at all: an agent cannot message a
+    # peer whose name it was never told. Read it from the Hub's own tables, binding each agent to
+    # its runner so the entry can state what that peer actually runs.
+    roster_result = await db.execute(select(Agent).where(Agent.project_id == project_id))
+    roster = sorted(roster_result.scalars().all(), key=lambda row: row.name)
+    runners_result = await db.execute(select(Runner).where(Runner.project_id == project_id))
+    roster_runners = {row.id: row for row in runners_result.scalars().all()}
+
     lines = []
-    if declared:
+    if registered:
         lines.append(f"# {agent} - AgentWeave Runtime Context")
     else:
         lines.append(f"# {agent} - AgentWeave Onboarding Context")
     lines.append("")
     lines.append("## Project Operating Profile")
     lines.append("")
-    if session_data:
-        lines.append(f"- Project: {session_data.get('name', 'Unnamed Project')}")
-        lines.append(f"- Mode: {session_data.get('mode', 'hierarchical')}")
-        lines.append(f"- Principal: `{session_data.get('principal', 'claude')}`")
-    else:
-        lines.append("- Project session has not been synced to Hub yet.")
-        missing.append("project session")
+    project_name = (project_row.name if project_row else None) or project_id
+    lines.append(f"- Project: {project_name}")
     lines.append(f"- Canonical runtime context: `.agentweave/context/{agent}.md`")
     lines.append("")
 
     lines.append("### Team")
-    if session_agents:
-        for name, meta in sorted(session_agents.items()):
-            details = [_runner_summary(meta)]
-            if name == session_data.get("principal"):
-                details.append("principal")
-            marker = " <- you" if name == agent else ""
-            lines.append(f"- `{name}`: " + "; ".join(details) + marker)
+    if roster:
+        for row in roster:
+            meta = dict(row.config or {})
+            bound = roster_runners.get(row.runner_id)
+            if bound is not None:
+                meta["runner"] = bound.cli
+                if bound.model:
+                    meta["model"] = bound.model
+            marker = " <- you" if row.name == agent else ""
+            lines.append(f"- `{row.name}`: {_runner_summary(meta)}{marker}")
+        lines.append("")
+        lines.append(
+            "Address a peer by the exact name above when sending a message or assigning a task."
+        )
     else:
-        lines.append("- No declared agents are synced.")
+        lines.append("- No other agents are registered in this project yet.")
     lines.append("")
 
     quality = (session_data or {}).get("quality") or {}
@@ -807,7 +851,7 @@ async def _render_hub_agent_context(
         lines.append(project_instructions)
         lines.append("")
 
-    if declared:
+    if registered:
         lines.append("## Communication Mode")
         lines.append("")
         lines.append(
@@ -815,18 +859,8 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
-    elif registered:
-        lines.append("## External Agent Rules")
-        lines.append("")
-        lines.append("You are registered with AgentWeave but are not declared in `agentweave.yml`.")
-        lines.append("Until the principal assigns you work:")
-        lines.append("- do not modify files")
-        lines.append("- do not claim tasks")
-        lines.append("- use only delivered turn entries and the available task ledger")
-        lines.append("- send a short availability message to the principal")
-        lines.append("")
     else:
-        lines.append("## External Agent Rules")
+        lines.append("## Registration")
         lines.append("")
         lines.append("You are not registered with AgentWeave yet.")
         lines.append("Ask the operator to register or configure this agent before taking work.")
@@ -846,17 +880,19 @@ async def _render_hub_agent_context(
         missing.append("charter")
 
     context = "\n".join(lines).rstrip() + "\n"
+    # `declared`/`provisional` are kept for existing clients, but Hub registration is now the only
+    # thing that decides them — there is no separate "declared in agentweave.yml" state to report.
     return {
         "agent": agent,
-        "known": declared or registered,
-        "declared": declared,
+        "known": registered,
+        "declared": registered,
         "registered": registered,
-        "provisional": not declared,
+        "provisional": not registered,
         "charter_id": charter.id if charter else None,
         "charter_name": charter.name if charter else None,
         "missing": sorted(set(missing)),
         "metadata": {
-            "context_path": f".agentweave/context/{agent}.md" if declared else None,
+            "context_path": f".agentweave/context/{agent}.md" if registered else None,
             "source": "hub",
         },
         "context": context,

@@ -110,23 +110,22 @@ async def test_get_context_unknown_charter(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_get_agent_context_declared_agent(app, auth_headers):
+async def test_get_agent_context_known_agent_gets_runtime_context(app, auth_headers):
+    """A Hub-registered agent gets runtime context, with quality gates when configured.
+
+    Hub registration is the only thing that makes an agent "known" — synced session data does
+    not, since nothing has written that table since 2026-08-03-single-runtime.
+    """
     resp = await app.post(
         "/api/v1/projects/proj-test/session/sync",
         json={
             "data": {
                 "id": "sess-test",
                 "name": "Test Session",
-                "mode": "hierarchical",
-                "principal": "claude",
                 "quality": {
                     "review_required": True,
                     "docs_threshold": "non_trivial",
                     "echo_chamber_guard": "enforce",
-                },
-                "agents": {
-                    "claude": {"runner": "claude", "model": "sonnet", "role": "principal"},
-                    "kimi": {"runner": "kimi"},
                 },
             }
         },
@@ -134,22 +133,36 @@ async def test_get_agent_context_declared_agent(app, auth_headers):
     )
     assert resp.status_code == 200
 
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "claude-known", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
     resp = await app.get(
-        "/api/v1/projects/proj-test/agents/agent-context?agent=claude", headers=auth_headers
+        "/api/v1/projects/proj-test/agents/agent-context?agent=claude-known", headers=auth_headers
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["agent"] == "claude"
-    assert data["declared"] is True
+    assert data["agent"] == "claude-known"
+    assert data["known"] is True
     assert data["registered"] is True
     assert data["provisional"] is False
     assert "roles" not in data
+    assert "AgentWeave Runtime Context" in data["context"]
     assert "Project Operating Profile" in data["context"]
     assert "review_required: `true`" in data["context"]
 
 
 @pytest.mark.asyncio
-async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
+async def test_get_agent_context_never_tells_a_known_agent_to_stand_down(app, auth_headers):
+    """The stand-down block is gone.
+
+    It was applied to every Hub-native agent unconditionally, which is why agents answered a
+    clear operator instruction with "the user hasn't given me any explicit task yet" and then
+    tried to message a non-existent `principal`.
+    """
     resp = await app.post(
         "/api/v1/projects/proj-test/agents/register",
         json={"name": "hermes-context", "contact_mode": "poll"},
@@ -163,11 +176,92 @@ async def test_get_agent_context_registered_undeclared_agent(app, auth_headers):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["declared"] is False
     assert data["registered"] is True
-    assert data["provisional"] is True
+    assert data["provisional"] is False
     assert "roles" not in data
-    assert "do not modify files" in data["context"]
+
+    context = data["context"]
+    for forbidden in (
+        "External Agent Rules",
+        "do not modify files",
+        "do not claim tasks",
+        "principal",
+        "agentweave.yml",
+    ):
+        assert forbidden not in context, f"context still contains {forbidden!r}"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_context_lists_the_real_roster(app, auth_headers):
+    """An agent must be told its peers' exact names, or it cannot address them."""
+    for name in ("roster-one", "roster-two"):
+        resp = await app.post(
+            "/api/v1/projects/proj-test/agents/register",
+            json={"name": name, "contact_mode": "poll"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=roster-one", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    context = resp.json()["context"]
+
+    assert "### Team" in context
+    assert "`roster-one`" in context
+    assert "`roster-two`" in context
+    # The reading agent is marked, and only the reading agent.
+    assert "`roster-one`: runner=native <- you" in context
+    assert "`roster-two`: runner=native\n" in context
+
+
+@pytest.mark.asyncio
+async def test_agent_summary_reports_the_bound_runner(app, auth_headers, bind_runner):
+    """A runner-bound agent reports its runner's cli and model, not "native"/"Native".
+
+    The summary used to derive these from synced session config merged over Agent.config,
+    neither of which carries the binding, so every Hub-created agent reported "Native"
+    despite holding a correct runner_id.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "bound-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    await bind_runner("bound-agent", cli="codex", model="gpt-5.4-mini")
+
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    agent = next(a for a in resp.json() if a["name"] == "bound-agent")
+    assert agent["runner"] == "codex"
+    assert agent["display_model"] == "gpt-5.4-mini"
+
+
+@pytest.mark.asyncio
+async def test_agent_summary_keeps_stored_config_when_unbound(app, auth_headers):
+    """An agent with no bound runner still derives from its own stored config.
+
+    That path is real for self-registered agents launched outside the Hub's spawn path,
+    so the runner override must not clobber it.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={
+            "name": "unbound-agent",
+            "contact_mode": "poll",
+            "config": {"runner": "opencode", "model": "ollama/qwen2.5-coder:7b"},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    agent = next(a for a in resp.json() if a["name"] == "unbound-agent")
+    assert agent["runner"] == "opencode"
+    assert agent["display_model"] == "ollama/qwen2.5-coder:7b"
 
 
 @pytest.mark.asyncio

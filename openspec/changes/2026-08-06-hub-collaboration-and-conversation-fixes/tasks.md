@@ -2,30 +2,34 @@
 
 ## 1. Canonical agent context is built from Hub state
 
-- [ ] 1.1 Rewrite `_render_hub_agent_context` (`hub/hub/api/v1/agents.py`) to take the agent roster
+- [x] 1.1 Rewrite `_render_hub_agent_context` (`hub/hub/api/v1/agents.py`) to take the agent roster
       from the `agents` table joined to `runners`, not from `session_data`.
-- [ ] 1.2 Collapse the three-way `declared`/`registered` branch to two states keyed on
+- [x] 1.2 Collapse the three-way `declared`/`registered` branch to two states keyed on
       `agent_row is not None`. Delete the "External Agent Rules" stand-down block entirely.
-- [ ] 1.3 Render `### Team` from the real roster: each peer's name, cli, model, and a `<- you`
+- [x] 1.3 Render `### Team` from the real roster: each peer's name, cli, model, and a `<- you`
       marker on the reading agent. Reuse `_runner_summary`, feeding it runner-derived metadata.
-- [ ] 1.4 Emit the quality-gates and scheduled-jobs sections only when the Hub actually holds that
+- [x] 1.4 Emit the quality-gates and scheduled-jobs sections only when the Hub actually holds that
       configuration; omit rather than render empty or invented sections.
-- [ ] 1.5 Keep the response's machine-readable fields working. `declared`/`provisional` are derived
+- [x] 1.5 Keep the response's machine-readable fields working. `declared`/`provisional` are derived
       from Hub registration now; do not silently drop keys existing clients read.
-- [ ] 1.6 Simplify the `agent_trigger.py:305-314` call site if `session_data` is no longer needed.
-- [ ] 1.7 Test: context for a Hub-native agent contains every peer's name and **no** occurrence of
+- [x] 1.6 Simplify the `agent_trigger.py:305-314` call site if `session_data` is no longer needed.
+      Not simplified, deliberately: `session_data` is still the only home for quality-gate
+      configuration, which the UI's own quality panel already surfaces. Dropping the parameter
+      would have deleted that section from context for the projects that do have it. It no longer
+      decides identity or the roster, which was the defect.
+- [x] 1.7 Test: context for a Hub-native agent contains every peer's name and **no** occurrence of
       "External Agent Rules", "principal", or "agentweave.yml".
-- [ ] 1.8 Test: context for an unknown agent still returns the unregistered notice and no
+- [x] 1.8 Test: context for an unknown agent still returns the unregistered notice and no
       work-taking guidance.
 
 ## 2. Agent summary reports its real runner and model
 
-- [ ] 2.1 Apply the `Agent.runner_id -> Runner` override before deriving `_runner`/`_display_model`
+- [x] 2.1 Apply the `Agent.runner_id -> Runner` override before deriving `_runner`/`_display_model`
       (`agents.py:456`), matching the shape used by `get_agents_launchability`.
-- [ ] 2.2 Keep the legacy `agent_row.config` derivation for agents with no bound runner
+- [x] 2.2 Keep the legacy `agent_row.config` derivation for agents with no bound runner
       (self-registered agents launched outside the Hub's spawn path).
-- [ ] 2.3 Test: a runner-bound agent reports its real cli and model, not `"native"`/`"Native"`.
-- [ ] 2.4 Test: an unbound self-registered agent still derives from its stored config.
+- [x] 2.3 Test: a runner-bound agent reports its real cli and model, not `"native"`/`"Native"`.
+- [x] 2.4 Test: an unbound self-registered agent still derives from its stored config.
 
 ## 3. Codex collaborates by default
 
