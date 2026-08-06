@@ -184,8 +184,10 @@ catalog ever offers more than one group in one picker.
 ## 6. Tab strip boundary
 
 - [x] 6.1 Remove `borderBottom` from the nav in `ProjectTabs.tsx`. Keep `background: var(--top)`.
-- [ ] 6.2 Check the boundary in both themes. If the plane alone is too weak, strengthen the plane —
-      do not restore the rule. **Deferred to §10's live check** (not yet performed).
+- [x] 6.2 Check the boundary in both themes. If the plane alone is too weak, strengthen the plane —
+      do not restore the rule. Checked live in §10 (task 10.9): `border-bottom-width: 0px` confirmed
+      in both dark and light mode against the real dev Hub; the plane alone reads as sufficient
+      separation in both, no strengthening needed.
 - [x] 6.3 Unit test: the view switcher declares no bottom border. `hubVisualLanguage.test.ts` — "the
       tab strip carries only a plane change at its boundary, not a dividing line".
 
