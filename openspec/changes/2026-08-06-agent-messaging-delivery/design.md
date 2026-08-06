@@ -187,3 +187,6 @@ provisioning path, not a visual one.
 - **Stale Hub instances on neighbouring ports are an operator-environment hazard**, not only a code
   bug. The instance-scoped credential check (Decision 3) is what makes the environment hazard
   harmless.
+
+See also `implications-codex-appserver.md` in this change directory for the full consequence
+analysis of Decision 1a.
