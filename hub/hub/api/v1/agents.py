@@ -15,7 +15,7 @@ from ... import bound_address, project_workspace, worktrees
 from ...agent_colors import next_color_index
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
-from ...codex_appserver import APP_SERVER_OPT_IN_FLAG
+from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
 from ...conversations import new_conversation
 from ...db.engine import get_session
 from ...db.models import (
@@ -205,18 +205,19 @@ async def get_agents_launchability(
                     "set HUB_URL explicitly."
                 )
             elif runner_row.cli == "codex":
+                # Derived from the same helper the trigger path uses to pick the transport, so
+                # what the operator is told and what actually runs cannot drift apart.
                 yolo = bool(merged.get("yolo"))
-                app_server_opted_in = APP_SERVER_OPT_IN_FLAG in (runner_row.flags or [])
-                if yolo or app_server_opted_in:
+                if uses_app_server(runner_row.cli, runner_row.flags) or yolo:
                     collaboration_ready = True
                 else:
                     collaboration_ready = False
                     collaboration_reason = (
-                        "This Codex agent uses the classic exec transport without yolo "
-                        "enabled — AgentWeave tool calls (send_message, etc.) will be "
-                        "silently denied with no operator present to approve them. "
-                        "Enable yolo, or bind a Runner opted into the app-server "
-                        f'transport (flags: ["{APP_SERVER_OPT_IN_FLAG}"]).'
+                        "This Codex agent's runner opted out of the app-server transport "
+                        f'(flags: ["{APP_SERVER_OPT_OUT_FLAG}"]) and does not have yolo '
+                        "enabled, so it falls back to classic exec — AgentWeave tool calls "
+                        "(send_message, etc.) will be silently denied with no operator "
+                        "present to approve them. Remove the opt-out, or enable yolo."
                     )
             else:
                 collaboration_ready = True

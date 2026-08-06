@@ -7,7 +7,11 @@ from unittest.mock import patch
 import pytest
 
 from hub.sse import sse_manager
-from tests.test_agent_trigger import _await_background_run, _fake_pty
+from tests.test_agent_trigger import (
+    _await_background_run,
+    _bind_codex_exec_runner,
+    _fake_pty,
+)
 
 
 @pytest.mark.asyncio
@@ -207,7 +211,9 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
         headers=auth_headers,
     )
     assert sync.status_code == 200
-    await bind_runner("model-switch", cli="codex")
+    # Exercised through the `exec` transport (its spawn is what this test mocks), which codex
+    # now reaches only by explicit opt-out.
+    await _bind_codex_exec_runner(app, auth_headers)("model-switch")
 
     status = await app.get("/api/v1/projects/proj-test/status", headers=auth_headers)
     project_id = status.json()["project_id"]

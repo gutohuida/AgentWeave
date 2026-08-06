@@ -173,8 +173,31 @@ class TestCollaborationReadiness:
         assert result["collaboration_reason"] is None
 
     @pytest.mark.asyncio
-    async def test_non_yolo_exec_codex_agent_is_not_collaboration_ready(
+    async def test_default_codex_agent_is_collaboration_ready(
         self, app, auth_headers, bind_runner
+    ):
+        """A codex agent created with no special configuration can collaborate.
+
+        This is the whole point of making app-server the default: the Add-agent dialog sets
+        no flags, so under the old opt-in every codex agent an operator could create landed on
+        the exec transport and could not call a single AgentWeave tool.
+        """
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"codex-default": {"yolo": False}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        await bind_runner("codex-default", cli="codex")
+
+        result = await self._probe(app, auth_headers, "codex-default")
+        assert result["runnable"] is True
+        assert result["collaboration_ready"] is True
+        assert result["collaboration_reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_non_yolo_codex_agent_opted_out_of_app_server_is_not_collaboration_ready(
+        self, app, auth_headers
     ):
         sync = await app.post(
             "/api/v1/projects/proj-test/session/sync",
@@ -182,7 +205,18 @@ class TestCollaborationReadiness:
             headers=auth_headers,
         )
         assert sync.status_code == 200
-        await bind_runner("codex-exec", cli="codex")
+        created = await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "codex-exec-runner", "cli": "codex", "flags": ["--no-app-server"]},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
+        bound = await app.patch(
+            "/api/v1/projects/proj-test/agents/codex-exec",
+            json={"runner_id": created.json()["id"]},
+            headers=auth_headers,
+        )
+        assert bound.status_code == 200, bound.text
 
         result = await self._probe(app, auth_headers, "codex-exec")
         assert result["runnable"] is True

@@ -8,6 +8,14 @@ Kimi, OpenCode, and Copilot are explicitly out of scope for this task (per-runne
 construction for them is deferred) — `build_command` raises `UnsupportedRunnerError` for
 anything else so the caller gets a clear, stated reason rather than a silently wrong command.
 
+Codex has two transports. The default is `codex app-server` (see `codex_appserver.py`), where the
+Hub answers each approval itself and can accept its own MCP server without weakening the sandbox.
+This module builds the *other* one — `codex exec` — which a runner selects by carrying
+`--no-app-server` in its flags. `exec` is non-interactive and exposes no `--ask-for-approval` flag,
+so approvals there resolve by policy only: deny everything (which silently kills every AgentWeave
+tool call) or `--dangerously-bypass-approvals-and-sandbox`. That is why it is no longer the default
+and why an agent on it is reported as unable to collaborate unless yolo is set.
+
 Yolo-enabled Claude runs receive `--dangerously-skip-permissions`; headless Hub execution has no
 interactive terminal where an operator could answer a permission prompt. Non-yolo Claude runs
 receive `--permission-mode manual` instead of no permission flag at all, so their sandbox posture

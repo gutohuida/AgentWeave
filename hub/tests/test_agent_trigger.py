@@ -77,17 +77,17 @@ async def _wait_for_active_app_server_run(run_id, timeout=2.0):
     raise AssertionError(f"run {run_id} never registered as an active app-server run")
 
 
-def _bind_codex_app_server_runner(app, auth_headers):
-    """Returns an async helper: `await _bind(agent_name)` binding a codex Runner with the
-    task 2.8 app-server opt-in flag set, mirroring `bind_runner`'s shape but going through
-    the raw runners API (like `test_trigger_command_uses_bound_runner_model_and_flags`)
-    since `bind_runner` has no way to set `flags`.
+def _bind_codex_runner_with_flags(app, auth_headers, flags):
+    """Returns an async helper: `await _bind(agent_name)` binding a codex Runner carrying
+    *flags*, mirroring `bind_runner`'s shape but going through the raw runners API (like
+    `test_trigger_command_uses_bound_runner_model_and_flags`) since `bind_runner` has no way
+    to set `flags`.
     """
 
     async def _bind(agent_name):
         created = await app.post(
             "/api/v1/projects/proj-test/runners",
-            json={"name": f"{agent_name}-runner", "cli": "codex", "flags": ["--app-server"]},
+            json={"name": f"{agent_name}-runner", "cli": "codex", "flags": list(flags)},
             headers=auth_headers,
         )
         assert created.status_code == 201, created.text
@@ -101,6 +101,16 @@ def _bind_codex_app_server_runner(app, auth_headers):
         return runner_id
 
     return _bind
+
+
+def _bind_codex_app_server_runner(app, auth_headers):
+    """Codex on the app-server transport. Explicit here, though it is also the default."""
+    return _bind_codex_runner_with_flags(app, auth_headers, ["--app-server"])
+
+
+def _bind_codex_exec_runner(app, auth_headers):
+    """Codex opted out to the legacy `exec` transport."""
+    return _bind_codex_runner_with_flags(app, auth_headers, ["--no-app-server"])
 
 
 def _fake_run_turn(
@@ -609,14 +619,18 @@ async def test_trigger_respects_explicit_mcp_override_without_probing(
 
 
 @pytest.mark.asyncio
-async def test_codex_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers, bind_runner):
+async def test_codex_exec_trigger_uses_headless_pipe_instead_of_pty(app, auth_headers):
+    """The `exec` transport runs headless through a pipe, never a PTY.
+
+    Codex now defaults to app-server, so this must opt out explicitly to exercise `exec`.
+    """
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"trigger-codex": {"runner": "codex"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
-    await bind_runner("trigger-codex", cli="codex")
+    await _bind_codex_exec_runner(app, auth_headers)("trigger-codex")
 
     fake_spawn = _fake_pty(
         [
@@ -1401,6 +1415,70 @@ async def test_trigger_reports_its_own_conversation_when_an_older_one_is_schedul
         }
     assert states["STALE BACKLOG"][0] == "delivered"
     assert states["FRESH INPUT"] == ("queued", body["conversation_id"])
+
+
+@pytest.mark.asyncio
+async def test_codex_defaults_to_app_server_with_no_flags_at_all(app, auth_headers, bind_runner):
+    """A codex runner carrying no flags routes through `run_turn`, not `codex exec`.
+
+    The Add-agent dialog creates runners with no flags, so this is the shape every codex agent
+    an operator actually creates has. Under the previous opt-in it silently got the exec
+    transport, whose MCP tool calls are always denied.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"default-codex": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("default-codex", cli="codex")
+
+    fake_run_turn = _fake_run_turn()
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.api.v1.agent_trigger.PipeSession.spawn") as pipe_spawn:
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "default-codex", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
+
+    pipe_spawn.assert_not_called()
+    fake_run_turn.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_codex_exec_argv_never_carries_a_transport_sentinel(app, auth_headers):
+    """Neither sentinel is a real `codex` argument, so neither may reach argv."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"sentinel-codex": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_exec_runner(app, auth_headers)("sentinel-codex")
+
+    fake_spawn = _fake_pty(
+        [
+            '{"type":"thread.started","thread_id":"thread-sentinel"}\n',
+            '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}\n',
+        ]
+    )
+    with patch("hub.api.v1.agent_trigger.PipeSession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "sentinel-codex", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            await _await_background_run()
+
+    command = fake_spawn.call_args.args[0]
+    assert "--no-app-server" not in command
+    assert "--app-server" not in command
 
 
 @pytest.mark.asyncio

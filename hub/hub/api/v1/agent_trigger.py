@@ -34,7 +34,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import bound_address, instance_identity, project_workspace, worktrees
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
-from ...codex_appserver import APP_SERVER_OPT_IN_FLAG, AppServerError, TurnOutcome
+from ...codex_appserver import (
+    TRANSPORT_SENTINELS,
+    AppServerError,
+    TurnOutcome,
+    uses_app_server,
+)
 from ...codex_appserver import run_turn as codex_run_turn
 from ...conversations import (
     conversation_for_provider_session,
@@ -331,13 +336,13 @@ async def trigger_agent_directly(
         canonical_server = Path(__file__).resolve().parents[2] / "mcp_server.py"
         mcp_command = [sys.executable, str(canonical_server)]
 
-    # Task 2.8's opt-in: a sentinel in the bound Runner's flags selects the app-server
-    # transport for this codex run. Stripped before `flags` reaches `build_command` — it is
-    # not a real `codex exec` argument and would otherwise leak into that argv unchanged.
+    # Codex uses the app-server transport unless the runner explicitly opts out; see
+    # `uses_app_server`. Both transport sentinels are stripped before `flags` reaches
+    # `build_command` — neither is a real `codex exec` argument, and either would otherwise
+    # leak into that argv unchanged.
     runner_flags = list(runner_row.flags or [])
-    use_codex_app_server = runner == "codex" and APP_SERVER_OPT_IN_FLAG in runner_flags
-    if use_codex_app_server:
-        runner_flags = [f for f in runner_flags if f != APP_SERVER_OPT_IN_FLAG]
+    use_codex_app_server = uses_app_server(runner, runner_flags)
+    runner_flags = [f for f in runner_flags if f not in TRANSPORT_SENTINELS]
 
     try:
         cmd = build_command(

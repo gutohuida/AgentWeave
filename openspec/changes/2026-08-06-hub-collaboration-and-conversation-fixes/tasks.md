@@ -33,19 +33,19 @@
 
 ## 3. Codex collaborates by default
 
-- [ ] 3.1 Add a `--no-app-server` opt-out sentinel alongside `APP_SERVER_OPT_IN_FLAG` in
+- [x] 3.1 Add a `--no-app-server` opt-out sentinel alongside `APP_SERVER_OPT_IN_FLAG` in
       `hub/hub/codex_appserver.py`.
-- [ ] 3.2 Invert `use_codex_app_server` (`agent_trigger.py:337`) to default `True` for
+- [x] 3.2 Invert `use_codex_app_server` (`agent_trigger.py:337`) to default `True` for
       `runner == "codex"`, selecting `exec` only on explicit opt-out.
-- [ ] 3.3 Strip **both** sentinels from `runner_flags` before `build_command` — neither is a real
+- [x] 3.3 Strip **both** sentinels from `runner_flags` before `build_command` — neither is a real
       `codex exec` argument.
-- [ ] 3.4 Update `collaboration_ready`/`collaboration_reason` (`agents.py:207-220`) to the inverted
+- [x] 3.4 Update `collaboration_ready`/`collaboration_reason` (`agents.py:207-220`) to the inverted
       rule so reported state and actual transport cannot disagree.
-- [ ] 3.5 Update `runner_commands.py`'s module docstring to state the default transport and the
+- [x] 3.5 Update `runner_commands.py`'s module docstring to state the default transport and the
       opt-out.
-- [ ] 3.6 Test: a codex runner with no flags selects app-server; `--no-app-server` selects exec;
+- [x] 3.6 Test: a codex runner with no flags selects app-server; `--no-app-server` selects exec;
       neither sentinel appears in the built argv.
-- [ ] 3.7 Test: `collaboration_ready` is `true` for a default codex runner and `false` for one that
+- [x] 3.7 Test: `collaboration_ready` is `true` for a default codex runner and `false` for one that
       opted out without yolo.
 
 ## 4. Conversation chrome

@@ -46,11 +46,39 @@ from .runner_events import (
     tool_use_event,
 )
 
-# Task 2.8's opt-in: present in a bound Runner's `flags` list, this selects the app-server
-# transport for a codex run instead of `exec` — never the default (implications.md §7: keep
-# exec until app-server is proven equivalent). Stripped by the caller before `flags` reaches
-# `codex exec`'s own argv, since it is not a real `codex` CLI flag.
+# Transport sentinels. Both may appear in a bound Runner's `flags` list; neither is a real
+# `codex` CLI argument, so the caller strips them before `flags` reaches argv.
+#
+# app-server is now the DEFAULT for codex, not an opt-in
+# (`2026-08-06-hub-collaboration-and-conversation-fixes`). It was introduced as an opt-in, which
+# meant every codex agent an operator could actually create through the Add-agent dialog — that
+# path sets no flags — ran on `codex exec`. `exec` is non-interactive and has no
+# `--ask-for-approval` flag at all, so approvals resolve by policy: deny everything, which kills
+# every AgentWeave MCP tool call, or bypass the sandbox entirely. The Hub was configuring a tool
+# surface its agents could enumerate but never invoke, which `agent-tool-surface` already forbids.
+#
+# APP_SERVER_OPT_IN_FLAG is retained because runners created before this change may carry it, and
+# because it remains a harmless explicit way to state the default.
 APP_SERVER_OPT_IN_FLAG = "--app-server"
+
+# Selects the legacy `exec` transport. `codex app-server` is labelled [experimental] by the Codex
+# CLI itself, so the escape hatch stays — but it must be asked for, since it is known to break
+# collaboration.
+APP_SERVER_OPT_OUT_FLAG = "--no-app-server"
+
+# Both sentinels, for callers that need to strip them from argv.
+TRANSPORT_SENTINELS = (APP_SERVER_OPT_IN_FLAG, APP_SERVER_OPT_OUT_FLAG)
+
+
+def uses_app_server(runner_cli: str, flags: Optional[List[str]]) -> bool:
+    """Whether a codex run with these runner flags uses the app-server transport.
+
+    Single source of truth for the decision, so the transport actually selected and the
+    collaboration-readiness reported to the operator cannot disagree.
+    """
+    if runner_cli != "codex":
+        return False
+    return APP_SERVER_OPT_OUT_FLAG not in (flags or [])
 
 # Server->client methods this Hub must answer. Verified against
 # `codex app-server generate-json-schema` (CLI 0.146.0) and a live protocol trace.
