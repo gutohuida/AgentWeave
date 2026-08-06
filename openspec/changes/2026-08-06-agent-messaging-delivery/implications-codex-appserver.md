@@ -96,6 +96,16 @@ Task 2.15 checks whether Claude has the same MCP defect. If it does, the same re
 the same treatment and the architectures reconverge. If it does not, the divergence is accepted
 deliberately and should be stated in the runner module itself.
 
+**Resolved 2026-08-06, and it is neither of those two outcomes.** Claude *does* have the same class
+of defect (verified live — `design.md` Decision 6): an MCP tool call and a sandbox-escaping write
+are gated by the same undifferentiated permission check under `--permission-mode manual`. But unlike
+Codex, no transport exists to build — `--allowedTools` already lets the Hub grant its own tools
+without granting the write. **The divergence is accepted, but for a different reason than "Claude
+has no defect": Claude's fix is a spawn-time flag, not a protocol.** `PtySession` continues to drive
+Claude through one-shot argv, same as today; only the argv gains `--permission-mode manual
+--allowedTools "mcp__agentweave__*"` for non-yolo runs, in a follow-on change — this document's
+scope stops at establishing that, per task 2.15's own instruction not to implement it here.
+
 ## 7. The protocol is experimental
 
 `codex app-server` is labelled `[experimental]`, and this design rests on behaviour measured against

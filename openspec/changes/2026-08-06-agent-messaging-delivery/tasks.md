@@ -135,8 +135,21 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       against the fix, confirmed `is_error: true`. 5 new unit tests added in
       `test_codex_appserver.py` (`test_file_change_declined_is_marked_error` and siblings) to
       close the gap this live test found. Full hub suite: 720 passed, 9 skipped.
-- [ ] 2.15 Check whether the Claude runner has an equivalent defect, using the same probe-MCP-server
-      method. Record what was established; do not assume parity in either direction.
+- [x] 2.15 Check whether the Claude runner has an equivalent defect, using the same probe-MCP-server
+      method. Record what was established; do not assume parity in either direction. **Done
+      2026-08-06** against Claude Code CLI 2.1.221, live, headless (`-p`, no
+      `--dangerously-skip-permissions`), using the same throwaway one-tool MCP server as Decision 1.
+      **Yes, the same class of defect exists**: under `--permission-mode manual`, an MCP tool call
+      and an out-of-workspace `Write` are refused by the identical undifferentiated "permission not
+      granted" message — no distinction by tool/server identity. **Unlike Codex, the fix is cheap**:
+      `--allowedTools "mcp__agentweave__*"` (verified live) lets the Hub's own tools through while
+      the write stays refused, with no transport rewrite needed. Full write-up, including a
+      distinct finding (non-yolo Claude's actual sandboxing today silently depends on the
+      *operator's own* `~/.claude/settings.json`, not the Hub's `yolo` flag, since
+      `_build_claude_command` sets no `--permission-mode` at all) and what remains unverified, in
+      `design.md` Decision 6. **Not implemented in this change** — task 2.15 is investigation-only;
+      whether/when to add `--allowedTools`/`--permission-mode` to `runner_commands.py` is a
+      follow-on scope decision (see `design.md`'s "not established" list).
 
 ## 3. Derive the callback address from the served address
 

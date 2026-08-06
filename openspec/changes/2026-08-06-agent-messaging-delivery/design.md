@@ -209,6 +209,74 @@ name needs repairing or regenerating, not just the new ones.
 This is bundled here rather than in the UI change because it is a data-correctness bug in the same
 provisioning path, not a visual one.
 
+## Decision 6 — Claude has the same class of defect, with a cheaper fix (task 2.15)
+
+**This was determined empirically on 2026-08-06 against Claude Code CLI 2.1.221**, using the same
+throwaway one-tool MCP server as Decision 1, driven headless (`-p`, `--output-format stream-json`,
+no `--dangerously-skip-permissions`) — the exact shape of a non-yolo Hub-spawned Claude run.
+
+### The first result was confounded, and the confound itself is a finding
+
+The first run (no explicit `--permission-mode`) showed the MCP tool call *and* a `Write` to a path
+outside the working directory both succeeding silently, with no prompt and no error. This is not
+Claude Code's out-of-the-box behavior: this development machine's `~/.claude/settings.json` sets
+`"permissions": {"defaultMode": "bypassPermissions"}` as the operator's own personal convenience
+setting, and the Hub's current `_build_claude_command` (`runner_commands.py`) never passes
+`--permission-mode` at all for a non-yolo run — so it silently inherits whatever the *operator's own
+machine* has configured globally, not what the agent's `yolo` setting says.
+
+**This is a distinct, separately actionable finding**: whether a "non-yolo" Claude agent is actually
+sandboxed today depends on the Hub operator's own `~/.claude/settings.json`, not on the Hub's own
+`yolo` flag. On a fresh install (no such override) the CLI's documented posture is to ask for
+permission — which headless mode cannot answer — so the likely default-install behavior is closer to
+the blocked case below, not the silently-permissive one this specific machine produced.
+
+### Controlling for it: `--permission-mode manual`
+
+A CLI flag overrides `settings.json`, so `--permission-mode manual` isolates the variable under test
+without touching this machine's real settings (swapping `HOME`/`USERPROFILE` to get a clean profile
+was tried first and rejected — it also drops this machine's auth, since Claude Code stores
+credentials there too). Under `--permission-mode manual`, **both** the MCP tool call and the
+out-of-cwd write were refused with the identical, undifferentiated message:
+
+```
+Claude requested permissions to use mcp__probe__probe_ping, but you haven't granted it yet.
+Claude requested permissions to write to <path>, but you haven't granted it yet.
+```
+
+**This is the same class of defect Decision 1 found in `codex exec`**: no distinction exists at this
+layer between "the Hub's own tool" and "an arbitrary filesystem write" — both are gated by one
+undifferentiated permission check, and headless mode has no way to answer it. A non-yolo Claude
+agent, correctly configured for its own sandbox, cannot use AgentWeave's MCP tools at all — the exact
+trade Decision 1a's `app-server` rewrite exists to avoid for Codex.
+
+### Unlike Codex, no transport rewrite is needed
+
+Claude Code exposes `--allowedTools` (per-tool static allowlist, e.g. `"mcp__agentweave__*"`) as a
+CLI flag. Verified live: `--permission-mode manual --allowedTools "mcp__probe__probe_ping"` let the
+probe tool execute normally while the out-of-cwd `Write` was **still refused**, with the identical
+permission-denied message as the fully-blocked case above. **Do not assume parity in either
+direction, per task 2.15's own instruction — this is the asymmetry**: Codex needed a new transport
+because `exec`'s approval is a one-shot policy with no client attached; Claude's gate is a static,
+spawn-time allowlist the Hub can already set on every invocation via `runner_commands.py`, no new
+runner architecture required.
+
+### What is and is not established
+
+- **Established**: the defect exists in Claude Code 2.1.221 under an explicit, non-bypass permission
+  mode. The fix shape (`--permission-mode manual` + `--allowedTools "mcp__agentweave__*"` for
+  non-yolo Claude runs) is verified to separate "the Hub's own tools work" from "the sandbox holds."
+- **Not established, and out of scope for this change**: what the CLI's true default resolves to
+  with zero explicit configuration on a fresh install (inferred, not directly measured, from
+  `--dangerously-skip-permissions`'s existence as a named escape hatch and from `manual` mode's
+  behavior — not from a clean-profile run, since that would have required dropping this machine's
+  auth); whether `--allowedTools` needs the explicit `--permission-mode manual` alongside it on a
+  machine with no `bypassPermissions` override, or is sufficient alone (the one test with
+  `--allowedTools` and no `--permission-mode` flag ran on this machine's `bypassPermissions`-default
+  profile, so it is not a clean read); and whether implementing this fix in `_build_claude_command`
+  belongs in this change or a follow-on — it changes every non-yolo Claude run's command line, a
+  larger blast radius than task 2.15's own scope ("record what was established").
+
 ## Risks
 
 - **The Codex approval key may differ across Codex versions.** Mitigation: task 1.1 verifies against
