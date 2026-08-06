@@ -372,38 +372,90 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight })
   }
 
-  it('stays pinned at the bottom, suspends when scrolled away, resumes when scrolled back', () => {
+  function timelineEntry(id: string): TimelineEntry {
+    return {
+      id,
+      kind: 'agent_output',
+      content: `entry ${id}`,
+      timestamp: `2026-08-06T00:00:0${id}Z`,
+      delivery_state: 'delivered',
+    }
+  }
+
+  it('follows the conversation entries it renders, not the raw output log', () => {
+    // The effect used to depend on `lines` from `useAgentOutput` — the legacy output stream,
+    // which is not what this view renders. Driving content through `recordedEntries` is what
+    // actually exercises the conversation, and is why the previous version of this test could
+    // not observe the defect.
     const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined)
     const { rerender } = render(<AgentOutputPanel agent={idleAgent} />)
     const output = screen.getByTestId('conversation-output')
 
-    // At the bottom by default — new output is followed.
     setScrollGeometry(output, { scrollTop: 960, scrollHeight: 1000, clientHeight: 40 })
-    outputLines = [{ id: '1', agent: 'claude', session_id: undefined, content: 'a', timestamp: 't', kind: 'text' }]
+    recordedEntries = [timelineEntry('1')]
     rerender(<AgentOutputPanel agent={idleAgent} />)
     expect(scrollSpy).toHaveBeenCalled()
     scrollSpy.mockClear()
 
-    // Scroll away from the bottom — new output must not move the viewport.
+    // Scrolled away — a new entry must not move the viewport.
     setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 40 })
     fireEvent.scroll(output)
-    outputLines = [
-      ...outputLines,
-      { id: '2', agent: 'claude', session_id: undefined, content: 'b', timestamp: 't2', kind: 'text' },
-    ]
+    recordedEntries = [...recordedEntries, timelineEntry('2')]
     rerender(<AgentOutputPanel agent={idleAgent} />)
     expect(scrollSpy).not.toHaveBeenCalled()
 
-    // Scroll back to the bottom — following resumes.
+    // Back at the bottom — following resumes.
     setScrollGeometry(output, { scrollTop: 960, scrollHeight: 1000, clientHeight: 40 })
     fireEvent.scroll(output)
-    outputLines = [
-      ...outputLines,
-      { id: '3', agent: 'claude', session_id: undefined, content: 'c', timestamp: 't3', kind: 'text' },
-    ]
+    recordedEntries = [...recordedEntries, timelineEntry('3')]
     rerender(<AgentOutputPanel agent={idleAgent} />)
     expect(scrollSpy).toHaveBeenCalled()
 
     scrollSpy.mockRestore()
+  })
+
+  it('opens a conversation with history at its newest entry', async () => {
+    recordedEntries = [timelineEntry('1'), timelineEntry('2'), timelineEntry('3')]
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+
+    render(<AgentOutputPanel agent={idleAgent} />)
+
+    // Instant, not smooth: a long history should not animate past everything on the way down.
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'auto' }))
+    scrollSpy.mockRestore()
+  })
+
+  it('offers a way back to the newest entry only while following is suspended', async () => {
+    recordedEntries = [timelineEntry('1')]
+    const scrollSpy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+    render(<AgentOutputPanel agent={idleAgent} />)
+    const output = screen.getByTestId('conversation-output')
+
+    // Let the open-at-newest frame land first, so this test observes the operator's scroll
+    // rather than racing that jump.
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith({ behavior: 'auto' }))
+
+    // Following: no control.
+    expect(screen.queryByRole('button', { name: 'Jump to newest' })).not.toBeInTheDocument()
+
+    setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 40 })
+    fireEvent.scroll(output)
+
+    const jump = await screen.findByRole('button', { name: 'Jump to newest' })
+    scrollSpy.mockClear()
+    fireEvent.click(jump)
+
+    expect(scrollSpy).toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Jump to newest' })).not.toBeInTheDocument(),
+    )
+    scrollSpy.mockRestore()
+  })
+
+  it('does not reintroduce a pause or resume scroll toggle', () => {
+    render(<AgentOutputPanel agent={idleAgent} />)
+    expect(
+      screen.queryByRole('button', { name: /Pause scroll|Resume scroll/ }),
+    ).not.toBeInTheDocument()
   })
 })

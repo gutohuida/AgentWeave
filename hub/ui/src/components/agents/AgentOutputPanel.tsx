@@ -77,6 +77,7 @@ export function AgentOutputPanel({
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
+  const openScrollFrameRef = useRef<number | null>(null)
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -149,17 +150,22 @@ export function AgentOutputPanel({
     }
   }, [agent.status, handoffState, lines.length])
 
-  useEffect(() => {
-    if (autoscroll && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [lines, autoscroll])
-
   function handleScroll() {
     const el = containerRef.current
     if (!el) return
+    // A scroll by the operator wins over the pending open-at-newest jump below. Without this,
+    // scrolling up in the moment after a conversation opens is undone by that frame firing.
+    if (openScrollFrameRef.current !== null) {
+      cancelAnimationFrame(openScrollFrameRef.current)
+      openScrollFrameRef.current = null
+    }
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     setAutoscroll(atBottom)
+  }
+
+  function scrollToNewest(behavior: ScrollBehavior = 'smooth') {
+    bottomRef.current?.scrollIntoView({ behavior })
+    setAutoscroll(true)
   }
 
   const isRunning = agent.status === 'running'
@@ -183,6 +189,32 @@ export function AgentOutputPanel({
   const chat = currentConversationId ? conversationChat : recentChat
   const timelineEntries = chat.data?.entries ?? []
   const sseConnectionState = useSSEConnectionState()
+
+  // Follow the entries the timeline actually renders. This used to depend on `lines` — the
+  // legacy raw output log from `useAgentOutput`, which is not what this view shows — so new
+  // conversation content grew the DOM without ever scrolling, and unrelated log lines scrolled
+  // for content nobody was looking at (2026-08-06-agent-permissions-tool-schemas-and-base-knowledge).
+  useEffect(() => {
+    if (autoscroll) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [timelineEntries.length, autoscroll])
+
+  // Opening or switching a conversation lands on its newest entry. Nothing did this before, so a
+  // conversation with history opened at its oldest message. Instant rather than smooth: a long
+  // history should not animate past everything on the way down.
+  useEffect(() => {
+    // Deferred a frame so the entries have been laid out before we jump to their end.
+    openScrollFrameRef.current = requestAnimationFrame(() => {
+      openScrollFrameRef.current = null
+      scrollToNewest('auto')
+    })
+    return () => {
+      if (openScrollFrameRef.current !== null) {
+        cancelAnimationFrame(openScrollFrameRef.current)
+        openScrollFrameRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent.name, currentConversationId])
 
   const [foldAllSignal, setFoldAllSignal] = useState(0)
 
@@ -412,7 +444,9 @@ export function AgentOutputPanel({
         />
       </div>
 
-      {/* Output body */}
+      {/* Output body. Positioned so the return-to-newest control can float over its lower edge
+          without taking layout space or shifting the conversation when it appears. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -436,6 +470,28 @@ export function AgentOutputPanel({
           />
         )}
         <div ref={bottomRef} />
+      </div>
+
+        {/* Not a pause/resume toggle — the spec removed that, because scroll position already
+            expresses whether to follow. This states a different intent ("take me back"), and so
+            appears only while following is suspended. */}
+        {!autoscroll && (
+          <button
+            onClick={() => scrollToNewest()}
+            aria-label="Jump to newest"
+            title="Jump to newest"
+            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium"
+            style={{
+              background: 'var(--surface-3)',
+              border: '1px solid var(--border-hi)',
+              color: 'var(--text)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.28)',
+            }}
+          >
+            <Icon name="expand_more" size={13} />
+            Jump to newest
+          </button>
+        )}
       </div>
 
       <div className="conversation-composer-fade shrink-0">

@@ -32,16 +32,16 @@
 
 ## 3. Autoscroll, opening position, and a jump control
 
-- [ ] 3.1 Re-key the scroll effect in `AgentOutputPanel.tsx` on the entries the timeline renders,
+- [x] 3.1 Re-key the scroll effect in `AgentOutputPanel.tsx` on the entries the timeline renders,
       not `lines`.
-- [ ] 3.2 Scroll to the newest turn when a conversation is opened or switched, resetting `autoscroll`.
+- [x] 3.2 Scroll to the newest turn when a conversation is opened or switched, resetting `autoscroll`.
       Use an instant scroll so a long history does not animate.
-- [ ] 3.3 Add a jump-to-bottom control, visible only while following is suspended. Do **not**
+- [x] 3.3 Add a jump-to-bottom control, visible only while following is suspended. Do **not**
       reintroduce a pause/resume toggle — the spec forbids it.
-- [ ] 3.4 Fix the existing autoscroll test, which drives content through `outputLines` and so cannot
+- [x] 3.4 Fix the existing autoscroll test, which drives content through `outputLines` and so cannot
       observe the defect.
-- [ ] 3.5 Test: opening a conversation with history lands at the newest entry.
-- [ ] 3.6 Test: the jump control appears only when suspended, and restores following.
+- [x] 3.5 Test: opening a conversation with history lands at the newest entry.
+- [x] 3.6 Test: the jump control appears only when suspended, and restores following.
 
 ## 4. Canonical context tells an agent where it is and what its tools accept
 
