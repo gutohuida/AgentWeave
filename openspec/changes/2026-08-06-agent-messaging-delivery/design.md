@@ -19,39 +19,70 @@ accepts POST, so the 405 could only have come from a different process.
 
 ## Decision 1 — how Codex approval is resolved
 
-Three options were considered.
+**This was determined empirically on 2026-08-06 against Codex CLI 0.146.0 on Windows 11**, using a
+throwaway one-tool MCP server (`probe_ping`, returning a fixed token) so the result could not be
+confused with an AgentWeave-specific fault. It is not: **every** MCP tool call in `codex exec` is
+auto-cancelled under a sandbox, whatever the server.
 
-**Rejected: set `yolo` by default.** `--dangerously-bypass-approvals-and-sandbox` disables the
-filesystem sandbox as well as approvals. Collaboration would then be purchased with the sandbox,
-which is the trade the proposal exists to remove.
+### Verified results
 
-**Rejected: instruct the model not to need approval.** Prompt text cannot change an approval policy
-evaluated by the CLI.
+| Configuration (with `--sandbox workspace-write` unless noted) | MCP call | Sandbox holds |
+|---|---|---|
+| default (`approvals_reviewer` unset → `user`) | ✗ cancelled | ✓ yes |
+| `--ignore-user-config` | ✗ cancelled | — |
+| `approval_policy="never"` | ✗ cancelled | — |
+| `sandbox_workspace_write.network_access=true` | ✗ cancelled | — |
+| `approvals_reviewer="auto_review"` | ✓ works | **✗ no** |
+| `approvals_reviewer="guardian_subagent"` | ✓ works | **✗ no** |
+| `--sandbox danger-full-access` | ✓ works | ✗ none by definition |
+| `--dangerously-bypass-approvals-and-sandbox` | ✓ works | ✗ none by definition |
 
-**Chosen: configure approval for the MCP server specifically, via `-c` overrides on the `codex exec`
-invocation the Hub already constructs.** The Hub already writes
-`mcp_servers.agentweave.command`, `.args`, and `.env_vars` this way; approval configuration belongs
-in the same block, applied to the one server the Hub installed and to nothing else.
+Sandbox holding was tested directly: the agent was told to write a file outside its workspace. Under
+the default reviewer the file was never created. Under **both** `auto_review` and
+`guardian_subagent` the write was approved and the file appeared on disk.
 
-The precise key is **deliberately not fixed by this design**. Codex config keys are version-specific
-(`codex exec --help` on 0.146.0 exposes `--strict-config`, which errors on unrecognised keys), and
-the local `~/.codex/config.toml` carries `approvals_reviewer = "user"`, which is a strong candidate
-for the cause but was not confirmed by reading Codex's source. Implementation task 1.1 is to
-determine the correct key empirically against the installed CLI before writing any of it into the
-command builder, and to record what was verified. **A key that has not been shown to work against a
-real `codex exec` run MUST NOT be committed.**
+### What this rules out
 
-Whatever key is chosen, the sandbox flag selection (`--sandbox workspace-write` vs
-`--dangerously-bypass-approvals-and-sandbox`) stays exactly as it is today. Approval and sandboxing
-become independent.
+- **`approval_policy="never"` is not "auto-approve".** It means never *ask*, which resolves an
+  approval request as denied. It makes the failure certain, not absent.
+- **There is no per-server trust or approval key.** Tested against a complete server definition
+  under `--strict-config`, `mcp_servers.<name>` accepts `enabled` and `startup_timeout_sec` but
+  rejects `tool_approval`, `auto_approve`, `trust`, `trusted`, and `approval_policy` as unknown
+  fields. Codex 0.146.0 offers no way to trust one MCP server.
+- **It is not caused by the operator's `config.toml`.** `--ignore-user-config` reproduces it, so
+  `approvals_reviewer = "user"` present in that file is the default behaviour, not a local
+  misconfiguration.
+- **It is not a network restriction.** Granting `network_access` under `workspace-write` changes
+  nothing.
 
-### Fallback if no such key exists
+### The consequence — a requirement had to change
 
-If task 1.1 establishes that this Codex version cannot grant non-interactive MCP approval by
-configuration, the Hub SHALL detect the condition at spawn time and record a diagnostic naming it,
-rather than starting a run whose tool surface it knows to be inert. Requirement
-"A tool surface the agent cannot invoke is a failure, not a configuration" is written to be
-satisfiable either way — by making the call work, or by refusing to pretend it will.
+**On Codex 0.146.0 there is no configuration that permits MCP tool calls while preserving the
+filesystem sandbox.** The three settings that permit the call all do so by permitting *every*
+escalation.
+
+This invalidates the original requirement that collaboration must not cost the sandbox. It was
+written before the behaviour was measured and it is not satisfiable on this provider. Pretending
+otherwise would either block the feature indefinitely or produce an implementation that quietly
+claims a protection it does not have.
+
+**Chosen: make the trade explicit, operator-owned, and visible, rather than implicit.**
+
+A Codex agent that can collaborate is a Codex agent whose escalations are auto-approved. The Hub's
+obligation is therefore to (a) never make that choice silently on the operator's behalf, (b) state
+plainly what is given up, and (c) keep the sandboxed-and-non-collaborating configuration available
+and working for operators who prefer it.
+
+`auto_review` is preferred over `guardian_subagent` for this purpose: both failed the sandbox test
+identically, and `guardian_subagent` additionally spends model calls per approval for a protection
+it did not provide.
+
+### Not closed
+
+Per-server MCP trust is the setting this actually needs, and Codex does not have it. This is worth
+raising upstream. If a future Codex version adds it, the requirement reverts to the stronger form
+and the operator-facing trade disappears — the spec should be re-tightened at that point, not left
+permanently relaxed.
 
 ## Decision 2 — the Hub's own address
 

@@ -14,9 +14,13 @@ Hub MUST NOT start a run whose tool surface it has configured but which it knows
 call. Where a provider requires approval before a tool call proceeds, the Hub SHALL supply that
 approval as part of starting the run.
 
-Making the tool surface invocable MUST NOT require weakening any other protection the operator
-selected for that run. In particular, the agent's filesystem sandboxing SHALL be unchanged by
-whatever makes the tool surface callable.
+Where a provider cannot grant that approval without also weakening another protection the operator
+selected — a limitation measured on the provider, not assumed — the Hub MUST NOT make that trade
+silently. It SHALL require the operator to choose it explicitly, SHALL state which protection is
+given up, and SHALL keep the protected, non-collaborating configuration available and working.
+
+Where a provider can grant the approval without weakening another protection, the Hub SHALL do so
+and SHALL NOT present the operator with a choice that is not required.
 
 #### Scenario: Tools are available without operator configuration
 
@@ -35,11 +39,31 @@ whatever makes the tool surface callable.
 - **THEN** the call proceeds to the Hub
 - **AND** is not refused for want of an approval the operator was never asked for
 
-#### Scenario: Collaboration does not cost the sandbox
+#### Scenario: Collaboration costs nothing where the provider allows it
 
-- **WHEN** an agent whose run is filesystem-sandboxed calls a tool from its configured surface
+- **WHEN** a provider can permit tool calls without weakening another protection
+- **AND** an agent of that provider calls a tool from its configured surface
 - **THEN** the call proceeds
-- **AND** the run remains filesystem-sandboxed
+- **AND** every protection the operator selected remains in force
+- **AND** the operator was not asked to give anything up
+
+#### Scenario: An unavoidable trade is chosen by the operator, not assumed
+
+- **WHEN** a provider cannot permit tool calls without weakening a protection the operator selected
+- **THEN** the Hub does not weaken that protection on its own initiative
+- **AND** an agent whose operator has not chosen the trade keeps its protection
+
+#### Scenario: The operator is told what the trade costs
+
+- **WHEN** the operator is offered that choice
+- **THEN** the protection being given up is named
+- **AND** the consequence of giving it up is stated
+
+#### Scenario: Declining the trade leaves a working agent
+
+- **WHEN** the operator declines the trade
+- **THEN** the agent still runs with its protection in force
+- **AND** the Hub reports that agent as unable to collaborate rather than failing silently
 
 #### Scenario: An uninvocable surface is refused, not pretended
 

@@ -5,30 +5,39 @@ because unit tests passed while the feature was completely broken in reality.
 
 ## 1. Establish how Codex approval is actually granted
 
-- [ ] 1.1 Determine empirically, against the installed Codex CLI, which configuration grants
-      non-interactive MCP tool approval for one named server. Run real `codex exec` invocations with
-      candidate `-c` overrides and a registered MCP server; record the exact commands tried and
-      their outcomes. `approvals_reviewer` in `~/.codex/config.toml` is a candidate, not an answer.
-- [ ] 1.2 Record the finding — including the Codex version it was verified against — in
-      `design.md` and in a comment at the construction site. Do not commit an unverified key.
-- [ ] 1.3 If no such configuration exists on this version, implement the Decision 1 fallback instead:
-      detect the condition at spawn time and record a diagnostic. Mark 1.4-1.6 not-applicable with
-      that reason rather than leaving them silently unchecked.
+- [x] 1.1 Determine empirically which configuration grants non-interactive MCP tool approval.
+      **Done 2026-08-06 against Codex CLI 0.146.0** using a throwaway one-tool MCP server. Full
+      results table in `design.md` Decision 1.
+- [x] 1.2 Record the finding and the version it was verified against — in `design.md`. Still to be
+      repeated as a comment at the construction site when 2.1 lands.
+- [x] 1.3 Establish whether a sandbox-preserving configuration exists. **It does not.** All three
+      settings that permit the call (`approvals_reviewer="auto_review"`,
+      `approvals_reviewer="guardian_subagent"`, `--sandbox danger-full-access`) also permit writes
+      outside the workspace, verified by a direct breach test. There is no per-server MCP trust key.
 
-## 2. Make the Codex tool surface invocable
+## 2. Make the Codex tool surface invocable as an explicit operator choice
 
-- [ ] 2.1 Apply the verified approval configuration in `_build_codex_command`
-      (`hub/hub/runner_commands.py`), in the same `-c` block that already registers the server.
-- [ ] 2.2 Confirm sandbox flag selection is untouched: a non-`yolo` run still passes
-      `--sandbox workspace-write`, a `yolo` run still passes the bypass flag.
-- [ ] 2.3 Unit test: a non-`yolo` codex command carries both the approval configuration and
+Requires the operator decision on how the trade is presented — see "Open decision" at the foot of
+this file. Do not start section 2 before that is settled.
+
+- [ ] 2.1 Apply `approvals_reviewer="auto_review"` in `_build_codex_command`
+      (`hub/hub/runner_commands.py`) **only** for agents whose operator has chosen collaboration,
+      in the same `-c` block that already registers the server. Comment it with the 1.1 findings.
+- [ ] 2.2 Add the per-agent setting that carries that choice. It is distinct from `yolo`: `yolo`
+      removes the sandbox outright, this keeps `--sandbox workspace-write` while auto-approving
+      escalations. Both are weaker than the default; they are not the same weakening.
+- [ ] 2.3 Confirm an agent without the setting is byte-for-byte unchanged from today.
+- [ ] 2.4 Unit test: an agent with the setting gets `auto_review` and still gets
       `--sandbox workspace-write`.
-- [ ] 2.4 Unit test: the approval configuration names only the AgentWeave server and grants nothing
-      globally.
-- [ ] 2.5 Check whether the Claude runner has the same defect. If it does, fix it in the same way
-      and add the matching tests; if it does not, record how that was established.
-- [ ] 2.6 **Live:** trigger a non-`yolo` codex agent to `send_message` another agent. Its transcript
-      shows the call completing, with no "cancelled" line.
+- [ ] 2.5 Unit test: an agent without the setting gets neither.
+- [ ] 2.6 Unit test: `yolo` and the collaboration setting remain independently expressible.
+- [ ] 2.7 Check whether the Claude runner has the same defect — run the same probe-MCP-server
+      experiment against `claude`. If it does, fix it; if it does not, record how that was
+      established. Do not assume parity in either direction.
+- [ ] 2.8 **Live:** a collaboration-enabled codex agent's `send_message` completes, with no
+      "cancelled" line.
+- [ ] 2.9 **Live:** re-run the breach test through the Hub — confirm the documented sandbox
+      consequence is exactly what the operator was told, no more and no less.
 
 ## 3. Derive the callback address from the served address
 
@@ -88,12 +97,28 @@ because unit tests passed while the feature was completely broken in reality.
 - [ ] 8.1 `pytest hub/tests -q` — full pass, count recorded.
 - [ ] 8.2 `npm test -- --run` and `npx tsc --noEmit` in `hub/ui` — clean (only if UI files changed).
 - [ ] 8.3 **Live, the original failure:** on a Hub started on a non-default port, with two
-      default-configuration (non-`yolo`) codex agents, ask agent one to message agent two. Confirm:
+      collaboration-enabled non-`yolo` codex agents, ask agent one to message agent two. Confirm:
       the tool call completes; the message row exists with the right sender, recipient, and project;
       a queue entry was created for the recipient; and the recipient is scheduled for a turn.
 - [ ] 8.4 **Live:** the recipient actually runs its turn and its transcript contains the message.
 - [ ] 8.5 **Live:** repeat 8.3 with two claude agents.
 - [ ] 8.6 **Live:** repeat 8.3 across providers — a codex agent messaging a claude agent.
-- [ ] 8.7 Confirm the sandbox is still in force during 8.3 (a non-`yolo` agent still cannot write
-      outside its workspace).
+- [ ] 8.7 Confirm a codex agent *without* collaboration enabled still cannot write outside its
+      workspace, so the default posture is genuinely unchanged by this change.
 - [ ] 8.8 `openspec validate 2026-08-06-agent-messaging-delivery --strict` — clean.
+
+## Open decision — blocks section 2
+
+Task 1.3 established that on Codex 0.146.0, a Codex agent that can collaborate is a Codex agent
+whose sandbox escalations are auto-approved. There is no third option on this provider.
+
+The operator must decide how that trade is presented before section 2 is implemented:
+
+- Per-agent opt-in, default off — collaboration is off until enabled per agent; safest default,
+  but agent-to-agent messaging silently does nothing until someone finds the switch.
+- Per-project opt-in, default off — one decision covers a project's agents.
+- Default on for Codex agents, clearly labelled — messaging works out of the box; the operator is
+  told at creation what a Codex agent's sandbox actually guarantees.
+
+Whichever is chosen, the requirement stands that the cost is named, not implied, and that declining
+leaves a working sandboxed agent that is reported as unable to collaborate.
