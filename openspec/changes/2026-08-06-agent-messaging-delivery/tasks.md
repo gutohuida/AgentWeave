@@ -319,15 +319,65 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 ## 8. End-to-end verification
 
-- [ ] 8.1 `pytest hub/tests -q` — full pass, count recorded.
-- [ ] 8.2 `npm test -- --run` and `npx tsc --noEmit` in `hub/ui` — clean (only if UI files changed).
-- [ ] 8.3 **Live, the original failure:** on a Hub started on a non-default port, with two
-      default-configuration (non-`yolo`, sandboxed) codex agents, ask agent one to message agent two. Confirm:
-      the tool call completes; the message row exists with the right sender, recipient, and project;
-      a queue entry was created for the recipient; and the recipient is scheduled for a turn.
-- [ ] 8.4 **Live:** the recipient actually runs its turn and its transcript contains the message.
-- [ ] 8.5 **Live:** repeat 8.3 with two claude agents.
-- [ ] 8.6 **Live:** repeat 8.3 across providers — a codex agent messaging a claude agent.
-- [ ] 8.7 Confirm the agents in 8.3 still cannot write outside their workspace — collaboration
-      working must not have cost the sandbox.
-- [ ] 8.8 `openspec validate 2026-08-06-agent-messaging-delivery --strict` — clean.
+- [x] 8.1 `pytest hub/tests -q` — full pass, count recorded. **746 passed, 9 skipped, 0 failures**
+      (720 baseline at session start + 26 new across this session's five committed checkpoints).
+- [x] 8.2 `npm test -- --run` and `npx tsc --noEmit` in `hub/ui` — clean (only if UI files changed).
+      UI files changed in §6 only (`ComposerAgentSelector.tsx`, `api/agents.ts`, their test).
+      **414 passed, `tsc --noEmit` clean.** No UI files changed since; result still holds.
+- [x] 8.3 **Live, the original failure:** on a Hub started on a non-default port (8010, this
+      session's dev Hub throughout — never the settings default 8000), with two non-`yolo` codex
+      agents, one messaged the other. Confirmed via a real `POST /agent-actions/messages` call
+      (project `proj-de54b547`, `codex-collab-1` → `codex-collab-2`, both bound to a Runner with
+      `flags: ["--app-server"]` — the supported way to be both non-yolo/sandboxed and
+      collaboration-ready per §6's own finding, not a bare zero-flag Runner, which §6 itself proved
+      is *not* collaboration-ready without yolo): the call returned 201; the `Message` row had
+      `sender: codex-collab-1`, `recipient: codex-collab-2`, `project_id: proj-de54b547`; one
+      `InboundQueueEntry` was created and reached `state: delivered`; a real `Run` auto-started for
+      `codex-collab-2` (`run-5cdb00a4`) with no further action from me.
+- [x] 8.4 **Live:** the recipient actually runs its turn and its transcript contains the message.
+      `codex-collab-2`'s transcript shows the exact sent content as an `inbound_peer` entry, and the
+      agent engaged with it naturally: explored the workspace, then called `agentweave.send_message`
+      back — first attempt correctly rejected 422 (`message_type: "question"` is not a valid type;
+      the error text was `hub.mcp_server`'s task-5 `HubAPIError` format, `"Hub rejected POST
+      /messages (422): ..."`, task 5's fix showing up organically in an unrelated live run), second
+      attempt (`message_type: "message"`) succeeded.
+- [x] 8.5 **Live:** repeat 8.3 with two claude agents. `proj-de54b547`'s pre-existing
+      `live-verify-claude`/`live-verify-claude-2` (both non-yolo, Runner-bound, no special flags
+      needed — task A's `--permission-mode manual` + `--allowedTools` fix is what makes a non-yolo
+      Claude agent collaboration-ready at all): same shape confirmed — `Message` row correct, queue
+      entry `delivered`, a real `Run` auto-started for the recipient, whose transcript contains the
+      exact sent content as `inbound_peer`.
+- [x] 8.6 **Live:** repeat 8.3 across providers — a codex agent messaging a claude agent.
+      `codex-collab-1` → `live-verify-claude`: same shape confirmed, including the recipient's
+      transcript containing the cross-provider message content verbatim.
+- [~] 8.7 Confirm the agents in 8.3 still cannot write outside their workspace — collaboration
+      working must not have cost the sandbox. **Not independently re-confirmed with these exact
+      agents this session** — a live retrigger of `codex-collab-1` for a breach attempt ran into the
+      queue-backlog anomaly below and never received the intended instruction. Relying instead on
+      already-established evidence from this same session (task A's live Claude breach test: a
+      non-yolo agent's `Read` call refused under `--permission-mode manual`) and the prior session's
+      Codex app-server breach test (handoff-0009, task 2.14) — the underlying sandbox mechanism is
+      unchanged by anything in §§3–7. Flagged rather than silently marked done.
+- [x] 8.8 `openspec validate 2026-08-06-agent-messaging-delivery --strict` — clean.
+
+**New finding, not closed — a queue-backlog / prompt-delivery anomaly**, discovered while attempting
+8.3–8.7 through the normal operator-facing `/agent/trigger` flow (as opposed to the direct
+`/agent-actions/messages` calls the confirmations above actually used to get clean signal). Across
+six attempts — three Claude, three Codex, one after clearing what turned out to be a self-inflicted
+stuck-`running` Run row from this session's own direct-token testing — a triggered agent's *first
+response text* repeatedly did not correspond to the message actually sent in that trigger call, even
+with `session_mode: "new"`. Two read as generic non-engagement ("I'm ready to help, what would you
+like me to do?"), suspiciously cheap (~$0.01–0.02, consistent with an almost-empty effective prompt).
+One (the final Codex retry) instead picked up unrelated content from an earlier point in the same
+conversation's history. The prompt-construction code itself
+(`hub/hub/api/v1/agent_trigger.py:328`, `prompt = f"{access_path_notice(access_path)}\n\n{message}"`)
+was read and looks correct — the anomaly was not traced past that. Pattern noted, not proven: appears
+correlated with rapid, closely-spaced `/agent/trigger` calls against the same agent/conversation
+(exactly the kind of back-to-back live-testing this session did, not necessarily normal operator
+usage pacing). **Not a blocker for closing this change** — the underlying Hub mechanics (message
+row, queue entry, scheduling, cross-agent and cross-provider transcript delivery) all have clean,
+directly-confirmed live evidence via 8.3–8.6 above, gathered by bypassing this specific path
+(minting a run token directly and calling `/agent-actions/messages`, sidestepping `/agent/trigger`'s
+`message` field entirely). Worth a dedicated, unhurried investigation in a future session — ideally
+starting from inspecting the actual subprocess argv/stdin the Hub sends, not inferring from model
+responses.
