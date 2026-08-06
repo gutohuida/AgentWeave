@@ -1,5 +1,8 @@
 # Tasks — operator-in-the-loop turns
 
+**DEFERRED 2026-08-06 by operator decision — do not start.** Finish
+`2026-08-06-agent-messaging-delivery` and `2026-08-06-hub-composer-and-chrome-refinement` first.
+
 **Blocked on** `2026-08-06-agent-messaging-delivery` sections 2 and 3. Sections 1-3 below need only
 the Hub; sections 4-6 need the app-server client from that change.
 

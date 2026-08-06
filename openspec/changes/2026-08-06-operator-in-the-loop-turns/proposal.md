@@ -2,6 +2,12 @@
 
 **Approved:** _pending_
 
+**Status: DEFERRED — do not implement.** Recorded 2026-08-06 by operator decision: not a priority,
+and the current batch (`2026-08-06-agent-messaging-delivery` and
+`2026-08-06-hub-composer-and-chrome-refinement`) is to be finished first. This document is kept
+because the research behind it — in particular the measured elicitation limitation — is expensive to
+re-derive and does not go stale quickly. Revisit deliberately; do not pick it up because it is here.
+
 **Depends on:** `2026-08-06-agent-messaging-delivery`. The Codex app-server transport is what makes
 most of this possible; without it there is no channel to ask the operator anything mid-turn.
 
