@@ -108,11 +108,13 @@ export function AgentTimeline({
     <div className="max-w-[960px] mx-auto flex flex-col gap-[21px] px-[30px]">
       {turns.map((turn, turnIndex) => {
         const key = turn.runId ?? `turn-${turnIndex}`
-        const isLastTurn = turnIndex === turns.length - 1
         const runStatus = turn.runId ? statusByRun[turn.runId] : undefined
-        // Default: the last turn is open, every earlier one starts folded to a
-        // one-line summary — the operator can toggle any of them either way.
-        const folded = foldOverride[key] ?? !isLastTurn
+        // Foldedness is the operator's choice, never a function of position. The default used
+        // to be `!isLastTurn` — derived from the turn's index — so appending a turn silently
+        // collapsed whatever the operator was reading the moment they sent a message. Now every
+        // turn renders open until folded by hand, via the per-turn control below or
+        // "Fold all turns".
+        const folded = foldOverride[key] ?? false
 
         if (folded) {
           return (
@@ -128,17 +130,18 @@ export function AgentTimeline({
 
         return (
           <div key={key} className="flex flex-col gap-[21px]">
-            {!isLastTurn && (
-              <button
-                onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
-                className="fold-control self-start flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
-                style={{ color: 'var(--text-3)', opacity: 0.55 }}
-                title="Fold this turn"
-              >
-                <Icon name="expand_more" size={11} />
-                fold
-              </button>
-            )}
+            {/* Every turn is foldable, including the last. Nothing folds on its own any more,
+                so gating this on `!isLastTurn` would leave a single-turn conversation with no
+                way to fold at all. */}
+            <button
+              onClick={() => setFoldOverride((old) => ({ ...old, [key]: true }))}
+              className="fold-control self-start flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px]"
+              style={{ color: 'var(--text-3)', opacity: 0.55 }}
+              title="Fold this turn"
+            >
+              <Icon name="expand_more" size={11} />
+              fold
+            </button>
             <TurnBody
               turn={turn}
               turnKey={key}
@@ -441,7 +444,11 @@ function MessageEntry({
     )
   }
 
-  // Operator ("you") — right-aligned tinted bubble.
+  // Operator ("you") — right-aligned neutral bubble. Deliberately no hue: this used to be a
+  // 14% `--blue` wash with a 30% blue border, which read as leftover navy against the charcoal
+  // palette. `--blue` is the interface's single chromatic accent and is reserved for focus and
+  // selection. Right-alignment plus a neutral surface already distinguishes it from peer
+  // bubbles, which carry their own per-agent tint.
   if (entry.kind === 'operator_input') {
     return (
       <div className="flex flex-col items-end gap-[5px]" style={wrapperStyle}>
@@ -457,8 +464,8 @@ function MessageEntry({
           className="max-w-[82%] px-[13px] py-[10px] text-sm leading-[1.6] whitespace-pre-wrap break-words"
           style={{
             borderRadius: 'var(--radius-xl, 18px)',
-            border: '1px solid color-mix(in oklab, var(--blue) 30%, transparent)',
-            background: 'color-mix(in oklab, var(--blue) 14%, var(--surface-2))',
+            border: '1px solid var(--border)',
+            background: 'var(--surface-2)',
             color: 'var(--text)',
           }}
         >

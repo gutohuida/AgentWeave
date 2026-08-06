@@ -154,12 +154,21 @@ describe('AgentTimeline', () => {
     expect(screen.getByText(/Turn stopped/)).toBeInTheDocument()
   })
 
-  it('folds a completed turn by default and unfolds it on click', () => {
-    render(
+  it('leaves an earlier turn open when a newer turn arrives', () => {
+    // The operator's complaint: "I don't want to automatically fold previous conversation upon
+    // sending a new message." Foldedness used to be derived from `!isLastTurn`, so the turn
+    // being read collapsed the instant a new run appended one.
+    const earlier = entry({ id: 'a3', kind: 'agent_output', output_kind: 'text', content: 'earlier turn body', run_id: 'run-old' })
+    const { rerender } = render(
+      <AgentTimeline agent={agent} entries={[earlier]} roster={[agent]} timelineEvents={[]} isRunning={false} />,
+    )
+    expect(screen.getByText('earlier turn body')).toBeInTheDocument()
+
+    rerender(
       <AgentTimeline
         agent={agent}
         entries={[
-          entry({ id: 'a3', kind: 'agent_output', output_kind: 'text', content: 'earlier turn body', run_id: 'run-old' }),
+          earlier,
           entry({ id: 'a4', kind: 'agent_output', output_kind: 'text', content: 'latest turn body', run_id: 'run-new', timestamp: '2026-08-02T00:05:00Z' }),
         ]}
         roster={[agent]}
@@ -167,13 +176,41 @@ describe('AgentTimeline', () => {
         isRunning={false}
       />,
     )
-    // The earlier turn starts folded to a one-line pill — its body is not in the document.
-    expect(screen.queryByText('earlier turn body')).not.toBeInTheDocument()
-    expect(screen.getByText(/Turn folded/)).toBeInTheDocument()
+    expect(screen.getByText('earlier turn body')).toBeInTheDocument()
     expect(screen.getByText('latest turn body')).toBeInTheDocument()
+    expect(screen.queryByText(/Turn folded/)).not.toBeInTheDocument()
+  })
+
+  it('folds any turn on demand, including the only turn, and keeps it folded', () => {
+    const only = entry({ id: 'a3b', kind: 'agent_output', output_kind: 'text', content: 'only turn body', run_id: 'run-only' })
+    const { rerender } = render(
+      <AgentTimeline agent={agent} entries={[only]} roster={[agent]} timelineEvents={[]} isRunning={false} />,
+    )
+
+    // A single-turn conversation is still foldable — the control used to be hidden on the
+    // last turn, which with no automatic folding would leave no way to fold at all.
+    fireEvent.click(screen.getByTitle('Fold this turn'))
+    expect(screen.queryByText('only turn body')).not.toBeInTheDocument()
+    expect(screen.getByText(/Turn folded/)).toBeInTheDocument()
+
+    // A manual fold survives a new turn arriving.
+    rerender(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          only,
+          entry({ id: 'a4b', kind: 'agent_output', output_kind: 'text', content: 'newer turn body', run_id: 'run-newer', timestamp: '2026-08-02T00:05:00Z' }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.queryByText('only turn body')).not.toBeInTheDocument()
+    expect(screen.getByText('newer turn body')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText(/Turn folded/))
-    expect(screen.getByText('earlier turn body')).toBeInTheDocument()
+    expect(screen.getByText('only turn body')).toBeInTheDocument()
   })
 
   it('folds every turn on demand via foldAllSignal', () => {

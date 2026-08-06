@@ -50,23 +50,23 @@
 
 ## 4. Conversation chrome
 
-- [ ] 4.1 Operator bubble (`AgentTimeline.tsx:445`): background `var(--surface-2)`, border
+- [x] 4.1 Operator bubble (`AgentTimeline.tsx:445`): background `var(--surface-2)`, border
       `1px solid var(--border)`. No `--blue`.
-- [ ] 4.2 Remove the outer `box-shadow` from `.conversation-composer-surface` (`index.css:458`);
+- [x] 4.2 Remove the outer `box-shadow` from `.conversation-composer-surface` (`index.css:458`);
       keep the `inset` top highlight and the `--border-hi` border.
-- [ ] 4.3 Flatten `.conversation-composer-fade` (`index.css:449`) to transparent padding.
-- [ ] 4.4 Update the design comment at `index.css:453` so it no longer cites a drop shadow that no
+- [x] 4.3 Flatten `.conversation-composer-fade` (`index.css:449`) to transparent padding.
+- [x] 4.4 Update the design comment at `index.css:453` so it no longer cites a drop shadow that no
       longer exists.
-- [ ] 4.5 Test: the operator bubble's style declares no `--blue`; the composer surface declares no
+- [x] 4.5 Test: the operator bubble's style declares no `--blue`; the composer surface declares no
       outer box-shadow.
 
 ## 5. Turns never fold themselves
 
-- [ ] 5.1 `AgentTimeline.tsx:115`: default `foldOverride[key] ?? false`.
-- [ ] 5.2 Make the per-turn fold control unconditional (`AgentTimeline.tsx:131`) so the last turn is
+- [x] 5.1 `AgentTimeline.tsx:115`: default `foldOverride[key] ?? false`.
+- [x] 5.2 Make the per-turn fold control unconditional (`AgentTimeline.tsx:131`) so the last turn is
       foldable too.
-- [ ] 5.3 Test: appending a new turn leaves an earlier, un-toggled turn open.
-- [ ] 5.4 Test: "Fold all turns" and the per-turn control still fold, and a manually folded turn
+- [x] 5.3 Test: appending a new turn leaves an earlier, un-toggled turn open.
+- [x] 5.4 Test: "Fold all turns" and the per-turn control still fold, and a manually folded turn
       stays folded when a new turn arrives.
 
 ## 6. The cross-agent send picker is removed

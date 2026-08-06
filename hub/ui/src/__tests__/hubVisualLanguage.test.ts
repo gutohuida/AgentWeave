@@ -12,6 +12,7 @@ import projectHeaderSource from '@/components/layout/ProjectHeader.tsx?raw'
 import projectTabsSource from '@/components/layout/ProjectTabs.tsx?raw'
 import conversationControlsSource from '@/components/agents/ConversationControls.tsx?raw'
 import composerSource from '@/components/agents/Composer.tsx?raw'
+import agentTimelineSource from '@/components/agents/AgentTimeline.tsx?raw'
 
 const cssSource = readFileSync('src/index.css', 'utf8')
 
@@ -137,5 +138,33 @@ describe('Hub UI mock alignment contracts', () => {
 
   it('the tab strip carries only a plane change at its boundary, not a dividing line (§6)', () => {
     expect(projectTabsSource).not.toMatch(/borderBottom/)
+  })
+
+  it('nothing paints a darker region around the composer (2026-08-06-hub-collaboration-and-conversation-fixes §4)', () => {
+    // Operator: "There is a charcoal chat box and then a black box around it?" Two layers did
+    // that — a 52px near-black drop shadow, and a `--bg` gradient across the whole strip. The
+    // inset top highlight is what actually lifts the panel and is kept.
+    const surfaceRule = cssSource.match(/\.conversation-composer-surface\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(surfaceRule).toContain('inset 0 1px')
+    expect(surfaceRule).not.toMatch(/box-shadow:[^;]*\b0 20px 52px/)
+    expect(surfaceRule).not.toMatch(/rgba\(2,\s*5,\s*18/)
+
+    const fadeRule = cssSource.match(/\.conversation-composer-fade\s*\{[^}]*\}/)?.[0] ?? ''
+    expect(fadeRule).not.toContain('linear-gradient')
+  })
+
+  it("the operator's own message bubble carries no accent hue (§4)", () => {
+    // `--blue` is the single chromatic accent, reserved for focus/selection. A 14% wash of it
+    // over --surface-2 is what read as "the old dark navy color palete".
+    expect(agentTimelineSource).not.toContain('var(--blue)')
+    expect(agentTimelineSource).toContain("background: 'var(--surface-2)'")
+    expect(agentTimelineSource).toContain("border: '1px solid var(--border)'")
+  })
+
+  it('a turn never folds itself as a function of its position (§6)', () => {
+    // `foldOverride[key] ?? !isLastTurn` collapsed whatever the operator was reading the moment
+    // a new turn was appended.
+    expect(agentTimelineSource).not.toMatch(/foldOverride\[key\]\s*\?\?\s*!isLastTurn/)
+    expect(agentTimelineSource).toMatch(/foldOverride\[key\]\s*\?\?\s*false/)
   })
 })
