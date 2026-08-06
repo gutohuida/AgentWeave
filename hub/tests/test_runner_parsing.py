@@ -5,6 +5,8 @@ against this repo's actual installed CLIs (Claude Code 2.1.220, codex-cli 0.146.
 task 3.5's implementation — not hand-guessed shapes.
 """
 
+import json
+
 import pytest
 
 from hub.runner_commands import UnsupportedRunnerError, build_command
@@ -19,7 +21,16 @@ from hub.runner_parsing import (
 class TestBuildCommandClaude:
     def test_new_session_minimal(self):
         cmd = build_command(runner="claude", cli="claude", prompt="hello")
-        assert cmd == ["claude", "--output-format", "stream-json", "--verbose", "-p", "hello"]
+        assert cmd == [
+            "claude",
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--permission-mode",
+            "manual",
+            "-p",
+            "hello",
+        ]
 
     def test_resume_appends_flag(self):
         cmd = build_command(runner="claude", cli="claude", prompt="hi", session_id="sess-123")
@@ -39,6 +50,44 @@ class TestBuildCommandClaude:
         cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=False)
         assert "--dangerously-skip-permissions" not in cmd
 
+    def test_no_yolo_sets_explicit_manual_permission_mode(self):
+        cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=False)
+        assert "--permission-mode" in cmd
+        assert cmd[cmd.index("--permission-mode") + 1] == "manual"
+
+    def test_yolo_omits_permission_mode_flag(self):
+        cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=True)
+        assert "--permission-mode" not in cmd
+
+    def test_no_yolo_with_mcp_command_allowlists_agentweave_tools(self):
+        cmd = build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hi",
+            yolo=False,
+            mcp_command=["python", "mcp_server.py"],
+        )
+        assert "--allowedTools" in cmd
+        # The mcpServers key used for --mcp-config governs the tool-name prefix Claude Code
+        # exposes; the allowlist pattern must reference that same key, not a hardcoded guess.
+        config = json.loads(cmd[cmd.index("--mcp-config") + 1])
+        (server_key,) = config["mcpServers"].keys()
+        assert cmd[cmd.index("--allowedTools") + 1] == f"mcp__{server_key}__*"
+
+    def test_no_yolo_with_no_mcp_command_omits_allowlist(self):
+        cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=False)
+        assert "--allowedTools" not in cmd
+
+    def test_yolo_with_mcp_command_omits_allowlist(self):
+        cmd = build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hi",
+            yolo=True,
+            mcp_command=["python", "mcp_server.py"],
+        )
+        assert "--allowedTools" not in cmd
+
     def test_context_file_injected_only_if_it_exists(self, tmp_path):
         missing = tmp_path / "nope.md"
         cmd = build_command(runner="claude", cli="claude", prompt="hi", context_file=missing)
@@ -53,7 +102,16 @@ class TestBuildCommandClaude:
     def test_claude_proxy_and_native_use_the_same_construction(self):
         for runner in ("claude_proxy", "native"):
             cmd = build_command(runner=runner, cli="claude", prompt="hi")
-            assert cmd == ["claude", "--output-format", "stream-json", "--verbose", "-p", "hi"]
+            assert cmd == [
+                "claude",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--permission-mode",
+                "manual",
+                "-p",
+                "hi",
+            ]
 
     def test_prompt_is_always_the_final_argument(self):
         cmd = build_command(

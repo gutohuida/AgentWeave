@@ -9,7 +9,12 @@ construction for them is deferred) — `build_command` raises `UnsupportedRunner
 anything else so the caller gets a clear, stated reason rather than a silently wrong command.
 
 Yolo-enabled Claude runs receive `--dangerously-skip-permissions`; headless Hub execution has no
-interactive terminal where an operator could answer a permission prompt.
+interactive terminal where an operator could answer a permission prompt. Non-yolo Claude runs
+receive `--permission-mode manual` instead of no permission flag at all, so their sandbox posture
+is set by the Hub's own `yolo` flag rather than by whatever `~/.claude/settings.json` happens to say
+on the machine the Hub runs on (see openspec change `2026-08-06-claude-non-yolo-permission-mode`).
+When such a run also configures the Hub's own MCP server, `--allowedTools "mcp__agentweave__*"` is
+added so that server's tools stay usable under the sandbox.
 """
 
 from __future__ import annotations
@@ -134,8 +139,12 @@ def _build_claude_command(
             }
         }
         cmd += ["--mcp-config", json.dumps(config)]
+        if not yolo:
+            cmd += ["--allowedTools", "mcp__agentweave__*"]
     if yolo:
         cmd += ["--dangerously-skip-permissions"]
+    else:
+        cmd += ["--permission-mode", "manual"]
     if session_id:
         cmd += ["--resume", session_id]
     if extra_flags:
