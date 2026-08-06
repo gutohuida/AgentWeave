@@ -130,6 +130,21 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 default="medium",
                 apply=ApplySpec(style="flag", template="--effort {value}"),
             ),
+            # Values are written out rather than built with `_enum`, whose derived labels
+            # (`id.replace("_"," ").capitalize()`) would read "Acceptedits" and "Bypasspermissions".
+            # An operator picks by what the agent may do, not by the CLI's spelling.
+            ControlDescriptor(
+                id="permission_mode",
+                label="Permissions",
+                kind="enum",
+                values=(
+                    ControlValue(id="acceptEdits", label="Edit files"),
+                    ControlValue(id="manual", label="Ask first"),
+                    ControlValue(id="bypassPermissions", label="Full access"),
+                ),
+                default="acceptEdits",
+                apply=ApplySpec(style="flag", template="--permission-mode {value}"),
+            ),
         ),
     ),
     "codex": ProviderDescriptor(

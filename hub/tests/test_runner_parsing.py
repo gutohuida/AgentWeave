@@ -27,7 +27,7 @@ class TestBuildCommandClaude:
             "stream-json",
             "--verbose",
             "--permission-mode",
-            "manual",
+            "acceptEdits",
             "-p",
             "hello",
         ]
@@ -50,10 +50,12 @@ class TestBuildCommandClaude:
         cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=False)
         assert "--dangerously-skip-permissions" not in cmd
 
-    def test_no_yolo_sets_explicit_manual_permission_mode(self):
+    def test_no_yolo_sets_a_posture_that_can_actually_work(self):
+        """`manual` refused every write: it asks an operator who is not there. See
+        2026-08-06-agent-permissions-tool-schemas-and-base-knowledge."""
         cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=False)
-        assert "--permission-mode" in cmd
-        assert cmd[cmd.index("--permission-mode") + 1] == "manual"
+        assert cmd.count("--permission-mode") == 1
+        assert cmd[cmd.index("--permission-mode") + 1] == "acceptEdits"
 
     def test_yolo_omits_permission_mode_flag(self):
         cmd = build_command(runner="claude", cli="claude", prompt="hi", yolo=True)
@@ -108,7 +110,7 @@ class TestBuildCommandClaude:
                 "stream-json",
                 "--verbose",
                 "--permission-mode",
-                "manual",
+                "acceptEdits",
                 "-p",
                 "hi",
             ]
@@ -127,6 +129,47 @@ class TestBuildCommandClaude:
             extra_flags=["--effort", "high"],
         )
         assert cmd[-4:] == ["--effort", "high", "-p", "hi"]
+
+
+class TestClaudePermissionModeOverride:
+    """The operator's `permission_mode` control must reach argv.
+
+    Its rendered flag arrives in `control_args`, which is spliced in *before* the default posture
+    is appended — so without a guard the default would win and the composer's Permissions pill
+    would appear to work while changing nothing.
+    """
+
+    def _cmd(self, value, *, yolo=False):
+        return build_command(
+            runner="claude",
+            cli="claude",
+            prompt="hi",
+            yolo=yolo,
+            control_overrides={"permission_mode": value},
+        )
+
+    def test_override_reaches_argv_and_suppresses_the_default(self):
+        cmd = self._cmd("manual")
+        assert cmd.count("--permission-mode") == 1
+        assert cmd[cmd.index("--permission-mode") + 1] == "manual"
+
+    def test_override_of_full_access_is_rendered(self):
+        cmd = self._cmd("bypassPermissions")
+        assert cmd[cmd.index("--permission-mode") + 1] == "bypassPermissions"
+
+    def test_an_explicit_choice_wins_over_yolo_without_contradicting_it(self):
+        """A per-conversation choice is deliberate and more specific than the agent's standing
+        yolo flag; the two must not both appear."""
+        cmd = self._cmd("manual", yolo=True)
+        assert cmd[cmd.index("--permission-mode") + 1] == "manual"
+        assert "--dangerously-skip-permissions" not in cmd
+
+    def test_an_invalid_value_is_refused_before_it_reaches_argv(self):
+        from hub.model_catalog import validate_overrides
+
+        accepted, rejection = validate_overrides("claude", {"permission_mode": "sudo"})
+        assert rejection is not None
+        assert accepted == {}
 
 
 class TestBuildCommandCodex:

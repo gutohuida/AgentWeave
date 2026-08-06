@@ -17,17 +17,17 @@
 
 ## 2. Claude permission control and a working default
 
-- [ ] 2.1 Add a `permission_mode` `ControlDescriptor` to `CATALOG["claude"].controls`
+- [x] 2.1 Add a `permission_mode` `ControlDescriptor` to `CATALOG["claude"].controls`
       (`hub/hub/model_catalog.py`) with explicit `ControlValue` labels — "Edit files", "Ask first",
       "Full access" — not `_enum`, whose derived labels would read "Acceptedits".
-- [ ] 2.2 Default the descriptor to `acceptEdits`, and change `_build_claude_command`'s non-yolo
+- [x] 2.2 Default the descriptor to `acceptEdits`, and change `_build_claude_command`'s non-yolo
       branch from `manual` to `acceptEdits`.
-- [ ] 2.3 Guard both the `--permission-mode` and `--dangerously-skip-permissions` branches so an
+- [x] 2.3 Guard both the `--permission-mode` and `--dangerously-skip-permissions` branches so an
       override supplied through `control_args` is not overridden by the hardcoded flag appended later.
-- [ ] 2.4 Update `runner_commands.py`'s module docstring, which documents the `manual` decision.
-- [ ] 2.5 Test: default non-yolo argv carries `--permission-mode acceptEdits` exactly once.
-- [ ] 2.6 Test: an override reaches argv and the hardcoded flag is suppressed.
-- [ ] 2.7 Test: yolo still emits `--dangerously-skip-permissions`, and an override does not duplicate
+- [x] 2.4 Update `runner_commands.py`'s module docstring, which documents the `manual` decision.
+- [x] 2.5 Test: default non-yolo argv carries `--permission-mode acceptEdits` exactly once.
+- [x] 2.6 Test: an override reaches argv and the hardcoded flag is suppressed.
+- [x] 2.7 Test: yolo still emits `--dangerously-skip-permissions`, and an override does not duplicate
       or contradict it.
 
 ## 3. Autoscroll, opening position, and a jump control

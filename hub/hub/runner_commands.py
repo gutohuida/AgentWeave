@@ -16,13 +16,17 @@ so approvals there resolve by policy only: deny everything (which silently kills
 tool call) or `--dangerously-bypass-approvals-and-sandbox`. That is why it is no longer the default
 and why an agent on it is reported as unable to collaborate unless yolo is set.
 
-Yolo-enabled Claude runs receive `--dangerously-skip-permissions`; headless Hub execution has no
-interactive terminal where an operator could answer a permission prompt. Non-yolo Claude runs
-receive `--permission-mode manual` instead of no permission flag at all, so their sandbox posture
-is set by the Hub's own `yolo` flag rather than by whatever `~/.claude/settings.json` happens to say
-on the machine the Hub runs on (see openspec change `2026-08-06-claude-non-yolo-permission-mode`).
-When such a run also configures the Hub's own MCP server, `--allowedTools "mcp__agentweave__*"` is
-added so that server's tools stay usable under the sandbox.
+Claude permission posture is always stated explicitly, so it comes from the Hub rather than from
+whatever `~/.claude/settings.json` says on the machine the Hub runs on (openspec change
+`2026-08-06-claude-non-yolo-permission-mode`). Yolo runs receive `--dangerously-skip-permissions`;
+non-yolo runs receive `--permission-mode DEFAULT_CLAUDE_PERMISSION_MODE`. That default was `manual`
+until 2026-08-06, when operator testing showed it refuses every write — headless execution has no
+terminal at which an operator could answer the prompt `manual` raises, and no approval surface
+exists yet (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`).
+
+Either default is suppressed when the operator has chosen a posture through the `permission_mode`
+control, whose rendered flag arrives in `control_args`. When a run also configures the Hub's own MCP
+server, `--allowedTools "mcp__agentweave__*"` is added so that server's tools stay usable.
 """
 
 from __future__ import annotations
@@ -34,6 +38,15 @@ from typing import Dict, List, Optional
 from .model_catalog import render_control_args
 
 SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
+
+# The posture a non-yolo Claude run gets when the operator has chosen none. `manual` was used
+# until 2026-08-06 and is unusable headlessly: it defers each decision to an operator prompt that
+# nothing can answer, so every write was refused with "Claude requested permissions to write to
+# ..., but you haven't granted it yet". `acceptEdits` keeps the Hub — not the host machine's
+# settings — in control of posture while producing a run that can do work. Isolation is still
+# carried by the agent's own git worktree, which this does not widen. `manual` remains selectable
+# through the `permission_mode` control for a deliberately inert run.
+DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits"
 
 # claude_proxy and native both invoke the claude CLI (see _build_claude_command) under a
 # different auth/proxy setup — their catalog identity for control-override rendering is
@@ -134,6 +147,11 @@ def _build_claude_command(
         cmd += ["--model", model]
     if control_args:
         cmd += control_args
+    # An operator's `permission_mode` control arrives inside `control_args`, which is spliced in
+    # above; the default posture below is appended *after* it and would win. Suppress the default
+    # whenever the override supplied one, or the composer's Permissions pill would appear to work
+    # and change nothing — the worst available failure mode.
+    operator_set_permission_mode = "--permission-mode" in (control_args or [])
     if context_file is not None and context_file.exists():
         cmd += ["--append-system-prompt-file", str(context_file)]
     if mcp_command:
@@ -149,10 +167,11 @@ def _build_claude_command(
         cmd += ["--mcp-config", json.dumps(config)]
         if not yolo:
             cmd += ["--allowedTools", "mcp__agentweave__*"]
-    if yolo:
-        cmd += ["--dangerously-skip-permissions"]
-    else:
-        cmd += ["--permission-mode", "manual"]
+    if not operator_set_permission_mode:
+        if yolo:
+            cmd += ["--dangerously-skip-permissions"]
+        else:
+            cmd += ["--permission-mode", DEFAULT_CLAUDE_PERMISSION_MODE]
     if session_id:
         cmd += ["--resume", session_id]
     if extra_flags:
