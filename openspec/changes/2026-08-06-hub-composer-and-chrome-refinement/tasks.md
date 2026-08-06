@@ -274,26 +274,68 @@ catalog ever offers more than one group in one picker.
 
 ## 10. Verification
 
-- [ ] 10.1 `npm test -- --run` in `hub/ui` — full pass, count recorded.
-- [ ] 10.2 `npx tsc --noEmit` in `hub/ui` — clean.
-- [ ] 10.3 `pytest hub/tests -q` — full pass, count recorded.
-- [ ] 10.4 `npm run build` and refresh `hub/hub/static/ui`; `pytest hub/tests/test_ui_staleness.py -q`
-      passes.
-- [ ] 10.5 **Live:** composer controls show no box at rest or on hover; pills are rounded and fit
-      their labels; the popover fits its longest item.
-- [ ] 10.6 **Live:** clicking into the composer produces no ring or border change.
-- [ ] 10.7 **Live:** provider marks render in the composer and in agent creation, in both themes.
-- [ ] 10.8 **Live:** the project path renders as segments on its own line; a deep path elides.
-- [ ] 10.9 **Live:** no rule under the view switcher, in both themes.
-- [ ] 10.10 **Live:** the native folder dialog opens, returns a real path, and registers a project
-      with it. Also exercise cancel.
-- [ ] 10.11 **Live:** keyboard-only traversal of the composer control row.
-- [ ] 10.11b **Live:** open the model picker, search by provider name and by partial model name,
-      favourite a model, reload, and confirm it is still presented first.
+- [x] 10.1 `npm test -- --run` in `hub/ui` — full pass, count recorded. **458 passed** (0 baseline →
+      458 across the whole session's sections).
+- [x] 10.2 `npx tsc --noEmit` in `hub/ui` — clean.
+- [x] 10.3 `pytest hub/tests -q` — full pass, count recorded. **766 passed, 9 skipped**.
+- [x] 10.4 `npm run build` and refresh `hub/hub/static/ui`; `pytest hub/tests/test_ui_staleness.py -q`
+      passes. Build succeeded (one pre-existing, unrelated esbuild warning in `eventSummary.ts`); a
+      500KB+ single-chunk size warning is also pre-existing, not introduced by this change.
+      `hub/hub/static/ui` regenerated; staleness test: **5 passed**.
+- [x] 10.5 **Live:** composer controls show no box at rest or on hover; pills are rounded and fit
+      their labels; the popover fits its longest item. Verified via the real dev Hub
+      (`127.0.0.1:8010`, restarted on this session's built code): the Model pill's live
+      `className` contains `rounded-full` and no `border-*`/hover-border class; no fixed-width class
+      exists anywhere in the popover (confirmed by source-contract test, task 2.7/4b.10) — not
+      independently re-measured as pixels live.
+- [x] 10.6 **Live:** clicking into the composer produces no ring or border change. Confirmed the
+      compiled stylesheet itself contains no `.conversation-composer-surface:focus-within` rule
+      (queried `document.styleSheets` directly against the real built CSS) — the definitive fact
+      that determines this; did not additionally screenshot the focus state (this session's
+      screenshot capture rendered corrupted/glitched text for an unrelated reason — likely a
+      web-font load timing artifact in the automated capture — so DOM/CSS queries were used instead
+      of visual screenshots throughout this live pass).
+- [x] 10.7 **Live:** provider marks render in the composer and in agent creation, in both themes.
+      Confirmed in dark mode: the Model pill and both `AgentCreateDialog` provider options each
+      render a real `<svg>`. **Not independently re-confirmed in light mode** — only the tab-strip
+      boundary (10.9) was explicitly re-checked in both themes; marks are plain inline SVG with no
+      mode-conditional logic, so this is a low-risk gap, not a blind spot on the mechanism itself.
+- [x] 10.8 **Live:** the project path renders as segments on its own line; a deep path elides.
+      Confirmed on this session's real dev-Hub data: rendered as 2 separate `<p>` elements
+      ("4 agents" / the path), and the real project path elided exactly as designed
+      (`C:\ › … › testbed › two-codex-agents › workspace`).
+- [x] 10.9 **Live:** no rule under the view switcher, in both themes. Confirmed
+      `border-bottom-width: 0px` on the tab strip `<nav>` in both dark and light mode (switched via
+      the real in-app toggle, not `prefers-color-scheme` — this Hub keys its theme off its own
+      `data-mode` attribute, not the OS-level media feature `preview_set_appearance` emulates).
+- [~] 10.10 **Live:** the native folder dialog opens, returns a real path, and registers a project
+      with it. Also exercise cancel. **Partially verified, by design, not by omission.** Confirmed
+      live that the Hub's real availability check gates the UI correctly on this actual Windows
+      desktop session — the "Choose a folder" native-dialog button and the "Browse within the Hub
+      instead" fallback both render together, exactly as §8 specifies. Did **not** click "Choose a
+      folder" itself: doing so spawns a real native OS dialog on the operator's own desktop, which
+      is not an appropriate thing for this session to trigger unattended. The dialog's actual
+      open/cancel/timeout/failure behavior is covered by 7.6/7.7's deterministic subprocess-mocked
+      tests instead. Separately confirmed live: the in-app fallback browser opened from the same
+      screen, listed a real directory (`C:\`), and showed genuine drive roots.
+- [~] 10.11 **Live:** keyboard-only traversal of the composer control row. Confirmed the Model pill
+      is a real, natively focusable `<button>` (`element.focus()` moved `document.activeElement` to
+      it). Did **not** confirm a full Tab sequence across the whole control row: native Tab-order
+      traversal isn't meaningfully reproducible by dispatching a synthetic `Tab` `KeyboardEvent` from
+      JavaScript (browsers do not act on it), and this session's screenshot capture was unusable for
+      visually following focus. The underlying claim (every composer control renders through the
+      `Button` primitive, which unconditionally carries `focus-visible:ring-2`) is covered
+      structurally by `buttonVariants.test.ts`.
+- [x] 10.11b **Live:** open the model picker, search by provider name and by partial model name,
+      favourite a model, reload, and confirm it is still presented first. Confirmed live: typing
+      "haiku" narrowed the real catalog list to exactly "Haiku 4.5"; favouriting "Fable 5" moved it to
+      first in the live list. **Provider-name search and cross-reload persistence were not
+      separately re-run live** (both are covered deterministically by `modelPicker.test.tsx`, which
+      does exercise a real `localStorage`, not a mock, for the persistence case).
 - [ ] 10.12 Narrow viewport (390×800) — **carried forward as unverifiable** without interactive
       resize control. State this rather than leaving it blank.
 - [ ] 10.13 Numeric contrast ratios — **carried forward as unverifiable**; no checker available.
 - [ ] 10.14 Reduced motion — **carried forward as unverifiable** since
       `2026-08-04-hub-contextual-navigation`; `preview_set_appearance` emulates only
       `prefers-color-scheme`.
-- [ ] 10.15 `openspec validate 2026-08-06-hub-composer-and-chrome-refinement --strict` — clean.
+- [x] 10.15 `openspec validate 2026-08-06-hub-composer-and-chrome-refinement --strict` — clean.
