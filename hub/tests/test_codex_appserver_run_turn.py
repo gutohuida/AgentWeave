@@ -186,6 +186,49 @@ class TestRunTurnHappyPath:
         assert resume_params["threadId"] == "019fd481-71f1-7e90-98dc-9033753492bc"
 
     @pytest.mark.asyncio
+    async def test_on_thread_started_fires_before_turn_start_and_before_any_event(
+        self, monkeypatch
+    ):
+        """Task 2.8's integration needs the thread id before any `on_event` call, to bind
+        `Conversation.provider_session_id` the same way the `exec` path resolves
+        `session_id` before that line's own events are recorded."""
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=list(_HAPPY_PATH_NOTIFICATIONS),
+        )
+        _patch_spawn(monkeypatch, fake)
+
+        calls = []
+
+        async def _on_thread_started(thread_id):
+            calls.append(("thread_started", thread_id))
+
+        async def _on_event(event):
+            calls.append(("event", event.kind))
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_on_event,
+            on_thread_started=_on_thread_started,
+        )
+
+        assert calls[0] == ("thread_started", "019fd61e-d230-7d61-8d80-5cf5840c94f8")
+        assert all(call[0] == "event" for call in calls[1:])
+        methods_called = [m for m, _ in fake.sent_requests]
+        assert methods_called.index("thread/start") < methods_called.index("turn/start")
+
+    @pytest.mark.asyncio
     async def test_mcp_command_is_registered_in_thread_start_config(self, monkeypatch):
         fake = _FakeSession(
             responses={

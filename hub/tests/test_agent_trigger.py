@@ -11,7 +11,7 @@ import json
 import subprocess
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -61,6 +61,76 @@ async def _wait_for_active_pty(run_id, timeout=2.0):
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"run {run_id} never registered an active pty")
+
+
+async def _wait_for_active_app_server_run(run_id, timeout=2.0):
+    """Poll until `_execute_codex_appserver_run` has registered *run_id* as in-flight.
+
+    App-server equivalent of `_wait_for_active_pty` above: this path has no PtySession to
+    register in `_active_ptys`, only membership in `_active_app_server_runs`.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if run_id in agent_trigger._active_app_server_runs:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"run {run_id} never registered as an active app-server run")
+
+
+def _bind_codex_app_server_runner(app, auth_headers):
+    """Returns an async helper: `await _bind(agent_name)` binding a codex Runner with the
+    task 2.8 app-server opt-in flag set, mirroring `bind_runner`'s shape but going through
+    the raw runners API (like `test_trigger_command_uses_bound_runner_model_and_flags`)
+    since `bind_runner` has no way to set `flags`.
+    """
+
+    async def _bind(agent_name):
+        created = await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": f"{agent_name}-runner", "cli": "codex", "flags": ["--app-server"]},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
+        runner_id = created.json()["id"]
+        bound = await app.patch(
+            f"/api/v1/projects/proj-test/agents/{agent_name}",
+            json={"runner_id": runner_id},
+            headers=auth_headers,
+        )
+        assert bound.status_code == 200, bound.text
+        return runner_id
+
+    return _bind
+
+
+def _fake_run_turn(
+    *,
+    thread_id="thread-appserver-1",
+    status="completed",
+    error=None,
+    events=(),
+    usage=None,
+    accounting=None,
+):
+    """Build an `AsyncMock` replacement for `codex_appserver.run_turn` that drives the
+    caller's own callbacks the way a real turn would (thread bound before any event,
+    events before usage/accounting, outcome last) — real behavior via `side_effect`, call
+    recording via `AsyncMock` itself, exactly like `_fake_pty` does for the PTY path.
+    """
+    from hub.codex_appserver import TurnOutcome
+
+    async def _run(**kwargs):
+        if kwargs.get("on_thread_started") is not None:
+            await kwargs["on_thread_started"](thread_id)
+        for event in events:
+            await kwargs["on_event"](event)
+        if usage is not None and kwargs.get("on_usage") is not None:
+            await kwargs["on_usage"](usage)
+        if accounting is not None and kwargs.get("on_accounting") is not None:
+            await kwargs["on_accounting"](accounting)
+        return TurnOutcome(thread_id=thread_id, status=status, error=error)
+
+    return AsyncMock(side_effect=_run)
 
 
 def _fake_pty(lines, exit_code=0, pid=4242):
@@ -1199,6 +1269,288 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
 
     assert excinfo.value.status_code == 409
     assert "HUB_URL" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_codex_app_server_opt_in_flag_selects_run_turn_not_exec(
+    app, auth_headers
+):
+    """Task 2.8: `--app-server` in a bound codex Runner's flags routes the run through
+    `codex_appserver.run_turn` instead of `PipeSession`/`codex exec` — and never leaks into
+    a `codex exec` argv, since no exec ever happens on this path."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"appserver-codex": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("appserver-codex")
+
+    fake_run_turn = _fake_run_turn()
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.api.v1.agent_trigger.PipeSession.spawn") as pipe_spawn:
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "appserver-codex", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                run_id = resp.json()["run_id"]
+                await _await_background_run()
+
+    pipe_spawn.assert_not_called()
+    fake_run_turn.assert_called_once()
+    assert fake_run_turn.call_args.kwargs["cli"] == "codex"
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "completed"
+        assert run.session_id == "thread-appserver-1"
+
+
+@pytest.mark.asyncio
+async def test_codex_app_server_records_output_events_and_usage(app, auth_headers):
+    """Task 2.5/2.8: events `on_event`/`on_usage`/`on_accounting` deliver during a turn are
+    recorded the same way the `exec` path's parsed lines are — `AgentOutput` and
+    `TurnUsage` rows indistinguishable from that path's, per implications.md §4's stated
+    goal."""
+    from hub.runner_events import AccountingSample, ContextUsageSample, text_event
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"appserver-output": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("appserver-output")
+
+    fake_run_turn = _fake_run_turn(
+        events=[text_event("hello from app-server")],
+        usage=ContextUsageSample(
+            status="measured", source="codex_appserver", context_tokens=10, limit_tokens=100
+        ),
+        accounting=AccountingSample(
+            source="codex_appserver", input_tokens=7, output_tokens=3, total_tokens=10
+        ),
+    )
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "appserver-output", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    output_resp = await app.get(
+        "/api/v1/projects/proj-test/agents/appserver-output/output", headers=auth_headers
+    )
+    assert output_resp.status_code == 200
+    rows = output_resp.json()
+    assert any(row["content"] == "hello from app-server" for row in rows)
+    assert all(row["session_id"] == "thread-appserver-1" for row in rows if row["run_id"] == run_id)
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import TurnUsage
+
+    async with async_session_factory() as db:
+        usage = (
+            await db.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))
+        ).scalar_one()
+        assert usage.input_tokens == 7
+        assert usage.output_tokens == 3
+        assert usage.total_tokens == 10
+
+
+@pytest.mark.asyncio
+async def test_codex_app_server_resume_passes_known_session_id_as_resume_thread_id(
+    app, auth_headers
+):
+    """Task 2.6: resuming a conversation whose `provider_session_id` was recorded by
+    either transport passes straight through as `run_turn`'s `resume_thread_id` — no
+    translation layer, matching design.md Decision 1a's verified finding."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"appserver-resume": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("appserver-resume")
+
+    fake_run_turn = _fake_run_turn(thread_id="thread-appserver-1")
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            first = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "appserver-resume", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert first.status_code == 200
+            await _await_background_run()
+
+            second = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={
+                    "agent": "appserver-resume",
+                    "message": "again",
+                    "session_mode": "resume",
+                    "session_id": "thread-appserver-1",
+                },
+                headers=auth_headers,
+            )
+            assert second.status_code == 200
+            await _await_background_run()
+
+    assert fake_run_turn.call_count == 2
+    assert fake_run_turn.call_args_list[0].kwargs["resume_thread_id"] is None
+    assert fake_run_turn.call_args_list[1].kwargs["resume_thread_id"] == "thread-appserver-1"
+
+
+@pytest.mark.asyncio
+async def test_codex_app_server_binding_conflict_fails_run(app, auth_headers):
+    """Mirrors the `exec` path's `conversation_binding_conflict` handling: a thread id that
+    disagrees with the conversation's already-bound `provider_session_id` fails the run
+    rather than silently overwriting which session the conversation is bound to."""
+    from hub.conversations import new_conversation
+    from hub.db.engine import async_session_factory
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"appserver-conflict": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("appserver-conflict")
+
+    async with async_session_factory() as db:
+        conversation = new_conversation(project_id="proj-test", agent="appserver-conflict")
+        conversation.provider_session_id = "thread-already-bound"
+        db.add(conversation)
+        await db.commit()
+        await db.refresh(conversation)
+        conversation_id = conversation.id
+
+    fake_run_turn = _fake_run_turn(thread_id="thread-different")
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={
+                    "agent": "appserver-conflict",
+                    "message": "hi",
+                    "conversation_id": conversation_id,
+                    "session_mode": "new",
+                },
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "failed"
+        assert "binding conflict" in run.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_codex_app_server_spawn_failure_fails_run_and_returns_queue_entries(
+    app, auth_headers
+):
+    """Mirrors the `exec` path's `FileNotFoundError` handling (`test_...` above for
+    claude/codex exec spawn failures): a codex binary missing at app-server spawn time
+    fails the run with a stated reason and returns any delivered queue entries to
+    "queued" rather than stranding them against a run that never started."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"appserver-missing": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("appserver-missing")
+
+    failing_run_turn = AsyncMock(side_effect=FileNotFoundError("codex not found in PATH"))
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", failing_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "appserver-missing", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "failed"
+        assert "not found in PATH" in run.error
+
+
+@pytest.mark.asyncio
+async def test_codex_app_server_stop_signals_should_interrupt(app, auth_headers):
+    """Task 2.7's remaining piece: the stop endpoint has no process handle for an
+    app-server run, so it must reach `run_turn` purely through `_stop_requested` —
+    `should_interrupt` here polls that exact set, mirroring `_stoppable_pty`'s
+    terminate-releases-the-block pattern but through the poll-based interrupt contract
+    `run_turn` actually implements instead of a direct process kill."""
+    from hub.codex_appserver import TurnOutcome
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"appserver-stoppable": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("appserver-stoppable")
+
+    async def _run_until_interrupted(**kwargs):
+        should_interrupt = kwargs["should_interrupt"]
+        while not should_interrupt():
+            await asyncio.sleep(0.01)
+        return TurnOutcome(thread_id="thread-stop-1", status="interrupted")
+
+    fake_run_turn = AsyncMock(side_effect=_run_until_interrupted)
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            trigger = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "appserver-stoppable", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert trigger.status_code == 200
+            run_id = trigger.json()["run_id"]
+
+            await _wait_for_active_app_server_run(run_id)
+
+            stop = await app.post(
+                "/api/v1/projects/proj-test/agent/appserver-stoppable/stop", headers=auth_headers
+            )
+            assert stop.status_code == 200
+            assert stop.json()["run_id"] == run_id
+            assert stop.json()["status"] == "stopping"
+
+            await _await_background_run()
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "stopped"
 
 
 # test_trigger_unsupported_runner_accumulates_queue (kimi-agent, runner="kimi") was

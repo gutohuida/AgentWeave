@@ -46,6 +46,12 @@ from .runner_events import (
     tool_use_event,
 )
 
+# Task 2.8's opt-in: present in a bound Runner's `flags` list, this selects the app-server
+# transport for a codex run instead of `exec` — never the default (implications.md §7: keep
+# exec until app-server is proven equivalent). Stripped by the caller before `flags` reaches
+# `codex exec`'s own argv, since it is not a real `codex` CLI flag.
+APP_SERVER_OPT_IN_FLAG = "--app-server"
+
 # Server->client methods this Hub must answer. Verified against
 # `codex app-server generate-json-schema` (CLI 0.146.0) and a live protocol trace.
 ELICITATION_METHOD = "mcpServer/elicitation/request"
@@ -535,6 +541,7 @@ async def run_turn(
     on_event: "Callable[[RunEvent], Awaitable[None]]",
     on_usage: "Optional[Callable[[ContextUsageSample], Awaitable[None]]]" = None,
     on_accounting: "Optional[Callable[[AccountingSample], Awaitable[None]]]" = None,
+    on_thread_started: "Optional[Callable[[str], Awaitable[None]]]" = None,
     should_interrupt: "Optional[Callable[[], bool]]" = None,
     turn_timeout: float = DEFAULT_TURN_TIMEOUT_SECONDS,
 ) -> TurnOutcome:
@@ -546,6 +553,11 @@ async def run_turn(
     never reused across turns. `resume_thread_id`, when given, is a `Run.session_id` recorded
     by either transport — `codex exec`'s session ID and `app-server`'s `threadId` are the same
     identifier space (design.md Decision 1a, verified 2026-08-06), so no translation is needed.
+
+    `on_thread_started`, when given, fires once with the thread's id right after
+    `thread/start`/`thread/resume` responds and strictly before `turn/start` — so a caller
+    that binds session identity to durable state (e.g. `Conversation.provider_session_id`)
+    can do so before any `on_event` call for this turn, never after.
 
     The protocol supplies no turn-level timeout (implications.md §2) — `turn_timeout` is the
     Hub's own, and a process that dies mid-turn (crash, `close()` from a stop request) fails
@@ -585,6 +597,12 @@ async def run_turn(
         else:
             start_response = await session.request("thread/start", thread_params)
         thread_id = start_response["result"]["thread"]["id"]
+        if on_thread_started is not None:
+            # Fires before `turn/start` — every subsequent `on_event` call in the loop
+            # below can rely on the caller already knowing this turn's session identity,
+            # matching the `exec` path's guarantee that session_id is resolved before that
+            # line's own events are recorded.
+            await on_thread_started(thread_id)
 
         turn_response = await session.request(
             "turn/start",

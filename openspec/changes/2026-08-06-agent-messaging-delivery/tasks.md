@@ -36,8 +36,9 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       `codex_appserver.run_turn` (the per-turn orchestrator: initialize → thread/start-or-resume →
       turn/start → notification loop → `TurnOutcome`, tested end-to-end against a scripted fake
       session replaying real captured message sequences in `test_codex_appserver_run_turn.py`).
-      **Still open**: wiring `run_turn` into `agent_trigger.py`'s `_execute_run` (2.8) — this is the
-      standalone, tested module; nothing calls it from the live run path yet.
+      **Wired 2026-08-06 (task 2.8)**: `agent_trigger.py`'s `_execute_codex_appserver_run` now
+      calls `run_turn` from the live run path when a bound codex Runner's `flags` contains the
+      opt-in sentinel `codex_appserver.APP_SERVER_OPT_IN_FLAG`.
 - [x] 2.2 Approve `mcpServer/elicitation/request` **only** when `_meta.codex_approval_kind` is
       `mcp_tool_call` and `serverName` is the Hub's own server. Anything else is denied.
       `hub/hub/codex_appserver.py::decide_approval`.
@@ -61,7 +62,7 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       per-request delta (`tokenUsage.last`) — resolves implications.md §4's open question (yes,
       this makes the catalog lookup redundant for this path) and sidesteps `exec`'s rollout-file
       cumulative-delta estimation entirely.
-- [ ] 2.6 Preserve session resume via `thread/resume`, keeping the durable session identity agents
+- [x] 2.6 Preserve session resume via `thread/resume`, keeping the durable session identity agents
       already rely on. **Feasibility verified 2026-08-06**: `thread/resume`'s `threadId` accepts an
       existing `Run.session_id` recorded by the current `codex exec resume` path unchanged — same
       identifier space, same on-disk rollout file, no translation layer needed. See `design.md`
@@ -70,26 +71,37 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       (`test_resume_uses_thread_resume_not_thread_start`). Also verified live that `thread/start`'s
       `config` param (schema: passthrough object) registers a per-turn MCP server exactly like
       `exec`'s `-c mcp_servers.<name>.*` — a throwaway server reached `startupStatus: "ready"`.
-      **Still open**: `agent_trigger.py` never passes a Codex `Run.session_id` in as
-      `resume_thread_id` — that's part of 2.8's integration.
-- [ ] 2.7 Handle process death, a hung turn, and `turn/interrupt` so a stuck app-server cannot wedge
+      **Wired 2026-08-06**: `_execute_codex_appserver_run` passes `known_session_id` (the
+      conversation's `provider_session_id`) as `resume_thread_id`
+      (`test_codex_app_server_resume_passes_known_session_id_as_resume_thread_id`).
+- [x] 2.7 Handle process death, a hung turn, and `turn/interrupt` so a stuck app-server cannot wedge
       an agent. **Mechanism implemented and tested** in `run_turn`: a dead process is detected
       within one poll interval rather than waiting out the full turn timeout
       (`test_process_death_mid_turn_fails_fast_not_after_full_timeout`); an unresolved turn past
       `turn_timeout` fails and force-closes the session (`test_timeout_fails_and_closes_session`);
       `should_interrupt()` returning true sends `turn/interrupt` and force-closes afterward
-      (`test_should_interrupt_sends_turn_interrupt_and_force_closes`). **Still open**: nothing in
-      `agent_trigger.py` calls `should_interrupt` from the existing `_stop_requested` set yet — that
-      wiring is 2.8.
-- [ ] 2.8 Keep the `exec` path intact and selectable until 8.x proves the app-server path
-      equivalent. Do not delete it in this change. **The remaining integration task**: branch
-      `_execute_run` to call `codex_appserver.run_turn` when app-server is selected (an explicit
-      opt-in, e.g. a `runner.flags` sentinel — no schema change needed, mirrors how `extra_flags`
-      already flows through `build_command`), wire its callbacks to the existing
-      `record_agent_output`/`record_context_usage`/`record_turn_usage` calls, pass
-      `resume_thread_id=known_session_id` for Codex resumes, and wire `should_interrupt` to
-      `_stop_requested`. This is the highest-risk remaining piece — it touches the live run
-      lifecycle 699 existing tests already cover.
+      (`test_should_interrupt_sends_turn_interrupt_and_force_closes`). **Wired 2026-08-06**:
+      `_execute_codex_appserver_run` passes `should_interrupt=lambda: run_id in _stop_requested`;
+      the stop endpoint adds to that same set for an app-server run (no process handle to
+      terminate directly) instead of calling `.terminate()`
+      (`test_codex_app_server_stop_signals_should_interrupt`).
+- [x] 2.8 Keep the `exec` path intact and selectable until 8.x proves the app-server path
+      equivalent. Do not delete it in this change. **Implemented 2026-08-06**:
+      `trigger_agent_directly` strips `codex_appserver.APP_SERVER_OPT_IN_FLAG` out of a bound
+      codex Runner's `flags` before it reaches `build_command` (so it never leaks into a real
+      `codex exec` argv) and sets `use_codex_app_server` when present — `exec` stays the default
+      for every codex Runner that doesn't opt in. `_execute_run` branches to the new
+      `_execute_codex_appserver_run` when set; that function wires `run_turn`'s
+      `on_event`/`on_usage`/`on_accounting` callbacks to the same
+      `record_agent_output`/`record_context_usage`/`record_turn_usage` calls the `exec` path
+      makes, a new `on_thread_started` callback (added to `run_turn` for this) to the same
+      conversation-binding-conflict logic `_flush_line` applies for `exec`, and
+      `should_interrupt`/`resume_thread_id` per 2.6/2.7 above. `run_turn` has no process handle to
+      register in `_active_ptys`, so a parallel `_active_app_server_runs` set backs the stop
+      endpoint and shutdown teardown for this path. Six new integration tests in
+      `test_agent_trigger.py` (opt-in routing, output/usage recording, resume, binding conflict,
+      spawn failure, stop) plus one new `run_turn` unit test for `on_thread_started`'s ordering
+      guarantee. Full hub suite: 715 passed, 9 skipped.
 - [x] 2.9 Unit test: an MCP elicitation for the Hub's own server is approved.
       `test_codex_appserver.py::TestDecideApproval::test_own_server_mcp_tool_call_is_approved`.
 - [x] 2.10 Unit test: an MCP elicitation naming a *different* server is denied.

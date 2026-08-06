@@ -34,6 +34,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import bound_address, project_workspace, worktrees
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
+from ...codex_appserver import APP_SERVER_OPT_IN_FLAG, AppServerError, TurnOutcome
+from ...codex_appserver import run_turn as codex_run_turn
 from ...conversations import (
     conversation_for_provider_session,
     get_open_conversation,
@@ -83,10 +85,17 @@ _background_runs: set = set()
 # the only place the PTY-or-pipe session instance exists. The legacy internal name remains
 # to avoid churning lifecycle code that does not depend on the transport type.
 _active_ptys: Dict[str, PipeSession | PtySession] = {}
+# run_ids currently executing over the Codex app-server transport (task 2.8). This path has
+# no PtySession/PipeSession to register in `_active_ptys` — `codex_appserver.run_turn` owns
+# its own subprocess internally — so the stop endpoint and shutdown teardown need a separate
+# way to know such a run exists and is interruptible.
+_active_app_server_runs: set = set()
 # run_ids whose stop was requested via the endpoint below. `_execute_run`'s own completion
 # handling reads this once the process exits to tell "stopped deliberately" (final status
 # "stopped") apart from "crashed/exited non-zero on its own" (final status "failed") — the
-# exit code alone can't distinguish the two once a forced terminate is involved.
+# exit code alone can't distinguish the two once a forced terminate is involved. The
+# app-server path also polls this set directly (`run_turn`'s `should_interrupt`), since it has
+# no process handle to terminate from the outside.
 _stop_requested: set = set()
 
 
@@ -322,6 +331,14 @@ async def trigger_agent_directly(
         canonical_server = Path(__file__).resolve().parents[2] / "mcp_server.py"
         mcp_command = [sys.executable, str(canonical_server)]
 
+    # Task 2.8's opt-in: a sentinel in the bound Runner's flags selects the app-server
+    # transport for this codex run. Stripped before `flags` reaches `build_command` — it is
+    # not a real `codex exec` argument and would otherwise leak into that argv unchanged.
+    runner_flags = list(runner_row.flags or [])
+    use_codex_app_server = runner == "codex" and APP_SERVER_OPT_IN_FLAG in runner_flags
+    if use_codex_app_server:
+        runner_flags = [f for f in runner_flags if f != APP_SERVER_OPT_IN_FLAG]
+
     try:
         cmd = build_command(
             runner=runner,
@@ -332,7 +349,7 @@ async def trigger_agent_directly(
             session_id=resume_session_id,
             yolo=yolo,
             mcp_command=mcp_command,
-            extra_flags=runner_row.flags,
+            extra_flags=runner_flags,
             control_overrides=control_overrides,
         )
     except UnsupportedRunnerError as exc:
@@ -415,6 +432,11 @@ async def trigger_agent_directly(
             known_session_id=resume_session_id,
             env=env,
             worktree=isolated_workspace,
+            use_codex_app_server=use_codex_app_server,
+            cli=probe["cli"],
+            prompt=prompt,
+            yolo=yolo,
+            mcp_command=mcp_command,
         )
     )
     _background_runs.add(task)
@@ -629,7 +651,17 @@ async def stop_agent_run(
         )
 
     pty = _active_ptys.get(run.id)
-    if pty is None:
+    if pty is not None:
+        _stop_requested.add(run.id)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, lambda: pty.terminate(force=True))
+    elif run.id in _active_app_server_runs:
+        # No process handle to terminate directly (codex_appserver.run_turn owns the
+        # subprocess internally) — `_stop_requested` is itself the signal: `run_turn`'s
+        # `should_interrupt` polls this same set and sends `turn/interrupt` within one poll
+        # interval (task 2.7).
+        _stop_requested.add(run.id)
+    else:
         # Spawned but not yet registered, or already past its read/wait loop — either way
         # there's nothing left to terminate; the run's own completion handling will settle
         # its final status shortly.
@@ -637,10 +669,6 @@ async def stop_agent_run(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"{agent}'s run is not in a stoppable state right now.",
         )
-
-    _stop_requested.add(run.id)
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, lambda: pty.terminate(force=True))
 
     return StopAgentResponse(
         success=True,
@@ -661,13 +689,20 @@ async def terminate_all_active_runs() -> int:
     that owns transitioning a run's persisted status; duplicating that here risks the two
     disagreeing about *when* a run's status actually changes.
 
-    Returns the number of runs terminated.
+    An app-server run has no process handle here to kill directly — the same
+    `_stop_requested` signal `stop_agent_run` uses is the only lever available, so this is
+    best-effort within `run_turn`'s poll interval, not an immediate kill like the PTY/pipe
+    case. `run_turn`'s own `finally` still closes its subprocess once its loop notices.
+
+    Returns the number of runs terminated or signalled to stop.
     """
     loop = asyncio.get_running_loop()
     ptys = list(_active_ptys.values())
     for pty in ptys:
         await loop.run_in_executor(None, lambda p=pty: terminate_process_tree(p.pid, force=True))
-    return len(ptys)
+    app_server_run_ids = list(_active_app_server_runs)
+    _stop_requested.update(app_server_run_ids)
+    return len(ptys) + len(app_server_run_ids)
 
 
 _RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")
@@ -715,6 +750,11 @@ async def _execute_run(
     known_session_id: Optional[str],
     env: Optional[Dict[str, str]] = None,
     worktree: Optional[Path] = None,
+    use_codex_app_server: bool = False,
+    cli: Optional[str] = None,
+    prompt: Optional[str] = None,
+    yolo: bool = False,
+    mcp_command: Optional[List[str]] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -722,7 +762,31 @@ async def _execute_run(
     working directory *is* `work_dir` here, but `_execute_run` needs the fact that it's
     an isolated worktree specifically (not just "some cwd") to know whether to snapshot
     it once the run ends (task 5.3's conflict detection needs real commits to compare).
+
+    *use_codex_app_server* (task 2.8) selects a completely separate execution path —
+    `_execute_codex_appserver_run` below — since the app-server transport has no PTY/pipe
+    subprocess for this function's own read/wait loop to drive; `cli`/`prompt`/`yolo`/
+    `mcp_command` are only meaningful for that path (`cmd` was still built for it by the
+    caller, but is unused here — app-server has no argv, it speaks JSON-RPC).
     """
+    if use_codex_app_server:
+        await _execute_codex_appserver_run(
+            project_id=project_id,
+            agent=agent,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            cli=cli,
+            prompt=prompt,
+            model=model,
+            work_dir=work_dir,
+            known_session_id=known_session_id,
+            yolo=yolo,
+            mcp_command=mcp_command,
+            env=env,
+            worktree=worktree,
+        )
+        return
+
     loop = asyncio.get_running_loop()
 
     try:
@@ -982,6 +1046,242 @@ async def _execute_run(
         await schedule_agent(project_id, agent)
     finally:
         _active_ptys.pop(run_id, None)
+        _stop_requested.discard(run_id)
+
+
+async def _execute_codex_appserver_run(
+    *,
+    project_id: str,
+    agent: str,
+    run_id: str,
+    conversation_id: str,
+    cli: str,
+    prompt: str,
+    model: Optional[str],
+    work_dir: Optional[str],
+    known_session_id: Optional[str],
+    yolo: bool,
+    mcp_command: Optional[List[str]],
+    env: Optional[Dict[str, str]],
+    worktree: Optional[Path],
+) -> None:
+    """Codex `app-server` (task 2.8) counterpart to `_execute_run`'s PTY/pipe read loop above.
+
+    `codex_appserver.run_turn` owns the actual subprocess and JSON-RPC exchange internally
+    (see its own docstring); this function's job is only to wire that transport's callbacks
+    to the same recording/broadcast/scheduling calls `_execute_run` makes for `exec`, so the
+    two transports are indistinguishable to everything downstream of a `Run` row (task 2.5's
+    stated goal) — a `Run`, its `AgentOutput` rows, its usage accounting, and its lifecycle
+    broadcasts all look the same regardless of which transport produced them.
+    """
+    _active_app_server_runs.add(run_id)
+    try:
+        async with async_session_factory() as db:
+            await _broadcast_run_lifecycle(
+                db, project_id, "run_started", agent=agent, run_id=run_id, runner="codex", model=model
+            )
+
+        session_id = known_session_id
+        binding_conflict: Optional[str] = None
+        accounting_sample: Optional[AccountingSample] = None
+        sequence = 0
+
+        async def _bind_session_id(thread_id: str) -> None:
+            # Mirrors `_execute_run._flush_line`'s conversation-binding logic (same
+            # conflict/first-writer rules), fired once per turn instead of once per line —
+            # app-server hands the Hub its session identity up front, `exec` reveals it
+            # mid-stream.
+            nonlocal binding_conflict, session_id
+            async with async_session_factory() as db:
+                run = await db.get(Run, run_id)
+                conversation = await db.get(Conversation, conversation_id)
+                if conversation is None:
+                    binding_conflict = "Conversation disappeared during provider binding"
+                elif conversation.provider_session_id is None:
+                    conversation.provider_session_id = thread_id
+                    conversation.updated_at = datetime.now(timezone.utc)
+                    session_id = thread_id
+                elif conversation.provider_session_id == thread_id:
+                    session_id = thread_id
+                else:
+                    binding_conflict = (
+                        "Provider session binding conflict: "
+                        f"expected {conversation.provider_session_id!r}, received {thread_id!r}"
+                    )
+                if run and binding_conflict is None:
+                    run.session_id = session_id
+                await db.commit()
+                if binding_conflict is not None:
+                    await persist_event(
+                        db,
+                        project_id,
+                        "conversation_binding_conflict",
+                        {
+                            "agent": agent,
+                            "run_id": run_id,
+                            "conversation_id": conversation_id,
+                            "error": binding_conflict,
+                        },
+                        agent=agent,
+                        severity="warn",
+                    )
+
+        async def _on_event(event) -> None:
+            nonlocal sequence
+            sequence += 1
+            async with async_session_factory() as db:
+                await record_agent_output(
+                    db,
+                    project_id,
+                    agent,
+                    content=event.content,
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    kind=event.kind,
+                    payload=event.payload,
+                    run_id=run_id,
+                    sequence=sequence,
+                )
+
+        async def _on_usage(usage) -> None:
+            async with async_session_factory() as db:
+                await record_context_usage(db, project_id, agent, usage.to_payload(agent))
+
+        async def _on_accounting(accounting) -> None:
+            nonlocal accounting_sample
+            accounting_sample = (
+                accounting if accounting_sample is None else accounting_sample.merged(accounting)
+            )
+
+        try:
+            outcome: TurnOutcome = await codex_run_turn(
+                cli=cli,
+                cwd=work_dir,
+                env=env,
+                prompt=prompt,
+                model=model,
+                resume_thread_id=known_session_id,
+                yolo=yolo,
+                mcp_command=mcp_command,
+                on_event=_on_event,
+                on_usage=_on_usage,
+                on_accounting=_on_accounting,
+                on_thread_started=_bind_session_id,
+                should_interrupt=lambda: run_id in _stop_requested,
+            )
+        except (FileNotFoundError, AppServerError, asyncio.TimeoutError, OSError) as exc:
+            # Mirrors `_execute_run`'s own early-spawn-failure handling: nothing was ever
+            # delivered to the agent, so returned queue entries go back to "queued" rather
+            # than being recorded against a run that never really started.
+            async with async_session_factory() as db:
+                run = await db.get(Run, run_id)
+                if run:
+                    run.status = "failed"
+                    run.error = str(exc)
+                    run.ended_at = datetime.now(timezone.utc)
+                    await record_turn_usage(
+                        db,
+                        run_id=run_id,
+                        project_id=project_id,
+                        agent=agent,
+                        runner="codex",
+                        sample=None,
+                    )
+                returned = await return_run_entries(db, run_id)
+                await db.commit()
+                await _broadcast_run_lifecycle(
+                    db, project_id, "run_failed", agent=agent, run_id=run_id, error=str(exc)
+                )
+                for entry_id in returned:
+                    payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                    await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                    await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+            return
+
+        if worktree is not None:
+            # Same best-effort snapshot as `_execute_run` — a git failure here must not turn
+            # a completed/failed run into something worse than it already is.
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None, lambda: worktrees.snapshot_worktree(worktree, agent)
+                )
+            except worktrees.GitCommandError:
+                logger.warning(
+                    "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
+                )
+
+        # A deliberate stop reaches here as `TurnOutcome.status == "interrupted"` (run_turn's
+        # own `should_interrupt` handling), the app-server equivalent of exec's
+        # `run_id in _stop_requested` check — that same set is what `should_interrupt` above
+        # polled to decide to send `turn/interrupt` in the first place.
+        if binding_conflict is not None:
+            final_status, lifecycle_event = "failed", "run_failed"
+        elif outcome.status == "interrupted":
+            final_status, lifecycle_event = "stopped", "run_stopped"
+        elif outcome.status == "completed":
+            final_status, lifecycle_event = "completed", "run_completed"
+        else:
+            final_status, lifecycle_event = "failed", "run_failed"
+        # No process exit code exists for this transport; 0/1 keeps `Run.exit_code` and the
+        # "Run {status} (exit {code})" status line meaningful to the same UI code that reads
+        # them for the exec path (AgentOutputPanel's handoff-detection, see below).
+        exit_code = 0 if final_status == "completed" else 1
+
+        async with async_session_factory() as db:
+            run = await db.get(Run, run_id)
+            if run:
+                run.status = final_status
+                run.exit_code = exit_code
+                if binding_conflict is not None:
+                    run.error = binding_conflict
+                elif outcome.error:
+                    run.error = outcome.error
+                run.ended_at = datetime.now(timezone.utc)
+                await record_turn_usage(
+                    db,
+                    run_id=run_id,
+                    project_id=project_id,
+                    agent=agent,
+                    runner="codex",
+                    sample=accounting_sample,
+                )
+                await db.commit()
+            await _broadcast_run_lifecycle(
+                db,
+                project_id,
+                lifecycle_event,
+                agent=agent,
+                run_id=run_id,
+                conversation_id=conversation_id,
+                session_id=session_id,
+                exit_code=exit_code,
+            )
+            # Kept for the same reason as `_execute_run`'s identical broadcast: the
+            # "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning for
+            # this exact kind="status"/phase="completed" line, not via a separate listener.
+            await sse_manager.broadcast(
+                project_id,
+                "agent_output",
+                {
+                    "id": f"status-{run_id}",
+                    "agent": agent,
+                    "conversation_id": conversation_id,
+                    "session_id": session_id,
+                    "content": f"Run {final_status} (exit {exit_code}).",
+                    "kind": "status",
+                    "payload": {"phase": "completed", "exit_code": exit_code},
+                    "run_id": run_id,
+                    "sequence": sequence + 1,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+
+        from ...turn_scheduler import schedule_agent
+
+        await schedule_agent(project_id, agent)
+    finally:
+        _active_app_server_runs.discard(run_id)
         _stop_requested.discard(run_id)
 
 
