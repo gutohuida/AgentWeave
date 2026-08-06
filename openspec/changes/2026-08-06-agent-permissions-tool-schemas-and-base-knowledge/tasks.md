@@ -77,17 +77,17 @@
 
 ## 7. Verification
 
-- [ ] 7.1 `pytest hub/tests/ -q` — baseline 777 passed / 9 skipped.
-- [ ] 7.2 `cd hub/ui && npx vitest run` — baseline 462 passed.
-- [ ] 7.3 `npx tsc --noEmit`; `ruff check` on every touched Python file.
-- [ ] 7.4 `openspec validate --specs --strict` — 24 items.
-- [ ] 7.5 `npm run build` and regenerate `hub/hub/static/ui`.
-- [ ] 7.6 **Live:** ask a Claude agent to create a file — succeeds, no permission error.
-- [ ] 7.7 **Live:** set the pill to "Ask first" and repeat — the refusal returns, proving the control
+- [x] 7.1 `pytest hub/tests/ -q` — baseline 777 passed / 9 skipped.
+- [x] 7.2 `cd hub/ui && npx vitest run` — baseline 462 passed.
+- [x] 7.3 `npx tsc --noEmit`; `ruff check` on every touched Python file.
+- [x] 7.4 `openspec validate --specs --strict` — 24 items.
+- [x] 7.5 `npm run build` and regenerate `hub/hub/static/ui`.
+- [x] 7.6 **Live:** ask a Claude agent to create a file — succeeds, no permission error.
+- [x] 7.7 **Live:** set the pill to "Ask first" and repeat — the refusal returns, proving the control
       reaches argv rather than being decorative.
-- [ ] 7.8 **Live:** ask an agent where it is — it names its worktree, not the project root.
-- [ ] 7.9 **Live:** a Codex agent's **first** `send_message` succeeds — no 422 in `agent_outputs`.
-- [ ] 7.10 **Live:** a conversation with history opens at the newest entry; sending follows;
+- [x] 7.8 **Live:** ask an agent where it is — it names its worktree, not the project root.
+- [x] 7.9 **Live:** a Codex agent's **first** `send_message` succeeds — no 422 in `agent_outputs`.
+- [x] 7.10 **Live:** a conversation with history opens at the newest entry; sending follows;
       scrolling up suspends and reveals the jump control.
-- [ ] 7.11 **Live:** `GET /agents/agent-context` mentions no `roles.json`, `principal`, or
+- [x] 7.11 **Live:** `GET /agents/agent-context` mentions no `roles.json`, `principal`, or
       `agentweave.yml`.

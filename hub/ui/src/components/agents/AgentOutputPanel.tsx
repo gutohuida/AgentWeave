@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { useSSEConnectionState } from '@/hooks/useSSE'
@@ -77,7 +77,6 @@ export function AgentOutputPanel({
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
-  const openScrollFrameRef = useRef<number | null>(null)
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -153,19 +152,22 @@ export function AgentOutputPanel({
   function handleScroll() {
     const el = containerRef.current
     if (!el) return
-    // A scroll by the operator wins over the pending open-at-newest jump below. Without this,
-    // scrolling up in the moment after a conversation opens is undone by that frame firing.
-    if (openScrollFrameRef.current !== null) {
-      cancelAnimationFrame(openScrollFrameRef.current)
-      openScrollFrameRef.current = null
-    }
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
     setAutoscroll(atBottom)
   }
 
-  function scrollToNewest(behavior: ScrollBehavior = 'smooth') {
-    bottomRef.current?.scrollIntoView({ behavior })
-    setAutoscroll(true)
+  /** Move the viewport to the newest entry.
+   *
+   * Assigns `scrollTop` rather than calling `scrollIntoView({behavior:'smooth'})` or deferring
+   * through `requestAnimationFrame`. Both of those are driven by the browser's frame loop, and a
+   * document that is not being painted — an unfocused or offscreen window — starves it: measured
+   * live, `rAF` never fired and a smooth scroll left `scrollTop` at 0, while a direct assignment
+   * landed immediately. Following a conversation must not depend on whether the window happens to
+   * be painting.
+   */
+  function scrollToNewest() {
+    const el = containerRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }
 
   const isRunning = agent.status === 'running'
@@ -194,25 +196,18 @@ export function AgentOutputPanel({
   // legacy raw output log from `useAgentOutput`, which is not what this view shows — so new
   // conversation content grew the DOM without ever scrolling, and unrelated log lines scrolled
   // for content nobody was looking at (2026-08-06-agent-permissions-tool-schemas-and-base-knowledge).
-  useEffect(() => {
-    if (autoscroll) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  useLayoutEffect(() => {
+    if (autoscroll) scrollToNewest()
   }, [timelineEntries.length, autoscroll])
 
-  // Opening or switching a conversation lands on its newest entry. Nothing did this before, so a
-  // conversation with history opened at its oldest message. Instant rather than smooth: a long
-  // history should not animate past everything on the way down.
-  useEffect(() => {
-    // Deferred a frame so the entries have been laid out before we jump to their end.
-    openScrollFrameRef.current = requestAnimationFrame(() => {
-      openScrollFrameRef.current = null
-      scrollToNewest('auto')
-    })
-    return () => {
-      if (openScrollFrameRef.current !== null) {
-        cancelAnimationFrame(openScrollFrameRef.current)
-        openScrollFrameRef.current = null
-      }
-    }
+  // Opening or switching a conversation lands on its newest entry, and resumes following. Nothing
+  // did this before, so a conversation with history opened at its oldest message. A layout effect
+  // runs after the entries are in the DOM but before paint, so the jump is never visible as a
+  // scroll — and `timelineEntries.length` is a dependency because the entries usually arrive a
+  // render after the conversation identity changes.
+  useLayoutEffect(() => {
+    scrollToNewest()
+    setAutoscroll(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.name, currentConversationId])
 
@@ -477,7 +472,10 @@ export function AgentOutputPanel({
             appears only while following is suspended. */}
         {!autoscroll && (
           <button
-            onClick={() => scrollToNewest()}
+            onClick={() => {
+              scrollToNewest()
+              setAutoscroll(true)
+            }}
             aria-label="Jump to newest"
             title="Jump to newest"
             className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium"
