@@ -360,6 +360,44 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       unchanged by anything in §§3–7. Flagged rather than silently marked done.
 - [x] 8.8 `openspec validate 2026-08-06-agent-messaging-delivery --strict` — clean.
 
+**UPDATE (2026-08-06, next session) — root-caused and partly fixed.** The anomaly below is real and
+is now explained. It is *not* a prompt-construction defect: `agent_trigger.py:328` was correct, as
+suspected. The cause is turn selection. `/agent/trigger` does not send its `message` to the agent —
+it appends an `InboundQueueEntry` and calls `turn_scheduler.schedule_agent`, which selects the
+conversation of the **oldest eligible entry across the agent's entire queue** and drains only that
+conversation's entries. Any older `queued` entry in a *different* conversation therefore wins the
+turn, and the caller's fresh message stays queued until a later turn.
+
+Reproduced deterministically in-process (no live Hub, no model involved) by seeding one stale queued
+entry in an older conversation and issuing a normal trigger: the prompt actually handed to the
+subprocess contained only `STALE OLD BACKLOG MESSAGE`, while `FRESH NEW TRIGGER MESSAGE` remained
+`state: queued`. This accounts for every observed live symptom — non-engagement replies (the agent
+genuinely received unrelated older input), the ~$0.01–0.02 cost (a small stale prompt), and the final
+attempt "picking up unrelated content from earlier" (literally the backlog). It also explains the
+correlation with rapid back-to-back triggering, which is precisely how a cross-conversation backlog
+accumulates.
+
+Two distinct problems, only one of which is a defect:
+
+1. **Fixed — the response misreported which input was running.** `trigger_agent` returned the
+   scheduler's response verbatim and merely stamped the caller's `queue_entry_id` onto it, yielding an
+   incoherent body: `status: "running"` with another conversation's `run_id`/`conversation_id` but
+   this request's `queue_entry_id`. That violates shipped spec `agent-conversation-workspace`
+   ("the response contains the new `conversation_id` whether its status is `running` or `queued`"), so
+   it is a straight bug fix against existing spec — no delta needed. `trigger_agent` now returns the
+   scheduler's response only when it belongs to this request's own conversation; otherwise it reports
+   `status: "queued"`, this request's `conversation_id`, and a `waiting_reason` naming the older run.
+   Regression test: `test_trigger_reports_its_own_conversation_when_an_older_one_is_scheduled`.
+2. **Not fixed — oldest-entry-wins is current specified behavior, not a bug.** The selection rule is
+   spec'd verbatim in `agent-conversation-workspace` ("the scheduler chooses the conversation of the
+   oldest eligible entry"). An operator's fresh message deferring behind an unrelated conversation's
+   backlog is therefore working as designed, however surprising. Whether operator-originated input
+   should preempt an older autonomous/peer backlog, and how the UI should surface "your message is
+   queued behind another conversation", is a real product question — left open deliberately rather
+   than changed unilaterally, since altering it requires a spec delta.
+
+Original write-up, preserved as recorded at the time:
+
 **New finding, not closed — a queue-backlog / prompt-delivery anomaly**, discovered while attempting
 8.3–8.7 through the normal operator-facing `/agent/trigger` flow (as opposed to the direct
 `/agent-actions/messages` calls the confirmations above actually used to get clean signal). Across

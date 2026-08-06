@@ -596,10 +596,24 @@ async def trigger_agent(
     from ...turn_scheduler import schedule_agent
 
     scheduled = await schedule_agent(project_id, body.agent)
-    if scheduled.response is not None:
+    # The scheduler picks the conversation of the *oldest* eligible entry across this
+    # agent's whole queue, which is not necessarily the conversation this request just
+    # appended to (spec `agent-conversation-workspace`: "Different conversations never
+    # share one provider turn"). When it picked a different one, this caller's input is
+    # still queued: report that, and this request's own conversation, rather than another
+    # conversation's run — the response must always describe the input it accepted (same
+    # spec: "the response contains the new conversation_id whether its status is running
+    # or queued").
+    if scheduled.response is not None and scheduled.response.conversation_id == conversation.id:
         response = scheduled.response
         response.queue_entry_id = entry.id
         return response
+    waiting_reason = scheduled.waiting_reason
+    if scheduled.response is not None:
+        waiting_reason = (
+            "an older conversation's queued input is being delivered first "
+            f"(run {scheduled.response.run_id})"
+        )
     return TriggerAgentResponse(
         success=True,
         message=f"Input queued for {body.agent}.",
@@ -609,7 +623,7 @@ async def trigger_agent(
         provider_session_id=conversation.provider_session_id,
         session_id=conversation.provider_session_id,
         queue_entry_id=entry.id,
-        waiting_reason=scheduled.waiting_reason,
+        waiting_reason=waiting_reason,
     )
 
 

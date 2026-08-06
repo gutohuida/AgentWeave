@@ -1313,6 +1313,94 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
 
 
 @pytest.mark.asyncio
+async def test_trigger_reports_its_own_conversation_when_an_older_one_is_scheduled(
+    app, auth_headers, bind_runner
+):
+    """The scheduler picks the conversation of the oldest eligible entry across the whole
+    agent queue, which may not be the one this request just appended to. When that happens
+    the caller's input is still queued, and the response must say so — reporting the other
+    conversation's run as if it were this request's would tell the operator their message
+    is running when it is not (`agent-conversation-workspace`: "the response contains the
+    new conversation_id whether its status is running or queued").
+
+    `_execute_run` is patched out: this is a scheduling/reporting question, so the prompt
+    the Hub built is asserted on directly rather than through a spawned process.
+    """
+    from hub.conversations import new_conversation
+    from hub.db.engine import async_session_factory
+    from hub.inbound_queue import new_entry
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"backlog-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("backlog-claude", cli="claude")
+
+    # A leftover queued entry in an older, still-open conversation — e.g. a peer agent's
+    # message that arrived while this agent was busy, or one left by an interrupted run.
+    async with async_session_factory() as db:
+        stale_conversation = new_conversation(project_id="proj-test", agent="backlog-claude")
+        db.add(stale_conversation)
+        await db.flush()
+        stale_conversation_id = stale_conversation.id
+        db.add(
+            new_entry(
+                project_id="proj-test",
+                agent="backlog-claude",
+                origin_type="operator",
+                content="STALE BACKLOG",
+                hop_depth=0,
+                conversation_id=stale_conversation_id,
+            )
+        )
+        await db.commit()
+
+    executed = AsyncMock()
+    with patch("hub.api.v1.agent_trigger._execute_run", executed):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "backlog-claude", "message": "FRESH INPUT"},
+                headers=auth_headers,
+            )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    # The response describes the input this request accepted, not the older run.
+    assert body["conversation_id"] != stale_conversation_id
+    assert body["status"] == "queued"
+    assert body["run_id"] is None
+    assert "older conversation" in body["waiting_reason"]
+
+    # The older conversation's turn is what actually started, and it carries only its own
+    # entry — the fresh input is not silently folded into another conversation's prompt.
+    assert executed.call_args.kwargs["prompt"].count("STALE BACKLOG") == 1
+    assert "FRESH INPUT" not in executed.call_args.kwargs["prompt"]
+
+    from sqlalchemy import select
+
+    from hub.db.models import InboundQueueEntry
+
+    async with async_session_factory() as db:
+        states = {
+            row.content: (row.state, row.conversation_id)
+            for row in (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.agent == "backlog-claude"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        }
+    assert states["STALE BACKLOG"][0] == "delivered"
+    assert states["FRESH INPUT"] == ("queued", body["conversation_id"])
+
+
+@pytest.mark.asyncio
 async def test_codex_app_server_opt_in_flag_selects_run_turn_not_exec(
     app, auth_headers
 ):
