@@ -191,28 +191,58 @@ catalog ever offers more than one group in one picker.
 
 ## 7. Native folder dialog — Hub side
 
-- [ ] 7.1 Add a Hub module that opens the host's folder dialog and returns a path, cancellation, a
-      timeout, or a failure as distinct outcomes. Windows first.
-- [ ] 7.2 Run it off the event loop with a timeout. The Hub must serve other requests while a dialog
-      is open — assert this, do not assume it.
-- [ ] 7.3 Guard against concurrent requests: a second request while one is open opens no second
-      dialog.
-- [ ] 7.4 Report availability: unavailable in a container, unavailable without a desktop session,
-      unavailable on an unsupported platform.
-- [ ] 7.5 Endpoint for availability and for opening, authenticated like every other Hub endpoint and
+- [x] 7.1 Add a Hub module that opens the host's folder dialog and returns a path, cancellation, a
+      timeout, or a failure as distinct outcomes. Windows first. New `hub/hub/native_dialog.py`.
+      `tkinter.filedialog.askdirectory` (Windows' own native common dialog, via Tk's platform
+      binding) — standard library, no new dependency, matching every other choice in this codebase.
+      Runs as a short-lived subprocess (`python -c <script>`), not a thread hosting a blocking Tk
+      mainloop: a subprocess can be killed cleanly on timeout, a thread cannot.
+- [x] 7.2 Run it off the event loop with a timeout. The Hub must serve other requests while a dialog
+      is open — assert this, do not assume it. `asyncio.create_subprocess_exec` +
+      `asyncio.wait_for(proc.communicate(), timeout=...)`, fully async — never blocks the loop.
+      Asserted live by 7.7 below, not just by inspection.
+- [x] 7.3 Guard against concurrent requests: a second request while one is open opens no second
+      dialog. Module-level `asyncio.Lock`; a second call while held raises `DialogBusyError`
+      *before* any subprocess spawns (not queued behind the first).
+- [x] 7.4 Report availability: unavailable in a container, unavailable without a desktop session,
+      unavailable on an unsupported platform. Platform check (`sys.platform == "win32"`) plus an
+      interactive-window-station check via `ctypes` (stdlib) — the same technique .NET's own
+      `Environment.UserInteractive` uses. Both a Linux container (fails the platform check) and a
+      Windows service/Session-0 process (fails the window-station check) fall out of these two
+      checks without container-specific detection logic.
+- [x] 7.5 Endpoint for availability and for opening, authenticated like every other Hub endpoint and
       operator-scoped (no project ID — it precedes a project existing, same as `fs/list`).
-- [ ] 7.6 Unit tests: each of path / cancel / timeout / failure / unavailable / concurrent.
-- [ ] 7.7 Unit test: the Hub answers another request while a dialog is open.
+      `GET/POST /api/v1/fs/native-dialog/{availability,open}`, `get_operator` dependency, matching
+      `fs_browse.py`'s own pattern exactly.
+- [x] 7.6 Unit tests: each of path / cancel / timeout / failure / unavailable / concurrent.
+      `test_native_dialog.py`, `TestOpenFolderDialogUnit` (6 tests) + `TestCheckAvailability` (3).
+- [x] 7.7 Unit test: the Hub answers another request while a dialog is open. Same file,
+      `test_hub_answers_another_request_while_a_dialog_is_open` — a controllable `asyncio.Event`
+      holds the mocked dialog call open while a concurrent `GET /health` is asserted to complete
+      first, then the dialog call is released and confirmed to complete after. Full suite: 761
+      passed, 9 skipped (747 baseline + 14 new).
 
 ## 8. Native folder dialog — UI side
 
-- [ ] 8.1 Offer the native dialog in `ProjectManagerModal.tsx` only where the Hub reports it
-      available.
-- [ ] 8.2 Cancel leaves the typed path untouched and shows no error.
-- [ ] 8.3 Timeout and failure are reported in their own terms, with browsing and typing still
-      available.
-- [ ] 8.4 Keep the in-app browser reachable as the fallback.
-- [ ] 8.5 Unit tests for available / unavailable / cancel / timeout / failure.
+- [x] 8.1 Offer the native dialog in `ProjectManagerModal.tsx` only where the Hub reports it
+      available. New `hub/ui/src/api/nativeDialog.ts` (`useNativeDialogAvailability`,
+      `useOpenNativeDialog`, same instance-scoped shape as `fsBrowse.ts` — added to
+      `projectScopedApiContract.test.tsx`'s existing instance-level exemption set alongside it, same
+      rationale). When available, "Browse…" opens the native dialog directly; when not, it opens the
+      in-app `DirectoryPicker` exactly as before — unchanged for every operator this isn't offered to.
+- [x] 8.2 Cancel leaves the typed path untouched and shows no error. `outcome: "cancelled"` is a
+      distinct no-op branch — no `setPath`, no notice.
+- [x] 8.3 Timeout and failure are reported in their own terms, with browsing and typing still
+      available. A `role="status"` notice names which one occurred (and the failure's own detail
+      text); the text input and both browse paths remain fully interactive throughout.
+- [x] 8.4 Keep the in-app browser reachable as the fallback. A "Browse within the Hub instead" toggle
+      is shown alongside the native option — same `DirectoryPicker`/`pickerOpen` state as the
+      native-unavailable case, not a second, parallel implementation.
+- [x] 8.5 Unit tests for available / unavailable / cancel / timeout / failure.
+      `projectManagerDirectoryPicker.test.tsx`, new describe block (6 tests): offered-only-when-
+      available, chosen path fills the field, cancel is silent, timeout/failure each report their
+      own text, in-app browser stays reachable. Full frontend suite: 451 passed (445 baseline + 6
+      new), `tsc --noEmit` clean.
 
 ## 9. Directory browser improvements (the fallback path)
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '@/api/client'
 import { useCreateProject, useOpenProject, type ProjectSummary } from '@/api/projects'
+import { useNativeDialogAvailability, useOpenNativeDialog } from '@/api/nativeDialog'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { Button } from '@/components/ui/button'
 import { DirectoryPicker } from './DirectoryPicker'
@@ -19,22 +20,49 @@ export function ProjectManagerModal({
   const [path, setPath] = useState('')
   const [name, setName] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [nativeDialogNotice, setNativeDialogNotice] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const openProject = useOpenProject()
   const createProject = useCreateProject()
   const mutation = mode === 'create' ? createProject : openProject
+  const { data: nativeAvailability } = useNativeDialogAvailability()
+  const nativeDialog = useOpenNativeDialog()
 
   useEffect(() => {
     if (mode) {
       setPath('')
       setName('')
       setPickerOpen(false)
+      setNativeDialogNotice(null)
       openProject.reset()
       createProject.reset()
     }
     // Mutation objects are deliberately excluded; their identity changes as state changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
+
+  // Cancel leaves the typed path untouched and shows no error (task 8.2) — only
+  // timeout/failure get a status of their own (task 8.3); "unavailable" shouldn't occur
+  // here since the button offering this is itself gated on availability, but is handled
+  // in its own terms rather than folded into "failed" in case availability changes
+  // between the check and the click.
+  const openNativeFolderDialog = () => {
+    setNativeDialogNotice(null)
+    nativeDialog.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.outcome === 'chosen' && result.path) {
+          setPath(result.path)
+        } else if (result.outcome === 'timeout') {
+          setNativeDialogNotice('The folder dialog did not respond in time.')
+        } else if (result.outcome === 'unavailable') {
+          setNativeDialogNotice(result.detail ?? 'The native folder dialog is unavailable.')
+        } else if (result.outcome === 'failed') {
+          setNativeDialogNotice(result.detail ?? 'The folder dialog could not be opened.')
+        }
+      },
+      onError: () => setNativeDialogNotice('The folder dialog could not be opened.'),
+    })
+  }
 
   useDialogFocus(!!mode, panelRef, onClose)
 
@@ -63,9 +91,22 @@ export function ProjectManagerModal({
           Directory path
           <div className="relative mt-1 flex gap-1.5">
             <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="block w-full min-w-0 rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
-            <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen} aria-label="Open directory browser">
-              Browse…
-            </Button>
+            {nativeAvailability?.available ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openNativeFolderDialog}
+                disabled={nativeDialog.isPending}
+                aria-label="Choose a folder"
+              >
+                {nativeDialog.isPending ? 'Waiting…' : 'Browse…'}
+              </Button>
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)} aria-expanded={pickerOpen} aria-label="Open directory browser">
+                Browse…
+              </Button>
+            )}
             {pickerOpen && (
               <DirectoryPicker
                 startPath={/^([a-zA-Z]:[\\/]|\/)/.test(path.trim()) ? path.trim() : '/'}
@@ -78,6 +119,24 @@ export function ProjectManagerModal({
             )}
           </div>
         </label>
+        {nativeAvailability?.available && (
+          // The in-app browser stays reachable even when the native dialog is offered
+          // (design.md Decision 4: "The in-app browser is not deleted").
+          <button
+            type="button"
+            className="mt-1 text-[11px] underline"
+            style={{ color: 'var(--text-3)' }}
+            onClick={() => setPickerOpen((v) => !v)}
+            aria-expanded={pickerOpen}
+          >
+            {pickerOpen ? 'Hide the in-Hub browser' : 'Browse within the Hub instead'}
+          </button>
+        )}
+        {nativeDialogNotice && (
+          <p role="status" className="mt-1 text-[11px]" style={{ color: 'var(--amber)' }}>
+            {nativeDialogNotice}
+          </p>
+        )}
         <div data-testid="project-path-preview" className="mt-2 truncate rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>{preview}</div>
         <label className="mt-3 block text-xs">
           Display name <span style={{ color: 'var(--text-3)' }}>(optional)</span>
