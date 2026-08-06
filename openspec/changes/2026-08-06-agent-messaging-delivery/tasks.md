@@ -57,18 +57,36 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 ## 3. Derive the callback address from the served address
 
-- [ ] 3.1 Capture the Hub's actually-bound address during startup (lifespan) and store it on
-      application state.
-- [ ] 3.2 In `hub/hub/api/v1/agent_trigger.py`, build `HUB_URL` from: explicit operator `HUB_URL`
+- [x] 3.1 Capture the Hub's actually-bound address during startup (lifespan) and store it on
+      application state. **Implemented differently than first scoped**: uvicorn's own
+      `Server.startup()` binds the socket *after* the ASGI lifespan's `startup` phase completes in
+      the standard host/port path (verified against installed uvicorn 0.41.0 source), so the
+      address genuinely cannot be observed at lifespan-startup time. Instead: a new
+      `hub/hub/bound_address.py` module-level global is populated by HTTP middleware
+      (`main.py`'s `_observe_bound_address`) from `request.scope["server"]` — the real accepted-socket
+      address uvicorn's own transport reports, `get_local_addr(transport)`, not configured intent.
+      A module global rather than `app.state` because `trigger_agent_directly` is deliberately
+      request-decoupled (the scheduler calls it with no request in flight) — see its docstring.
+- [x] 3.2 In `hub/hub/api/v1/agent_trigger.py`, build `HUB_URL` from: explicit operator `HUB_URL`
       first, then the captured bound address. Remove the `settings.aw_port` fallback entirely.
-- [ ] 3.3 Raise a typed trigger error, with the reason recorded, when neither source is available.
-- [ ] 3.4 Unit test: a Hub bound to a non-default port supplies that port to a run.
-- [ ] 3.5 Unit test: an explicit `HUB_URL` takes precedence over the observed address.
-- [ ] 3.6 Unit test: with neither available, starting a run fails and records the reason.
-- [ ] 3.7 Regression test asserting no code path reaches `settings.aw_port` to build a run's callback
-      address.
-- [ ] 3.8 **Live:** with the Hub on `8010` and something else on `8000`, a triggered agent's tool
-      call reaches `8010`. This is the exact reproduction from `design.md`.
+      Host is always normalized to `127.0.0.1` (the agent is always a local Hub subprocess in
+      native mode); only the observed *port* corrects the defect.
+- [x] 3.3 Raise a typed trigger error, with the reason recorded, when neither source is available.
+- [x] 3.4 Unit test: a Hub bound to a non-default port supplies that port to a run.
+      `test_trigger_derives_hub_url_from_observed_address_not_configured_port`.
+- [x] 3.5 Unit test: an explicit `HUB_URL` takes precedence over the observed address.
+      `test_trigger_prefers_explicit_hub_url_over_observed_address`.
+- [x] 3.6 Unit test: with neither available, starting a run fails and records the reason.
+      `test_trigger_directly_refuses_when_no_address_is_known`.
+- [x] 3.7 Regression test asserting no code path reaches `settings.aw_port` to build a run's callback
+      address. Folded into 3.4's test: `settings.aw_port` is poisoned to an obviously-wrong value
+      and the spawned env is asserted to use the observed port instead.
+- [x] 3.8 **Live:** with the Hub on `8010` and something else on `8000`, a triggered agent's tool
+      call reaches `8010`. **Done 2026-08-06** — restarted the dev Hub on 8010 with this fix (old
+      process predated the code change), confirmed the stale Hub still answers on 8000, triggered
+      `live-verify-claude` with no `HUB_URL` env var set, and its `list_tasks` MCP tool call
+      returned `{"result":[]}` — the correct empty answer for `proj-de54b547`, not a failure or a
+      response from the unrelated Hub on 8000.
 
 ## 4. Scope run credentials to the issuing instance
 

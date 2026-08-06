@@ -9,12 +9,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, bound_address
 from .api.v1 import v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
@@ -161,6 +161,13 @@ def create_app() -> FastAPI:
         ContentSizeLimitMiddleware,
         max_size=settings.aw_max_body_size,
     )
+
+    @app.middleware("http")
+    async def _observe_bound_address(request: Request, call_next):
+        server = request.scope.get("server")
+        if server:
+            bound_address.observe(server[0], server[1])
+        return await call_next(request)
 
     @app.get("/health", include_in_schema=False)
     async def health():

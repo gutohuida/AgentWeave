@@ -1079,6 +1079,128 @@ async def test_trigger_resolves_claude_proxy_env_at_spawn_time(
     assert spawned_env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
 
 
+@pytest.mark.asyncio
+async def test_trigger_derives_hub_url_from_observed_address_not_configured_port(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """Task 3.2/3.4/3.7: `HUB_URL` is built from the address the Hub actually observed a
+    connection arrive on (`hub.bound_address`), never from `settings.aw_port` — which
+    describes configured intent and can silently diverge from where uvicorn really bound
+    (CLI flag, env var, or `port=0` all bypass `settings`). Poisoning `aw_port` with an
+    obviously-wrong value and asserting it never appears in the spawned env is the
+    regression check that no code path still reaches it.
+    """
+    monkeypatch.delenv("HUB_URL", raising=False)
+    from hub.config import settings
+
+    monkeypatch.setattr(settings, "aw_port", 1)
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"bound-addr-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("bound-addr-agent", cli="claude")
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-bound-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.bound_address.get", return_value=("127.0.0.1", 9310)):
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "bound-addr-agent", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
+
+    assert fake_spawn.call_count == 1
+    _, kwargs = fake_spawn.call_args
+    assert kwargs["env"]["HUB_URL"] == "http://127.0.0.1:9310"
+
+
+@pytest.mark.asyncio
+async def test_trigger_prefers_explicit_hub_url_over_observed_address(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """Task 3.5: an explicit `HUB_URL` in the Hub's own environment is an intentional
+    operator override — a reverse proxy or container publishing a different external
+    address is a real deployment — and keeps precedence over the observed bound
+    address."""
+    monkeypatch.setenv("HUB_URL", "http://hub.example.internal:443")
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"explicit-url-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("explicit-url-agent", cli="claude")
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-explicit-1"}\n']
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.bound_address.get", return_value=("127.0.0.1", 9310)):
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "explicit-url-agent", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
+
+    assert fake_spawn.call_count == 1
+    _, kwargs = fake_spawn.call_args
+    assert kwargs["env"]["HUB_URL"] == "http://hub.example.internal:443"
+
+
+@pytest.mark.asyncio
+async def test_trigger_directly_refuses_when_no_address_is_known(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """Task 3.3/3.6: with no explicit `HUB_URL` and no bound address ever observed,
+    starting a run is refused with a stated reason instead of guessing — the same
+    typed-rejection contract every other `trigger_agent_directly` pre-flight check
+    uses, so the scheduler's `except TriggerAgentError` handling (`turn_scheduler.py`)
+    covers it without a special case."""
+    from hub.conversations import new_conversation
+    from hub.db.engine import async_session_factory
+
+    monkeypatch.delenv("HUB_URL", raising=False)
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"no-addr-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("no-addr-agent", cli="claude")
+
+    async with async_session_factory() as db:
+        conversation = new_conversation(project_id="proj-test", agent="no-addr-agent")
+        db.add(conversation)
+        await db.commit()
+        await db.refresh(conversation)
+
+        with patch("hub.bound_address.get", return_value=None):
+            with pytest.raises(agent_trigger.TriggerAgentError) as excinfo:
+                await agent_trigger.trigger_agent_directly(
+                    project_id="proj-test",
+                    agent="no-addr-agent",
+                    message="hi",
+                    conversation_id=conversation.id,
+                    session=db,
+                )
+
+    assert excinfo.value.status_code == 409
+    assert "HUB_URL" in excinfo.value.detail
+
+
 # test_trigger_unsupported_runner_accumulates_queue (kimi-agent, runner="kimi") was
 # removed here: since runner-agent-charter-separation phase 1, Runner.cli is
 # schema-constrained to claude|codex (POST /api/v1/projects/proj-test/runners rejects anything else, see

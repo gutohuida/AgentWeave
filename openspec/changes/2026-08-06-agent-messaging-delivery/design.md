@@ -135,8 +135,20 @@ refusal.
 by CLI argument, by env var, by programmatic `run()`, or be given `port=0`, and only one of those
 paths flows through `settings`.
 
-The Hub SHALL capture its actually-bound address during startup — from the running server's socket,
-in the lifespan hook — and every agent callback URL SHALL be derived from that captured value.
+The Hub SHALL capture its actually-bound address from the running server's socket and every agent
+callback URL SHALL be derived from that captured value.
+
+**Implemented differently than first scoped here.** uvicorn's own `Server.startup()` calls
+`await self.lifespan.startup()` *before* it binds the listening socket in the standard host/port
+path (verified against installed uvicorn 0.41.0 source) — the address genuinely cannot be observed
+from inside the lifespan hook. Instead, HTTP middleware records `request.scope["server"]` — the real
+accepted-connection address uvicorn's transport layer reports (`get_local_addr(transport)`), not
+configured intent — into a module-level global (`hub/hub/bound_address.py`) on every request. A
+module global rather than `app.state` because `trigger_agent_directly` is deliberately
+request-decoupled: the scheduler calls it with no HTTP request in flight, so nothing but a value
+observed from some *prior* request is available at that call site. This is the risk section's
+anticipated fallback ("prefer the ASGI lifespan's view of the server over reaching into uvicorn
+internals") landing on the side that was actually available.
 
 `HUB_URL`, when explicitly set in the Hub's own environment, remains an intentional operator
 override and keeps precedence: a reverse proxy or container publishing a different external address

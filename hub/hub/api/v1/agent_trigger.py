@@ -31,10 +31,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, worktrees
+from ... import bound_address, project_workspace, worktrees
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
-from ...config import settings
 from ...conversations import (
     conversation_for_provider_session,
     get_open_conversation,
@@ -353,8 +352,24 @@ async def trigger_agent_directly(
     env["AW_RUN_TOKEN"] = run_token
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
-    host = "127.0.0.1" if settings.aw_host in ("0.0.0.0", "::") else settings.aw_host
-    env["HUB_URL"] = os.environ.get("HUB_URL", f"http://{host}:{settings.aw_port}")
+    explicit_hub_url = os.environ.get("HUB_URL")
+    if explicit_hub_url:
+        env["HUB_URL"] = explicit_hub_url
+    else:
+        observed = bound_address.get()
+        if observed is None:
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                "Cannot determine the Hub's own address for this run: no HUB_URL is set "
+                "in the Hub's environment and no bound address has been observed from an "
+                "incoming connection yet. Set HUB_URL explicitly, or retry once the Hub "
+                "has served at least one request.",
+            )
+        # The agent is always spawned as a local subprocess of the Hub (native mode);
+        # only the observed *port* corrects the defect (settings.aw_port can silently
+        # diverge from where uvicorn actually bound). The host is always loopback.
+        _, observed_port = observed
+        env["HUB_URL"] = f"http://127.0.0.1:{observed_port}"
     # A parent service environment may contain operator credentials. Never pass them
     # through to a spawned run: AW_RUN_TOKEN is the run's complete authority.
     env.pop("HUB_API_KEY", None)
