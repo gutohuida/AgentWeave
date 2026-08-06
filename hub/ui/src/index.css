@@ -80,6 +80,11 @@
        because the fill itself, not the ground plane, sets the contrast requirement. */
     --on-accent-fill: #ffffff;
 
+    /* Provider brand marks (composer/chrome refinement §4) — mode-independent, like
+       --on-accent-fill above: a provider's own brand colour is fixed by that provider, not
+       by which theme the Hub happens to be in. Anthropic's published mark colour. */
+    --provider-claude: #d97757;
+
     /* Agent identity palette — authored, not reused from the status colours
        above, which already carry meaning. Assigned by registration order. */
     --agent-1: #7c8cff;

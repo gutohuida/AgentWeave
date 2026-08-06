@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Icon } from '@/components/common/Icon'
+import { Icon, ProviderMark } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { useModelCatalog, providerForRunner, type ControlDescriptor, type ProviderDescriptor } from '@/api/modelCatalog'
 
@@ -35,10 +35,14 @@ interface ComposerModelControlsProps {
 export function ControlPill({
   label,
   valueLabel,
+  icon,
   children,
 }: {
   label: string
   valueLabel: string
+  /** A leading mark (e.g. a provider's brand mark) shown before the value — optional
+   * because most pills (Effort, conversation routing) have no icon of their own. */
+  icon?: React.ReactNode
   children: (close: () => void) => React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
@@ -66,6 +70,7 @@ export function ControlPill({
         title={label}
       >
         <span style={{ color: 'var(--text-3)' }}>{label}: </span>
+        {icon}
         {valueLabel} ▾
       </Button>
       {open && (
@@ -89,10 +94,12 @@ export function ControlPill({
 export function ControlOption({
   active,
   label,
+  icon,
   onSelect,
 }: {
   active: boolean
   label: string
+  icon?: React.ReactNode
   onSelect: () => void
 }) {
   return (
@@ -106,6 +113,7 @@ export function ControlOption({
       style={{ color: 'var(--text)' }}
     >
       {active && <Icon name="check" size={12} style={{ color: 'var(--blue)' }} />}
+      {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>
   )
@@ -121,8 +129,12 @@ function ModelPill({
   onChangeModel: (modelId: string) => void
 }) {
   const current = provider.models.find((m) => m.id === effectiveModel) ?? provider.models.find((m) => m.default)
+  // One mark for the whole pill: every model offered here belongs to the same provider
+  // (the target agent's runner already resolved that), so the mark identifies the group,
+  // not which row within it — matching t3code's own per-provider grouping.
+  const mark = <ProviderMark provider={provider.provider} label={provider.label} className="mr-1" />
   return (
-    <ControlPill label="Model" valueLabel={current?.label ?? effectiveModel ?? '—'}>
+    <ControlPill label="Model" valueLabel={current?.label ?? effectiveModel ?? '—'} icon={mark}>
       {(close) => (
         <>
           {provider.models.map((model) => (
@@ -130,6 +142,7 @@ function ModelPill({
               key={model.id}
               active={model.id === (effectiveModel ?? current?.id)}
               label={model.label}
+              icon={mark}
               onSelect={() => {
                 onChangeModel(model.id)
                 close()

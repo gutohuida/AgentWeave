@@ -13,6 +13,7 @@ vi.mock('@/api/runners', () => ({
   useProviderLaunchability: () => ({ data: { providers: {
     codex: { runnable: true, present: true, authorized: true },
     claude: { runnable: false, present: false, authorized: true, reason: 'CLI unavailable' },
+    'future-cli': { runnable: true, present: true, authorized: true },
   } } }),
 }))
 vi.mock('@/api/modelCatalog', () => ({
@@ -27,6 +28,14 @@ vi.mock('@/api/modelCatalog', () => ({
       provider: 'codex',
       label: 'Codex CLI',
       models: [{ id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', aliases: [], context_window: 272_000, default: true }],
+      controls: [],
+    },
+    // A provider ProviderMark has no brand SVG for — exercises the initials fallback
+    // and confirms a missing mark never blocks selection (task 4.7).
+    {
+      provider: 'future-cli',
+      label: 'Future CLI',
+      models: [{ id: 'future-1', label: 'Future One', aliases: [], context_window: null, default: true }],
       controls: [],
     },
   ] } }),
@@ -49,10 +58,12 @@ describe('operator agent creation dialog', () => {
   it('collects a name, launchable provider and model, and optional charter', () => {
     const onCreated = vi.fn()
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={onCreated} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
     expect(screen.getByRole('option', { name: /Claude Code/ })).toBeDisabled()
     expect(screen.getByText(/CLI unavailable/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'codex-gamma' } })
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'codex' } })
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-5.6-sol' } })
     fireEvent.change(screen.getByLabelText('Charter'), { target: { value: 'charter-reviewer' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
@@ -66,8 +77,27 @@ describe('operator agent creation dialog', () => {
 
   it('selects the catalog default model when the provider changes', () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'codex' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
     expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-sol')
+  })
+
+  it('shows the selected provider as the trigger label and closes the picker on choice', () => {
+    render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+    expect(screen.getByRole('button', { name: 'Provider' })).toHaveTextContent('Codex CLI')
+    expect(screen.queryByRole('listbox', { name: 'Provider' })).not.toBeInTheDocument()
+  })
+
+  it('a launchable provider with no brand mark is still selectable', () => {
+    render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    const option = screen.getByRole('option', { name: /Future CLI/ })
+    expect(option).not.toBeDisabled()
+    fireEvent.click(option)
+    expect(screen.getByRole('button', { name: 'Provider' })).toHaveTextContent('Future CLI')
+    expect(screen.getByLabelText('Model')).toHaveValue('future-1')
   })
 
   it('does not offer a model select before a provider is chosen', () => {

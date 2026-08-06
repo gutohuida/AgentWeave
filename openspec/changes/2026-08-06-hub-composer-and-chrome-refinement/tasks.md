@@ -83,19 +83,43 @@ named in `proposal.md`; re-clone rather than guess if a detail is needed.
 
 ## 4. Provider marks
 
-- [ ] 4.1 Add provider marks as inline SVG within the existing `Icon` module
+- [x] 4.1 Add provider marks as inline SVG within the existing `Icon` module
       (`hub/ui/src/components/common/Icon.tsx`). No new dependency, no webfont, no network request.
-      Source each mark from that provider's own published brand assets.
-- [ ] 4.2 Resolve marks by the catalog's provider identity, with a text-label fallback for an
-      unknown provider.
-- [ ] 4.3 Show the mark beside the current value and beside each option in the composer's model
-      control.
-- [ ] 4.4 Show the mark beside each provider in `AgentCreateDialog.tsx`, keeping the provider name
-      always present.
-- [ ] 4.5 Confirm the existing source-contract test — that `ComposerModelControls.tsx` hardcodes no
-      provider name — still passes. Do not weaken it to accommodate the lookup.
-- [ ] 4.6 Unit test: an unknown provider renders a text label and no mark.
-- [ ] 4.7 Unit test: a launchable provider with no mark is still selectable.
+      Source each mark from that provider's own published brand assets. Sourced Anthropic's and
+      OpenAI's actual mark paths from t3code's own `Icons.tsx`
+      (`apps/web/src/components/Icons.tsx`, `ClaudeAI`/`OpenAI` exports, MIT) via `gh api` against
+      the upstream repo, not approximated — those are each provider's own published mark, the same
+      one t3code itself renders. OpenAI's mark uses `currentColor` (it's a monochrome mark by
+      design); Anthropic's fixed brand colour is a new mode-independent `--provider-claude` token in
+      `index.css` (kept out of the .tsx file — `hubVisualLanguage.test.ts` bans raw hex in
+      `src/components/**/*.tsx`).
+- [x] 4.2 Resolve marks by the catalog's provider identity, with a text-label fallback for an
+      unknown provider. New `ProviderMark({ provider, label, size, className })` — unknown provider
+      renders `providerInitials(label)` (t3code's own initials algorithm, ported) in a small badge,
+      never a broken or wrong icon.
+- [x] 4.3 Show the mark beside the current value and beside each option in the composer's model
+      control. `ControlPill`/`ControlOption` gained an optional `icon` prop; `ModelPill` computes one
+      `ProviderMark` (every model in one Model pill belongs to the same already-resolved provider)
+      and passes it to both the trigger and every option — `EnumControlPill` (Effort etc.) and
+      `ComposerConversationRouting` ("To") pass no icon, unaffected.
+- [x] 4.4 Show the mark beside each provider in `AgentCreateDialog.tsx`, keeping the provider name
+      always present. A native `<option>` cannot host an SVG in any browser, so "beside each
+      provider" required replacing the bare `<select>` with a real listbox (new `ProviderPicker`,
+      same button+popover shape as `ComposerAgentSelector`) — this was the literal bare-`<select>`
+      the proposal named as the "more consequential" case of this problem. The Model and Charter
+      fields are untouched, still native `<select>`s (out of task 4's scope; 4b is the composer's own
+      model-picker rebuild, a different component). Updated 2 existing tests that drove the old
+      `<select>` via `fireEvent.change` to open-then-click, matching `ComposerAgentSelector`'s own
+      established test pattern in this codebase.
+- [x] 4.5 Confirm the existing source-contract test — that `ComposerModelControls.tsx` hardcodes no
+      provider name — still passes. Confirmed: `ModelPill` passes `provider.provider`/`provider.label`
+      (catalog-supplied), never a literal; the actual "claude"/"codex" keys live in `Icon.tsx`, a
+      different file the contract test doesn't scan.
+- [x] 4.6 Unit test: an unknown provider renders a text label and no mark.
+      `providerMark.test.tsx` — "renders an unknown provider as text initials, and no mark".
+- [x] 4.7 Unit test: a launchable provider with no mark is still selectable.
+      `agentCreationUi.test.tsx` — "a launchable provider with no brand mark is still selectable"
+      (added a third mocked catalog provider, `future-cli`, with no entry in `PROVIDER_MARKS`).
 
 ## 4b. Model picker — search, grouping, favourites
 
