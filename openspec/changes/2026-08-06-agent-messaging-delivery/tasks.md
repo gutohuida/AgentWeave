@@ -250,11 +250,45 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 ## 6. Collaboration readiness reporting
 
-- [ ] 6.1 Extend the readiness surface with a collaboration-ready determination per agent, covering
-      tool-surface invocability and callback-address agreement.
-- [ ] 6.2 Ensure the check starts no agent run.
-- [ ] 6.3 Unit tests for each unmet condition and for the all-clear case.
-- [ ] 6.4 Surface the result where the operator already looks at agent readiness.
+- [x] 6.1 Extend the readiness surface with a collaboration-ready determination per agent, covering
+      tool-surface invocability and callback-address agreement. **Prerequisite fix discovered along
+      the way**: `GET /agents/launchability` (`hub/hub/api/v1/agents.py`) probed a *legacy*
+      session-config-derived `runner`/`model` even for an agent bound to a Hub `Runner` — inconsistent
+      with `trigger_agent_directly`, which already overrides those two keys from the bound Runner
+      before probing. Fixed first (operator decision: fix the endpoint's data source before building
+      on it, not just extend it as-is): `get_agents_launchability` now applies the same
+      `Agent.runner_id -> Runner` override `trigger_agent_directly` does, for any agent that has one;
+      an agent with no bound Runner (self-registered/CLI-launched, outside the Hub's own spawn path)
+      keeps the legacy probe unchanged, since that path is real for those agents. On top of the fixed
+      probe: `collaboration_ready`/`collaboration_reason` fields, computed only for a Runner-bound,
+      already-`runnable` agent — `None` means "not applicable" (unbound, or not even runnable).
+      *Callback-address agreement*: `bound_address.get() is not None or HUB_URL is set` — the same
+      Hub-instance-wide condition `trigger_agent_directly` itself requires before starting any run.
+      *Tool-surface invocability*: for a `codex` Runner, ready only if `yolo` or the Runner's `flags`
+      opt into the app-server transport (`APP_SERVER_OPT_IN_FLAG`) — a plain non-yolo `exec` Codex
+      agent would hit the exact silent-tool-denial defect this whole change started from (Decision 1);
+      for `claude`, always ready (task A's `--permission-mode manual` +
+      `--allowedTools "mcp__agentweave__*"` fix makes both yolo and non-yolo genuinely invocable now).
+- [x] 6.2 Ensure the check starts no agent run. Read-only: DB reads (`Agent`/`Runner`), an env var
+      read, and `bound_address.get()` — no subprocess, no `Run` row created. Docstring states this
+      explicitly.
+- [x] 6.3 Unit tests for each unmet condition and for the all-clear case.
+      `hub/tests/test_launchability.py::TestCollaborationReadiness` — 7 tests: Claude Runner-bound
+      (ready), non-yolo exec Codex (not ready, reason asserted), yolo Codex (ready), app-server-opted
+      Codex without yolo (ready), unknown callback address (not ready, reason asserted), unbound agent
+      (verdict is `None`, not `False`), not-runnable agent (verdict is `None`).
+- [x] 6.4 Surface the result where the operator already looks at agent readiness.
+      `ComposerAgentSelector.tsx` (already the consumer of this endpoint, per its docstring "Feeds
+      launchability indicators in the agent/runner selector"): a runnable-but-not-collaboration-ready
+      agent now shows "Runnable — cannot collaborate" in amber (`--amber`) instead of plain green
+      "Runnable", with `collaboration_reason` rendered the same way `reason` already was. New test:
+      `composerAgentSelector.test.tsx`'s third case, asserting both the flagged label and that a fully
+      ready agent's label stays plain "Runnable" (not also flagged).
+
+      **Live-verified against real, pre-existing dev-Hub data, no synthetic setup**: `proj-de54b547`'s
+      two Claude agents (Runner-bound) both show `collaboration_ready: true`; `proj-d9b5ed67`'s
+      `codex-mini-1` (`yolo: true`) shows `true`, `codex-mini-2` (non-yolo exec) shows `false` with
+      the exact reason text, through `GET /agents/launchability` on the real Hub.
 
 ## 7. Runner name mojibake
 

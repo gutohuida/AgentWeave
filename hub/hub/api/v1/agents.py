@@ -1,6 +1,7 @@
 """Agent monitor endpoints."""
 
 import asyncio
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -10,12 +11,11 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...model_catalog import get_provider
-
-from ... import project_workspace, worktrees
+from ... import bound_address, project_workspace, worktrees
 from ...agent_colors import next_color_index
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
+from ...codex_appserver import APP_SERVER_OPT_IN_FLAG
 from ...conversations import new_conversation
 from ...db.engine import get_session
 from ...db.models import (
@@ -35,6 +35,7 @@ from ...db.models import (
 )
 from ...inbound_queue import new_entry
 from ...launchability import get_agent_config, probe_agent
+from ...model_catalog import get_provider
 from ...output_recording import record_agent_output, record_context_usage
 from ...schemas.agents import (
     AgentHeartbeatCreate,
@@ -142,11 +143,23 @@ async def get_agents_launchability(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Probe every configured agent's launchability: CLI present, authorized, runnable.
+    """Probe every configured agent's launchability: CLI present, authorized, runnable —
+    and, for an agent the Hub can actually trigger directly, whether it is
+    collaboration-ready (task 6).
 
-    Read-only and side-effect-free — this checks PATH and environment variables visible
-    to the Hub process; it never spawns anything. Feeds launchability indicators in the
-    agent/runner selector.
+    Read-only and side-effect-free — this checks PATH, environment variables, and DB
+    rows visible to the Hub process; it never spawns anything (task 6.2). Feeds
+    launchability indicators in the agent/runner selector.
+
+    For an agent bound to a Hub Runner (`Agent.runner_id` set), the Runner's own
+    `cli`/`model` are the source of truth for the probe — mirroring
+    `trigger_agent_directly`'s own override of the legacy session-config-derived
+    `runner`/`model` keys (see that function's comment). Without this override, an agent
+    whose session-synced config disagreed with its actually-bound Runner would report
+    launchability for a CLI/model combination `trigger_agent_directly` would never
+    actually use. An agent with no bound Runner (self-registered or CLI-launched,
+    outside the Hub's own spawn path) keeps the legacy config-derived probe unchanged —
+    that path is real for those agents, not stale.
     """
     project_id, _ = project
 
@@ -159,10 +172,60 @@ async def get_agents_launchability(
     for name in db_agents:
         session_agents_meta.setdefault(name, {})
 
+    # Task 6.1's "callback-address agreement": the same condition
+    # `trigger_agent_directly` itself requires before it will start any run at all (see
+    # its own HUB_URL / bound_address.get() check) — a Hub-instance-wide fact, checked
+    # once rather than per agent.
+    hub_address_known = bool(os.environ.get("HUB_URL")) or bound_address.get() is not None
+
     results = {}
     for name in session_agents_meta:
         merged = await get_agent_config(project_id, name, session)
-        results[name] = probe_agent(name, merged)
+        agent_row = db_agents.get(name)
+        runner_row = None
+        if agent_row is not None and agent_row.runner_id is not None:
+            runner_row = await session.get(Runner, agent_row.runner_id)
+        if runner_row is not None:
+            merged["runner"] = runner_row.cli
+            merged["model"] = runner_row.model
+
+        probe = probe_agent(name, merged)
+
+        # Collaboration readiness only applies to an agent the Hub can trigger directly
+        # (a bound Runner) and only once basic launchability already holds — an agent
+        # that cannot even start has nothing more specific to say here.
+        collaboration_ready: Optional[bool] = None
+        collaboration_reason: Optional[str] = None
+        if runner_row is not None and probe["runnable"]:
+            if not hub_address_known:
+                collaboration_ready = False
+                collaboration_reason = (
+                    "The Hub cannot determine its own callback address yet, so a "
+                    "triggered run could not reach it — trigger any run once first, or "
+                    "set HUB_URL explicitly."
+                )
+            elif runner_row.cli == "codex":
+                yolo = bool(merged.get("yolo"))
+                app_server_opted_in = APP_SERVER_OPT_IN_FLAG in (runner_row.flags or [])
+                if yolo or app_server_opted_in:
+                    collaboration_ready = True
+                else:
+                    collaboration_ready = False
+                    collaboration_reason = (
+                        "This Codex agent uses the classic exec transport without yolo "
+                        "enabled — AgentWeave tool calls (send_message, etc.) will be "
+                        "silently denied with no operator present to approve them. "
+                        "Enable yolo, or bind a Runner opted into the app-server "
+                        f'transport (flags: ["{APP_SERVER_OPT_IN_FLAG}"]).'
+                    )
+            else:
+                collaboration_ready = True
+
+        results[name] = {
+            **probe,
+            "collaboration_ready": collaboration_ready,
+            "collaboration_reason": collaboration_reason,
+        }
 
     return {"agents": results}
 

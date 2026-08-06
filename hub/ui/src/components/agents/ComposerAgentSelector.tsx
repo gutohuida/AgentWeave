@@ -9,10 +9,17 @@ interface ComposerAgentSelectorProps {
 }
 
 function statusLabel(state: AgentLaunchability | undefined): string {
+  if (state?.runnable && state.collaboration_ready === false) return 'Runnable — cannot collaborate'
   if (state?.runnable) return 'Runnable'
   if (state && !state.present) return 'Not present'
   if (state && !state.authorized) return 'Not authorized'
   return 'Unavailable'
+}
+
+function statusColor(state: AgentLaunchability | undefined): string {
+  if (state?.runnable && state.collaboration_ready === false) return 'var(--amber)'
+  if (state?.runnable) return 'var(--green)'
+  return 'var(--text-3)'
 }
 
 export function ComposerAgentSelector({
@@ -109,9 +116,12 @@ export function ComposerAgentSelector({
                   style={{ color: 'var(--text)' }}
                 >
                   <span className="text-xs font-medium">{agent.name}</span>
-                  <span className="text-[10px] text-right" style={{ color: state?.runnable ? 'var(--green)' : 'var(--text-3)' }}>
+                  <span className="text-[10px] text-right" style={{ color: statusColor(state) }}>
                     <span>{label}</span>
                     {state?.reason && <span className="block">{state.reason}</span>}
+                    {!state?.reason && state?.collaboration_reason && (
+                      <span className="block">{state.collaboration_reason}</span>
+                    )}
                   </span>
                 </button>
               )

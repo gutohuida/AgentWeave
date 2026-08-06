@@ -21,6 +21,17 @@ const launchability = {
   },
 }
 
+const launchabilityWithNonCollaborativeCodex = {
+  ...launchability,
+  codex: {
+    present: true,
+    authorized: true,
+    runnable: true,
+    collaboration_ready: false,
+    collaboration_reason: 'This Codex agent uses the classic exec transport without yolo enabled.',
+  },
+}
+
 describe('ComposerAgentSelector', () => {
   it('lists every configured agent and visibly distinguishes launchability', async () => {
     const user = userEvent.setup()
@@ -59,5 +70,28 @@ describe('ComposerAgentSelector', () => {
     expect(screen.getAllByRole('option')).toHaveLength(1)
     await user.click(screen.getByRole('option', { name: /codex/i }))
     expect(onSelect).toHaveBeenCalledWith('codex')
+  })
+
+  it('distinguishes a runnable-but-not-collaboration-ready agent from a fully ready one', async () => {
+    const user = userEvent.setup()
+    render(
+      <ComposerAgentSelector
+        agents={agents}
+        launchability={launchabilityWithNonCollaborativeCodex}
+        selectedAgent="claude"
+        onSelect={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Target agent: claude' }))
+
+    expect(
+      screen.getByRole('option', { name: /codex.*runnable.*cannot collaborate/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('This Codex agent uses the classic exec transport without yolo enabled.'),
+    ).toBeInTheDocument()
+    // A fully ready agent's label must stay plain "Runnable", not also flagged.
+    expect(screen.getByRole('option', { name: /^claude — Runnable$/i })).toBeInTheDocument()
   })
 })

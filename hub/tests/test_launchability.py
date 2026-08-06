@@ -135,6 +135,155 @@ async def test_launchability_endpoint_reports_configured_agents(app, auth_header
     assert agents["backup"]["reason"] == "Runner is set to manual — no CLI to launch automatically."
 
 
+class TestCollaborationReadiness:
+    """Task 6: collaboration_ready/collaboration_reason on the launchability probe —
+    only meaningful for an agent the Hub can trigger directly (a bound Runner) and only
+    once basic launchability already holds."""
+
+    @pytest.fixture(autouse=True)
+    def _reachable_hub(self, monkeypatch):
+        monkeypatch.setattr("hub.bound_address.get", lambda: ("127.0.0.1", 8010))
+
+    @pytest.fixture(autouse=True)
+    def _cli_present(self, monkeypatch):
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: f"/usr/bin/{cli}")
+
+    async def _probe(self, app, auth_headers, name):
+        resp = await app.get(
+            "/api/v1/projects/proj-test/agents/launchability", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        return resp.json()["agents"][name]
+
+    @pytest.mark.asyncio
+    async def test_claude_agent_bound_to_a_runner_is_collaboration_ready(
+        self, app, auth_headers, bind_runner
+    ):
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"claude-collab": {}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        await bind_runner("claude-collab", cli="claude")
+
+        result = await self._probe(app, auth_headers, "claude-collab")
+        assert result["runnable"] is True
+        assert result["collaboration_ready"] is True
+        assert result["collaboration_reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_non_yolo_exec_codex_agent_is_not_collaboration_ready(
+        self, app, auth_headers, bind_runner
+    ):
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"codex-exec": {"yolo": False}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        await bind_runner("codex-exec", cli="codex")
+
+        result = await self._probe(app, auth_headers, "codex-exec")
+        assert result["runnable"] is True
+        assert result["collaboration_ready"] is False
+        assert "silently denied" in result["collaboration_reason"]
+
+    @pytest.mark.asyncio
+    async def test_yolo_codex_agent_is_collaboration_ready(self, app, auth_headers, bind_runner):
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"codex-yolo": {"yolo": True}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        await bind_runner("codex-yolo", cli="codex")
+
+        result = await self._probe(app, auth_headers, "codex-yolo")
+        assert result["collaboration_ready"] is True
+
+    @pytest.mark.asyncio
+    async def test_app_server_opted_in_codex_agent_is_collaboration_ready_without_yolo(
+        self, app, auth_headers
+    ):
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"codex-appserver": {"yolo": False}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        created = await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "codex-appserver-runner", "cli": "codex", "flags": ["--app-server"]},
+            headers=auth_headers,
+        )
+        assert created.status_code == 201, created.text
+        bound = await app.patch(
+            "/api/v1/projects/proj-test/agents/codex-appserver",
+            json={"runner_id": created.json()["id"]},
+            headers=auth_headers,
+        )
+        assert bound.status_code == 200, bound.text
+
+        result = await self._probe(app, auth_headers, "codex-appserver")
+        assert result["collaboration_ready"] is True
+        assert result["collaboration_reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_unknown_callback_address_is_not_collaboration_ready(
+        self, app, auth_headers, bind_runner, monkeypatch
+    ):
+        monkeypatch.setattr("hub.bound_address.get", lambda: None)
+        monkeypatch.delenv("HUB_URL", raising=False)
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"claude-no-address": {}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        await bind_runner("claude-no-address", cli="claude")
+
+        result = await self._probe(app, auth_headers, "claude-no-address")
+        assert result["runnable"] is True
+        assert result["collaboration_ready"] is False
+        assert "callback address" in result["collaboration_reason"]
+
+    @pytest.mark.asyncio
+    async def test_agent_with_no_bound_runner_has_no_collaboration_verdict(
+        self, app, auth_headers
+    ):
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"unbound-agent": {"runner": "claude"}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+
+        result = await self._probe(app, auth_headers, "unbound-agent")
+        # Legacy config still drives basic launchability for a non-Hub-managed agent...
+        assert result["runnable"] is True
+        # ...but collaboration readiness does not apply — the Hub cannot trigger it.
+        assert result["collaboration_ready"] is None
+        assert result["collaboration_reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_not_runnable_agent_has_no_collaboration_verdict(
+        self, app, auth_headers, bind_runner, monkeypatch
+    ):
+        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
+        sync = await app.post(
+            "/api/v1/projects/proj-test/session/sync",
+            json={"data": {"agents": {"claude-missing-cli": {}}}},
+            headers=auth_headers,
+        )
+        assert sync.status_code == 200
+        await bind_runner("claude-missing-cli", cli="claude")
+
+        result = await self._probe(app, auth_headers, "claude-missing-cli")
+        assert result["runnable"] is False
+        assert result["collaboration_ready"] is None
+
+
 class TestResolveAgentEnv:
     """Task 3.11: the Hub resolves provider environment itself at spawn time, mirroring
     `agentweave.watchdog._prepare_agent_env`/`_prepare_runner_env`'s exact semantics —

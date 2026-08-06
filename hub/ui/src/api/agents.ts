@@ -31,6 +31,11 @@ export interface AgentLaunchability {
   authorized: boolean
   runnable: boolean
   reason?: string | null
+  /** Only meaningful for an agent the Hub can trigger directly (a bound Runner) and
+   * only once `runnable` already holds — `null` means "not applicable", not "unready".
+   * See openspec/changes/2026-08-06-agent-messaging-delivery/tasks.md §6. */
+  collaboration_ready?: boolean | null
+  collaboration_reason?: string | null
 }
 
 export interface AgentLaunchabilityResponse {
