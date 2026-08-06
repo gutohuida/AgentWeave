@@ -52,6 +52,56 @@ def strip_ansi_escapes(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text)
 
 
+# An npm `.cmd` shim's payload line: one quoted executable, then `%*` and nothing else, e.g.
+#   "%dp0%\node_modules\@anthropic-ai\claude-code\bin\claude.exe"   %*
+# The `%*`-and-nothing-else anchor is what makes the rewrite safe. A shim that bakes in its own
+# arguments — `"%dp0%\node.exe" "%dp0%\..\cli.js" %*`, the usual JS-shim shape — must not match,
+# because argv[0] substitution would silently drop those arguments and launch the wrong thing.
+_CMD_SHIM_PAYLOAD_RE = re.compile(
+    r'^\s*(?:@?call\s+)?"(%~?dp0%\\?)?([^"]+?\.exe)"\s*%\*\s*$',
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _unwrap_cmd_shim(resolved: str) -> str:
+    """Resolve a Windows `.cmd`/`.bat` shim to the real `.exe` it delegates to.
+
+    This is a correctness fix, not an optimisation. A `.cmd` is executed *by cmd.exe*, and
+    cmd.exe parses its command line before the target ever sees it — so a raw newline inside
+    an argument terminates the command there and everything after it is silently discarded.
+
+    That is catastrophic here: `claude` installs via npm as `claude.CMD`, and the Hub passes
+    the whole turn prompt as one `-p` argument whose first line is the tool-access notice and
+    whose remaining lines are the operator's actual message. Every Claude run on Windows
+    therefore received only that first notice line, and agents answered clear instructions
+    with "the user hasn't given me any task yet" — the message was delivered, queued, and
+    marked delivered, but never reached the model
+    (`2026-08-06-hub-collaboration-and-conversation-fixes`). Spawning the `.exe` directly
+    bypasses cmd.exe entirely, and argv (newlines included) arrives intact.
+
+    Conservative by design: only a shim that forwards *all* of its arguments to one executable
+    and adds none of its own is rewritten — a JS shim running `node.exe some-script.js %*`
+    would lose the script path, so it is left alone, as is a shim whose target does not exist
+    or that names more than one payload. Worst case is today's behaviour, never a wrong command.
+    """
+    try:
+        content = Path(resolved).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return resolved
+    matches = {(m.group(1) or "", m.group(2)) for m in _CMD_SHIM_PAYLOAD_RE.finditer(content)}
+    if len(matches) != 1:
+        return resolved
+    prefix, target = matches.pop()
+    # `%dp0%` is the shim's own directory; without it the payload is already a full path.
+    candidate = Path(resolved).parent / target if prefix else Path(target)
+    try:
+        if candidate.is_file():
+            return str(candidate.resolve())
+    except OSError:
+        pass
+    return resolved
+
+
 def resolve_executable(cmd: List[str]) -> List[str]:
     """Resolve ``cmd[0]`` to an absolute path via PATH/PATHEXT if it isn't one already.
 
@@ -61,15 +111,21 @@ def resolve_executable(cmd: List[str]) -> List[str]:
     ``shutil.which`` (and ``cmd.exe``) do. Resolving first also avoids ever needing
     ``shell=True``, and the shell-injection surface that comes with it.
 
+    A resolved `.cmd`/`.bat` shim is then unwrapped to the executable it delegates to, so
+    arguments containing newlines survive — see ``_unwrap_cmd_shim``.
+
     Raises ``FileNotFoundError`` with a clear message if ``cmd[0]`` cannot be found.
     """
     if not cmd:
         raise ValueError("cmd must be a non-empty list")
     if Path(cmd[0]).is_absolute():
-        return list(cmd)
-    resolved = shutil.which(cmd[0])
+        resolved: Optional[str] = cmd[0]
+    else:
+        resolved = shutil.which(cmd[0])
     if not resolved:
         raise FileNotFoundError(f"{cmd[0]!r} was not found in PATH")
+    if IS_WINDOWS and Path(resolved).suffix.lower() in (".cmd", ".bat"):
+        resolved = _unwrap_cmd_shim(resolved)
     return [resolved, *cmd[1:]]
 
 

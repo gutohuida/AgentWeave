@@ -75,6 +75,81 @@ class TestResolveExecutable:
             resolve_executable([])
 
 
+class TestCmdShimUnwrapping:
+    """A `.cmd` shim runs under cmd.exe, which truncates its command line at the first raw
+    newline — so a multi-line `-p` prompt loses everything after line one. `claude` installs
+    from npm as `claude.CMD`, so every Claude run on Windows received only the prompt's first
+    line and agents reported having been given no task
+    (2026-08-06-hub-collaboration-and-conversation-fixes).
+    """
+
+    def _shim(self, tmp_path, body, name="tool.cmd"):
+        shim = tmp_path / name
+        shim.write_text(body, encoding="utf-8")
+        return shim
+
+    def test_npm_shim_resolves_to_its_real_executable(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
+        target_dir = tmp_path / "node_modules" / "pkg" / "bin"
+        target_dir.mkdir(parents=True)
+        target = target_dir / "tool.exe"
+        target.write_text("")
+        shim = self._shim(
+            tmp_path,
+            '@ECHO off\r\nSETLOCAL\r\n"%dp0%\\node_modules\\pkg\\bin\\tool.exe"   %*\r\n',
+        )
+
+        resolved = resolve_executable([str(shim), "-p", "line one\nline two"])
+        assert resolved[0] == str(target.resolve())
+        # Arguments are untouched — only argv[0] is rewritten.
+        assert resolved[1:] == ["-p", "line one\nline two"]
+
+    def test_shim_that_bakes_in_its_own_arguments_is_left_alone(self, tmp_path, monkeypatch):
+        """A JS shim runs `node.exe script.js %*`; dropping the script would break the launch."""
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
+        (tmp_path / "node.exe").write_text("")
+        shim = self._shim(
+            tmp_path,
+            '@ECHO off\r\n"%dp0%\\node.exe" "%dp0%\\..\\cli.js" %*\r\n',
+        )
+        assert resolve_executable([str(shim)])[0] == str(shim)
+
+    def test_shim_whose_target_is_missing_is_left_alone(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
+        shim = self._shim(tmp_path, '@ECHO off\r\n"%dp0%\\gone.exe" %*\r\n')
+        assert resolve_executable([str(shim)])[0] == str(shim)
+
+    def test_non_windows_never_unwraps(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", False)
+        (tmp_path / "tool.exe").write_text("")
+        shim = self._shim(tmp_path, '@ECHO off\r\n"%dp0%\\tool.exe" %*\r\n')
+        assert resolve_executable([str(shim)])[0] == str(shim)
+
+    @pytest.mark.skipif(not IS_WINDOWS, reason="cmd.exe truncation is Windows-only")
+    def test_a_multiline_argument_survives_the_unwrapped_spawn(self, tmp_path):
+        """End-to-end proof, against a real shim and a real spawn, that the newline survives."""
+        echo = tmp_path / "echoargv.py"
+        echo.write_text(
+            "import sys, json\n"
+            "print('START' + json.dumps(sys.argv[1:]) + 'END', flush=True)\n",
+            encoding="utf-8",
+        )
+        # Same shape as the real npm shim: one executable, `%*`, no baked-in arguments. The
+        # script path is supplied by the caller's own argv, as claude's prompt is.
+        shim = self._shim(tmp_path, f'@ECHO off\r\n"{sys.executable}" %*\r\n')
+
+        session = PtySession.spawn([str(shim), str(echo), "-p", "first line\nSECOND_LINE_MARKER"])
+        out = ""
+        for _ in range(400):
+            chunk = session.read()
+            if chunk:
+                out += chunk
+            if "END" in out:
+                break
+            time.sleep(0.05)
+        assert "SECOND_LINE_MARKER" in out, f"prompt was truncated: {out[:400]!r}"
+
+
 class TestPtySessionSpawn:
     @pytest.mark.skipif(not IS_WINDOWS, reason="pywinpty socket polling is Windows-only")
     def test_delayed_output_is_not_mistaken_for_eof(self):
