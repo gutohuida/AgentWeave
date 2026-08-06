@@ -292,7 +292,7 @@ TASK_STATUSES = [
 ]
 
 # Message types
-MESSAGE_TYPES = ["message", "delegation", "review", "discussion"]
+MESSAGE_TYPES = ["message", "delegation", "review", "discussion", "direct_trigger"]
 
 # Priorities
 PRIORITIES = ["low", "medium", "high", "critical"]

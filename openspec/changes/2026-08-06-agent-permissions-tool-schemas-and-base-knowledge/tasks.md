@@ -2,18 +2,18 @@
 
 ## 1. MCP tool schemas advertise their valid values
 
-- [ ] 1.1 Define `Literal` aliases in `hub/hub/mcp_server.py` for message type, task status, task
+- [x] 1.1 Define `Literal` aliases in `hub/hub/mcp_server.py` for message type, task status, task
       priority, and job session mode, each asserted against the runtime list it mirrors
       (`hub/hub/schemas/messages.py:_MESSAGE_TYPES`, `hub/hub/schemas/tasks.py:_TASK_STATUSES`
       and `_PRIORITIES`) so drift fails a test instead of reintroducing the bug.
-- [ ] 1.2 Apply them to `send_message.message_type`, `create_task.priority`, `update_task.status`,
+- [x] 1.2 Apply them to `send_message.message_type`, `create_task.priority`, `update_task.status`,
       `create_job.session_mode`, and add a parameter description to each.
-- [ ] 1.3 Reduce `HubAPIError`'s detail from a stringified list of Pydantic error dicts to the human
+- [x] 1.3 Reduce `HubAPIError`'s detail from a stringified list of Pydantic error dicts to the human
       `msg` sentence.
-- [ ] 1.4 Add `direct_trigger` to `src/agentweave/constants.py`'s `MESSAGE_TYPES`.
-- [ ] 1.5 Test: each tool's generated schema carries the enum.
-- [ ] 1.6 Test: the alias and the runtime validator list agree, for all four.
-- [ ] 1.7 Test: an invalid value is rejected, and the surfaced error is the human sentence.
+- [x] 1.4 Add `direct_trigger` to `src/agentweave/constants.py`'s `MESSAGE_TYPES`.
+- [x] 1.5 Test: each tool's generated schema carries the enum.
+- [x] 1.6 Test: the alias and the runtime validator list agree, for all four.
+- [x] 1.7 Test: an invalid value is rejected, and the surfaced error is the human sentence.
 
 ## 2. Claude permission control and a working default
 

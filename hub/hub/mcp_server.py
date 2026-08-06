@@ -10,12 +10,39 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 try:
     from fastmcp import FastMCP
 except ImportError as exc:
     raise ImportError("fastmcp is required. Install it with: pip install fastmcp") from exc
+
+# Constrained parameter values, declared as `Literal` so the generated tool schema carries an
+# `enum` every client can read before calling. A bare `str` advertises nothing: Codex agents
+# repeatedly guessed `message_type="text"`, were rejected 422 by the Hub, and only succeeded on a
+# retry (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`). `update_task.status` is
+# the sharpest case — no default and eight valid states, so a model must supply one blind.
+#
+# These mirror `hub.schemas.messages._MESSAGE_TYPES`, `hub.schemas.tasks._TASK_STATUSES` /
+# `_PRIORITIES`, and `hub.schemas.jobs`'s session-mode check. They are *restated* rather than
+# imported on purpose: this module is spawned as a standalone script from an arbitrary working
+# directory by both the Claude and Codex transports, and its only imports are stdlib plus fastmcp.
+# Importing the Hub package here would make the entire tool surface fail to start if the package
+# layout ever changed. `test_mcp_tool_schemas.py` asserts these agree with the validators, so
+# drift fails in CI rather than at an agent's first call.
+MessageType = Literal["message", "delegation", "review", "discussion", "direct_trigger"]
+TaskStatus = Literal[
+    "pending",
+    "assigned",
+    "in_progress",
+    "completed",
+    "under_review",
+    "revision_needed",
+    "approved",
+    "rejected",
+]
+TaskPriority = Literal["low", "medium", "high", "critical"]
+JobSessionMode = Literal["new", "resume"]
 
 mcp = FastMCP(
     name="agentweave",
@@ -73,6 +100,33 @@ class HubUnreachableError(RuntimeError):
         )
 
 
+def _readable_detail(detail: Any) -> str:
+    """Reduce a FastAPI error body to a sentence an agent can act on.
+
+    A Pydantic validation failure arrives as a list of error dicts, and stringifying it verbatim
+    produced tool errors like `[{'type': 'value_error', 'loc': ['body', 'type'], 'msg': "Value
+    error, type must be one of [...]", 'ctx': {...}}]`. An agent trying to correct itself had to
+    parse that. Keep the messages, and name the offending field when the body says which it was.
+    """
+    if isinstance(detail, list):
+        parts = []
+        for item in detail:
+            if not isinstance(item, dict):
+                parts.append(str(item))
+                continue
+            message = str(item.get("msg", "")).removeprefix("Value error, ").strip()
+            location = [str(piece) for piece in (item.get("loc") or []) if piece != "body"]
+            if location and message:
+                parts.append(f"{'.'.join(location)}: {message}")
+            elif message:
+                parts.append(message)
+            else:
+                parts.append(str(item))
+        if parts:
+            return "; ".join(parts)
+    return str(detail)
+
+
 def _hub_request(
     method: str,
     path: str,
@@ -100,7 +154,7 @@ def _hub_request(
         detail = exc.read().decode(errors="replace")
         try:
             parsed = json.loads(detail)
-            detail = str(parsed.get("detail", detail))
+            detail = _readable_detail(parsed.get("detail", detail))
         except (ValueError, AttributeError):
             pass
         raise HubAPIError(exc.code, detail, method, path) from exc
@@ -113,10 +167,19 @@ def send_message(
     to_agent: str,
     subject: str,
     content: str,
-    message_type: str = "message",
+    message_type: MessageType = "message",
     task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Send an attributable message through the recipient's durable inbound queue."""
+    """Send an attributable message through the recipient's durable inbound queue.
+
+    Args:
+        to_agent: Exact name of a registered agent in this project, as listed in your context.
+        subject: Short summary line.
+        content: The message body.
+        message_type: One of "message", "delegation", "review", "discussion",
+            "direct_trigger". Leave unset for an ordinary message.
+        task_id: Optional task this message relates to.
+    """
     result = _hub_request(
         "POST",
         "/messages",
@@ -136,11 +199,20 @@ def create_task(
     title: str,
     description: str = "",
     assignee: Optional[str] = None,
-    priority: str = "medium",
+    priority: TaskPriority = "medium",
     requirements: Optional[List[str]] = None,
     acceptance_criteria: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Create a task attributed to the bound agent."""
+    """Create a task attributed to the bound agent.
+
+    Args:
+        title: Short task title.
+        description: What the task involves.
+        assignee: Exact name of a registered agent, or unset to leave it unassigned.
+        priority: One of "low", "medium", "high", "critical".
+        requirements: Optional list of requirements.
+        acceptance_criteria: Optional list of acceptance criteria.
+    """
     return _hub_request(
         "POST",
         "/tasks",
@@ -168,8 +240,14 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: str) -> Dict[str, Any]:
-    """Update a task's lifecycle status as the bound agent."""
+def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
+    """Update a task's lifecycle status as the bound agent.
+
+    Args:
+        task_id: The task's ID.
+        status: The new lifecycle status. One of "pending", "assigned", "in_progress",
+            "completed", "under_review", "revision_needed", "approved", "rejected".
+    """
     return _hub_request("PATCH", f"/tasks/{task_id}", {"status": status})
 
 
@@ -212,9 +290,17 @@ def create_job(
     agent: str,
     message: str,
     cron: str,
-    session_mode: str = "new",
+    session_mode: JobSessionMode = "new",
 ) -> Dict[str, Any]:
-    """Create recurring work only when the operator enabled the agent-job allowance."""
+    """Create recurring work only when the operator enabled the agent-job allowance.
+
+    Args:
+        name: Job name.
+        agent: Exact name of the registered agent the job triggers.
+        message: The message delivered to that agent on each run.
+        cron: Cron expression for the schedule.
+        session_mode: "new" to start a fresh conversation each run, "resume" to continue.
+    """
     return _job_effect(
         "POST",
         "/jobs",
