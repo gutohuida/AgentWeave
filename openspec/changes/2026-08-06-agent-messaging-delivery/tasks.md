@@ -28,16 +28,35 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 - [ ] 2.1 Add an app-server client: spawn `codex app-server`, speak JSON-RPC over stdio, handle
       `initialize` / `initialized` / `thread/start` / `turn/start`, and answer server→client
-      requests. Registering the AgentWeave MCP server keeps its existing `-c` form.
-- [ ] 2.2 Approve `mcpServer/elicitation/request` **only** when `_meta.codex_approval_kind` is
+      requests. Registering the AgentWeave MCP server keeps its existing `-c` form. **Not yet
+      built** — only exercised so far via throwaway probe scripts
+      (`testbed/scratch/probe_appserver_*.py`, gitignored, not product code) used to measure the
+      shapes 2.2-2.5 below now implement. The production bidirectional transport class (spawn,
+      read/write loop, request/response correlation) is still open; needed before 2.6-2.8/2.14 can
+      be attempted.
+- [x] 2.2 Approve `mcpServer/elicitation/request` **only** when `_meta.codex_approval_kind` is
       `mcp_tool_call` and `serverName` is the Hub's own server. Anything else is denied.
-- [ ] 2.3 Answer `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, and
+      `hub/hub/codex_appserver.py::decide_approval`.
+- [x] 2.3 Answer `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, and
       `item/permissions/requestApproval` from the operator's selected sandbox — `yolo` approves,
       otherwise deny. `yolo` keeps its current meaning and is not required for messaging.
-- [ ] 2.4 Deny any server→client request the Hub does not recognise. An unrecognised approval is
-      never granted by default.
-- [ ] 2.5 Map protocol events onto the existing output/timeline/usage model, replacing the
-      `--json` stdout parsing in `runner_parsing.py` for this path.
+      `decide_approval`. **Response shape verified live, not assumed from schema**: the schema
+      exports two differently-shaped response types for the same-looking concept
+      (`CommandExecutionRequestApprovalResponse`'s `{"decision":"accept"|"decline"}` vs the older
+      `ExecCommandApprovalResponse`'s `{"decision":"approved"|"denied"}`) — only the former is
+      what `item/commandExecution/requestApproval` actually accepts. Confirmed with a real
+      out-of-workspace write attempt: declined with `{"decision":"decline"}`, no file appeared, no
+      protocol error.
+- [x] 2.4 Deny any server→client request the Hub does not recognise. An unrecognised approval is
+      never granted by default. `decide_approval`'s fallthrough branch.
+- [x] 2.5 Map protocol events onto the existing output/timeline/usage model, replacing the
+      `--json` stdout parsing in `runner_parsing.py` for this path. `codex_appserver.py`'s
+      `map_item_to_events`/`map_token_usage_notification`/`map_turn_failure`, built from a live
+      captured item/turn notification sequence, not `exec`'s snake_case shapes. **Bonus finding**:
+      `thread/tokenUsage/updated` self-reports `modelContextWindow` directly and a non-cumulative
+      per-request delta (`tokenUsage.last`) — resolves implications.md §4's open question (yes,
+      this makes the catalog lookup redundant for this path) and sidesteps `exec`'s rollout-file
+      cumulative-delta estimation entirely.
 - [ ] 2.6 Preserve session resume via `thread/resume`, keeping the durable session identity agents
       already rely on. **Feasibility verified 2026-08-06**: `thread/resume`'s `threadId` accepts an
       existing `Run.session_id` recorded by the current `codex exec resume` path unchanged — same
@@ -47,12 +66,20 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       an agent.
 - [ ] 2.8 Keep the `exec` path intact and selectable until 8.x proves the app-server path
       equivalent. Do not delete it in this change.
-- [ ] 2.9 Unit test: an MCP elicitation for the Hub's own server is approved.
-- [ ] 2.10 Unit test: an MCP elicitation naming a *different* server is denied.
-- [ ] 2.11 Unit test: command-execution and file-change approvals are denied for a non-`yolo` run
-      and approved for a `yolo` run.
-- [ ] 2.12 Unit test: an unrecognised server→client request is denied.
-- [ ] 2.13 Unit test: `yolo` is not required for a tool call to be approved.
+- [x] 2.9 Unit test: an MCP elicitation for the Hub's own server is approved.
+      `test_codex_appserver.py::TestDecideApproval::test_own_server_mcp_tool_call_is_approved`.
+- [x] 2.10 Unit test: an MCP elicitation naming a *different* server is denied.
+      `test_different_server_mcp_tool_call_is_denied`.
+- [x] 2.11 Unit test: command-execution and file-change approvals are denied for a non-`yolo` run
+      and approved for a `yolo` run. `test_command_execution_denied_for_non_yolo`,
+      `test_command_execution_approved_for_yolo`, `test_file_change_follows_same_yolo_rule`.
+- [x] 2.12 Unit test: an unrecognised server→client request is denied.
+      `test_unrecognised_method_is_denied_not_ignored`.
+- [x] 2.13 Unit test: `yolo` is not required for a tool call to be approved.
+      `test_yolo_does_not_affect_elicitation_decision`. 27 tests total in
+      `hub/tests/test_codex_appserver.py`, including `map_item_to_events` and
+      `map_token_usage_notification` coverage beyond the tasks explicitly listed here. Full hub
+      suite re-run green: 692 passed, 9 skipped.
 - [ ] 2.14 **Live:** the breach test through the Hub — one turn that calls a tool *and* attempts a
       write outside the workspace. The tool call succeeds; the write is refused; no file appears.
 - [ ] 2.15 Check whether the Claude runner has an equivalent defect, using the same probe-MCP-server
