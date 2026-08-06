@@ -1,5 +1,27 @@
 ## ADDED Requirements
 
+### Requirement: A delivered turn reaches the model intact
+
+Every queued input the Hub marks as delivered SHALL reach the agent's model in full. The Hub
+MUST NOT report an input as delivered when the mechanism used to start the run cannot carry it.
+
+Where a platform's process-launch path can alter, truncate, or reinterpret a run's arguments —
+for example a command interpreter that parses a command line before the target program receives
+it — the Hub SHALL use a launch path that preserves them exactly, including argument content
+that spans multiple lines.
+
+#### Scenario: A multi-line turn prompt is delivered whole
+
+- **WHEN** the Hub starts a run whose turn prompt spans several lines
+- **THEN** the agent receives every line of that prompt
+
+#### Scenario: Delivery state reflects what the model actually received
+
+- **WHEN** a queued input is marked delivered against a run
+- **THEN** that input's full content formed part of the prompt that run was started with
+
+---
+
 ### Requirement: A turn's folded state is set by the operator, never by its position
 
 A turn SHALL render expanded unless the operator has folded it. Foldedness MUST NOT be derived from

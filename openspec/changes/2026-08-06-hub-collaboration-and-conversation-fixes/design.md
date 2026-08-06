@@ -157,3 +157,31 @@ to drop it.
 - **Roster disclosure.** Every agent now learns the names, CLIs, and models of its peers. That is the
   minimum required for collaboration and matches what the spec already asked for; no secrets are
   added, and `_runner_summary`'s env-name-only behaviour is preserved.
+
+## Decision 7 — Unwrap Windows `.cmd` shims rather than re-encode the prompt
+
+Discovered during live verification, after the context rewrite was already in place (see the
+proposal's second root cause). Three options were considered:
+
+1. **Escape or encode the newlines.** Rejected: the truncation happens inside `cmd.exe`'s own
+   command-line parsing, before the target program's argument parser runs. A raw `LF` cannot be
+   escaped into surviving it, and rewriting the prompt to avoid newlines would corrupt the
+   operator's own text.
+2. **Deliver the prompt over stdin instead of argv.** Rejected for now: it changes the launch
+   contract for every runner, and the PTY transport would need an explicit write-then-EOF step
+   whose interaction with ConPTY is a new risk. Worth revisiting only if a runner ever needs a
+   prompt larger than a command line can hold.
+3. **Resolve the shim to the executable it delegates to, so `cmd.exe` is never involved.**
+   **Chosen.** It is a one-line change to the launch path, it fixes every runner that installs
+   via npm rather than just `claude`, and it is verifiable directly by reading the child's argv.
+
+The rewrite is deliberately narrow. Only a shim whose payload line is one quoted `.exe` followed
+by `%*` and nothing else is unwrapped. The common JS-shim shape, `"…\node.exe" "…\cli.js" %*`,
+bakes in an argument that `argv[0]` substitution would silently drop — launching `node` with the
+operator's prompt and no script. That case, a shim naming several payloads, and a shim whose
+target does not exist all fall back to today's behaviour, so the worst outcome is the status quo
+rather than a wrong command.
+
+This is why the bug survived a full test suite: `PtySession.spawn` is mocked everywhere in
+`hub/tests`, so no test ever launched a real `.cmd`. The regression test added here spawns a real
+shim and asserts on the child's own `argv`, which is the only level at which the defect is visible.

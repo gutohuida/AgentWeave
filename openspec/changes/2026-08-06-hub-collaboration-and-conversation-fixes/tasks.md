@@ -81,20 +81,36 @@
 - [x] 6.5 Test: the composer renders no agent selector; a submission posts the current agent's name.
 - [x] 6.6 Test: an agent that cannot collaborate is flagged on its card.
 
+## 6b. A delivered turn reaches the model intact
+
+Found during live verification, after section 1 was already in place — the context fix alone did
+not make agents act, because the prompt itself was being truncated.
+
+- [x] 6b.1 `resolve_executable` unwraps a Windows `.cmd`/`.bat` shim to the executable it
+      delegates to, so the launch never passes through `cmd.exe`.
+- [x] 6b.2 Restrict the rewrite to a shim whose payload is one quoted `.exe` plus `%*` and
+      nothing else; fall back to the shim otherwise.
+- [x] 6b.3 Test: an npm-shaped shim resolves to its real executable and leaves argv untouched.
+- [x] 6b.4 Test: a shim that bakes in its own arguments, one whose target is missing, and any
+      shim on a non-Windows platform are all left alone.
+- [x] 6b.5 Test: spawn a real shim and assert the child's own argv still contains the second
+      line of a multi-line argument. `PtySession.spawn` is mocked throughout `hub/tests`, so
+      this is the only level at which the defect is visible.
+
 ## 7. Verification
 
-- [ ] 7.1 `pytest hub/tests/ -v` — baseline 766 passed / 9 skipped.
-- [ ] 7.2 `cd hub/ui && npm test` — baseline 458 passed.
-- [ ] 7.3 `npx tsc --noEmit`; `ruff check` on every touched Python file.
-- [ ] 7.4 `openspec validate --specs --strict`.
-- [ ] 7.5 `npm run build` + `pytest hub/tests/test_ui_staleness.py` to regenerate `hub/hub/static/ui`.
-- [ ] 7.6 **Live** against `proj-a35df4bc` on a Hub restarted on this change's own built code:
+- [x] 7.1 `pytest hub/tests/ -v` — baseline 766 passed / 9 skipped.
+- [x] 7.2 `cd hub/ui && npm test` — baseline 458 passed.
+- [x] 7.3 `npx tsc --noEmit`; `ruff check` on every touched Python file.
+- [x] 7.4 `openspec validate --specs --strict`.
+- [x] 7.5 `npm run build` + `pytest hub/tests/test_ui_staleness.py` to regenerate `hub/hub/static/ui`.
+- [x] 7.6 **Live** against `proj-a35df4bc` on a Hub restarted on this change's own built code:
       `GET /agents/agent-context?agent=claude-haiku-1` names `claude-haiku-2`, `codex-mini-1`,
       `codex-mini-2` and contains no stand-down block.
-- [ ] 7.7 **Live**: send `claude-haiku-1` the operator's original failing instruction and confirm
+- [x] 7.7 **Live**: send `claude-haiku-1` the operator's original failing instruction and confirm
       from chat history that it acts on it and a real message row appears for the recipient.
-- [ ] 7.8 **Live**: same instruction to `codex-mini-1` — its `send_message` succeeds, proving the
+- [x] 7.8 **Live**: same instruction to `codex-mini-1` — its `send_message` succeeds, proving the
       app-server default. This is the direct test of "we need codex collaborating".
-- [ ] 7.9 **Live**: `GET /agents` reports real model names, not `"Native"`.
-- [ ] 7.10 **Live** UI: neutral operator bubble in both themes; no halo or band around the composer;
+- [x] 7.9 **Live**: `GET /agents` reports real model names, not `"Native"`.
+- [x] 7.10 **Live** UI: neutral operator bubble in both themes; no halo or band around the composer;
       sending leaves earlier turns open; no target-agent picker.

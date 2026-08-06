@@ -51,6 +51,32 @@ dev Hub and `hub/data/agentweave.db` before any code was changed:
 
 The agent followed its instructions exactly. The instructions were wrong.
 
+### …and the prompt was being cut off at its first newline
+
+Fixing the context was necessary but not sufficient. With the stand-down block gone and the real
+roster in place, a re-test still produced *"the user hasn't given me any task yet"* — while the
+agent correctly named its peers. That split is the tell: the roster arrives through
+`--append-system-prompt-file`, a path containing no newlines, and the operator's message arrives
+as the `-p` argument, which does.
+
+`claude` installs from npm as **`claude.CMD`**. A `.cmd` is executed by `cmd.exe`, which parses
+the command line before the target program ever sees it, and a raw newline inside an argument
+terminates the command there. The Hub builds the turn prompt as
+`access_path_notice(...) + "\n\n" + format_turn_prompt(...)`, so every Claude run on Windows
+received exactly this and nothing else:
+
+```
+[AgentWeave] Tool access: the `agentweave` MCP tools are available — call send_message / …
+```
+
+The operator's instruction was queued, selected, delivered, and stamped `delivered_in_run_id` —
+and never reached the model. Confirmed directly by spawning through a `.cmd` shim and reading the
+child process's own `argv`: everything after the first newline is gone. `codex` resolves to a real
+`.EXE` and is unaffected, which is why this never showed up in Codex runs.
+
+Both defects were real and independent. The first made agents refuse work they understood; the
+second meant they never saw it.
+
 `_render_hub_agent_context` (`hub/hub/api/v1/agents.py:737`) decides which of three context shapes to
 render by testing `declared = agent in session_data["agents"]`, where `session_data` is read from the
 `project_sessions` table. **That table's only two writers — the CLI's `Session.save()` push and the
