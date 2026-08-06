@@ -1,6 +1,6 @@
 # Agent-to-agent messaging actually reaches the Hub
 
-**Approved:** _pending_
+**Approved:** 2026-08-06, operator
 
 ## Why
 

@@ -1,6 +1,6 @@
 # Composer controls stop looking like buttons, and the project path stops being a string
 
-**Approved:** _pending_
+**Approved:** 2026-08-06, operator
 
 ## Why
 
