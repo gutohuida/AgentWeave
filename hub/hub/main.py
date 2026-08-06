@@ -28,6 +28,24 @@ UI_DIST = Path(__file__).parent / "static" / "ui"
 UI_SRC = Path(__file__).parent.parent / "ui" / "src"
 
 
+class UTF8JSONResponse(JSONResponse):
+    """Starlette's default `JSONResponse` sends `Content-Type: application/json` with no
+    `charset` parameter. JSON is UTF-8 by definition (RFC 8259) so the body itself is
+    correct either way — but a client that does not itself default to UTF-8 for an
+    unlabelled `application/json` response can decode it wrong. Reproduced live: Windows
+    PowerShell 5.1's `Invoke-WebRequest`/`Invoke-RestMethod` is exactly such a client — a
+    stored runner name containing an em dash (`Codex CLI — GPT-5.4-Mini`, correct UTF-8
+    on the wire and in the database, confirmed by inspecting raw bytes at every layer)
+    rendered as `Codex CLI â€” GPT-5.4-Mini` through it, and correctly through curl / a
+    browser / PowerShell 7+. See openspec/changes/2026-08-06-agent-messaging-delivery
+    design.md, Decision 5 — this replaces that decision's original "double-encoding
+    somewhere in the write path" hypothesis, which raw-byte inspection at the DB, the
+    HTTP wire, and construction time all ruled out.
+    """
+
+    media_type = "application/json; charset=utf-8"
+
+
 def _git_last_commit_iso(path: Path) -> Optional[str]:
     """Return the ISO-8601 commit date of the most recent commit touching `path`."""
     try:
@@ -144,6 +162,7 @@ def create_app() -> FastAPI:
         ),
         version=__version__,
         lifespan=lifespan,
+        default_response_class=UTF8JSONResponse,
     )
 
     # CORS — origins configurable via AW_CORS_ORIGINS env var (comma-separated).
@@ -177,7 +196,7 @@ def create_app() -> FastAPI:
         if warning:
             payload["ui_stale"] = True
             payload["ui_stale_detail"] = warning
-        return JSONResponse(payload)
+        return UTF8JSONResponse(payload)
 
     app.include_router(v1_router)
 

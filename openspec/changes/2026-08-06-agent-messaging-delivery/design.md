@@ -198,16 +198,30 @@ nowhere else. Two changes:
    agent timeline. A call denied before leaving the agent's process (Defect 1) is by construction
    not observable Hub-side; this is why Decision 1 must fix that case rather than report it.
 
-## Decision 5 — runner name mojibake
+## Decision 5 — runner name mojibake: not a double-encoding, a missing charset (task 7)
 
-`GET /runners` returns `"Codex CLI â€” GPT-5.4-Mini"`. That is a UTF-8 em dash (`—`, `E2 80 94`)
-decoded as Latin-1 and re-encoded. The auto-provisioning path in `hub/hub/api/v1/agents.py` builds
-this name. Implementation must first establish **where** the double-encoding happens — name
-construction, DB write, or response serialisation — because the fix differs, and any already-stored
-name needs repairing or regenerating, not just the new ones.
+The original hypothesis — a UTF-8 em dash decoded as Latin-1 and re-encoded somewhere in the write
+path — **was wrong, and was ruled out by inspecting raw bytes at every layer** (task 7, per its own
+"establish where before changing anything"): the name construction (`hub/hub/api/v1/agents.py`,
+`f"{provider_entry.label} — {model_entry.label}"`), the stored `Runner.name` column (dumped as raw
+UTF-8 bytes: `Claude Code \xe2\x80\x94 Sonnet 5` — correct), and the raw HTTP response body from a
+real running Hub (also correct UTF-8 on the wire, confirmed via `curl -o` and inspecting the file's
+bytes in Python) were all byte-for-byte correct at every point. There is no corruption anywhere in
+the Hub's own stack, and no already-stored name needs repair or regeneration.
 
-This is bundled here rather than in the UI change because it is a data-correctness bug in the same
-provisioning path, not a visual one.
+**Reproduced instead as a client-side decoding defect**: Starlette's default `JSONResponse` sends
+`Content-Type: application/json` with no `charset` parameter. Windows PowerShell 5.1's
+`Invoke-WebRequest`/`Invoke-RestMethod` — this environment's own primary shell, and very plausibly
+the tool the original observation used — does not default an unlabelled `application/json` response
+to UTF-8 when converting it to a string, and rendered the same em dash as
+`Claude Code â Sonnet 5`. Confirmed live: adding an explicit `charset=utf-8` to the Content-Type
+header (`hub.main.UTF8JSONResponse`, set as the app's `default_response_class`) made the identical
+request through the identical PowerShell 5.1 client render it correctly, with no other change.
+curl, a browser, and PowerShell 7+ were never affected either way — they already default correctly.
+
+This is bundled here rather than in the UI change because it was suspected as a data-correctness bug
+in the same provisioning path, not because it turned out to be one — it is a response-header
+completeness bug, project-wide, not specific to runner names.
 
 ## Decision 6 — Claude has the same class of defect, with a cheaper fix (task 2.15)
 

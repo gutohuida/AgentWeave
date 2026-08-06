@@ -292,13 +292,30 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
 
 ## 7. Runner name mojibake
 
-- [ ] 7.1 Locate where the double-encoding occurs — name construction in `hub/hub/api/v1/agents.py`,
+- [x] 7.1 Locate where the double-encoding occurs — name construction in `hub/hub/api/v1/agents.py`,
       the database write, or response serialisation. Establish which before changing anything.
-- [ ] 7.2 Fix at that layer.
-- [ ] 7.3 Decide and implement what happens to already-stored mis-encoded names (repair migration or
-      regeneration); record the decision.
-- [ ] 7.4 Unit test: an auto-provisioned runner name round-trips a non-ASCII character through the
-      API unchanged.
+      **None of the three** — raw-byte inspection at all three found correct UTF-8 everywhere. Root
+      cause was a fourth layer not in the original list: the HTTP response's `Content-Type` header
+      never declared a charset, which a real client (Windows PowerShell 5.1, this environment's own
+      shell) decodes wrong for an unlabelled `application/json` body. See design.md Decision 5
+      (rewritten — the original "double-encoding in the write path" hypothesis was wrong).
+- [x] 7.2 Fix at that layer. `hub/hub/main.py`: new `UTF8JSONResponse` (media_type
+      `application/json; charset=utf-8`), set as the app's `default_response_class`; the one
+      hand-constructed `JSONResponse` (`/health`) updated to use it explicitly too, since
+      `default_response_class` only applies when a route returns a plain value, not an explicit
+      `Response` object.
+- [x] 7.3 Decide and implement what happens to already-stored mis-encoded names (repair migration or
+      regeneration); record the decision. **N/A — nothing is mis-encoded in storage.** No repair or
+      regeneration needed; recorded as such in design.md rather than silently dropped.
+- [x] 7.4 Unit test: an auto-provisioned runner name round-trips a non-ASCII character through the
+      API unchanged. `hub/tests/test_response_encoding.py` — 3 tests: a regular API route declares
+      `charset=utf-8`; `/health` (the hand-constructed-`JSONResponse` path) does too; an
+      auto-provisioned runner's em-dash name is present and correct in a real API response.
+
+      **Live-verified against a real Hub, through the actual client that showed the original
+      symptom**: Windows PowerShell 5.1's `Invoke-WebRequest` against `GET /runners` rendered a
+      stored em-dash name as `Claude Code â Sonnet 5` before the fix, `Claude Code — Sonnet 5` after
+      — same request, same data, only the response header changed.
 
 ## 8. End-to-end verification
 
