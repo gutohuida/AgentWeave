@@ -167,6 +167,70 @@ class TestMapItemToEvents:
         events = map_item_to_events(item, is_start=False)
         assert events[0].payload["is_error"] is True
 
+    def test_command_execution_declined_is_marked_error_despite_null_exit_code(self):
+        """Task 2.14's live breach test: a declined command never runs, so `exitCode` is
+        null — `status: "declined"` (schema: CommandExecutionStatus) is what actually
+        distinguishes a refused command from a successful one here."""
+        item = {
+            "type": "commandExecution",
+            "id": "call_x",
+            "aggregatedOutput": "",
+            "exitCode": None,
+            "status": "declined",
+        }
+        events = map_item_to_events(item, is_start=False)
+        assert events[0].payload["is_error"] is True
+
+    def test_file_change_started_emits_tool_use(self):
+        item = {
+            "type": "fileChange",
+            "id": "call_1",
+            "changes": [{"path": "C:\\workspace\\out.txt", "diff": "BREACH\n", "kind": {"type": "add"}}],
+        }
+        events = map_item_to_events(item, is_start=True)
+        assert len(events) == 1
+        assert events[0].kind == "tool_use"
+        assert events[0].payload["tool"] == "apply_patch"
+        assert events[0].call_id == "call_1"
+
+    def test_file_change_completed_success_is_not_marked_error(self):
+        item = {
+            "type": "fileChange",
+            "id": "call_1",
+            "status": "completed",
+            "changes": [{"path": "C:\\workspace\\out.txt", "diff": "hi\n", "kind": {"type": "add"}}],
+        }
+        events = map_item_to_events(item, is_start=False)
+        assert events[0].kind == "tool_result"
+        assert events[0].payload["is_error"] is False
+
+    def test_file_change_declined_is_marked_error(self):
+        """Task 2.14's live breach test caught this live: an out-of-workspace `apply_patch`
+        attempt, declined via `decide_approval`, reports `status: "declined"` (schema:
+        PatchApplyStatus) — not "failed". The original `== "failed"` check missed this and
+        reported a refused sandbox-escape attempt as a successful tool call."""
+        item = {
+            "type": "fileChange",
+            "id": "call_1",
+            "status": "declined",
+            "changes": [
+                {"path": "C:\\outside\\OUTSIDE_BREACH_MARKER.txt", "diff": "BREACH\n", "kind": {"type": "add"}}
+            ],
+        }
+        events = map_item_to_events(item, is_start=False)
+        assert events[0].kind == "tool_result"
+        assert events[0].payload["is_error"] is True
+
+    def test_file_change_failed_is_marked_error(self):
+        item = {
+            "type": "fileChange",
+            "id": "call_1",
+            "status": "failed",
+            "changes": [{"path": "C:\\workspace\\out.txt", "diff": "hi\n", "kind": {"type": "add"}}],
+        }
+        events = map_item_to_events(item, is_start=False)
+        assert events[0].payload["is_error"] is True
+
     def test_mcp_tool_call_started_emits_tool_use_with_server_qualified_name(self):
         item = {
             "type": "mcpToolCall",

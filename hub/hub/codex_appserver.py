@@ -61,6 +61,12 @@ PERMISSIONS_APPROVAL_METHOD = "item/permissions/requestApproval"
 
 _SANDBOX_APPROVAL_METHODS = (COMMAND_APPROVAL_METHOD, FILE_CHANGE_APPROVAL_METHOD)
 
+# Shared by commandExecution's and fileChange's `status` fields (schema:
+# CommandExecutionStatus / PatchApplyStatus — both "inProgress"/"completed"/"failed"/
+# "declined"). A refused approval reports "declined", not "failed" — verified against the
+# installed CLI's own schema (`codex app-server generate-json-schema`), not assumed.
+_FAILED_ITEM_STATUSES = ("failed", "declined")
+
 # Full-access grant used only when `yolo` is set and Codex still asks (defensive: thread/start
 # should already select a policy that avoids this under yolo, but every request must still get
 # an answer per implications.md §2 — "silence becomes a deadlock").
@@ -245,7 +251,13 @@ def map_item_to_events(item: Dict[str, Any], *, is_start: bool) -> List[RunEvent
                 tool="shell",
                 output=item.get("aggregatedOutput", ""),
                 call_id=call_id,
-                is_error=bool(exit_code),
+                # `status` (schema: CommandExecutionStatus — "inProgress"/"completed"/"failed"/
+                # "declined") is checked alongside `exitCode` rather than instead of it: a
+                # declined command never runs, so `exitCode` is null and `bool(None)` alone
+                # would silently report a refused command as a successful one — the same class
+                # of bug live-verified and fixed below for `fileChange` (task 2.14's breach
+                # test caught it there first).
+                is_error=item.get("status") in _FAILED_ITEM_STATUSES or bool(exit_code),
             )
         ]
 
@@ -267,7 +279,13 @@ def map_item_to_events(item: Dict[str, Any], *, is_start: bool) -> List[RunEvent
                 output=summary,
                 summary=summary,
                 call_id=call_id,
-                is_error=item.get("status") == "failed",
+                # `status` (schema: PatchApplyStatus) is "declined" for a refused write, not
+                # "failed" — live-verified 2026-08-06 via task 2.14's breach test: a real
+                # out-of-workspace `apply_patch` attempt, declined via `decide_approval`,
+                # reported `is_error: false` under the original `== "failed"` check, which
+                # would have shown a refused sandbox-escape attempt as a successful tool call
+                # in the operator-facing timeline.
+                is_error=item.get("status") in _FAILED_ITEM_STATUSES,
             )
         ]
 

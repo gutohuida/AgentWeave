@@ -116,8 +116,25 @@ Land section 3 first — it is independent, smaller, and fixes mis-delivery on i
       `hub/tests/test_codex_appserver.py`, including `map_item_to_events` and
       `map_token_usage_notification` coverage beyond the tasks explicitly listed here. Full hub
       suite re-run green: 692 passed, 9 skipped.
-- [ ] 2.14 **Live:** the breach test through the Hub — one turn that calls a tool *and* attempts a
+- [x] 2.14 **Live:** the breach test through the Hub — one turn that calls a tool *and* attempts a
       write outside the workspace. The tool call succeeds; the write is refused; no file appears.
+      **Done 2026-08-06** against real `codex app-server` (CLI 0.146.0) through a real Hub
+      instance: a non-yolo codex agent bound to the app-server runner, given a single turn asking
+      it to (1) call the AgentWeave `list_tasks` MCP tool and (2) `apply_patch` a file at an
+      absolute path outside its workspace. Both halves held across three independent live runs:
+      the tool call succeeded (`{"result":[]}`), the write was declined
+      (`{"decision":"decline"}`, agent's own report: "patch rejected by user" / "The patch was
+      rejected; no file was created"), and no file ever appeared at the target path. **Also
+      found and fixed live**: the first two runs showed the declined write's `tool_result` event
+      as `is_error: false` — `map_item_to_events`'s `fileChange`/`commandExecution` branches
+      checked `status == "failed"`, but a declined item reports `status: "declined"` (schema:
+      `PatchApplyStatus` / `CommandExecutionStatus`, verified via `codex app-server
+      generate-json-schema`), so a refused sandbox-escape attempt was rendering as a successful
+      tool call in the operator-facing timeline. Fixed in `codex_appserver.py` (both branches now
+      check `status in ("failed", "declined")`); re-ran the same live breach test a third time
+      against the fix, confirmed `is_error: true`. 5 new unit tests added in
+      `test_codex_appserver.py` (`test_file_change_declined_is_marked_error` and siblings) to
+      close the gap this live test found. Full hub suite: 720 passed, 9 skipped.
 - [ ] 2.15 Check whether the Claude runner has an equivalent defect, using the same probe-MCP-server
       method. Record what was established; do not assume parity in either direction.
 
