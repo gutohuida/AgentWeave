@@ -126,4 +126,16 @@ describe('Hub UI mock alignment contracts', () => {
     expect(appSource).not.toMatch(/dataset\.theme/)
     expect(appSource).not.toMatch(/data-theme=/)
   })
+
+  it('the composer surface does not react to focus (2026-08-06-hub-composer-and-chrome-refinement §3)', () => {
+    expect(cssSource).not.toMatch(/conversation-composer-surface:focus-within/)
+    // The send button still goes through the Button primitive, whose base class carries an
+    // unconditional focus-visible ring — removing the surface's own focus reaction does not
+    // leave the composer's controls without one.
+    expect(composerSource).toContain("from '@/components/ui/button'")
+  })
+
+  it('the tab strip carries only a plane change at its boundary, not a dividing line (§6)', () => {
+    expect(projectTabsSource).not.toMatch(/borderBottom/)
+  })
 })

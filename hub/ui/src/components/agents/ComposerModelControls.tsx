@@ -1,6 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Button } from '@/components/ui/button'
 import { useModelCatalog, providerForRunner, type ControlDescriptor, type ProviderDescriptor } from '@/api/modelCatalog'
+
+/** The AgentWeave counterpart of t3code's `composerControlClassName` (design.md Decision
+ * 1) — every composer trigger (model, effort, conversation routing, target agent) renders
+ * through this, on the `Button` primitive's `ghost`/`pill` combination, so they cannot
+ * drift into their own private visual dialect the way `ControlPill` used to. `ghost`
+ * supplies "no border or fill at rest, hover brightens fill only"; `pill` supplies content
+ * height with no radius of its own, so `rounded-full` here is the only rounding rule in
+ * play — never fighting a size variant's own radius class for specificity. */
+export const composerControlClassName =
+  'rounded-full text-[var(--text-2)] hover:text-[var(--text)]'
 
 interface ComposerModelControlsProps {
   /** The target agent's bound runner CLI (e.g. "claude", "codex") — resolves which
@@ -44,23 +55,24 @@ export function ControlPill({
 
   return (
     <div ref={rootRef} className="relative">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="pill"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="h-8 rounded border bg-[var(--surface)] px-2 text-xs hover:bg-[var(--accent)]"
-        style={{ borderColor: 'var(--border)', color: 'var(--text-2)' }}
+        className={composerControlClassName}
         title={label}
       >
         <span style={{ color: 'var(--text-3)' }}>{label}: </span>
         {valueLabel} ▾
-      </button>
+      </Button>
       {open && (
         <div
           role="listbox"
           aria-label={label}
-          className="absolute left-0 bottom-full mb-1 min-w-[160px] max-h-56 overflow-y-auto p-1 rounded border z-50"
+          className="absolute left-0 bottom-full mb-1 max-w-64 max-h-56 overflow-y-auto p-1 rounded border z-50"
           style={{
             background: 'var(--surface)',
             borderColor: 'var(--border)',

@@ -33,12 +33,35 @@ export function ProjectHeader({
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-sm font-semibold" style={{ color: 'var(--text)' }}>{projectName}</h1>
         {directoryAvailable ? (
-          <p className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
-            {agentCount} agent{agentCount === 1 ? '' : 's'}
+          <>
+            <p className="truncate text-[10px]" style={{ color: 'var(--text-3)' }}>
+              {agentCount} agent{agentCount === 1 ? '' : 's'}
+            </p>
+            {/* Structure, not a joined string (composer/chrome refinement §5): each segment
+                is its own element so it can be styled or truncated independently, rather
+                than a `pathSegments.join(' › ')` blob competing with the project name for
+                the same line. Not rendered as links — this project's navigation has no
+                per-segment destination to send a click to (design.md Decision 5: a segment
+                that navigates nowhere should not look interactive). */}
             {pathSegments.length > 0 && (
-              <span title={pathDisplay ?? undefined}> · {pathSegments.join(' › ')}</span>
+              <p
+                className="flex min-w-0 items-center overflow-hidden text-[10px]"
+                title={pathDisplay ?? undefined}
+                style={{ color: 'var(--text-3)' }}
+              >
+                {pathSegments.map((segment, index) => (
+                  <span key={index} className="flex min-w-0 shrink items-center">
+                    {index > 0 && (
+                      <span aria-hidden="true" className="mx-1 shrink-0">
+                        ›
+                      </span>
+                    )}
+                    <span className="truncate">{segment}</span>
+                  </span>
+                ))}
+              </p>
             )}
-          </p>
+          </>
         ) : (
           <p role="status" className="truncate text-[10px]" style={{ color: 'var(--amber)' }}>
             Directory unavailable

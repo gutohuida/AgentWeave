@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { composerControlClassName } from './ComposerModelControls'
 import type { AgentLaunchability, AgentSummary } from '@/api/agents'
 
 interface ComposerAgentSelectorProps {
@@ -49,8 +51,10 @@ export function ComposerAgentSelector({
 
   return (
     <div ref={rootRef} className="relative">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="pill"
         aria-label={`Target agent: ${selectedAgent}`}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -58,15 +62,11 @@ export function ComposerAgentSelector({
           setQuery('')
           setOpen((value) => !value)
         }}
-        className="h-8 rounded border bg-[var(--surface)] px-2 text-xs hover:bg-[var(--accent)]"
-        style={{
-          borderColor: 'var(--border)',
-          color: 'var(--text-2)',
-          fontFamily: "'JetBrains Mono', monospace",
-        }}
+        className={composerControlClassName}
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}
       >
         {selectedAgent} ▾
-      </button>
+      </Button>
 
       {open && (
         <div

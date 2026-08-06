@@ -9,43 +9,77 @@ named in `proposal.md`; re-clone rather than guess if a detail is needed.
 
 ## 1. The control primitive
 
-- [ ] 1.1 Remove `hover:border-[var(--border)]` from `ghost` in `hub/ui/src/components/ui/button.tsx`.
-      Express hover as background and text prominence only.
-- [ ] 1.2 Keep `border border-transparent` in the base class. It exists so emphasis never shifts
+- [x] 1.1 Remove `hover:border-[var(--border)]` from `ghost` in `hub/ui/src/components/ui/button.tsx`.
+      Express hover as background and text prominence only. Also merged `active:` into the same
+      `bg-[var(--accent)]` fill rather than leaving it on the removed border colour.
+- [x] 1.2 Keep `border border-transparent` in the base class. It exists so emphasis never shifts
       layout; removing it would reintroduce the pixel shift its comment documents.
-- [ ] 1.3 Leave `outline` and `destructive` alone — they draw a border at rest and are permitted to
+- [x] 1.3 Leave `outline` and `destructive` alone — they draw a border at rest and are permitted to
       change it.
-- [ ] 1.4 **Audit every `variant="ghost"` call site** for a control that relied on the hover border
-      to be legible against its background. List what was checked; fix any that regress.
-- [ ] 1.5 Unit test: a ghost control declares no hover border.
-- [ ] 1.6 Unit test: a ghost control's resting and hover box dimensions are identical.
+- [x] 1.4 **Audit every `variant="ghost"` call site** for a control that relied on the hover border
+      to be legible against its background. Checked all 14 files using `variant="ghost"`
+      (`AgentCreateDialog`, `AgentOutputPanel`, `ConversationControls`, `ChartersPage`, `JobCard`,
+      `JobForm`, `ProjectHeader`, `ProjectTabs`, `Sidebar`, `DirectoryPicker`,
+      `QuestionInterruptCard`, `RunnersPage`, `SpecPage`, `SpecWorkspace`) — every site is an icon or
+      text button on an ordinary surface/card background, and `hover:bg-[var(--accent)]` (unchanged
+      by this fix) was already present on all of them. None relied specifically on the border for
+      legibility; no regressions found, none fixed.
+- [x] 1.5 Unit test: a ghost control declares no hover border.
+      `buttonVariants.test.ts` — "ghost declares no hover or active border utility".
+- [x] 1.6 Unit test: a ghost control's resting and hover box dimensions are identical.
+      `buttonVariants.test.ts` — "the base transparent border is the only border rule in play,
+      so hover cannot shift box dimensions" (verifies `ghost`'s own class list contributes no
+      `border*` token beyond the base's unconditional `border border-transparent`).
 
 ## 2. Composer control appearance
 
-- [ ] 2.1 Add one shared composer-control appearance, the counterpart of t3code's
+- [x] 2.1 Add one shared composer-control appearance, the counterpart of t3code's
       `composerControlClassName`: content height, muted text and icon, hover brightens text, no
-      border or fill at rest.
-- [ ] 2.2 Rebuild `ControlPill` (`ComposerModelControls.tsx`) on the `Button` primitive using that
+      border or fill at rest. Implemented as two pieces so no radius/sizing class ever has to
+      out-specificity another: a new `pill` `size` variant on the `Button` primitive
+      (`h-8 gap-1 px-2.5 text-xs`, deliberately no `rounded-*`) plus an exported
+      `composerControlClassName` (`rounded-full text-[var(--text-2)] hover:text-[var(--text)]`) in
+      `ComposerModelControls.tsx`, used together (`variant="ghost" size="pill"
+      className={composerControlClassName}`).
+- [x] 2.2 Rebuild `ControlPill` (`ComposerModelControls.tsx`) on the `Button` primitive using that
       appearance. Remove the hardcoded `h-8 rounded border`.
-- [ ] 2.3 Route `ComposerConversationRouting` and `ComposerAgentSelector` through the same
-      appearance so they cannot drift.
-- [ ] 2.4 Make the pill fully rounded at its own height.
-- [ ] 2.5 Remove `min-w-[160px]` from the popover. Give it a maximum width with truncation and no
-      minimum.
-- [ ] 2.6 Unit test: no composer control declares a resting or hover border.
-- [ ] 2.7 Unit test: the popover declares no minimum width.
+- [x] 2.3 Route `ComposerConversationRouting` and `ComposerAgentSelector` through the same
+      appearance so they cannot drift. `ComposerConversationRouting` already rendered through
+      `ControlPill` itself; `ComposerAgentSelector` had its own hand-rolled trigger button, now
+      rebuilt on `Button` with the same `composerControlClassName` import.
+- [x] 2.4 Make the pill fully rounded at its own height. (`rounded-full` in the shared appearance,
+      paired with the radius-free `pill` size — see 2.1.)
+- [x] 2.5 Remove `min-w-[160px]` from the popover. Give it a maximum width with truncation and no
+      minimum. Now `max-w-64`; `ControlOption`'s label already truncates (`min-w-0 flex-1
+      truncate`, unrelated to the removed fixed minimum).
+- [x] 2.6 Unit test: no composer control declares a resting or hover border.
+      `composerModelControls.test.tsx` — "composerControlClassName declares no border and no fixed
+      width".
+- [x] 2.7 Unit test: the popover declares no minimum width. Same file — "ControlPill.tsx declares no
+      fixed minimum-width on its popover" (matches `min-w-[`, not the unrelated `min-w-0` flex
+      escape hatch elsewhere in the file).
 - [ ] 2.8 Unit test: a short-label control is narrower than a long-label one (content sizing is real,
-      not incidental).
-- [ ] 2.9 Unit test: each composer control still exposes a focus indicator.
+      not incidental). **Not covered by an automated test** — jsdom does not perform real layout, so
+      an actual pixel-width comparison isn't possible under vitest; covered instead by 2.6's
+      assertion that no fixed-width class exists, and by the live check in §10.
+- [x] 2.9 Unit test: each composer control still exposes a focus indicator.
+      `composerModelControls.test.tsx` — "the model pill trigger renders as a real button exposing a
+      focus indicator"; `buttonVariants.test.ts` also confirms `focus-visible:ring-2` is present for
+      every variant/size combination including `ghost`/`pill`.
 
 ## 3. Composer surface focus
 
-- [ ] 3.1 Remove the `.conversation-composer-surface:focus-within` rule from `hub/ui/src/index.css`.
-- [ ] 3.2 Confirm the resting surface still reads as a distinct surface without it; if it does not,
-      adjust the resting treatment rather than restoring a focus reaction.
-- [ ] 3.3 Unit test: the stylesheet declares no focus-within border, shadow, or ring on the composer
-      surface.
-- [ ] 3.4 Unit test: controls inside the composer still show focus indicators.
+- [x] 3.1 Remove the `.conversation-composer-surface:focus-within` rule from `hub/ui/src/index.css`.
+- [x] 3.2 Confirm the resting surface still reads as a distinct surface without it; if it does not,
+      adjust the resting treatment rather than restoring a focus reaction. The resting rule already
+      carries `border: 1px solid var(--border-hi)` (the elevated end of the border scale, not the
+      ordinary `--border`) plus its own drop shadow — kept as-is; no strengthening needed. Full
+      confirmation is the live check in §10.
+- [x] 3.3 Unit test: the stylesheet declares no focus-within border, shadow, or ring on the composer
+      surface. `hubVisualLanguage.test.ts` — "the composer surface does not react to focus".
+- [x] 3.4 Unit test: controls inside the composer still show focus indicators. Same test — confirms
+      `Composer.tsx` still renders through the `Button` primitive, whose base class carries an
+      unconditional `focus-visible:ring-2` (verified generally in `buttonVariants.test.ts`).
 
 ## 4. Provider marks
 
@@ -88,21 +122,28 @@ Reference: t3code `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `modelPick
 
 ## 5. Project header
 
-- [ ] 5.1 Replace `pathSegments.join(' › ')` in `ProjectHeader.tsx` with per-segment elements.
-- [ ] 5.2 Move the path onto its own line, off the agent-count line.
-- [ ] 5.3 Keep `elidePathSegments` and its tests; keep the full path available on hover.
-- [ ] 5.4 Decide whether segments navigate. If they do not, ensure they are not styled as
-      interactive. Record the decision.
-- [ ] 5.5 Unit test: a multi-segment path renders as multiple elements, not one text node.
-- [ ] 5.6 Unit test: the agent count and the path are not in the same line element.
-- [ ] 5.7 Unit test: a deep path still elides in the middle and keeps its ends.
+- [x] 5.1 Replace `pathSegments.join(' › ')` in `ProjectHeader.tsx` with per-segment elements.
+- [x] 5.2 Move the path onto its own line, off the agent-count line.
+- [x] 5.3 Keep `elidePathSegments` and its tests; keep the full path available on hover (`title` moved
+      from the inline `<span>` onto the path's own `<p>`).
+- [x] 5.4 Decide whether segments navigate. **Decided: no.** Rendered as plain, non-interactive
+      `<span>` elements (no button/link semantics, no hover/focus state) — there is no per-segment
+      navigation destination in the Hub today, and design.md Decision 5 is explicit that a segment
+      with nowhere to go should not look interactive. Structure without false affordance.
+- [x] 5.5 Unit test: a multi-segment path renders as multiple elements, not one text node.
+      `projectHeaderPath.test.tsx` — "renders a multi-segment path as multiple elements".
+- [x] 5.6 Unit test: the agent count and the path are not in the same line element. Same file —
+      "keeps the agent count and the path out of the same line element".
+- [x] 5.7 Unit test: a deep path still elides in the middle and keeps its ends. Same file — "elides a
+      deep path in the middle and keeps its head and tail, with the full path on hover".
 
 ## 6. Tab strip boundary
 
-- [ ] 6.1 Remove `borderBottom` from the nav in `ProjectTabs.tsx`. Keep `background: var(--top)`.
+- [x] 6.1 Remove `borderBottom` from the nav in `ProjectTabs.tsx`. Keep `background: var(--top)`.
 - [ ] 6.2 Check the boundary in both themes. If the plane alone is too weak, strengthen the plane —
-      do not restore the rule.
-- [ ] 6.3 Unit test: the view switcher declares no bottom border.
+      do not restore the rule. **Deferred to §10's live check** (not yet performed).
+- [x] 6.3 Unit test: the view switcher declares no bottom border. `hubVisualLanguage.test.ts` — "the
+      tab strip carries only a plane change at its boundary, not a dividing line".
 
 ## 7. Native folder dialog — Hub side
 

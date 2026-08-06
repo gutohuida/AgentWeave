@@ -52,11 +52,12 @@ const buttonVariants = cva(
           'active:bg-[var(--primary-active)]',
           'active:shadow-[inset_0_1px_0_var(--press-lo)]',
         ].join(' '),
-        /** Quiet. Floats in nothing until touched. */
+        /** Quiet. Floats in nothing until touched — hover/active brighten fill and text only,
+         * never the border, so nothing is ever drawn around a resting control. */
         ghost: [
           'bg-transparent text-[var(--text)]',
-          'hover:bg-[var(--accent)] hover:border-[var(--border)]',
-          'active:border-[var(--border-hi)] active:shadow-[inset_0_1px_0_var(--press-lo)]',
+          'hover:bg-[var(--accent)]',
+          'active:bg-[var(--accent)] active:shadow-[inset_0_1px_0_var(--press-lo)]',
           "[&_svg:not([class*='text-'])]:text-[var(--text-2)]",
         ].join(' '),
         /** Bounded but unfilled. */
@@ -83,6 +84,12 @@ const buttonVariants = cva(
         icon: 'size-9 rounded-[var(--radius-lg)] p-0',
         'icon-sm': 'size-8 rounded-[var(--radius-md)] p-0',
         'icon-xs': 'size-7 rounded-[var(--radius-sm)] p-0',
+        /** Content height and padding only — deliberately no `rounded-*` class, so a
+         * caller supplying `rounded-full` (the composer-control appearance) never has to
+         * out-specificity a radius this variant already set. Used by composer triggers
+         * (model, effort, conversation routing, target agent), which round to a pill at
+         * their own height rather than the fixed radius scale. */
+        pill: 'h-8 gap-1 px-2.5 text-xs',
       },
     },
     defaultVariants: { variant: 'ghost', size: 'md' },
