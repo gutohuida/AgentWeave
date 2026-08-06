@@ -1,12 +1,20 @@
 """Project-scoped session sync endpoints.
 
-Accepts the full session.json payload pushed from the CLI or watchdog and
-stores it in the database. This lets the Hub (running in Docker with no
-host filesystem access) know the complete agent configuration — names,
-runner metadata, yolo flags, and any future fields — without needing volume mounts.
+Historically the CLI pushed its local `session.json` here on every save, and the
+watchdog re-pushed it on startup as a safety net — this endpoint's roster reconciliation
+(`sync_session` below) still implements that contract: the `agents` payload is treated as
+the complete, authoritative roster, and any existing `Agent` row omitted from it is
+deleted (its worktree released, never discarding unmerged work silently).
 
-The CLI calls this automatically on every Session.save(); the watchdog also
-calls it on startup as a safety net.
+Both of those callers are gone as of the `2026-08-03-single-runtime` change: the CLI's
+push path (`Session.save()`) and the watchdog itself have no callers/no longer exist in
+`src/agentweave`. Today this endpoint is reached only by direct API calls — chiefly the
+test suite, which uses it to seed an agent roster for fixtures — and it still performs a
+full roster *replace*, not a merge, on every call. An operator-facing roster mutation goes
+through `operator-agent-creation` instead (`POST /agents`), which only ever adds.
+
+Calling this endpoint directly against a project with agents you want to keep will delete
+any agent whose name is missing from the payload, exactly as it did for a CLI push.
 """
 
 import logging
@@ -41,10 +49,12 @@ async def sync_session(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    """Upsert the session.json configuration for this project.
+    """Upsert a project's agent roster from a full, authoritative payload.
 
-    Called automatically by the CLI on every session save and by the
-    watchdog on startup. Idempotent — safe to call repeatedly.
+    Idempotent — safe to call repeatedly. See the module docstring: the CLI/watchdog
+    callers this contract was built for no longer exist; this is reached today only by
+    direct API calls, chiefly the test suite seeding fixtures. `agents` here fully replaces
+    the existing roster — any agent omitted from it is deleted.
     """
     project_id, _ = project
 
