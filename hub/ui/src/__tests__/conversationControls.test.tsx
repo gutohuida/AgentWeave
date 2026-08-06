@@ -233,37 +233,35 @@ describe('conversation controls — placement and overflow menu', () => {
     await waitFor(() => expect(trigger).toHaveFocus())
   })
 
-  it('targets a selected agent with no conversation id and leaves the open conversation scoped to claude', async () => {
+  it('offers no way to redirect a message to a different agent', async () => {
+    // Operator: "Let's remove the ability and the buttons that enable the user from one screen
+    // to send message to another agent. Is counter intuitive." A retargeted message left no
+    // trace in the conversation the operator was looking at.
     const codexAgent: AgentSummary = { ...idleAgent, name: 'codex', runner: 'codex' }
     roster = [idleAgent, codexAgent]
     launchability.codex = { present: true, authorized: true, runnable: true }
     fetchMock.mockResolvedValue(new Response(JSON.stringify({
       status: 'started',
-      conversation_id: 'conv-codex',
+      conversation_id: 'conv-claude',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    const onAgentConversationChange = vi.fn()
     const user = userEvent.setup()
 
-    render(
-      <AgentOutputPanel
-        agent={idleAgent}
-        onAgentConversationChange={onAgentConversationChange}
-      />,
-    )
+    render(<AgentOutputPanel agent={idleAgent} />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
 
-    await user.click(screen.getByRole('button', { name: 'Target agent: claude' }))
-    await user.click(screen.getByRole('option', { name: /codex/i }))
-    await user.type(screen.getByRole('textbox'), 'redirect this')
+    expect(screen.queryByRole('button', { name: /^Target agent:/ })).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox'), 'stays here')
     await user.click(screen.getByRole('button', { name: 'Send message' }))
 
+    // Always the agent whose conversation this is, and it continues that conversation.
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(JSON.parse(request.body as string)).toEqual({
-      agent: 'codex',
-      message: 'redirect this',
+      agent: 'claude',
+      message: 'stays here',
+      conversation_id: 'conv-old',
     })
-    expect(onAgentConversationChange).toHaveBeenCalledWith('codex', 'conv-codex')
     expect(conversation.agent).toBe('claude')
   })
 })

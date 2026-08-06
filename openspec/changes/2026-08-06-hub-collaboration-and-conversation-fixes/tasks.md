@@ -71,15 +71,15 @@
 
 ## 6. The cross-agent send picker is removed
 
-- [ ] 6.1 Delete `hub/ui/src/components/agents/ComposerAgentSelector.tsx` and
+- [x] 6.1 Delete `hub/ui/src/components/agents/ComposerAgentSelector.tsx` and
       `hub/ui/src/__tests__/composerAgentSelector.test.tsx`.
-- [ ] 6.2 Remove the `targetAgent`/`onTargetAgentChange` props and the selector render from
+- [x] 6.2 Remove the `targetAgent`/`onTargetAgentChange` props and the selector render from
       `Composer.tsx`.
-- [ ] 6.3 Remove the `targetAgent` state, its reset effect, and the `redirectsAgent` branch from
+- [x] 6.3 Remove the `targetAgent` state, its reset effect, and the `redirectsAgent` branch from
       `AgentOutputPanel.tsx`. Submissions always target `agent.name`.
-- [ ] 6.4 Surface `collaboration_ready` on `AgentCard.tsx` beside the runner/model summary.
-- [ ] 6.5 Test: the composer renders no agent selector; a submission posts the current agent's name.
-- [ ] 6.6 Test: an agent that cannot collaborate is flagged on its card.
+- [x] 6.4 Surface `collaboration_ready` on `AgentCard.tsx` beside the runner/model summary.
+- [x] 6.5 Test: the composer renders no agent selector; a submission posts the current agent's name.
+- [x] 6.6 Test: an agent that cannot collaborate is flagged on its card.
 
 ## 7. Verification
 

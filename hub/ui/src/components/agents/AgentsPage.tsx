@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { useAgents, AgentSummary } from '@/api/agents'
+import { useAgentLaunchability, useAgents, AgentSummary } from '@/api/agents'
 import { useQuestions } from '@/api/questions'
 import { AgentCard } from './AgentCard'
 import { AgentDetailPanel } from './AgentDetailPanel'
@@ -47,6 +47,7 @@ function GridCard({ agent, onClick }: { agent: AgentSummary; onClick: () => void
 
 export function AgentsPage() {
   const { data: agents = [], isLoading } = useAgents()
+  const { data: launchabilityData } = useAgentLaunchability()
   const { data: questions = [] } = useQuestions(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [filter, setFilter] = useState<AgentFilter>('all')
@@ -147,6 +148,7 @@ export function AgentsPage() {
                 <AgentCard
                   key={agent.name}
                   agent={agent}
+                  launchability={launchabilityData?.agents?.[agent.name]}
                   selected={selected === agent.name}
                   onClick={() => {
                     setSelected(agent.name)

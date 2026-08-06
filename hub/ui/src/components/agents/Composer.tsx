@@ -9,10 +9,8 @@ import {
 } from '@/lib/composerTrigger'
 import { resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
-import { ComposerAgentSelector } from './ComposerAgentSelector'
 import { ComposerModelControls } from './ComposerModelControls'
 import { ComposerConversationRouting } from './ComposerConversationRouting'
-import type { AgentLaunchability, AgentSummary } from '@/api/agents'
 import type { AgentConversation } from '@/api/agentChat'
 
 export const COMPOSER_MIN_ROWS = 3
@@ -32,11 +30,7 @@ export interface ComposerProps {
   /** Workspace paths backing the `@path`/`$skill` trigger sources — fetched once by the
    *  caller (design.md's caching mitigation), filtered client-side here per keystroke. */
   workspacePaths?: string[]
-  agents?: AgentSummary[]
-  launchability?: Record<string, AgentLaunchability>
-  targetAgent?: string
-  onTargetAgentChange?: (agent: string) => void
-  /** The target agent's bound runner CLI — resolves which catalog provider's models and
+  /** The agent's bound runner CLI — resolves which catalog provider's models and
    * controls the composer offers (2026-08-04-hub-model-control-and-provisioning). Omitted
    * (or one the catalog doesn't declare) renders no model/control pills. */
   runner?: string | null
@@ -66,10 +60,6 @@ export function Composer({
   isRunning,
   onSubmit,
   workspacePaths = [],
-  agents = [],
-  launchability = {},
-  targetAgent = agent,
-  onTargetAgentChange = () => undefined,
   runner = null,
   effectiveModel = null,
   effectiveControls = {},
@@ -252,21 +242,13 @@ export function Composer({
 
       {/* Row two: the control row — a leading slot and a trailing slot, not a fixed
           arrangement, so 2026-08-04-hub-model-control-and-provisioning's model/effort
-          controls can join the leading slot beside the agent selector without
-          re-laying-out the composer. */}
+          controls can join the leading slot without re-laying-out the composer.
+
+          No recipient selector: a message goes to the agent whose conversation this is.
+          The selector that used to sit here could redirect a submission to a different
+          agent with no trace in the visible timeline. */}
       <div className="flex items-center justify-between gap-2" data-slot="composer-control-row">
         <div className="flex items-center gap-2" data-slot="composer-control-row-leading">
-          <ComposerAgentSelector
-            agents={agents.length > 0 ? agents : [{
-              name: agent,
-              status: 'idle',
-              message_count: 0,
-              active_task_count: 0,
-            }]}
-            launchability={launchability}
-            selectedAgent={targetAgent}
-            onSelect={onTargetAgentChange}
-          />
           <ComposerModelControls
             runner={runner}
             effectiveModel={pendingOverrides.model ?? effectiveModel}

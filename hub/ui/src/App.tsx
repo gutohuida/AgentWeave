@@ -171,9 +171,6 @@ export default function App() {
             navigateTo(agentDestination(destination.projectId, destination.agent, conversationId))
           }
         }}
-        onAgentConversationChange={(agent, conversationId) =>
-          navigateTo(agentDestination(destination.projectId, agent, conversationId))
-        }
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
       />
     ) : (

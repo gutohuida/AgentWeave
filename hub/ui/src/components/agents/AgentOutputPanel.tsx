@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { useSSEConnectionState } from '@/hooks/useSSE'
 import {
   AgentSummary,
-  useAgentLaunchability,
   useAgentOutput,
   useAgents,
   useAgentTimeline,
@@ -25,7 +24,6 @@ interface AgentOutputPanelProps {
   onBackToProject?: () => void
   initialConversationId?: string | null
   onConversationChange?: (conversationId: string | null) => void
-  onAgentConversationChange?: (agent: string, conversationId: string) => void
 }
 
 const NEW_CONVERSATION_VALUE = '__new__'
@@ -59,7 +57,6 @@ export function AgentOutputPanel({
   onBackToProject,
   initialConversationId = null,
   onConversationChange,
-  onAgentConversationChange,
 }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
@@ -77,7 +74,6 @@ export function AgentOutputPanel({
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
-  const [targetAgent, setTargetAgent] = useState(agent.name)
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
@@ -96,21 +92,14 @@ export function AgentOutputPanel({
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
-    setTargetAgent(agent.name)
     setPendingOverrides({})
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
   }, [agent.name, initialConversationId])
 
   // The composer's model/effort pills show the currently selected conversation's own
-  // persisted overrides (task: "An override survives reload"); redirecting to a
-  // different target agent has no conversation history to seed from, so it resets to
-  // that agent's own catalog defaults instead.
+  // persisted overrides (task: "An override survives reload").
   useEffect(() => {
-    if (targetAgent !== agent.name) {
-      setPendingOverrides({})
-      return
-    }
     const current = conversationsRef.current.find((c) => c.id === selectedConversationId)
     const seeded = current?.runtime_overrides ?? {}
     // Skip the update when the seeded value is already equivalent — without this, a
@@ -121,7 +110,7 @@ export function AgentOutputPanel({
     // conversations.length (not the array itself) re-seeds once the list first arrives,
     // without depending on an identity that changes more often than its content does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetAgent, agent.name, selectedConversationId, conversations.length])
+  }, [agent.name, selectedConversationId, conversations.length])
 
   useEffect(() => {
     onConversationChangeRef.current?.(
@@ -184,9 +173,8 @@ export function AgentOutputPanel({
 
   const { data: roster = [] } = useAgents()
   const { data: runners = [] } = useRunners()
-  const targetAgentRow = roster.find((a) => a.name === targetAgent)
+  const targetAgentRow = roster.find((a) => a.name === agent.name)
   const targetRunnerRow = runners.find((r) => r.id === targetAgentRow?.runner_id)
-  const { data: launchabilityData } = useAgentLaunchability()
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
   const { data: workspacePaths = [] } = useWorkspacePaths()
@@ -333,12 +321,14 @@ export function AgentOutputPanel({
     if (!apiKey || !projectId) throw new Error('Not configured')
     setIsSending(true)
     setSubmissionError(null)
-    const redirectsAgent = targetAgent !== agent.name
-    const isNew = redirectsAgent
-      || !selectedConversationId
-      || selectedConversationId === NEW_CONVERSATION_VALUE
+    // A message always goes to the agent whose conversation this is. The composer used to
+    // offer a target-agent picker that could redirect a submission elsewhere, leaving no trace
+    // in the conversation the operator was looking at (operator: "Let's remove the ability and
+    // the buttons that enable the user from one screen to send message to another agent. Is
+    // counter intuitive.").
+    const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
     const outgoingMessage =
-      isNew && !redirectsAgent && handoffState === 'ready'
+      isNew && handoffState === 'ready'
         ? `${RESUME_HANDOFF_PREFIX}\n\n${typedMessage}`
         : typedMessage
     if (isNew) setSessionNotice('Starting new conversation…')
@@ -346,18 +336,10 @@ export function AgentOutputPanel({
       const result = await postTrigger(
         outgoingMessage,
         isNew ? undefined : selectedConversationId,
-        targetAgent,
+        agent.name,
         emptyToUndefined(pendingOverrides),
       )
-      if (redirectsAgent) {
-        onAgentConversationChange?.(targetAgent, result.conversation_id)
-        if (!onAgentConversationChange) {
-          setSessionNotice(`Started ${targetAgent} conversation ${result.conversation_id.slice(0, 12)}…`)
-          setTargetAgent(agent.name)
-        }
-      } else {
-        setSelectedConversationId(result.conversation_id)
-      }
+      setSelectedConversationId(result.conversation_id)
       if (isNew) setHandoffState('idle')
       const notice = queuedNotice(result, `${agent.name} is not available to receive it right now`)
       if (notice) {
@@ -498,10 +480,6 @@ export function AgentOutputPanel({
               isRunning={isRunning}
               onSubmit={handleComposerSubmit}
               workspacePaths={workspacePaths}
-              agents={roster}
-              launchability={launchabilityData?.agents ?? {}}
-              targetAgent={targetAgent}
-              onTargetAgentChange={setTargetAgent}
               runner={targetRunnerRow?.cli ?? null}
               effectiveModel={targetRunnerRow?.model ?? null}
               pendingOverrides={pendingOverrides}

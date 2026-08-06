@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { AgentSummary } from '@/api/agents'
+import { AgentLaunchability, AgentSummary } from '@/api/agents'
 import { getStatusConfig, StatusDot } from '@/lib/agentStatus'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 
@@ -7,10 +7,15 @@ interface AgentCardProps {
   agent: AgentSummary
   selected: boolean
   onClick: () => void
+  /** This agent's launchability, when the caller has it. Its `collaboration_ready` is the
+   *  only place an operator can see that an agent will run but cannot call AgentWeave tools;
+   *  it used to live in the composer's target-agent picker, which no longer exists. */
+  launchability?: AgentLaunchability
 }
 
-export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
+export function AgentCard({ agent, selected, onClick, launchability }: AgentCardProps) {
   const cfg = getStatusConfig(agent.status)
+  const cannotCollaborate = launchability?.collaboration_ready === false
 
   return (
     <button
@@ -65,6 +70,15 @@ export function AgentCard({ agent, selected, onClick }: AgentCardProps) {
               style={{ background: 'color-mix(in srgb, var(--green) 10%, transparent)', color: 'var(--green)' }}
             >
               EXT
+            </span>
+          )}
+          {cannotCollaborate && (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              title={launchability?.collaboration_reason ?? undefined}
+              style={{ background: 'color-mix(in srgb, var(--amber) 10%, transparent)', color: 'var(--amber)' }}
+            >
+              CANNOT COLLABORATE
             </span>
           )}
         </div>
