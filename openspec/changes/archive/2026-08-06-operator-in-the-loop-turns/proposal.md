@@ -2,11 +2,26 @@
 
 **Approved:** _pending_
 
-**Status: DEFERRED — do not implement.** Recorded 2026-08-06 by operator decision: not a priority,
-and the current batch (`2026-08-06-agent-messaging-delivery` and
-`2026-08-06-hub-composer-and-chrome-refinement`) is to be finished first. This document is kept
-because the research behind it — in particular the measured elicitation limitation — is expensive to
-re-derive and does not go stale quickly. Revisit deliberately; do not pick it up because it is here.
+**Status: SUPERSEDED — archived 2026-08-07, never implemented under this name.**
+
+It was deferred on 2026-08-06 by operator decision (not a priority; the messaging-delivery and
+composer-chrome batch was to finish first). Its gap was then closed by three successor changes
+driven by the operator's own live testing rather than by picking this document up:
+
+| This proposed | Closed by |
+|---|---|
+| `ask_user` can block | `2026-08-07-hub-answered-permission-approver` — blocking is now the only mode, and the structure is required rather than taught |
+| Questions answerable in the conversation | same change — a card above the composer, which the composer itself answers |
+| A denied action can be escalated instead of silently refused | same change — the "Ask me" posture, for both providers |
+| An answer is attributable and recorded | same change — `Question.created_by_run_id`, `answered_at`, and timeline events |
+| A running turn can be steered or interrupted | partially pre-existing: "Stop turn" ends a run; steering mid-turn is still the inbound queue |
+
+Also related: `2026-08-07-unasked-question-backstop` (a question the agent never routed still reaches
+the operator) and `2026-08-07-batched-operator-questions` (several questions in one call).
+
+**Kept in the archive for its research**, not its plan — in particular the measured elicitation
+limitation, which is expensive to re-derive and does not go stale quickly. The task list below was
+never worked; do not read it as outstanding.
 
 **Depends on:** `2026-08-06-agent-messaging-delivery`. The Codex app-server transport is what makes
 most of this possible; without it there is no channel to ask the operator anything mid-turn.

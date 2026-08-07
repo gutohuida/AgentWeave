@@ -2,12 +2,18 @@
 
 ## Purpose
 
-Defines what an agent may do through HTTP, MCP, and ordinary commands, and how that access is
+Defines what an agent may do through HTTP and MCP, and how that access is
 established. Originated by `openspec/changes/2026-07-30-hub-native-experience`; the identity
 requirement below carries the `openspec/changes/agent-capability-plane` revision (run-credential
 authentication in place of environment-variable binding). `openspec/changes/single-runtime` removed
 the per-runner access-path selection and command-based-fallback requirements below, since it deletes
 the CLI collaboration commands they depended on — HTTP and MCP are the only two paths now.
+
+**Reconciled 2026-08-07.** The first requirement below previously limited the surface to *causing
+effects*, while the next one required an agent to read the task ledger and receive an answer — a
+contradiction recorded in `openspec/explorations/2026-08-02-product-direction.md`. The effect-only
+sentence is replaced by the least-privilege read boundary that document prescribes; the prohibition
+on reading around the delivery system is preserved unchanged.
 
 ## Requirements
 
@@ -17,9 +23,12 @@ The system SHALL supply everything an agent needs in order to begin a turn — i
 the roster of its collaborators, its charter, and its project's instructions — at the start of
 that turn.
 
-The tool surface exposed to an agent SHALL therefore be limited to **causing effects** in shared
-state. A tool MUST NOT allow an agent to read coordination state that was not supplied to it, and
-MUST NOT allow an agent to alter its own configuration or scope.
+Turn-start supply is an onboarding and delivery guarantee, **not** a prohibition on reading during a
+turn. The boundary on reads is least privilege rather than grammatical shape: a tool MAY return
+information the agent needs for its own work, scoped to the current project and run — for example a
+task's detail, or the answer to a question it asked. A tool MUST NOT let an agent read around
+delivery or governance — another agent's undelivered queue, secrets, hidden operator state, or
+configuration outside its scope — and MUST NOT let an agent alter its own configuration or scope.
 
 #### Scenario: An agent begins a turn already holding what it needs
 
@@ -300,3 +309,25 @@ MUST NOT surface the validator's internal error structure.
 
 - **WHEN** a tool call is rejected for an invalid value
 - **THEN** the error names the offending parameter and the accepted values in prose
+
+### Requirement: An endpoint the harness calls is not advertised as a capability
+
+A tool that exists to serve the runtime SHALL NOT be described to the agent as one of its own
+capabilities, even where it is registered on the same server as the agent's collaboration tools.
+
+The described tool surface exists so an agent knows what it can deliberately use. Listing an endpoint
+the harness invokes on the agent's behalf misrepresents what the agent is for and invites calls that
+accomplish nothing.
+
+This narrows what is described, not what exists. The requirement that every tool the agent can
+deliberately use is described SHALL continue to hold.
+
+#### Scenario: A runtime endpoint is omitted from the described surface
+
+- **WHEN** generated context describes the agent's tools
+- **THEN** it does not list a tool that exists solely for the runtime to call
+
+#### Scenario: Collaboration tools remain fully described
+
+- **WHEN** generated context describes the agent's tools
+- **THEN** every tool the agent can deliberately use is still described

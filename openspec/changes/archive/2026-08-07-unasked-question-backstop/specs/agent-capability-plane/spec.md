@@ -2,8 +2,8 @@
 
 ### Requirement: A turn that ends on an unasked question is surfaced to the operator
 
-When a run completes having produced a trailing question without opening a question of record, the
-system SHALL record that fact durably and make it visible to the operator.
+The system SHALL durably record, and show the operator, any run that completes having produced a
+trailing question without opening a question of record.
 
 An agent that ends a turn on an unanswered question has stopped working and is waiting for an answer
 that cannot arrive, because nothing was ever asked. From the operator's side this is
