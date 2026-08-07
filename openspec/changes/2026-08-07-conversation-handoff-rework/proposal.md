@@ -25,9 +25,9 @@
 
 The Handoff control does not do what it says. Traced end to end on 2026-08-07:
 
-- The button sends a prompt instructing the agent to *"Invoke your `aw-checkpoint` skill"* and save
-  under `.agentweave/shared/checkpoints/`
-  (`hub/ui/src/components/agents/AgentOutputPanel.tsx:38`).
+- The button sends a prompt instructing the agent to *"Invoke your `aw-checkpoint` skill"*
+  (`hub/ui/src/components/agents/AgentOutputPanel.tsx:39`) and save under
+  `.agentweave/shared/checkpoints/` (`:41`). The constant spans `:37-41`.
 - **`aw-checkpoint` is never installed.** The template exists at
   `src/agentweave/templates/skills/aw-checkpoint.md`, and `get_skill_template()` has exactly one
   caller in the repository — a test. No code path writes any skill into any project.
@@ -35,7 +35,8 @@ The Handoff control does not do what it says. Traced end to end on 2026-08-07:
   (`src/agentweave/constants.py:12`) has three children — `context_usage/`,
   `compact_decision.md`, `copilot_otel/`. `checkpoints` is not among them.
 - **`.agentweave/shared/context.md`, which the resume prefix instructs the successor to read
-  (`AgentOutputPanel.tsx:44`), is never written.** A differently-named file,
+  (`AgentOutputPanel.tsx:46`, in the `RESUME_HANDOFF_PREFIX` constant spanning `:43-49`), is never
+  written.** A differently-named file,
   `.agentweave/ai_context.md`, is referenced only by `diagnostics.py`, whose remediation hint still
   tells the operator to run `agentweave sync-context` — a command removed in the 56→5 CLI cut.
 - **Nothing verifies any of it.** "Handoff ready" is set when the run ends
@@ -97,7 +98,7 @@ proactive offer needs one. Do not treat that as decided.
 
 - `agent-conversation-handoff` is affected in full; it currently specifies a mechanism that does not
   work.
-- The stale prompt in `AgentOutputPanel.tsx:37-49` and the stale `sync-context` hint in
+- The stale prompt constants in `AgentOutputPanel.tsx:37-49` and the stale `sync-context` hint in
   `diagnostics.py:477` are **live defects today**, independent of this change and of the navigation
   change. They should be corrected without waiting for either — see `tasks.md` section 0.
 

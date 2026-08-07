@@ -12,11 +12,12 @@
 These are live defects today. They do not depend on this change, on the navigation change, or on
 the exploration. Do them independently.
 
-- [ ] 0.1 `AgentOutputPanel.tsx:37-49` — the handoff prompt instructs the agent to invoke an
+- [ ] 0.1 `AgentOutputPanel.tsx:37-41` (`HANDOFF_PROMPT`) — the prompt instructs the agent to invoke an
       `aw-checkpoint` skill that is never installed and write to `.agentweave/shared/checkpoints/`,
       which is never created. Replace with an instruction the agent can actually satisfy, or state
       plainly in the prompt that it must produce the summary inline
-- [ ] 0.2 `AgentOutputPanel.tsx:44` — the resume prefix instructs the successor to read
+- [ ] 0.2 `AgentOutputPanel.tsx:43-49` (`RESUME_HANDOFF_PREFIX`, the path at `:46`) — the resume
+      prefix instructs the successor to read
       `.agentweave/shared/context.md`, which nothing writes. Remove or correct
 - [ ] 0.3 `src/agentweave/diagnostics.py:477` — the remediation hint tells the operator to run
       `agentweave sync-context`, a command removed in the 56→5 CLI cut. Correct it
