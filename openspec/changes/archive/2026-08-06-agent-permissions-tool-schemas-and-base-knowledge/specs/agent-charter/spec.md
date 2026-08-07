@@ -2,8 +2,8 @@
 
 ### Requirement: Seeded charters describe only what the runtime provides
 
-A charter's content is injected into an agent's context verbatim, so a charter is instruction, not
-documentation. Seeded charters SHALL therefore describe only mechanisms the runtime actually offers.
+Seeded charters SHALL describe only mechanisms the runtime actually offers. A charter's content is
+injected into an agent's context verbatim, so a charter is instruction, not documentation.
 
 A seeded charter MUST NOT instruct an agent to read a file the system does not create, run a command
 that does not exist, or address a participant the roster does not contain.
