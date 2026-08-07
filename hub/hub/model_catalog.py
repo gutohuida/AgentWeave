@@ -165,7 +165,10 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                         label="Workspace only",
                         apply=ApplySpec(style="flag", template="--permission-mode manual"),
                     ),
-                    ControlValue(id="manual", label="Ask first"),
+                    # `manual` now means what the label always promised: each call is put to the
+                    # operator through the Hub's approval tool. Until 2026-08-07 nothing could
+                    # answer it, so it refused everything.
+                    ControlValue(id="manual", label="Ask me"),
                     ControlValue(id="bypassPermissions", label="Full access"),
                 ),
                 default="acceptEdits",

@@ -720,3 +720,34 @@ class AgentJobDeletion(Base):
     deleted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
+
+
+class PermissionRequest(Base):
+    """One permission decision a run is waiting on an operator to make.
+
+    Created by the approval tool under the operator-answered posture and polled by that same
+    tool until `status` leaves "pending". The row outlives the answer so a denial stays visible
+    after the fact; `decided_at` distinguishes an answer from a timeout, which also writes a
+    terminal status rather than leaving the row pending forever.
+    """
+
+    __tablename__ = "permission_requests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    tool_use_id: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    tool_input: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # "pending" | "allowed" | "denied" | "expired"
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
+    decided_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_permission_requests_project_status", "project_id", "status"),
+    )

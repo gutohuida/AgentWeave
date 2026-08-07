@@ -65,7 +65,12 @@ from ...pty_runner import (
     strip_ansi_escapes,
     terminate_process_tree,
 )
-from ...runner_commands import SUPPORTED_RUNNERS, UnsupportedRunnerError, build_command
+from ...runner_commands import (
+    OPERATOR_POSTURE,
+    SUPPORTED_RUNNERS,
+    UnsupportedRunnerError,
+    build_command,
+)
 from ...runner_events import AccountingSample
 from ...runner_parsing import (
     parse_claude_line,
@@ -383,6 +388,10 @@ async def trigger_agent_directly(
     # the agent is *told* about and the one that is *enforced* must come from one value, or an
     # agent can be refused at a line it was never shown.
     env["AW_WORKSPACE_DIR"] = effective_work_dir
+    # Which approver posture this run is under. The approval tool serves both, and only this
+    # tells it whether to decide against the workspace itself or put the call to the operator.
+    if (control_overrides or {}).get("permission_mode") == "manual":
+        env["AW_PERMISSION_POSTURE"] = OPERATOR_POSTURE
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
     explicit_hub_url = os.environ.get("HUB_URL")

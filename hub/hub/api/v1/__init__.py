@@ -19,6 +19,7 @@ from .messages import router as messages_router
 from .model_catalog import router as model_catalog_router
 from .native_dialog import router as native_dialog_router
 from .projects import router as projects_router
+from .permissions import router as permissions_router
 from .questions import router as questions_router
 from .runners import router as runners_router
 from .session_sync import router as session_sync_router
@@ -41,6 +42,7 @@ project_resources_router.include_router(accounting_router)
 project_resources_router.include_router(messages_router)
 project_resources_router.include_router(tasks_router)
 project_resources_router.include_router(questions_router)
+project_resources_router.include_router(permissions_router)
 project_resources_router.include_router(status_router)
 project_resources_router.include_router(events_router)
 project_resources_router.include_router(agent_trigger_router)

@@ -8,6 +8,7 @@ from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_auth import AgentActor, get_agent_actor
@@ -25,7 +26,7 @@ from ...schemas.tasks import (
     TaskUpdate,
 )
 from ...sse import sse_manager
-from ...utils import persist_event
+from ...utils import persist_event, short_id
 from .agents import AgentRequest, request_agent
 from .jobs import create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
@@ -370,3 +371,80 @@ async def record_permission_decision(
             {"agent": actor.agent, "tool_name": body.tool_name, "reason": body.reason},
         )
     return {"recorded": not body.allowed}
+
+
+class PermissionRequestCreate(BaseModel):
+    """A run asking the operator to decide one tool call."""
+
+    tool_name: str = Field(max_length=128)
+    tool_use_id: str = Field(default="", max_length=128)
+    tool_input: dict = Field(default_factory=dict)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/permission-requests", status_code=status.HTTP_201_CREATED)
+async def open_permission_request(
+    body: PermissionRequestCreate,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Open a pending permission request and tell the operator it is waiting.
+
+    The caller blocks on the answer, so this must not do anything slow or fallible beyond
+    persisting the row and broadcasting.
+    """
+    from ...db.models import PermissionRequest
+
+    request_id = f"perm-{short_id()}"
+    session.add(
+        PermissionRequest(
+            id=request_id,
+            project_id=actor.project_id,
+            agent=actor.agent,
+            run_id=actor.run_id,
+            tool_name=body.tool_name,
+            tool_use_id=body.tool_use_id,
+            tool_input=body.tool_input,
+            status="pending",
+        )
+    )
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id,
+        "permission_requested",
+        {
+            "id": request_id,
+            "agent": actor.agent,
+            "tool_name": body.tool_name,
+            "run_id": actor.run_id,
+        },
+    )
+    return {"id": request_id, "status": "pending"}
+
+
+@router.get("/permission-requests/{request_id}")
+async def poll_permission_request(
+    request_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Report a request's current status to the run waiting on it.
+
+    Scoped to the asking agent: one run must not be able to read, or wait on, another's
+    pending decision.
+    """
+    from ...db.models import PermissionRequest
+
+    row = (
+        await session.execute(
+            select(PermissionRequest).where(
+                PermissionRequest.id == request_id,
+                PermissionRequest.project_id == actor.project_id,
+                PermissionRequest.agent == actor.agent,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such permission request")
+    return {"id": row.id, "status": row.status}

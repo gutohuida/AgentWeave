@@ -235,8 +235,10 @@ def test_the_workspace_posture_emits_both_flags_exactly_once():
     assert argv[argv.index("--permission-prompt-tool") + 1] == CLAUDE_PERMISSION_PROMPT_TOOL
 
 
-@pytest.mark.parametrize("posture", ["acceptEdits", "manual", "bypassPermissions"])
-def test_other_postures_emit_no_approver_flag(posture):
+@pytest.mark.parametrize("posture", ["acceptEdits", "bypassPermissions"])
+def test_postures_that_decide_nothing_emit_no_approver_flag(posture):
+    """`manual` is excluded deliberately — since 2026-08-07 it routes to the operator through the
+    same approver, and has its own test below."""
     argv = _claude_argv(control_overrides={"permission_mode": posture})
     assert "--permission-prompt-tool" not in argv
     assert argv[argv.index("--permission-mode") + 1] == posture
@@ -293,3 +295,107 @@ def test_generated_context_does_not_advertise_the_approver():
     assert "approve_tool_call" not in text
     assert "send_message" in text
     assert "create_job" in text
+
+
+# --- The operator-answered posture ------------------------------------------------------------
+
+
+def test_ask_me_also_routes_through_the_approver():
+    """`manual` used to mean "ask" with nothing able to answer, so it refused everything."""
+    argv = _claude_argv(control_overrides={"permission_mode": "manual"})
+    assert argv[argv.index("--permission-mode") + 1] == "manual"
+    assert argv[argv.index("--permission-prompt-tool") + 1] == CLAUDE_PERMISSION_PROMPT_TOOL
+
+
+def test_the_two_approver_postures_are_spelled_the_same_on_the_command_line():
+    """Both select `manual`; only AW_PERMISSION_POSTURE separates who answers."""
+    workspace = _claude_argv(control_overrides={"permission_mode": WORKSPACE_PERMISSION_MODE})
+    operator = _claude_argv(control_overrides={"permission_mode": "manual"})
+    assert workspace == operator
+
+
+def test_the_operator_posture_constant_agrees_across_the_two_modules():
+    """`mcp_server` restates it rather than importing, to stay standalone-spawnable."""
+    from hub import mcp_server, runner_commands
+
+    assert mcp_server.OPERATOR_POSTURE == runner_commands.OPERATOR_POSTURE
+
+
+def test_an_unreachable_hub_denies_rather_than_hanging(workspace, monkeypatch):
+    """The operator cannot be asked if the request never lands, and a run that waits on an
+    answer nobody recorded waits forever."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+    monkeypatch.setattr(
+        mcp_server, "_hub_request", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down"))
+    )
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+    assert answer["behavior"] == "deny"
+    assert "could not be asked" in answer["message"]
+
+
+def test_an_unanswered_request_is_denied_when_the_wait_runs_out(workspace, monkeypatch):
+    """Never returns nothing and never waits forever — an unanswered request suspends the turn."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+    monkeypatch.setattr(mcp_server, "OPERATOR_DECISION_TIMEOUT", 0.05)
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+
+    def hub(method, path, *_a, **_k):
+        if method == "POST" and path == "/permission-requests":
+            return {"id": "perm-1", "status": "pending"}
+        return {"id": "perm-1", "status": "pending"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+    assert answer["behavior"] == "deny"
+    assert "no operator answered" in answer["message"]
+
+
+@pytest.mark.parametrize(
+    ("verdict", "behavior"), [("allowed", "allow"), ("denied", "deny"), ("expired", "deny")]
+)
+def test_the_operators_answer_is_returned_to_the_run(workspace, monkeypatch, verdict, behavior):
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+
+    def hub(method, path, *_a, **_k):
+        if method == "POST":
+            return {"id": "perm-1", "status": "pending"}
+        return {"id": "perm-1", "status": verdict}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+    assert answer["behavior"] == behavior
+
+
+def test_the_hubs_own_tools_are_not_put_to_the_operator(workspace, monkeypatch):
+    """Asking a human to approve each send_message would make collaboration unusable."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+
+    def explode(*_a, **_k):
+        raise AssertionError("the operator must not be asked about the Hub's own tools")
+
+    monkeypatch.setattr(mcp_server, "_ask_operator", explode)
+    monkeypatch.setattr(mcp_server, "_report_decision", lambda *a, **k: None)
+    answer = json.loads(
+        mcp_server.approve_tool_call("mcp__agentweave__send_message", {"to_agent": "b"}, "tu")
+    )
+    assert answer["behavior"] == "allow"
+
+
+def test_the_workspace_posture_never_asks_the_operator(workspace, monkeypatch):
+    from hub import mcp_server
+
+    monkeypatch.delenv("AW_PERMISSION_POSTURE", raising=False)
+    monkeypatch.setattr(
+        mcp_server, "_ask_operator", lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked"))
+    )
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+    assert answer["behavior"] == "allow"

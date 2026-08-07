@@ -43,6 +43,11 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
   }
 })
 
+vi.mock('@/api/permissions', () => ({
+  usePendingPermissionRequests: () => ({ data: [] }),
+  useDecidePermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
 vi.mock('@/api/queue', () => ({
   useQueueStatus: () => ({ data: { waiting_count: recordedEntries.length } }),
   withdrawQueueEntry: vi.fn(),

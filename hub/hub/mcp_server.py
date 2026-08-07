@@ -8,6 +8,7 @@ and operator-gated scheduled-work mutations.
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -347,6 +348,15 @@ def run_job(job_id: str) -> Dict[str, Any]:
 #      present a correct "allow" is silently not honoured and the action is refused anyway.
 #      This is why `approve_tool_call` has no return annotation. Do not add one.
 
+# `AW_PERMISSION_POSTURE`'s value when the operator, not the Hub, decides each call.
+OPERATOR_POSTURE = "operator"
+
+# How long an operator has to answer before the request is denied, and how often the waiting run
+# checks. Claude was measured holding a permission tool call open for at least 150s, so this fits
+# inside what the provider tolerates while leaving an operator time to read and click.
+OPERATOR_DECISION_TIMEOUT = 120
+OPERATOR_POLL_SECONDS = 2
+
 # Input keys whose value is a filesystem path across Claude's built-in tools.
 _PATH_KEYS = ("file_path", "path", "notebook_path")
 
@@ -432,6 +442,50 @@ def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str)
         pass
 
 
+def _ask_operator(tool_name: str, tool_input: Dict[str, Any], tool_use_id: str) -> Dict[str, Any]:
+    """Put the decision to the operator and block until they answer or the wait runs out.
+
+    Blocking is the point: Claude holds the tool call open while this waits, which is what makes
+    an operator prompt possible at all. Measured against Claude Code 2.1.221, it waits at least
+    150s (the spike's own limit, not Claude's), so `OPERATOR_DECISION_TIMEOUT` is the budget an
+    operator has to answer.
+
+    Timing out denies. It never returns nothing and never waits forever: an unanswered request
+    suspends the turn indefinitely, which is the failure this whole design exists to avoid. An
+    operator who was away gets a denied action and a record of it, not a stuck agent.
+    """
+    try:
+        opened = _hub_request(
+            "POST",
+            "/permission-requests",
+            {"tool_name": tool_name, "tool_use_id": tool_use_id, "tool_input": tool_input},
+        )
+        request_id = opened["id"]
+    except Exception:  # noqa: BLE001 - see docstring; an unreachable Hub must not hang the turn
+        return {
+            "allow": False,
+            "reason": "the operator could not be asked (the Hub did not accept the request)",
+        }
+
+    deadline = time.monotonic() + OPERATOR_DECISION_TIMEOUT
+    while time.monotonic() < deadline:
+        time.sleep(OPERATOR_POLL_SECONDS)
+        try:
+            state = _hub_request("GET", f"/permission-requests/{request_id}")
+        except Exception:  # noqa: BLE001 - a blip must not decide; keep waiting until the deadline
+            continue
+        if state.get("status") == "allowed":
+            return {"allow": True, "reason": "the operator approved this action"}
+        if state.get("status") in ("denied", "expired"):
+            return {"allow": False, "reason": "the operator refused this action"}
+    return {
+        "allow": False,
+        "reason": (
+            f"no operator answered within {OPERATOR_DECISION_TIMEOUT}s, so this was not approved"
+        ),
+    }
+
+
 @mcp.tool()
 def approve_tool_call(
     tool_name: str,
@@ -439,16 +493,21 @@ def approve_tool_call(
     tool_use_id: str = "",
 ):
     """Runtime approval endpoint. Not an agent capability — the harness calls this, not you."""
-    decision = _decide(tool_name, input or {})
+    tool_input = input or {}
+    if os.environ.get("AW_PERMISSION_POSTURE", "").strip() == OPERATOR_POSTURE:
+        # The Hub's own tools are still decided here rather than put to the operator: asking a
+        # human to approve each `send_message` would make collaboration unusable, and those calls
+        # are already bounded by the run's own credential.
+        if tool_name.startswith("mcp__agentweave__"):
+            decision = {"allow": True, "reason": "the Hub's own tools"}
+        else:
+            decision = _ask_operator(tool_name, tool_input, tool_use_id)
+    else:
+        decision = _decide(tool_name, tool_input)
     _report_decision(tool_name, decision, tool_use_id)
     if decision["allow"]:
         return json.dumps({"behavior": "allow", "updatedInput": input})
-    return json.dumps(
-        {
-            "behavior": "deny",
-            "message": f"Denied: {decision['reason']}. You are confined to your own workspace.",
-        }
-    )
+    return json.dumps({"behavior": "deny", "message": f"Denied: {decision['reason']}."})
 
 
 def main() -> None:

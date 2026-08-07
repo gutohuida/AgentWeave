@@ -53,6 +53,18 @@ DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits"
 # registers in `--mcp-config` above, and the tool half `mcp_server.py`'s own function name.
 CLAUDE_PERMISSION_PROMPT_TOOL = "mcp__agentweave__approve_tool_call"
 
+# The two postures that route decisions through the approver, differing only in who answers:
+# `workspace` has the Hub decide against the run's own directory; `manual` puts each call to the
+# operator. Before this, `manual` meant "ask" with nothing able to answer, so it refused
+# everything — the label promised a prompt that could never appear.
+APPROVER_PERMISSION_MODES = (WORKSPACE_PERMISSION_MODE, "manual")
+
+# Value of the spawned run's `AW_PERMISSION_POSTURE`, telling the approval tool that the operator
+# answers rather than the Hub. Restated in `mcp_server.py` rather than imported from here: that
+# module is spawned standalone and imports only stdlib plus fastmcp (see its own docstring).
+# `test_permission_approver.py` asserts the two agree.
+OPERATOR_POSTURE = "operator"
+
 # claude_proxy and native both invoke the claude CLI (see _build_claude_command) under a
 # different auth/proxy setup — their catalog identity for control-override rendering is
 # still "claude", the provider the catalog actually declares controls for.
@@ -182,7 +194,7 @@ def _build_claude_command(
         # approver flag must not outlive the posture that asked for it.
         if (
             operator_set_permission_mode
-            and (control_overrides or {}).get("permission_mode") == WORKSPACE_PERMISSION_MODE
+            and (control_overrides or {}).get("permission_mode") in APPROVER_PERMISSION_MODES
         ):
             cmd += ["--permission-prompt-tool", CLAUDE_PERMISSION_PROMPT_TOOL]
     if not operator_set_permission_mode:
