@@ -55,7 +55,6 @@ hub-down:
 sync-skills:
 	python scripts/sync_skills.py
 
-# Sync role templates from CLI source into Hub package so they are bundled in Docker builds
 hub-full-build:
 	cd hub && docker build . -t agentweave-hub:audit
 	# Belt-and-braces: also let docker compose build the same image under its
