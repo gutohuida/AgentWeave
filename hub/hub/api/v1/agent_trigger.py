@@ -43,7 +43,9 @@ from ...codex_appserver import (
 from ...codex_appserver import run_turn as codex_run_turn
 from ...conversations import (
     conversation_for_provider_session,
+    conversation_id_for_run,
     get_open_conversation,
+    name_conversation,
     new_conversation,
 )
 from ...db.engine import async_session_factory, get_session
@@ -581,11 +583,15 @@ async def trigger_agent(
             provider_session_id=body.session_id,
         )
         if conversation is None:
-            conversation = new_conversation(project_id=project_id, agent=body.agent)
+            conversation = new_conversation(
+                project_id=project_id, agent=body.agent, origin="operator"
+            )
             conversation.provider_session_id = body.session_id
             session.add(conversation)
     else:
-        conversation = new_conversation(project_id=project_id, agent=body.agent)
+        # This route queues its entry as `origin_type="operator"` below; the conversation it
+        # opens is the same act.
+        conversation = new_conversation(project_id=project_id, agent=body.agent, origin="operator")
         session.add(conversation)
 
     if body.overrides:
@@ -623,6 +629,7 @@ async def trigger_agent(
     )
     session.add(entry)
     conversation.updated_at = entry.arrived_at
+    name_conversation(conversation, body.message)
     await session.commit()
     payload = {
         "entry_id": entry.id,
@@ -1285,6 +1292,7 @@ async def _await_operator_permission(
                 project_id=project_id,
                 agent=agent,
                 run_id=run_id,
+                conversation_id=await conversation_id_for_run(db, run_id),
                 tool_name=_CODEX_APPROVAL_LABELS.get(method, method),
                 tool_use_id="",
                 tool_input=dict(subject),

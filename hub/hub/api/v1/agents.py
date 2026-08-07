@@ -1064,7 +1064,9 @@ async def request_agent(
         created_by_run_id=source_run.id,
     )
     hop_depth = source_run.turn_depth + 1
-    conversation = new_conversation(project_id=project_id, agent=body.name)
+    # A peer asked for this agent to exist; the thread it opens with is that peer's, not the
+    # operator's, even though no message has been sent through the messaging path yet.
+    conversation = new_conversation(project_id=project_id, agent=body.name, origin="peer")
     message = Message(
         id=f"msg-{short_id()}",
         project_id=project_id,

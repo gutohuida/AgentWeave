@@ -12,7 +12,11 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .conversations import conversation_for_provider_session, new_conversation
+from .conversations import (
+    conversation_for_provider_session,
+    name_conversation,
+    new_conversation,
+)
 from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, JobRun
 from .sse import sse_manager
@@ -285,10 +289,15 @@ class JobScheduler:
                     provider_session_id=resume_session_id,
                 )
             if conversation is None:
-                conversation = new_conversation(project_id=job.project_id, agent=job.agent)
+                conversation = new_conversation(
+                    project_id=job.project_id, agent=job.agent, origin="job"
+                )
                 if resume_session_id:
                     conversation.provider_session_id = resume_session_id
                 session.add(conversation)
+            # Named from the job, not its message: a schedule fires the same message repeatedly,
+            # and the job's name is what the operator recognises the thread by.
+            name_conversation(conversation, job.name)
 
             # Create run record
             run_id = f"run-{short_id()}"

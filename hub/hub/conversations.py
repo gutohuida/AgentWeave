@@ -3,25 +3,76 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Dict, Iterable, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Conversation
+from .db.models import (
+    CONVERSATION_ORIGINS,
+    CONVERSATION_TITLE_MAX_LENGTH,
+    Conversation,
+    InboundQueueEntry,
+    PermissionRequest,
+    Question,
+    Run,
+    UnaskedQuestion,
+)
 from .utils import short_id
 
 
-def new_conversation(*, project_id: str, agent: str) -> Conversation:
+def title_from_message(text: str, *, limit: int = CONVERSATION_TITLE_MAX_LENGTH) -> str:
+    """Name a conversation from its first message. Pure — no database, no model.
+
+    Truncates at a word boundary, so a title never ends mid-word. Returns "" when the message
+    has no text to name it with; the caller leaves the title unset rather than storing a blank.
+
+    One case has no clean answer: a single "word" longer than the limit (a URL, a pasted blob).
+    Backing off to a word boundary would return nothing at all, so it is cut at the limit —
+    storing something readable beats storing nothing.
+    """
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    cut = collapsed[:limit]
+    boundary = cut.rfind(" ")
+    if boundary <= 0:
+        return cut
+    return cut[:boundary].rstrip()
+
+
+def new_conversation(*, project_id: str, agent: str, origin: str) -> Conversation:
+    """Build an unsaved conversation.
+
+    `origin` is required rather than defaulted: a conversation's provenance can only be known
+    where it is created, and a default would silently record every peer- and job-created
+    conversation as something the operator started.
+    """
+    if origin not in CONVERSATION_ORIGINS:
+        raise ValueError(f"origin must be one of {CONVERSATION_ORIGINS}, got {origin!r}")
     now = datetime.now(timezone.utc)
     return Conversation(
         id=f"conv-{short_id()}",
         project_id=project_id,
         agent=agent,
         lifecycle="open",
+        origin=origin,
         created_at=now,
         updated_at=now,
     )
+
+
+def name_conversation(conversation: Conversation, text: str) -> None:
+    """Name an unnamed conversation from the message being queued into it.
+
+    A no-op once the conversation has a title, so it is safe to call on every queued entry and
+    so neither a later message nor a generated title can displace what named the thread.
+    """
+    if conversation.title:
+        return
+    title = title_from_message(text)
+    if title:
+        conversation.title = title
 
 
 async def get_open_conversation(
@@ -69,3 +120,105 @@ async def conversation_for_provider_session(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def conversation_id_for_run(db: AsyncSession, run_id: Optional[str]) -> Optional[str]:
+    """The conversation a run belongs to, for stamping onto a row the run creates.
+
+    Read once at creation rather than joined at read time — see design.md, "Attention state is
+    denormalised onto the three blocking tables".
+    """
+    if not run_id:
+        return None
+    result = await db.execute(select(Run.conversation_id).where(Run.id == run_id))
+    return result.scalar_one_or_none()
+
+
+async def archivable(db: AsyncSession, conversation: Conversation) -> Optional[str]:
+    """Why this conversation cannot be archived, or None when it can be.
+
+    Two obstructions, both refused rather than resolved. Stopping a live run from a row menu
+    destroys work with no undo. An undelivered queue entry is worse than a preference:
+    `latest_open_conversation` filters on `open`, so archiving strands the entry permanently —
+    the next peer message opens a fresh conversation and nothing ever delivers the old one.
+    """
+    if conversation.lifecycle == "archived":
+        return None
+
+    running = await db.execute(
+        select(Run.id)
+        .where(Run.conversation_id == conversation.id, Run.status == "running")
+        .limit(1)
+    )
+    if running.scalar_one_or_none() is not None:
+        return "This conversation has a run in progress. Wait for it to finish, or stop it first."
+
+    queued = await db.execute(
+        select(InboundQueueEntry.id)
+        .where(
+            InboundQueueEntry.conversation_id == conversation.id,
+            InboundQueueEntry.state == "queued",
+        )
+        .limit(1)
+    )
+    if queued.scalar_one_or_none() is not None:
+        return (
+            "This conversation has messages waiting to be delivered. Archiving it would strand "
+            "them, because nothing delivers into an archived conversation."
+        )
+    return None
+
+
+async def conversation_attention(
+    db: AsyncSession, conversation_ids: Iterable[str]
+) -> Dict[str, str]:
+    """Map each conversation id to "running", "waiting" or "idle".
+
+    Waiting outranks running: a run blocked on a question is still a running process, but what
+    the operator needs to see is that it stopped for them.
+    """
+    ids: List[str] = list(conversation_ids)
+    if not ids:
+        return {}
+
+    attention: Dict[str, str] = dict.fromkeys(ids, "idle")
+
+    running = await db.execute(
+        select(Run.conversation_id).where(
+            Run.conversation_id.in_(ids), Run.status == "running"
+        )
+    )
+    for cid in running.scalars():
+        if cid:
+            attention[cid] = "running"
+
+    waiting_queries = (
+        select(Question.conversation_id).where(
+            Question.conversation_id.in_(ids), Question.answered.is_(False)
+        ),
+        select(PermissionRequest.conversation_id).where(
+            PermissionRequest.conversation_id.in_(ids), PermissionRequest.status == "pending"
+        ),
+        select(UnaskedQuestion.conversation_id).where(
+            UnaskedQuestion.conversation_id.in_(ids), UnaskedQuestion.status == "pending"
+        ),
+    )
+    for query in waiting_queries:
+        result = await db.execute(query)
+        for cid in result.scalars():
+            if cid:
+                attention[cid] = "waiting"
+
+    return attention
+
+
+def archive(conversation: Conversation) -> None:
+    """Mark a conversation archived. Callers check `archivable` first."""
+    conversation.lifecycle = "archived"
+    conversation.archived_at = datetime.now(timezone.utc)
+
+
+def unarchive(conversation: Conversation) -> None:
+    """Reopen an archived conversation. Always permitted — nothing is blocked by reopening."""
+    conversation.lifecycle = "open"
+    conversation.archived_at = None

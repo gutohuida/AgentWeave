@@ -128,12 +128,15 @@ def test_new_conversation_helper_produces_contract_defaults() -> None:
     """`new_conversation()` is the only construction path outside migration
     backfill — its defaults must match the contract: open, unbound, freshly
     timestamped, never pre-archived."""
-    conversation = new_conversation(project_id="proj-x", agent="agent-x")
+    conversation = new_conversation(project_id="proj-x", agent="agent-x", origin="operator")
     assert conversation.id.startswith("conv-")
     assert conversation.lifecycle == "open"
     assert conversation.provider_session_id is None
     assert conversation.archived_at is None
     assert conversation.created_at == conversation.updated_at
+    assert conversation.origin == "operator"
+    # Unnamed until a first message names it — never labelled by its id.
+    assert conversation.title is None
 
 
 # ---------------------------------------------------------------------------

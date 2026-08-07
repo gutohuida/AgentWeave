@@ -1322,7 +1322,7 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
     await bind_runner("no-addr-agent", cli="claude")
 
     async with async_session_factory() as db:
-        conversation = new_conversation(project_id="proj-test", agent="no-addr-agent")
+        conversation = new_conversation(project_id="proj-test", agent="no-addr-agent", origin="operator")
         db.add(conversation)
         await db.commit()
         await db.refresh(conversation)
@@ -1370,7 +1370,7 @@ async def test_trigger_reports_its_own_conversation_when_an_older_one_is_schedul
     # A leftover queued entry in an older, still-open conversation — e.g. a peer agent's
     # message that arrived while this agent was busy, or one left by an interrupted run.
     async with async_session_factory() as db:
-        stale_conversation = new_conversation(project_id="proj-test", agent="backlog-claude")
+        stale_conversation = new_conversation(project_id="proj-test", agent="backlog-claude", origin="operator")
         db.add(stale_conversation)
         await db.flush()
         stale_conversation_id = stale_conversation.id
@@ -1653,7 +1653,7 @@ async def test_codex_app_server_binding_conflict_fails_run(app, auth_headers):
     await _bind_codex_app_server_runner(app, auth_headers)("appserver-conflict")
 
     async with async_session_factory() as db:
-        conversation = new_conversation(project_id="proj-test", agent="appserver-conflict")
+        conversation = new_conversation(project_id="proj-test", agent="appserver-conflict", origin="operator")
         conversation.provider_session_id = "thread-already-bound"
         db.add(conversation)
         await db.commit()

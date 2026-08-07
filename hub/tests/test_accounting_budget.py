@@ -52,7 +52,7 @@ async def _set_budget_and_usage(*, limit: int, used: int) -> None:
 
 async def _queue(name: str, origin_type: str) -> str:
     async with async_session_factory() as session:
-        conversation = new_conversation(project_id="proj-test", agent=name)
+        conversation = new_conversation(project_id="proj-test", agent=name, origin="operator")
         session.add(conversation)
         entry = new_entry(
             project_id="proj-test",

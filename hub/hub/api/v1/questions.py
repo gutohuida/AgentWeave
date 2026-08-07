@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
 from ...auth import get_project
-from ...conversations import latest_open_conversation, new_conversation
+from ...conversations import (
+    conversation_id_for_run,
+    latest_open_conversation,
+    name_conversation,
+    new_conversation,
+)
 from ...db.engine import get_session
 from ...db.models import Question
 from ...inbound_queue import new_entry
@@ -48,6 +53,7 @@ async def ask_question_for_actor(
         header=body.header,
         multi_select=body.multi_select,
         created_by_run_id=created_by_run_id,
+        conversation_id=await conversation_id_for_run(session, created_by_run_id),
         batch_id=batch_id,
         batch_index=batch_index,
         batch_size=batch_size,
@@ -156,7 +162,10 @@ async def answer_question(
             session, project_id=project_id, agent=from_agent
         )
         if conversation is None:
-            conversation = new_conversation(project_id=project_id, agent=from_agent)
+            # The operator answering is what opens this thread.
+            conversation = new_conversation(
+                project_id=project_id, agent=from_agent, origin="operator"
+            )
             session.add(conversation)
 
         entry = new_entry(
@@ -168,6 +177,9 @@ async def answer_question(
             hop_depth=0,
             conversation_id=conversation.id,
         )
+        # Named from the question rather than the entry's text: the entry restates the answer
+        # too, and "Question: … Answer: …" is not what the thread is about.
+        name_conversation(conversation, q_text)
         session.add(entry)
     await session.commit()
     await session.refresh(question)

@@ -17,14 +17,23 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
+from ...conversations import archivable, archive, conversation_attention, unarchive
 from ...db.engine import get_session
-from ...db.models import AgentOutput, Conversation, InboundQueueEntry, Message, Project
+from ...db.models import (
+    CONVERSATION_TITLE_MAX_LENGTH,
+    AgentOutput,
+    Conversation,
+    InboundQueueEntry,
+    Message,
+    Project,
+)
+from ...sse import sse_manager
 
 router = APIRouter(prefix="/agent", tags=["agent-chat"])
 
@@ -51,17 +60,34 @@ class TimelineEntry(BaseModel):
     hop_budget_exceeded: Optional[bool] = None
 
 
+ConversationAttention = Literal["running", "waiting", "idle"]
+
+
 class ConversationResponse(BaseModel):
     id: str
     agent: str
     provider_session_id: Optional[str]
     lifecycle: str
+    # Null until the conversation's first message names it. A surface listing a titleless
+    # conversation labels it as new — never by `id`.
+    title: Optional[str] = None
+    title_set_by_operator: bool = False
+    origin: str = "operator"
+    # Whether this conversation needs the operator, without opening it. "waiting" outranks
+    # "running" — a run blocked on a question is running, but stopping for the operator is the
+    # part they have to see.
+    attention: ConversationAttention = "idle"
     created_at: datetime
     updated_at: datetime
+    archived_at: Optional[datetime] = None
     # Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}). None/empty
     # means the conversation inherits its agent's runner and the catalog's control defaults —
     # this is what the composer reads to show the values the next message will use.
     runtime_overrides: Optional[Dict[str, str]] = None
+
+
+class ConversationRenameRequest(BaseModel):
+    title: str
 
 
 class ChatHistoryResponse(BaseModel):
@@ -146,22 +172,149 @@ async def _queued_entries_for(
     ]
 
 
+async def _to_response(
+    session: AsyncSession, conversations: List[Conversation]
+) -> List[ConversationResponse]:
+    """Serialise conversations with their attention state, one query for the whole page."""
+    attention = await conversation_attention(session, [row.id for row in conversations])
+    responses = []
+    for row in conversations:
+        response = ConversationResponse.model_validate(row, from_attributes=True)
+        response.attention = attention.get(row.id, "idle")  # type: ignore[assignment]
+        responses.append(response)
+    return responses
+
+
+async def _owned_conversation(
+    session: AsyncSession, project_id: str, agent: str, conversation_id: str
+) -> Conversation:
+    """Fetch a conversation, or 404 if it is not this project's and this agent's.
+
+    404 rather than 403 for a conversation belonging to another project: whether an id exists
+    elsewhere is not this caller's to learn.
+    """
+    conversation = await session.get(Conversation, conversation_id)
+    if (
+        conversation is None
+        or conversation.project_id != project_id
+        or conversation.agent != agent
+    ):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
+
+
+async def _broadcast_conversation(project_id: str, conversation: Conversation) -> None:
+    await sse_manager.broadcast(
+        project_id,
+        "conversation_updated",
+        {
+            "project_id": project_id,
+            "agent": conversation.agent,
+            "conversation_id": conversation.id,
+            "lifecycle": conversation.lifecycle,
+            "title": conversation.title,
+        },
+    )
+
+
 @router.get("/{agent}/conversations", response_model=List[ConversationResponse])
 async def list_conversations(
     agent: str,
+    lifecycle: Literal["open", "archived", "all"] = Query("open"),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """List the durable conversations owned by one project agent."""
+    """List the durable conversations owned by one project agent.
+
+    Archived conversations are excluded by default; `?lifecycle=archived` returns exactly those,
+    so a surface offering "Show archived" gets both the rows and their count from one request.
+    """
     project_id, _ = project
+    predicates = [Conversation.project_id == project_id, Conversation.agent == agent]
+    if lifecycle != "all":
+        predicates.append(Conversation.lifecycle == lifecycle)
     result = await session.execute(
         select(Conversation)
-        .where(Conversation.project_id == project_id, Conversation.agent == agent)
+        .where(*predicates)
         .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     )
-    return [
-        ConversationResponse.model_validate(row, from_attributes=True) for row in result.scalars()
-    ]
+    return await _to_response(session, list(result.scalars()))
+
+
+@router.patch("/{agent}/conversations/{conversation_id}", response_model=ConversationResponse)
+async def rename_conversation(
+    agent: str,
+    conversation_id: str,
+    body: ConversationRenameRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set a conversation's title, and record that the operator set it.
+
+    Recording who set it is what makes an operator's title survive title generation.
+    """
+    project_id, _ = project
+    conversation = await _owned_conversation(session, project_id, agent, conversation_id)
+
+    title = " ".join(body.title.split())
+    if not title:
+        raise HTTPException(status_code=400, detail="A title cannot be empty")
+    if len(title) > CONVERSATION_TITLE_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A title cannot exceed {CONVERSATION_TITLE_MAX_LENGTH} characters",
+        )
+
+    conversation.title = title
+    conversation.title_set_by_operator = True
+    await session.commit()
+    await session.refresh(conversation)
+    await _broadcast_conversation(project_id, conversation)
+    return (await _to_response(session, [conversation]))[0]
+
+
+@router.post(
+    "/{agent}/conversations/{conversation_id}/archive", response_model=ConversationResponse
+)
+async def archive_conversation(
+    agent: str,
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Archive a conversation, or refuse with the reason it cannot be archived yet."""
+    project_id, _ = project
+    conversation = await _owned_conversation(session, project_id, agent, conversation_id)
+
+    obstruction = await archivable(session, conversation)
+    if obstruction is not None:
+        raise HTTPException(status_code=409, detail=obstruction)
+
+    archive(conversation)
+    await session.commit()
+    await session.refresh(conversation)
+    await _broadcast_conversation(project_id, conversation)
+    return (await _to_response(session, [conversation]))[0]
+
+
+@router.post(
+    "/{agent}/conversations/{conversation_id}/unarchive", response_model=ConversationResponse
+)
+async def unarchive_conversation(
+    agent: str,
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reopen an archived conversation. Never refused — reopening obstructs nothing."""
+    project_id, _ = project
+    conversation = await _owned_conversation(session, project_id, agent, conversation_id)
+
+    unarchive(conversation)
+    await session.commit()
+    await session.refresh(conversation)
+    await _broadcast_conversation(project_id, conversation)
+    return (await _to_response(session, [conversation]))[0]
 
 
 @router.get("/{agent}/chat/{conversation_id}", response_model=ChatHistoryResponse)

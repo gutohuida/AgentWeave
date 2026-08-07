@@ -66,6 +66,17 @@ class Project(Base):
         DateTime(timezone=True), nullable=True
     )
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # "truncate" | "generate". Truncation is the floor and the default: a conversation is named
+    # the moment its first message lands, so the rail never shows an identifier and a generation
+    # failure changes nothing structural. Generating is an opt-in to spending tokens on titles.
+    conversation_title_mode: Mapped[str] = mapped_column(
+        String(16), default="truncate", server_default="truncate", nullable=False
+    )
+    # Which of the project's runners does the titling. Null under "truncate", and null under
+    # "generate" means "no runner chosen yet" — which the titling path treats as truncate.
+    # Deliberately not a ForeignKey: `runners.project_id` already points here, and closing the
+    # loop would make the two tables unsortable for DDL. Validated where it is set instead.
+    conversation_title_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
@@ -220,6 +231,17 @@ class OperatorCredential(Base):
 
 CONVERSATION_LIFECYCLES = ("open", "archived")
 
+# Where a conversation came from, recorded at creation and immutable thereafter. `handoff`,
+# `spec` and `job` are accepted with no producer yet — deliberately, so that retrofitting a
+# producer later does not leave every conversation predating it recorded as something it wasn't.
+CONVERSATION_ORIGINS = ("operator", "peer", "handoff", "spec", "job")
+
+# The stored length of a title, and so the ceiling a rename is rejected above.
+CONVERSATION_TITLE_MAX_LENGTH = 120
+
+# How a project names its conversations. Truncation is the floor; generation is the opt-in.
+CONVERSATION_TITLE_MODES = ("truncate", "generate")
+
 
 class Conversation(Base):
     """AgentWeave-owned durable conversation, independent of provider session identity."""
@@ -231,6 +253,14 @@ class Conversation(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     provider_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     lifecycle: Mapped[str] = mapped_column(String(16), default="open", nullable=False)
+    # Null until the conversation's first message names it. Nothing may present the id as a
+    # label, so every surface that lists a titleless conversation labels it as new instead.
+    title: Mapped[Optional[str]] = mapped_column(
+        String(CONVERSATION_TITLE_MAX_LENGTH), nullable=True
+    )
+    # An operator-set title is never replaced by a generated one.
+    title_set_by_operator: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), default="operator", nullable=False)
     # Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}), keyed by
     # control identity so a new catalog control needs no migration. Null/empty means "no
     # override" — the conversation inherits its agent's runner and the catalog's control
@@ -248,6 +278,10 @@ class Conversation(Base):
 
     __table_args__ = (
         CheckConstraint("lifecycle IN ('open', 'archived')", name="ck_conversations_lifecycle"),
+        CheckConstraint(
+            "origin IN ('operator', 'peer', 'handoff', 'spec', 'job')",
+            name="ck_conversations_origin",
+        ),
         Index("ix_conversations_project_agent_updated", "project_id", "agent", "updated_at"),
         Index(
             "uq_conversations_project_agent_provider_session",
@@ -420,6 +454,10 @@ class Question(Base):
     )
     answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Denormalized from the opening run. Navigation reads the attention state of every
+    # conversation on every SSE re-render, and a two-hop join through `Run` per row is the wrong
+    # shape for that. Nullable because rows predating the column cannot be attributed.
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
 
@@ -765,6 +803,8 @@ class PermissionRequest(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Denormalized from the opening run, for the same reason as `Question.conversation_id`.
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
     tool_use_id: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     tool_input: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
@@ -799,7 +839,8 @@ class UnaskedQuestion(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
-    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Already recorded since this table was added; indexed now because navigation queries it.
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     # "pending" | "asked" | "dismissed"
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)

@@ -55,7 +55,10 @@ async def record_agent_output(
         if session_id is None:
             conversation = await latest_open_conversation(db, project_id=project_id, agent=agent)
         if conversation is None:
-            conversation = new_conversation(project_id=project_id, agent=agent)
+            # Reached only when output arrives that no conversation and no run accounts for —
+            # a self-reporting agent's session the Hub did not open. `operator` is the floor:
+            # the thread it reconstructs is the one the operator sees the agent working in.
+            conversation = new_conversation(project_id=project_id, agent=agent, origin="operator")
             conversation.provider_session_id = session_id
             db.add(conversation)
             await db.flush()

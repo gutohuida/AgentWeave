@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_auth import AgentActor, get_agent_actor
+from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
 from ...db.models import Question
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
@@ -476,6 +477,7 @@ async def open_permission_request(
             project_id=actor.project_id,
             agent=actor.agent,
             run_id=actor.run_id,
+            conversation_id=await conversation_id_for_run(session, actor.run_id),
             tool_name=body.tool_name,
             tool_use_id=body.tool_use_id,
             tool_input=body.tool_input,

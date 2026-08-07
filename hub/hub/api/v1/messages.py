@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
 from ...auth import get_project
-from ...conversations import latest_open_conversation, new_conversation
+from ...conversations import latest_open_conversation, name_conversation, new_conversation
 from ...db.engine import get_session
 from ...db.models import Agent, Message, Run
 from ...inbound_queue import new_entry, project_limits
@@ -94,7 +94,9 @@ async def create_message_for_actor(
         session, project_id=project_id, agent=body.recipient
     )
     if recipient_conversation is None:
-        recipient_conversation = new_conversation(project_id=project_id, agent=body.recipient)
+        recipient_conversation = new_conversation(
+            project_id=project_id, agent=body.recipient, origin="peer"
+        )
         session.add(recipient_conversation)
 
     entry = new_entry(
@@ -107,6 +109,7 @@ async def create_message_for_actor(
         message_id=msg.id,
         conversation_id=recipient_conversation.id,
     )
+    name_conversation(recipient_conversation, body.content)
     session.add_all([msg, entry])
     await session.commit()
     await session.refresh(msg)

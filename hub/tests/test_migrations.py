@@ -125,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0034. The full
+    migration runs cleanly and the version lands at 0037. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -133,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0034).
+    # Verify alembic_version is at the latest revision (0037).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0034", f"expected alembic_version=0034, got {version}"
+    assert version == "0037", f"expected alembic_version=0037, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0034"
+    assert version == "0037"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -228,6 +228,178 @@ def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
         ).fetchone()
     assert row is not None
     assert row[0] is None
+
+
+def _create_0034_conversations_state(db_file: Path) -> None:
+    """A populated database at 0034: conversations with its constraints, and a row pointing at it.
+
+    `test_migration_0027_...` builds a bare `conversations` table with no `projects`, which is a
+    shape 0035 deliberately skips. This one has the foreign key target, so the table recreate 0035
+    performs actually runs — which is the part that can lose an index, a constraint, or a row.
+    """
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0034')")
+        conn.execute(
+            "CREATE TABLE projects "
+            "(id VARCHAR(64) PRIMARY KEY, name VARCHAR(256) NOT NULL, created_at DATETIME NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE conversations ("
+            "id VARCHAR(64) PRIMARY KEY, "
+            "project_id VARCHAR(64) NOT NULL REFERENCES projects (id), "
+            "agent VARCHAR(64) NOT NULL, provider_session_id VARCHAR(128), "
+            "lifecycle VARCHAR(16) NOT NULL, runtime_overrides JSON, "
+            "created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL, archived_at DATETIME, "
+            "CONSTRAINT ck_conversations_lifecycle CHECK (lifecycle IN ('open', 'archived')))"
+        )
+        conn.execute("CREATE INDEX ix_conversations_agent ON conversations (agent)")
+        conn.execute(
+            "CREATE INDEX ix_conversations_project_agent_updated "
+            "ON conversations (project_id, agent, updated_at)"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX uq_conversations_project_agent_provider_session "
+            "ON conversations (project_id, agent, provider_session_id)"
+        )
+        conn.execute(
+            "CREATE TABLE runs ("
+            "id VARCHAR(64) PRIMARY KEY, "
+            "conversation_id VARCHAR(64) REFERENCES conversations (id))"
+        )
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) "
+            "VALUES ('proj-x', 'Existing', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO conversations "
+            "(id, project_id, agent, lifecycle, created_at, updated_at) "
+            "VALUES ('conv-existing', 'proj-x', 'claude', 'open', "
+            "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute("INSERT INTO runs (id, conversation_id) VALUES ('run-1', 'conv-existing')")
+
+
+def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> None:
+    """0035 adds title and origin without losing indexes, constraints, rows, or the reference."""
+    db_file = tmp_path / "old_0034.db"
+    _create_0034_conversations_state(db_file)
+
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    columns = {column["name"]: column for column in _inspect_columns(db_url, "conversations")}
+    assert {"title", "title_set_by_operator", "origin"} <= columns.keys()
+    assert columns["title"]["nullable"] is True
+    assert columns["origin"]["nullable"] is False
+
+    with sqlite3.connect(db_file) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == "0037"
+
+        # The existing row survives, unnamed and attributed to the operator.
+        row = conn.execute(
+            "SELECT title, title_set_by_operator, origin, lifecycle, agent "
+            "FROM conversations WHERE id = 'conv-existing'"
+        ).fetchone()
+        assert row == (None, 0, "operator", "open", "claude")
+
+        # The row that references it is untouched and still resolves.
+        assert conn.execute("SELECT conversation_id FROM runs WHERE id = 'run-1'").fetchone() == (
+            "conv-existing",
+        )
+
+        indexes = {
+            r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        }
+        assert {
+            "ix_conversations_agent",
+            "ix_conversations_project_agent_updated",
+            "uq_conversations_project_agent_provider_session",
+        } <= indexes
+
+        ddl = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'conversations'"
+        ).fetchone()[0]
+        assert "ck_conversations_lifecycle" in ddl
+        assert "ck_conversations_origin" in ddl
+
+        # The closed set is enforced by the database, not only by the model.
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO conversations "
+                "(id, project_id, agent, lifecycle, origin, created_at, updated_at) "
+                "VALUES ('conv-bad', 'proj-x', 'claude', 'open', 'invented', "
+                "'2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+            )
+
+
+def test_migration_0036_indexes_conversation_id_on_blocking_tables(tmp_path) -> None:
+    """0036 adds the column where it is missing and the index on all three tables.
+
+    `unasked_questions.conversation_id` predates this revision, so the migration must add its
+    index without trying to add the column a second time.
+    """
+    db_file = tmp_path / "old_0034_blocking.db"
+    _create_0034_conversations_state(db_file)
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "CREATE TABLE questions (id VARCHAR(64) PRIMARY KEY, from_agent VARCHAR(64) NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE permission_requests "
+            "(id VARCHAR(64) PRIMARY KEY, agent VARCHAR(64) NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE unasked_questions "
+            "(id VARCHAR(64) PRIMARY KEY, agent VARCHAR(64) NOT NULL, conversation_id VARCHAR(64))"
+        )
+        conn.execute(
+            "INSERT INTO unasked_questions (id, agent, conversation_id) "
+            "VALUES ('unasked-1', 'claude', 'conv-existing')"
+        )
+
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    for table in ("questions", "permission_requests", "unasked_questions"):
+        columns = {column["name"] for column in _inspect_columns(db_url, table)}
+        assert "conversation_id" in columns, f"{table} is missing conversation_id"
+
+    with sqlite3.connect(db_file) as conn:
+        indexes = {
+            r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'index'")
+        }
+        assert {
+            "ix_questions_conversation_id",
+            "ix_permission_requests_conversation_id",
+            "ix_unasked_questions_conversation_id",
+        } <= indexes
+
+        # The pre-existing attribution is not disturbed by adding the index.
+        assert conn.execute(
+            "SELECT conversation_id FROM unasked_questions WHERE id = 'unasked-1'"
+        ).fetchone() == ("conv-existing",)
+
+
+def test_migration_0037_defaults_projects_to_truncated_titles(tmp_path) -> None:
+    """An existing project is opted out of spending tokens on titles."""
+    db_file = tmp_path / "old_0034_projects.db"
+    _create_0034_conversations_state(db_file)
+
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run_alembic_with(db_url)
+
+    columns = {column["name"]: column for column in _inspect_columns(db_url, "projects")}
+    assert {"conversation_title_mode", "conversation_title_runner_id"} <= columns.keys()
+    assert columns["conversation_title_mode"]["nullable"] is False
+    assert columns["conversation_title_runner_id"]["nullable"] is True
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT conversation_title_mode, conversation_title_runner_id "
+            "FROM projects WHERE id = 'proj-x'"
+        ).fetchone() == ("truncate", None)
 
 
 def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
@@ -340,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0034", f"expected alembic_version=0034, got {version}"
+    assert version == "0037", f"expected alembic_version=0037, got {version}"
 
 
 @pytest.mark.asyncio
