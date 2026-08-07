@@ -513,6 +513,25 @@
   .interject-choice:disabled {
     opacity: 0.5;
   }
+  /* Multi-select only: a chosen option has to stay visibly chosen, since nothing is submitted
+     until the operator confirms. Single-select never shows this — clicking answers outright. */
+  .interject-choice[data-selected="true"] {
+    background: var(--row-hover);
+    border-color: var(--border-hi);
+    box-shadow: inset 2px 0 var(--text-2);
+  }
+  /* Names the decision without colouring it. */
+  .interject-chip {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) / 1.5);
+    padding: 1px 6px;
+  }
   .interject-input {
     flex: 1;
     padding: 6px 8px;

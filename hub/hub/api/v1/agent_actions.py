@@ -16,7 +16,7 @@ from ...db.engine import get_session
 from ...db.models import Question
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
-from ...schemas.questions import QuestionCreate, QuestionResponse
+from ...schemas.questions import QuestionCreate, QuestionOption, QuestionResponse
 from ...schemas.tasks import (
     _PRIORITIES,
     _TASK_ID_RE,
@@ -92,7 +92,9 @@ class AgentTaskCreate(BaseModel):
 class AgentQuestionCreate(BaseModel):
     question: str = Field(max_length=10000)
     blocking: bool = False
-    options: List[str] = Field(default_factory=list, max_length=8)
+    options: List[QuestionOption] = Field(default_factory=list, max_length=8)
+    header: Optional[str] = Field(default=None, max_length=64)
+    multi_select: bool = False
 
     model_config = {"extra": "forbid"}
 
@@ -222,6 +224,8 @@ async def ask_operator_question(
         question=body.question,
         blocking=body.blocking,
         options=list(body.options or []),
+        header=body.header,
+        multi_select=body.multi_select,
     )
     return await ask_question_for_actor(
         question,

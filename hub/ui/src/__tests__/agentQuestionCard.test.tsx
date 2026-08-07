@@ -1,7 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { AgentQuestionCard } from '@/components/agents/AgentQuestionCard'
-import type { Question } from '@/api/questions'
+import type { Question, QuestionOption } from '@/api/questions'
+
+function opt(label: string, description = ''): QuestionOption {
+  return { label, description }
+}
 
 const answer = vi.fn()
 
@@ -38,7 +42,7 @@ describe('agent question card', () => {
       target: { value: 'the staging one' },
     })
     fireEvent.click(screen.getByTestId('agent-question-send-q-1'))
-    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'the staging one' })
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'the staging one', labels: [] })
   })
 
   it('submits on Enter, since the agent is waiting', () => {
@@ -46,7 +50,7 @@ describe('agent question card', () => {
     const input = screen.getByTestId('agent-question-input-q-1')
     fireEvent.change(input, { target: { value: 'postgres' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'postgres' })
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'postgres', labels: [] })
   })
 
   it('refuses to send an empty answer', () => {
@@ -82,7 +86,7 @@ describe('agent question card — offered choices', () => {
   it('renders one button per offered option', () => {
     render(
       <AgentQuestionCard
-        questions={[question({ options: ['Postgres', 'SQLite', 'MySQL'] })]}
+        questions={[question({ options: [opt('Postgres', 'Concurrent writes; needs a server'), opt('SQLite'), opt('MySQL')] })]}
         agent="haiku-1"
       />
     )
@@ -93,23 +97,23 @@ describe('agent question card — offered choices', () => {
 
   it('answers with the exact option text when one is clicked', () => {
     render(
-      <AgentQuestionCard questions={[question({ options: ['Postgres', 'SQLite'] })]} agent="haiku-1" />
+      <AgentQuestionCard questions={[question({ options: [opt('Postgres'), opt('SQLite')] })]} agent="haiku-1" />
     )
     fireEvent.click(screen.getByTestId('agent-question-option-q-1-1'))
-    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'SQLite' })
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'SQLite', labels: ['SQLite'] })
   })
 
   it('still accepts a typed answer, and says so', () => {
     // Options are an offer, not a constraint: an operator who disagrees with all of them must
     // not be cornered into picking one.
     render(
-      <AgentQuestionCard questions={[question({ options: ['Postgres'] })]} agent="haiku-1" />
+      <AgentQuestionCard questions={[question({ options: [opt('Postgres')] })]} agent="haiku-1" />
     )
     const input = screen.getByTestId('agent-question-input-q-1')
     expect(input).toHaveAttribute('placeholder', 'Or answer in your own words')
     fireEvent.change(input, { target: { value: 'neither, use DuckDB' } })
     fireEvent.click(screen.getByTestId('agent-question-send-q-1'))
-    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'neither, use DuckDB' })
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'neither, use DuckDB', labels: [] })
   })
 
   it('shows no choices for an open question', () => {
@@ -133,11 +137,108 @@ describe('interjections wear the composer’s chrome', () => {
   it('uses the shared surface rather than a coloured callout', () => {
     // The operator asked for these to read as an extension of the chat box, not an alert.
     const { container } = render(
-      <AgentQuestionCard questions={[question({ options: ['a'] })]} agent="haiku-1" />
+      <AgentQuestionCard questions={[question({ options: [opt('a')] })]} agent="haiku-1" />
     )
     expect(container.querySelector('.conversation-interject')).not.toBeNull()
     expect(container.querySelector('.interject-choice')).not.toBeNull()
     expect(container.innerHTML).not.toContain('--blue')
     expect(container.innerHTML).not.toContain('--amber')
+  })
+})
+
+describe('agent question card — descriptions, header, multi-select', () => {
+  beforeEach(() => answer.mockClear())
+
+  it('shows each option’s description, which is the point of options', () => {
+    render(
+      <AgentQuestionCard
+        questions={[
+          question({
+            options: [
+              opt('Postgres', 'Concurrent writes; needs a server'),
+              opt('SQLite', 'No server; no concurrent writes'),
+            ],
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('Concurrent writes; needs a server')).toBeInTheDocument()
+    expect(screen.getByText('No server; no concurrent writes')).toBeInTheDocument()
+  })
+
+  it('omits the description line when there is none', () => {
+    const { container } = render(
+      <AgentQuestionCard questions={[question({ options: [opt('Postgres')] })]} agent="haiku-1" />
+    )
+    expect(container.textContent).toContain('Postgres')
+    expect(container.querySelectorAll('.interject-choice span')).toHaveLength(1)
+  })
+
+  it('shows the header chip only when the agent supplied one', () => {
+    const { rerender } = render(
+      <AgentQuestionCard questions={[question({ header: 'Database' })]} agent="haiku-1" />
+    )
+    expect(screen.getByTestId('agent-question-header-q-1')).toHaveTextContent('Database')
+    rerender(<AgentQuestionCard questions={[question({ header: undefined })]} agent="haiku-1" />)
+    expect(screen.queryByTestId('agent-question-header-q-1')).not.toBeInTheDocument()
+  })
+
+  it('answers immediately on click when only one choice is allowed', () => {
+    render(
+      <AgentQuestionCard
+        questions={[question({ options: [opt('Postgres'), opt('SQLite')] })]}
+        agent="haiku-1"
+      />
+    )
+    fireEvent.click(screen.getByTestId('agent-question-option-q-1-0'))
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'Postgres', labels: ['Postgres'] })
+  })
+
+  it('accumulates a multi-select and sends every chosen label', () => {
+    render(
+      <AgentQuestionCard
+        questions={[
+          question({ multi_select: true, options: [opt('a'), opt('b'), opt('c')] }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    fireEvent.click(screen.getByTestId('agent-question-option-q-1-0'))
+    fireEvent.click(screen.getByTestId('agent-question-option-q-1-2'))
+    // Nothing is sent until the operator confirms — otherwise the first click would answer.
+    expect(answer).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('agent-question-send-q-1'))
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'a, c', labels: ['a', 'c'] })
+  })
+
+  it('deselects a multi-select option when clicked again', () => {
+    render(
+      <AgentQuestionCard
+        questions={[question({ multi_select: true, options: [opt('a'), opt('b')] })]}
+        agent="haiku-1"
+      />
+    )
+    const first = screen.getByTestId('agent-question-option-q-1-0')
+    fireEvent.click(first)
+    expect(first).toHaveAttribute('data-selected', 'true')
+    fireEvent.click(first)
+    expect(first).not.toHaveAttribute('data-selected')
+  })
+
+  it('lets a typed answer override a multi-select in progress', () => {
+    // The operator who bothered to type meant it; the options were only an offer.
+    render(
+      <AgentQuestionCard
+        questions={[question({ multi_select: true, options: [opt('a'), opt('b')] })]}
+        agent="haiku-1"
+      />
+    )
+    fireEvent.click(screen.getByTestId('agent-question-option-q-1-0'))
+    fireEvent.change(screen.getByTestId('agent-question-input-q-1'), {
+      target: { value: 'none of these' },
+    })
+    fireEvent.click(screen.getByTestId('agent-question-send-q-1'))
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'none of these', labels: [] })
   })
 })

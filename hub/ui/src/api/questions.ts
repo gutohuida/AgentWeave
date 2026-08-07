@@ -2,6 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, patchJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
+export interface QuestionOption {
+  label: string
+  /** What choosing this actually means — the reason options beat a bare text box. */
+  description: string
+}
+
 export interface Question {
   id: string
   project_id: string
@@ -9,7 +15,11 @@ export interface Question {
   question: string
   blocking: boolean
   /** Answers the agent offered. Empty means open-ended; the operator may always type instead. */
-  options?: string[]
+  options?: QuestionOption[]
+  /** Short chip naming the decision, e.g. "Database". */
+  header?: string | null
+  multi_select?: boolean
+  answer_labels?: string[]
   answered: boolean
   answer?: string
   created_at: string
@@ -33,8 +43,11 @@ export function useAnswerQuestion() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: ({ id, answer }: { id: string; answer: string }) =>
-      patchJson<Question>(`/api/v1/projects/${projectId}/questions/${id}`, { answer }),
+    mutationFn: ({ id, answer, labels }: { id: string; answer: string; labels?: string[] }) =>
+      patchJson<Question>(`/api/v1/projects/${projectId}/questions/${id}`, {
+        answer,
+        labels: labels ?? [],
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'questions'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'status'] })

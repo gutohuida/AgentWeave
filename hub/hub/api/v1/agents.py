@@ -784,12 +784,17 @@ def _tool_surface_lines() -> List[str]:
         "- `list_tasks(agent=None)` — read the shared task ledger.",
         "- `get_task(task_id)` — read one ledger entry.",
         f"- `update_task(task_id, status)` — status is required, one of {values(TaskStatus)}.",
-        "- `ask_user(question, options=None)` — ask the operator and **wait** for the answer, "
-        "which is returned to you. Ask whenever a choice is genuinely the operator's to make and "
-        "guessing wrong would waste real work; do not ask what the repository or the task already "
-        "answers. Pass `options` (up to 8) whenever the decision is between known alternatives — "
-        "the operator answers in one click and you get back exactly one of your own strings. They "
-        "may still type something else, so handle an answer that is none of them.",
+        "- `ask_user(question, options=None, header=None, multi_select=False)` — ask the operator "
+        "and **wait** for the answer, which is returned to you. Ask whenever a choice is genuinely "
+        "the operator's to make and guessing wrong would waste real work; do not ask what the "
+        "repository or the task already answers.",
+        "  `options` is up to 8 entries of `{\"label\", \"description\"}`. Pass them whenever the "
+        "decision is between known alternatives. The label comes back to you; the description is "
+        "what lets the operator choose without already knowing the trade-off, so write what "
+        "picking it actually means rather than restating the label. `header` is a two-or-three "
+        "word chip naming the decision. Set `multi_select` when several can be chosen together, "
+        "and the answer arrives as a list. The operator may always answer with none of your "
+        "options, so handle an answer that is not one of them.",
         "- `get_answer(question_id)` — only needed for a question you asked with "
         "`blocking=False`; a normal `ask_user` has already returned the answer.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",

@@ -35,7 +35,9 @@ async def ask_question_for_actor(
         from_agent=from_agent,
         question=body.question,
         blocking=body.blocking,
-        options=list(body.options or []),
+        options=[option.model_dump() for option in (body.options or [])],
+        header=body.header,
+        multi_select=body.multi_select,
         created_by_run_id=created_by_run_id,
     )
     session.add(question)
@@ -123,6 +125,7 @@ async def answer_question(
     q_text = question.question
 
     question.answer = body.answer
+    question.answer_labels = list(body.labels or [])
     question.answered = True
     question.answered_at = datetime.now(timezone.utc)
 

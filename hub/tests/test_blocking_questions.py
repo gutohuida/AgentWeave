@@ -100,8 +100,11 @@ def test_offered_options_reach_the_hub(monkeypatch):
         return {"answered": True, "answer": "Postgres"}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    result = mcp_server.ask_user("Which database?", options=["Postgres", "SQLite"])
-    assert bodies[0]["options"] == ["Postgres", "SQLite"]
+    result = mcp_server.ask_user(
+        "Which database?",
+        options=[{"label": "Postgres", "description": "server"}, {"label": "SQLite"}],
+    )
+    assert [o["label"] for o in bodies[0]["options"]] == ["Postgres", "SQLite"]
     assert result["answer"] == "Postgres"
 
 
@@ -119,3 +122,62 @@ def test_an_open_question_sends_an_empty_option_list(monkeypatch):
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
     mcp_server.ask_user("Anything?")
     assert bodies[0]["options"] == []
+
+
+def test_a_multi_select_answer_comes_back_as_a_list(monkeypatch):
+    """Returning a joined string would make every caller re-split it."""
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            return {"id": "q-1"}
+        return {"answered": True, "answer": "a, c", "answer_labels": ["a", "c"]}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user(
+        "Which?", options=[{"label": "a"}, {"label": "c"}], multi_select=True
+    )
+    assert result["answer"] == ["a", "c"]
+
+
+def test_a_single_select_answer_stays_a_string(monkeypatch):
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            return {"id": "q-1"}
+        return {"answered": True, "answer": "a", "answer_labels": ["a"]}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user("Which?", options=[{"label": "a"}])
+    assert result["answer"] == "a"
+
+
+def test_a_typed_answer_to_a_multi_select_is_not_forced_into_a_list(monkeypatch):
+    """The operator answered with none of the options; there are no labels to return."""
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            return {"id": "q-1"}
+        return {"answered": True, "answer": "none of these", "answer_labels": []}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user("Which?", options=[{"label": "a"}], multi_select=True)
+    assert result["answer"] == "none of these"
+
+
+def test_header_and_multi_select_reach_the_hub(monkeypatch):
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    bodies = []
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            bodies.append(body)
+            return {"id": "q-1"}
+        return {"answered": True, "answer": "x", "answer_labels": []}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    mcp_server.ask_user("Which?", header="Database", multi_select=True)
+    assert bodies[0]["header"] == "Database"
+    assert bodies[0]["multi_select"] is True

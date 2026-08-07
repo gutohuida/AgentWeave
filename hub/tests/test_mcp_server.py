@@ -120,8 +120,15 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
     assert answered["answered"] is True
     assert answered["answer"] == "yes"
     # `options` is always sent, empty for an open question — the column is a list, and a null
-    # would come back as None rather than [].
-    assert _body(calls[0]) == {"question": "Proceed?", "blocking": True, "options": []}
+    # would come back as None rather than []. `header`/`multi_select` are sent unconditionally
+    # too, so the Hub never has to distinguish "absent" from "not wanted".
+    assert _body(calls[0]) == {
+        "question": "Proceed?",
+        "blocking": True,
+        "options": [],
+        "header": None,
+        "multi_select": False,
+    }
     assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}
 
 

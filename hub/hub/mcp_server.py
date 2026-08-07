@@ -256,17 +256,24 @@ def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
 @mcp.tool()
 def ask_user(
     question: str,
-    options: Optional[List[str]] = None,
+    options: Optional[List[Dict[str, str]]] = None,
+    header: Optional[str] = None,
+    multi_select: bool = False,
     blocking: bool = True,
 ) -> Dict[str, Any]:
     """Ask the operator a question and wait for their answer.
 
     Args:
         question: What you need the operator to decide or clarify.
-        options: The answers you would accept, at most 8. Offer them whenever the decision is
-            a choice between known alternatives — the operator answers with one click instead
-            of typing, and you get back exactly one of the strings you supplied. Leave unset
-            for a genuinely open question. The operator may always type something else.
+        options: The answers you would accept, at most 8, each
+            {"label": "...", "description": "..."}. Offer them whenever the decision is a
+            choice between known alternatives. The label is what comes back; the description
+            is what lets the operator choose without already knowing the trade-off — write
+            what picking it actually means, not a restatement of the label. Leave unset for a
+            genuinely open question. The operator may always answer with none of them.
+        header: A two-or-three word chip naming the decision, e.g. "Database". Optional.
+        multi_select: Set True when several options can be chosen together. The answer then
+            comes back as a list.
         blocking: Leave this alone to wait for the answer, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
             continuing — you must then poll `get_answer` yourself, and a turn that ends first
@@ -275,7 +282,13 @@ def ask_user(
     result = _hub_request(
         "POST",
         "/questions",
-        {"question": question, "blocking": blocking, "options": list(options or [])},
+        {
+            "question": question,
+            "blocking": blocking,
+            "options": list(options or []),
+            "header": header,
+            "multi_select": multi_select,
+        },
     )
     question_id = result.get("id")
     if not blocking:
@@ -292,11 +305,15 @@ def ask_user(
         except Exception:  # noqa: BLE001 - a blip must not end the wait; retry until the deadline
             continue
         if state.get("answered"):
+            labels = state.get("answer_labels") or []
             return {
                 "success": True,
                 "question_id": question_id,
                 "answered": True,
-                "answer": state.get("answer"),
+                # A multi-select answer stays a list; everything else is the single string the
+                # operator chose or typed. Returning one shape for both would make every caller
+                # re-split a joined string.
+                "answer": labels if (multi_select and labels) else state.get("answer"),
             }
     return {
         "success": True,

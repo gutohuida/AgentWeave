@@ -388,9 +388,19 @@ class Question(Base):
     answered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     blocking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Answers the agent will accept, when it offered a choice rather than an open question.
-    # Empty means open-ended. The operator is never *confined* to these — a typed answer is
-    # always allowed — but offering them is what turns a question into one click.
+    # Each entry is {"label", "description"}: the label is what comes back, the description is
+    # what lets an operator choose between them without already knowing the trade-off. Empty
+    # means open-ended. The operator is never *confined* to these — a typed answer is always
+    # allowed — but offering them is what turns a question into one click.
     options: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # Short chip shown above the question, e.g. "Database". Optional.
+    header: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    multi_select: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # The chosen labels, structurally. `answer` keeps the human-readable form (a single label,
+    # the labels joined, or free text) so everything already reading it still works.
+    answer_labels: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

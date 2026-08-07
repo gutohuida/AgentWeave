@@ -125,18 +125,20 @@ async def test_a_question_can_offer_options_and_they_survive_the_round_trip(app,
             "from_agent": "claude",
             "question": "Which database?",
             "blocking": True,
-            "options": ["Postgres", "SQLite"],
+            "options": [{"label": "Postgres", "description": "Concurrent writes"},
+                        {"label": "SQLite", "description": ""}],
         },
         headers=auth_headers,
     )
     assert resp.status_code == 201
-    assert resp.json()["options"] == ["Postgres", "SQLite"]
+    assert [o["label"] for o in resp.json()["options"]] == ["Postgres", "SQLite"]
+    assert resp.json()["options"][0]["description"] == "Concurrent writes"
 
     listed = await app.get(
         "/api/v1/projects/proj-test/questions?answered=false", headers=auth_headers
     )
     found = next(q for q in listed.json() if q["id"] == resp.json()["id"])
-    assert found["options"] == ["Postgres", "SQLite"]
+    assert [o["label"] for o in found["options"]] == ["Postgres", "SQLite"]
 
 
 @pytest.mark.asyncio
@@ -157,7 +159,7 @@ async def test_too_many_options_are_refused(app, auth_headers):
         json={
             "from_agent": "claude",
             "question": "Pick one",
-            "options": [f"option-{i}" for i in range(9)],
+            "options": [{"label": f"option-{i}"} for i in range(9)],
         },
         headers=auth_headers,
     )
@@ -169,7 +171,7 @@ async def test_the_operator_may_answer_something_other_than_an_offered_option(ap
     """Options are an offer, not a constraint."""
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
-        json={"from_agent": "claude", "question": "Which?", "options": ["a", "b"]},
+        json={"from_agent": "claude", "question": "Which?", "options": [{"label": "a"}, {"label": "b"}]},
         headers=auth_headers,
     )
     q_id = resp.json()["id"]
@@ -180,3 +182,40 @@ async def test_the_operator_may_answer_something_other_than_an_offered_option(ap
     )
     assert answered.status_code == 200
     assert answered.json()["answer"] == "neither, use c"
+
+
+@pytest.mark.asyncio
+async def test_chosen_labels_are_stored_structurally(app, auth_headers):
+    """A multi-select answer stays a list rather than a string someone re-splits."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={
+            "from_agent": "claude",
+            "question": "Which?",
+            "options": [{"label": "a"}, {"label": "b"}],
+            "multi_select": True,
+            "header": "Pick",
+        },
+        headers=auth_headers,
+    )
+    assert resp.json()["multi_select"] is True
+    assert resp.json()["header"] == "Pick"
+    q_id = resp.json()["id"]
+
+    answered = await app.patch(
+        f"/api/v1/projects/proj-test/questions/{q_id}",
+        json={"answer": "a, b", "labels": ["a", "b"]},
+        headers=auth_headers,
+    )
+    assert answered.json()["answer_labels"] == ["a", "b"]
+    assert answered.json()["answer"] == "a, b"
+
+
+@pytest.mark.asyncio
+async def test_an_option_must_have_a_label(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={"from_agent": "claude", "question": "Which?", "options": [{"description": "x"}]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
