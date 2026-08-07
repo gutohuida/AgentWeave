@@ -14,7 +14,7 @@ root.
 
 | Don't | Do |
 |---|---|
-| Run `agentweave init`, `switch`, `watch`, or start a Hub at the repo root | Run them inside `testbed/` (see `testbed/README.md`) |
+| Launch the app or point a Hub at the repo root | Do it inside `testbed/` (see `testbed/README.md`) |
 | Invoke `aw-*` skills (`aw-spec-propose`, `aw-status`, `aw-delegate`, …) | Use the `openspec-*` skills — see "Specifications" below |
 | Delegate to agents via AgentWeave messaging | Do the work directly, or use Claude Code subagents |
 | Write to `spec/` | Write to `openspec/changes/<date>-<name>/` |
@@ -118,33 +118,42 @@ only container-visible paths beneath `AW_WORKSPACE_ROOT`, mounted from
 
 ### CLI (`src/agentweave/`)
 
+The CLI is **not** a collaboration surface. It does only what cannot be done from inside the app:
+start it, diagnose why it will not start, stop it, reset it. Five `cmd_*` functions survive, down
+from 56 — see `openspec/explorations/2026-08-02-product-direction.md` for why, before adding a
+sixth.
+
 ```
 src/agentweave/
-├── cli.py              # All CLI commands. To add: cmd_* function, subparser in create_parser(),
-│                       # routing branch in main()
+├── cli.py              # The 5 surviving commands: status, doctor, stop, hub_start, reset.
+│                       # To add: cmd_* function, subparser in create_parser(), routing in main()
+├── diagnostics.py      # What `doctor` reports on: runtimes, ports, database, permissions
+├── config.py           # agentweave.yml parsing and generation
 ├── session.py          # Session lifecycle, JSON persistence
 ├── task.py             # Task CRUD, file-based storage with locking
-├── messaging.py        # MessageBus — routes through transport layer
+├── jobs.py             # Scheduled-job records
 ├── locking.py          # File-based mutex (use: `with lock("name"):`)
 ├── validator.py        # validate_task/message/session + sanitize functions
-├── watchdog.py         # Polls for new messages/tasks, auto-pings agents
 ├── eventlog.py         # Read-path utilities for events.jsonl
-├── logging_config.py   # Python logging stdlib setup (JSONRotatingFileHandler, HubHandler)
-├── config.py           # agentweave.yml parsing and generation
-├── runner.py           # Agent runner helpers (claude_proxy support, env var resolution)
+├── stream_events.py    # Canonical run-event kinds shared with the Hub's parsers
+├── tool_surface.py     # The agent capability surface description
+├── spec_manifest.py    # Spec manifest read/write
+├── logging_handlers.py # JSONRotatingFileHandler + HubHandler
 ├── constants.py        # All valid values, regex patterns, directory paths
 ├── utils.py            # load_json, save_json, generate_id, now_iso, print_* helpers
 ├── templates/          # Markdown templates loaded via get_template("name")
-│   └── skills/         # Generated aw-* product skills
-├── transport/          # Pluggable transport layer
-│   ├── base.py         # BaseTransport ABC (6 abstract methods)
-│   ├── local.py        # Local filesystem transport
-│   ├── git.py          # Git orphan branch transport (plumbing only)
-│   ├── http.py         # HTTP transport for Hub
+│   └── skills/         # Packaged skill templates (handoff, resume, generated aw-*)
+├── transport/          # HTTP only — the Hub is the single runtime
+│   ├── base.py         # BaseTransport ABC
+│   ├── http.py         # HTTP transport for the Hub
 │   └── config.py       # get_transport() factory
 └── mcp/
-    └── server.py       # FastMCP server (stdio transport)
+    └── server.py       # Compatibility re-export of the Hub's tool surface — no tools of its own
 ```
+
+**Deleted, and not to be recreated:** `watchdog.py`, `messaging.py`, `runner.py`,
+`transport/local.py`, `transport/git.py`, and the role subsystem. The Hub owns execution; there is
+no second runtime and no filesystem or git collaboration substrate.
 
 ### Hub (`hub/`)
 
@@ -217,63 +226,35 @@ Fresh projects seed default runners and 21 starter charters. Operators manage an
 the Hub UI. The former CLI multi-role subsystem, fixed enum, role files, and role-derived API/UI
 fields no longer exist and must not be recreated.
 
-### Claude-Proxy Agents
+### Runners
 
-Run Minimax, GLM through Claude Code CLI:
+A runner is a Runner record in the Hub — a CLI (`claude`, `codex`, …), a model, and flags. Operators
+create and bind them in the Hub UI; `hub/hub/runner_commands.py` turns one into a spawn. Claude and
+Codex are the two wired to a real spawn path today; the rest are refused with a stated 501 rather
+than silently mishandled.
 
-```bash
-# Configure
-agentweave agent configure minimax --runner claude_proxy
+### Operator-in-the-loop
 
-# Built-in providers: minimax, glm
+An agent can stop and involve the operator rather than guess:
 
-# Run
-agentweave run --agent minimax "task"
-# or
-eval $(agentweave switch minimax)
-```
+- **Permissions** — the composer's Permissions pill sets the run's posture. `manual` ("Ask me")
+  routes Claude through `--permission-prompt-tool` and Codex through
+  `codex_appserver.decide_approval`, producing a card the operator answers.
+- **Questions** — `ask_user` takes 1–4 structured questions, blocks, and returns the answers. The
+  operator steps through them above the composer.
+- **The backstop** — a completed run whose final text ends in a question, having opened no question
+  row, is flagged so a question the agent forgot to route still reaches the operator.
 
-### OpenCode Agents
+How long a run waits is per-agent (`Agent.permission_timeout_seconds`,
+`Agent.question_timeout_seconds`), carried to the spawned tool process as `AW_DECISION_TIMEOUT` and
+`AW_QUESTION_TIMEOUT`.
 
-Run OpenCode (terminal-based AI coding agent) with local Ollama or cloud models:
+### Logging
 
-```bash
-# Configure in agentweave.yml
-#   opencode-dev:
-#     runner: opencode
-#     model: ollama/qwen2.5-coder:7b
-
-# MCP setup writes opencode.json automatically
-agentweave mcp-setup
-
-# Launch
-agentweave switch opencode-dev
-```
-
-OpenCode uses stable session IDs (`agentweave-{agent}`) and file-based MCP registration via `opencode.json`.
-
-### Transport Layer
-
-```
-No transport.json  → LocalTransport (default)
-type: "git"        → GitTransport (cross-machine)
-type: "http"       → HttpTransport (Hub)
-```
-
-**GitTransport principles:**
-- Uses git plumbing only (`hash-object`, `mktree`, `commit-tree`, `push`)
-- Never touches working tree or HEAD
-- Append-only with UUID-suffixed filenames
-
-**HttpTransport:**
-- Uses stdlib `urllib.request` only
-- No new CLI dependencies
-
-### Logging (v0.11.0+)
-
-Python `logging` stdlib with:
+Python `logging` stdlib, set up in `logging_handlers.py`:
 - `JSONRotatingFileHandler`: 10MB rotation, 5 backups → `.agentweave/logs/events.jsonl`
-- `HubHandler`: Forwards to Hub when HTTP transport active
+  *(inside a project, never at this repo's root)*
+- `HubHandler`: forwards to the Hub
 
 Env vars: `AW_LOG_LEVEL` (default WARNING), `AW_LOG_FILE`
 
@@ -329,9 +310,16 @@ pending → assigned → in_progress → completed → under_review → approved
 - `is_locked()` is read-only — never delete files
 - NEVER create `.agentweave/`, `agentweave.yml`, or `spec/` at the repository root — use `testbed/`
 - NEVER commit `kimichanges.md`, `kimiwork.md`
-- Hub API key format: `aw_live_{random32}`
+- Hub API key format: `aw_live_{random32}`; run credentials are minted per run (`agent_auth.py`) and
+  identity is never accepted from a request body or header
 - HttpTransport uses stdlib `urllib.request` only
-- Stage paths explicitly; `git add -A` sweeps in untracked `.claude/handoffs/` scratch
+- `hub/hub/mcp_server.py` is spawned standalone and may import **only** stdlib + fastmcp — anything
+  it needs from the Hub is restated there, with a test asserting the two agree
+- `approve_tool_call` has **no return annotation**. FastMCP would derive `structuredContent` from
+  one, which silently defeats an `allow`. Do not add one.
+- `hub/hub/static/ui` is a committed build artefact — after `npm run build`, copy `hub/ui/dist` over
+  it and confirm with `diff -rq`. `test_ui_staleness.py` does **not** check this repo's copy.
+- Stage paths explicitly; `git add -A` sweeps in scratch
 
 ## Common Tasks
 
@@ -342,16 +330,18 @@ pending → assigned → in_progress → completed → under_review → approved
 3. Add routing branch in `main()`
 4. Add tests in `tests/test_cli.py`
 
-### Adding a Transport
+### Adding a database column
 
-1. Create class in `transport/<name>.py` extending `BaseTransport`
-2. Implement all 6 abstract methods
-3. Add branch in `transport/config.py`
-4. Add CLI handling in `cmd_transport_setup()`
+1. Add the field in `hub/hub/db/models.py`
+2. New migration in `hub/hub/migrations/versions/` — guard for a missing table, as `0033`/`0034` do,
+   because upgrades starting from an early revision reach it with only that revision's tables
+3. Bump the head assertions in `hub/tests/test_migrations.py` **and**
+   `hub/tests/test_project_persistence.py`
+4. Expose it on the relevant Pydantic schema if the UI needs it
 
 ### Adding an MCP Tool
 
-1. Add `@mcp.tool()` decorated function in `mcp/server.py` (CLI) or `hub/mcp_server.py` (Hub)
+1. Add `@mcp.tool()` decorated function in `hub/hub/mcp_server.py`
 2. Import and use existing core modules
 3. Follow existing error handling patterns
 

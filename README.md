@@ -50,7 +50,7 @@ the run-authenticated agent capability plane—not CLI subcommands.
 - Task board, messages, questions, and scheduled jobs
 - Usage accounting, logs, traces, specifications, and project settings
 - Direct Hub-owned execution for configured runners
-- One least-privilege capability API shared by HTTP, MCP, and agent-facing CLI adapters
+- One least-privilege capability API, reached over HTTP or through equivalent MCP tools
 
 ## Local state and configuration
 
@@ -78,9 +78,13 @@ never returned by readiness or diagnostic APIs.
 ## Agent capability plane
 
 Every running agent receives a short-lived run token. That identity can access only the project and
-agent actions permitted to that run. HTTP, MCP, and CLI adapters expose the same action set and
-authorization semantics. Operator APIs use one instance credential and carry project identity in
-their URL; choosing a project is navigation, not authentication.
+agent actions permitted to that run, and is never accepted from a request body or header. Direct
+HTTP and MCP are two adapters over the same action set and authorization semantics — MCP because it
+is convenient, HTTP because some environments forbid MCP servers. The CLI is not one of them: it
+manages the local instance and has no agent capabilities.
+
+Operator APIs use one instance credential and carry project identity in their URL; choosing a
+project is navigation, not authentication.
 
 ## Development
 
