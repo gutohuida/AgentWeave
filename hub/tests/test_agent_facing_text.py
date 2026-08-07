@@ -70,3 +70,29 @@ class TestTurnPreamble:
 
 def test_stalled_status_does_not_name_the_watchdog():
     assert "watchdog" not in STALLED_STATUS_MESSAGE.lower()
+
+
+def test_the_context_describes_ask_user_as_it_actually_behaves():
+    """The generated tool list is a second description of the same tool, and the two disagreeing
+    is worse than either being absent: it told agents `blocking=False` after the default became
+    True, and never mentioned `options` at all, so no agent would offer a choice."""
+    from hub.api.v1.agents import _tool_surface_lines
+
+    text = "\n".join(_tool_surface_lines())
+    assert "blocking=False)" not in text
+    assert "options" in text
+    assert "wait" in text.lower()
+
+
+def test_the_context_and_the_tool_signature_agree_on_ask_user():
+    """Guards the actual failure mode: someone changes the signature and leaves the prose."""
+    import inspect
+
+    from hub.api.v1.agents import _tool_surface_lines
+    from hub.mcp_server import ask_user
+
+    text = "\n".join(_tool_surface_lines())
+    for name in inspect.signature(ask_user).parameters:
+        if name == "blocking":
+            continue  # deliberately not advertised; the default is what agents should use
+        assert name in text, f"context does not mention ask_user's {name!r} parameter"

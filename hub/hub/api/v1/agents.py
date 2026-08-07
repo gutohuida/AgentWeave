@@ -784,8 +784,14 @@ def _tool_surface_lines() -> List[str]:
         "- `list_tasks(agent=None)` — read the shared task ledger.",
         "- `get_task(task_id)` — read one ledger entry.",
         f"- `update_task(task_id, status)` — status is required, one of {values(TaskStatus)}.",
-        "- `ask_user(question, blocking=False)` — ask the operator.",
-        "- `get_answer(question_id)` — collect an answer to an earlier question.",
+        "- `ask_user(question, options=None)` — ask the operator and **wait** for the answer, "
+        "which is returned to you. Ask whenever a choice is genuinely the operator's to make and "
+        "guessing wrong would waste real work; do not ask what the repository or the task already "
+        "answers. Pass `options` (up to 8) whenever the decision is between known alternatives — "
+        "the operator answers in one click and you get back exactly one of your own strings. They "
+        "may still type something else, so handle an answer that is none of them.",
+        "- `get_answer(question_id)` — only needed for a question you asked with "
+        "`blocking=False`; a normal `ask_user` has already returned the answer.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
