@@ -254,12 +254,48 @@ def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def ask_user(question: str, blocking: bool = False) -> Dict[str, Any]:
-    """Ask the operator a question attributed to the bound agent."""
-    result = _hub_request(
-        "POST", "/questions", {"question": question, "blocking": blocking}
-    )
-    return {"success": True, "question_id": result.get("id")}
+def ask_user(question: str, blocking: bool = True) -> Dict[str, Any]:
+    """Ask the operator a question and wait for their answer.
+
+    Args:
+        question: What you need the operator to decide or clarify.
+        blocking: Leave this alone to wait for the answer, which is almost always what you
+            want. Set it False only to ask something you genuinely do not need answered before
+            continuing — you must then poll `get_answer` yourself, and a turn that ends first
+            loses the question.
+    """
+    result = _hub_request("POST", "/questions", {"question": question, "blocking": blocking})
+    question_id = result.get("id")
+    if not blocking:
+        return {"success": True, "question_id": question_id, "answered": False}
+
+    # Waiting is the point: an agent that asks and carries on regardless has guessed, and the
+    # operator's answer arrives too late to matter. The wait is bounded for the same reason the
+    # permission approver's is — a turn suspended forever is worse than one told nobody replied.
+    deadline = time.monotonic() + QUESTION_ANSWER_TIMEOUT
+    while time.monotonic() < deadline:
+        time.sleep(QUESTION_POLL_SECONDS)
+        try:
+            state = _hub_request("GET", f"/questions/{question_id}")
+        except Exception:  # noqa: BLE001 - a blip must not end the wait; retry until the deadline
+            continue
+        if state.get("answered"):
+            return {
+                "success": True,
+                "question_id": question_id,
+                "answered": True,
+                "answer": state.get("answer"),
+            }
+    return {
+        "success": True,
+        "question_id": question_id,
+        "answered": False,
+        "answer": None,
+        "note": (
+            f"No operator answered within {QUESTION_ANSWER_TIMEOUT}s. Continue as best you can "
+            "and say plainly that you proceeded without an answer."
+        ),
+    }
 
 
 @mcp.tool()
@@ -356,6 +392,14 @@ OPERATOR_POSTURE = "operator"
 # inside what the provider tolerates while leaving an operator time to read and click.
 OPERATOR_DECISION_TIMEOUT = 120
 OPERATOR_POLL_SECONDS = 2
+
+# A question deserves a longer wait than a permission prompt: the operator has to read it and
+# compose an answer, not click one of two buttons. 240s is what an ordinary MCP tool call was
+# measured tolerating against Claude Code 2.1.221 — the tool answered at exactly 240s and the
+# model used the result. The true ceiling is higher but unmeasured, so this does not exceed what
+# was proven. Still bounded: an unanswered wait must end.
+QUESTION_ANSWER_TIMEOUT = 240
+QUESTION_POLL_SECONDS = 2
 
 # Input keys whose value is a filesystem path across Claude's built-in tools.
 _PATH_KEYS = ("file_path", "path", "notebook_path")

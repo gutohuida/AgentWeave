@@ -100,12 +100,25 @@ def test_task_tools_use_agent_ledger_endpoints_without_assigner(hub):
     assert _body(calls[3]) == {"status": "completed"}
 
 
-def test_question_tools_bind_asker_and_return_answer(hub):
+def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
+    """`ask_user` now waits and returns the answer itself, so it consumes the poll response its
+    own wait makes. `get_answer` remains for an agent that deliberately did not block."""
+    from hub import mcp_server
     from hub.mcp_server import ask_user, get_answer
 
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
     calls, responses = hub
-    responses.extend([b'{"id":"q-1"}', b'{"answered":true,"answer":"yes"}'])
-    assert ask_user("Proceed?", blocking=True)["question_id"] == "q-1"
+    responses.extend(
+        [
+            b'{"id":"q-1"}',
+            b'{"answered":true,"answer":"yes"}',  # consumed by ask_user's own wait
+            b'{"answered":true,"answer":"yes"}',  # for the explicit get_answer below
+        ]
+    )
+    answered = ask_user("Proceed?")
+    assert answered["question_id"] == "q-1"
+    assert answered["answered"] is True
+    assert answered["answer"] == "yes"
     assert _body(calls[0]) == {"question": "Proceed?", "blocking": True}
     assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}
 

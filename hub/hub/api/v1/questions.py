@@ -128,44 +128,60 @@ async def answer_question(
     # Operator answers are typed depth-zero queue entries, not magic "user"
     # messages or inbox-poll triggers. They resume autonomous chains in the same
     # governed path as every other operator input.
-    conversation = await latest_open_conversation(session, project_id=project_id, agent=from_agent)
-    if conversation is None:
-        conversation = new_conversation(project_id=project_id, agent=from_agent)
-        session.add(conversation)
+    #
+    # Skipped for a blocking question: `ask_user` waits and returns the answer as its own tool
+    # result, so the asking agent already has it. Queuing as well told it twice and cost a whole
+    # extra turn — measured live, the agent answered, then woke again and restated the same
+    # directive. A non-blocking question still needs this: nothing is waiting to receive it.
+    entry = None
+    conversation = None
+    if not question.blocking:
+        conversation = await latest_open_conversation(
+            session, project_id=project_id, agent=from_agent
+        )
+        if conversation is None:
+            conversation = new_conversation(project_id=project_id, agent=from_agent)
+            session.add(conversation)
 
-    entry = new_entry(
-        project_id=project_id,
-        agent=from_agent,
-        origin_type="operator",
-        origin_agent=None,
-        content=f"Question: {q_text}\n\nAnswer: {body.answer}",
-        hop_depth=0,
-        conversation_id=conversation.id,
-    )
-    session.add(entry)
+        entry = new_entry(
+            project_id=project_id,
+            agent=from_agent,
+            origin_type="operator",
+            origin_agent=None,
+            content=f"Question: {q_text}\n\nAnswer: {body.answer}",
+            hop_depth=0,
+            conversation_id=conversation.id,
+        )
+        session.add(entry)
     await session.commit()
     await session.refresh(question)
 
     await sse_manager.broadcast(
         project_id, "question_answered", {"id": question_id, "answer": body.answer}
     )
-    queue_payload = {
-        "entry_id": entry.id,
-        "agent": from_agent,
-        "origin_type": "operator",
-        "hop_depth": 0,
-        "question_id": question_id,
-        "conversation_id": conversation.id,
-    }
-    await persist_event(session, project_id, "queue_entry_queued", queue_payload, agent=from_agent)
-    await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
+    # Only a queued answer has a queue event to report, or an agent to wake for it. A blocking
+    # asker is already awake and holding the tool call open.
+    if entry is not None:
+        queue_payload = {
+            "entry_id": entry.id,
+            "agent": from_agent,
+            "origin_type": "operator",
+            "hop_depth": 0,
+            "question_id": question_id,
+            "conversation_id": conversation.id,
+        }
+        await persist_event(
+            session, project_id, "queue_entry_queued", queue_payload, agent=from_agent
+        )
+        await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
     await persist_event(
         session,
         project_id,
         "question_answered",
         {"id": question_id, "answer": body.answer},
     )
-    from ...turn_scheduler import schedule_agent
+    if entry is not None:
+        from ...turn_scheduler import schedule_agent
 
-    await schedule_agent(project_id, from_agent)
+        await schedule_agent(project_id, from_agent)
     return question

@@ -17,7 +17,9 @@ import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
 import { Composer } from './Composer'
 import { PermissionRequestCard } from './PermissionRequestCard'
+import { AgentQuestionCard } from './AgentQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
+import { useQuestions } from '@/api/questions'
 import { ConversationControls, type HandoffState } from './ConversationControls'
 import { agentColorVars } from '@/lib/agentColors'
 
@@ -80,6 +82,7 @@ export function AgentOutputPanel({
   const handoffOutputStartRef = useRef<number | null>(null)
   const handoffSawRunningRef = useRef(false)
   const { data: permissionRequests = [] } = usePendingPermissionRequests()
+  const { data: openQuestions = [] } = useQuestions(false)
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -532,6 +535,7 @@ export function AgentOutputPanel({
               operator is answering under its timeout, so this must be where they already are
               rather than somewhere they have to scroll to. */}
           <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
+          <AgentQuestionCard questions={openQuestions} agent={agent.name} />
 
           <div className="conversation-composer-surface">
             <Composer

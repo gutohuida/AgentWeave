@@ -8,13 +8,14 @@ from hub.db.models import InboundQueueEntry, Message
 
 @pytest.mark.asyncio
 async def test_ask_and_answer_question(app, auth_headers):
+    """The non-blocking path: nothing is waiting, so the answer is queued to wake the agent."""
     # Ask a question
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
         json={
             "from_agent": "claude",
             "question": "Which approach should I use?",
-            "blocking": True,
+            "blocking": False,
         },
         headers=auth_headers,
     )
@@ -22,7 +23,7 @@ async def test_ask_and_answer_question(app, auth_headers):
     data = resp.json()
     assert data["id"].startswith("q-")
     assert data["answered"] is False
-    assert data["blocking"] is True
+    assert data["blocking"] is False
 
     q_id = data["id"]
 
@@ -76,3 +77,41 @@ async def test_ask_and_answer_question(app, auth_headers):
         "/api/v1/projects/proj-test/questions?answered=false", headers=auth_headers
     )
     assert not any(q["id"] == q_id for q in resp4.json())
+
+
+@pytest.mark.asyncio
+async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_headers):
+    """`ask_user` waits and returns the answer as its own tool result, so the asking agent
+    already has it. Queuing as well told it twice and cost a whole extra turn — measured live,
+    the agent answered and then woke again to restate the same directive."""
+    from hub.db.engine import async_session_factory
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={"from_agent": "claude", "question": "Which one?", "blocking": True},
+        headers=auth_headers,
+    )
+    q_id = resp.json()["id"]
+
+    answered = await app.patch(
+        f"/api/v1/projects/proj-test/questions/{q_id}",
+        json={"answer": "the blocking answer"},
+        headers=auth_headers,
+    )
+    assert answered.status_code == 200
+    assert answered.json()["answer"] == "the blocking answer"
+
+    async with async_session_factory() as session:
+        entries = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.project_id == "proj-test",
+                        InboundQueueEntry.content.contains("the blocking answer"),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert entries == []

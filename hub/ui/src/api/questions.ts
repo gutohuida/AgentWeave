@@ -21,6 +21,9 @@ export function useQuestions(answered?: boolean) {
     queryKey: ['project', projectId, 'questions', answered],
     queryFn: () => getJson<Question[]>(`/api/v1/projects/${projectId}/questions${params}`),
     enabled: isConfigured && !!projectId,
+    // An agent blocks on a question it asked, so arriving late is close to not arriving. SSE
+    // already invalidates this key; the interval is the backstop for a dropped event.
+    refetchInterval: 3000,
   })
 }
 
