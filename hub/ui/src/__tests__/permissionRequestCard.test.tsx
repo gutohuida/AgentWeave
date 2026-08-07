@@ -71,3 +71,42 @@ describe('permission request card', () => {
     expect(screen.queryByTestId('permission-request-perm-1')).not.toBeInTheDocument()
   })
 })
+
+describe('permission request card — codex shapes', () => {
+  it('shows the granted root for a file-change approval', () => {
+    render(
+      <PermissionRequestCard
+        requests={[request({ tool_name: 'a file change', tool_input: { grantRoot: 'C:/work' } })]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('C:/work')).toBeInTheDocument()
+  })
+
+  it('falls back to the provider\u2019s reason when it sends no path at all', () => {
+    // Measured live: codex sends {"grantRoot": null, "reason": null} for a file change, so this
+    // path is reached in practice rather than being defensive.
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'a file change',
+            tool_input: { grantRoot: null, reason: 'needs to write outside the sandbox' },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('needs to write outside the sandbox')).toBeInTheDocument()
+  })
+
+  it('says so plainly when the provider sent nothing', () => {
+    render(
+      <PermissionRequestCard
+        requests={[request({ tool_name: 'a file change', tool_input: { grantRoot: null } })]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText(/the provider sent none/)).toBeInTheDocument()
+  })
+})

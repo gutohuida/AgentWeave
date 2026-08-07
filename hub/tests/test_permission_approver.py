@@ -399,3 +399,109 @@ def test_the_workspace_posture_never_asks_the_operator(workspace, monkeypatch):
     )
     answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
     assert answer["behavior"] == "allow"
+
+
+# --- Codex postures ---------------------------------------------------------------------------
+
+
+def test_codex_offers_the_same_postures_by_the_same_names():
+    """An operator should not have to learn two vocabularies for the same choice."""
+    claude = get_provider("claude").control("permission_mode")
+    codex = get_provider("codex").control("permission_mode")
+    assert [v.id for v in codex.values] == [v.id for v in claude.values]
+    assert [v.label for v in codex.values] == [v.label for v in claude.values]
+    assert codex.default == "acceptEdits"
+
+
+def test_the_codex_posture_reaches_no_command_line():
+    """Codex approvals are answered over the app-server protocol, not selected by a flag."""
+    assert render_control_args("codex", {"permission_mode": WORKSPACE_PERMISSION_MODE}) == []
+    assert render_control_args("codex", {"permission_mode": "manual"}) == []
+
+
+def test_codex_workspace_posture_allows_inside_and_denies_outside(tmp_path):
+    from hub.codex_appserver import COMMAND_APPROVAL_METHOD, decide_approval
+
+    ws = tmp_path / "work"
+    ws.mkdir()
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+
+    def decide(cwd):
+        return decide_approval(
+            COMMAND_APPROVAL_METHOD,
+            {"command": "ls", "cwd": str(cwd)},
+            yolo=False,
+            own_server_name="agentweave",
+            posture=WORKSPACE_PERMISSION_MODE,
+            workspace=str(ws),
+        )
+
+    assert decide(ws)["decision"] == "accept"
+    assert decide(outside)["decision"] == "decline"
+
+
+def test_codex_workspace_posture_denies_when_the_boundary_is_unknown(tmp_path):
+    from hub.codex_appserver import COMMAND_APPROVAL_METHOD, decide_approval
+
+    decision = decide_approval(
+        COMMAND_APPROVAL_METHOD,
+        {"command": "ls", "cwd": str(tmp_path)},
+        yolo=False,
+        own_server_name="agentweave",
+        posture=WORKSPACE_PERMISSION_MODE,
+        workspace=None,
+    )
+    assert decision["decision"] == "decline"
+
+
+def test_codex_operator_posture_asks_rather_than_deciding():
+    from hub.codex_appserver import ASK_OPERATOR, COMMAND_APPROVAL_METHOD, decide_approval
+    from hub.runner_commands import OPERATOR_POSTURE
+
+    decision = decide_approval(
+        COMMAND_APPROVAL_METHOD,
+        {"command": "ls", "cwd": "/anywhere"},
+        yolo=False,
+        own_server_name="agentweave",
+        posture=OPERATOR_POSTURE,
+    )
+    assert decision == ASK_OPERATOR
+    # The sentinel must never be a valid protocol reply.
+    assert decision["decision"] not in ("accept", "decline")
+
+
+def test_codex_without_a_posture_behaves_exactly_as_before():
+    from hub.codex_appserver import COMMAND_APPROVAL_METHOD, decide_approval
+
+    params = {"command": "ls", "cwd": "/anywhere"}
+    kw = {"own_server_name": "agentweave", "posture": None}
+    assert decide_approval(COMMAND_APPROVAL_METHOD, params, yolo=True, **kw)["decision"] == "accept"
+    assert decide_approval(COMMAND_APPROVAL_METHOD, params, yolo=False, **kw)["decision"] == "decline"
+
+
+def test_codex_approval_subject_carries_what_the_operator_needs():
+    from hub.codex_appserver import (
+        COMMAND_APPROVAL_METHOD,
+        FILE_CHANGE_APPROVAL_METHOD,
+        approval_subject,
+    )
+
+    command = approval_subject(
+        COMMAND_APPROVAL_METHOD, {"command": "rm -rf x", "cwd": "/w", "reason": "cleanup"}
+    )
+    assert command == {"command": "rm -rf x", "cwd": "/w", "reason": "cleanup"}
+
+    # File-change approvals carry no per-file paths; grantRoot is all there is.
+    change = approval_subject(FILE_CHANGE_APPROVAL_METHOD, {"grantRoot": "/w", "reason": "edit"})
+    assert change == {"grantRoot": "/w", "reason": "edit"}
+
+
+def test_codex_posture_mapping():
+    from hub.api.v1.agent_trigger import _codex_posture
+    from hub.runner_commands import OPERATOR_POSTURE
+
+    assert _codex_posture("manual") == OPERATOR_POSTURE
+    assert _codex_posture(WORKSPACE_PERMISSION_MODE) == WORKSPACE_PERMISSION_MODE
+    assert _codex_posture("acceptEdits") is None
+    assert _codex_posture(None) is None

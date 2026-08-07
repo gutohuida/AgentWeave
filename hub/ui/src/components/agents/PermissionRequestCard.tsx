@@ -21,7 +21,17 @@ function describe(request: PermissionRequest): string {
   if (typeof path === 'string' && path) return path
   const command = input.command
   if (typeof command === 'string' && command) return command
-  return 'no path or command given'
+  // Codex's file-change approvals carry only the root they want granted; the individual paths
+  // are not in the request, so this is the most specific thing there is to show.
+  const grantRoot = input.grantRoot
+  if (typeof grantRoot === 'string' && grantRoot) return grantRoot
+  const cwd = input.cwd
+  if (typeof cwd === 'string' && cwd) return cwd
+  // Codex often sends a file-change approval with grantRoot null. Its own stated reason is then
+  // the only thing describing the request, and is better than telling the operator nothing.
+  const reason = input.reason
+  if (typeof reason === 'string' && reason) return reason
+  return 'no details given — the provider sent none'
 }
 
 export function PermissionRequestCard({ requests, agent }: PermissionRequestCardProps) {

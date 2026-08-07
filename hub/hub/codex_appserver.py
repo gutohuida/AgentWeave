@@ -30,10 +30,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from .model_catalog import WORKSPACE_PERMISSION_MODE
 from .pty_runner import resolve_executable
+from .runner_commands import OPERATOR_POSTURE
 from .runner_events import (
     AccountingSample,
     ContextUsageSample,
@@ -89,6 +92,11 @@ PERMISSIONS_APPROVAL_METHOD = "item/permissions/requestApproval"
 
 _SANDBOX_APPROVAL_METHODS = (COMMAND_APPROVAL_METHOD, FILE_CHANGE_APPROVAL_METHOD)
 
+# Returned by `decide_approval` when only a human can answer. Never a valid protocol reply --
+# `run_turn` replaces it with a real decision before responding, and responding with this
+# would be a protocol error rather than a silent mistake.
+ASK_OPERATOR: Dict[str, Any] = {"decision": "__ask_operator__"}
+
 # Shared by commandExecution's and fileChange's `status` fields (schema:
 # CommandExecutionStatus / PatchApplyStatus — both "inProgress"/"completed"/"failed"/
 # "declined"). A refused approval reports "declined", not "failed" — verified against the
@@ -104,12 +112,71 @@ _YOLO_PERMISSIONS_GRANT: Dict[str, Any] = {
 }
 
 
+def approval_subject(method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """What a sandbox approval is asking about, in the shape the operator card renders.
+
+    Codex's two sandbox approvals carry different evidence, and the difference is real rather
+    than incidental. A command approval names the command, its cwd, and Codex's own reason. A
+    file-change approval names only the root it wants granted — the individual paths are not in
+    the request (verified against `codex app-server generate-json-schema`, CLI 0.146.0), so a
+    workspace check on this method is necessarily coarser than Claude's per-path one.
+    """
+    if method == COMMAND_APPROVAL_METHOD:
+        cwd = params.get("cwd")
+        return {
+            "command": params.get("command"),
+            "cwd": cwd if isinstance(cwd, str) else (cwd or {}).get("value"),
+            "reason": params.get("reason"),
+        }
+    return {"grantRoot": params.get("grantRoot"), "reason": params.get("reason")}
+
+
+def _within(path: Optional[str], workspace: Optional[str]) -> bool:
+    """True when *path* is the workspace or beneath it, comparing resolved components.
+
+    Absent either side is not "inside": an unknown boundary is not an open one.
+    """
+    if not path or not workspace:
+        return False
+    try:
+        root = os.path.realpath(workspace)
+        target = os.path.realpath(path)
+        shared = os.path.commonpath([root, target])
+    except (OSError, ValueError):  # unresolvable, or different drives on Windows
+        return False
+    return os.path.normcase(shared) == os.path.normcase(root)
+
+
+def _thread_policy(*, yolo: bool, posture: Optional[str]) -> "tuple[str, str]":
+    """The `sandbox` / `approvalPolicy` a thread starts under, for a given posture.
+
+    This is what decides whether Codex asks at all. `decide_approval` only ever sees requests the
+    thread policy caused: measured live, `workspace-write` + `on-request` let a codex agent create
+    a file inside its worktree without raising a single approval, so an operator who selected
+    "Ask me" saw nothing and the agent simply proceeded.
+
+    "Ask me" therefore starts `read-only` + `untrusted`, the strictest pair the schema offers
+    (`AskForApproval`: untrusted | on-request | never; `SandboxMode`: read-only | workspace-write |
+    danger-full-access), so effectively every effectful action becomes a request the operator
+    answers. The other postures keep the pairing they already had.
+    """
+    if yolo and posture is None:
+        return "danger-full-access", "never"
+    if posture == OPERATOR_POSTURE:
+        return "read-only", "untrusted"
+    if posture == "bypassPermissions":
+        return "danger-full-access", "never"
+    return "workspace-write", "on-request"
+
+
 def decide_approval(
     method: str,
     params: Dict[str, Any],
     *,
     yolo: bool,
     own_server_name: str,
+    posture: Optional[str] = None,
+    workspace: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Decide the Hub's answer to one server->client request.
 
@@ -134,6 +201,14 @@ def decide_approval(
     if method in _SANDBOX_APPROVAL_METHODS:
         # Command/file-change approvals are not tool-surface concerns (implications.md §3):
         # they follow the operator's selected sandbox, never the elicitation decision above.
+        if posture == OPERATOR_POSTURE:
+            # Answered outside this function — it is pure and cannot wait on a human. The caller
+            # turns this into a real accept/decline and must never pass it back to Codex.
+            return dict(ASK_OPERATOR)
+        if posture == WORKSPACE_PERMISSION_MODE:
+            subject = approval_subject(method, params)
+            inside = _within(subject.get("cwd") or subject.get("grantRoot"), workspace)
+            return {"decision": "accept"} if inside else {"decision": "decline"}
         return {"decision": "accept"} if yolo else {"decision": "decline"}
 
     if method == PERMISSIONS_APPROVAL_METHOD:
@@ -590,6 +665,9 @@ async def run_turn(
     on_thread_started: "Optional[Callable[[str], Awaitable[None]]]" = None,
     should_interrupt: "Optional[Callable[[], bool]]" = None,
     turn_timeout: float = DEFAULT_TURN_TIMEOUT_SECONDS,
+    posture: Optional[str] = None,
+    workspace: Optional[str] = None,
+    request_approval: "Optional[Callable[[str, Dict[str, Any]], Awaitable[bool]]]" = None,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -619,10 +697,11 @@ async def run_turn(
         )
         await session.notify("initialized", {})
 
+        sandbox_mode, approval_policy = _thread_policy(yolo=yolo, posture=posture)
         thread_params: Dict[str, Any] = {
             "cwd": cwd,
-            "sandbox": "danger-full-access" if yolo else "workspace-write",
-            "approvalPolicy": "never" if yolo else "on-request",
+            "sandbox": sandbox_mode,
+            "approvalPolicy": approval_policy,
         }
         if model:
             thread_params["model"] = model
@@ -691,8 +770,22 @@ async def run_turn(
                 # A server->client request (approval/elicitation) — must always be answered
                 # (implications.md §2: an unanswered request hangs the turn indefinitely).
                 decision = decide_approval(
-                    method, msg.get("params") or {}, yolo=yolo, own_server_name=own_server_name
+                    method,
+                    msg.get("params") or {},
+                    yolo=yolo,
+                    own_server_name=own_server_name,
+                    posture=posture,
+                    workspace=workspace,
                 )
+                if decision == ASK_OPERATOR:
+                    # The sentinel is not a protocol reply; it must be resolved into a real one
+                    # before it can be sent. With no answerer wired, decline -- every request
+                    # still gets an answer (implications.md 2: silence is a deadlock).
+                    allowed = False
+                    if request_approval is not None:
+                        subject = approval_subject(method, msg.get("params") or {})
+                        allowed = await request_approval(method, subject)
+                    decision = {"decision": "accept" if allowed else "decline"}
                 await session.respond(msg_id, decision)
                 continue
 

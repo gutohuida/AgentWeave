@@ -47,7 +47,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Agent, Conversation, Run, Runner
+from ...db.models import Agent, Conversation, PermissionRequest, Run, Runner
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
@@ -56,7 +56,7 @@ from ...launchability import (
     resolve_access_path,
     resolve_agent_env,
 )
-from ...model_catalog import validate_overrides
+from ...model_catalog import WORKSPACE_PERMISSION_MODE, validate_overrides
 from ...output_recording import record_agent_output, record_context_usage
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
@@ -107,6 +107,13 @@ _active_app_server_runs: set = set()
 # app-server path also polls this set directly (`run_turn`'s `should_interrupt`), since it has
 # no process handle to terminate from the outside.
 _stop_requested: set = set()
+
+# How long a Codex approval waits for the operator, and how often it re-reads the decision.
+# Codex holds its JSON-RPC request open throughout; unlike Claude's tool call there is no
+# provider-side ceiling measured here, so this matches the Claude approver's budget rather than
+# inventing a longer one.
+CODEX_OPERATOR_DECISION_TIMEOUT = 120
+CODEX_OPERATOR_POLL_SECONDS = 2
 
 
 class TriggerAgentRequest(BaseModel):
@@ -463,6 +470,7 @@ async def trigger_agent_directly(
             prompt=prompt,
             yolo=yolo,
             mcp_command=mcp_command,
+            permission_mode=(control_overrides or {}).get("permission_mode"),
         )
     )
     _background_runs.add(task)
@@ -795,6 +803,7 @@ async def _execute_run(
     prompt: Optional[str] = None,
     yolo: bool = False,
     mcp_command: Optional[List[str]] = None,
+    permission_mode: Optional[str] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -824,6 +833,7 @@ async def _execute_run(
             mcp_command=mcp_command,
             env=env,
             worktree=worktree,
+            permission_mode=permission_mode,
         )
         return
 
@@ -1089,6 +1099,78 @@ async def _execute_run(
         _stop_requested.discard(run_id)
 
 
+# How Codex's approval methods read on the operator's card. The raw method names
+# ("item/commandExecution/requestApproval") are protocol, not something to put in front of a
+# person deciding in seconds.
+_CODEX_APPROVAL_LABELS = {
+    "item/commandExecution/requestApproval": "a command",
+    "item/fileChange/requestApproval": "a file change",
+}
+
+
+def _codex_posture(permission_mode: Optional[str]) -> Optional[str]:
+    """Map the operator's chosen posture onto what `decide_approval` understands.
+
+    "manual" is the operator-answered posture for both providers; the value differs only
+    because Claude's spelling is its CLI's own.
+    """
+    if permission_mode == "manual":
+        return OPERATOR_POSTURE
+    if permission_mode == WORKSPACE_PERMISSION_MODE:
+        return WORKSPACE_PERMISSION_MODE
+    return None
+
+
+async def _await_operator_permission(
+    *, project_id: str, agent: str, run_id: str, method: str, subject: Dict[str, object]
+) -> bool:
+    """Open a permission request for a Codex approval and wait for the operator.
+
+    The Codex counterpart of `mcp_server._ask_operator`, and it holds the same line: a turn is
+    suspended, not failed, while this waits, so the wait is bounded and running out denies.
+    Codex is waiting on a JSON-RPC response the whole time.
+    """
+    request_id = f"perm-{short_id()}"
+    async with async_session_factory() as db:
+        db.add(
+            PermissionRequest(
+                id=request_id,
+                project_id=project_id,
+                agent=agent,
+                run_id=run_id,
+                tool_name=_CODEX_APPROVAL_LABELS.get(method, method),
+                tool_use_id="",
+                tool_input=dict(subject),
+                status="pending",
+            )
+        )
+        await db.commit()
+    await sse_manager.broadcast(
+        project_id,
+        "permission_requested",
+        {"id": request_id, "agent": agent, "tool_name": _CODEX_APPROVAL_LABELS.get(method, method),
+         "run_id": run_id},
+    )
+
+    deadline = asyncio.get_event_loop().time() + CODEX_OPERATOR_DECISION_TIMEOUT
+    while asyncio.get_event_loop().time() < deadline:
+        await asyncio.sleep(CODEX_OPERATOR_POLL_SECONDS)
+        async with async_session_factory() as db:
+            row = await db.get(PermissionRequest, request_id)
+            status_now = row.status if row is not None else "denied"
+        if status_now == "allowed":
+            return True
+        if status_now in ("denied", "expired"):
+            return False
+
+    async with async_session_factory() as db:
+        row = await db.get(PermissionRequest, request_id)
+        if row is not None and row.status == "pending":
+            row.status = "expired"
+            await db.commit()
+    return False
+
+
 async def _execute_codex_appserver_run(
     *,
     project_id: str,
@@ -1104,6 +1186,7 @@ async def _execute_codex_appserver_run(
     mcp_command: Optional[List[str]],
     env: Optional[Dict[str, str]],
     worktree: Optional[Path],
+    permission_mode: Optional[str] = None,
 ) -> None:
     """Codex `app-server` (task 2.8) counterpart to `_execute_run`'s PTY/pipe read loop above.
 
@@ -1196,6 +1279,15 @@ async def _execute_codex_appserver_run(
         try:
             outcome: TurnOutcome = await codex_run_turn(
                 cli=cli,
+                posture=_codex_posture(permission_mode),
+                workspace=work_dir,
+                request_approval=lambda method, subject: _await_operator_permission(
+                    project_id=project_id,
+                    agent=agent,
+                    run_id=run_id,
+                    method=method,
+                    subject=subject,
+                ),
                 cwd=work_dir,
                 env=env,
                 prompt=prompt,

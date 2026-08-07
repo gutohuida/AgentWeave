@@ -196,6 +196,23 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 default="medium",
                 apply=ApplySpec(style="config", template="model_reasoning_effort={value}"),
             ),
+            # Codex's approvals are answered by the Hub over the app-server protocol, not
+            # selected by a command-line flag, so this renders nothing to argv (style="none")
+            # and is read at trigger time instead. The labels match Claude's deliberately: an
+            # operator should not have to learn two vocabularies for the same choice.
+            ControlDescriptor(
+                id="permission_mode",
+                label="Permissions",
+                kind="enum",
+                values=(
+                    ControlValue(id="acceptEdits", label="Edit files"),
+                    ControlValue(id=WORKSPACE_PERMISSION_MODE, label="Workspace only"),
+                    ControlValue(id="manual", label="Ask me"),
+                    ControlValue(id="bypassPermissions", label="Full access"),
+                ),
+                default="acceptEdits",
+                apply=ApplySpec(style="none"),
+            ),
         ),
     ),
 }
