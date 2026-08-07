@@ -110,26 +110,37 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
     calls, responses = hub
     responses.extend(
         [
-            b'{"id":"q-1"}',
+            b'{"batch_id":"qbatch-1","questions":[{"id":"q-1"}]}',
             b'{"answered":true,"answer":"yes"}',  # consumed by ask_user's own wait
             b'{"answered":true,"answer":"yes"}',  # for the explicit get_answer below
         ]
     )
     answered = ask_user(
-        "Proceed?", header="Decide", options=[{"label": "Yes"}, {"label": "No"}], multi_select=False
+        [
+            {
+                "question": "Proceed?",
+                "header": "Decide",
+                "options": [{"label": "Yes"}, {"label": "No"}],
+                "multi_select": False,
+            }
+        ]
     )
-    assert answered["question_id"] == "q-1"
+    assert answered["question_ids"] == ["q-1"]
     assert answered["answered"] is True
-    assert answered["answer"] == "yes"
-    # `options` is always sent, empty for an open question — the column is a list, and a null
-    # would come back as None rather than []. `header`/`multi_select` are sent unconditionally
-    # too, so the Hub never has to distinguish "absent" from "not wanted".
+    assert answered["answers"][0]["answer"] == "yes"
+    # The whole batch goes in one request, and each entry carries its full structure —
+    # `header`/`options`/`multi_select` are sent unconditionally, so the Hub never has to
+    # distinguish "absent" from "not wanted".
     assert _body(calls[0]) == {
-        "question": "Proceed?",
+        "questions": [
+            {
+                "question": "Proceed?",
+                "header": "Decide",
+                "options": [{"label": "Yes"}, {"label": "No"}],
+                "multi_select": False,
+            }
+        ],
         "blocking": True,
-        "options": [{"label": "Yes"}, {"label": "No"}],
-        "header": "Decide",
-        "multi_select": False,
     }
     assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}
 

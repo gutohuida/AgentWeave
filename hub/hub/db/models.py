@@ -401,6 +401,15 @@ class Question(Base):
     # The chosen labels, structurally. `answer` keeps the human-readable form (a single label,
     # the labels joined, or free text) so everything already reading it still works.
     answer_labels: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # One `ask_user` call can carry several questions. They are separate rows sharing a batch id,
+    # rather than one row holding a list, so every existing reader of a question keeps working —
+    # a question asked on its own is simply a batch of one.
+    batch_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Position within the batch, and the batch's total. `batch_size` is denormalized onto every
+    # row on purpose: the panel fetches only *unanswered* questions, so this is what lets it say
+    # "2 of 3" without a second request for rows it has already finished with.
+    batch_index: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
+    batch_size: Mapped[int] = mapped_column(default=1, server_default="1", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

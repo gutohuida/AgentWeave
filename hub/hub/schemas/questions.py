@@ -59,6 +59,12 @@ class QuestionResponse(BaseModel):
     multi_select: bool = False
 
     answer_labels: List[str] = Field(default_factory=list)
+    # Batch identity. A question asked on its own reports `batch_size == 1`, so a reader never has
+    # to special-case the unbatched form. `batch_size` is what lets the panel say "2 of 3" while
+    # holding only the unanswered rows.
+    batch_id: Optional[str] = None
+    batch_index: int = 0
+    batch_size: int = 1
     created_at: datetime
     answered_at: Optional[datetime] = None
 

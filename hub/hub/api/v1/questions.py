@@ -27,7 +27,16 @@ async def ask_question_for_actor(
     from_agent: str,
     created_by_run_id: Optional[str],
     session: AsyncSession,
+    batch_id: Optional[str] = None,
+    batch_index: int = 0,
+    batch_size: int = 1,
 ) -> Question:
+    """Create one question row. A question asked on its own is a batch of one.
+
+    Batched questions come through here too, one call each, so a question that arrives as part of a
+    set is created by exactly the same path — same id scheme, same event, same broadcast — as one
+    asked alone.
+    """
     q_id = f"q-{short_id()}"
     question = Question(
         id=q_id,
@@ -39,6 +48,9 @@ async def ask_question_for_actor(
         header=body.header,
         multi_select=body.multi_select,
         created_by_run_id=created_by_run_id,
+        batch_id=batch_id,
+        batch_index=batch_index,
+        batch_size=batch_size,
     )
     session.add(question)
     await session.commit()

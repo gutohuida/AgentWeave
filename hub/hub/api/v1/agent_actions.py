@@ -101,6 +101,25 @@ class AgentQuestionCreate(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class AgentQuestionBatchCreate(BaseModel):
+    """Several questions asked in one call, answered in one sitting.
+
+    Capped at 4 the way Claude Code's own `AskUserQuestion` is: past a handful, stepping through
+    stops feeling like being asked something and starts feeling like filling in a form. The lower
+    bound is 1, not 2 — a single question is the common case and must not need a different call.
+    """
+
+    questions: List[AgentQuestionCreate] = Field(min_length=1, max_length=4)
+    blocking: bool = True
+
+    model_config = {"extra": "forbid"}
+
+
+class AgentQuestionBatchResponse(BaseModel):
+    batch_id: str
+    questions: List[QuestionResponse]
+
+
 class BoundAgentRequest(BaseModel):
     name: str = Field(min_length=1, max_length=32)
     template: str = Field(min_length=1, max_length=32)
@@ -235,6 +254,52 @@ async def ask_operator_question(
         from_agent=actor.agent,
         created_by_run_id=actor.run_id,
         session=session,
+    )
+
+
+@router.post(
+    "/questions/batch",
+    response_model=AgentQuestionBatchResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def ask_operator_question_batch(
+    body: AgentQuestionBatchCreate,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Ask several questions at once, as rows sharing one batch identity.
+
+    Validation happens before anything is written — Pydantic rejects the whole body if any entry
+    is missing its structure — so a batch is never half-created, and the agent retries with a
+    complete set rather than leaving the operator a partial prompt.
+    """
+    batch_id = f"qbatch-{short_id()}"
+    total = len(body.questions)
+    created = []
+    for index, entry in enumerate(body.questions):
+        question = QuestionCreate(
+            from_agent=actor.agent,
+            question=entry.question,
+            blocking=body.blocking,
+            options=list(entry.options or []),
+            header=entry.header,
+            multi_select=entry.multi_select,
+        )
+        created.append(
+            await ask_question_for_actor(
+                question,
+                project_id=actor.project_id,
+                from_agent=actor.agent,
+                created_by_run_id=actor.run_id,
+                session=session,
+                batch_id=batch_id,
+                batch_index=index,
+                batch_size=total,
+            )
+        )
+    return AgentQuestionBatchResponse(
+        batch_id=batch_id,
+        questions=[QuestionResponse.model_validate(row) for row in created],
     )
 
 

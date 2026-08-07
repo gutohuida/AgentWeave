@@ -784,16 +784,18 @@ def _tool_surface_lines() -> List[str]:
         "- `list_tasks(agent=None)` — read the shared task ledger.",
         "- `get_task(task_id)` — read one ledger entry.",
         f"- `update_task(task_id, status)` — status is required, one of {values(TaskStatus)}.",
-        "- `ask_user(question, header, options, multi_select)` — ask the operator and **wait** "
-        "for the answer, which is returned to you. Ask whenever a choice is genuinely the "
-        "operator's to make and guessing wrong would waste real work; do not ask what the "
-        "repository or the task already answers.",
-        "  All four are required. `header` is two or three words naming the decision. `options` "
+        "- `ask_user(questions)` — ask the operator and **wait** for the answers, which are "
+        "returned to you. Ask whenever a choice is genuinely the operator's to make and guessing "
+        "wrong would waste real work; do not ask what the repository or the task already answers.",
+        "  `questions` is a list of 1 to 4. Ask everything you need in one call: the operator "
+        "steps through them in a single sitting, which interrupts them once instead of once per "
+        "question. Each entry needs `question`, `header`, `options` and `multi_select`, all "
+        "required. `header` is two or three words naming the decision. `options` "
         "is 2 to 8 entries of `{\"label\", \"description\"}` — the label comes back to you, and "
         "the description is what lets the operator choose without already knowing the trade-off, "
         "so write what picking it actually means rather than restating the label. There is no "
         "way to ask without options: if the decision feels open, offer the answers you consider "
-        "most likely. `multi_select` is true when several can be chosen together, and the answer "
+        "most likely. `multi_select` is true when several can be chosen together, and that answer "
         "then arrives as a list. The operator can always reply in their own words instead, so "
         "handle an answer that is none of yours.",
         "- `get_answer(question_id)` — only needed for a question you asked with "

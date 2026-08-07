@@ -255,76 +255,105 @@ def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
 
 @mcp.tool()
 def ask_user(
-    question: str,
-    header: str,
-    options: List[Dict[str, str]],
-    multi_select: bool,
+    questions: List[Dict[str, Any]],
     blocking: bool = True,
 ) -> Dict[str, Any]:
-    """Ask the operator a question and wait for their answer.
+    """Ask the operator one or more questions and wait for the answers.
+
+    Ask everything you need in a single call. The operator steps through them in one sitting,
+    which is one interruption instead of several, and your turn waits once instead of once per
+    question.
 
     Args:
-        question: What you need the operator to decide or clarify.
-        header: Two or three words naming the decision, e.g. "Database".
-        options: Between 2 and 8 answers, each {"label": "...", "description": "..."}. The
-            label is what comes back to you; the description is what lets the operator choose
-            without already knowing the trade-off — write what picking it actually means, not
-            a restatement of the label. There is no way to ask without options: if the decision
-            feels open, offer the answers you consider most likely. The operator can always
-            reply in their own words instead, so handle an answer that is none of yours.
-        multi_select: True when several options can be chosen together, and the answer comes
-            back as a list. False when exactly one applies.
-        blocking: Leave this alone to wait for the answer, which is almost always what you
+        questions: Between 1 and 4 questions, each a dict with:
+            - "question": what you need the operator to decide or clarify.
+            - "header": two or three words naming the decision, e.g. "Database".
+            - "options": between 2 and 8 answers, each {"label": "...", "description": "..."}.
+              The label is what comes back to you; the description is what lets the operator
+              choose without already knowing the trade-off — write what picking it actually
+              means, not a restatement of the label. There is no way to ask without options: if
+              the decision feels open, offer the answers you consider most likely. The operator
+              can always reply in their own words instead, so handle an answer that is none of
+              yours.
+            - "multi_select": True when several options can be chosen together, and that
+              answer comes back as a list. False when exactly one applies.
+        blocking: Leave this alone to wait for the answers, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
             continuing — you must then poll `get_answer` yourself, and a turn that ends first
-            loses the question.
+            loses the questions.
+
+    Returns a list under "answers", one entry per question, in the order you asked them.
     """
+    asked = list(questions)
     result = _hub_request(
         "POST",
-        "/questions",
-        {
-            "question": question,
-            "blocking": blocking,
-            "options": list(options),
-            "header": header,
-            "multi_select": multi_select,
-        },
+        "/questions/batch",
+        {"questions": asked, "blocking": blocking},
     )
-    question_id = result.get("id")
+    rows = result.get("questions") or []
+    question_ids = [row.get("id") for row in rows]
+    pending = {
+        row.get("id"): bool(asked[index].get("multi_select"))
+        for index, row in enumerate(rows)
+        if index < len(asked)
+    }
     if not blocking:
-        return {"success": True, "question_id": question_id, "answered": False}
+        return {"success": True, "question_ids": question_ids, "answered": False}
+
+    answers: Dict[str, Dict[str, Any]] = {}
 
     # Waiting is the point: an agent that asks and carries on regardless has guessed, and the
     # operator's answer arrives too late to matter. The wait is bounded for the same reason the
     # permission approver's is — a turn suspended forever is worse than one told nobody replied.
+    # The whole batch shares one deadline; the operator is working through them in one sitting.
     deadline = time.monotonic() + QUESTION_ANSWER_TIMEOUT
-    while time.monotonic() < deadline:
+    while time.monotonic() < deadline and len(answers) < len(question_ids):
         time.sleep(QUESTION_POLL_SECONDS)
-        try:
-            state = _hub_request("GET", f"/questions/{question_id}")
-        except Exception:  # noqa: BLE001 - a blip must not end the wait; retry until the deadline
-            continue
-        if state.get("answered"):
-            labels = state.get("answer_labels") or []
-            return {
-                "success": True,
+        for question_id in question_ids:
+            if question_id in answers:
+                continue
+            try:
+                state = _hub_request("GET", f"/questions/{question_id}")
+            except Exception:  # noqa: BLE001 - a blip must not end the wait; retry till deadline
+                continue
+            if state.get("answered"):
+                labels = state.get("answer_labels") or []
+                answers[question_id] = {
+                    "question_id": question_id,
+                    "question": state.get("question"),
+                    "answered": True,
+                    # A multi-select answer stays a list; everything else is the single string
+                    # the operator chose or typed. Returning one shape for both would make every
+                    # caller re-split a joined string.
+                    "answer": labels if (pending.get(question_id) and labels) else state.get("answer"),
+                }
+
+    ordered = [
+        answers.get(
+            question_id,
+            {
                 "question_id": question_id,
-                "answered": True,
-                # A multi-select answer stays a list; everything else is the single string the
-                # operator chose or typed. Returning one shape for both would make every caller
-                # re-split a joined string.
-                "answer": labels if (multi_select and labels) else state.get("answer"),
-            }
-    return {
+                "question": asked[index].get("question") if index < len(asked) else None,
+                "answered": False,
+                "answer": None,
+            },
+        )
+        for index, question_id in enumerate(question_ids)
+    ]
+    unanswered = [entry for entry in ordered if not entry["answered"]]
+    payload: Dict[str, Any] = {
         "success": True,
-        "question_id": question_id,
-        "answered": False,
-        "answer": None,
-        "note": (
-            f"No operator answered within {QUESTION_ANSWER_TIMEOUT}s. Continue as best you can "
-            "and say plainly that you proceeded without an answer."
-        ),
+        "question_ids": question_ids,
+        "answered": not unanswered,
+        "answers": ordered,
     }
+    if unanswered:
+        payload["note"] = (
+            f"{len(unanswered)} of {len(ordered)} question(s) went unanswered within "
+            f"{QUESTION_ANSWER_TIMEOUT}s. Continue as best you can and say plainly which "
+            "decisions you made without an answer."
+        )
+    return payload
 
 
 @mcp.tool()
