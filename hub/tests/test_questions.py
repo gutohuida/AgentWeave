@@ -16,6 +16,10 @@ async def test_ask_and_answer_question(app, auth_headers):
             "from_agent": "claude",
             "question": "Which approach should I use?",
             "blocking": False,
+            "header": "Decide",
+            "options": [{"label": "Yes"},
+            {"label": "No"}],
+            "multi_select": False,
         },
         headers=auth_headers,
     )
@@ -88,7 +92,7 @@ async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_he
 
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
-        json={"from_agent": "claude", "question": "Which one?", "blocking": True},
+        json={"from_agent": "claude", "question": "Which one?", "blocking": True, "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
         headers=auth_headers,
     )
     q_id = resp.json()["id"]
@@ -125,6 +129,8 @@ async def test_a_question_can_offer_options_and_they_survive_the_round_trip(app,
             "from_agent": "claude",
             "question": "Which database?",
             "blocking": True,
+            "header": "Database",
+            "multi_select": False,
             "options": [{"label": "Postgres", "description": "Concurrent writes"},
                         {"label": "SQLite", "description": ""}],
         },
@@ -142,13 +148,39 @@ async def test_a_question_can_offer_options_and_they_survive_the_round_trip(app,
 
 
 @pytest.mark.asyncio
-async def test_an_open_question_reports_no_options(app, auth_headers):
+async def test_a_question_without_the_structure_is_refused(app, auth_headers):
+    """The whole point of requiring these: an agent cannot forget them, because a call without
+    them never becomes a question. Teaching it to remember is probabilistic; this is not."""
+    for missing in ("header", "options", "multi_select"):
+        body = {
+            "from_agent": "claude",
+            "question": "Anything?",
+            "header": "Decide",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+            "multi_select": False,
+        }
+        del body[missing]
+        resp = await app.post(
+            "/api/v1/projects/proj-test/questions", json=body, headers=auth_headers
+        )
+        assert resp.status_code == 422, f"omitting {missing} was accepted"
+
+
+@pytest.mark.asyncio
+async def test_a_single_option_is_refused(app, auth_headers):
+    """One option is not a choice; it is a confirmation dialog wearing a choice's clothes."""
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
-        json={"from_agent": "claude", "question": "Anything?"},
+        json={
+            "from_agent": "claude",
+            "question": "Which?",
+            "header": "Pick",
+            "multi_select": False,
+            "options": [{"label": "only"}],
+        },
         headers=auth_headers,
     )
-    assert resp.json()["options"] == []
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -159,6 +191,8 @@ async def test_too_many_options_are_refused(app, auth_headers):
         json={
             "from_agent": "claude",
             "question": "Pick one",
+            "header": "Pick",
+            "multi_select": False,
             "options": [{"label": f"option-{i}"} for i in range(9)],
         },
         headers=auth_headers,
@@ -171,7 +205,13 @@ async def test_the_operator_may_answer_something_other_than_an_offered_option(ap
     """Options are an offer, not a constraint."""
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
-        json={"from_agent": "claude", "question": "Which?", "options": [{"label": "a"}, {"label": "b"}]},
+        json={
+            "from_agent": "claude",
+            "question": "Which?",
+            "header": "Pick",
+            "multi_select": False,
+            "options": [{"label": "a"}, {"label": "b"}],
+        },
         headers=auth_headers,
     )
     q_id = resp.json()["id"]
@@ -215,7 +255,13 @@ async def test_chosen_labels_are_stored_structurally(app, auth_headers):
 async def test_an_option_must_have_a_label(app, auth_headers):
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
-        json={"from_agent": "claude", "question": "Which?", "options": [{"description": "x"}]},
+        json={
+            "from_agent": "claude",
+            "question": "Which?",
+            "header": "Pick",
+            "multi_select": False,
+            "options": [{"description": "x"}, {"description": "y"}],
+        },
         headers=auth_headers,
     )
     assert resp.status_code == 422

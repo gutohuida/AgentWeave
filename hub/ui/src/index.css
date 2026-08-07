@@ -491,59 +491,74 @@
     letter-spacing: 0.02em;
     color: var(--text-2);
   }
-  /* One offered answer. Reads as a target rather than a filled button so a row of them does not
-     become a wall of primary actions. */
+  /* One offered answer. Borderless at rest so a list of them reads as content rather than a
+     row of controls; the outline appears on hover, where it means "this is the one you are
+     about to pick". */
   .interject-choice {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 12px;
     width: 100%;
     text-align: left;
     padding: 8px 10px;
-    font-size: 12px;
     color: var(--text);
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
     transition: background-color var(--dur-fast) var(--ease),
                 border-color var(--dur-fast) var(--ease);
   }
   .interject-choice:hover:not(:disabled) {
     background: var(--row-hover);
+    border-color: var(--border);
+  }
+  .interject-choice[data-selected="true"] {
+    background: var(--row-selected);
     border-color: var(--border-hi);
   }
   .interject-choice:disabled {
     opacity: 0.5;
+    cursor: not-allowed;
   }
-  /* Multi-select only: a chosen option has to stay visibly chosen, since nothing is submitted
-     until the operator confirms. Single-select never shows this — clicking answers outright. */
-  .interject-choice[data-selected="true"] {
-    background: var(--row-hover);
-    border-color: var(--border-hi);
-    box-shadow: inset 2px 0 var(--text-2);
-  }
-  /* Names the decision without colouring it. */
-  .interject-chip {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: var(--text-2);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: calc(var(--radius) / 1.5);
-    padding: 1px 6px;
-  }
-  .interject-input {
+  .interject-choice-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
     flex: 1;
-    padding: 6px 8px;
+  }
+  .interject-choice-label {
     font-size: 12px;
+    font-weight: 500;
     color: var(--text);
+  }
+  .interject-choice-desc {
+    font-size: 11px;
+    color: var(--text-2);
+  }
+  /* The shortcut is only useful if it is visible. Swapped for a check once chosen. */
+  .interject-kbd {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .interject-count {
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-  .interject-input:focus {
-    outline: none;
-    border-color: var(--border-hi);
+    border-radius: var(--radius-sm);
+    padding: 0 5px;
   }
   .work-disclosure {
     border: 1px solid var(--border);

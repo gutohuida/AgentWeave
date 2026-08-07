@@ -19,7 +19,7 @@ import { Composer } from './Composer'
 import { PermissionRequestCard } from './PermissionRequestCard'
 import { AgentQuestionCard } from './AgentQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
-import { useQuestions } from '@/api/questions'
+import { useAnswerQuestion, useQuestions } from '@/api/questions'
 import { ConversationControls, type HandoffState } from './ConversationControls'
 import { agentColorVars } from '@/lib/agentColors'
 
@@ -83,6 +83,11 @@ export function AgentOutputPanel({
   const handoffSawRunningRef = useRef(false)
   const { data: permissionRequests = [] } = usePendingPermissionRequests()
   const { data: openQuestions = [] } = useQuestions(false)
+  const answerQuestion = useAnswerQuestion()
+  const [questionSelection, setQuestionSelection] = useState<string[]>([])
+  const [composerDraft, setComposerDraft] = useState('')
+  const pendingQuestion =
+    openQuestions.find((q) => q.from_agent === agent.name && !q.answered) ?? null
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -350,7 +355,47 @@ export function AgentOutputPanel({
     handoffSawRunningRef.current = false
   }
 
+  /** Answer the waiting question, from whichever the operator supplied.
+   *
+   * Typed text wins over a selection: someone who bothered to write meant it, and the options
+   * were only ever an offer. */
+  const answerPendingQuestion = async (typedMessage: string): Promise<void> => {
+    if (!pendingQuestion) return
+    const typed = typedMessage.trim()
+    const labels = typed ? [] : questionSelection
+    if (!typed && labels.length === 0) return
+    await answerQuestion.mutateAsync({
+      id: pendingQuestion.id,
+      answer: typed || labels.join(', '),
+      labels,
+    })
+    setQuestionSelection([])
+    setComposerDraft('')
+  }
+
+  const handleQuestionToggle = (label: string) => {
+    if (!pendingQuestion) return
+    if (pendingQuestion.multi_select !== true) {
+      // Single choice answers outright. The selection is set first so the row paints as chosen
+      // in the same frame as the click, rather than after the round-trip.
+      setQuestionSelection([label])
+      void answerPendingQuestion('')
+        .then(() => undefined)
+        .catch(() => setQuestionSelection([]))
+      return
+    }
+    setQuestionSelection((current) =>
+      current.includes(label) ? current.filter((l) => l !== label) : [...current, label],
+    )
+  }
+
   const handleComposerSubmit = async (typedMessage: string): Promise<void> => {
+    // A waiting question owns the composer until it is answered — otherwise the operator's
+    // reply becomes a new message and the agent keeps waiting for one that never comes.
+    if (pendingQuestion) {
+      await answerPendingQuestion(typedMessage)
+      return
+    }
     if (!apiKey || !projectId) throw new Error('Not configured')
     setIsSending(true)
     setSubmissionError(null)
@@ -535,7 +580,14 @@ export function AgentOutputPanel({
               operator is answering under its timeout, so this must be where they already are
               rather than somewhere they have to scroll to. */}
           <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
-          <AgentQuestionCard questions={openQuestions} agent={agent.name} />
+          <AgentQuestionCard
+            questions={openQuestions}
+            agent={agent.name}
+            selected={questionSelection}
+            onToggle={handleQuestionToggle}
+            isResponding={answerQuestion.isPending}
+            isTyping={composerDraft.trim().length > 0}
+          />
 
           <div className="conversation-composer-surface">
             <Composer
@@ -545,6 +597,11 @@ export function AgentOutputPanel({
               conversationId={currentConversationId ?? null}
               isRunning={isRunning}
               onSubmit={handleComposerSubmit}
+              canSubmitEmpty={!!pendingQuestion && questionSelection.length > 0}
+              onTextChange={setComposerDraft}
+              placeholder={
+                pendingQuestion ? `Answer ${agent.name}…` : undefined
+              }
               workspacePaths={workspacePaths}
               runner={targetRunnerRow?.cli ?? null}
               effectiveModel={targetRunnerRow?.model ?? null}

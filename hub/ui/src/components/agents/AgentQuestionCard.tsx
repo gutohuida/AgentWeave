@@ -1,146 +1,117 @@
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Question, useAnswerQuestion } from '@/api/questions'
+import { useEffect } from 'react'
+import { Icon } from '@/components/common/Icon'
+import { Question } from '@/api/questions'
 
 interface AgentQuestionCardProps {
   questions: Question[]
   /** Only this agent's questions; the card sits inside one conversation. */
   agent: string
+  /** Labels chosen so far. Owned by the panel's parent, because the composer's send button is
+   *  what confirms them — there is no submit control in here. */
+  selected: string[]
+  onToggle: (label: string) => void
+  /** True while the answer is in flight. */
+  isResponding: boolean
+  /** Set once the operator starts typing: a written answer supersedes any selection, so the
+   *  selection stops looking chosen. */
+  isTyping: boolean
 }
 
-/** An unanswered question from the agent whose conversation this is.
+/** The question an agent is waiting on, rendered as part of the composer.
  *
- * `QuestionsPanel` already lists questions elsewhere, but a blocking agent is waiting *now* and
- * the operator is reading the conversation, not the overview. This puts the question where they
- * already are, in the composer's own chrome.
+ * Deliberately has no text input and no submit button of its own. Free text goes through the
+ * real composer below, and its send button confirms whatever is selected here — one place to
+ * answer from, which is what makes this read as an extension of the chat box rather than a
+ * widget sitting on top of one.
  */
-export function AgentQuestionCard({ questions, agent }: AgentQuestionCardProps) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const [picked, setPicked] = useState<Record<string, string[]>>({})
-  const answer = useAnswerQuestion()
+export function AgentQuestionCard({
+  questions,
+  agent,
+  selected,
+  onToggle,
+  isResponding,
+  isTyping,
+}: AgentQuestionCardProps) {
   const pending = questions.filter((q) => q.from_agent === agent && !q.answered)
-  if (pending.length === 0) return null
+  const question = pending[0]
+
+  // Number keys pick an option, as long as the operator is not writing in a field. The badges
+  // on each row are what make this discoverable; a shortcut nobody can see is not a feature.
+  useEffect(() => {
+    if (!question || isResponding) return
+    const options = question.options ?? []
+    const handler = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
+      const digit = Number.parseInt(event.key, 10)
+      if (Number.isNaN(digit) || digit < 1 || digit > 9) return
+      const option = options[digit - 1]
+      if (!option) return
+      event.preventDefault()
+      onToggle(option.label)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [question, isResponding, onToggle])
+
+  if (!question) return null
+  const options = question.options ?? []
+  const multi = question.multi_select === true
 
   return (
-    <div className="flex flex-col gap-2" data-testid="agent-questions">
-      {pending.map((question) => {
-        const draft = drafts[question.id] ?? ''
-        const chosen = picked[question.id] ?? []
-        const options = question.options ?? []
-        const multi = question.multi_select === true
+    <div className="conversation-interject" data-testid={`agent-question-${question.id}`}>
+      <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
+        <span className="interject-eyebrow">{question.header || `${agent} is asking`}</span>
+        {pending.length > 1 && (
+          <span className="interject-count" data-testid="agent-question-count">
+            1/{pending.length}
+          </span>
+        )}
+      </div>
 
-        const submit = (labels: string[], text: string) => {
-          const typed = text.trim()
-          // A typed answer wins over a selection: the operator who bothered to write something
-          // meant it, and the options were only ever an offer.
-          if (typed) {
-            answer.mutate({ id: question.id, answer: typed, labels: [] })
-          } else if (labels.length > 0) {
-            answer.mutate({ id: question.id, answer: labels.join(', '), labels })
-          } else {
-            return
-          }
-          setDrafts((d) => ({ ...d, [question.id]: '' }))
-          setPicked((p) => ({ ...p, [question.id]: [] }))
-        }
+      <p style={{ fontSize: 13, color: 'var(--text)' }}>{question.question}</p>
+      {multi && (
+        <p style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
+          Select one or more options.
+        </p>
+      )}
 
-        const toggle = (label: string) => {
-          if (!multi) {
-            submit([label], '')
-            return
-          }
-          setPicked((p) => {
-            const current = p[question.id] ?? []
-            return {
-              ...p,
-              [question.id]: current.includes(label)
-                ? current.filter((l) => l !== label)
-                : [...current, label],
-            }
-          })
-        }
+      <div className="flex flex-col gap-1.5" style={{ marginTop: 10 }}>
+        {options.map((option, index) => {
+          const isSelected = !isTyping && selected.includes(option.label)
+          const shortcut = index < 9 ? index + 1 : null
+          return (
+            <button
+              key={`${question.id}-${index}`}
+              type="button"
+              className="interject-choice"
+              data-selected={isSelected ? 'true' : undefined}
+              data-testid={`agent-question-option-${question.id}-${index}`}
+              disabled={isResponding}
+              onClick={() => onToggle(option.label)}
+            >
+              <span className="interject-choice-body">
+                <span className="interject-choice-label">{option.label}</span>
+                {option.description && option.description !== option.label && (
+                  <span className="interject-choice-desc">{option.description}</span>
+                )}
+              </span>
+              {isSelected ? (
+                <Icon name="check" size={14} className="shrink-0" />
+              ) : shortcut !== null ? (
+                <kbd className="interject-kbd">{shortcut}</kbd>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
 
-        const canSend = draft.trim().length > 0 || chosen.length > 0
-
-        return (
-          <div
-            key={question.id}
-            data-testid={`agent-question-${question.id}`}
-            className="conversation-interject"
-          >
-            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-              <span className="interject-eyebrow">{agent} is asking</span>
-              {question.header && (
-                <span className="interject-chip" data-testid={`agent-question-header-${question.id}`}>
-                  {question.header}
-                </span>
-              )}
-            </div>
-            <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
-              {question.question}
-            </p>
-
-            {options.length > 0 && (
-              <div className="flex flex-col gap-1.5" style={{ marginBottom: 10 }}>
-                {options.map((option, index) => {
-                  const selected = chosen.includes(option.label)
-                  return (
-                    <button
-                      key={`${question.id}-${index}`}
-                      type="button"
-                      className="interject-choice"
-                      data-selected={multi && selected ? 'true' : undefined}
-                      data-testid={`agent-question-option-${question.id}-${index}`}
-                      disabled={answer.isPending}
-                      onClick={() => toggle(option.label)}
-                    >
-                      <span style={{ display: 'block', color: 'var(--text)' }}>{option.label}</span>
-                      {option.description && (
-                        <span
-                          style={{ display: 'block', fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}
-                        >
-                          {option.description}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <input
-                data-testid={`agent-question-input-${question.id}`}
-                value={draft}
-                // Offered options never confine the operator; the box stays, and says so.
-                placeholder={options.length > 0 ? 'Or answer in your own words' : 'Your answer'}
-                onChange={(e) => setDrafts((d) => ({ ...d, [question.id]: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    submit(chosen, draft)
-                  }
-                }}
-                className="interject-input"
-              />
-              <Button
-                size="sm"
-                data-testid={`agent-question-send-${question.id}`}
-                disabled={answer.isPending || !canSend}
-                onClick={() => submit(chosen, draft)}
-              >
-                Answer
-              </Button>
-            </div>
-
-            {question.blocking && (
-              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
-                The agent is waiting, and will continue without an answer if nobody replies.
-              </p>
-            )}
-          </div>
-        )
-      })}
+      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
+        {multi
+          ? 'Pick what applies, then send. Or write your own answer below.'
+          : 'Pick one, or write your own answer below.'}
+      </p>
     </div>
   )
 }

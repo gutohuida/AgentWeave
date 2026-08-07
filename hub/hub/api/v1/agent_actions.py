@@ -92,9 +92,11 @@ class AgentTaskCreate(BaseModel):
 class AgentQuestionCreate(BaseModel):
     question: str = Field(max_length=10000)
     blocking: bool = False
-    options: List[QuestionOption] = Field(default_factory=list, max_length=8)
-    header: Optional[str] = Field(default=None, max_length=64)
-    multi_select: bool = False
+    # All required — see QuestionCreate. An agent that omits them is rejected before the Hub
+    # stores anything, and retries with the structure rather than silently degrading.
+    options: List[QuestionOption] = Field(min_length=2, max_length=8)
+    header: str = Field(min_length=1, max_length=64)
+    multi_select: bool
 
     model_config = {"extra": "forbid"}
 

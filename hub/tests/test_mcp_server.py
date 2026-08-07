@@ -115,7 +115,9 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
             b'{"answered":true,"answer":"yes"}',  # for the explicit get_answer below
         ]
     )
-    answered = ask_user("Proceed?")
+    answered = ask_user(
+        "Proceed?", header="Decide", options=[{"label": "Yes"}, {"label": "No"}], multi_select=False
+    )
     assert answered["question_id"] == "q-1"
     assert answered["answered"] is True
     assert answered["answer"] == "yes"
@@ -125,8 +127,8 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
     assert _body(calls[0]) == {
         "question": "Proceed?",
         "blocking": True,
-        "options": [],
-        "header": None,
+        "options": [{"label": "Yes"}, {"label": "No"}],
+        "header": "Decide",
         "multi_select": False,
     }
     assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}

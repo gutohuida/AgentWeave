@@ -26,7 +26,7 @@ def test_asking_waits_for_the_answer_and_returns_it(monkeypatch):
         return {"answered": True, "answer": "use the blue one"}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    result = mcp_server.ask_user("which colour?")
+    result = mcp_server.ask_user("which colour?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=False)
     assert result["answered"] is True
     assert result["answer"] == "use the blue one"
     assert polls["n"] >= 3
@@ -47,7 +47,7 @@ def test_not_blocking_returns_immediately_without_polling(monkeypatch):
         return {"id": "q-1"}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    result = mcp_server.ask_user("anything?", blocking=False)
+    result = mcp_server.ask_user("anything?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=False, blocking=False)
     assert result["answered"] is False
     assert calls == [("POST", "/questions")]
 
@@ -62,7 +62,7 @@ def test_an_unanswered_question_gives_up_and_says_so(monkeypatch):
         "_hub_request",
         lambda method, *a, **k: {"id": "q-1"} if method == "POST" else {"answered": False},
     )
-    result = mcp_server.ask_user("which colour?")
+    result = mcp_server.ask_user("which colour?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=False)
     assert result["answered"] is False
     assert "without an answer" in result["note"]
 
@@ -80,7 +80,7 @@ def test_a_transient_hub_failure_does_not_end_the_wait(monkeypatch):
         return {"answered": True, "answer": "fine"}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    assert mcp_server.ask_user("q?")["answer"] == "fine"
+    assert mcp_server.ask_user("q?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=False)["answer"] == "fine"
 
 
 def test_the_question_wait_stays_inside_what_was_measured():
@@ -102,14 +102,16 @@ def test_offered_options_reach_the_hub(monkeypatch):
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
     result = mcp_server.ask_user(
         "Which database?",
+        header="Database",
         options=[{"label": "Postgres", "description": "server"}, {"label": "SQLite"}],
+        multi_select=False,
     )
     assert [o["label"] for o in bodies[0]["options"]] == ["Postgres", "SQLite"]
     assert result["answer"] == "Postgres"
 
 
-def test_an_open_question_sends_an_empty_option_list(monkeypatch):
-    """Never None: the column is a list, and a null would come back as None rather than []."""
+def test_the_structure_is_always_sent(monkeypatch):
+    """There is no open-question shape any more — every call carries options."""
     monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
     bodies = []
 
@@ -120,8 +122,9 @@ def test_an_open_question_sends_an_empty_option_list(monkeypatch):
         return {"answered": True, "answer": "x"}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    mcp_server.ask_user("Anything?")
-    assert bodies[0]["options"] == []
+    mcp_server.ask_user("Anything?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=False)
+    assert len(bodies[0]["options"]) == 2
+    assert bodies[0]["header"] == "H"
 
 
 def test_a_multi_select_answer_comes_back_as_a_list(monkeypatch):
@@ -135,7 +138,7 @@ def test_a_multi_select_answer_comes_back_as_a_list(monkeypatch):
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
     result = mcp_server.ask_user(
-        "Which?", options=[{"label": "a"}, {"label": "c"}], multi_select=True
+        "Which?", header="H", options=[{"label": "a"}, {"label": "c"}], multi_select=True
     )
     assert result["answer"] == ["a", "c"]
 
@@ -149,7 +152,7 @@ def test_a_single_select_answer_stays_a_string(monkeypatch):
         return {"answered": True, "answer": "a", "answer_labels": ["a"]}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    result = mcp_server.ask_user("Which?", options=[{"label": "a"}])
+    result = mcp_server.ask_user("Which?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=False)
     assert result["answer"] == "a"
 
 
@@ -163,7 +166,7 @@ def test_a_typed_answer_to_a_multi_select_is_not_forced_into_a_list(monkeypatch)
         return {"answered": True, "answer": "none of these", "answer_labels": []}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    result = mcp_server.ask_user("Which?", options=[{"label": "a"}], multi_select=True)
+    result = mcp_server.ask_user("Which?", header="H", options=[{"label": "a"}, {"label": "b"}], multi_select=True)
     assert result["answer"] == "none of these"
 
 
@@ -178,6 +181,6 @@ def test_header_and_multi_select_reach_the_hub(monkeypatch):
         return {"answered": True, "answer": "x", "answer_labels": []}
 
     monkeypatch.setattr(mcp_server, "_hub_request", hub)
-    mcp_server.ask_user("Which?", header="Database", multi_select=True)
+    mcp_server.ask_user("Which?", header="Database", options=[{"label": "a"}, {"label": "b"}], multi_select=True)
     assert bodies[0]["header"] == "Database"
     assert bodies[0]["multi_select"] is True

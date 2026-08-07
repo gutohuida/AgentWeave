@@ -256,24 +256,24 @@ def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
 @mcp.tool()
 def ask_user(
     question: str,
-    options: Optional[List[Dict[str, str]]] = None,
-    header: Optional[str] = None,
-    multi_select: bool = False,
+    header: str,
+    options: List[Dict[str, str]],
+    multi_select: bool,
     blocking: bool = True,
 ) -> Dict[str, Any]:
     """Ask the operator a question and wait for their answer.
 
     Args:
         question: What you need the operator to decide or clarify.
-        options: The answers you would accept, at most 8, each
-            {"label": "...", "description": "..."}. Offer them whenever the decision is a
-            choice between known alternatives. The label is what comes back; the description
-            is what lets the operator choose without already knowing the trade-off — write
-            what picking it actually means, not a restatement of the label. Leave unset for a
-            genuinely open question. The operator may always answer with none of them.
-        header: A two-or-three word chip naming the decision, e.g. "Database". Optional.
-        multi_select: Set True when several options can be chosen together. The answer then
-            comes back as a list.
+        header: Two or three words naming the decision, e.g. "Database".
+        options: Between 2 and 8 answers, each {"label": "...", "description": "..."}. The
+            label is what comes back to you; the description is what lets the operator choose
+            without already knowing the trade-off — write what picking it actually means, not
+            a restatement of the label. There is no way to ask without options: if the decision
+            feels open, offer the answers you consider most likely. The operator can always
+            reply in their own words instead, so handle an answer that is none of yours.
+        multi_select: True when several options can be chosen together, and the answer comes
+            back as a list. False when exactly one applies.
         blocking: Leave this alone to wait for the answer, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
             continuing — you must then poll `get_answer` yourself, and a turn that ends first
@@ -285,7 +285,7 @@ def ask_user(
         {
             "question": question,
             "blocking": blocking,
-            "options": list(options or []),
+            "options": list(options),
             "header": header,
             "multi_select": multi_select,
         },

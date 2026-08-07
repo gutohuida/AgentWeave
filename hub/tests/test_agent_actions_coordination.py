@@ -155,14 +155,14 @@ async def test_agent_can_read_only_its_own_question_answer(app, auth_headers):
     rejected = await app.post(
         "/api/v1/agent-actions/questions",
         headers=asker_headers,
-        json={"question": "Which path?", "from_agent": "impostor"},
+        json={"question": "Which path?", "from_agent": "impostor", "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
     )
     assert rejected.status_code == 422
 
     asked = await app.post(
         "/api/v1/agent-actions/questions",
         headers=asker_headers,
-        json={"question": "Which path?", "blocking": True},
+        json={"question": "Which path?", "blocking": True, "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
     )
     assert asked.status_code == 201
     question_id = asked.json()["id"]

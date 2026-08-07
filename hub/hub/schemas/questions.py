@@ -25,9 +25,14 @@ class QuestionCreate(BaseModel):
     blocking: bool = False
     # Offered answers. Empty means open-ended. Capped so one question cannot render an
     # unbounded wall of buttons in front of an operator deciding under a run's timeout.
-    options: List[QuestionOption] = Field(default_factory=list, max_length=8)
-    header: Optional[str] = Field(default=None, max_length=64)
-    multi_select: bool = False
+    # Required, not optional. Teaching an agent to pass options is probabilistic — it forgets,
+    # and the operator gets a text box for a decision that was always a choice. A schema it
+    # cannot satisfy without them is not. This mirrors Claude Code's own AskUserQuestion, where
+    # header/options/multiSelect are all mandatory and free text is the UI's escape, never a
+    # missing-options case.
+    options: List[QuestionOption] = Field(min_length=2, max_length=8)
+    header: str = Field(min_length=1, max_length=64)
+    multi_select: bool
 
 
 class QuestionAnswer(BaseModel):
@@ -52,6 +57,7 @@ class QuestionResponse(BaseModel):
     options: List[QuestionOption] = Field(default_factory=list)
     header: Optional[str] = None
     multi_select: bool = False
+
     answer_labels: List[str] = Field(default_factory=list)
     created_at: datetime
     answered_at: Optional[datetime] = None

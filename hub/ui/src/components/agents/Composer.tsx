@@ -27,6 +27,15 @@ export interface ComposerProps {
   isRunning: boolean
   /** Resolves on a started-or-queued outcome, rejects on failure. */
   onSubmit: (text: string) => Promise<void>
+  /** Allow sending with an empty box. Set while a pending question already has options
+   *  selected: the send button then confirms that selection, so the panel needs no submit
+   *  control of its own and free text and choices go out through one place. */
+  canSubmitEmpty?: boolean
+  /** Current draft text, for callers that need to react to typing — a pending question clears
+   *  its selection once the operator starts writing instead. */
+  onTextChange?: (text: string) => void
+  /** Overrides the resting placeholder, e.g. while a question is waiting. */
+  placeholder?: string
   /** Workspace paths backing the `@path`/`$skill` trigger sources — fetched once by the
    *  caller (design.md's caching mitigation), filtered client-side here per keystroke. */
   workspacePaths?: string[]
@@ -59,6 +68,9 @@ export function Composer({
   conversationId,
   isRunning,
   onSubmit,
+  canSubmitEmpty = false,
+  onTextChange,
+  placeholder,
   workspacePaths = [],
   runner = null,
   effectiveModel = null,
@@ -130,7 +142,7 @@ export function Composer({
 
   const handleSend = async () => {
     const trimmed = text.trim()
-    if (!trimmed || submitting) return
+    if ((!trimmed && !canSubmitEmpty) || submitting) return
     const typed = text
     // Cancel the pending debounced write before submitting: otherwise it can fire after
     // a successful clearComposerDraft below and resurrect the just-submitted text.
@@ -142,6 +154,7 @@ export function Composer({
     setText('')
     try {
       await onSubmit(trimmed)
+      onTextChange?.('')
       clearComposerDraft(projectId, agent, conversationId)
     } catch {
       setText(typed)
@@ -183,6 +196,7 @@ export function Composer({
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value)
+    onTextChange?.(e.target.value)
     refreshTrigger(e.target.value, e.target.selectionStart)
   }
 
@@ -220,7 +234,7 @@ export function Composer({
             handleCursorMove(e)
           }}
           onClick={handleCursorMove}
-          placeholder={isRunning ? `${agent} is responding…` : `Message ${agent}…`}
+          placeholder={placeholder ?? (isRunning ? `${agent} is responding…` : `Message ${agent}…`)}
           rows={COMPOSER_MIN_ROWS}
           disabled={submitting}
           className="w-full px-2 py-2 text-xs resize-none border-0 bg-transparent disabled:opacity-50"
@@ -273,7 +287,7 @@ export function Composer({
             size="icon-sm"
             onClick={() => void handleSend()}
             aria-label="Send message"
-            disabled={!text.trim() || submitting}
+            disabled={(!text.trim() && !canSubmitEmpty) || submitting}
           >
             <Icon name="send" size={18} />
           </Button>

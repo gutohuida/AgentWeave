@@ -91,7 +91,7 @@ async def project_a_resources(app, project_a):
     # Question
     q_resp = await app.post(
         f"{base}/questions",
-        json={"from_agent": "alice", "question": "project a question"},
+        json={"from_agent": "alice", "question": "project a question", "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
         headers=auth_headers,
     )
     assert q_resp.status_code == 201
