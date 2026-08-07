@@ -1,4 +1,4 @@
-.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format format-check hub-build hub-up hub-down hub-full-build sync-roles
+.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format format-check hub-build hub-up hub-down hub-full-build sync-skills
 
 # ── CLI (src/agentweave) ─────────────────────────────────────────────────────
 
@@ -49,13 +49,14 @@ hub-up:
 hub-down:
 	cd hub && docker compose down -v
 
-# Sync role templates from CLI source into Hub package so they are bundled in Docker builds
-sync-roles:
-	mkdir -p hub/hub/data/roles
-	cp src/agentweave/templates/roles/*.md hub/hub/data/roles/
-	cp src/agentweave/templates/roles/roles.json hub/hub/data/roles/roles.json
+# Mirror hand-written dev skills from .claude/skills/ out to the agents that can't read it:
+# .agents/skills/ (Kimi) and ~/.codex/skills/ (Codex — user-level only, it has no
+# project-level discovery). Additive; leaves generated aw-* skills at the destination alone.
+sync-skills:
+	python scripts/sync_skills.py
 
-hub-full-build: sync-roles
+# Sync role templates from CLI source into Hub package so they are bundled in Docker builds
+hub-full-build:
 	cd hub && docker build . -t agentweave-hub:audit
 	# Belt-and-braces: also let docker compose build the same image under its
 	# own tag (hub-hub) in case someone prefers `docker compose up --build`.

@@ -262,9 +262,6 @@ AGENT_RUNNER_DEFAULTS: dict = {
     "codex": "codex",
 }
 
-# Valid collaboration positions within a session
-VALID_ROLES = ["principal", "delegate", "reviewer", "collaborator"]
-
 # Valid modes
 VALID_MODES = ["hierarchical", "peer", "review"]
 

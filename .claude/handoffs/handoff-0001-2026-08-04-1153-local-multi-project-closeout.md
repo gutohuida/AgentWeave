@@ -1,8 +1,10 @@
-# Handoff: Local multi-project workspace verified; spec archive remains
+# Handoff 0001: Local multi-project workspace verified; spec archive remains
 
 **Date:** 2026-08-04T11:53:41+01:00 · **Branch:** `hub-native-experience` · **HEAD:** `4f2a776`
-**Agent:** T3 Code / Codex (gpt-5.6-sol)
-**Previous handoff:** `.claude/handoffs/2026-08-04-1040-local-multi-project-phase5complete.md`
+**Model:** gpt-5.6-sol
+**Agent:** T3 Code / Codex
+**Iteration commits:** unknown — predates this convention
+**Previous handoff:** `.claude/handoffs/2026-08-04-1040-local-multi-project-phase5complete.md` (pre-chain, unnumbered)
 **Status:** in progress
 
 ## Goal
