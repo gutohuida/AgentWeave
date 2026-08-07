@@ -241,7 +241,10 @@ async def test_a_refused_action_is_recorded_where_the_operator_can_see_it(app):
         )
     assert len(rows) == 1
     assert rows[0].agent == "walled"
-    assert rows[0].severity == "warning"
+    # "warn", not "warning": the activity view's severity chips, borders and filter list know
+    # only the former, so a denial stored as "warning" rendered unmarked and was hidden by the
+    # very filter meant to surface it.
+    assert rows[0].severity == "warn"
     assert rows[0].data["tool_name"] == "Write"
     assert "outside your workspace" in rows[0].data["reason"]
 

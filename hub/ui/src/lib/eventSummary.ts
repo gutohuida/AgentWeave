@@ -8,6 +8,10 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'question_asked': return `from ${data.from_agent}${data.blocking ? ' (blocking)' : ''}: ${String(data.question ?? '').slice(0, 80)}`
     case 'question_answered': return `question ${data.id} answered`
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
+    // Both of these carry the only detail worth reading in a field the default branch does not
+    // look at, so without a case they render as their own event name twice over.
+    case 'permission_denied': return `${data.agent ?? ''} refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}`
+    case 'question_not_asked': return `${data.agent} ended a turn on a question it never asked: ${String(data.question ?? '').slice(0, 80)}`
     // CLI-pushed events
     case 'msg_sent': return `${data.from} → ${data.to}${data.subject ? `: "${data.subject}"` : ''} (${data.msg_id})`
     case 'msg_read': return `${data.agent} read ${data.msg_id} from ${data.from}`

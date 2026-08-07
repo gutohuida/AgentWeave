@@ -53,6 +53,11 @@ vi.mock('@/api/permissions', () => ({
   useDecidePermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
+vi.mock('@/api/unaskedQuestions', () => ({
+  usePendingUnaskedQuestions: () => ({ data: [] }),
+  useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
 vi.mock('@/api/queue', () => ({
   useQueueStatus: () => ({ data: { waiting_count: recordedEntries.length } }),
   withdrawQueueEntry: vi.fn(),
