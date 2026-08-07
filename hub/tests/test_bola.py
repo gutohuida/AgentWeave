@@ -255,6 +255,52 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
 
 
 @pytest.mark.asyncio
+async def test_cross_project_conversation_mutations_return_404(
+    app, project_a, other_project, project_a_resources
+):
+    """Renaming, archiving or messaging into another project's conversation must not work.
+
+    404 rather than 403 throughout: whether a conversation id exists in some other project is
+    not this caller's to learn.
+    """
+    a_base = f"/api/v1/projects/{project_a['project_id']}"
+    listed = await app.get(f"{a_base}/agent/alice/conversations", headers=project_a["headers"])
+    assert listed.status_code == 200, listed.text
+    conversation_id = listed.json()[0]["id"]
+
+    b = other_project["headers"]
+    b_base = f"/api/v1/projects/{other_project['project_id']}"
+    target = f"{b_base}/agent/alice/conversations/{conversation_id}"
+
+    assert (
+        await app.patch(target, json={"title": "Stolen"}, headers=b)
+    ).status_code == 404
+    assert (await app.post(f"{target}/archive", headers=b)).status_code == 404
+    assert (await app.post(f"{target}/unarchive", headers=b)).status_code == 404
+
+    # And a message cannot be aimed into it either.
+    sent = await app.post(
+        f"{b_base}/messages",
+        json={
+            "from": "intruder",
+            "to": "alice",
+            "content": "Cross-project delivery",
+            "conversation_id": conversation_id,
+        },
+        headers=b,
+    )
+    assert sent.status_code == 404
+
+    # Project A's conversation is untouched by any of it.
+    after = await app.get(
+        f"{a_base}/agent/alice/conversations?lifecycle=all", headers=project_a["headers"]
+    )
+    target_row = next(row for row in after.json() if row["id"] == conversation_id)
+    assert target_row["lifecycle"] == "open"
+    assert target_row["title"] != "Stolen"
+
+
+@pytest.mark.asyncio
 async def test_project_a_can_still_read_its_own_resources(app, project_a, project_a_resources):
     """Isolation must not break the legitimate owner's access."""
     ids = project_a_resources

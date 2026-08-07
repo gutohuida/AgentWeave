@@ -171,6 +171,7 @@ def send_message(
     content: str,
     message_type: MessageType = "message",
     task_id: Optional[str] = None,
+    conversation_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Send an attributable message through the recipient's durable inbound queue.
 
@@ -181,6 +182,10 @@ def send_message(
         message_type: One of "message", "delegation", "review", "discussion",
             "direct_trigger". Leave unset for an ordinary message.
         task_id: Optional task this message relates to.
+        conversation_id: Which of the recipient's conversations to send into. Leave unset to
+            use their most recent one, or to start a new one if they have none. Sending to an
+            archived conversation fails and returns your content back, so you can retry
+            without it.
     """
     result = _hub_request(
         "POST",
@@ -191,6 +196,7 @@ def send_message(
             "content": content,
             "type": message_type,
             "task_id": task_id,
+            "conversation_id": conversation_id,
         },
     )
     return {"success": True, "message_id": result.get("id")}

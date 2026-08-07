@@ -1,38 +1,52 @@
 ## 1. Schema and migrations
 
-- [ ] 1.1 Add `title` (nullable) and `origin` (non-null, default `operator`) to `Conversation` in `hub/hub/db/models.py`, with a check constraint restricting `origin` to `operator|peer|handoff|spec|job`
-- [ ] 1.2 Migration `0035_add_conversation_title_and_origin.py`, guarding for a missing `conversations` table the way `0033`/`0034` do
-- [ ] 1.3 Add `conversation_id` (nullable, indexed) to `Question`, `PermissionRequest` and `UnaskedQuestion`
-- [ ] 1.4 Migration `0036_add_conversation_id_to_blocking_tables.py`, with the same missing-table guard
-- [ ] 1.5 Add the project-level title-generation setting to the project settings model
-- [ ] 1.6 Migration `0037_add_project_title_generation_setting.py`, defaulting to truncation
-- [ ] 1.7 Move the head assertions in `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py` to `0037`
-- [ ] 1.8 Run each migration against a real database from `0031` forward and confirm no `NoSuchTableError`
+- [x] 1.1 Add `title` (nullable) and `origin` (non-null, default `operator`) to `Conversation` in `hub/hub/db/models.py`, with a check constraint restricting `origin` to `operator|peer|handoff|spec|job`
+- [x] 1.2 Migration `0035_add_conversation_title_and_origin.py`, guarding for a missing `conversations` table the way `0033`/`0034` do
+- [x] 1.3 Add `conversation_id` (nullable, indexed) to `Question`, `PermissionRequest` and `UnaskedQuestion`
+- [x] 1.4 Migration `0036_add_conversation_id_to_blocking_tables.py`, with the same missing-table guard
+- [x] 1.5 Add the project-level title-generation setting to the project settings model
+- [x] 1.6 Migration `0037_add_project_title_generation_setting.py`, defaulting to truncation
+- [x] 1.7 Move the head assertions in `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py` to `0037`
+- [x] 1.8 Run each migration against a real database from `0031` forward and confirm no `NoSuchTableError`
 
 ## 2. Conversation lifecycle — backend
 
-- [ ] 2.1 `new_conversation()` in `hub/hub/conversations.py` takes a required `origin`; update every call site, passing `peer` from `hub/hub/api/v1/messages.py`
-- [ ] 2.2 Pure `title_from_message(text) -> str` helper: truncate at a word boundary within the limit, no partial words; unit-tested with no database
-- [ ] 2.3 Set the title when the first message of a conversation is recorded; leave an existing title untouched
-- [ ] 2.4 Add `title_set_by_operator` so a generated title can never overwrite an operator's
-- [ ] 2.5 `PATCH /projects/{id}/agent/{agent}/conversations/{cid}` for rename — reject empty and over-length with a stated reason
-- [ ] 2.6 `archivable(conversation) -> Optional[str]` returning the obstruction reason: unfinished run, or undelivered `InboundQueueEntry` rows
-- [ ] 2.7 `POST .../conversations/{cid}/archive` and `.../unarchive`, refusing with 409 and the reason from 2.6
-- [ ] 2.8 Conversation listing excludes `archived` by default; `?lifecycle=archived` returns them with a count
-- [ ] 2.9 `hub/hub/api/v1/messages.py` refuses a send whose recipient conversation is archived, returning the cause, the instruction to start a new conversation, and the submitted content restated verbatim
-- [ ] 2.10 Mirror that refusal through the MCP `send_message` adapter and assert both paths carry the same three parts
-- [ ] 2.11 Record `conversation_id` when creating `Question`, `PermissionRequest` and `UnaskedQuestion`, taken from the opening run
-- [ ] 2.12 Expose per-conversation attention state on the conversation listing: `running`, `waiting`, or `idle`
+> Three things this section assumed that turned out not to hold, resolved as noted:
+>
+> - **2.9 needed a capability that did not exist.** `send_message` addresses an *agent*, never a
+>   conversation, and `latest_open_conversation` already skips archived rows — so "a send whose
+>   recipient conversation is archived" could not happen on any path. `MessageCreate` and the MCP
+>   tool gained an optional `conversation_id` (operator decision, 2026-08-08). Unset keeps
+>   today's behaviour exactly; set and archived is refused with the three parts.
+> - **2.8's count is the archived listing's length.** A wrapper object carrying `archived_count`
+>   would have changed the endpoint's shape, which design.md's migration plan step 2 explicitly
+>   keeps stable. A dedicated count belongs with the project-wide listing that 5.1 and section 6
+>   may add, not here.
+> - **2.11 was already half done.** `UnaskedQuestion.conversation_id` existed and was populated;
+>   only `Question` and `PermissionRequest` needed the column.
+
+- [x] 2.1 `new_conversation()` in `hub/hub/conversations.py` takes a required `origin`; update every call site, passing `peer` from `hub/hub/api/v1/messages.py`
+- [x] 2.2 Pure `title_from_message(text) -> str` helper: truncate at a word boundary within the limit, no partial words; unit-tested with no database
+- [x] 2.3 Set the title when the first message of a conversation is recorded; leave an existing title untouched
+- [x] 2.4 Add `title_set_by_operator` so a generated title can never overwrite an operator's
+- [x] 2.5 `PATCH /projects/{id}/agent/{agent}/conversations/{cid}` for rename — reject empty and over-length with a stated reason
+- [x] 2.6 `archivable(conversation) -> Optional[str]` returning the obstruction reason: unfinished run, or undelivered `InboundQueueEntry` rows
+- [x] 2.7 `POST .../conversations/{cid}/archive` and `.../unarchive`, refusing with 409 and the reason from 2.6
+- [x] 2.8 Conversation listing excludes `archived` by default; `?lifecycle=archived` returns them with a count
+- [x] 2.9 `hub/hub/api/v1/messages.py` refuses a send whose recipient conversation is archived, returning the cause, the instruction to start a new conversation, and the submitted content restated verbatim
+- [x] 2.10 Mirror that refusal through the MCP `send_message` adapter and assert both paths carry the same three parts
+- [x] 2.11 Record `conversation_id` when creating `Question`, `PermissionRequest` and `UnaskedQuestion`, taken from the opening run
+- [x] 2.12 Expose per-conversation attention state on the conversation listing: `running`, `waiting`, or `idle`
 
 ## 3. Conversation lifecycle — tests
 
-- [ ] 3.1 `test_conversation_titles.py` — truncation at a word boundary, first-message titling, operator title never overwritten, empty/over-length rename rejected
-- [ ] 3.2 `test_conversation_origin.py` — operator vs peer at creation, immutability across rename/archive/unarchive
-- [ ] 3.3 `test_conversation_archive.py` — archive/unarchive round trip, listing exclusion, archived conversation still readable
-- [ ] 3.4 `test_conversation_archive_refusal.py` — live run refuses, undelivered queue entry refuses, neither is mutated, success once cleared
-- [ ] 3.5 `test_archived_send_refusal.py` — HTTP and MCP both fail with cause + instruction + verbatim content; no message, no queue entry, no rehoming
-- [ ] 3.6 `test_conversation_attention.py` — each of question, permission request and unasked question raises `waiting`; answering clears it; running and waiting are distinct
-- [ ] 3.7 Extend `test_bola.py` for the new routes — cross-project access refused
+- [x] 3.1 `test_conversation_titles.py` — truncation at a word boundary, first-message titling, operator title never overwritten, empty/over-length rename rejected
+- [x] 3.2 `test_conversation_origin.py` — operator vs peer at creation, immutability across rename/archive/unarchive
+- [x] 3.3 `test_conversation_archive.py` — archive/unarchive round trip, listing exclusion, archived conversation still readable
+- [x] 3.4 `test_conversation_archive_refusal.py` — live run refuses, undelivered queue entry refuses, neither is mutated, success once cleared
+- [x] 3.5 `test_archived_send_refusal.py` — HTTP and MCP both fail with cause + instruction + verbatim content; no message, no queue entry, no rehoming
+- [x] 3.6 `test_conversation_attention.py` — each of question, permission request and unasked question raises `waiting`; answering clears it; running and waiting are distinct
+- [x] 3.7 Extend `test_bola.py` for the new routes — cross-project access refused
 
 ## 4. Title generation
 

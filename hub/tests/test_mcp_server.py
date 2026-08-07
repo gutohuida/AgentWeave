@@ -66,6 +66,9 @@ def test_send_message_payload_contains_no_identity_or_run(hub):
         "content": "Content",
         "type": "message",
         "task_id": None,
+        # Where the message goes is the sender's choice; unset means the recipient's most
+        # recent conversation. It is routing, not identity — which is what this test guards.
+        "conversation_id": None,
     }
 
 

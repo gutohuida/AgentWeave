@@ -85,6 +85,31 @@ def bind_runner(app, auth_headers):
     return _bind
 
 
+@pytest.fixture
+def drain_conversation():
+    """Returns an async helper: `await drain_conversation(conversation_id)`.
+
+    Marks a conversation's queued inbound entries delivered, standing in for a turn that
+    actually consumed them. Archiving refuses while a conversation holds undelivered entries,
+    so any test about what happens *after* archiving has to get past that guard first — and
+    faking the state is honest here in a way that faking the guard would not be.
+    """
+    from sqlalchemy import update
+
+    from hub.db.models import InboundQueueEntry
+
+    async def _drain(conversation_id):
+        async with async_session_factory() as session:
+            await session.execute(
+                update(InboundQueueEntry)
+                .where(InboundQueueEntry.conversation_id == conversation_id)
+                .values(state="delivered")
+            )
+            await session.commit()
+
+    return _drain
+
+
 @pytest.fixture(autouse=True)
 def _no_real_worktree_provision(monkeypatch):
     """Every agent trigger calls worktrees.resolve_agent_workspace, which (for a

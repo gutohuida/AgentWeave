@@ -17,6 +17,11 @@ class MessageCreate(BaseModel):
     type: str = Field(default="message", max_length=64)
     task_id: Optional[str] = Field(default=None, max_length=128)
     run_id: Optional[str] = Field(default=None, max_length=64)
+    # Which of the recipient's conversations to send into. Unset means the recipient's most
+    # recent open one, opening a new one if there is none — the behaviour that predates this
+    # field. Naming an archived conversation is refused rather than redirected: where a message
+    # lands is the sender's decision, not something the Hub quietly makes for it.
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"populate_by_name": True, "extra": "forbid"}
 

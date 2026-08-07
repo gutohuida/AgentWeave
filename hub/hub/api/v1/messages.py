@@ -11,7 +11,7 @@ from ... import project_workspace
 from ...auth import get_project
 from ...conversations import latest_open_conversation, name_conversation, new_conversation
 from ...db.engine import get_session
-from ...db.models import Agent, Message, Run
+from ...db.models import Agent, Conversation, Message, Run
 from ...inbound_queue import new_entry, project_limits
 from ...schemas.common import SuccessResponse
 from ...schemas.messages import MessageCreate, MessageResponse
@@ -90,14 +90,54 @@ async def create_message_for_actor(
             ),
         )
 
-    recipient_conversation = await latest_open_conversation(
-        session, project_id=project_id, agent=body.recipient
-    )
-    if recipient_conversation is None:
-        recipient_conversation = new_conversation(
-            project_id=project_id, agent=body.recipient, origin="peer"
+    if body.conversation_id:
+        recipient_conversation = await session.get(Conversation, body.conversation_id)
+        if (
+            recipient_conversation is None
+            or recipient_conversation.project_id != project_id
+            or recipient_conversation.agent != body.recipient
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Unknown conversation '{body.conversation_id}': no conversation by that "
+                    f"id belongs to '{body.recipient}' in this project"
+                ),
+            )
+        if recipient_conversation.lifecycle == "archived":
+            # Three parts, and the third is the point: an agent whose send is refused should not
+            # have to reconstruct its own message from a context it has already moved past.
+            await persist_event(
+                session,
+                project_id,
+                "agent_action_rejected",
+                {
+                    "endpoint": "POST /messages",
+                    "reason": "archived_conversation",
+                    "recipient": body.recipient,
+                    "conversation_id": body.conversation_id,
+                },
+                agent=sender,
+                severity="warn",
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Conversation '{body.conversation_id}' is archived and cannot receive "
+                    f"messages. Send to a new conversation with '{body.recipient}' instead, by "
+                    "omitting conversation_id. Your message was not sent. Its content was:\n\n"
+                    f"{body.content}"
+                ),
+            )
+    else:
+        recipient_conversation = await latest_open_conversation(
+            session, project_id=project_id, agent=body.recipient
         )
-        session.add(recipient_conversation)
+        if recipient_conversation is None:
+            recipient_conversation = new_conversation(
+                project_id=project_id, agent=body.recipient, origin="peer"
+            )
+            session.add(recipient_conversation)
 
     entry = new_entry(
         project_id=project_id,
