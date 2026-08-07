@@ -765,3 +765,33 @@ class PermissionRequest(Base):
     __table_args__ = (
         Index("ix_permission_requests_project_status", "project_id", "status"),
     )
+
+
+class UnaskedQuestion(Base):
+    """A question a run ended its turn on without ever routing through `ask_user`.
+
+    Detected rather than reported: no provider protocol lets the Hub require that a turn end
+    through a particular tool, so the Hub reads the run's final assistant text instead. The row
+    exists because the operator needs something to act on — `status` leaves "pending" when they
+    re-prompt the agent ("asked") or decide it was not a real question ("dismissed").
+
+    "asked" means the operator asked the agent to ask properly, not that anyone answered. Whether
+    the agent then calls the tool is the agent's business, and its own turn.
+    """
+
+    __tablename__ = "unasked_questions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    # "pending" | "asked" | "dismissed"
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_unasked_questions_project_status", "project_id", "status"),)

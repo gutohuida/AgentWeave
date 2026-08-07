@@ -371,7 +371,7 @@ async def record_permission_decision(
                 "reason": body.reason,
                 "run_id": actor.run_id,
             },
-            severity="warning",
+            severity="warn",
         )
         await sse_manager.broadcast(
             actor.project_id,

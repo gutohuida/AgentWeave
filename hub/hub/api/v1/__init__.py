@@ -27,6 +27,7 @@ from .setup import router as setup_router
 from .spec import router as spec_router
 from .status import router as status_router
 from .tasks import router as tasks_router
+from .unasked_questions import router as unasked_questions_router
 from .workspace import router as workspace_router
 from .worktrees import router as worktrees_router
 
@@ -43,6 +44,7 @@ project_resources_router.include_router(messages_router)
 project_resources_router.include_router(tasks_router)
 project_resources_router.include_router(questions_router)
 project_resources_router.include_router(permissions_router)
+project_resources_router.include_router(unasked_questions_router)
 project_resources_router.include_router(status_router)
 project_resources_router.include_router(events_router)
 project_resources_router.include_router(agent_trigger_router)

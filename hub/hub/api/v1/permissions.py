@@ -107,7 +107,7 @@ async def decide_permission_request(
                 "reason": "the operator refused this action",
                 "run_id": row.run_id,
             },
-            severity="warning",
+            severity="warn",
         )
     await sse_manager.broadcast(
         project_id,

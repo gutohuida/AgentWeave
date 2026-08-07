@@ -196,6 +196,7 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         f"{base}/tasks",
         f"{base}/questions",
         f"{base}/jobs",
+        f"{base}/unasked-questions",
         f"{base}/events/history",
         f"{base}/logs",
         f"{base}/agents",
