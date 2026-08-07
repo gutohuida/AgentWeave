@@ -47,12 +47,6 @@ class ModelDescriptor:
 
 
 @dataclass(frozen=True)
-class ControlValue:
-    id: str
-    label: str
-
-
-@dataclass(frozen=True)
 class ApplySpec:
     """How a control reaches the provider's command line.
 
@@ -64,6 +58,23 @@ class ApplySpec:
 
     style: str
     template: str = ""
+
+
+@dataclass(frozen=True)
+class ControlValue:
+    """One permitted value of an enum control.
+
+    `apply`, when set, replaces the *control's* `ApplySpec` for this value alone. Almost every
+    value renders through its control's single template, substituting itself for `{value}`; a
+    value needs its own spec only when it does not name itself on the command line. Claude's
+    "Workspace only" posture is the case that motivated this: it is a distinct choice to the
+    operator but spells itself `--permission-mode manual`, the same mode as "Ask first", and is
+    distinguished from it by a second flag that only `_build_claude_command` can decide to emit.
+    """
+
+    id: str
+    label: str
+    apply: Optional[ApplySpec] = None
 
 
 @dataclass(frozen=True)
@@ -99,6 +110,12 @@ class ProviderDescriptor:
 def _enum(*ids: str) -> Tuple[ControlValue, ...]:
     return tuple(ControlValue(id=v, label=v.replace("_", " ").capitalize()) for v in ids)
 
+
+# The `permission_mode` value naming the Hub as the answerer for a run's permission requests.
+# Deliberately not one of Claude's own mode spellings: it selects Claude's `manual` mode *plus*
+# `--permission-prompt-tool`, and needs an identity of its own to be distinguishable from a bare
+# `manual` in stored overrides and in `_build_claude_command`.
+WORKSPACE_PERMISSION_MODE = "workspace"
 
 CATALOG: Dict[str, ProviderDescriptor] = {
     "claude": ProviderDescriptor(
@@ -139,6 +156,15 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 kind="enum",
                 values=(
                     ControlValue(id="acceptEdits", label="Edit files"),
+                    # Spells itself `manual` — the same mode as "Ask first" — and is separated
+                    # from it by `--permission-prompt-tool`, which names the Hub as the answerer.
+                    # Only `_build_claude_command` knows whether that answerer exists for a given
+                    # run, so it appends that flag; the catalog declares the mode alone.
+                    ControlValue(
+                        id=WORKSPACE_PERMISSION_MODE,
+                        label="Workspace only",
+                        apply=ApplySpec(style="flag", template="--permission-mode manual"),
+                    ),
                     ControlValue(id="manual", label="Ask first"),
                     ControlValue(id="bypassPermissions", label="Full access"),
                 ),
@@ -258,10 +284,17 @@ def render_control_args(provider: str, overrides: Dict[str, str]) -> List[str]:
         if control_id == "model":
             continue
         control = entry.control(control_id)
-        if control is None or control.apply.style == "none":
+        if control is None:
             continue
-        rendered = control.apply.template.format(value=value)
-        if control.apply.style == "config":
+        # A value may override its control's spec (see `ControlValue.apply`). This stays generic:
+        # the renderer still does not know what any control means, only that the value it was
+        # given may carry its own rendering.
+        selected = next((v for v in control.values if v.id == value), None)
+        spec = selected.apply if selected is not None and selected.apply is not None else control.apply
+        if spec.style == "none":
+            continue
+        rendered = spec.template.format(value=value)
+        if spec.style == "config":
             args += ["-c", rendered]
         else:  # "flag"
             args += rendered.split(" ")

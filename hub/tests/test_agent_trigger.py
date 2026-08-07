@@ -524,6 +524,10 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
     assert "HUB_PROJECT_ID" not in spawned_env
     # The Hub's own environment must be inherited, not replaced, by adding these keys.
     assert "PATH" in spawned_env or "Path" in spawned_env
+    # The boundary the "Workspace only" posture enforces is the directory the run actually
+    # executes in — the same value the context renderer names as "Your workspace". If these ever
+    # diverge, an agent is refused at a line it was never shown.
+    assert spawned_env["AW_WORKSPACE_DIR"] == fake_spawn.call_args.kwargs["cwd"]
 
     prompt = captured_kwargs["prompt"]
     assert "do the thing" in prompt

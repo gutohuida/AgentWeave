@@ -761,6 +761,11 @@ def _tool_surface_lines() -> List[str]:
     preamble listed four tool names and nothing else, so agents guessed `message_type="text"` and
     were rejected. Four job tools were never mentioned at all. Constrained values are taken from
     `mcp_server`'s own `Literal` aliases, so this cannot drift from the schema clients receive.
+
+    `mcp_server.approve_tool_call` is deliberately absent and must stay absent. It is registered
+    on the same server for convenience but is a runtime endpoint the harness invokes, not a
+    capability the agent has: calling it accomplishes nothing and grants nothing. This section
+    exists to tell an agent what it can deliberately use.
     """
     from ...mcp_server import JobSessionMode, MessageType, TaskPriority, TaskStatus
 

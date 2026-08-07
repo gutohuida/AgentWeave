@@ -7,6 +7,7 @@ and operator-gated scheduled-work mutations.
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -330,6 +331,124 @@ def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
 def run_job(job_id: str) -> Dict[str, Any]:
     """Trigger recurring work immediately only under operator allowance."""
     return _job_effect("POST", f"/jobs/{job_id}/run")
+
+
+# --- Permission approval -------------------------------------------------------------------
+#
+# Claude calls the tool named by `--permission-prompt-tool` for each permission decision and
+# honours its answer. The contract is undocumented (the flag is hidden from `--help`) and was
+# measured against Claude Code 2.1.221; see the change's design.md. Three details are load-bearing:
+#
+#   1. Claude passes `tool_use_id`. A signature omitting it fails *every* call with a validation
+#      error, which the model reports as a broken approval system rather than a denial.
+#   2. The answer is a JSON string in a text content block.
+#   3. `structuredContent` must be ABSENT. FastMCP derives an output schema from the return
+#      annotation and emits `structuredContent: {"result": ...}` alongside the text; with it
+#      present a correct "allow" is silently not honoured and the action is refused anyway.
+#      This is why `approve_tool_call` has no return annotation. Do not add one.
+
+# Input keys whose value is a filesystem path across Claude's built-in tools.
+_PATH_KEYS = ("file_path", "path", "notebook_path")
+
+# Absolute paths appearing anywhere in a shell command: POSIX (/x) and Windows (C:\x, C:/x).
+_ABSOLUTE_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s\"'|;&><)]*")
+
+
+def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+    """Decide one permission request. Pure and total: every input maps to a decision.
+
+    Mirrors `codex_appserver.decide_approval`'s contract for the Codex side — an unanswered
+    request does not fail a turn, it suspends it forever, so there is no path here that declines
+    to answer. Anything unrecognised denies rather than allows.
+    """
+    if tool_name.startswith("mcp__agentweave__"):
+        return {"allow": True, "reason": "the Hub's own tools"}
+
+    workspace = os.environ.get("AW_WORKSPACE_DIR", "").strip()
+    if not workspace:
+        return {
+            "allow": False,
+            "reason": (
+                "your workspace could not be established, so no action can be checked "
+                "against it"
+            ),
+        }
+    try:
+        root = os.path.realpath(workspace)
+    except OSError:
+        return {"allow": False, "reason": "your workspace directory could not be resolved"}
+
+    candidates: List[str] = []
+    for key in _PATH_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value:
+            candidates.append(value)
+    command = tool_input.get("command")
+    if isinstance(command, str) and command:
+        # A shell command carries no declared path argument, so absolute paths are read out of
+        # the command text. Relative paths are left alone: they resolve against the run's cwd,
+        # which is the workspace. This does not make shell escape impossible -- a command can
+        # still build a path at runtime -- and is a boundary, not a sandbox.
+        candidates.extend(_ABSOLUTE_PATH_RE.findall(command))
+
+    for candidate in candidates:
+        absolute = candidate if os.path.isabs(candidate) else os.path.join(root, candidate)
+        try:
+            resolved = os.path.realpath(absolute)
+        except OSError:
+            return {"allow": False, "reason": f"{candidate!r} could not be resolved"}
+        # `commonpath` compares path components, so it cannot be fooled the way a string prefix
+        # can (`/work-other` does not start inside `/work`). Both sides are already real paths,
+        # so `..` and symlinks have been collapsed before this comparison.
+        try:
+            shared = os.path.commonpath([root, resolved])
+        except ValueError:  # different drives on Windows
+            return {"allow": False, "reason": f"{candidate!r} is outside your workspace"}
+        if os.path.normcase(shared) != os.path.normcase(root):
+            return {"allow": False, "reason": f"{candidate!r} is outside your workspace"}
+
+    return {"allow": True, "reason": "inside your workspace"}
+
+
+def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str) -> None:
+    """Tell the Hub what was decided. Observational only — never able to change or delay it.
+
+    Every failure is swallowed, including an unset run token: a decision has already been reached
+    by the time this runs, and a Hub that is down, slow, or unreachable must not turn an answered
+    request into an unanswered one.
+    """
+    try:  # noqa: SIM105 - kept explicit; contextlib.suppress hides how deliberate this is
+        _hub_request(
+            "POST",
+            "/permission-decisions",
+            {
+                "tool_name": tool_name,
+                "tool_use_id": tool_use_id,
+                "allowed": decision["allow"],
+                "reason": decision["reason"],
+            },
+        )
+    except Exception:  # noqa: BLE001, SIM105 - deliberately total and explicit; see docstring
+        pass
+
+
+@mcp.tool()
+def approve_tool_call(
+    tool_name: str,
+    input: Dict[str, Any],  # noqa: A002 - Claude sends this key; the name is not ours to choose
+    tool_use_id: str = "",
+):
+    """Runtime approval endpoint. Not an agent capability — the harness calls this, not you."""
+    decision = _decide(tool_name, input or {})
+    _report_decision(tool_name, decision, tool_use_id)
+    if decision["allow"]:
+        return json.dumps({"behavior": "allow", "updatedInput": input})
+    return json.dumps(
+        {
+            "behavior": "deny",
+            "message": f"Denied: {decision['reason']}. You are confined to your own workspace.",
+        }
+    )
 
 
 def main() -> None:

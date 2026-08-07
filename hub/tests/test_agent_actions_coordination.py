@@ -212,3 +212,67 @@ async def test_agent_task_not_found_is_project_scoped(app):
 
     async with async_session_factory() as session:
         assert (await session.execute(select(Task))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_a_refused_action_is_recorded_where_the_operator_can_see_it(app):
+    """A denial the operator never learns about is the gap this reporting closes: the agent hits
+    a wall, works around it, and the one person who could widen it never knew."""
+    from hub.db.models import EventLog
+
+    headers, _ = await _active_run("run-denied", "walled")
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        headers=headers,
+        json={
+            "tool_name": "Write",
+            "tool_use_id": "toolu_denied",
+            "allowed": False,
+            "reason": "'/etc/passwd' is outside your workspace",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+
+    async with async_session_factory() as session:
+        rows = (
+            (await session.execute(select(EventLog).where(EventLog.event_type == "permission_denied")))
+            .scalars()
+            .all()
+        )
+    assert len(rows) == 1
+    assert rows[0].agent == "walled"
+    assert rows[0].severity == "warning"
+    assert rows[0].data["tool_name"] == "Write"
+    assert "outside your workspace" in rows[0].data["reason"]
+
+
+@pytest.mark.asyncio
+async def test_an_allowed_action_is_not_recorded(app):
+    """One row per allowed tool call would bury the refusals under the unremarkable case."""
+    from hub.db.models import EventLog
+
+    headers, _ = await _active_run("run-allowed", "working")
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        headers=headers,
+        json={"tool_name": "Write", "tool_use_id": "t", "allowed": True, "reason": "inside"},
+    )
+    assert resp.status_code == 202
+
+    async with async_session_factory() as session:
+        rows = (
+            (await session.execute(select(EventLog).where(EventLog.event_type == "permission_denied")))
+            .scalars()
+            .all()
+        )
+    assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_permission_decisions_require_a_bound_run(app):
+    """The endpoint is agent-authenticated like every other agent action."""
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        json={"tool_name": "Write", "allowed": False, "reason": "x"},
+    )
+    assert resp.status_code in (401, 403)

@@ -164,6 +164,27 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     await waitFor(() => expect(seen).toEqual(expect.arrayContaining(types)))
   })
 
+  it('dispatches permission_denied, so a refused agent is visible rather than silent', async () => {
+    // Not in SSE_EVENT_TYPES means dropped client-side before any handler runs, and the
+    // operator never learns the agent hit a wall.
+    fetchSpy.mockResolvedValue(
+      makeSSEResponse([
+        'event: permission_denied\ndata: {"agent":"walled","tool_name":"Write","reason":"outside your workspace"}\n\n',
+      ])
+    )
+
+    const seen: string[] = []
+    function Probe() {
+      useSSE((e) => {
+        seen.push(e.type)
+      })
+      return null
+    }
+    render(withQueryClient(<Probe />))
+
+    await waitFor(() => expect(seen).toContain('permission_denied'))
+  })
+
   it('dispatches inbound queue lifecycle events', async () => {
     const types = [
       'queue_entry_queued',

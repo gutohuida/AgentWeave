@@ -47,6 +47,7 @@ const SSE_EVENT_TYPES = [
   'queue_entry_withdrawn',
   'accounting_budget_updated',
   'queue_chain_suspended',
+  'permission_denied',
   'project_created',
   'project_opened',
   'project_relocated',

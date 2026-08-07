@@ -177,6 +177,7 @@ export function eventBelongsToTimeline(event: SSEEvent, name: string): boolean {
       return d.from === name || d.to === name || d.recipient === name
     case 'log_event':
     case 'agent_heartbeat':
+    case 'permission_denied':
     case 'run_started':
     case 'run_completed':
     case 'run_failed':

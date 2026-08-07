@@ -13,20 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_auth import AgentActor, get_agent_actor
 from ...db.engine import get_session
 from ...db.models import Question
-from ...schemas.messages import MessageCreate, MessageResponse, _MESSAGE_TYPES
-from ...schemas.questions import QuestionCreate, QuestionResponse
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
+from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
+from ...schemas.questions import QuestionCreate, QuestionResponse
 from ...schemas.tasks import (
-    TaskCreate,
-    TaskResponse,
-    TaskUpdate,
     _PRIORITIES,
     _TASK_ID_RE,
     _TASK_STATUSES,
+    TaskCreate,
+    TaskResponse,
+    TaskUpdate,
 )
-from .messages import create_message_for_actor
+from ...sse import sse_manager
+from ...utils import persist_event
 from .agents import AgentRequest, request_agent
 from .jobs import create_job, delete_job, run_job, update_job
+from .messages import create_message_for_actor
 from .questions import ask_question_for_actor
 from .tasks import create_task_for_actor, get_task, list_tasks, update_task_for_actor
 
@@ -316,3 +318,55 @@ async def run_governed_job(
         agent_identity=actor.agent,
         run_identity=actor.run_id,
     )
+
+
+class PermissionDecisionCreate(BaseModel):
+    """One permission decision a run has *already* made and is reporting.
+
+    Past tense throughout: the run answered Claude before calling this, so nothing here can
+    change the outcome. See `mcp_server._report_decision`.
+    """
+
+    tool_name: str = Field(max_length=128)
+    tool_use_id: str = Field(default="", max_length=128)
+    allowed: bool
+    reason: str = Field(default="", max_length=1000)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/permission-decisions", status_code=status.HTTP_202_ACCEPTED)
+async def record_permission_decision(
+    body: PermissionDecisionCreate,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record a run's permission decision so a refusal is visible to the operator.
+
+    Only refusals are persisted. An allowed call is the unremarkable case and would bury the
+    interesting one under a row per tool call; a refusal is the thing the operator can act on,
+    and is the gap `2026-08-06-operator-in-the-loop-turns` records — an agent that hits a wall
+    while the one person who could widen it never learns it happened.
+
+    Returns 202 rather than 201: the caller is not waiting on this and discards the response.
+    """
+    if not body.allowed:
+        await persist_event(
+            session,
+            project_id=actor.project_id,
+            event_type="permission_denied",
+            agent=actor.agent,
+            data={
+                "tool_name": body.tool_name,
+                "tool_use_id": body.tool_use_id,
+                "reason": body.reason,
+                "run_id": actor.run_id,
+            },
+            severity="warning",
+        )
+        await sse_manager.broadcast(
+            actor.project_id,
+            "permission_denied",
+            {"agent": actor.agent, "tool_name": body.tool_name, "reason": body.reason},
+        )
+    return {"recorded": not body.allowed}

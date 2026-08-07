@@ -35,7 +35,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .model_catalog import render_control_args
+from .model_catalog import WORKSPACE_PERMISSION_MODE, render_control_args
 
 SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
 
@@ -47,6 +47,11 @@ SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
 # carried by the agent's own git worktree, which this does not widen. `manual` remains selectable
 # through the `permission_mode` control for a deliberately inert run.
 DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits"
+
+# The tool `--permission-prompt-tool` names for the "Workspace only" posture. `mcp__<server>__<tool>`
+# is Claude's addressing for an MCP tool; the server half must match the name `_build_claude_command`
+# registers in `--mcp-config` above, and the tool half `mcp_server.py`'s own function name.
+CLAUDE_PERMISSION_PROMPT_TOOL = "mcp__agentweave__approve_tool_call"
 
 # claude_proxy and native both invoke the claude CLI (see _build_claude_command) under a
 # different auth/proxy setup — their catalog identity for control-override rendering is
@@ -123,6 +128,7 @@ def build_command(
             mcp_command=mcp_command,
             extra_flags=extra_flags,
             control_args=control_args,
+            control_overrides=control_overrides,
         )
     raise UnsupportedRunnerError(
         f"runner {runner!r} is not yet supported for direct Hub spawn "
@@ -141,6 +147,7 @@ def _build_claude_command(
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
     control_args: Optional[List[str]] = None,
+    control_overrides: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     cmd = [cli, "--output-format", "stream-json", "--verbose"]
     if model:
@@ -167,6 +174,17 @@ def _build_claude_command(
         cmd += ["--mcp-config", json.dumps(config)]
         if not yolo:
             cmd += ["--allowedTools", "mcp__agentweave__*"]
+        # The "Workspace only" posture is `manual` plus an answerer. Emitted here rather than from
+        # the catalog because only this function knows whether the server that answers is even
+        # configured: naming an approver that will not be there makes every tool call fail, which
+        # the model reports as a broken approval system. Guarded by
+        # `operator_set_permission_mode` for the same reason the default posture below is — an
+        # approver flag must not outlive the posture that asked for it.
+        if (
+            operator_set_permission_mode
+            and (control_overrides or {}).get("permission_mode") == WORKSPACE_PERMISSION_MODE
+        ):
+            cmd += ["--permission-prompt-tool", CLAUDE_PERMISSION_PROMPT_TOOL]
     if not operator_set_permission_mode:
         if yolo:
             cmd += ["--dangerously-skip-permissions"]

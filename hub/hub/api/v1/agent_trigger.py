@@ -378,6 +378,11 @@ async def trigger_agent_directly(
     env["AW_AGENT_IDENTITY"] = agent
     env["AW_RUN_ID"] = run_id
     env["AW_RUN_TOKEN"] = run_token
+    # The boundary the "Workspace only" posture enforces. Deliberately the same
+    # `effective_work_dir` passed to the context renderer above as "Your workspace": the boundary
+    # the agent is *told* about and the one that is *enforced* must come from one value, or an
+    # agent can be refused at a line it was never shown.
+    env["AW_WORKSPACE_DIR"] = effective_work_dir
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
     explicit_hub_url = os.environ.get("HUB_URL")
