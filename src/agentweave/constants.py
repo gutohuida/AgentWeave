@@ -30,8 +30,8 @@ COPILOT_OTEL_DIR = SHARED_DIR / "copilot_otel"  # per-invocation OTel JSONL scra
 
 # File paths
 SESSION_FILE = AGENTWEAVE_DIR / "session.json"
-WATCHDOG_PID_FILE = AGENTWEAVE_DIR / "watchdog.pid"  # gitignored, machine-local
-WATCHDOG_LOG_FILE = AGENTWEAVE_DIR / "watchdog.log"  # gitignored, machine-local
+# The watchdog itself is gone; only the heartbeat file outlives it, still read by the
+# readiness checks that report an agent as stale.
 WATCHDOG_HEARTBEAT_FILE = AGENTWEAVE_DIR / "watchdog.heartbeat"  # gitignored
 
 # Event log
