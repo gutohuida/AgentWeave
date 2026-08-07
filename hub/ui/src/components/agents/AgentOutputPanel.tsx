@@ -21,6 +21,7 @@ import { AgentQuestionCard } from './AgentQuestionCard'
 import { UnaskedQuestionCard } from './UnaskedQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
 import { usePendingUnaskedQuestions } from '@/api/unaskedQuestions'
+import { activeQuestionFor } from '@/lib/pendingQuestions'
 import { useAnswerQuestion, useQuestions } from '@/api/questions'
 import { ConversationControls, type HandoffState } from './ConversationControls'
 import { agentColorVars } from '@/lib/agentColors'
@@ -89,8 +90,10 @@ export function AgentOutputPanel({
   const answerQuestion = useAnswerQuestion()
   const [questionSelection, setQuestionSelection] = useState<string[]>([])
   const [composerDraft, setComposerDraft] = useState('')
-  const pendingQuestion =
-    openQuestions.find((q) => q.from_agent === agent.name && !q.answered) ?? null
+  // The same selector the card renders from. Deriving it separately here was safe while only one
+  // question could be outstanding; with a batch the two could order differently, and the operator
+  // would read one question while answering another.
+  const pendingQuestion = activeQuestionFor(openQuestions, agent.name).question
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -362,10 +365,16 @@ export function AgentOutputPanel({
    *
    * Typed text wins over a selection: someone who bothered to write meant it, and the options
    * were only ever an offer. */
-  const answerPendingQuestion = async (typedMessage: string): Promise<void> => {
+  const answerPendingQuestion = async (
+    typedMessage: string,
+    // Passed explicitly by the single-choice path, which answers in the same click that makes
+    // the selection: `setQuestionSelection` has not applied yet at that point, so reading the
+    // state here would see the previous (empty) value and send nothing at all.
+    chosenLabels?: string[],
+  ): Promise<void> => {
     if (!pendingQuestion) return
     const typed = typedMessage.trim()
-    const labels = typed ? [] : questionSelection
+    const labels = typed ? [] : (chosenLabels ?? questionSelection)
     if (!typed && labels.length === 0) return
     await answerQuestion.mutateAsync({
       id: pendingQuestion.id,
@@ -382,7 +391,7 @@ export function AgentOutputPanel({
       // Single choice answers outright. The selection is set first so the row paints as chosen
       // in the same frame as the click, rather than after the round-trip.
       setQuestionSelection([label])
-      void answerPendingQuestion('')
+      void answerPendingQuestion('', [label])
         .then(() => undefined)
         .catch(() => setQuestionSelection([]))
       return

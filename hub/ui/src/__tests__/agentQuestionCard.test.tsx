@@ -134,12 +134,18 @@ describe('agent question panel', () => {
     expect(screen.queryByText('Select one or more options.')).not.toBeInTheDocument()
   })
 
-  it('counts outstanding questions only when there is more than one', () => {
-    const { rerender } = renderCard(question())
+  it('shows no counter for a question asked on its own', () => {
+    renderCard(question())
     expect(screen.queryByTestId('agent-question-count')).not.toBeInTheDocument()
-    rerender(
+  })
+
+  it('does not count two unrelated questions as steps of one prompt', () => {
+    // The counter used to be a queue depth wearing a step counter's clothes: two questions from
+    // two unrelated calls read as "1/2", telling the operator there was a second step coming in
+    // something they had not been asked yet.
+    render(
       <AgentQuestionCard
-        questions={[question(), question({ id: 'q-2' })]}
+        questions={[question(), question({ id: 'q-2', created_at: '2026-08-07T11:00:00Z' })]}
         agent="haiku-1"
         selected={[]}
         onToggle={toggle}
@@ -147,7 +153,65 @@ describe('agent question panel', () => {
         isTyping={false}
       />
     )
-    expect(screen.getByTestId('agent-question-count')).toHaveTextContent('1/2')
+    expect(screen.queryByTestId('agent-question-count')).not.toBeInTheDocument()
+  })
+
+  it('steps through a batch, counting position within it', () => {
+    const batch = (index: number, answered: boolean) =>
+      question({
+        id: `q-${index + 1}`,
+        question: `Question ${index + 1}?`,
+        batch_id: 'qbatch-1',
+        batch_index: index,
+        batch_size: 3,
+        answered,
+        created_at: `2026-08-07T10:0${index}:00Z`,
+      })
+
+    const { rerender } = render(
+      <AgentQuestionCard
+        questions={[batch(0, false), batch(1, false), batch(2, false)]}
+        agent="haiku-1"
+        selected={[]}
+        onToggle={toggle}
+        isResponding={false}
+        isTyping={false}
+      />
+    )
+    expect(screen.getByTestId('agent-question-count')).toHaveTextContent('1/3')
+    expect(screen.getByText('Question 1?')).toBeInTheDocument()
+    expect(screen.getByText(/Then 2 more\./)).toBeInTheDocument()
+
+    // Answering removes that row from what the panel holds, which is what advances the step.
+    rerender(
+      <AgentQuestionCard
+        questions={[batch(0, true), batch(1, false), batch(2, false)]}
+        agent="haiku-1"
+        selected={[]}
+        onToggle={toggle}
+        isResponding={false}
+        isTyping={false}
+      />
+    )
+    expect(screen.getByTestId('agent-question-count')).toHaveTextContent('2/3')
+    expect(screen.getByText('Question 2?')).toBeInTheDocument()
+  })
+
+  it('says nothing about "more" on the last question of a batch', () => {
+    render(
+      <AgentQuestionCard
+        questions={[
+          question({ id: 'q-2', batch_id: 'qbatch-1', batch_index: 1, batch_size: 2 }),
+        ]}
+        agent="haiku-1"
+        selected={[]}
+        onToggle={toggle}
+        isResponding={false}
+        isTyping={false}
+      />
+    )
+    expect(screen.getByTestId('agent-question-count')).toHaveTextContent('2/2')
+    expect(screen.queryByText(/more\./)).not.toBeInTheDocument()
   })
 
   it('shows nothing for another agent, or when nothing is pending', () => {

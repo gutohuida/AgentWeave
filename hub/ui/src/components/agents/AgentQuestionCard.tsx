@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Question } from '@/api/questions'
+import { activeQuestionFor } from '@/lib/pendingQuestions'
 
 interface AgentQuestionCardProps {
   questions: Question[]
@@ -32,8 +33,7 @@ export function AgentQuestionCard({
   isResponding,
   isTyping,
 }: AgentQuestionCardProps) {
-  const pending = questions.filter((q) => q.from_agent === agent && !q.answered)
-  const question = pending[0]
+  const { question, step, total } = activeQuestionFor(questions, agent)
 
   // Number keys pick an option, as long as the operator is not writing in a field. The badges
   // on each row are what make this discoverable; a shortcut nobody can see is not a feature.
@@ -63,9 +63,12 @@ export function AgentQuestionCard({
     <div className="conversation-interject" data-testid={`agent-question-${question.id}`}>
       <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
         <span className="interject-eyebrow">{question.header || `${agent} is asking`}</span>
-        {pending.length > 1 && (
+        {/* Position within this batch, not a count of everything outstanding. The old counter
+            read like a step counter while being a queue depth, which said "1/2" to someone with
+            one question in front of them and nothing else coming. */}
+        {total > 1 && (
           <span className="interject-count" data-testid="agent-question-count">
-            1/{pending.length}
+            {step}/{total}
           </span>
         )}
       </div>
@@ -111,6 +114,9 @@ export function AgentQuestionCard({
         {multi
           ? 'Pick what applies, then send. Or write your own answer below.'
           : 'Pick one, or write your own answer below.'}
+        {/* Said once, here, rather than left for the operator to infer from the counter — an
+            answer they cannot take back is worth knowing about before they give it. */}
+        {step < total ? ` Then ${total - step} more.` : ''}
       </p>
     </div>
   )

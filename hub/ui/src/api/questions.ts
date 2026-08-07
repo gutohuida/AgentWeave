@@ -22,6 +22,11 @@ export interface Question {
   answer_labels?: string[]
   answered: boolean
   answer?: string
+  /** Batch identity. One `ask_user` call can carry several questions; a question asked on its
+   *  own reports `batch_size: 1`, so nothing has to special-case the unbatched form. */
+  batch_id?: string | null
+  batch_index?: number
+  batch_size?: number
   created_at: string
   answered_at?: string
 }
