@@ -1,6 +1,14 @@
+import { useEffect, useState } from 'react'
 import { AgentSummary, useAgentSessions } from '@/api/agents'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
-import { useBindAgentRunner, useRunners } from '@/api/runners'
+import {
+  MAX_WAITING_SECONDS,
+  MIN_WAITING_SECONDS,
+  useBindAgentRunner,
+  useRunners,
+  useUpdateAgentWaiting,
+} from '@/api/runners'
+import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useCopy } from '@/hooks/useCopy'
 import { Icon } from '@/components/common/Icon'
 import { formatDistanceToNow } from 'date-fns'
@@ -163,21 +171,47 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
           )}
         </div>
 
-        {/* Bound Runner (runner-agent-charter-separation) */}
-        <div className="mt-4">
-          <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-            Bound Runner
-          </p>
-          <RunnerPicker agent={agent} />
-        </div>
-
-        <div className="mt-4">
-          <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-            Bound Charter
-          </p>
-          <CharterPicker agent={agent} />
-        </div>
       </section>
+
+      {/* The editable settings, on the same components the project settings panel uses, so the
+          two read as one system rather than two panels that happen to both have controls. */}
+      <SettingsSection
+        title="Bindings"
+        description="What this agent runs as, and the behaviour contract it works under."
+      >
+        <SettingsRow
+          label="Runner"
+          description="The execution capability this agent is bound to — its CLI, model and flags."
+        >
+          <RunnerPicker agent={agent} />
+        </SettingsRow>
+        <SettingsRow
+          label="Charter"
+          description="The markdown behaviour contract injected into this agent's turn context."
+        >
+          <CharterPicker agent={agent} />
+        </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Waiting for you"
+        description="How long this agent holds its turn open for you before giving up and carrying on."
+      >
+        <WaitingSetting
+          agent={agent}
+          field="permission_timeout_seconds"
+          label="Permission decision"
+          fallback={120}
+          description="How long a run waits for you to allow or refuse an action under “Ask me”. Running out refuses it. Measured: the provider held a permission prompt open for at least 150s."
+        />
+        <WaitingSetting
+          agent={agent}
+          field="question_timeout_seconds"
+          label="Answer to a question"
+          fallback={240}
+          description="How long a run waits for you to answer a question it asked. Longer than a permission decision, because you have to read it and choose. Measured: an ordinary tool call was held open for at least 240s."
+        />
+      </SettingsSection>
 
       {/* Stats Section */}
       <section style={cardStyle}>
@@ -211,6 +245,91 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
         </div>
       </section>
     </div>
+  )
+}
+
+/** One wait, in seconds, or blank for the built-in default.
+ *
+ * Committed on blur rather than on every keystroke: typing "45" over "240" passes through "4",
+ * and saving that would set a wait shorter than the card takes to render. Blank clears the
+ * setting back to the default rather than sending 0, which the API would refuse anyway.
+ */
+function WaitingSetting({
+  agent,
+  field,
+  label,
+  description,
+  fallback,
+}: {
+  agent: AgentSummary
+  field: 'permission_timeout_seconds' | 'question_timeout_seconds'
+  label: string
+  description: string
+  fallback: number
+}) {
+  const update = useUpdateAgentWaiting()
+  const stored = agent[field] ?? null
+  const [draft, setDraft] = useState(stored === null ? '' : String(stored))
+  const [error, setError] = useState<string | null>(null)
+
+  // The roster is the source of truth; a value changed elsewhere (or rejected here) has to win
+  // over whatever is sitting in the box.
+  useEffect(() => {
+    setDraft(stored === null ? '' : String(stored))
+  }, [stored])
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed === '') {
+      setError(null)
+      if (stored !== null) update.mutate({ agent: agent.name, field, seconds: null })
+      return
+    }
+    const seconds = Number(trimmed)
+    if (!Number.isInteger(seconds) || seconds < MIN_WAITING_SECONDS || seconds > MAX_WAITING_SECONDS) {
+      setError(`Between ${MIN_WAITING_SECONDS} and ${MAX_WAITING_SECONDS} seconds.`)
+      return
+    }
+    setError(null)
+    if (seconds !== stored) update.mutate({ agent: agent.name, field, seconds })
+  }
+
+  return (
+    <SettingsRow label={label} description={description}>
+      <div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={MIN_WAITING_SECONDS}
+            max={MAX_WAITING_SECONDS}
+            value={draft}
+            placeholder={String(fallback)}
+            aria-label={`${label} wait for ${agent.name}, in seconds`}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+            }}
+            disabled={update.isPending}
+            className="w-24 px-3 py-2 rounded-md text-sm"
+            style={{
+              background: 'var(--surface-3)',
+              color: 'var(--text)',
+              border: `1px solid ${error ? 'var(--red)' : 'var(--border)'}`,
+              opacity: update.isPending ? 0.6 : 1,
+            }}
+          />
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>seconds</span>
+        </div>
+        <p className="mt-1 text-[11px]" style={{ color: error ? 'var(--red)' : 'var(--text-3)' }}>
+          {error ?? (stored === null ? `Default (${fallback}s). Clear to keep it.` : 'Blank for the default.')}
+        </p>
+        {update.isError && !error && (
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>Could not save.</p>
+        )}
+      </div>
+    </SettingsRow>
   )
 }
 

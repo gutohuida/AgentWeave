@@ -400,6 +400,13 @@ async def trigger_agent_directly(
     # tells it whether to decide against the workspace itself or put the call to the operator.
     if (control_overrides or {}).get("permission_mode") == "manual":
         env["AW_PERMISSION_POSTURE"] = OPERATOR_POSTURE
+    # How long this agent waits on the operator. Set only when configured — an absent variable is
+    # what tells the tool to use its own default, so writing one unconditionally would turn every
+    # agent into a configured one and freeze today's numbers.
+    if agent_row.permission_timeout_seconds is not None:
+        env["AW_DECISION_TIMEOUT"] = str(agent_row.permission_timeout_seconds)
+    if agent_row.question_timeout_seconds is not None:
+        env["AW_QUESTION_TIMEOUT"] = str(agent_row.question_timeout_seconds)
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
     explicit_hub_url = os.environ.get("HUB_URL")
@@ -1233,8 +1240,36 @@ def _codex_posture(permission_mode: Optional[str]) -> Optional[str]:
     return None
 
 
+def _codex_decision_timeout(env: Optional[Dict[str, str]]) -> int:
+    """This run's permission wait, from the same environment variable the Claude path uses.
+
+    Read from `env` rather than threaded as another parameter because the trigger already put it
+    there for the MCP process, and one carrier for one setting means the two transports cannot
+    drift apart. Anything unparseable or out of range falls back, matching `mcp_server`'s rule.
+    """
+    # Imported here, not at module scope: `.agents` imports this module back.
+    from .agents import MAX_WAITING_SECONDS, MIN_WAITING_SECONDS
+
+    raw = (env or {}).get("AW_DECISION_TIMEOUT")
+    if not raw:
+        return CODEX_OPERATOR_DECISION_TIMEOUT
+    try:
+        value = int(raw)
+    except ValueError:
+        return CODEX_OPERATOR_DECISION_TIMEOUT
+    if MIN_WAITING_SECONDS <= value <= MAX_WAITING_SECONDS:
+        return value
+    return CODEX_OPERATOR_DECISION_TIMEOUT
+
+
 async def _await_operator_permission(
-    *, project_id: str, agent: str, run_id: str, method: str, subject: Dict[str, object]
+    *,
+    project_id: str,
+    agent: str,
+    run_id: str,
+    method: str,
+    subject: Dict[str, object],
+    timeout_seconds: Optional[int] = None,
 ) -> bool:
     """Open a permission request for a Codex approval and wait for the operator.
 
@@ -1264,7 +1299,9 @@ async def _await_operator_permission(
          "run_id": run_id},
     )
 
-    deadline = asyncio.get_event_loop().time() + CODEX_OPERATOR_DECISION_TIMEOUT
+    deadline = asyncio.get_event_loop().time() + (
+        timeout_seconds if timeout_seconds is not None else CODEX_OPERATOR_DECISION_TIMEOUT
+    )
     while asyncio.get_event_loop().time() < deadline:
         await asyncio.sleep(CODEX_OPERATOR_POLL_SECONDS)
         async with async_session_factory() as db:
@@ -1399,6 +1436,7 @@ async def _execute_codex_appserver_run(
                     run_id=run_id,
                     method=method,
                     subject=subject,
+                    timeout_seconds=_codex_decision_timeout(env),
                 ),
                 cwd=work_dir,
                 env=env,

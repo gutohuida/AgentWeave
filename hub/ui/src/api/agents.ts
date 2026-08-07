@@ -23,6 +23,9 @@ export interface AgentSummary {
   color_index?: number | null  // Stable palette index, assigned once at registration
   runner_id?: string | null  // Bound Runner record, if any (runner-agent-charter-separation)
   charter_id?: string | null  // Bound Charter record, if any (runner-agent-charter-separation)
+  /** How long this agent waits on the operator. `null` means the built-in default. */
+  permission_timeout_seconds?: number | null
+  question_timeout_seconds?: number | null
 }
 
 export interface AgentLaunchability {

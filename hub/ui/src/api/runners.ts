@@ -100,6 +100,32 @@ export function useDeleteRunner() {
   })
 }
 
+/** How long this agent waits on the operator. `null` clears back to the built-in default.
+ *
+ * Bounds match the API's, which is the real guard — the inputs' min/max are a convenience on top
+ * of it rather than the only thing standing between a typo and a run that waits ten minutes. */
+export const MIN_WAITING_SECONDS = 10
+export const MAX_WAITING_SECONDS = 600
+
+export function useUpdateAgentWaiting() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      agent,
+      field,
+      seconds,
+    }: {
+      agent: string
+      field: 'permission_timeout_seconds' | 'question_timeout_seconds'
+      seconds: number | null
+    }) => patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { [field]: seconds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
+    },
+  })
+}
+
 export function useBindAgentRunner() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()

@@ -445,18 +445,43 @@ def run_job(job_id: str) -> Dict[str, Any]:
 # `AW_PERMISSION_POSTURE`'s value when the operator, not the Hub, decides each call.
 OPERATOR_POSTURE = "operator"
 
+# Bounds on a configured wait. Restated here rather than imported from `api/v1/agents.py`, for the
+# same reason `OPERATOR_POSTURE` is: this module is spawned standalone and imports only stdlib and
+# fastmcp. A test asserts the two agree.
+MIN_WAITING_SECONDS = 10
+MAX_WAITING_SECONDS = 600
+
+
+def _configured_wait(env_name: str, default: int) -> int:
+    """Read a per-agent wait from the environment, falling back to the default.
+
+    The Hub puts these in the run's environment the way it already does the workspace boundary and
+    the permission posture; there is no database from here. Anything absent, unparseable or out of
+    range falls back rather than raising — a turn that dies because a setting was mistyped is worse
+    than one that waits the standard time.
+    """
+    raw = os.environ.get(env_name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if MIN_WAITING_SECONDS <= value <= MAX_WAITING_SECONDS else default
+
+
 # How long an operator has to answer before the request is denied, and how often the waiting run
-# checks. Claude was measured holding a permission tool call open for at least 150s, so this fits
-# inside what the provider tolerates while leaving an operator time to read and click.
-OPERATOR_DECISION_TIMEOUT = 120
+# checks. Claude was measured holding a permission tool call open for at least 150s, so the default
+# fits inside what the provider tolerates while leaving an operator time to read and click.
+OPERATOR_DECISION_TIMEOUT = _configured_wait("AW_DECISION_TIMEOUT", 120)
 OPERATOR_POLL_SECONDS = 2
 
 # A question deserves a longer wait than a permission prompt: the operator has to read it and
 # compose an answer, not click one of two buttons. 240s is what an ordinary MCP tool call was
 # measured tolerating against Claude Code 2.1.221 — the tool answered at exactly 240s and the
-# model used the result. The true ceiling is higher but unmeasured, so this does not exceed what
-# was proven. Still bounded: an unanswered wait must end.
-QUESTION_ANSWER_TIMEOUT = 240
+# model used the result. The true ceiling is higher but unmeasured, so the default does not exceed
+# what was proven. Still bounded: an unanswered wait must end.
+QUESTION_ANSWER_TIMEOUT = _configured_wait("AW_QUESTION_TIMEOUT", 240)
 QUESTION_POLL_SECONDS = 2
 
 # Input keys whose value is a filesystem path across Claude's built-in tools.

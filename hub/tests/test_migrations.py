@@ -125,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0033. The full
+    migration runs cleanly and the version lands at 0034. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -133,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0033).
+    # Verify alembic_version is at the latest revision (0034).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0033", f"expected alembic_version=0033, got {version}"
+    assert version == "0034", f"expected alembic_version=0034, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0033"
+    assert version == "0034"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -340,7 +340,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0033", f"expected alembic_version=0033, got {version}"
+    assert version == "0034", f"expected alembic_version=0034, got {version}"
 
 
 @pytest.mark.asyncio

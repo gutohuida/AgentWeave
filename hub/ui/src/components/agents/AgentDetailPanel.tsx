@@ -25,7 +25,10 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
     { id: 'output', label: 'Output' },
     { id: 'tasks', label: `Tasks (${agentTasks.length})` },
     { id: 'messages', label: 'Messages' },
-    { id: 'info', label: 'Info' },
+    // "Settings", not "Info": this tab has edited the agent's runner and charter bindings for a
+    // while, and it is where durable per-agent settings live. Calling it Info sent operators
+    // looking for a gear that should not exist.
+    { id: 'info', label: 'Settings' },
   ]
 
   return (

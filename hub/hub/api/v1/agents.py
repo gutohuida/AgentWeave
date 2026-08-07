@@ -517,6 +517,12 @@ async def list_agents(
                 color_index=agent_row.color_index if agent_row else None,
                 runner_id=agent_row.runner_id if agent_row else None,
                 charter_id=agent_row.charter_id if agent_row else None,
+                permission_timeout_seconds=(
+                    agent_row.permission_timeout_seconds if agent_row else None
+                ),
+                question_timeout_seconds=(
+                    agent_row.question_timeout_seconds if agent_row else None
+                ),
             )
         )
 
@@ -1181,6 +1187,37 @@ async def register_agent(
     return {"charter_id": agent_row.charter_id, "context": rendered["context"]}
 
 
+# How long an agent may be told to wait on the operator. The floor stops a wait so short the card
+# has barely rendered; the ceiling is well past anything measured. What *was* measured is narrower:
+# the permission-prompt tool tolerated at least 150s and an ordinary MCP tool call at least 240s,
+# and both were the spike's own limits rather than a proven ceiling. Values above those are allowed
+# and untested, which the settings row says out loud.
+MIN_WAITING_SECONDS = 10
+MAX_WAITING_SECONDS = 600
+WAITING_SETTING_FIELDS = ("permission_timeout_seconds", "question_timeout_seconds")
+
+
+def _validated_waiting_seconds(field: str, value: object) -> Optional[int]:
+    """Coerce one waiting setting, or refuse it.
+
+    Validated here rather than only in the UI: this endpoint takes a raw dict, so without this a
+    bad value reaches the column and surfaces later as a run that waits a nonsense length of time.
+    `None` clears the setting back to the built-in default.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise HTTPException(status_code=400, detail=f"{field} must be a whole number of seconds")
+    if not MIN_WAITING_SECONDS <= value <= MAX_WAITING_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{field} must be between {MIN_WAITING_SECONDS} and {MAX_WAITING_SECONDS} seconds"
+            ),
+        )
+    return value
+
+
 @router.patch("/{name}")
 async def patch_agent(
     name: str,
@@ -1195,11 +1232,12 @@ async def patch_agent(
     """
     project_id, _ = project
 
-    # Reject collision with configured agents — except for runner_id/charter_id, which
-    # the CLI's legacy session-sync config never owned (they're new,
-    # runner-agent-charter-separation-only fields) and a configured agent needs
-    # bindable exactly like a self-registered one.
-    _unrestricted_fields = {"runner_id", "charter_id"}
+    # Reject collision with configured agents — except for the fields the CLI's legacy
+    # session-sync config never owned. runner_id/charter_id are runner-agent-charter-separation
+    # fields; the waiting settings are newer still. A configured agent needs all of them settable
+    # exactly like a self-registered one — an agent does not wait differently for the operator
+    # because of how it was declared.
+    _unrestricted_fields = {"runner_id", "charter_id", *WAITING_SETTING_FIELDS}
     session_data = await _get_session_data(project_id, session)
     if (
         session_data
@@ -1248,6 +1286,10 @@ async def patch_agent(
                 raise HTTPException(status_code=404, detail=f"Charter '{charter_id}' not found")
         agent_row.charter_id = charter_id
 
+    for field in WAITING_SETTING_FIELDS:
+        if field in body:
+            setattr(agent_row, field, _validated_waiting_seconds(field, body[field]))
+
     # Merge config if provided
     if "config" in body:
         new_config = body["config"] or {}
@@ -1266,6 +1308,8 @@ async def patch_agent(
         "config": agent_row.config,
         "runner_id": agent_row.runner_id,
         "charter_id": agent_row.charter_id,
+        "permission_timeout_seconds": agent_row.permission_timeout_seconds,
+        "question_timeout_seconds": agent_row.question_timeout_seconds,
     }
 
 

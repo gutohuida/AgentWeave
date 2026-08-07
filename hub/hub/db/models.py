@@ -112,6 +112,11 @@ class Agent(Base):
     charter_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("charters.id"), nullable=True
     )
+    # How long this agent waits on the operator, in seconds. NULL means the built-in default —
+    # deliberately not a copy of it, because a row storing today's number would keep saying it
+    # after the default moved, pinning every existing agent to a value nobody chose.
+    permission_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    question_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

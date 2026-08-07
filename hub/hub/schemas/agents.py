@@ -65,6 +65,9 @@ class AgentSummary(BaseModel):
     color_index: Optional[int] = None  # Stable palette index, assigned once at registration
     runner_id: Optional[str] = Field(default=None, max_length=64)  # Bound Runner record, if any
     charter_id: Optional[str] = Field(default=None, max_length=64)  # Bound Charter record, if any
+    # How long this agent waits on the operator. None means the built-in default.
+    permission_timeout_seconds: Optional[int] = None
+    question_timeout_seconds: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

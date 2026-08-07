@@ -38,6 +38,9 @@ vi.mock('@/api/charters', () => ({
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  MIN_WAITING_SECONDS: 10,
+  MAX_WAITING_SECONDS: 600,
 }))
 
 vi.mock('@/api/agents', async (importOriginal) => {
