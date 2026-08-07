@@ -66,6 +66,111 @@ async def test_project_collection_includes_safe_live_agent_summary(app, auth_hea
 
 
 @pytest.mark.asyncio
+async def test_project_summary_reports_running_for_a_run_with_no_heartbeat(
+    app, auth_headers
+) -> None:
+    """A Hub-triggered run posts no heartbeat, so the rail's own endpoint has to
+    read `runs` the way /agents does — otherwise the rail dot stays grey for the
+    whole run while every other surface shows green."""
+    async with async_session_factory() as session:
+        session.add(
+            Agent(
+                id="agent-live-run",
+                project_id="proj-test",
+                name="live-run-agent",
+                color_index=1,
+            )
+        )
+        session.add(
+            Run(
+                id="run-live-no-heartbeat",
+                project_id="proj-test",
+                agent="live-run-agent",
+                status="running",
+                capability_token_hash=hash_run_token("token-live-run"),
+            )
+        )
+        await session.commit()
+
+    response = await app.get("/api/v1/projects", headers=auth_headers)
+    project = next(item for item in response.json() if item["id"] == "proj-test")
+    summary = next(a for a in project["agents"] if a["name"] == "live-run-agent")
+
+    assert summary["status"] == "running"
+    assert summary["last_seen"] is None
+
+
+@pytest.mark.asyncio
+async def test_project_summary_agrees_with_agents_endpoint_during_a_run(
+    app, auth_headers
+) -> None:
+    """The rail and the panels read different endpoints; they must not disagree
+    about whether the same agent is running."""
+    async with async_session_factory() as session:
+        session.add(
+            Agent(
+                id="agent-parity",
+                project_id="proj-test",
+                name="parity-agent",
+                color_index=2,
+            )
+        )
+        session.add(
+            Run(
+                id="run-parity",
+                project_id="proj-test",
+                agent="parity-agent",
+                status="running",
+                capability_token_hash=hash_run_token("token-parity"),
+            )
+        )
+        await session.commit()
+
+    projects = await app.get("/api/v1/projects", headers=auth_headers)
+    project = next(item for item in projects.json() if item["id"] == "proj-test")
+    rail_status = next(
+        a["status"] for a in project["agents"] if a["name"] == "parity-agent"
+    )
+
+    agents = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    panel_status = next(
+        a["status"] for a in agents.json() if a["name"] == "parity-agent"
+    )
+
+    assert rail_status == panel_status == "running"
+
+
+@pytest.mark.asyncio
+async def test_project_summary_is_idle_once_the_run_finishes(app, auth_headers) -> None:
+    """Only `status == "running"` counts; a completed run must not pin the dot green."""
+    async with async_session_factory() as session:
+        session.add(
+            Agent(
+                id="agent-finished-run",
+                project_id="proj-test",
+                name="finished-run-agent",
+                color_index=4,
+            )
+        )
+        session.add(
+            Run(
+                id="run-finished",
+                project_id="proj-test",
+                agent="finished-run-agent",
+                status="completed",
+                capability_token_hash=hash_run_token("token-finished"),
+            )
+        )
+        await session.commit()
+
+    response = await app.get("/api/v1/projects", headers=auth_headers)
+    project = next(item for item in response.json() if item["id"] == "proj-test")
+    summary = next(a for a in project["agents"] if a["name"] == "finished-run-agent")
+
+    assert summary["status"] == "idle"
+
+
+@pytest.mark.asyncio
 async def test_project_scoped_api_key_is_not_an_operator_credential(app) -> None:
     legacy_key = "aw_live_legacy_project_key_123456"
     async with async_session_factory() as session:

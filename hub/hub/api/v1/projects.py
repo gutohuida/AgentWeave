@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
 from ...db.engine import get_session
-from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project
+from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run
 from ...project_lifecycle import ProjectLifecycleService
 from ...project_workspace import (
     ProjectPathError,
@@ -108,10 +108,25 @@ async def _project_summary(session: AsyncSession, project: Project) -> ProjectSu
     latest: dict[str, AgentHeartbeat] = {}
     for heartbeat in heartbeat_rows:
         latest.setdefault(heartbeat.agent, heartbeat)
+    # Agents with a direct-spawn run in progress. A Hub-triggered run
+    # (agent_trigger.py) never posts a heartbeat, and nothing else in the
+    # Hub-native runtime does either, so a heartbeat-only status would leave
+    # the rail dot grey for the whole duration of a live run. This mirrors
+    # agents.py's `agents_with_active_run`; the two must agree, or the rail
+    # and the panels disagree about the same agent.
+    running_run_rows = await session.execute(
+        select(Run.agent).where(
+            Run.project_id == project.id,
+            Run.status == "running",
+        )
+    )
+    agents_with_active_run = {name for (name,) in running_run_rows}
     agent_summaries = []
     for agent in agents:
         heartbeat = latest.get(agent.name)
         effective_status, _ = effective_heartbeat_status(heartbeat)
+        if agent.name in agents_with_active_run:
+            effective_status = "running"
         agent_summaries.append(
             ProjectAgentSummary(
                 id=agent.id,
