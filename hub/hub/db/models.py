@@ -387,6 +387,10 @@ class Question(Base):
     answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     answered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     blocking: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Answers the agent will accept, when it offered a choice rather than an open question.
+    # Empty means open-ended. The operator is never *confined* to these — a typed answer is
+    # always allowed — but offering them is what turns a question into one click.
+    options: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

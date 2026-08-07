@@ -92,6 +92,7 @@ class AgentTaskCreate(BaseModel):
 class AgentQuestionCreate(BaseModel):
     question: str = Field(max_length=10000)
     blocking: bool = False
+    options: List[str] = Field(default_factory=list, max_length=8)
 
     model_config = {"extra": "forbid"}
 
@@ -220,6 +221,7 @@ async def ask_operator_question(
         from_agent=actor.agent,
         question=body.question,
         blocking=body.blocking,
+        options=list(body.options or []),
     )
     return await ask_question_for_actor(
         question,

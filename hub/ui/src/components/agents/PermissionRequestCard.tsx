@@ -45,21 +45,16 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
         <div
           key={request.id}
           data-testid={`permission-request-${request.id}`}
-          style={{
-            background: 'color-mix(in srgb, var(--amber) 6%, transparent)',
-            border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
-            borderRadius: 'var(--radius)',
-            padding: '10px 12px',
-          }}
+          className="conversation-interject"
         >
-          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)', marginBottom: 4 }}>
+          <p className="interject-eyebrow" style={{ marginBottom: 4 }}>
             {agent} wants to use {request.tool_name}
           </p>
           <p
             style={{
               fontSize: 12,
-              color: 'var(--text-2)',
-              marginBottom: 8,
+              color: 'var(--text)',
+              marginBottom: 10,
               fontFamily: 'var(--font-mono)',
               wordBreak: 'break-all',
             }}

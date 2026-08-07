@@ -87,3 +87,35 @@ def test_the_question_wait_stays_inside_what_was_measured():
     """An ordinary MCP tool call was measured tolerating 240s against Claude Code 2.1.221.
     Raising this above that ceiling would make the wait itself the failure."""
     assert mcp_server.QUESTION_ANSWER_TIMEOUT <= 240
+
+
+def test_offered_options_reach_the_hub(monkeypatch):
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    bodies = []
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            bodies.append(body)
+            return {"id": "q-1"}
+        return {"answered": True, "answer": "Postgres"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user("Which database?", options=["Postgres", "SQLite"])
+    assert bodies[0]["options"] == ["Postgres", "SQLite"]
+    assert result["answer"] == "Postgres"
+
+
+def test_an_open_question_sends_an_empty_option_list(monkeypatch):
+    """Never None: the column is a list, and a null would come back as None rather than []."""
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    bodies = []
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST":
+            bodies.append(body)
+            return {"id": "q-1"}
+        return {"answered": True, "answer": "x"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    mcp_server.ask_user("Anything?")
+    assert bodies[0]["options"] == []

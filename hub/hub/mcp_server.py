@@ -254,17 +254,29 @@ def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def ask_user(question: str, blocking: bool = True) -> Dict[str, Any]:
+def ask_user(
+    question: str,
+    options: Optional[List[str]] = None,
+    blocking: bool = True,
+) -> Dict[str, Any]:
     """Ask the operator a question and wait for their answer.
 
     Args:
         question: What you need the operator to decide or clarify.
+        options: The answers you would accept, at most 8. Offer them whenever the decision is
+            a choice between known alternatives — the operator answers with one click instead
+            of typing, and you get back exactly one of the strings you supplied. Leave unset
+            for a genuinely open question. The operator may always type something else.
         blocking: Leave this alone to wait for the answer, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
             continuing — you must then poll `get_answer` yourself, and a turn that ends first
             loses the question.
     """
-    result = _hub_request("POST", "/questions", {"question": question, "blocking": blocking})
+    result = _hub_request(
+        "POST",
+        "/questions",
+        {"question": question, "blocking": blocking, "options": list(options or [])},
+    )
     question_id = result.get("id")
     if not blocking:
         return {"success": True, "question_id": question_id, "answered": False}

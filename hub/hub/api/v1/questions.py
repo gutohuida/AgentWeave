@@ -35,6 +35,7 @@ async def ask_question_for_actor(
         from_agent=from_agent,
         question=body.question,
         blocking=body.blocking,
+        options=list(body.options or []),
         created_by_run_id=created_by_run_id,
     )
     session.add(question)

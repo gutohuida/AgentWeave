@@ -18,8 +18,8 @@ from .logs import router as logs_router
 from .messages import router as messages_router
 from .model_catalog import router as model_catalog_router
 from .native_dialog import router as native_dialog_router
-from .projects import router as projects_router
 from .permissions import router as permissions_router
+from .projects import router as projects_router
 from .questions import router as questions_router
 from .runners import router as runners_router
 from .session_sync import router as session_sync_router

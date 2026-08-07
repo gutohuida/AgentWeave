@@ -75,3 +75,69 @@ describe('agent question card', () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe('agent question card — offered choices', () => {
+  beforeEach(() => answer.mockClear())
+
+  it('renders one button per offered option', () => {
+    render(
+      <AgentQuestionCard
+        questions={[question({ options: ['Postgres', 'SQLite', 'MySQL'] })]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('Postgres')).toBeInTheDocument()
+    expect(screen.getByText('SQLite')).toBeInTheDocument()
+    expect(screen.getByText('MySQL')).toBeInTheDocument()
+  })
+
+  it('answers with the exact option text when one is clicked', () => {
+    render(
+      <AgentQuestionCard questions={[question({ options: ['Postgres', 'SQLite'] })]} agent="haiku-1" />
+    )
+    fireEvent.click(screen.getByTestId('agent-question-option-q-1-1'))
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'SQLite' })
+  })
+
+  it('still accepts a typed answer, and says so', () => {
+    // Options are an offer, not a constraint: an operator who disagrees with all of them must
+    // not be cornered into picking one.
+    render(
+      <AgentQuestionCard questions={[question({ options: ['Postgres'] })]} agent="haiku-1" />
+    )
+    const input = screen.getByTestId('agent-question-input-q-1')
+    expect(input).toHaveAttribute('placeholder', 'Or answer in your own words')
+    fireEvent.change(input, { target: { value: 'neither, use DuckDB' } })
+    fireEvent.click(screen.getByTestId('agent-question-send-q-1'))
+    expect(answer).toHaveBeenCalledWith({ id: 'q-1', answer: 'neither, use DuckDB' })
+  })
+
+  it('shows no choices for an open question', () => {
+    render(<AgentQuestionCard questions={[question({ options: [] })]} agent="haiku-1" />)
+    expect(screen.queryByTestId('agent-question-option-q-1-0')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agent-question-input-q-1')).toHaveAttribute(
+      'placeholder',
+      'Your answer'
+    )
+  })
+
+  it('tolerates a question with no options field at all', () => {
+    const q = question()
+    delete (q as { options?: string[] }).options
+    render(<AgentQuestionCard questions={[q]} agent="haiku-1" />)
+    expect(screen.getByText('Which database should I target?')).toBeInTheDocument()
+  })
+})
+
+describe('interjections wear the composer’s chrome', () => {
+  it('uses the shared surface rather than a coloured callout', () => {
+    // The operator asked for these to read as an extension of the chat box, not an alert.
+    const { container } = render(
+      <AgentQuestionCard questions={[question({ options: ['a'] })]} agent="haiku-1" />
+    )
+    expect(container.querySelector('.conversation-interject')).not.toBeNull()
+    expect(container.querySelector('.interject-choice')).not.toBeNull()
+    expect(container.innerHTML).not.toContain('--blue')
+    expect(container.innerHTML).not.toContain('--amber')
+  })
+})

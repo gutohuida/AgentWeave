@@ -110,3 +110,13 @@ describe('permission request card — codex shapes', () => {
     expect(screen.getByText(/the provider sent none/)).toBeInTheDocument()
   })
 })
+
+describe('permission card wears the composer’s chrome', () => {
+  it('is the shared surface, not an amber callout', () => {
+    const { container } = render(
+      <PermissionRequestCard requests={[request()]} agent="haiku-1" />
+    )
+    expect(container.querySelector('.conversation-interject')).not.toBeNull()
+    expect(container.innerHTML).not.toContain('--amber')
+  })
+})

@@ -12,7 +12,7 @@ interface AgentQuestionCardProps {
  *
  * `QuestionsPanel` already lists questions elsewhere, but a blocking agent is waiting *now* and
  * the operator is reading the conversation, not the overview. This puts the question where they
- * already are.
+ * already are, in the composer's own chrome.
  */
 export function AgentQuestionCard({ questions, agent }: AgentQuestionCardProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -24,61 +24,69 @@ export function AgentQuestionCard({ questions, agent }: AgentQuestionCardProps) 
     <div className="flex flex-col gap-2" data-testid="agent-questions">
       {pending.map((question) => {
         const draft = drafts[question.id] ?? ''
-        const submit = () => {
-          if (!draft.trim()) return
-          answer.mutate({ id: question.id, answer: draft.trim() })
+        const send = (value: string) => {
+          if (!value.trim()) return
+          answer.mutate({ id: question.id, answer: value.trim() })
           setDrafts((d) => ({ ...d, [question.id]: '' }))
         }
+        const options = question.options ?? []
         return (
           <div
             key={question.id}
             data-testid={`agent-question-${question.id}`}
-            style={{
-              background: 'color-mix(in srgb, var(--blue) 6%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--blue) 25%, transparent)',
-              borderRadius: 'var(--radius)',
-              padding: '10px 12px',
-            }}
+            className="conversation-interject"
           >
-            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--blue)', marginBottom: 4 }}>
+            <p className="interject-eyebrow" style={{ marginBottom: 4 }}>
               {agent} is asking
             </p>
-            <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 8 }}>
+            <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 10 }}>
               {question.question}
             </p>
+
+            {options.length > 0 && (
+              <div className="flex flex-col gap-1.5" style={{ marginBottom: 10 }}>
+                {options.map((option, index) => (
+                  <button
+                    key={`${question.id}-${index}`}
+                    type="button"
+                    className="interject-choice"
+                    data-testid={`agent-question-option-${question.id}-${index}`}
+                    disabled={answer.isPending}
+                    onClick={() => send(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <input
                 data-testid={`agent-question-input-${question.id}`}
                 value={draft}
-                placeholder="Your answer"
+                // Offered options never confine the operator; the box stays, and says so.
+                placeholder={options.length > 0 ? 'Or answer in your own words' : 'Your answer'}
                 onChange={(e) => setDrafts((d) => ({ ...d, [question.id]: e.target.value }))}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
-                    submit()
+                    send(draft)
                   }
                 }}
-                style={{
-                  flex: 1,
-                  background: 'var(--surface-2)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  padding: '6px 8px',
-                  fontSize: 12,
-                  color: 'var(--text)',
-                }}
+                className="interject-input"
               />
               <Button
                 size="sm"
                 data-testid={`agent-question-send-${question.id}`}
                 disabled={answer.isPending || !draft.trim()}
-                onClick={submit}
+                onClick={() => send(draft)}
               >
                 Answer
               </Button>
             </div>
+
             {question.blocking && (
-              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
                 The agent is waiting, and will continue without an answer if nobody replies.
               </p>
             )}

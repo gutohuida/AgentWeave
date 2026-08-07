@@ -115,3 +115,68 @@ async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_he
             .all()
         )
     assert entries == []
+
+
+@pytest.mark.asyncio
+async def test_a_question_can_offer_options_and_they_survive_the_round_trip(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={
+            "from_agent": "claude",
+            "question": "Which database?",
+            "blocking": True,
+            "options": ["Postgres", "SQLite"],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["options"] == ["Postgres", "SQLite"]
+
+    listed = await app.get(
+        "/api/v1/projects/proj-test/questions?answered=false", headers=auth_headers
+    )
+    found = next(q for q in listed.json() if q["id"] == resp.json()["id"])
+    assert found["options"] == ["Postgres", "SQLite"]
+
+
+@pytest.mark.asyncio
+async def test_an_open_question_reports_no_options(app, auth_headers):
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={"from_agent": "claude", "question": "Anything?"},
+        headers=auth_headers,
+    )
+    assert resp.json()["options"] == []
+
+
+@pytest.mark.asyncio
+async def test_too_many_options_are_refused(app, auth_headers):
+    """A wall of buttons is not a choice, and the operator is deciding under a run's timeout."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={
+            "from_agent": "claude",
+            "question": "Pick one",
+            "options": [f"option-{i}" for i in range(9)],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_the_operator_may_answer_something_other_than_an_offered_option(app, auth_headers):
+    """Options are an offer, not a constraint."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={"from_agent": "claude", "question": "Which?", "options": ["a", "b"]},
+        headers=auth_headers,
+    )
+    q_id = resp.json()["id"]
+    answered = await app.patch(
+        f"/api/v1/projects/proj-test/questions/{q_id}",
+        json={"answer": "neither, use c"},
+        headers=auth_headers,
+    )
+    assert answered.status_code == 200
+    assert answered.json()["answer"] == "neither, use c"

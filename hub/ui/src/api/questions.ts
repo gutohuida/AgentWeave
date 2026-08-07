@@ -8,6 +8,8 @@ export interface Question {
   from_agent: string
   question: string
   blocking: boolean
+  /** Answers the agent offered. Empty means open-ended; the operator may always type instead. */
+  options?: string[]
   answered: boolean
   answer?: string
   created_at: string

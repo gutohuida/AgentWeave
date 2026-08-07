@@ -119,7 +119,9 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
     assert answered["question_id"] == "q-1"
     assert answered["answered"] is True
     assert answered["answer"] == "yes"
-    assert _body(calls[0]) == {"question": "Proceed?", "blocking": True}
+    # `options` is always sent, empty for an open question — the column is a list, and a null
+    # would come back as None rather than [].
+    assert _body(calls[0]) == {"question": "Proceed?", "blocking": True, "options": []}
     assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}
 
 
