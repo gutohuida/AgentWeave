@@ -78,6 +78,7 @@
 - [x] 6.3 A persistent 2px leading edge in the owning agent's colour, matching `agentColorVars` — no hover tint
 - [x] 6.4 The same attention indicator as the tree
 - [x] 6.5 A "Show archived (N)" control in the recency view, listing the project's archived conversations across agents (operator decision, 2026-08-08: recency hides archived, but the count and the way in must be visible — hiding them silently reads as data loss)
+- [x] 6.6 Cap the recency list per project with the same expander contract as the tree — "Show N more" and a way back (operator requirement, 2026-08-08: *"The recency should have a conversation limit as well by project"*). Larger than the tree's per-agent 7, because this view flattens every agent: `RECENCY_DISPLAY_CAP = 15`
 
 ## 7. Row menus and the new-conversation surface
 

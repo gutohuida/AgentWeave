@@ -59,6 +59,10 @@ through an explicit control stating how many exist — the same affordance the t
 agent, offered here across the project. Hiding them without saying they are there reads as data
 loss to an operator who archives often.
 
+Beyond a fixed number of conversations, the recency list SHALL place the remainder behind an
+explicit expander that states how many are hidden, and SHALL offer a way back to the capped list
+once expanded. The limit applies per project, since this view has no agent to apply it per.
+
 #### Scenario: The tree is the default view
 
 - **WHEN** the operator loads the Hub having never chosen a view
@@ -81,6 +85,13 @@ loss to an operator who archives often.
 - **THEN** archived conversations are not listed among the open ones
 - **AND** a control states how many archived conversations the project has
 - **AND** activating it lists them
+
+#### Scenario: The recency list is capped per project
+
+- **WHEN** a project has more conversations than the recency view's display limit
+- **THEN** an expander states how many further conversations exist
+- **AND** activating it lists them
+- **AND** a control returns the list to its capped length
 
 #### Scenario: The chosen view survives reload
 

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentConversation, ProjectConversations } from '@/api/agentChat'
+import { RECENCY_DISPLAY_CAP } from '@/components/layout/RecencyView'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useConfigStore } from '@/store/configStore'
 
@@ -199,5 +200,47 @@ describe('the recency view', () => {
     renderRail()
     toggle()
     expect(screen.getByTestId('recency-empty-proj-a')).toBeInTheDocument()
+  })
+
+  it('caps the project’s conversations and states how many are hidden', () => {
+    openPayload = {
+      conversations: Array.from({ length: RECENCY_DISPLAY_CAP + 4 }, (_, index) =>
+        conversation({ id: `conv-${index}`, title: `Thread ${index}` }),
+      ),
+      archived_count: 0,
+    }
+    renderRail()
+    toggle()
+
+    expect(screen.getByTestId(`recency-conversation-conv-${RECENCY_DISPLAY_CAP - 1}`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`recency-conversation-conv-${RECENCY_DISPLAY_CAP}`)).toBeNull()
+    expect(screen.getByTestId('recency-expander-proj-a').textContent).toContain('Show 4 more')
+  })
+
+  it('expands to the whole project list, and back again', () => {
+    openPayload = {
+      conversations: Array.from({ length: RECENCY_DISPLAY_CAP + 4 }, (_, index) =>
+        conversation({ id: `conv-${index}`, title: `Thread ${index}` }),
+      ),
+      archived_count: 0,
+    }
+    renderRail()
+    toggle()
+
+    fireEvent.click(screen.getByTestId('recency-expander-proj-a'))
+    expect(screen.getByTestId(`recency-conversation-conv-${RECENCY_DISPLAY_CAP + 3}`)).toBeInTheDocument()
+
+    // The way back — the defect the operator found in the tree's version of this control.
+    const back = screen.getByTestId('recency-expander-proj-a')
+    expect(back.textContent).toContain('Show fewer')
+    fireEvent.click(back)
+    expect(screen.queryByTestId(`recency-conversation-conv-${RECENCY_DISPLAY_CAP}`)).toBeNull()
+  })
+
+  it('offers no expander when the project is under the cap', () => {
+    openPayload = { conversations: [conversation()], archived_count: 0 }
+    renderRail()
+    toggle()
+    expect(screen.queryByTestId('recency-expander-proj-a')).toBeNull()
   })
 })

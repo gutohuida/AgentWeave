@@ -4,6 +4,16 @@ import type { ProjectAgentSummary } from '@/api/projects'
 import { agentColorVars } from '@/lib/agentColors'
 import { ConversationRow } from './ConversationRow'
 
+/** How many of a project's conversations the recency view shows before the rest go behind an
+ *  expander.
+ *
+ *  The tree caps per *agent*; this view has no agents to cap by, so an unbounded flat list of one
+ *  project's whole history is exactly what the cap exists to prevent — six agents at seven each
+ *  would be forty-two rows here. Larger than the tree's seven because this is the scanning view
+ *  and a cap of seven would hide the second half of a normal working day. Operator's requirement,
+ *  2026-08-08: the recency view needs a conversation limit per project too. */
+export const RECENCY_DISPLAY_CAP = 15
+
 interface RecencyViewProps {
   projectId: string
   agents: ProjectAgentSummary[]
@@ -25,6 +35,7 @@ export function RecencyView({
   onOpenConversation,
 }: RecencyViewProps) {
   const [showArchived, setShowArchived] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const open = useProjectConversations(projectId)
   // Only fetched once asked for — the archived list is not what this view is for.
   const archived = useProjectConversations(showArchived ? projectId : null, 'archived')
@@ -37,10 +48,12 @@ export function RecencyView({
   const conversations = open.data?.conversations ?? []
   const archivedCount = open.data?.archived_count ?? 0
   const archivedRows = archived.data?.conversations ?? []
+  const visible = showAll ? conversations : conversations.slice(0, RECENCY_DISPLAY_CAP)
+  const hidden = conversations.length - visible.length
 
   return (
     <div className="ml-7 flex flex-col gap-0.5" data-testid={`rail-recency-${projectId}`}>
-      {conversations.map((conversation) => (
+      {visible.map((conversation) => (
         <ConversationRow
           key={conversation.id}
           conversation={conversation}
@@ -51,6 +64,22 @@ export function RecencyView({
           testId={`recency-conversation-${conversation.id}`}
         />
       ))}
+
+      {/* Rendered whenever anything is hidden *or* the list is already expanded — without the
+          second half there is no way back, which is the defect the operator found in the tree's
+          version of this control on 2026-08-08. */}
+      {(hidden > 0 || showAll) && (
+        <button
+          type="button"
+          className="row-item"
+          data-testid={`recency-expander-${projectId}`}
+          aria-expanded={showAll}
+          onClick={() => setShowAll((value) => !value)}
+          style={{ color: 'var(--text-3)' }}
+        >
+          {showAll ? 'Show fewer' : `Show ${hidden} more`}
+        </button>
+      )}
 
       {conversations.length === 0 && (
         <span
