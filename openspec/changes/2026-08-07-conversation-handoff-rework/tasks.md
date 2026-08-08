@@ -184,6 +184,12 @@ operator route and the agent route funnel into `create_message_for_actor`.
 - [ ] 2.7 Regression test reproducing the observed defect — three messages from one sender landing
       in three unrelated recipient threads — asserted to now land in one
 
+> **Deferred by the operator (2026-08-08): peer-thread presentation is a follow-up, not part of
+> this section.** Binding per sender-conversation creates more recipient threads than recency
+> routing did. `origin: peer` already exists (`messages.py:138`) so the navigation tree *can*
+> group or label them, but doing so is not in scope here. Expect the tree to get busier when
+> section 2 lands, and raise the grouping work separately.
+
 ## 3. PREREQUISITE — Context usage measurement
 
 Any threshold in section 8 keys on `percent`, which is **always null for Claude agents today**:
