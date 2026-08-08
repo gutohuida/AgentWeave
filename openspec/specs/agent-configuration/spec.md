@@ -1,5 +1,15 @@
-## ADDED Requirements
+# agent-configuration Specification
 
+## Purpose
+An agent's configuration is a destination of its own, not a dialog and not a panel inside a
+conversation. It divides into sections named for what an operator is trying to do — identity,
+execution, charter, interaction, context, access, workspace — and it holds only settings:
+observations about a running agent stay with the conversation, where they are useful.
+
+An agent is archived, never deleted, because every run the Hub records is attributed to one. What
+creation collects is bounded by whether it changes the first turn; everything else is here.
+
+## Requirements
 ### Requirement: Agent configuration is a destination rather than a surface inside a conversation
 
 The Hub SHALL present an agent's configuration as its own addressable destination, and MUST NOT
@@ -32,23 +42,29 @@ This follows the project's own settings pattern, where a section list replaces t
 than nesting inside it. A settings surface is somewhere an operator goes and comes back from, not
 somewhere they browse laterally, so the lateral navigation is what gives way.
 
-Returning MUST lead to the originating context rather than to a fixed location, because an operator
-who opened configuration from a conversation is mid-task in that conversation.
+Returning SHALL lead to a **fixed** target — the agent's most recent conversation — regardless of
+where the operator entered from. This matches the return control the project's own configuration
+already offers, which names one destination rather than describing where the operator has been. A
+remembered origin makes the same control mean different things on different visits, and there is
+nothing on screen that says which; a named, fixed target can be read before it is used.
+
+Both entry points therefore lead to the same place, which is the place the operator is going to
+work next in either case.
 
 #### Scenario: Sections replace lateral navigation
 
 - **WHEN** an agent's configuration is shown
 - **THEN** its sections are presented in place of the surrounding navigation
 
-#### Scenario: Returning leads back to the origin
+#### Scenario: Returning leads to the agent's conversation
 
 - **WHEN** the operator opens configuration from a conversation and then returns
-- **THEN** that conversation is shown again
+- **THEN** the agent's most recent conversation is shown
 
-#### Scenario: Returning from a different origin
+#### Scenario: The target does not depend on where the operator entered from
 
 - **WHEN** the operator opens configuration from navigation and then returns
-- **THEN** the context they came from is shown rather than a conversation
+- **THEN** the agent's most recent conversation is shown, the same target as from a conversation
 
 ### Requirement: Configuration is separated from observation
 
