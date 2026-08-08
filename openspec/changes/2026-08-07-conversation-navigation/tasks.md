@@ -35,6 +35,24 @@
 - [x] 2.8 Conversation listing excludes `archived` by default; `?lifecycle=archived` returns them with a count
 - [x] 2.9 `hub/hub/api/v1/messages.py` refuses a send whose recipient conversation is archived, returning the cause, the instruction to start a new conversation, and the submitted content restated verbatim
 - [x] 2.10 Mirror that refusal through the MCP `send_message` adapter and assert both paths carry the same three parts
+
+> **This shipped broken and was marked complete anyway (fixed 2026-08-08, reported by the operator).**
+> `conversation_id` was added to the MCP tool and to `MessageCreate` — the schema on the
+> *operator* route — but not to `AgentMessageCreate`, the schema on
+> `/api/v1/agent-actions/messages`, which is the route `mcp_server.send_message` actually posts
+> to. Because the tool puts the key in every body it builds, null included, and that schema sets
+> `extra: "forbid"` (which rejects a forbidden *key* regardless of its value), **every**
+> agent-to-agent message failed with `422: conversation_id: Extra inputs are not permitted` —
+> not only the ones naming a conversation. Peer messaging was down from `37983d3` until
+> `a8c0e05`.
+>
+> Both sides had tests. `test_mcp_server.py` mocks `urlopen` and asserts the body the tool
+> builds — it even asserts `"conversation_id": None` is present. `test_archived_send_refusal.py`
+> stubs `_hub_request` and manufactures the error from the operator route, while its docstring
+> claimed it "reaches the same route". Nothing tested the join. `test_mcp_body_contract.py` is
+> now that join: it reads each route's real request model off the FastAPI app and feeds it the
+> real body each tool produces, and it carries a test proving it can fail.
+> `test_agent_message_routing.py` covers where a message lands over the agent route.
 - [x] 2.11 Record `conversation_id` when creating `Question`, `PermissionRequest` and `UnaskedQuestion`, taken from the opening run
 - [x] 2.12 Expose per-conversation attention state on the conversation listing: `running`, `waiting`, or `idle`
 

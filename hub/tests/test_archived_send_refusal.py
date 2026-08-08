@@ -243,8 +243,14 @@ async def test_a_conversation_belonging_to_another_agent_is_not_found(
 async def test_the_mcp_adapter_carries_the_same_three_parts(
     app, auth_headers, drain_conversation, monkeypatch
 ) -> None:
-    """`send_message` reaches the same route, and `HubAPIError` puts the detail in its message,
-    so what the HTTP caller is told is what the agent is told."""
+    """`HubAPIError` puts the Hub's detail in its message, so what the HTTP caller is told is
+    what the agent is told.
+
+    This does **not** exercise the route `send_message` posts to — it stubs `_hub_request` and
+    manufactures the error from the operator route. An earlier version of this docstring claimed
+    it "reaches the same route", which is how `conversation_id` came to be accepted by
+    `MessageCreate` and rejected by `AgentMessageCreate` with the whole suite green. The real
+    join lives in `test_mcp_body_contract.py` and `test_agent_message_routing.py`."""
     import hub.mcp_server as mcp_server
 
     conversation_id = await _archived_conversation(app, auth_headers, drain_conversation)

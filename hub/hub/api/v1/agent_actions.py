@@ -43,6 +43,15 @@ class AgentMessageCreate(BaseModel):
     content: str = Field(max_length=10000)
     type: str = Field(default="message", max_length=64)
     task_id: Optional[str] = Field(default=None, max_length=128)
+    # Which of the recipient's conversations to send into. Unset — which is the common case,
+    # because a sending agent usually has no reason to know another agent's conversation ids —
+    # means their most recent open one, opening a new one if they have none.
+    #
+    # `extra: "forbid"` below is why this field's absence was not a missing feature but a total
+    # outage: `mcp_server.send_message` puts `conversation_id` in every body it builds, null
+    # included, and a forbidden *key* is rejected regardless of its value. Every agent-to-agent
+    # message failed 422, not only the ones naming a conversation.
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 
@@ -161,6 +170,7 @@ async def send_peer_message(
         type=body.type,
         task_id=body.task_id,
         run_id=actor.run_id,
+        conversation_id=body.conversation_id,
     )
     return await create_message_for_actor(
         message,
