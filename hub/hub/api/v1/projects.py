@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
 from ...db.engine import get_session
-from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run
+from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
 from ...project_lifecycle import ProjectLifecycleService
 from ...project_workspace import (
     ProjectPathError,
@@ -72,6 +72,12 @@ class ProjectSettings(BaseModel):
     agent_budget: int = Field(ge=1, le=1000)
     token_budget: Optional[int] = Field(default=None, gt=0)
     allow_agent_jobs: bool
+    # How conversations are named. `truncate` costs nothing and is the default; `generate`
+    # spends the operator's tokens on a one-shot spawn, which is their choice to make.
+    # Defaulted rather than required so a client written before this field still round-trips.
+    conversation_title_mode: Literal["truncate", "generate"] = "truncate"
+    # Which of the project's runners does the titling. Null falls back to the agent's own.
+    conversation_title_runner_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
 
@@ -261,6 +267,19 @@ async def update_project_settings(
 ) -> ProjectSettings:
     resolved_project_id = project_identity[0]
     project = await _operator_project_row(resolved_project_id, session)
+    if body.conversation_title_runner_id:
+        # Not a ForeignKey — `runners.project_id` already points at `projects`, and closing the
+        # loop would make the two unsortable for DDL. Checked here instead, which is also where
+        # a cross-project runner id has to be refused anyway.
+        runner = await session.get(Runner, body.conversation_title_runner_id)
+        if runner is None or runner.project_id != resolved_project_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unknown runner '{body.conversation_title_runner_id}': no runner by that "
+                    "id belongs to this project"
+                ),
+            )
     for field, value in body.model_dump().items():
         setattr(project, field, value)
     await session.commit()

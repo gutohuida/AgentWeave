@@ -41,6 +41,7 @@ from ...codex_appserver import (
     uses_app_server,
 )
 from ...codex_appserver import run_turn as codex_run_turn
+from ...conversation_titles import maybe_generate_title
 from ...conversations import (
     conversation_for_provider_session,
     conversation_id_for_run,
@@ -1215,6 +1216,10 @@ async def _execute_run(
             final_status=final_status,
         )
 
+        # After the response has landed, so the titler sees the exchange rather than the
+        # opening line alone, and so nothing the operator is waiting on is delayed by it.
+        await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)
+
         # A turn ending with queued entries starts the next turn without waiting for
         # operator input. The scheduler itself applies the hop budget and drain cap.
         from ...turn_scheduler import schedule_agent
@@ -1576,6 +1581,7 @@ async def _execute_codex_appserver_run(
             conversation_id=conversation_id,
             final_status=final_status,
         )
+        await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)
 
         from ...turn_scheduler import schedule_agent
 

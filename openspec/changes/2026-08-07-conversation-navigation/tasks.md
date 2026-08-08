@@ -50,11 +50,17 @@
 
 ## 4. Title generation
 
-- [ ] 4.1 One-shot titling spawn: reuse an existing project runner, bound to no conversation, no session resume, bounded timeout
-- [ ] 4.2 Trigger it after the agent's first response is recorded, only when the setting is on and the title is not operator-set
-- [ ] 4.3 Failure and timeout are no-ops — the truncated title stands and the agent's run is untouched
-- [ ] 4.4 Bound concurrent titling spawns so many simultaneous conversation starts cannot fan out unboundedly
-- [ ] 4.5 `test_title_generation.py` — off by default; on, replaces the truncated title; never overwrites an operator title; no timeline entry; no change to agent context usage; failure leaves the truncated title
+> **No `Run` row is recorded, against design.md's wording.** It reasoned that the spawn should
+> be "a one-shot run bound to no conversation", `Run.conversation_id` being nullable. Doing so
+> would stall the agent: `turn_scheduler.schedule_agent` and `trigger_agent_directly` both gate
+> on `Run.agent == a, Run.status == "running"`, so a titling run under the agent's name makes
+> it look busy until the title returns. Recorded as a `conversation_titled` event instead.
+
+- [x] 4.1 One-shot titling spawn: reuse an existing project runner, bound to no conversation, no session resume, bounded timeout
+- [x] 4.2 Trigger it after the agent's first response is recorded, only when the setting is on and the title is not operator-set
+- [x] 4.3 Failure and timeout are no-ops — the truncated title stands and the agent's run is untouched
+- [x] 4.4 Bound concurrent titling spawns so many simultaneous conversation starts cannot fan out unboundedly
+- [x] 4.5 `test_title_generation.py` — off by default; on, replaces the truncated title; never overwrites an operator title; no timeline entry; no change to agent context usage; failure leaves the truncated title
 
 ## 5. Navigation — the tree gains a level
 

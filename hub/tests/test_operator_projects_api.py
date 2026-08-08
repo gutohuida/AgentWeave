@@ -313,6 +313,11 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         "agent_budget": 12,
         "token_budget": 5000,
         "allow_agent_jobs": True,
+        # Defaulted rather than required, so a body written before the field still validates —
+        # and defaults to costing nothing, because a settings save must not start spending
+        # tokens on titles.
+        "conversation_title_mode": "truncate",
+        "conversation_title_runner_id": None,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers
