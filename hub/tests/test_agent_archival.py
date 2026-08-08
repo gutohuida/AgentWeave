@@ -121,6 +121,78 @@ async def test_a_running_agent_is_refused_with_a_reason(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_the_project_summary_roster_also_drops_archived_agents(app, auth_headers):
+    """The rail draws from `useProjects()`, not `useAgents()` — a second roster.
+
+    Found by driving the browser: archiving an agent removed it from `/agents` but left it in the
+    rail and in the project's agent count, because `_project_summary` builds its own list. This is
+    the exact failure mode task 3b.4 warned about, so it gets its own test rather than a comment.
+    """
+    await _register(app, auth_headers, "railonly")
+
+    resp = await app.get("/api/v1/projects", headers=auth_headers)
+    assert resp.status_code == 200
+    payload = resp.json()
+    projects = payload if isinstance(payload, list) else payload.get("projects", [])
+    target = next(p for p in projects if p["id"] == "proj-test")
+    assert "railonly" in [a["name"] for a in target["agents"]]
+
+    await app.post("/api/v1/projects/proj-test/agents/railonly/archive", headers=auth_headers)
+
+    resp = await app.get("/api/v1/projects", headers=auth_headers)
+    projects = resp.json() if isinstance(resp.json(), list) else resp.json().get("projects", [])
+    target = next(p for p in projects if p["id"] == "proj-test")
+    assert "railonly" not in [a["name"] for a in target["agents"]]
+
+
+@pytest.mark.asyncio
+async def test_an_archived_agent_is_not_named_as_a_peer_in_agent_context(app, auth_headers):
+    """The roster an agent is *told about* is a third offering surface.
+
+    Naming an archived peer would be worse than unhelpful: sending to one is refused, so the
+    roster would be inviting a turn that can only fail.
+    """
+    await _register(app, auth_headers, "reader")
+    await _register(app, auth_headers, "retired")
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=reader", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    assert "retired" in str(resp.json())
+
+    await app.post("/api/v1/projects/proj-test/agents/retired/archive", headers=auth_headers)
+
+    resp = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=reader", headers=auth_headers
+    )
+    assert resp.status_code == 200
+    assert "retired" not in str(resp.json())
+
+
+@pytest.mark.asyncio
+async def test_an_archived_agent_keeps_its_name_reserved(app, auth_headers):
+    """Deliberately *not* filtered: the name stays taken.
+
+    Archival is reversible, so freeing the name would let a new agent take it and make
+    unarchiving a collision. The agent budget counts archived agents for the same reason — noted
+    here because it is a choice, not an oversight.
+    """
+    await _register(app, auth_headers, "taken")
+    await app.post("/api/v1/projects/proj-test/agents/taken/archive", headers=auth_headers)
+
+    runners = await app.get("/api/v1/projects/proj-test/runners", headers=auth_headers)
+    runner_id = runners.json()[0]["id"]
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents",
+        json={"name": "taken", "runner_id": runner_id},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409, "an archived agent's name was handed to a new agent"
+
+
+@pytest.mark.asyncio
 async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(app, auth_headers):
     """The archived-*agent* case, which the archived-*conversation* contract does not cover.
 

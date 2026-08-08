@@ -121,14 +121,24 @@ one, plus the archival that makes its absence workable.
       peer-message recipients, task assignment, the new-conversation surface. **Enumerate these by
       search rather than by memory; one missed site leaves an archived agent selectable**
 
-      The search found the better answer: all eleven UI consumers read one endpoint. So
-      `GET /agents` takes `?lifecycle=open|archived|all` defaulting to `open`, and that single
-      filter removes archived agents from every surface at once — the rail, `TasksBoard`,
-      `JobForm`, `NewConversationSurface`, `SpecPage`, `StatusBar`, `OverviewPage`,
-      `ActivityLog`. Filtering per call site would have been the version where one missed site
-      leaves an agent selectable. Applied **after** every source has contributed to the roster,
-      not to the `Agent` query alone — a name also arrives from session config, from 24h of
-      activity, and from being a task's assignee
+      `GET /agents` takes `?lifecycle=open|archived|all` defaulting to `open`, applied **after**
+      every source has contributed to the roster rather than to the `Agent` query alone — a name
+      also arrives from session config, from 24h of activity, and from being a task's assignee.
+
+      **Three offering surfaces, not one.** The first pass assumed all eleven UI consumers read
+      `GET /agents`, and driving the browser disproved it immediately: the archived agent was
+      gone from `/agents` but still in the rail and still counted in "6 agents", because
+      `Sidebar` reads `useProjects()` and `_project_summary` (`projects.py:94`) builds its **own**
+      roster. A third is `_render_hub_agent_context` (`agents.py:898`), the peer roster the agent
+      itself is told about — naming an archived peer there would be worse than unhelpful, since
+      sending to one is refused, so the roster would be inviting a turn that can only fail. All
+      three are filtered and all three have tests. This is exactly the failure this task predicted,
+      and it survived a green test suite; only using the surface found it.
+
+      **Deliberately not filtered:** `request_agent`'s uniqueness check. An archived agent keeps
+      its name reserved, because archival is reversible and freeing the name would make
+      unarchiving a collision. The agent budget counts archived agents for the same reason. Both
+      are choices, and a test pins the first
 - [x] 3b.5 An archived agent keeps its history: conversations remain readable, runs and messages keep
       their attribution
 - [x] 3b.6 Define what happens when a peer sends to an archived agent. The checkpoint change defines

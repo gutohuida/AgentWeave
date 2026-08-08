@@ -91,10 +91,16 @@ class ProjectSettings(BaseModel):
 
 
 async def _project_summary(session: AsyncSession, project: Project) -> ProjectSummary:
+    # The second roster, and the one the navigation rail actually draws from — `Sidebar` reads
+    # `useProjects()`, not `useAgents()`. Archived agents are excluded here as well as in
+    # `list_agents`; filtering only that one endpoint left an archived agent still listed in the
+    # rail and counted in the project's agent total.
     agents = (
         (
             await session.execute(
-                select(Agent).where(Agent.project_id == project.id).order_by(Agent.name)
+                select(Agent)
+                .where(Agent.project_id == project.id, Agent.lifecycle == "open")
+                .order_by(Agent.name)
             )
         )
         .scalars()

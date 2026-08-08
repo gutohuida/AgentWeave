@@ -895,7 +895,12 @@ async def _render_hub_agent_context(
     # The roster is the part that makes collaboration possible at all: an agent cannot message a
     # peer whose name it was never told. Read it from the Hub's own tables, binding each agent to
     # its runner so the entry can state what that peer actually runs.
-    roster_result = await db.execute(select(Agent).where(Agent.project_id == project_id))
+    #
+    # Archived peers are left out. Naming one here would be worse than unhelpful: sending to an
+    # archived agent is refused, so the roster would be inviting a turn that can only fail.
+    roster_result = await db.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.lifecycle == "open")
+    )
     roster = sorted(roster_result.scalars().all(), key=lambda row: row.name)
     runners_result = await db.execute(select(Runner).where(Runner.project_id == project_id))
     roster_runners = {row.id: row for row in runners_result.scalars().all()}
