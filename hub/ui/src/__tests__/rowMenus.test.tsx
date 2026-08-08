@@ -252,24 +252,20 @@ describe('every navigation row exposes its actions through a visible menu', () =
     expect(item).toHaveTextContent('Nothing archived yet')
   })
 
-  it('opens agent settings from the rail without taking navigation down, and returns focus', async () => {
+  it('opens agent settings as a destination rather than a dialog', async () => {
     const user = userEvent.setup()
-    renderRail()
+    const onOpenAgentSettings = vi.fn()
+    renderRail({ onOpenAgentSettings })
 
-    const trigger = screen.getByTestId('agent-menu-proj-a-claude')
-    await user.click(trigger)
+    await user.click(screen.getByTestId('agent-menu-proj-a-claude'))
     await user.click(await screen.findByRole('menuitem', { name: 'Agent settings' }))
 
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveAccessibleName('claude settings')
-    expect(screen.getByTestId('agent-info-tab')).toBeInTheDocument()
-    // Hosted by the rail, which outlives the content area — that is what makes settings
-    // openable "without unmounting the open conversation".
+    // Configuration is a page, not a 520px modal: it names its subject in the URL, so it is
+    // linkable and survives a reload. The rail-hosted dialog could be neither.
+    expect(onOpenAgentSettings).toHaveBeenCalledWith('proj-a', 'claude', 'identity')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // The rail itself is untouched — settings still open "without unmounting" navigation.
     expect(screen.getByTestId('rail-agent-proj-a-claude')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Close settings' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('never shows a conversation identifier as a label anywhere in the rail', async () => {

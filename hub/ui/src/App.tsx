@@ -36,6 +36,8 @@ import { useSSE } from '@/hooks/useSSE'
 import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
   agentDestination,
+  agentSettingsBackDestination,
+  agentSettingsDestination,
   environmentDestination,
   isNewConversationDestination,
   newConversationDestination,
@@ -43,6 +45,7 @@ import {
   resolveConversationSelection,
   type EnvironmentSection,
 } from '@/lib/navigation'
+import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 
@@ -219,12 +222,17 @@ export default function App() {
           }
         }}
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
+        onOpenAgentSettings={() =>
+          navigateTo(agentSettingsDestination(destination.projectId, agentName))
+        }
       />
     ) : (
       <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>
         Agent unavailable.
       </div>
     )
+  } else if (destination.kind === 'agent-settings') {
+    content = <AgentSettingsPage agent={destination.agent} section={destination.section} />
   } else if (destination.kind === 'project') {
     let projectContent: React.ReactNode
     if (destination.tab === 'overview') {
@@ -302,7 +310,11 @@ export default function App() {
           <Sidebar
             destination={destination}
             activePage={activePage}
-            activeAgent={destination.kind === 'conversation' ? destination.agent : null}
+            activeAgent={
+              destination.kind === 'conversation' || destination.kind === 'agent-settings'
+                ? destination.agent
+                : null
+            }
             activeConversation={
               destination.kind === 'conversation' ? destination.conversationId : null
             }
@@ -313,6 +325,12 @@ export default function App() {
             }
             onNewConversation={(id, agent) => navigateTo(newConversationDestination(id, agent))}
             onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
+            onOpenAgentSettings={(id, agent, section) =>
+              navigateTo(agentSettingsDestination(id, agent, section))
+            }
+            onBackFromAgentSettings={(id, agent) =>
+              navigateTo(agentSettingsBackDestination(agentSettingsDestination(id, agent)))
+            }
             onAddAgent={(id) => setAgentCreateProjectId(id)}
             onOpenExisting={() => setProjectManagerMode('open')}
             onCreateProject={() => setProjectManagerMode('create')}

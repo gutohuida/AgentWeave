@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentDestination,
+  agentSettingsBackDestination,
+  agentSettingsDestination,
   environmentDestination,
+  isAgentSettingsDestination,
+  isSectionedDestination,
   parseDestination,
   projectDestination,
   resolveDestination,
@@ -37,6 +41,16 @@ describe('phase 5 URL navigation contract', () => {
       expect(parseDestination(serializeDestination(destination))).toEqual(destination)
     })
 
+    it('round-trips an agent-settings destination at its default section', () => {
+      const destination = agentSettingsDestination('proj-1', 'claude')
+      expect(parseDestination(serializeDestination(destination))).toEqual(destination)
+    })
+
+    it('round-trips an agent-settings destination on a named section', () => {
+      const destination = agentSettingsDestination('proj-1', 'claude', 'interaction')
+      expect(parseDestination(serializeDestination(destination))).toEqual(destination)
+    })
+
     it('serializes the zero-project state as an empty query string', () => {
       expect(serializeDestination({ kind: 'zero' })).toBe('')
     })
@@ -64,6 +78,28 @@ describe('phase 5 URL navigation contract', () => {
       )
     })
 
+    it('resolves a settings URL to settings, not to the conversation it also looks like', () => {
+      // The conversation branch claims any URL carrying an `agent`, so a settings link is only
+      // a settings link if `settings` is tested first. Getting this backwards sends every
+      // settings link to a chat, which is exactly the shape of bug that survives type-checking.
+      const parsed = parseDestination('?project=proj-1&agent=claude&settings=execution')
+      expect(isAgentSettingsDestination(parsed as WorkspaceDestination)).toBe(true)
+      expect(parsed).toEqual(agentSettingsDestination('proj-1', 'claude', 'execution'))
+    })
+
+    it('defaults an unknown settings section to the first section', () => {
+      expect(parseDestination('?project=proj-1&agent=claude&settings=bogus')).toEqual(
+        agentSettingsDestination('proj-1', 'claude'),
+      )
+    })
+
+    it('ignores a settings parameter that names no agent', () => {
+      // There is no such thing as configuring no agent, so this is not coerced into one.
+      expect(parseDestination('?project=proj-1&settings=execution')).toEqual(
+        projectDestination('proj-1'),
+      )
+    })
+
     it('treats agent+project as a conversation destination regardless of tab', () => {
       expect(parseDestination('?project=proj-1&agent=claude&tab=tasks')).toEqual(
         agentDestination('proj-1', 'claude'),
@@ -79,6 +115,44 @@ describe('phase 5 URL navigation contract', () => {
       }
       expect(params.has('session_id')).toBe(false)
       expect(params.has('claude_session_id')).toBe(false)
+    })
+  })
+
+  describe('the agent-settings destination', () => {
+    it('back goes to the agent, not to wherever the operator came from', () => {
+      // Fixed, like "Back to {project}" — no stored origin. `conversationId: null` is what makes
+      // it the agent's most recent, since `resolveConversationSelection` already resolves null
+      // that way.
+      const back = agentSettingsBackDestination(
+        agentSettingsDestination('proj-1', 'claude', 'access'),
+      )
+      expect(back).toEqual(agentDestination('proj-1', 'claude'))
+      expect(back.conversationId).toBeNull()
+    })
+
+    it('puts the rail into section mode, as project configuration does', () => {
+      expect(isSectionedDestination(agentSettingsDestination('proj-1', 'claude'))).toBe(true)
+      expect(isSectionedDestination(environmentDestination('proj-1'))).toBe(true)
+      expect(isSectionedDestination(agentDestination('proj-1', 'claude'))).toBe(false)
+    })
+
+    it('survives resolution against the registered project collection', () => {
+      const requested = agentSettingsDestination('proj-1', 'claude', 'charter')
+      expect(
+        resolveDestination(requested, {
+          availableProjectIds: ['proj-1'],
+          lastOpenedProjectId: null,
+        }),
+      ).toEqual(requested)
+    })
+
+    it('falls back when its project is not registered', () => {
+      expect(
+        resolveDestination(agentSettingsDestination('proj-gone', 'claude'), {
+          availableProjectIds: ['proj-1'],
+          lastOpenedProjectId: null,
+        }),
+      ).toEqual(projectDestination('proj-1'))
     })
   })
 

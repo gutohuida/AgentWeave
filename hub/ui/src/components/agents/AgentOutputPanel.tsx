@@ -36,6 +36,9 @@ import { agentColorVars } from '@/lib/agentColors'
 interface AgentOutputPanelProps {
   agent: AgentSummary
   onBackToProject?: () => void
+  /** The conversation-header entry point to this agent's configuration. The other is the agent's
+   *  row menu in navigation; both reach the same destination. */
+  onOpenAgentSettings?: () => void
   /** The conversation this panel renders, resolved by the destination. `null` means the agent
    *  has none yet, and the next message starts one. */
   conversationId?: string | null
@@ -81,6 +84,7 @@ function continuityLabel(conversation: AgentConversation): string {
 export function AgentOutputPanel({
   agent,
   onBackToProject,
+  onOpenAgentSettings,
   conversationId = null,
   onSelectConversation,
 }: AgentOutputPanelProps) {
@@ -508,6 +512,18 @@ export function AgentOutputPanel({
           {agent.status}
         </span>
         <div className="flex-1" />
+        {onOpenAgentSettings && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            data-testid="conversation-agent-settings"
+            onClick={onOpenAgentSettings}
+            aria-label={`Settings for ${agent.name}`}
+            title={`Settings for ${agent.name}`}
+          >
+            <Icon name="settings" size={16} />
+          </Button>
+        )}
         <ConversationControls
           agent={agent}
           isRunning={isRunning}

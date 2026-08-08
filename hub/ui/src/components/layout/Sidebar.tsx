@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useProjects } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { AgentSettingsDialog } from './AgentSettingsDialog'
 import {
+  AGENT_SETTINGS_SECTIONS,
   ENVIRONMENT_SECTIONS,
+  isAgentSettingsDestination,
   isConfigurationDestination,
+  type AgentSettingsSection,
   type EnvironmentSection,
   type WorkspaceDestination,
 } from '@/lib/navigation'
@@ -29,6 +31,10 @@ interface SidebarProps {
    *  implied — the surface asks for one before the first message can be sent. */
   onNewConversation?: (projectId: string, agent: string | null) => void
   onOpenEnvironment?: (projectId: string, section: EnvironmentSection) => void
+  onOpenAgentSettings?: (projectId: string, agent: string, section: AgentSettingsSection) => void
+  /** Where the settings page's back control goes — a fixed target, the agent's most recent
+   *  conversation, mirroring "Back to {project}" rather than remembering an origin. */
+  onBackFromAgentSettings?: (projectId: string, agent: string) => void
   onAddAgent?: (projectId: string) => void
   onOpenExisting: () => void
   onCreateProject: () => void
@@ -48,6 +54,15 @@ const RAIL_VIEW_KEY = 'aw.railView'
 /** The tree is the default: the agent roster is what AgentWeave has that a two-level chat
  *  sidebar does not. The recency view recovers the flat scan the extra level costs. */
 export type RailView = 'tree' | 'recency'
+const AGENT_SECTION_LABELS: Record<AgentSettingsSection, string> = {
+  identity: 'Identity',
+  execution: 'Execution',
+  charter: 'Charter',
+  interaction: 'Interaction',
+  context: 'Context',
+  access: 'Access',
+  workspace: 'Workspace',
+}
 const SECTION_LABELS: Record<EnvironmentSection, string> = {
   quality: 'Quality',
   instructions: 'Instructions',
@@ -82,6 +97,8 @@ export function Sidebar({
   onOpenConversation,
   onNewConversation,
   onOpenEnvironment,
+  onOpenAgentSettings,
+  onBackFromAgentSettings,
   onAddAgent,
   onOpenExisting,
   onCreateProject,
@@ -89,11 +106,6 @@ export function Sidebar({
   width = SIDEBAR_WIDTH,
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
-  /** Agent settings open from the rail, not from the conversation surface — which is what makes
-   *  them openable "without unmounting the open conversation". The rail outlives the content
-   *  area, so a dialog hosted here cannot take the conversation down with it. */
-  const [settingsAgent, setSettingsAgent] = useState<string | null>(null)
-  const settingsInvokerRef = useRef<HTMLElement | null>(null)
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadFlags(COLLAPSED_KEY))
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
@@ -120,6 +132,8 @@ export function Sidebar({
   const configuredProject = configuration
     ? projects.find((project) => project.id === configuration.projectId)
     : null
+  const agentSettings =
+    destination && isAgentSettingsDestination(destination) ? destination : null
 
   useEffect(() => {
     try {
@@ -150,7 +164,7 @@ export function Sidebar({
       className="workspace-rail flex h-full shrink-0 flex-col"
       data-testid="sidebar"
       data-compact={compact ? 'true' : 'false'}
-      data-mode={configuration ? 'section' : 'project'}
+      data-mode={configuration || agentSettings ? 'section' : 'project'}
       style={{
         width: compact ? SIDEBAR_COMPACT_WIDTH : width,
         background: 'var(--rail)',
@@ -163,7 +177,44 @@ export function Sidebar({
         {!compact && <span>AgentWeave</span>}
       </div>
 
-      {!compact && configuration ? (
+      {!compact && agentSettings ? (
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-3 w-full justify-start"
+            data-testid="agent-settings-back"
+            aria-label={`Back to ${agentSettings.agent}`}
+            onClick={() =>
+              onBackFromAgentSettings?.(agentSettings.projectId, agentSettings.agent)
+            }
+          >
+            <Icon name="arrow_left" size={15} />
+            {agentSettings.agent}
+          </Button>
+          <div className="mb-3 px-2">
+            <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Agent settings</div>
+            <div className="truncate text-[11px]" style={{ color: 'var(--text-3)' }}>{agentSettings.agent}</div>
+          </div>
+          <nav aria-label="Agent settings sections" className="flex flex-col gap-0.5">
+            {AGENT_SETTINGS_SECTIONS.map((section) => (
+              <button
+                key={section}
+                type="button"
+                className="row-item"
+                data-testid={`agent-settings-section-${section}`}
+                data-active={agentSettings.section === section ? 'true' : 'false'}
+                aria-current={agentSettings.section === section ? 'page' : undefined}
+                onClick={() =>
+                  onOpenAgentSettings?.(agentSettings.projectId, agentSettings.agent, section)
+                }
+              >
+                {AGENT_SECTION_LABELS[section]}
+              </button>
+            ))}
+          </nav>
+        </>
+      ) : !compact && configuration ? (
         <>
           <Button
             variant="ghost"
@@ -288,14 +339,10 @@ export function Sidebar({
                       onOpenAgent={onOpenAgent}
                       onOpenConversation={onOpenConversation}
                       onNewConversation={onNewConversation}
-                      onOpenAgentSettings={(id, agent) => {
-                        // Captured now so the dialog can hand focus back to the control that
-                        // opened it — the menu has already unmounted its own item by then.
-                        settingsInvokerRef.current = document.querySelector(
-                          `[data-testid="agent-menu-${id}-${agent}"]`,
-                        )
-                        setSettingsAgent(agent)
-                      }}
+                      // Navigates to the agent's settings destination. It used to open a dialog
+                      // hosted here; configuration outgrew a 520px modal, and a destination is
+                      // also linkable and survives reload, which a dialog never was.
+                      onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'identity')}
                       onAddAgent={onAddAgent}
                     />
                   )}
@@ -310,12 +357,6 @@ export function Sidebar({
           </Button>
         </>
       ) : null}
-
-      <AgentSettingsDialog
-        agent={settingsAgent}
-        onClose={() => setSettingsAgent(null)}
-        onCloseFocus={() => settingsInvokerRef.current?.focus()}
-      />
     </aside>
   )
 }

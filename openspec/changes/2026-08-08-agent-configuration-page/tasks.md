@@ -45,33 +45,52 @@ render.
 
 ## 2. The destination
 
-- [ ] 2.1 Add a fourth destination shape carrying the agent — `{ kind: 'agent-settings', projectId,
+- [x] 2.1 Add a fourth destination shape carrying the agent — `{ kind: 'agent-settings', projectId,
       agent, section }` — to `lib/navigation.ts` and the URL. **Not** an `ENVIRONMENT_SECTIONS`
-      entry: those carry no subject, so they cannot address one agent
-- [ ] 2.2 Page shell following the environment pattern at `Sidebar.tsx:173-191` — the sidebar becomes
+      entry: those carry no subject, so they cannot address one agent. URL is
+      `?project=…&agent=…&settings=<section>`. **The parse order is the trap**: the conversation
+      branch claims any URL carrying an `agent`, so `settings` must be tested *first* or every
+      settings link resolves to a chat. Regression-tested
+- [x] 2.2 Page shell following the environment pattern at `Sidebar.tsx:173-191` — the sidebar becomes
       the section list plus a back control, rather than sections nesting inside the surrounding
-      navigation
-- [ ] 2.3 Back goes to a **fixed** target: the agent's most recent conversation. No stored origin,
-      matching `App.tsx:207`'s fixed "Back to {project}"
-- [ ] 2.4 Entry points from the agent's navigation row and its conversation header
-- [ ] 2.5 The destination survives reload and is linkable
+      navigation. `isAgentSettingsDestination` is kept separate from `isConfigurationDestination`
+      (that one is a type guard callers narrow on to read `environmentSection`);
+      `isSectionedDestination` is the union the rail's `data-mode` uses
+- [x] 2.3 Back goes to a **fixed** target: the agent's most recent conversation. No stored origin,
+      matching `App.tsx:207`'s fixed "Back to {project}". Free: `conversationId: null` already
+      resolves to the newest via `resolveConversationSelection`
+- [x] 2.4 Entry points from the agent's navigation row and its conversation header. The row menu's
+      *Agent settings* item now navigates instead of opening `AgentSettingsDialog`, which is
+      **deleted** — the popup the operator asked to be replaced by a page
+- [x] 2.5 The destination survives reload and is linkable — verified live in a browser against the
+      Hub on `:8010`, not only in vitest
 
 ## 3. Sections
 
 Named for what an operator is trying to do, not for the shape of the data.
 
-- [ ] 3.1 **Identity** — name, description
-- [ ] 3.2 **Execution** — runner binding, model, default permission posture
-- [ ] 3.3 **Charter** — charter binding
-- [ ] 3.4 **Interaction** — permission timeout, question timeout (moved from `AgentInfoTab`'s
+> All seven sections exist and route, because a section list whose buttons do nothing is not a
+> shell — it is a broken page. What each renders today is recorded per task below. The editable
+> controls moved to `components/agents/AgentSettingsControls.tsx` so that relocating a setting is a
+> change of placement, not a rewrite.
+
+- [~] 3.1 **Identity** — name, description. Name renders. **`description` does not exist**: `Agent`
+      (`models.py:107-131`) has no such column, so this needs a migration and is not a UI-only task
+- [~] 3.2 **Execution** — runner binding, model, default permission posture. Runner binding renders;
+      model follows from the bound Runner. **Default permission posture is not here yet** — and this
+      is where the stored `config["yolo"]` belongs, per section 1's finding
+- [x] 3.3 **Charter** — charter binding
+- [x] 3.4 **Interaction** — permission timeout, question timeout (moved from `AgentInfoTab`'s
       *Waiting for you*)
-- [ ] 3.5 **Context** — defined here, populated by the checkpoint change. Renders whatever context
-      settings exist at the time
-- [ ] 3.6 **Access** — defined here, populated by the checkpoint change
-- [ ] 3.7 **Workspace** — worktree, working directory
-- [ ] 3.8 Binding a runner or charter shows what is bound and allows rebinding through the existing
-      picker (`AgentInfoTab.tsx:352,394`). It does **not** link through to the runner or charter
-      record — rebinding one agent and editing a record bound by many are different acts
+- [x] 3.5 **Context** — defined here, populated by the checkpoint change. Renders whatever context
+      settings exist at the time — today, a stated "nothing configurable yet", because a section
+      that renders blank is indistinguishable from one that failed to load
+- [x] 3.6 **Access** — defined here, populated by the checkpoint change. Same stated empty state
+- [~] 3.7 **Workspace** — worktree, working directory. Section exists; **neither value is rendered
+      yet**
+- [x] 3.8 Binding a runner or charter shows what is bound and allows rebinding through the existing
+      picker. It does **not** link through to the runner or charter record — rebinding one agent and
+      editing a record bound by many are different acts
 
 ## 3b. Archival
 
@@ -99,8 +118,17 @@ one, plus the archival that makes its absence workable.
 - [ ] 4.1 Status, `latest_status_msg`, `last_seen` and the session list **stay with the
       conversation**. They are observation, they change without anyone configuring anything, and
       they are useful while working
+
+      **Owed now, not later.** Deleting `AgentSettingsDialog` in 2.4 removed `AgentInfoTab`'s only
+      caller — it is referenced by tests alone. Most of what it showed survives elsewhere (status
+      and context usage on the conversation header; task and message counts on the overview agent
+      cards), so what is actually unreachable today is the **provider session list**. That is
+      diagnostic detail, and `agent-conversation-workspace` already confines provider identity to
+      "details or diagnostics" — but it currently has no surface at all. Give it one here
 - [ ] 4.2 `AgentInfoTab` retains only observation, or is removed if nothing is left to justify a tab
-- [ ] 4.3 No setting appears in both places
+- [x] 4.3 No setting appears in both places — the editable controls live once, in
+      `AgentSettingsControls.tsx`, and are rendered only by the settings page. `AgentInfoTab` still
+      imports them but is no longer reachable, which 4.2 resolves
 
 ## 5. Creation-time boundary
 
@@ -118,14 +146,21 @@ one, plus the archival that makes its absence workable.
 
 ## 6. Verification
 
-- [ ] 6.1 Component tests for the page: sections render, edits persist, the back control returns to
-      the originating context
-- [ ] 6.2 Navigation test: the destination is reachable from both entry points, survives reload, and
+- [~] 6.1 Component tests for the page: sections render, edits persist, the back control returns to
+      the originating context. **Back and section routing are covered; per-section rendering and
+      edit persistence are still only covered indirectly**, through the existing
+      `agentWaitingSettings` / `runnersUi` / `chartersUi` tests that render `AgentInfoTab`. Those
+      should move to the page once 4.2 removes it
+- [x] 6.2 Navigation test: the destination is reachable from both entry points, survives reload, and
       is linkable
-- [ ] 6.3 Confirm no setting is editable from two surfaces
-- [ ] 6.4 **Drive it in a browser.** Standing gap across recent sessions — the operator has found
-      two defects by using surfaces that passed their tests
-- [ ] 6.5 Light and dark mode both checked by eye, not by token audit
+- [x] 6.3 Confirm no setting is editable from two surfaces — see 4.3
+- [x] 6.4 **Drive it in a browser.** Done against the live Hub on `:8010`: deep link to
+      `?…&settings=interaction` resolved to the section (not to a conversation), section switching
+      updated the URL, back returned to `conv-72bd6353`, and both the header button and the rail
+      row menu reached the page with no dialog rendered
+- [x] 6.5 Light and dark mode both checked by eye, not by token audit. Dark: active section carries
+      a 2px `rgb(124,140,255)` left accent with `#f5f5f6` text on `#0a0a0b`; idle rows are muted
+      with a transparent border — the same treatment the environment section list gets
 - [ ] 6.6 Full sweep: `pytest hub/tests/`, `npx vitest run`, `npx tsc --noEmit`,
       `npx openspec validate --changes --strict`, `npm run build` copied to `hub/hub/static/ui`
       confirmed with `diff -rq`

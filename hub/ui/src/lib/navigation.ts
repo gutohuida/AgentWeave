@@ -31,8 +31,23 @@ export const ENVIRONMENT_SECTIONS = [
 ] as const
 export type EnvironmentSection = (typeof ENVIRONMENT_SECTIONS)[number]
 
+/** Named for what an operator is trying to do, not for the shape of the data. *Context* and
+ *  *Access* are defined here ahead of the checkpoint change that fills them; a section with
+ *  nothing in it yet renders whatever settings exist at the time. */
+export const AGENT_SETTINGS_SECTIONS = [
+  'identity',
+  'execution',
+  'charter',
+  'interaction',
+  'context',
+  'access',
+  'workspace',
+] as const
+export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number]
+
 const DEFAULT_TAB: ProjectTab = 'overview'
 const DEFAULT_ENVIRONMENT_SECTION: EnvironmentSection = ENVIRONMENT_SECTIONS[0]
+const DEFAULT_AGENT_SETTINGS_SECTION: AgentSettingsSection = AGENT_SETTINGS_SECTIONS[0]
 
 export type WorkspaceDestination =
   | { kind: 'project'; projectId: string; tab: ProjectTab }
@@ -40,6 +55,10 @@ export type WorkspaceDestination =
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
   | { kind: 'conversation'; projectId: string; agent: string | null; conversationId: string | null }
+  // Its own kind rather than an `ENVIRONMENT_SECTIONS` entry: those address a project and carry no
+  // subject, so they cannot say *which* agent is being configured. `agent` is non-null by
+  // construction — there is no such thing as configuring no agent.
+  | { kind: 'agent-settings'; projectId: string; agent: string; section: AgentSettingsSection }
   | { kind: 'zero' }
 
 /** Collection-shaped from day one, even while one authenticated project is visible. */
@@ -70,6 +89,25 @@ export function agentDestination(
   conversationId: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
   return { kind: 'conversation', projectId, agent, conversationId }
+}
+
+export function agentSettingsDestination(
+  projectId: string,
+  agent: string,
+  section: AgentSettingsSection = DEFAULT_AGENT_SETTINGS_SECTION,
+): Extract<WorkspaceDestination, { kind: 'agent-settings' }> {
+  return { kind: 'agent-settings', projectId, agent, section }
+}
+
+/** Where the back control on the settings page goes: a *fixed* target, the agent's most recent
+ *  conversation, matching `App.tsx`'s fixed "Back to {project}" rather than remembering an origin.
+ *
+ *  `conversationId: null` is what makes it the most recent one — `resolveConversationSelection`
+ *  already resolves null to the agent's newest, so this needs no lookup of its own. */
+export function agentSettingsBackDestination(
+  destination: Extract<WorkspaceDestination, { kind: 'agent-settings' }>,
+): Extract<WorkspaceDestination, { kind: 'conversation' }> {
+  return agentDestination(destination.projectId, destination.agent)
 }
 
 /** The composer-primary surface for a conversation that does not exist yet.
@@ -125,6 +163,21 @@ export function isConfigurationDestination(
   return destination.kind === 'project' && destination.tab === 'environment'
 }
 
+/** The agent-scoped counterpart. Kept separate from `isConfigurationDestination` rather than
+ *  widened into it: that one is a type guard onto the environment shape, and callers narrow on it
+ *  to read `environmentSection`. */
+export function isAgentSettingsDestination(
+  destination: WorkspaceDestination,
+): destination is Extract<WorkspaceDestination, { kind: 'agent-settings' }> {
+  return destination.kind === 'agent-settings'
+}
+
+/** True in either configuration area. The Sidebar swaps into section-list-plus-back mode on this,
+ *  because the shell is the same whichever subject is being configured. */
+export function isSectionedDestination(destination: WorkspaceDestination): boolean {
+  return isConfigurationDestination(destination) || isAgentSettingsDestination(destination)
+}
+
 /** Serializes a destination into a URL search string (including the leading
  *  `?`, or `''` for the zero-project state). No provider session identifier is
  *  ever part of this shape — only AgentWeave's own project/agent/conversation
@@ -133,6 +186,11 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   if (destination.kind === 'zero') return ''
   const params = new URLSearchParams()
   params.set('project', destination.projectId)
+  if (destination.kind === 'agent-settings') {
+    params.set('agent', destination.agent)
+    params.set('settings', destination.section)
+    return `?${params.toString()}`
+  }
   if (destination.kind === 'conversation') {
     if (destination.agent) params.set('agent', destination.agent)
     if (destination.conversationId) params.set('conversation', destination.conversationId)
@@ -158,6 +216,21 @@ export function parseDestination(search: string): WorkspaceDestination | null {
 
   const agent = params.get('agent')
   const conversation = params.get('conversation')
+
+  // Checked *before* the conversation branch, and deliberately so: that branch claims any URL
+  // carrying an `agent`, so testing it first would resolve every settings link to a chat.
+  // `settings` without an `agent` is not a destination — there is no agent to configure — so it
+  // falls through rather than being coerced to one.
+  const rawSettingsSection = params.get('settings')
+  if (agent && rawSettingsSection !== null) {
+    const section: AgentSettingsSection = (
+      AGENT_SETTINGS_SECTIONS as readonly string[]
+    ).includes(rawSettingsSection)
+      ? (rawSettingsSection as AgentSettingsSection)
+      : DEFAULT_AGENT_SETTINGS_SECTION
+    return agentSettingsDestination(projectId, agent, section)
+  }
+
   // The agentless new-conversation surface has no `agent` to key on, so the sentinel is what
   // identifies it — otherwise a reload there would land on the project overview.
   if (agent || conversation === NEW_CONVERSATION_ID) {
