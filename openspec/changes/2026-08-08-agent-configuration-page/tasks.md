@@ -9,16 +9,39 @@
 Do this first. It is small, it is independent of the page, and it shrinks what the page has to
 render.
 
-- [ ] 1.1 Find every consumer of `role` and `yolo` — API responses, UI, tests, fixtures. **Removal
+- [x] 1.1 Find every consumer of `role` and `yolo` — API responses, UI, tests, fixtures. **Removal
       is only behaviour-preserving if nothing reads them; establish that rather than assuming it**
-- [ ] 1.2 Remove `role` and `yolo` from `hub/hub/schemas/agents.py:44-47`
-- [ ] 1.3 Remove the *Collaboration Role* section and *YOLO Mode* badge from
-      `AgentInfoTab.tsx:110-153`, and `ROLE_CONFIG` with them if it has no other caller
-- [ ] 1.4 Correct the stale enum comment on `runner` (`schemas/agents.py:48-50`), which names
-      `"native" | "claude_proxy" | "kimi" | "manual"` — an enum the Runner registry replaced
-- [ ] 1.5 Test asserting the agent response carries no `role` or `yolo`, so they cannot return
-      unnoticed
-- [ ] 1.6 Full suite after removal — this touches a response schema
+
+      **Done, and it overturned this change's own premise.** The two fields are not alike:
+
+      - **`role` is dead.** One producer (`agents.py:508`, from `agent_meta`), two consumers
+        (`api/agents.ts:14`, `AgentInfoTab.tsx:40,110-122`). Nothing reads it for behaviour.
+        (`specManifestRepair.test.tsx`'s "spec-role agent" means an agent *named* `spec`, not
+        `agent.role` — not a consumer.)
+      - **`yolo` is live and stays live.** Stored in `Agent.config` (`models.py:503`) and session
+        config; read at `agent_trigger.py:288` → `runner_commands.py:187,201,246`
+        (`--dangerously-skip-permissions` vs `--permission-mode`) and
+        `codex_appserver._thread_policy`/`decide_approval`; also `agents.py:210`
+        (collaboration-readiness refusal) and `_runner_summary:746`. The claim in the original
+        proposal that it is `bool = False` with nothing behind it was **wrong** —
+        `agents.py:509` populated it from `agent_meta`. Only the **read-only summary field and its
+        badge** are removed. `proposal.md`, `design.md` and the spec delta were corrected.
+      - Response-field consumers found in tests: `test_agents_self_registered.py:393,471`.
+        The `config["yolo"]` assertions at `:460-462` are a different surface and stay.
+- [x] 1.2 Remove `role` and `yolo` from `hub/hub/schemas/agents.py:44-47` — and their population at
+      `agents.py:508-509`
+- [x] 1.3 Remove the *Collaboration Role* section and *YOLO Mode* badge from
+      `AgentInfoTab.tsx:110-153`, and `ROLE_CONFIG` with them if it has no other caller — done;
+      `ROLE_CONFIG` had no other caller. The heading *"Roles & Configuration"* became
+      *"Configuration"*. Also removed the `agent.yolo` ⚡ indicator from `AgentCard.tsx:49`, a
+      consumer this task list had not listed (the component is unreachable but still compiled)
+- [x] 1.4 Correct the stale enum comment on `runner` (`schemas/agents.py:48-50`), which names
+      `"native" | "claude_proxy" | "kimi" | "manual"` — an enum the Runner registry replaced.
+      Corrected in `schemas/agents.py` and in `api/agents.ts:16`, which repeated it
+- [x] 1.5 Test asserting the agent response carries no `role` or `yolo`, so they cannot return
+      unnoticed — `test_agent_summary_carries_no_role_or_yolo`, which also asserts
+      `config["yolo"]` survives, so the removal cannot silently widen into a behaviour change
+- [x] 1.6 Full suite after removal — this touches a response schema
 
 ## 2. The destination
 

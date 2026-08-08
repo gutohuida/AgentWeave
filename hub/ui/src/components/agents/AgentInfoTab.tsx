@@ -19,12 +19,6 @@ interface AgentInfoTabProps {
   agent: AgentSummary
 }
 
-const ROLE_CONFIG: Record<string, { bg: string; color: string }> = {
-  principal: { bg: tint('var(--blue)'), color: 'var(--blue)' },
-  delegate: { bg: tint('var(--green)'), color: 'var(--green)' },
-  collaborator: { bg: tint('var(--text-3)'), color: 'var(--text-3)' },
-}
-
 const RUNNER_CONFIG: Record<string, { bg: string; color: string; label: string }> = {
   claude_proxy: { bg: tint('var(--amber)'), color: 'var(--amber)', label: 'proxy' },
   manual: { bg: tint('var(--text-3)'), color: 'var(--text-3)', label: 'manual' },
@@ -37,7 +31,6 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
   const sessions = sessionsData?.sessions || []
 
   const statusCfg = getStatusConfig(agent.status)
-  const roleCfg = agent.role ? (ROLE_CONFIG[agent.role] ?? ROLE_CONFIG.collaborator) : null
 
   const cardStyle: React.CSSProperties = {
     background: 'var(--surface-2)',
@@ -99,59 +92,14 @@ export function AgentInfoTab({ agent }: AgentInfoTabProps) {
         )}
       </section>
 
-      {/* Roles & Configuration Section */}
+      {/* Configuration Section */}
       <section style={cardStyle}>
         <h3 className="mb-4 flex items-center gap-2 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
           <Icon name="badge" size={18} style={{ color: 'var(--blue)' }} />
-          Roles & Configuration
+          Configuration
         </h3>
 
-        {/* Collaboration Role */}
-        {roleCfg && (
-          <div className="mb-4">
-            <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-              Collaboration Role
-            </p>
-            <span
-              className="text-[11px] font-medium capitalize px-2 py-1 rounded-full inline-block"
-              style={{ background: roleCfg.bg, color: roleCfg.color }}
-            >
-              {agent.role}
-            </span>
-          </div>
-        )}
-
-        {/* YOLO & Runner */}
         <div className="flex flex-wrap gap-3">
-          {/* YOLO Badge */}
-          <div>
-            <p className="text-[11px] mb-2" style={{ color: 'var(--text-3)', opacity: 0.7 }}>
-              YOLO Mode
-            </p>
-            {agent.yolo ? (
-              <span
-                className="text-[11px] font-medium px-2 py-1 rounded-full flex items-center gap-1"
-                style={{
-                  background: tint('var(--amber)'),
-                  color: 'var(--amber)',
-                }}
-              >
-                <Icon name="bolt" size={14} />
-                Enabled
-              </span>
-            ) : (
-              <span
-                className="text-[11px] font-medium px-2 py-1 rounded-full"
-                style={{
-                  background: 'var(--surface-3)',
-                  color: 'var(--text-3)',
-                }}
-              >
-                Disabled
-              </span>
-            )}
-          </div>
-
           {/* Runner Type */}
           {agent.runner && (
             <div>

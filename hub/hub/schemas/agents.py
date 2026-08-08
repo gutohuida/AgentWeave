@@ -41,13 +41,9 @@ class AgentSummary(BaseModel):
     last_seen: Optional[datetime] = None
     message_count: int
     active_task_count: int
-    role: Optional[str] = Field(
-        default=None, max_length=64
-    )  # "principal" | "delegate" | "collaborator"
-    yolo: bool = False
-    runner: str = Field(
-        default="native", max_length=64
-    )  # "native" | "claude_proxy" | "kimi" | "manual"
+    # The CLI this agent runs as. Free-form, not an enum: a Runner record supplies its own `cli`
+    # and any value the registry accepts can appear here. "native" is the no-binding fallback.
+    runner: str = Field(default="native", max_length=64)
     display_model: Optional[str] = Field(
         default=None, max_length=128
     )  # e.g. "Claude", "Kimi", "Minimax" — derived from runner

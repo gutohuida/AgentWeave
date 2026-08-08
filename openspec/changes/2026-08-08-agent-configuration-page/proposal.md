@@ -12,14 +12,22 @@ threshold, the generating runner and model, and two independent access grants
 (`read_checkpoint`, `recall`). Section 8 of that change has no destination for its UI. Building
 those into a tab inside a conversation would put durable configuration behind a transient surface.
 
-**It is displaying fields that no longer exist.** The `agents` table has no `role` and no `yolo`
-column — the role subsystem was deleted, and `CLAUDE.md` records that role-derived API and UI fields
-"no longer exist and must not be recreated". But `hub/hub/schemas/agents.py:44-47` still declares
-both, and `AgentInfoTab.tsx:110-153` still renders a *Collaboration Role* section and a *YOLO Mode*
-badge from them. `yolo` is `bool = False` with nothing behind it, so that badge can only ever read
-**Disabled** — a control that reports a state it cannot have. The adjacent `runner: str = "native"`
-(`:48-50`) carries a comment naming a runner enum (`"native" | "claude_proxy" | "kimi" | "manual"`)
-that the Runner registry replaced.
+**It is displaying two fields that should not be there, for two different reasons.**
+`hub/hub/schemas/agents.py:44-47` declares `role` and `yolo`, and `AgentInfoTab.tsx:110-153` renders
+a *Collaboration Role* section and a *YOLO Mode* badge from them.
+
+`role` no longer exists: the role subsystem was deleted, `CLAUDE.md` records that role-derived API
+and UI fields "no longer exist and must not be recreated", and nothing in the Hub reads it. It is a
+field no store can populate.
+
+`yolo` is the opposite mistake. It is a **real, live setting** — stored in `Agent.config`, read at
+`agent_trigger.py:288`, and used by `runner_commands.py` and `codex_appserver` to choose the run's
+permission posture — rendered as a badge the operator can read but not change, in a tab that is
+otherwise observation. The setting is not dead; its *presentation* is wrong, and its editable home
+is **Execution**'s permission posture. Only the summary field and the badge are removed.
+
+The adjacent `runner: str = "native"` (`:48-50`) carries a comment naming a runner enum
+(`"native" | "claude_proxy" | "kimi" | "manual"`) that the Runner registry replaced.
 
 This is the same defect shape this project has now found three times in a row — a surface that looks
 like it works because nothing checks whether it still means anything.
@@ -36,8 +44,9 @@ are different activities.
 - Sections are reworked into: **Identity**, **Execution**, **Charter**, **Interaction**, **Context**,
   **Access**, and **Workspace**. Status and Sessions — which are observation, not configuration —
   stay with the conversation rather than moving to the settings page.
-- The dead fields go: `role` and `yolo` are removed from the agent schema and from the UI, and the
-  stale runner-enum comment is corrected.
+- `role` and `yolo` are removed from the agent schema and from the UI — `role` because it is dead,
+  `yolo` because its presentation was read-only observation of a setting that belongs in Execution.
+  `Agent.config["yolo"]` keeps driving the run. The stale runner-enum comment is corrected.
 - **Creation-time settings are separated from later settings** by a stated rule: a setting is
   *offered* at creation when the agent's first turn would be materially different without it;
   everything else lives on the page. The rule governs what is offered, not what is required —

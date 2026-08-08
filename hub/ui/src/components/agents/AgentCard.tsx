@@ -45,10 +45,6 @@ export function AgentCard({ agent, selected, onClick, launchability }: AgentCard
         >
           {agent.name}
         </span>
-        {/* Yolo indicator */}
-        {agent.yolo && (
-          <span title="Yolo mode" style={{ fontSize: 12, color: 'var(--amber)' }}>⚡</span>
-        )}
         <span className="text-xs capitalize shrink-0" style={{ color: cfg.labelColor }}>
           {cfg.label}
         </span>

@@ -95,13 +95,25 @@ the other is how long it waits for a human. They were adjacent in the old tab un
 
 ### A setting with no backing state is not displayed
 
-`role` and `yolo` are removed from `schemas/agents.py` and from the UI. Neither has a column;
-`yolo` is a literal `False`, so its badge cannot report anything else, and `role` is always `None`,
-so its section never renders at all.
+`role` and `yolo` are both removed from `schemas/agents.py` and from the UI, but **for two different
+reasons**, and the distinction was established by search (task 1.1) rather than assumed. An earlier
+draft of this document asserted both were constants with no backing state. That is true of `role`
+and false of `yolo`.
 
-`CLAUDE.md` already states that role-derived API and UI fields must not be recreated. They were not
-recreated — they were never fully removed. This change completes that removal rather than
-introducing a new rule.
+`role` is dead. `agents` has no column, nothing in the Hub reads it for behaviour, and its single
+producer was `agents.py`'s summary populating it from `agent_meta`. `CLAUDE.md` already states that
+role-derived API and UI fields must not be recreated. They were not recreated — they were never
+fully removed. This change completes that removal rather than introducing a new rule.
+
+`yolo` is **live, and stays live**. It is stored in `Agent.config` (documented at `models.py:503`)
+and in session config, and it is read at `agent_trigger.py:288` to drive the spawn —
+`runner_commands.py` chooses `--dangerously-skip-permissions` over `--permission-mode` from it, and
+`codex_appserver._thread_policy` / `decide_approval` select Codex's approval posture from it. It is
+also read at `agents.py:210` for the collaboration-readiness refusal. What is removed is only the
+**read-only summary field and the badge that rendered it** — an observation of a setting whose
+editable home is *Execution*'s default permission posture, where a value can actually be changed
+rather than merely reported. `Agent.config["yolo"]` is untouched, and a test asserts it survives
+the removal.
 
 The stale enum comment on `runner` (`schemas/agents.py:48-50`) naming
 `"native" | "claude_proxy" | "kimi" | "manual"` is corrected at the same time: runners are registry
@@ -191,7 +203,9 @@ add one, plus the archival that makes the absence workable.
 
 - **`role` and `yolo` may have consumers.** Both are on a response schema, so anything reading the
   agent list could depend on their presence, including tests. Non-functional does not mean
-  unreferenced.
+  unreferenced. **Realised, for `yolo`:** it is not non-functional at all — it drives the spawn and
+  Codex's approval posture — and two tests asserted it on the list response. Only the response field
+  is removed; the stored setting stays.
 - **Two destinations for one agent.** The conversation and the settings page both belong to an
   agent, so navigation must make clear which is being shown and how to move between them without
   losing the conversation.

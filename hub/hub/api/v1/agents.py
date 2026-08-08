@@ -505,8 +505,6 @@ async def list_agents(
                 last_seen=hb.timestamp if hb else None,
                 message_count=msg_count,
                 active_task_count=task_count,
-                role=agent_meta.get("role"),
-                yolo=bool(agent_meta.get("yolo", False)),
                 runner=_runner,
                 display_model=_display_model,
                 context_usage=context_usage,

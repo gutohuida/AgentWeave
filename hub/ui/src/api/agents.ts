@@ -11,9 +11,7 @@ export interface AgentSummary {
   last_seen?: string
   message_count: number
   active_task_count: number
-  role?: string  // "principal" | "delegate" | "collaborator"
-  yolo?: boolean
-  runner?: string  // "native" | "claude_proxy" | "kimi" | "manual"
+  runner?: string  // The bound Runner's CLI; "native" when there is no binding
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   context_usage?: ContextUsage
   session_started_at?: string  // ISO timestamp when current session started

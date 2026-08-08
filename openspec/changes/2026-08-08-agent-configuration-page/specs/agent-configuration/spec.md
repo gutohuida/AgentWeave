@@ -150,10 +150,16 @@ conversation, as a message recipient, and as a task assignee.
 The Hub SHALL NOT present an agent setting that has no state behind it, and SHALL NOT expose such a
 field on the agent's API representation.
 
-An agent's stored record has no role and no autonomy-flag state. Both were nonetheless carried on
-the response schema and rendered, one of them as a badge that could only ever report a single value
-because its source was a constant. A control that cannot report anything but one state is not a
-control; it is a claim that something is configurable when it is not.
+An agent's stored record has no role state. It was nonetheless carried on the response schema and
+rendered. A field that no store can ever populate is a claim that something is configurable when it
+is not.
+
+The Hub SHALL also not present a setting as a **read-only badge** when that setting has an editable
+home elsewhere in the agent's configuration. An autonomy flag is a real stored setting that selects
+the run's permission posture, so it belongs where a posture is chosen and can be changed — not
+duplicated as an observation that reports a value the operator cannot act on. Reporting a setting
+without offering to change it is the mirror of the first failure: the first offers a control with no
+state, the second shows state with no control.
 
 The operator MUST NOT be asked to choose a persona or organizational role, which
 `operator-agent-creation` already requires of creation and which applies equally to configuration.
@@ -167,3 +173,9 @@ The operator MUST NOT be asked to choose a persona or organizational role, which
 
 - **WHEN** an agent's configuration is shown
 - **THEN** no persona or organizational role is offered
+
+#### Scenario: A stored autonomy flag keeps driving the run after leaving the summary
+
+- **WHEN** an agent whose stored configuration sets an autonomy flag is triggered
+- **THEN** the flag still selects the run's permission posture
+- **AND** the flag is absent from the agent's summary representation

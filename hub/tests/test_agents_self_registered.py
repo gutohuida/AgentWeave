@@ -365,7 +365,12 @@ async def test_register_agent_with_config(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
-    """Test that list_agents populates runner, model, and yolo from stored config."""
+    """Test that list_agents populates runner and model from stored config.
+
+    `yolo` stays in the stored config — it drives the spawn (`runner_commands`) and Codex's
+    approval policy — but it is deliberately not surfaced on the summary. See
+    openspec/changes/2026-08-08-agent-configuration-page tasks 1.2/1.5.
+    """
     resp = await app.post(
         "/api/v1/projects/proj-test/agents/register",
         json={
@@ -390,10 +395,48 @@ async def test_list_agents_shows_config_for_self_registered(app, auth_headers):
     assert hermes is not None
     assert hermes["runner"] == "claude_proxy"
     assert hermes["display_model"] == "MiniMax-Text-01"
-    assert hermes["yolo"] is True
     assert "dev_role" not in hermes
     assert "dev_roles" not in hermes
     assert hermes["self_registered"] is True
+
+
+@pytest.mark.asyncio
+async def test_agent_summary_carries_no_role_or_yolo(app, auth_headers):
+    """The summary exposes neither `role` nor `yolo`, even when both sit in stored config.
+
+    `role` is the deleted multi-role subsystem's last remnant: nothing in the Hub reads it.
+    `yolo` is different — it is live in `Agent.config`, where `runner_commands` and
+    `codex_appserver` read it — but it is not an operator-facing summary field, and the
+    read-only badge that rendered it is gone. Asserting absence here is what stops either
+    returning unnoticed. Tasks 1.2/1.5 of 2026-08-08-agent-configuration-page.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={
+            "name": "hermes-legacy-fields",
+            "contact_mode": "poll",
+            "config": {"runner": "claude", "model": "sonnet", "role": "principal", "yolo": True},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    # The config store keeps both — removal is of the response field, not of the setting.
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/hermes-legacy-fields",
+        json={"config": {}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["config"]["yolo"] is True
+    assert resp.json()["config"]["role"] == "principal"
+
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    assert resp.status_code == 200
+    hermes = next((a for a in resp.json() if a["name"] == "hermes-legacy-fields"), None)
+    assert hermes is not None
+    assert "role" not in hermes
+    assert "yolo" not in hermes
 
 
 @pytest.mark.asyncio
@@ -468,7 +511,6 @@ async def test_patch_agent_config(app, auth_headers):
     assert hermes is not None
     assert hermes["runner"] == "kimi"
     assert hermes["display_model"] == "kimi-k3"
-    assert hermes["yolo"] is True
 
 
 @pytest.mark.asyncio
