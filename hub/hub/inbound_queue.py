@@ -29,8 +29,8 @@ def new_entry(
     conversation_id: Optional[str] = None,
     work_dir: Optional[str] = None,
 ) -> InboundQueueEntry:
-    if origin_type not in ("operator", "agent", "job"):
-        raise ValueError("origin_type must be 'operator', 'agent', or 'job'")
+    if origin_type not in ("operator", "agent", "job", "checkpoint"):
+        raise ValueError("origin_type must be 'operator', 'agent', 'job', or 'checkpoint'")
     if (origin_type == "agent") != bool(origin_agent):
         raise ValueError("agent origins require origin_agent; operator origins forbid it")
     if hop_depth < 0:

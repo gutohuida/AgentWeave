@@ -7,12 +7,13 @@ from datetime import datetime
 from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
+from ...checkpoint_policy import threshold_error, window_for
 from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
 from ...project_lifecycle import ProjectLifecycleService
@@ -79,6 +80,21 @@ class ProjectSettings(BaseModel):
     # Which of the project's runners does the titling. Null falls back to the agent's own.
     conversation_title_runner_id: Optional[str] = Field(default=None, max_length=64)
 
+    # --- Checkpointing ---
+    # `off` by default. `offered` generates a checkpoint at the threshold and leaves the cutover
+    # to the operator; `automatic` also opens the successor and archives the predecessor.
+    # Generation happens under both, because the offer is "I made one, cut over?" rather than
+    # "shall I make one?" — there is nothing to ask permission for, and asking would mean
+    # generating later from a context that has degraded in the meantime.
+    checkpoint_mode: Literal["off", "offered", "automatic"] = "off"
+    checkpoint_threshold_mode: Optional[Literal["percent", "tokens"]] = None
+    # Canonical units: 0-100 under `percent`, an actual token count under `tokens`. A surface
+    # collecting thousands converts before sending.
+    checkpoint_threshold_value: Optional[int] = Field(default=None, gt=0)
+    checkpoint_notes_value: Optional[int] = Field(default=None, gt=0)
+    checkpoint_runner_id: Optional[str] = Field(default=None, max_length=64)
+    checkpoint_model: Optional[str] = Field(default=None, max_length=256)
+
     model_config = {"extra": "forbid"}
 
     @field_validator("name")
@@ -88,6 +104,35 @@ class ProjectSettings(BaseModel):
         if not stripped:
             raise ValueError("name must not be blank")
         return stripped
+
+    @model_validator(mode="after")
+    def validate_threshold(self) -> "ProjectSettings":
+        """A threshold is a mode and a value together, or neither.
+
+        Half a threshold is not a partial setting to be completed from elsewhere — a value of
+        `150` inheriting `percent` reads as 150% and never fires.
+        """
+        if (self.checkpoint_threshold_mode is None) != (self.checkpoint_threshold_value is None):
+            raise ValueError(
+                "checkpoint_threshold_mode and checkpoint_threshold_value must be set together"
+            )
+        if self.checkpoint_threshold_mode is not None:
+            error = threshold_error(
+                self.checkpoint_threshold_mode,
+                self.checkpoint_threshold_value,
+                context_window=window_for(self.checkpoint_model),
+            )
+            if error:
+                raise ValueError(error)
+        if self.checkpoint_notes_value is not None:
+            if self.checkpoint_threshold_value is None:
+                raise ValueError("a notes point needs a threshold to sit below")
+            if self.checkpoint_notes_value >= self.checkpoint_threshold_value:
+                raise ValueError(
+                    "the notes point must be below the checkpoint threshold, or notes are "
+                    "written from the context the checkpoint exists to escape"
+                )
+        return self
 
 
 async def _project_summary(session: AsyncSession, project: Project) -> ProjectSummary:
@@ -273,17 +318,19 @@ async def update_project_settings(
 ) -> ProjectSettings:
     resolved_project_id = project_identity[0]
     project = await _operator_project_row(resolved_project_id, session)
-    if body.conversation_title_runner_id:
-        # Not a ForeignKey — `runners.project_id` already points at `projects`, and closing the
-        # loop would make the two unsortable for DDL. Checked here instead, which is also where
-        # a cross-project runner id has to be refused anyway.
-        runner = await session.get(Runner, body.conversation_title_runner_id)
+    # Not ForeignKeys — `runners.project_id` already points at `projects`, and closing the loop
+    # would make the two unsortable for DDL. Checked here instead, which is also where a
+    # cross-project runner id has to be refused anyway.
+    for field_name in ("conversation_title_runner_id", "checkpoint_runner_id"):
+        runner_id = getattr(body, field_name)
+        if not runner_id:
+            continue
+        runner = await session.get(Runner, runner_id)
         if runner is None or runner.project_id != resolved_project_id:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Unknown runner '{body.conversation_title_runner_id}': no runner by that "
-                    "id belongs to this project"
+                    f"Unknown runner '{runner_id}': no runner by that id belongs to this project"
                 ),
             )
     for field, value in body.model_dump().items():

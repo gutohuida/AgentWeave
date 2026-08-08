@@ -441,10 +441,11 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
       nothing** — otherwise a failed generation leaves stale intent to be picked up by a later
       checkpoint as though it were current, the same staleness as reporting a pre-compaction
       context percentage
-- [ ] 6.3 Request notes at the **notes threshold**, below the cutover threshold, so they are not
+- [x] 6.3 Request notes at the **notes threshold**, below the cutover threshold, so they are not
       written from an already-degraded context
-      **BLOCKED on section 8.** The threshold configuration this keys on (8.4/8.5) does not exist
-      yet; the input side is complete, so this is the wiring only
+      **Unblocked and done with 8A.** `checkpoint_trigger.consider` enqueues the request when a
+      reading lands between the notes point and the cutover point, once per cycle rather than on
+      every reading, and never at or past cutover
 - [x] 6.0 **Generation itself** — `hub/hub/checkpoint_generation.py`, the glue sections 4 and 5
       were built for. A Hub-owned versioned prompt (`checkpoint/1`), input assembled from the
       anchor plus only the turns since, `CheckpointBody` as the schema, `render_body` /
@@ -525,25 +526,25 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
 
 ## 8. Lifecycle, configuration, and visibility
 
-- [ ] 8.1 Deliver the checkpoint to the successor as an `InboundQueueEntry`, conversation-scoped.
+- [x] 8.1 Deliver the checkpoint to the successor as an `InboundQueueEntry`, conversation-scoped.
       **Not** through `_render_hub_agent_context`, which is agent-scoped and writes one file per
       agent, so it cannot carry a per-conversation payload
-- [ ] 8.2 Archive the predecessor on a successful checkpoint, through `archivable()` — which
+- [x] 8.2 Archive the predecessor on a successful checkpoint, through `archivable()` — which
       already refuses when an undelivered queue entry would be stranded
-- [ ] 8.3 Create the successor with `origin: handoff` and a title derived from its predecessor's;
+- [x] 8.3 Create the successor with `origin: handoff` and a title derived from its predecessor's;
       make lineage legible in the navigation tree
-- [ ] 8.4 Configuration: automatic checkpointing off / offered / automatic, cutover threshold, notes
+- [x] 8.4 Configuration: automatic checkpointing off / offered / automatic, cutover threshold, notes
       threshold, Worker runner + model
-- [ ] 8.5 Threshold is `threshold_mode` (`percent` | `tokens`) + `threshold_value`, **not** two
+- [x] 8.5 Threshold is `threshold_mode` (`percent` | `tokens`) + `threshold_value`, **not** two
       nullable columns. Token values entered in thousands (`150` = 150 000)
-- [ ] 8.6 Resolution is agent ?? project ?? built-in default, and an override replaces the **whole
+- [x] 8.6 Resolution is agent ?? project ?? built-in default, and an override replaces the **whole
       threshold** — mode and value together, never field-by-field
-- [ ] 8.7 Where the context window is known, show both readings ("150k — 75% of Haiku 4.5's 200k")
+- [x] 8.7 Where the context window is known, show both readings ("150k — 75% of Haiku 4.5's 200k")
       and refuse a token threshold at or above the window, which would never fire
-- [ ] 8.8 Token mode must work where `limit_tokens` is unknown — it needs only `context_tokens`
+- [x] 8.8 Token mode must work where `limit_tokens` is unknown — it needs only `context_tokens`
 - [ ] 8.9 Minimal visibility: the checkpoint renders in the conversation timeline and is readable
       over the API. **In scope** — an invisible checkpoint rebuilds the defect this change removes
-- [ ] 8.10 The proactive offer becomes *"I made one, here it is, cut over?"* rather than *"shall I
+- [x] 8.10 The proactive offer becomes *"I made one, here it is, cut over?"* rather than *"shall I
       ask the agent?"* — generation no longer depends on the agent
 
 ## 9. Rename, and the stale references

@@ -318,6 +318,15 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         # tokens on titles.
         "conversation_title_mode": "truncate",
         "conversation_title_runner_id": None,
+        # Checkpointing is off until somebody turns it on, for the same reason titles default to
+        # truncation: a settings save must not start spending tokens, and here it must not start
+        # cutting conversations over either.
+        "checkpoint_mode": "off",
+        "checkpoint_threshold_mode": None,
+        "checkpoint_threshold_value": None,
+        "checkpoint_notes_value": None,
+        "checkpoint_runner_id": None,
+        "checkpoint_model": None,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers

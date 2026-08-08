@@ -174,4 +174,13 @@ async def record_context_usage(
             return "ignored"
     await persist_event(db, project_id, "context_warning", payload, agent=agent, severity="info")
     await sse_manager.broadcast(project_id, "context_warning", payload)
+
+    # A reading is the moment context pressure first becomes knowable, so it is where the
+    # checkpoint policy is evaluated. Dispatched, never awaited: generation is a blocking CLI
+    # spawn measured at ~19s live, and awaiting it here would stall every turn's output behind
+    # a checkpoint. Imported locally because `checkpoint_trigger` imports the generation stack,
+    # which imports this module.
+    from .checkpoint_trigger import consider_from_reading
+
+    consider_from_reading(project_id, agent, sample_payload.get("conversation_id"), payload)
     return "ok"

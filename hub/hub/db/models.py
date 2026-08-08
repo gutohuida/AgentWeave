@@ -78,6 +78,29 @@ class Project(Base):
     # loop would make the two tables unsortable for DDL. Validated where it is set instead.
     conversation_title_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
+    # --- Checkpointing ---
+    # "off" | "offered" | "automatic". Off by default: a project should not start spending tokens
+    # on generation, or cutting conversations over, because it was upgraded.
+    checkpoint_mode: Mapped[str] = mapped_column(
+        String(16), default="off", server_default="off", nullable=False
+    )
+    # One mode plus one value, never two nullable value columns — "150 000 tokens" and "50%" are
+    # the same setting expressed differently, and two columns make "both set" representable.
+    #
+    # `percent` holds 0-100. `tokens` holds a **canonical token count** (150 000), not the
+    # thousands an operator types: entry units belong to the surface that collects them, and a
+    # column whose meaning depends on another column's *units* as well as its mode is one
+    # indirection too many.
+    checkpoint_threshold_mode: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    checkpoint_threshold_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Where notes are requested. Same mode as the cutover threshold and necessarily earlier —
+    # notes written from an already-degraded context are themselves degraded.
+    checkpoint_notes_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Which runner and model generate checkpoints. Not a ForeignKey, for the same reason
+    # `conversation_title_runner_id` is not.
+    checkpoint_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    checkpoint_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")
     tasks: Mapped[List["Task"]] = relationship(back_populates="project")
@@ -139,6 +162,17 @@ class Agent(Base):
     # This is the same choice the composer's Permissions pill makes, applied when no run states
     # one, which is why it is not a vocabulary of its own.
     default_permission_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Per-agent overrides of the project's checkpoint policy. All three are NULL for an agent
+    # that inherits.
+    #
+    # An override replaces the **whole** threshold — mode and value together, never one field of
+    # it. Resolving field-by-field lets an agent inherit `percent` from the project and supply a
+    # value of `150`, which reads as "150%" and never fires. `checkpoint_threshold_mode` being
+    # non-NULL is what marks the agent as overriding at all.
+    checkpoint_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    checkpoint_threshold_mode: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    checkpoint_threshold_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    checkpoint_notes_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # An agent is archived, never deleted — its conversations, runs and messages keep their
     # attribution, and archival is reversible. Mirrors `Conversation.lifecycle` deliberately:
     # the two are the same act at different scopes, and giving them different vocabularies
@@ -401,8 +435,14 @@ class InboundQueueEntry(Base):
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
     __table_args__ = (
+        # `checkpoint` is the Hub handing a successor conversation its predecessor's checkpoint.
+        # Deliberately its own value rather than borrowed: under `automatic` no operator asked
+        # for it and no agent sent it, so both `operator` and `agent` would misstate where it
+        # came from — and a signal that reports something other than what it names is the exact
+        # defect this capability exists to remove.
         CheckConstraint(
-            "origin_type IN ('operator', 'agent', 'job')", name="ck_inbound_queue_origin_type"
+            "origin_type IN ('operator', 'agent', 'job', 'checkpoint')",
+            name="ck_inbound_queue_origin_type",
         ),
         CheckConstraint(
             "state IN ('queued', 'delivered', 'withdrawn')", name="ck_inbound_queue_state"
@@ -411,7 +451,8 @@ class InboundQueueEntry(Base):
         CheckConstraint(
             "(origin_type = 'operator' AND origin_agent IS NULL) OR "
             "(origin_type = 'agent' AND origin_agent IS NOT NULL) OR "
-            "(origin_type = 'job' AND origin_agent IS NULL)",
+            "(origin_type = 'job' AND origin_agent IS NULL) OR "
+            "(origin_type = 'checkpoint' AND origin_agent IS NULL)",
             name="ck_inbound_queue_origin_agent",
         ),
         Index(

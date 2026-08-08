@@ -18,6 +18,7 @@ from ...agent_lifecycle import archive as archive_agent_row
 from ...agent_lifecycle import unarchive as unarchive_agent_row
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
+from ...checkpoint_policy import CHECKPOINT_MODES, threshold_error
 from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
 from ...conversations import new_conversation
 from ...db.engine import get_session
@@ -1265,6 +1266,77 @@ MIN_WAITING_SECONDS = 10
 MAX_WAITING_SECONDS = 600
 WAITING_SETTING_FIELDS = ("permission_timeout_seconds", "question_timeout_seconds")
 
+CHECKPOINT_OVERRIDE_FIELDS = (
+    "checkpoint_mode",
+    "checkpoint_threshold_mode",
+    "checkpoint_threshold_value",
+    "checkpoint_notes_value",
+)
+
+
+def _apply_checkpoint_override(agent_row: Agent, body: Dict[str, Any]) -> None:
+    """Apply an agent's checkpoint override, as a whole threshold or not at all.
+
+    An override replaces mode and value **together**. Accepting one without the other lets an
+    agent inherit `percent` from its project and supply `150`, producing a threshold of 150% that
+    can never fire — and the agent would look configured while behaving as though it were not.
+    Clearing is symmetrical: both go back to NULL, and the project's threshold applies again.
+    """
+    touches_threshold = any(
+        field in body for field in ("checkpoint_threshold_mode", "checkpoint_threshold_value")
+    )
+    if touches_threshold:
+        mode = body.get("checkpoint_threshold_mode")
+        value = body.get("checkpoint_threshold_value")
+        if mode is None and value is None:
+            agent_row.checkpoint_threshold_mode = None
+            agent_row.checkpoint_threshold_value = None
+            agent_row.checkpoint_notes_value = None
+        else:
+            if mode is None or value is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "checkpoint_threshold_mode and checkpoint_threshold_value must be set "
+                        "together; half a threshold is not a partial setting"
+                    ),
+                )
+            error = threshold_error(mode, value)
+            if error:
+                raise HTTPException(status_code=400, detail=error)
+            agent_row.checkpoint_threshold_mode = mode
+            agent_row.checkpoint_threshold_value = value
+
+    if "checkpoint_notes_value" in body:
+        notes = body["checkpoint_notes_value"]
+        if notes is not None:
+            threshold = agent_row.checkpoint_threshold_value
+            if threshold is None:
+                raise HTTPException(
+                    status_code=400, detail="a notes point needs a threshold to sit below"
+                )
+            if not isinstance(notes, int) or isinstance(notes, bool) or notes >= threshold:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "the notes point must be a positive whole number below the checkpoint "
+                        "threshold, or notes are written from the context the checkpoint exists "
+                        "to escape"
+                    ),
+                )
+        agent_row.checkpoint_notes_value = notes
+
+    if "checkpoint_mode" in body:
+        mode = body["checkpoint_mode"]
+        # NULL is "inherit the project's", which is a real and common choice, so it is accepted
+        # rather than coerced to "off".
+        if mode is not None and mode not in CHECKPOINT_MODES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"checkpoint_mode must be null or one of {list(CHECKPOINT_MODES)}",
+            )
+        agent_row.checkpoint_mode = mode
+
 # Matches the column. Long enough for a line that says what the agent is for, short enough that it
 # stays a label rather than becoming a second charter written where nothing reads it.
 MAX_DESCRIPTION_CHARS = 256
@@ -1383,6 +1455,7 @@ async def patch_agent(
         "charter_id",
         "description",
         "default_permission_mode",
+        *CHECKPOINT_OVERRIDE_FIELDS,
         *WAITING_SETTING_FIELDS,
     }
     session_data = await _get_session_data(project_id, session)
@@ -1450,6 +1523,8 @@ async def patch_agent(
     if "default_permission_mode" in body:
         _apply_default_permission_mode(agent_row, body["default_permission_mode"])
 
+    _apply_checkpoint_override(agent_row, body)
+
     agent_row.updated = datetime.now(timezone.utc)
     await session.commit()
 
@@ -1467,6 +1542,7 @@ async def patch_agent(
         "permission_timeout_seconds": agent_row.permission_timeout_seconds,
         "question_timeout_seconds": agent_row.question_timeout_seconds,
         "default_permission_mode": agent_row.default_permission_mode,
+        **{field: getattr(agent_row, field) for field in CHECKPOINT_OVERRIDE_FIELDS},
     }
 
 
