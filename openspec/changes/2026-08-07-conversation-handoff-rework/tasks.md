@@ -1,24 +1,29 @@
-# Tasks — handoff rework
+# Tasks — conversation checkpoint (formerly handoff rework)
 
-> **Sections 2 and beyond are placeholders and MUST NOT be started.** They exist to record what
-> the exploration is expected to feed, not to be worked through. The real task list is written at
-> task 1.9, from what section 1 finds.
+> **Gate status (2026-08-08):** `2026-08-07-conversation-navigation` implemented ✅ · section 1
+> exploration complete ✅ (`openspec/explorations/2026-08-08-handoff-behaviour.md`) · `design.md`
+> written ✅ · `specs/` **not yet written** ⛔.
 >
-> Gate: `2026-08-07-conversation-navigation` implemented, **then** section 1 complete, **then**
-> `design.md` and `specs/` written, **then** implementation.
-
-## 0. Correct the stale references now — not gated
-
-These are live defects today. They do not depend on this change, on the navigation change, or on
-the exploration. Do them independently.
-
-> **Ordering correction (2026-08-08): 0.1 is NOT independent — run 1.1–1.3 first.**
-> Task 1.1 asks what the agent does when told to invoke a skill it does not have. Rewriting
-> `HANDOFF_PROMPT` destroys the condition 1.1 exists to observe. 1.1 and 1.2 have now been run and
-> are written up in `openspec/explorations/2026-08-08-handoff-behaviour.md`; 1.3 has not. Do not
-> touch 0.1/0.2 until it is.
+> **Implementation starts when `specs/` exists (task 1.10), and not before.**
 >
-> **What 1.1 already establishes about 0.1's shape:** the destination is not merely absent, it is
+> Sections 2–9 were rewritten from the exploration's findings at task 1.9. They replace the
+> placeholder sections that stood here, which recorded assumptions rather than evidence.
+>
+> **Order matters.** Sections 2 and 3 are prerequisites: section 2 makes cross-agent participation
+> computable, section 3 makes any threshold keyable. Both were discovered by this exploration and
+> both block work later in this change.
+
+## 0. Correct the stale references — unblocked, do with the rename
+
+These are live defects today. They were gated on the exploration (see below) and on `design.md`,
+both of which are now done. Fold them into section 9's rename rather than doing them twice.
+
+> **Ordering correction (2026-08-08): 0.1 was NOT independent — 1.1–1.3 came first, and have now
+> run.** Task 1.1 asks what the agent does when told to invoke a skill it does not have; rewriting
+> `HANDOFF_PROMPT` first would have destroyed the condition 1.1 exists to observe. Findings are in
+> `openspec/explorations/2026-08-08-handoff-behaviour.md`.
+>
+> **What 1.1 established about 0.1's shape:** the destination is not merely absent, it is
 > *unreachable*. `.agentweave/shared/checkpoints/` lies outside the agent's allowed working
 > directory (its worktree), so a Claude agent is sandbox-blocked from it and a Codex agent
 > silently creates a second, nested `.agentweave/shared/` inside its own worktree. Installing
@@ -37,6 +42,12 @@ the exploration. Do them independently.
 - [ ] 0.4 Decide and record whether `src/agentweave/templates/skills/aw-checkpoint.md` should be
       installed, rewritten, or deleted — it is currently packaged, referenced by a live prompt, and
       reachable by nothing
+      **Decided (design.md, "It is called a checkpoint"): deleted.** The capability moves into the
+      Hub, so there is nothing for the template to install.
+- [ ] 0.5 `hub/hub/api/v1/agents.py:1444` and `:1474` — the `compact_request` and
+      `new_session_request` inbox messages both instruct the agent to *"Run `/aw-checkpoint`"* and
+      to re-read a checkpoint afterwards. Same dead reference as 0.1/0.2; **found during the
+      exploration and missing from this section's original list**
 
 ## 1. Exploration — REQUIRED BEFORE ANY IMPLEMENTATION
 
@@ -129,39 +140,156 @@ Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
 
 **Then, and only then**
 
-- [ ] 1.9 Write `design.md` from 1.1–1.8. Replace sections 2+ of this file with a real task list
+- [x] 1.9 Write `design.md` from 1.1–1.8. Replace sections 2+ of this file with a real task list
+      **Done.** `design.md` records 13 decisions; sections 2–9 below replace the placeholders.
+      Note 1.8's recommendation was **overturned by the operator**: cross-agent reading is in v1, so
+      the routing fix is folded in as section 2 rather than raised as a separate proposal.
 - [ ] 1.10 Write `specs/` — at minimum the `agent-conversation-handoff` deltas, which are a rewrite
-      rather than an addition
-- [ ] 1.11 Confirm the verification rule is testable against whatever 1.5 decided: a handoff that
+      rather than an addition. Also needs a delta on `agent-conversation-workspace` defining the
+      **queue-routing contract**, a term that spec references but never defines
+- [x] 1.11 Confirm the verification rule is testable against whatever 1.5 decided: a handoff that
       produced no artifact must be reportable as failed, which the current run-ended check cannot do
+      **Confirmed, and strengthened.** Hub-side generation makes absence nearly impossible, so the
+      rule becomes: a checkpoint whose probe answers disagree with database ground truth is
+      **failed**. Deterministic on the dimension Factory.ai benchmarked worst. See design.md,
+      "A checkpoint that disagrees with the database is failed, not ready".
 
-## 2. PLACEHOLDER — Durable artifact
+## 2. PREREQUISITE — Deterministic peer delivery
 
-*Not to be started. Shape depends on 1.5 and 1.6.*
+Unblocks the cross-agent participation graph (section 7). Exactly one routing site: both the
+operator route and the agent route funnel into `create_message_for_actor`.
 
-- [ ] 2.1 Persist the handoff artifact as a Hub record attached to the successor conversation
-- [ ] 2.2 Verify it exists before reporting the handoff ready
+- [ ] 2.1 Add the binding column to `Conversation` (migration guarded for a missing table, as
+      `0033`/`0034` do) and bump the head assertions in `hub/tests/test_migrations.py` **and**
+      `hub/tests/test_project_persistence.py`
+- [ ] 2.2 Replace `latest_open_conversation(recipient)` at `messages.py:133` with find-or-create
+      keyed on `(sender_conversation_id, recipient_agent)`
+- [ ] 2.3 Key senderless traffic (Hub, scheduler — no source conversation) on the sender *identity*,
+      giving one stable thread per (system sender, recipient). **Recency routing must not survive
+      anywhere in the peer path**
+- [ ] 2.4 Archive handling: an explicitly-named archived `conversation_id` keeps today's
+      409-with-content-returned; a *binding* resolving to an operator-archived thread creates a
+      successor bound to the same sender conversation with `origin: peer`
+- [ ] 2.5 No backfill — bind lazily on next message. Historical traffic stays where it landed
+- [ ] 2.6 Tests: a sender's separate conversations reach separate recipient threads; a second
+      message on the same sender conversation reaches the *same* recipient thread; senderless
+      traffic is stable; the archive split behaves per 2.4
+- [ ] 2.7 Regression test reproducing the observed defect — three messages from one sender landing
+      in three unrelated recipient threads — asserted to now land in one
 
-## 3. PLACEHOLDER — Delivery to the successor
+## 3. PREREQUISITE — Context usage measurement
 
-*Not to be started. The queue mechanism is verified; nothing else here is.*
+Any threshold in section 8 keys on `percent`, which is **always null for Claude agents today**:
+329 samples, zero usable. Unimplementable until fixed.
 
-- [ ] 3.1 Deliver the artifact to the successor as an `InboundQueueEntry`, conversation-scoped
-- [ ] 3.2 Do not route it through `_render_hub_agent_context` — it is agent-scoped and writes one
-      file per agent, so it cannot carry a per-conversation payload
+- [ ] 3.1 Resolve `limit_tokens` from the model catalog rather than depending on two incomplete
+      events colliding, and compute `percent` server-side
+- [ ] 3.2 Fill in `context_window` for `claude-opus-5` and `claude-fable-5`
+      (`model_catalog.py:125,139`), both currently `None`
+- [ ] 3.3 Fix the read path at `agents.py:418-420`, which `setdefault`s the newest single row and so
+      returns whichever incomplete half arrived last
+- [ ] 3.4 Test with the real observed shapes: a `claude` sample with tokens and no limit, one with
+      limit and no tokens, and a complete `codex_appserver` sample
+- [ ] 3.5 Verify live against `:8010` that a Claude agent reports a percentage — the exploration's
+      standing rule is that a captured observation, not a passing test, closes a measurement task
 
-## 4. PLACEHOLDER — Lifecycle integration
+## 4. The Worker
 
-*Not to be started. Depends on `2026-08-07-conversation-navigation` shipping.*
+A Hub-side, out-of-band, single-purpose model invocation. Generalises
+`conversation_titles.py`'s proto-worker.
 
-- [ ] 4.1 Archive the predecessor on a successful handoff
-- [ ] 4.2 Create the successor with `origin: handoff` and a title derived from its predecessor's
-- [ ] 4.3 Make the lineage legible in the navigation tree
+- [ ] 4.1 Worker abstraction: operator-chosen `Runner` + model, Hub-owned versioned prompt,
+      deterministically assembled input, schema-validated output, durable record
+- [ ] 4.2 Reuse `Runner` records and validate the model against the catalog; do **not** use
+      `runner_commands.build_command`, which builds an agent turn (streaming JSON, MCP server,
+      permission posture, context file) — none of which applies
+- [ ] 4.3 Blocking spawn with timeout that never raises into its caller, following
+      `_run_titler:93`
+- [ ] 4.4 Record every invocation: prompt version, runner, model, tokens, duration, outcome
+- [ ] 4.5 Tests including a worker whose CLI fails, times out, and returns unparseable output
 
-## 5. PLACEHOLDER — Proactive offer
+## 5. The checkpoint record
 
-*Not to be started. Depends on 1.1–1.3 establishing what a handoff is worth offering.*
+- [ ] 5.1 `Checkpoint` model + migration: identity, `trigger`, `previous_checkpoint_id`,
+      `lineage_id`, `visibility`, envelope fields, body, probe verdict
+- [ ] 5.2 Compute the deterministic half — files changed from the conversation's auto-snapshot
+      diffs, tasks by `assignee`, open questions, permission decisions, runtime overrides
+- [ ] 5.3 Never ask the model for a computed field. Test that the envelope is populated even when
+      the Worker returns nothing
+- [ ] 5.4 State the task imprecision explicitly: `tasks` has no `conversation_id`, so the carried
+      list is the agent's whole list, identical across its concurrent conversations
+- [ ] 5.5 Anchored generation — checkpoint N+1 reads checkpoint N plus only the turns since, not the
+      whole transcript
 
-- [ ] 5.1 Offer a handoff when the agent crosses its context-usage threshold, in the card slot above
-      the composer
-- [ ] 5.2 Dismissible without suppressing it permanently
+## 6. Generation, agent notes, and self-validation
+
+- [ ] 6.1 `submit_checkpoint_notes` MCP tool — schema'd, capped near 1–2k tokens, asking **only**
+      for what is not in the transcript: intent in flight, unverified suspicions, warnings
+- [ ] 6.2 Notes are an *input*, never the artifact. Test that timeout, refusal, and garbage all
+      still produce a checkpoint
+- [ ] 6.3 Request notes at the **notes threshold**, below the cutover threshold, so they are not
+      written from an already-degraded context
+- [ ] 6.4 Probe the generated checkpoint against database ground truth — files changed, tasks
+      assigned, questions unanswered
+- [ ] 6.5 A checkpoint whose probes disagree with the database is **failed**. "Ready" means a
+      record exists and passed, never "the run stopped"
+- [ ] 6.6 Blind-resume acceptance test: a reader given only the checkpoint answers the probe
+      questions correctly
+- [ ] 6.7 Record `trigger` on every checkpoint. **One prompt for all triggers in v1 — provisional,
+      see design.md and `project_checkpoint_trigger_prompts_provisional`. Do not let this harden**
+
+## 7. Recall and permissions
+
+- [ ] 7.1 `recall(id)` MCP tool materialising exact archived content from `agent_outputs` by stable
+      id, scoped to the predecessor conversation in v1
+- [ ] 7.2 Checkpoint carries citations — ids with short previews
+- [ ] 7.3 Two independent grants on the `Agent` record: `read_checkpoint` and `recall`. Closed by
+      default. Summary access is **not** transcript access
+- [ ] 7.4 Enforce at the tool layer against the run's minted credential; identity is never taken
+      from a request body or header
+- [ ] 7.5 `visibility` on the checkpoint (`private` / `project` / `granted`); effective access is
+      agent capability ∩ checkpoint visibility
+- [ ] 7.6 Participation query — `Task.created_by_run_id → Run → (agent, conversation)`. Derived, not
+      stored; no new bookkeeping
+- [ ] 7.7 Test the tester scenario end to end: an agent granted checkpoint reads over three peers
+      can read their checkpoints and is **refused** `recall`
+- [ ] 7.8 Grants must not live on the charter — add a test asserting charter text cannot widen
+      access
+
+## 8. Lifecycle, configuration, and visibility
+
+- [ ] 8.1 Deliver the checkpoint to the successor as an `InboundQueueEntry`, conversation-scoped.
+      **Not** through `_render_hub_agent_context`, which is agent-scoped and writes one file per
+      agent, so it cannot carry a per-conversation payload
+- [ ] 8.2 Archive the predecessor on a successful checkpoint, through `archivable()` — which
+      already refuses when an undelivered queue entry would be stranded
+- [ ] 8.3 Create the successor with `origin: handoff` and a title derived from its predecessor's;
+      make lineage legible in the navigation tree
+- [ ] 8.4 Configuration: automatic checkpointing off / offered / automatic, cutover threshold, notes
+      threshold, Worker runner + model
+- [ ] 8.5 Threshold is `threshold_mode` (`percent` | `tokens`) + `threshold_value`, **not** two
+      nullable columns. Token values entered in thousands (`150` = 150 000)
+- [ ] 8.6 Resolution is agent ?? project ?? built-in default, and an override replaces the **whole
+      threshold** — mode and value together, never field-by-field
+- [ ] 8.7 Where the context window is known, show both readings ("150k — 75% of Haiku 4.5's 200k")
+      and refuse a token threshold at or above the window, which would never fire
+- [ ] 8.8 Token mode must work where `limit_tokens` is unknown — it needs only `context_tokens`
+- [ ] 8.9 Minimal visibility: the checkpoint renders in the conversation timeline and is readable
+      over the API. **In scope** — an invisible checkpoint rebuilds the defect this change removes
+- [ ] 8.10 The proactive offer becomes *"I made one, here it is, cut over?"* rather than *"shall I
+      ask the agent?"* — generation no longer depends on the agent
+
+## 9. Rename, and the stale references
+
+- [ ] 9.1 **Checkpoint** is the Hub record; handoff is at most a button that produces one. Rename
+      through the UI, API, and specs
+- [ ] 9.2 Rewrite `HANDOFF_PROMPT` and `RESUME_HANDOFF_PREFIX` (`AgentOutputPanel.tsx:48-60`), or
+      remove them if Hub-side generation makes them unnecessary. Section 0.1/0.2
+- [ ] 9.3 Fix `agents.py:1444` and `:1474`. Section 0.5
+- [ ] 9.4 Fix `diagnostics.py:477`'s dead `agentweave sync-context` hint. Section 0.3
+- [ ] 9.5 Delete `src/agentweave/templates/skills/aw-checkpoint.md`. Section 0.4
+- [ ] 9.6 Update `hub/ui/src/__tests__/agentHandoff.test.tsx`, which asserts the prompt contains
+      `'aw-checkpoint skill'`
+- [ ] 9.7 Full sweep before committing: `pytest hub/tests/`, `npx vitest run`, `npx tsc --noEmit`,
+      `npx openspec validate --changes --strict`, `npm run build` + copy to `hub/hub/static/ui`
+      confirmed with `diff -rq`
