@@ -502,3 +502,76 @@ async def test_a_turn_recorded_in_the_same_instant_as_the_checkpoint_is_not_lost
         )
 
     assert "BOUNDARY TURN" in captured[1]
+
+
+# --------------------------------------------------------------------------- blind resume
+
+
+@pytest.mark.asyncio
+async def test_a_reader_given_only_the_checkpoint_can_answer_the_probe(app, monkeypatch):
+    """Task 6.6, the acceptance test the control-plane literature calls a blind resume.
+
+    The reader sees the rendered checkpoint and nothing else — no transcript, no database, no
+    predecessor conversation. It must be able to answer the questions the Hub can already settle,
+    because if it cannot, the artifact does not carry what a successor needs and "ready" would be
+    a claim about a document nobody can use.
+    """
+    seen_by_probe = {}
+
+    def fake_run(cmd, **kwargs):
+        prompt = cmd[-1]
+        if "You have not seen the conversation" in prompt:
+            seen_by_probe["prompt"] = prompt
+            # Answer strictly from what the prompt contains — which is the whole point.
+            files = [line[2:] for line in prompt.splitlines() if line.startswith("- hub/")]
+            tasks = [
+                line.split(" — ")[0][2:]
+                for line in prompt.splitlines()
+                if line.startswith("- t") and " — " in line
+            ]
+            questions = [
+                line.split(" — ")[0][2:]
+                for line in prompt.splitlines()
+                if line.startswith("- q") and " — " in line
+            ]
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=_claude_stdout(
+                    {
+                        "files_changed": files,
+                        "task_ids": tasks,
+                        "unanswered_question_ids": questions,
+                    }
+                ),
+                stderr="",
+            )
+        return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
+
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        db.add(Task(id="t1", project_id=PROJECT, title="Finish the worker", assignee=AGENT))
+        db.add(
+            Question(
+                id="q1",
+                project_id=PROJECT,
+                from_agent=AGENT,
+                question="Which database?",
+                answered=False,
+                conversation_id="conv-1",
+            )
+        )
+        await db.commit()
+
+        monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        checkpoint = await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude"
+        )
+
+    assert checkpoint.status == "ready"
+    assert checkpoint.probe_status == "passed"
+    # The reader was genuinely blind: its prompt carried the checkpoint and no transcript.
+    assert "I added the column" not in seen_by_probe["prompt"]
+    # And the artifact carried an executable first step, which is what a successor starts from.
+    assert "Run pytest hub/tests/." in checkpoint.body

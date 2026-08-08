@@ -512,9 +512,14 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
       **`files_changed` was `[]` on both, correctly** — every run on that conversation predates
       `Run.snapshot_commit_sha`, and `0043` deliberately does not backfill. Recording no files is
       the designed behaviour for historical turns, not a gap in the computation
-- [ ] 6.6 Blind-resume acceptance test: a reader given only the checkpoint answers the probe
+- [x] 6.6 Blind-resume acceptance test: a reader given only the checkpoint answers the probe
       questions correctly
-- [ ] 6.7 Record `trigger` on every checkpoint. **One prompt for all triggers in v1 — provisional,
+
+      `test_a_reader_given_only_the_checkpoint_can_answer_the_probe`, which asserts the reader's
+      prompt carried the checkpoint and **no transcript** — a blind resume that could see the
+      conversation would prove nothing. Also observed live: a real model reading only the
+      rendered artifact recovered `task-probe-check` and `q-probe-check`
+- [x] 6.7 Record `trigger` on every checkpoint. **One prompt for all triggers in v1 — provisional,
       see design.md and `project_checkpoint_trigger_prompts_provisional`. Do not let this harden**
 
 ## 7. Recall and permissions
