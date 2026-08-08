@@ -116,6 +116,22 @@ function ProviderPicker({
   )
 }
 
+/**
+ * Creating an agent.
+ *
+ * **Before adding a field here, apply the rule:** a setting is offered at creation only if the
+ * agent's *first turn* would be materially different without it. Everything else belongs on the
+ * agent's configuration page, where it can be changed before it ever matters.
+ *
+ * The four that qualify: **name** (how it is addressed, by you and by peers), **provider** and
+ * **model** (what actually runs), and **charter** (the behaviour contract injected into that first
+ * turn's context). Charter is offered but never required — `operator-agent-creation` defines a
+ * no-charter contract, and tightening that here would break it.
+ *
+ * Thresholds, timeouts and access grants deliberately do **not** qualify. They all have workable
+ * defaults, and lengthening creation is friction at exactly the wrong moment: the operator is
+ * trying to get an agent, not to configure one.
+ */
 export function AgentCreateDialog({
   open,
   onClose,

@@ -174,17 +174,25 @@ one, plus the archival that makes its absence workable.
 
 ## 5. Creation-time boundary
 
-- [ ] 5.1 State the rule in the creation surface's own terms: a setting is **offered** at creation
+- [x] 5.1 State the rule in the creation surface's own terms: a setting is **offered** at creation
       if the agent's **first turn** would be materially different without it. The rule governs what
-      is offered, not what is required
-- [ ] 5.2 Confirm the current four — name, provider, model, charter — satisfy it. **Charter stays
+      is offered, not what is required — stated on `AgentCreateDialog` itself, where the next
+      person adding a field will read it before adding one
+- [x] 5.2 Confirm the current four — name, provider, model, charter — satisfy it. **Charter stays
       optional**: `operator-agent-creation` states it "MAY be selected but MUST NOT be required" and
-      defines a no-charter contract. Do not tighten that
-- [ ] 5.3 Do **not** add thresholds, timeouts, or access grants to creation. They have workable
+      defines a no-charter contract. Do not tighten that. Confirmed, and pinned by a test: with no
+      charter chosen, `charter_id` is **omitted** rather than sent as null — no charter is the
+      absence of a binding, not a binding to nothing
+- [x] 5.3 Do **not** add thresholds, timeouts, or access grants to creation. They have workable
       defaults and can be changed before they matter; lengthening creation is friction at exactly
-      the wrong moment
-- [ ] 5.4 A newly created agent opens somewhere sensible — decide whether that is its settings page
-      or its first conversation
+      the wrong moment — enforced by a test asserting the dialog offers no timeout, threshold,
+      permission, access, checkpoint or worktree control, so this is a failing build rather than a
+      review comment
+- [x] 5.4 A newly created agent opens somewhere sensible — decide whether that is its settings page
+      or its first conversation. **Its conversation**, which is what `App.tsx:379` already does.
+      Everything the first turn needs was asked at creation, so opening settings would be showing
+      the operator a page they have no reason to read yet; they created an agent in order to work
+      with it
 
 ## 6. Verification
 
@@ -205,6 +213,12 @@ one, plus the archival that makes its absence workable.
 - [x] 6.5 Light and dark mode both checked by eye, not by token audit. Dark: active section carries
       a 2px `rgb(124,140,255)` left accent with `#f5f5f6` text on `#0a0a0b`; idle rows are muted
       with a transparent border — the same treatment the environment section list gets
-- [ ] 6.6 Full sweep: `pytest hub/tests/`, `npx vitest run`, `npx tsc --noEmit`,
+- [x] 6.6 Full sweep: `pytest hub/tests/`, `npx vitest run`, `npx tsc --noEmit`,
       `npx openspec validate --changes --strict`, `npm run build` copied to `hub/hub/static/ui`
       confirmed with `diff -rq`
+
+      **`npm run lint` is not in this list because it does not work** — ESLint 9 requires a flat
+      `eslint.config.js` and this repo has none, so the command documented in `CLAUDE.md` fails
+      before linting anything. Pre-existing and unrelated to this change; `tsc` is doing the
+      real checking. `ruff check hub/hub/` also reports 3 pre-existing errors in `jobs.py` and
+      `codex_appserver.py`, neither touched here

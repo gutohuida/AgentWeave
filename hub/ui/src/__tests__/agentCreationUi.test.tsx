@@ -75,6 +75,40 @@ describe('operator agent creation dialog', () => {
     expect(onCreated).toHaveBeenCalledWith('codex-gamma')
   })
 
+  it('offers only the settings the first turn depends on', () => {
+    // The creation-time boundary, as a test rather than a comment: a setting belongs here only
+    // if the agent's *first turn* would be materially different without it. Thresholds, timeouts
+    // and access grants all have workable defaults and can be changed before they matter, so
+    // putting them here is friction at exactly the wrong moment.
+    render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+
+    expect(screen.getByLabelText('Agent name')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Provider' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Charter')).toBeInTheDocument()
+
+    for (const absent of [/timeout/i, /threshold/i, /permission/i, /access/i, /checkpoint/i, /worktree/i]) {
+      expect(screen.queryByLabelText(absent)).not.toBeInTheDocument()
+    }
+  })
+
+  it('never requires a charter', () => {
+    // `operator-agent-creation` states a charter "MAY be selected but MUST NOT be required" and
+    // defines a no-charter contract. The configuration page must not tighten that.
+    render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    fireEvent.click(screen.getByRole('option', { name: /Codex CLI/ }))
+    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'no-charter' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+
+    // The key is omitted rather than sent as null — "no charter" is the absence of a binding,
+    // not a binding to nothing.
+    expect(mutate).toHaveBeenCalledWith(
+      { name: 'no-charter', provider: 'codex', model: 'gpt-5.6-sol' },
+      expect.anything(),
+    )
+    expect(mutate.mock.calls[0][0]).not.toHaveProperty('charter_id')
+  })
+
   it('selects the catalog default model when the provider changes', () => {
     render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
