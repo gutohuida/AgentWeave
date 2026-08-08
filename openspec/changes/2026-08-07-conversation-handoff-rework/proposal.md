@@ -1,25 +1,27 @@
-# Handoff rework — skeleton, gated on exploration
+# Conversation checkpoint — gates cleared, ready to implement
 
-> **STATUS: SKELETON. DO NOT IMPLEMENT.**
+> **STATUS (2026-08-08): both gates cleared. Implementation may start.**
 >
-> This change has a proposal and an exploration task list. It deliberately has **no `design.md`
-> and no `specs/`**, because the design is not known yet and writing it now would encode
-> assumptions instead of findings.
+> 1. `2026-08-07-conversation-navigation` implemented ✅
+> 2. Section 1 exploration complete ✅
+>    (`openspec/explorations/2026-08-08-handoff-behaviour.md`), `design.md` written ✅,
+>    `specs/` written ✅ — `openspec validate --changes --strict` now passes.
 >
-> **Two gates, both hard:**
+> The gate did its job. The exploration overturned two things this document assumed, and both are
+> corrected below rather than quietly left standing:
 >
-> 1. `2026-08-07-conversation-navigation` must be implemented first. This change consumes
->    `archive`, `origin` and `title`, none of which exist yet. Designing against them before they
->    are built means designing against a guess.
-> 2. Section 1 of `tasks.md` — the exploration — must be completed, and `design.md` and `specs/`
->    written from what it finds, **before any task in section 2 or later is started**.
+> - **Handoff is the wrong name.** The record is a **checkpoint**, which is the vocabulary the
+>   product already used before the terminal skill's name was borrowed.
+> - **The agent should not write it.** This document assumed the artifact moves to a Hub record but
+>   is still produced by the agent. The exploration found the agent's competence was borrowed from
+>   the operator's personal skills, and that the Hub already holds everything needed to produce the
+>   artifact itself. Generation is Hub-side.
 >
-> Do not mark any task complete on the strength of this document existing.
+> Two prerequisites were discovered by the exploration and folded into this change, because both
+> block it and splitting them would produce changes that must land in a fixed order anyway:
+> deterministic peer delivery (section 2) and context-usage measurement (section 3).
 >
-> **`openspec validate --changes` fails on this change, and that failure is the gate working.**
-> It reports *"Change must have at least one delta"* because `specs/` is deliberately absent. Do
-> **not** silence it by writing placeholder requirements — that would encode the assumptions this
-> change exists to avoid. The failure clears when task 1.10 writes the real specs, and not before.
+> Still binding: **do not mark any task complete on the strength of a plan existing.**
 
 ## Why
 
@@ -84,23 +86,35 @@ Every bullet is subject to being overturned by section 1 of `tasks.md`.
 
 ## Capabilities
 
-**Not yet determined.** Filling this in is an output of the exploration, not an input to it.
+Four deltas, written at task 1.10:
 
-The likely shape is a rewrite of `agent-conversation-handoff` — its three substantive requirements
-(*Handoff checkpoints the selected conversation*, *The next conversation resumes the durable
-handoff*, *Conversation transition state is visible and scoped to the agent*) all describe the file
-mechanism and would become MODIFIED — plus a delta on `agent-conversation-workspace` if the
-proactive offer needs one. Do not treat that as decided.
+- **`conversation-checkpoint`** — ADDED. The new capability: the record, the worker that generates
+  it, the computed/written split, anchoring, agent notes, verification against the Hub's own
+  records, citations and recall, the two permission grants, lineage versus derived participation,
+  threshold configuration, and visibility.
+- **`agent-conversation-handoff`** — MODIFIED. Its three substantive requirements all specified the
+  file mechanism and are rewritten: the Hub produces the checkpoint, delivers it into the successor
+  as conversation-scoped queued input, and readiness follows the verified checkpoint rather than the
+  run ending.
+- **`agent-conversation-workspace`** — ADDED. Defines the **queue-routing contract**, a term this
+  capability already referenced and which was defined nowhere.
+- **`agent-context-usage`** — ADDED. A measured sample must identify its model, window metadata must
+  persist across samples that omit it, and a catalog model with no declared window degrades to
+  unknown rather than borrowing another model's.
 
 ## Impact
 
-**Not yet determined**, beyond two things already established:
-
-- `agent-conversation-handoff` is affected in full; it currently specifies a mechanism that does not
-  work.
-- The stale prompt constants in `AgentOutputPanel.tsx:37-49` and the stale `sync-context` hint in
-  `diagnostics.py:477` are **live defects today**, independent of this change and of the navigation
-  change. They should be corrected without waiting for either — see `tasks.md` section 0.
+- `agent-conversation-handoff` is affected in full; it specified a mechanism that cannot work.
+- **Peer delivery changes for every message.** Delivery binds to the sending conversation instead of
+  the recipient's most recently touched thread. There is exactly one routing site — both the
+  operator and agent routes funnel into `create_message_for_actor` — but the behaviour change is
+  visible in the conversation tree.
+- **Context usage begins reporting for Claude agents**, which it never has: 329 samples, zero usable
+  percentages, because the samples carrying token counts carry no model id.
+- The stale references are live defects today and are corrected with the rename in section 9:
+  `AgentOutputPanel.tsx:48-60`, `agents.py:1444` and `:1474` (found during the exploration and
+  missing from the original list), and `diagnostics.py:477`'s dead `agentweave sync-context` hint.
+- `src/agentweave/templates/skills/aw-checkpoint.md` is deleted; the capability moves into the Hub.
 
 ## Prior exploration
 

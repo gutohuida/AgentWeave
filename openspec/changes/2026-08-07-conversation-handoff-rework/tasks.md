@@ -144,9 +144,16 @@ Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
       **Done.** `design.md` records 13 decisions; sections 2–9 below replace the placeholders.
       Note 1.8's recommendation was **overturned by the operator**: cross-agent reading is in v1, so
       the routing fix is folded in as section 2 rather than raised as a separate proposal.
-- [ ] 1.10 Write `specs/` — at minimum the `agent-conversation-handoff` deltas, which are a rewrite
+- [x] 1.10 Write `specs/` — at minimum the `agent-conversation-handoff` deltas, which are a rewrite
       rather than an addition. Also needs a delta on `agent-conversation-workspace` defining the
       **queue-routing contract**, a term that spec references but never defines
+      **Done — four deltas**, and `openspec validate --changes --strict` now passes:
+      `conversation-checkpoint` (ADDED, the new capability), `agent-conversation-handoff`
+      (MODIFIED ×3), `agent-conversation-workspace` (ADDED, the queue-routing contract),
+      `agent-context-usage` (ADDED). The context delta turned out smaller than expected: the
+      existing resolution order is already correct — provider, then catalog, then unknown — and the
+      real gap is that nothing required a sample to identify its model, so the catalog step was
+      unreachable for every Claude sample that carried tokens.
 - [x] 1.11 Confirm the verification rule is testable against whatever 1.5 decided: a handoff that
       produced no artifact must be reportable as failed, which the current run-ended check cannot do
       **Confirmed, and strengthened.** Hub-side generation makes absence nearly impossible, so the
