@@ -292,6 +292,22 @@ class Conversation(Base):
     # override" — the conversation inherits its agent's runner and the catalog's control
     # defaults (2026-08-04-hub-model-control-and-provisioning design.md).
     runtime_overrides: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # What a peer message binds to when it arrives here. Exactly one is set on a peer-bound
+    # conversation, and both are NULL on every other conversation.
+    #
+    # A peer send that names no conversation used to land on whatever thread the recipient
+    # touched most recently, which scattered one exchange across unrelated threads. Delivery is
+    # keyed instead on the *sender's* conversation, so a sender's separate lines of work reach
+    # separate recipient threads and a second message on the same line reaches the same one.
+    #
+    # `bound_sender_agent` is the senderless case — the Hub and the scheduler have no source
+    # conversation, so their traffic keys on identity and gets one stable thread per sender.
+    # Without it that traffic would have to fall back to recency, which is the behaviour being
+    # removed.
+    bound_sender_conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    bound_sender_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

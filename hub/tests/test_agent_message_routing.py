@@ -20,7 +20,14 @@ from hub.db.models import Conversation, InboundQueueEntry, Message, Run
 CONTENT = "Please pick this thread back up."
 
 
-async def _active_run(run_id: str, agent: str) -> dict[str, str]:
+async def _active_run(
+    run_id: str, agent: str, conversation_id: str | None = None
+) -> dict[str, str]:
+    """A running turn the sender can act from.
+
+    `conversation_id` is what the send binds on: a real turn always has one, and leaving it None
+    models the senderless case (the Hub, the scheduler) that keys on identity instead.
+    """
     token = f"aw_run_{run_id}-secret"
     async with async_session_factory() as session:
         session.add(
@@ -30,6 +37,7 @@ async def _active_run(run_id: str, agent: str) -> dict[str, str]:
                 agent=agent,
                 status="running",
                 turn_depth=0,
+                conversation_id=conversation_id,
                 capability_token_hash=hash_run_token(token),
             )
         )
@@ -97,11 +105,19 @@ async def test_a_send_with_no_conversation_id_is_accepted(app, auth_headers) -> 
 
 
 @pytest.mark.asyncio
-async def test_no_conversation_id_lands_in_the_recipients_newest_open_one(app, auth_headers) -> None:
+async def test_no_conversation_id_does_not_land_on_whatever_was_touched_last(
+    app, auth_headers
+) -> None:
+    """Delivery is bound to the sender's conversation, not to the recipient's recency.
+
+    This asserted the opposite until 2026-08-08: a send with no id went to the recipient's newest
+    open thread. That is what scattered one exchange across three unrelated threads — the
+    recipient's ordering has nothing to do with which line of work a message belongs to.
+    """
     await _sync_agents(app, auth_headers, "codex-2")
     await _open_conversation("codex-2", "conv-older")
     await _open_conversation("codex-2", "conv-newest")
-    headers = await _active_run("run-route-2", "codex-1")
+    headers = await _active_run("run-route-2", "codex-1", conversation_id="conv-sender-a")
 
     response = await app.post(
         "/api/v1/agent-actions/messages",
@@ -109,7 +125,142 @@ async def test_no_conversation_id_lands_in_the_recipients_newest_open_one(app, a
         json={"recipient": "codex-2", "content": CONTENT, "conversation_id": None},
     )
     assert response.status_code == 201, response.text
-    assert await _conversation_of(response.json()["id"]) == "conv-newest"
+    landed = await _conversation_of(response.json()["id"])
+    assert landed not in {"conv-older", "conv-newest"}
+    async with async_session_factory() as session:
+        conversation = await session.get(Conversation, landed)
+        assert conversation.bound_sender_conversation_id == "conv-sender-a"
+        assert conversation.origin == "peer"
+
+
+@pytest.mark.asyncio
+async def test_one_senders_separate_conversations_reach_separate_threads(app, auth_headers) -> None:
+    """The conversation-level precision the participation graph needs: two lines of work from the
+    same sender are two exchanges, and collapsing them into one recipient thread loses that."""
+    await _sync_agents(app, auth_headers, "codex-2")
+    first = await _active_run("run-split-1", "codex-1", conversation_id="conv-work-a")
+    second = await _active_run("run-split-2", "codex-1", conversation_id="conv-work-b")
+
+    a = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=first,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    b = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=second,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    assert a.status_code == 201 and b.status_code == 201
+    assert await _conversation_of(a.json()["id"]) != await _conversation_of(b.json()["id"])
+
+
+@pytest.mark.asyncio
+async def test_three_messages_on_one_line_of_work_land_in_one_thread(app, auth_headers) -> None:
+    """The observed defect, reproduced: three `codex-1 → haiku-1` messages — one exchange by any
+    human reading — were delivered into three unrelated `haiku-1` threads."""
+    await _sync_agents(app, auth_headers, "haiku-1")
+    # Threads the recipient touches between sends, which is what recency routing followed.
+    await _open_conversation("haiku-1", "conv-noise-1")
+
+    landed = []
+    for index in range(3):
+        headers = await _active_run(f"run-three-{index}", "codex-1", conversation_id="conv-one")
+        response = await app.post(
+            "/api/v1/agent-actions/messages",
+            headers=headers,
+            json={"recipient": "haiku-1", "content": CONTENT},
+        )
+        assert response.status_code == 201, response.text
+        landed.append(await _conversation_of(response.json()["id"]))
+        await _open_conversation("haiku-1", f"conv-noise-newer-{index}")
+
+    assert len(set(landed)) == 1, landed
+    assert "conv-noise-1" not in landed
+
+
+@pytest.mark.asyncio
+async def test_senderless_traffic_gets_one_stable_thread_per_sender(app, auth_headers) -> None:
+    """The Hub and the scheduler have no source conversation. Keying on identity is what keeps
+    recency routing from surviving in that corner."""
+    await _sync_agents(app, auth_headers, "codex-2")
+    first = await _active_run("run-sysless-1", "codex-1")
+    second = await _active_run("run-sysless-2", "codex-1")
+
+    a = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=first,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    await _open_conversation("codex-2", "conv-touched-since")
+    b = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=second,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    assert a.status_code == 201 and b.status_code == 201
+    landed = await _conversation_of(a.json()["id"])
+    assert landed == await _conversation_of(b.json()["id"])
+    assert landed != "conv-touched-since"
+    async with async_session_factory() as session:
+        conversation = await session.get(Conversation, landed)
+        assert conversation.bound_sender_agent == "codex-1"
+        assert conversation.bound_sender_conversation_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_binding_the_operator_archived_gets_a_successor_not_a_refusal(
+    app, auth_headers
+) -> None:
+    """The archive split. A sender that *named* an archived conversation is refused, because it
+    chose one. A binding the operator archived is not the sender's doing, so it gets a successor
+    bound to the same sender rather than an error about a decision it did not make."""
+    await _sync_agents(app, auth_headers, "codex-2")
+    headers = await _active_run("run-arch-1", "codex-1", conversation_id="conv-bound")
+    first = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    assert first.status_code == 201
+    original = await _conversation_of(first.json()["id"])
+
+    async with async_session_factory() as session:
+        conversation = await session.get(Conversation, original)
+        conversation.lifecycle = "archived"
+        await session.commit()
+
+    headers = await _active_run("run-arch-2", "codex-1", conversation_id="conv-bound")
+    second = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    assert second.status_code == 201, second.text
+    successor = await _conversation_of(second.json()["id"])
+    assert successor != original
+    async with async_session_factory() as session:
+        conversation = await session.get(Conversation, successor)
+        assert conversation.bound_sender_conversation_id == "conv-bound"
+        assert conversation.origin == "peer"
+        assert conversation.lifecycle == "open"
+
+
+@pytest.mark.asyncio
+async def test_historical_conversations_are_never_resolved_by_a_binding(app, auth_headers) -> None:
+    """No backfill: existing threads carry no binding, so nothing claims them. Backfilling would
+    have meant guessing which of three conversations an `ack` really belonged to."""
+    await _sync_agents(app, auth_headers, "codex-2")
+    await _open_conversation("codex-2", "conv-historical")
+    headers = await _active_run("run-hist-1", "codex-1", conversation_id="conv-historical")
+
+    response = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={"recipient": "codex-2", "content": CONTENT},
+    )
+    assert response.status_code == 201
+    assert await _conversation_of(response.json()["id"]) != "conv-historical"
 
 
 @pytest.mark.asyncio

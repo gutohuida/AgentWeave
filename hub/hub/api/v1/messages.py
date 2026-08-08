@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
 from ...auth import get_project
-from ...conversations import latest_open_conversation, name_conversation, new_conversation
+from ...conversations import name_conversation, new_conversation, peer_bound_conversation
 from ...db.engine import get_session
 from ...db.models import Agent, Conversation, Message, Run
 from ...inbound_queue import new_entry, project_limits
@@ -160,13 +160,28 @@ async def create_message_for_actor(
                 ),
             )
     else:
-        recipient_conversation = await latest_open_conversation(
-            session, project_id=project_id, agent=body.recipient
+        # The normal path — a sender does not know the recipient's thread ids, so omitting the
+        # id is what agents actually do. It used to resolve to whatever thread the recipient
+        # touched most recently: three `codex-1 → haiku-1` messages, one exchange by any human
+        # reading, landed in three unrelated `haiku-1` threads. Delivery is bound instead, so the
+        # same line of work reaches the same thread every time.
+        recipient_conversation = await peer_bound_conversation(
+            session,
+            project_id=project_id,
+            recipient=body.recipient,
+            sender_conversation_id=source_conversation_id,
+            sender=sender,
         )
         if recipient_conversation is None:
+            # Also the archive case, and deliberately not a refusal. A sender that *named* an
+            # archived conversation is refused above, because it chose one; a binding whose
+            # thread the operator archived is not the sender's doing, so it gets a successor
+            # bound to the same sender rather than an error about a decision it did not make.
             recipient_conversation = new_conversation(
                 project_id=project_id, agent=body.recipient, origin="peer"
             )
+            recipient_conversation.bound_sender_conversation_id = source_conversation_id
+            recipient_conversation.bound_sender_agent = None if source_conversation_id else sender
             session.add(recipient_conversation)
 
     entry = new_entry(

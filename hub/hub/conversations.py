@@ -105,6 +105,45 @@ async def latest_open_conversation(
     return result.scalar_one_or_none()
 
 
+async def peer_bound_conversation(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    recipient: str,
+    sender_conversation_id: Optional[str],
+    sender: str,
+) -> Optional[Conversation]:
+    """The open conversation a peer message from this sender is bound to, if one exists.
+
+    Keyed on the *sender's* conversation, so a sender's separate lines of work reach separate
+    recipient threads and a second message on the same line reaches the same one. The Hub and the
+    scheduler have no source conversation, so their traffic keys on the sender's identity instead
+    — one stable thread per system sender, rather than falling back to recency.
+
+    Filters on `open` and takes the newest: a binding whose thread the operator archived resolves
+    to the successor bound to the same sender, not to the archived one.
+    """
+    conditions = [
+        Conversation.project_id == project_id,
+        Conversation.agent == recipient,
+        Conversation.lifecycle == "open",
+    ]
+    if sender_conversation_id:
+        conditions.append(Conversation.bound_sender_conversation_id == sender_conversation_id)
+    else:
+        # Both halves matter: without the NULL check a senderless message could resolve onto a
+        # thread bound to one of that sender's conversations, which is a different binding.
+        conditions.append(Conversation.bound_sender_agent == sender)
+        conditions.append(Conversation.bound_sender_conversation_id.is_(None))
+    result = await db.execute(
+        select(Conversation)
+        .where(*conditions)
+        .order_by(Conversation.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def conversation_for_provider_session(
     db: AsyncSession,
     *,

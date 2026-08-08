@@ -166,23 +166,47 @@ Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
 Unblocks the cross-agent participation graph (section 7). Exactly one routing site: both the
 operator route and the agent route funnel into `create_message_for_actor`.
 
-- [ ] 2.1 Add the binding column to `Conversation` (migration guarded for a missing table, as
+- [x] 2.1 Add the binding column to `Conversation` (migration guarded for a missing table, as
       `0033`/`0034` do) and bump the head assertions in `hub/tests/test_migrations.py` **and**
       `hub/tests/test_project_persistence.py`
-- [ ] 2.2 Replace `latest_open_conversation(recipient)` at `messages.py:133` with find-or-create
-      keyed on `(sender_conversation_id, recipient_agent)`
-- [ ] 2.3 Key senderless traffic (Hub, scheduler — no source conversation) on the sender *identity*,
+
+      **Two columns, not one.** `bound_sender_conversation_id` (indexed — every peer send looks it
+      up) and `bound_sender_agent`. A single key column would put a conversation id and an agent
+      name in one namespace, and the two answer different questions; keeping them apart means the
+      senderless lookup can require the conversation column to be NULL rather than hoping the two
+      never collide. Migration `0041`
+- [x] 2.2 Replace `latest_open_conversation(recipient)` at `messages.py` with find-or-create keyed
+      on `(sender_conversation_id, recipient_agent)` — `conversations.peer_bound_conversation`,
+      called from the one site both the operator and agent routes funnel through
+- [x] 2.3 Key senderless traffic (Hub, scheduler — no source conversation) on the sender *identity*,
       giving one stable thread per (system sender, recipient). **Recency routing must not survive
-      anywhere in the peer path**
-- [ ] 2.4 Archive handling: an explicitly-named archived `conversation_id` keeps today's
+      anywhere in the peer path** — it does not; `latest_open_conversation` is gone from
+      `messages.py` entirely. It remains in `questions.py`, `unasked_questions.py` and
+      `output_recording.py`, which attach a question or an output to the agent's *current* thread.
+      That is not the peer path and not a routing decision between correspondents
+- [x] 2.4 Archive handling: an explicitly-named archived `conversation_id` keeps today's
       409-with-content-returned; a *binding* resolving to an operator-archived thread creates a
-      successor bound to the same sender conversation with `origin: peer`
-- [ ] 2.5 No backfill — bind lazily on next message. Historical traffic stays where it landed
-- [ ] 2.6 Tests: a sender's separate conversations reach separate recipient threads; a second
+      successor bound to the same sender conversation with `origin: peer`.
+
+      Falls out of the lookup filtering on `open`: an archived bound thread simply is not found,
+      and the not-found branch creates the successor carrying the same binding. The split is real
+      and tested — the refusal is for a sender that *chose* the conversation, and a binding the
+      operator archived is not the sender's choice to be punished for
+- [x] 2.5 No backfill — bind lazily on next message. Historical traffic stays where it landed.
+      Pinned by a test: a pre-existing conversation carries no binding, so nothing resolves onto
+      it, even when its id happens to match the sender's
+- [x] 2.6 Tests: a sender's separate conversations reach separate recipient threads; a second
       message on the same sender conversation reaches the *same* recipient thread; senderless
-      traffic is stable; the archive split behaves per 2.4
-- [ ] 2.7 Regression test reproducing the observed defect — three messages from one sender landing
-      in three unrelated recipient threads — asserted to now land in one
+      traffic is stable; the archive split behaves per 2.4 — all in
+      `hub/tests/test_agent_message_routing.py`.
+
+      **One existing test asserted the behaviour being removed** —
+      `test_no_conversation_id_lands_in_the_recipients_newest_open_one`. Rewritten rather than
+      deleted, so the file records that the rule inverted and why
+- [x] 2.7 Regression test reproducing the observed defect — three messages from one sender landing
+      in three unrelated recipient threads — asserted to now land in one.
+      `test_three_messages_on_one_line_of_work_land_in_one_thread`, which touches a newer recipient
+      thread between each send so it fails against recency routing rather than passing by accident
 
 > **Deferred by the operator (2026-08-08): peer-thread presentation is a follow-up, not part of
 > this section.** Binding per sender-conversation creates more recipient threads than recency
