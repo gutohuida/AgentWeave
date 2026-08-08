@@ -133,9 +133,126 @@ Even voided, three behaviours are legible and differ from Claude's:
 Nothing was written — both `apply_patch` calls hit the expired approvals, and
 `worktrees/codex-1/.agentweave/shared/` does not exist on disk.
 
-### Run — clean re-run
+### Run `run-b4f1c688` — clean, and it corrects the proposal's premise
 
-*In progress at time of writing; see the addendum below.*
+Conversation `conv-a6b2e314` (*"Send a message to haiku-1 asking it to reply 'ack'"*), forced
+`permission_mode=acceptEdits`. `status=completed`, 2m43s, **zero permission requests**.
+
+**The proposal's stated premise is wrong, and this is the session's most consequential finding.**
+The change says *"Codex has no project-level skill discovery at all"*, and infers its behaviour
+will therefore differ. Project-level is correct; the inference is not. Codex read:
+
+> `Get-Content C:\Users\huida\.agents\skills\handoff\SKILL.md`
+
+`~/.agents/skills/` exists on this machine and contains `handoff` and `resume` — the
+**agent-agnostic** skill location. Codex found the *same* handoff skill Claude used, from a
+different directory, and followed it step for step: branch, status, `log --oneline -8`,
+`diff --stat HEAD`, the `origin/…` upstream probe, the three-location prior-handoff search, then
+the full section template and a `LATEST.md` pointer.
+
+So **both runtimes silently substitute the operator's personal handoff skill.** Claude announced
+it (*"There's a 'handoff' skill […] This seems to be what the operator is asking for"*); Codex
+never mentioned `aw-checkpoint` at all, in either run. Neither has ever executed the thing the
+prompt names.
+
+**The artifact was written, and it is good.** Verified on disk, 3222 bytes:
+
+```
+…\worktrees\codex-1\.agentweave\shared\checkpoints\2026-08-08-1341-pre_handoff.md
+…\worktrees\codex-1\.agentweave\shared\checkpoints\LATEST.md
+```
+
+Note the nesting again — `.agentweave\` *inside* `worktrees\codex-1\`. Codex resolved the prompt's
+relative path against its own cwd and created a second AgentWeave tree that nothing reads. This is
+now confirmed on disk, not merely inferred from the voided run.
+
+Two further observations from the clean run:
+
+- **`apply_patch` was rejected twice under `acceptEdits`, and a PowerShell heredoc write to the
+  same path succeeded.** The agent worked around it by itself (*"`apply_patch` is being rejected in
+  this workspace, so I'm using a direct file write fallback"*). Two tools, same destination,
+  different verdicts — worth a look independently of this change.
+- **With approvals not blocking, `Get-Date` worked and the timestamp is correct**
+  (`2026-08-08T13:41+01:00`). Compare Claude's invented `2026-08-08T00:00Z` under an
+  approval-blocked clock. The failure mode from 1.1 finding 5 is real but posture-dependent.
+
+### The caveat that constrains section 0
+
+Both agents rescued the broken prompt **only because this operator happens to have a personal
+handoff skill installed** — `~/.claude/skills/` for Claude, `~/.agents/skills/` for Codex. Neither
+is shipped by AgentWeave, and `get_skill_template` still installs nothing.
+
+A user without those directories gets the *un-rescued* behaviour, which 1.1's second run already
+shows: search, find nothing, hit the sandbox, ask the operator a question, produce no artifact.
+**The observed competence is borrowed, not a property of the product.** Task 0.1 cannot be
+resolved by assuming it.
+
+---
+
+## 1.4 — Which of `handoff.md`'s sections survive the move to a conversation
+
+Source: `src/agentweave/templates/skills/handoff.md`, 106 lines. It is written for a single agent
+in a terminal, driving one repository, deciding for itself when to compact. An AgentWeave
+conversation breaks three of those assumptions, and the sections split cleanly along the break.
+
+### Drop — the terminal's job, not the conversation's
+
+- **§1 "Choose the move."** The operator already chose by pressing a button. Observed waste: in
+  `run-4a8a2305` the agent reasoned through all four branches to arrive at *"The user explicitly
+  asked for a handoff → Full handoff"*, which was known before the run started.
+- **§2's git gathering.** This is not merely redundant in AgentWeave, it is **actively
+  uninformative**. `hub/hub/worktrees.py:243-258` runs `git add -A` and commits
+  `"Auto-snapshot: <agent>'s turn"` at the end of every turn. So by the time any handoff runs, the
+  tree is *always* clean and the log is *always* a wall of identical messages. Observed exactly
+  that: `git status --short` empty, `git diff --stat HEAD` empty, and eight consecutive
+  `Auto-snapshot: haiku-1's turn` lines — from which the agent concluded "Worktree clean, all
+  changes committed / No pending work", which is true of a worktree that did a week of work.
+- **§2's `git log origin/…` and "unpushed commits."** Agent branches have no upstream. Observed
+  output: *"Unpushed commits: none visible from local state"* — a non-answer.
+- **§2's search for a previous handoff.** The Hub knows the conversation's predecessor; making the
+  agent `find` for it wastes a turn and found nothing.
+- **§3's `.handoffs/` + `LATEST.md` filesystem chain.** Replaced by conversation lineage
+  (tasks 4.2/4.3). The observed artifact landed in a worktree the Hub cannot see.
+- **§4's closing instruction** — *"exactly one recommendation: start fresh and run `/resume`"*.
+  The successor is created by the Hub, not by the operator running a slash command.
+
+### Stamp, don't ask — the Hub already knows these, and the model gets them wrong
+
+The whole header block: `Date`, `Branch`, `HEAD`, `Agent`, `Previous handoff`, `Status`.
+
+The date is the proof. §3 says *"using the real current time"*; the agent's attempt
+(`powershell -Command "Get-Date …"`) came back `This command requires approval`, and it wrote
+`**Date:** 2026-08-08T00:00Z` — invented rather than blocked on. Every one of those fields is a
+column the Hub holds already.
+
+**Files touched** belongs here too, in a modified form: the Hub can diff the conversation's
+auto-snapshot commits and produce the real list, instead of trusting the model to recall it.
+
+**Constraints and user directives (verbatim)** is the interesting case. It is the section most
+worth having and the one a model is least reliable at — but the Hub holds every `operator_input`
+entry for the conversation verbatim, so the quotes can be sourced rather than recalled.
+
+### Keep, model-authored — nothing else can produce these
+
+`Goal`, `Current state`, `Key decisions` (with rejected alternatives), `Dead ends`,
+`Verification` (tested vs untested), `Next steps` (step 1 executable with no hidden decision),
+`Open questions`, `Read on resume`.
+
+These are judgement, and they are the entire value of a handoff. The observed artifact did them
+adequately even on an empty session.
+
+### What this hands to 1.5 and 1.11
+
+The split above is not a stylistic preference, it is a **verifiability** boundary, and it answers
+1.5 without needing a separate investigation:
+
+- Hub-stamped fields are checkable, so a handoff that omits or fudges them can be *failed*.
+- Model-authored prose is not checkable, so requiring it to be structured buys nothing.
+
+That argues for a **hybrid**: a structured envelope the Hub fills and validates, carrying one
+markdown body the model writes. It also makes 1.11's rule testable — "did this run produce a
+handoff record attached to this conversation?" is a row lookup, which the current
+run-ended-therefore-ready check cannot express.
 
 ---
 

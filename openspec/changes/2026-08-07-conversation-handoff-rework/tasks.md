@@ -57,19 +57,29 @@ Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
       for clarification instead, producing nothing. Both runs set "Handoff ready".
 - [x] 1.2 Repeat against a live Codex agent. Codex has no project-level skill discovery at all
       (`scripts/sync_skills.py` header), so its behaviour may differ from Claude's
-      **Answered:** it differs. Codex never looks for `aw-checkpoint` and never reports it
-      missing; it authors a checkpoint unaided and resolves the destination literally *relative to
-      its own worktree*, creating a nested `worktrees/codex-1/.agentweave/shared/checkpoints/`.
-      The first run was voided by an unattended approval queue (see the exploration's method
-      notes — force `permission_mode` on the trigger).
+      **Answered, and the premise needs correcting.** Codex has no *project*-level skill
+      discovery, but it reads `~/.agents/skills/` — it found and followed the *same* handoff skill
+      Claude used. Both runtimes silently substitute the operator's personal handoff skill; neither
+      has ever run `aw-checkpoint`. Codex resolves the destination relative to its own worktree,
+      creating a nested `worktrees/codex-1/.agentweave/shared/checkpoints/` — confirmed on disk.
+      **The rescue is borrowed, not a product property:** a user without those personal skill
+      directories gets 1.1's second-run behaviour — no artifact, a question back. Section 0 cannot
+      assume the competence observed here.
 - [ ] 1.3 Send the follow-up message and capture what the successor conversation actually receives.
       Determine whether any current behaviour is worth preserving before it is replaced
 
 **Determine the content**
 
-- [ ] 1.4 Read `src/agentweave/templates/skills/handoff.md` (106 lines) and decide which of its
+- [x] 1.4 Read `src/agentweave/templates/skills/handoff.md` (106 lines) and decide which of its
       sections apply to an AgentWeave conversation and which are specific to a single-agent coding
       session in a terminal
+      **Answered:** three groups. **Drop** §1 (the operator already chose by pressing the button),
+      §2's git gathering (the Hub auto-commits every turn at `worktrees.py:243-258`, so the tree is
+      *always* clean and the log is *always* identical auto-snapshots — observed), §2's upstream
+      probe, §2's prior-handoff search, §3's `.handoffs/`+`LATEST.md` chain, §4's "run /resume".
+      **Stamp, don't ask:** the whole header block plus Files touched, all Hub-known and all got
+      wrong or non-answered by the model. **Keep, model-authored:** Goal, Current state, Key
+      decisions, Dead ends, Verification, Next steps, Open questions, Read on resume.
 - [ ] 1.5 Decide whether the artifact is structured (columns or JSON, machine-checkable) or markdown
       (one blob, model-authored). Verification at task 1.11 depends on this answer
 - [ ] 1.6 Determine what a handoff must carry that a single-agent session never had: the peer
