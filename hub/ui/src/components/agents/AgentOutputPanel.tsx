@@ -36,16 +36,12 @@ import { agentColorVars } from '@/lib/agentColors'
 interface AgentOutputPanelProps {
   agent: AgentSummary
   onBackToProject?: () => void
-  /** The conversation this panel renders, resolved by the destination. `null` means there is
-   *  nothing to render yet — either the agent has no conversations, or the destination is
-   *  deliberately the new-conversation surface, which `isNewConversation` tells apart. */
+  /** The conversation this panel renders, resolved by the destination. `null` means the agent
+   *  has none yet, and the next message starts one. */
   conversationId?: string | null
-  /** True when the operator asked for a new conversation. Kept separate from a null
-   *  `conversationId` so the empty composer survives the conversation list arriving. */
-  isNewConversation?: boolean
   /** Move the destination. The panel calls this for the moves it causes itself — the trigger
-   *  returning a real conversation id for a first message, or the handoff handing over to a
-   *  fresh one. It never holds the answer; the destination does. */
+   *  returning a real conversation id for a first message. It never holds the answer; the
+   *  destination does. */
   onSelectConversation?: (conversationId: string | null) => void
 }
 
@@ -86,7 +82,6 @@ export function AgentOutputPanel({
   agent,
   onBackToProject,
   conversationId = null,
-  isNewConversation = false,
   onSelectConversation,
 }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
@@ -111,6 +106,11 @@ export function AgentOutputPanel({
     onSelectConversationRef.current(next)
   }
   const [handoffState, setHandoffState] = useState<HandoffState>('idle')
+  /** Set once a handoff has been prepared: the conversation on screen is finished, and the next
+   *  message must start a fresh one carrying the resume prefix. Local rather than a destination,
+   *  because no conversation exists to navigate to yet — moving the destination here would send
+   *  the operator to the new-conversation surface and lose the prepared handoff with it. */
+  const [startingFresh, setStartingFresh] = useState(false)
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
@@ -143,17 +143,15 @@ export function AgentOutputPanel({
   useEffect(() => {
     const sentTo = selfDirectedMoveRef.current
     selfDirectedMoveRef.current = undefined
-    const arrivedWhereItSentItself =
-      sentTo !== undefined &&
-      (sentTo === NEW_CONVERSATION_ID ? isNewConversation : sentTo === conversationId)
-    if (arrivedWhereItSentItself) return
+    if (sentTo !== undefined && sentTo === conversationId) return
     setHandoffState('idle')
+    setStartingFresh(false)
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
-  }, [agent.name, conversationId, isNewConversation])
+  }, [agent.name, conversationId])
 
   // The composer's model/effort pills show the open conversation's own persisted overrides
   // (task: "An override survives reload"). Task 8.4: this still fires on conversation change now
@@ -219,9 +217,11 @@ export function AgentOutputPanel({
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
     isRunning || isSending || handoffState === 'preparing'
-  const currentConversationId = conversationId ?? undefined
+  // A prepared handoff closes the conversation on screen even though the destination still names
+  // it: nothing further belongs in it, so it stops being the open conversation here.
+  const currentConversationId = startingFresh ? undefined : conversationId ?? undefined
   // Sending with nothing open starts a conversation whether or not the operator asked for one
-  // explicitly — a brand-new agent has none to continue.
+  // explicitly — a brand-new agent has none to continue either.
   const startsFresh = !currentConversationId
   const currentConversation = conversations.find((c) => c.id === currentConversationId)
 
@@ -368,9 +368,7 @@ export function AgentOutputPanel({
         setSessionNotice(`Could not start handoff — ${notice}`)
         return
       }
-      // Self-directed: the handover to a fresh conversation is the handoff continuing, so the
-      // reset effect must leave `handoffState` alone or the next message never resumes it.
-      moveTo(NEW_CONVERSATION_ID)
+      setStartingFresh(true)
     } catch (err) {
       console.error('Failed to prepare handoff:', err)
       handoffOutputStartRef.current = null
@@ -456,7 +454,12 @@ export function AgentOutputPanel({
         emptyToUndefined(pendingOverrides),
       )
       if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
-      if (startsFresh) setHandoffState('idle')
+      if (startsFresh) {
+        // The fresh conversation exists now, so the panel stops overriding the destination —
+        // the reset effect will not do it, having recognised its own move.
+        setStartingFresh(false)
+        setHandoffState('idle')
+      }
       const notice = queuedNotice(result, `${agent.name} is not available to receive it right now`)
       if (notice) {
         setSessionNotice(`Queued — ${notice}`)

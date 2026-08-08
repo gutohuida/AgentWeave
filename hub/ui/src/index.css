@@ -398,6 +398,8 @@
   .row-group:hover .row-action,
   .row-group:focus-within .row-action,
   .row-action:focus-visible,
+  /* An open menu's trigger stays visible even once the pointer has left the row to reach it. */
+  .row-action[data-state="open"],
   .row-action[data-persistent="true"] {
     opacity: 1;
   }

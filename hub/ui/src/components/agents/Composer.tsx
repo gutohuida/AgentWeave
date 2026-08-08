@@ -52,6 +52,10 @@ export interface ComposerProps {
    * message only when non-empty. */
   pendingOverrides?: Record<string, string>
   onPendingOverridesChange?: (overrides: Record<string, string>) => void
+  /** Why this composer cannot send yet. Set on the new-conversation surface started from the
+   *  recency view, where the message cannot go anywhere until an agent is chosen. Stated rather
+   *  than left to a silently dead button. */
+  disabledReason?: string
   conversations?: AgentConversation[]
   onSelectConversation?: (id: string) => void
   onNewConversation?: () => void
@@ -77,6 +81,7 @@ export function Composer({
   effectiveControls = {},
   pendingOverrides = {},
   onPendingOverridesChange = () => undefined,
+  disabledReason,
   conversations = [],
   onSelectConversation = () => undefined,
   onNewConversation = () => undefined,
@@ -142,7 +147,7 @@ export function Composer({
 
   const handleSend = async () => {
     const trimmed = text.trim()
-    if ((!trimmed && !canSubmitEmpty) || submitting) return
+    if ((!trimmed && !canSubmitEmpty) || submitting || disabledReason) return
     const typed = text
     // Cancel the pending debounced write before submitting: otherwise it can fire after
     // a successful clearComposerDraft below and resurrect the just-submitted text.
@@ -282,12 +287,22 @@ export function Composer({
           />
         </div>
         <div className="flex items-center gap-2" data-slot="composer-control-row-trailing">
+          {disabledReason && (
+            <span
+              className="text-[11px]"
+              data-testid="composer-disabled-reason"
+              style={{ color: 'var(--text-3)' }}
+            >
+              {disabledReason}
+            </span>
+          )}
           <Button
             variant="primary"
             size="icon-sm"
             onClick={() => void handleSend()}
             aria-label="Send message"
-            disabled={(!text.trim() && !canSubmitEmpty) || submitting}
+            title={disabledReason}
+            disabled={(!text.trim() && !canSubmitEmpty) || submitting || !!disabledReason}
           >
             <Icon name="send" size={18} />
           </Button>

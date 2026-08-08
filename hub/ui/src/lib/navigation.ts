@@ -37,7 +37,9 @@ const DEFAULT_ENVIRONMENT_SECTION: EnvironmentSection = ENVIRONMENT_SECTIONS[0]
 export type WorkspaceDestination =
   | { kind: 'project'; projectId: string; tab: ProjectTab }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
-  | { kind: 'conversation'; projectId: string; agent: string; conversationId: string | null }
+  // `agent` is null only on the new-conversation surface reached from the recency view, where
+  // no agent is implied by where the operator started — that surface asks for one.
+  | { kind: 'conversation'; projectId: string; agent: string | null; conversationId: string | null }
   | { kind: 'zero' }
 
 /** Collection-shaped from day one, even while one authenticated project is visible. */
@@ -70,12 +72,15 @@ export function agentDestination(
   return { kind: 'conversation', projectId, agent, conversationId }
 }
 
-/** The composer-primary surface for a conversation that does not exist yet, bound to `agent`. */
+/** The composer-primary surface for a conversation that does not exist yet.
+ *
+ * `agent` is null when the operator started from the recency view: no agent is implied there, so
+ * the surface requires one to be chosen before the first message can be sent. */
 export function newConversationDestination(
   projectId: string,
-  agent: string,
+  agent: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
-  return agentDestination(projectId, agent, NEW_CONVERSATION_ID)
+  return { kind: 'conversation', projectId, agent, conversationId: NEW_CONVERSATION_ID }
 }
 
 export function isNewConversationDestination(destination: WorkspaceDestination): boolean {
@@ -129,7 +134,7 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   const params = new URLSearchParams()
   params.set('project', destination.projectId)
   if (destination.kind === 'conversation') {
-    params.set('agent', destination.agent)
+    if (destination.agent) params.set('agent', destination.agent)
     if (destination.conversationId) params.set('conversation', destination.conversationId)
     return `?${params.toString()}`
   }
@@ -152,8 +157,11 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   if (!projectId) return null
 
   const agent = params.get('agent')
-  if (agent) {
-    return agentDestination(projectId, agent, params.get('conversation'))
+  const conversation = params.get('conversation')
+  // The agentless new-conversation surface has no `agent` to key on, so the sentinel is what
+  // identifies it — otherwise a reload there would land on the project overview.
+  if (agent || conversation === NEW_CONVERSATION_ID) {
+    return { kind: 'conversation', projectId, agent, conversationId: conversation }
   }
 
   const rawTab = params.get('tab')

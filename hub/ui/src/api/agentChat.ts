@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 import { NEW_SESSION_ID } from '@/lib/constants'
@@ -75,6 +75,10 @@ export interface ProjectConversations {
   /** Archived rows are excluded from `conversations`, so their count has to be carried
    *  separately — a "Show archived (N)" control cannot state N from a list that omitted them. */
   archived_count: number
+  /** The same count per agent, for the agent row's own "Show archived (N)". Agents with none
+   *  are absent, not zero. Optional so a Hub that predates it degrades to "nothing archived"
+   *  rather than to a crash. */
+  archived_by_agent?: Record<string, number>
 }
 
 /** What navigation shows for a conversation. A conversation with no message yet is labelled as
@@ -131,6 +135,67 @@ export function useProjectConversations(projectId: string | null, lifecycle: 'op
       ),
     enabled: isConfigured && !!projectId,
   })
+}
+
+/** What the Hub said when it refused, rather than the raw response body.
+ *
+ * Archiving is refused with a stated reason (a live run, an undelivered queue entry) and that
+ * reason is the entire point of the refusal — surfacing "409" instead would leave the operator
+ * with a row menu that silently does nothing. */
+export function conversationErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    try {
+      const detail = (JSON.parse(error.message) as { detail?: unknown }).detail
+      if (typeof detail === 'string' && detail.trim()) return detail
+    } catch {
+      // Not a JSON body — fall through to the caller's wording.
+    }
+  }
+  return fallback
+}
+
+interface ConversationRef {
+  projectId: string
+  agent: string
+  conversationId: string
+}
+
+function conversationPath({ projectId, agent, conversationId }: ConversationRef): string {
+  return `/api/v1/projects/${projectId}/agent/${agent}/conversations/${conversationId}`
+}
+
+/** Invalidates by the project prefix, so both the open and the archived listing refetch — an
+ *  archive moves a row from one to the other, and refreshing only the one the operator was
+ *  looking at leaves the other stale. */
+function useConversationMutation<Variables extends ConversationRef>(
+  run: (variables: Variables) => Promise<AgentConversation>,
+) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: run,
+    onSuccess: (_data, { projectId, agent }) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'conversations'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agent', agent, 'conversations'] })
+    },
+  })
+}
+
+export function useRenameConversation() {
+  return useConversationMutation<ConversationRef & { title: string }>((variables) =>
+    patchJson<AgentConversation>(conversationPath(variables), { title: variables.title }),
+  )
+}
+
+export function useArchiveConversation() {
+  return useConversationMutation<ConversationRef>((variables) =>
+    postJson<AgentConversation>(`${conversationPath(variables)}/archive`),
+  )
+}
+
+export function useUnarchiveConversation() {
+  return useConversationMutation<ConversationRef>((variables) =>
+    postJson<AgentConversation>(`${conversationPath(variables)}/unarchive`),
+  )
 }
 
 const QUEUE_EVENT_TYPES = new Set([

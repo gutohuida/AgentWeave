@@ -116,8 +116,11 @@ describe('the panel renders the destination’s conversation, and holds no opini
     expect(screen.getByTestId('session-continuity')).toHaveTextContent('The newest thread')
   })
 
-  it('stays on the new-conversation surface even though conversations exist', async () => {
-    render(<AgentOutputPanel agent={agent} conversationId={null} isNewConversation />)
+  it('does not pick a conversation of its own when the destination names none', async () => {
+    // The panel used to auto-select `conversations[0]` here. It no longer has an opinion:
+    // resolving "which conversation" is the destination's job, and this is what the panel does
+    // when the answer is "none".
+    render(<AgentOutputPanel agent={agent} conversationId={null} />)
     await waitFor(() =>
       expect(screen.getByTestId('session-continuity')).toHaveTextContent(
         'Next message starts a fresh conversation',

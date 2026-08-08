@@ -82,13 +82,13 @@
 
 ## 7. Row menus and the new-conversation surface
 
-- [ ] 7.1 Shared row-menu component on `@radix-ui/react-dropdown-menu`, opened from a visible control on the row, keyboard-reachable, returning focus on dismiss
-- [ ] 7.2 Conversation menu: rename (inline edit or dialog), archive
-- [ ] 7.3 Agent menu: new conversation, agent settings, show archived (N)
-- [ ] 7.4 Agent settings opens `AgentInfoTab` in a dialog without unmounting the open conversation
-- [ ] 7.5 New-conversation surface: composer-primary, agent pre-bound when started from an agent row
-- [ ] 7.6 Started from the recency view, the surface requires an agent to be chosen before sending
-- [ ] 7.7 Navigating away without sending leaves no conversation record
+- [x] 7.1 Shared row-menu component on `@radix-ui/react-dropdown-menu`, opened from a visible control on the row, keyboard-reachable, returning focus on dismiss
+- [x] 7.2 Conversation menu: rename (inline edit or dialog), archive
+- [x] 7.3 Agent menu: new conversation, agent settings, show archived (N)
+- [x] 7.4 Agent settings opens `AgentInfoTab` in a dialog without unmounting the open conversation
+- [x] 7.5 New-conversation surface: composer-primary, agent pre-bound when started from an agent row
+- [x] 7.6 Started from the recency view, the surface requires an agent to be chosen before sending
+- [x] 7.7 Navigating away without sending leaves no conversation record
 
 ## 8. Selection lifts into the destination
 
@@ -112,10 +112,10 @@
 - [x] 10.2 `conversationCap.test.tsx` — the remainder is behind an expander stating the count, never silently dropped
 - [x] 10.3 `recencyView.test.tsx` — toggle, persistence, cross-agent ordering, persistent agent colour with no hover dependency
 - [x] 10.4 `conversationAttention.test.tsx` — a question in one conversation shows as waiting while a different conversation is open
-- [ ] 10.5 `rowMenus.test.tsx` — both menus keyboard-operable, focus returns to trigger, agent settings do not unmount the conversation
-- [ ] 10.6 `newConversationSurface.test.tsx` — agent pre-bound from the tree; agent required from recency; abandonment creates nothing
+- [x] 10.5 `rowMenus.test.tsx` — both menus keyboard-operable, focus returns to trigger, agent settings do not unmount the conversation
+- [x] 10.6 `newConversationSurface.test.tsx` — agent pre-bound from the tree; agent required from recency; abandonment creates nothing
 - [ ] 10.7 `handoffPlacement.test.tsx` — handoff present and labelled on the header at rest; disabled with reason when unavailable
-- [ ] 10.8 Assert no conversation identifier appears as a label anywhere in the rail
+- [x] 10.8 Assert no conversation identifier appears as a label anywhere in the rail
 
 ## 11. Verification
 

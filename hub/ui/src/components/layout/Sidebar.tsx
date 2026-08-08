@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useProjects } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { AgentSettingsDialog } from './AgentSettingsDialog'
 import {
   ENVIRONMENT_SECTIONS,
   isConfigurationDestination,
@@ -24,6 +25,9 @@ interface SidebarProps {
   onOpenProject: (projectId: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
   onOpenConversation?: (projectId: string, agent: string, conversationId: string) => void
+  /** `agent` is null when the operator started from the recency view, where no agent is
+   *  implied — the surface asks for one before the first message can be sent. */
+  onNewConversation?: (projectId: string, agent: string | null) => void
   onOpenEnvironment?: (projectId: string, section: EnvironmentSection) => void
   onAddAgent?: (projectId: string) => void
   onOpenExisting: () => void
@@ -76,6 +80,7 @@ export function Sidebar({
   onOpenProject,
   onOpenAgent,
   onOpenConversation,
+  onNewConversation,
   onOpenEnvironment,
   onAddAgent,
   onOpenExisting,
@@ -84,6 +89,11 @@ export function Sidebar({
   width = SIDEBAR_WIDTH,
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
+  /** Agent settings open from the rail, not from the conversation surface — which is what makes
+   *  them openable "without unmounting the open conversation". The rail outlives the content
+   *  area, so a dialog hosted here cannot take the conversation down with it. */
+  const [settingsAgent, setSettingsAgent] = useState<string | null>(null)
+  const settingsInvokerRef = useRef<HTMLElement | null>(null)
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadFlags(COLLAPSED_KEY))
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
@@ -258,6 +268,7 @@ export function Sidebar({
                       activeProject={activeProject}
                       activeConversation={activeConversation}
                       onOpenConversation={onOpenConversation}
+                      onNewConversation={onNewConversation}
                     />
                   )}
                   {expanded && railView === 'tree' && (
@@ -276,6 +287,15 @@ export function Sidebar({
                       }
                       onOpenAgent={onOpenAgent}
                       onOpenConversation={onOpenConversation}
+                      onNewConversation={onNewConversation}
+                      onOpenAgentSettings={(id, agent) => {
+                        // Captured now so the dialog can hand focus back to the control that
+                        // opened it — the menu has already unmounted its own item by then.
+                        settingsInvokerRef.current = document.querySelector(
+                          `[data-testid="agent-menu-${id}-${agent}"]`,
+                        )
+                        setSettingsAgent(agent)
+                      }}
                       onAddAgent={onAddAgent}
                     />
                   )}
@@ -290,6 +310,12 @@ export function Sidebar({
           </Button>
         </>
       ) : null}
+
+      <AgentSettingsDialog
+        agent={settingsAgent}
+        onClose={() => setSettingsAgent(null)}
+        onCloseFocus={() => settingsInvokerRef.current?.focus()}
+      />
     </aside>
   )
 }

@@ -4,6 +4,7 @@ import { useAgents } from '@/api/agents'
 import { useProjects } from '@/api/projects'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
+import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { ActivityLog } from '@/components/activity/ActivityLog'
 import { ChartersPage } from '@/components/charters/ChartersPage'
 import { InstructionsPage } from '@/components/instructions/InstructionsPage'
@@ -37,6 +38,7 @@ import {
   agentDestination,
   environmentDestination,
   isNewConversationDestination,
+  newConversationDestination,
   projectDestination,
   resolveConversationSelection,
   type EnvironmentSection,
@@ -109,6 +111,7 @@ export default function App() {
   // there, which is the whole reason that sentinel is distinct from "unspecified".
   useEffect(() => {
     if (destination.kind !== 'conversation') return
+    if (destination.agent === null) return
     if (destination.conversationId !== null) return
     if (!resolvedConversationId) return
     navigateTo(
@@ -186,15 +189,28 @@ export default function App() {
   }
 
   let content: React.ReactNode
-  if (destination.kind === 'conversation') {
-    content = selectedAgent ? (
+  if (destination.kind === 'conversation' && isNewConversationDestination(destination)) {
+    // Composer-primary and creating nothing until the first message is sent, so abandoning it
+    // leaves no conversation record (spec: "An abandoned start leaves no record").
+    content = (
+      <NewConversationSurface
+        projectId={destination.projectId}
+        agent={destination.agent}
+        onStarted={(agent, conversationId) =>
+          navigateTo(agentDestination(destination.projectId, agent, conversationId))
+        }
+        onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
+      />
+    )
+  } else if (destination.kind === 'conversation') {
+    const agentName = destination.agent
+    content = selectedAgent && agentName ? (
       <AgentOutputPanel
         agent={selectedAgent}
         conversationId={resolvedConversationId}
-        isNewConversation={isNewConversationDestination(destination)}
         onSelectConversation={(conversationId) => {
           if (destination.conversationId !== conversationId) {
-            navigateTo(agentDestination(destination.projectId, destination.agent, conversationId))
+            navigateTo(agentDestination(destination.projectId, agentName, conversationId))
           }
         }}
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
@@ -290,6 +306,7 @@ export default function App() {
             onOpenConversation={(id, agent, conversationId) =>
               navigateTo(agentDestination(id, agent, conversationId))
             }
+            onNewConversation={(id, agent) => navigateTo(newConversationDestination(id, agent))}
             onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
             onAddAgent={(id) => setAgentCreateProjectId(id)}
             onOpenExisting={() => setProjectManagerMode('open')}

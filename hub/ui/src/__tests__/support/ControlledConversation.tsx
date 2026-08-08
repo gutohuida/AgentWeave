@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import type { AgentSummary } from '@/api/agents'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
-import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 
 interface ControlledConversationProps {
   agent: AgentSummary
-  /** Where the destination starts. `null` is "nothing open"; `NEW_CONVERSATION_ID` is the
-   *  new-conversation surface. */
+  /** Where the destination starts. `null` is "the agent has no conversation yet". */
   conversationId?: string | null
   onSelectConversation?: (conversationId: string | null) => void
 }
@@ -28,8 +26,7 @@ export function ControlledConversation({
   return (
     <AgentOutputPanel
       agent={agent}
-      conversationId={current === NEW_CONVERSATION_ID ? null : current}
-      isNewConversation={current === NEW_CONVERSATION_ID}
+      conversationId={current}
       onSelectConversation={(next) => {
         setCurrent(next)
         onSelectConversation?.(next)

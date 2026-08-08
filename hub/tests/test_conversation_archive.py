@@ -161,6 +161,8 @@ async def test_the_project_listing_spans_agents_newest_first(
     ]
     assert [row["title"] for row in body["conversations"]] == ["Beta thread", "Alpha thread"]
     assert body["archived_count"] == 0
+    # Agents with nothing archived are absent from the breakdown, not zero.
+    assert body["archived_by_agent"] == {}
 
 
 @pytest.mark.asyncio
@@ -177,10 +179,13 @@ async def test_the_project_listing_counts_archived_it_does_not_show(
     body = await _project_conversations(app, auth_headers)
     assert body["conversations"] == []
     assert body["archived_count"] == 1
+    # The agent row's own "Show archived (N)" needs the count for that agent alone.
+    assert body["archived_by_agent"] == {"offline": 1}
 
     archived = await _project_conversations(app, auth_headers, lifecycle="archived")
     assert [row["id"] for row in archived["conversations"]] == [conversation_id]
     assert archived["archived_count"] == 1
+    assert archived["archived_by_agent"] == {"offline": 1}
 
 
 @pytest.mark.asyncio
@@ -205,7 +210,7 @@ async def test_the_project_listing_is_scoped_to_its_project(app, auth_headers) -
 
     other = await app.get("/api/v1/projects/proj-other/conversations", headers=auth_headers)
     assert other.status_code == 200
-    assert other.json() == {"conversations": [], "archived_count": 0}
+    assert other.json() == {"conversations": [], "archived_count": 0, "archived_by_agent": {}}
 
 
 @pytest.mark.asyncio

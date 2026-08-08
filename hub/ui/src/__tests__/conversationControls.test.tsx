@@ -168,7 +168,14 @@ describe('conversation controls — placement and overflow menu', () => {
 
   it('opens the overflow menu with items in fixed order, keyboard-activatable, focus returns to trigger on close', async () => {
     const user = userEvent.setup()
-    render(<ControlledConversation agent={idleAgent} conversationId="conv-old" />)
+    const onSelectConversation = vi.fn()
+    render(
+      <ControlledConversation
+        agent={idleAgent}
+        conversationId="conv-old"
+        onSelectConversation={onSelectConversation}
+      />,
+    )
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     const trigger = screen.getByRole('button', { name: 'Conversation actions' })
@@ -190,11 +197,8 @@ describe('conversation controls — placement and overflow menu', () => {
     await user.keyboard('{ArrowDown}')
     await waitFor(() => expect(newConversationItem).toHaveFocus())
     await user.keyboard('{Enter}')
-    await waitFor(() =>
-      expect(screen.getByTestId('session-continuity')).toHaveTextContent(
-        'Next message starts a fresh conversation',
-      ),
-    )
+    // Starting a conversation is a destination move now, not local panel state.
+    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('__new__'))
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
 
     // Re-open and close with Escape — focus must return to the trigger.

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useProjectConversations } from '@/api/agentChat'
 import type { ProjectAgentSummary } from '@/api/projects'
+import { Icon } from '@/components/common/Icon'
 import { agentColorVars } from '@/lib/agentColors'
 import { ConversationRow } from './ConversationRow'
 
@@ -20,6 +21,8 @@ interface RecencyViewProps {
   activeProject: boolean
   activeConversation: string | null
   onOpenConversation?: (projectId: string, agent: string, conversationId: string) => void
+  /** No agent is implied by a row's position here, so the surface has to ask for one. */
+  onNewConversation?: (projectId: string, agent: string | null) => void
 }
 
 /** Every conversation in the project, newest activity first, regardless of which agent owns it.
@@ -33,6 +36,7 @@ export function RecencyView({
   activeProject,
   activeConversation,
   onOpenConversation,
+  onNewConversation,
 }: RecencyViewProps) {
   const [showArchived, setShowArchived] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -56,6 +60,7 @@ export function RecencyView({
       {visible.map((conversation) => (
         <ConversationRow
           key={conversation.id}
+          projectId={projectId}
           conversation={conversation}
           active={activeProject && activeConversation === conversation.id}
           onOpen={() => onOpenConversation?.(projectId, conversation.agent, conversation.id)}
@@ -108,6 +113,7 @@ export function RecencyView({
         archivedRows.map((conversation) => (
           <ConversationRow
             key={conversation.id}
+            projectId={projectId}
             conversation={conversation}
             active={activeProject && activeConversation === conversation.id}
             onOpen={() => onOpenConversation?.(projectId, conversation.agent, conversation.id)}
@@ -116,6 +122,18 @@ export function RecencyView({
             testId={`recency-archived-${conversation.id}`}
           />
         ))}
+
+      {/* The tree starts a conversation from an agent's row menu. This view has no agent rows,
+          so it needs its own way in — and the surface it opens has to ask which agent. */}
+      <button
+        type="button"
+        className="row-item"
+        data-testid={`recency-new-conversation-${projectId}`}
+        onClick={() => onNewConversation?.(projectId, null)}
+      >
+        <Icon name="add" size={14} />
+        New conversation
+      </button>
     </div>
   )
 }

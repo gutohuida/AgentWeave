@@ -5,6 +5,7 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { agentColorVars } from '@/lib/agentColors'
 import { ConversationRow } from './ConversationRow'
+import { RowMenu, type RowMenuItem } from './RowMenu'
 
 /** How many of an agent's conversations the tree shows before the rest go behind an expander.
  *
@@ -23,6 +24,8 @@ interface AgentTreeProps {
   onToggleAgent: (agent: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
   onOpenConversation?: (projectId: string, agent: string, conversationId: string) => void
+  onNewConversation?: (projectId: string, agent: string) => void
+  onOpenAgentSettings?: (projectId: string, agent: string) => void
   onAddAgent?: (projectId: string) => void
 }
 
@@ -38,10 +41,17 @@ export function AgentTree({
   onToggleAgent,
   onOpenAgent,
   onOpenConversation,
+  onNewConversation,
+  onOpenAgentSettings,
   onAddAgent,
 }: AgentTreeProps) {
   const { data } = useProjectConversations(projectId)
   const [showAll, setShowAll] = useState<Record<string, boolean>>({})
+  const [showArchived, setShowArchived] = useState<Record<string, boolean>>({})
+  // The archived rows are only fetched once an agent's menu asks for them — the tree is for
+  // what is open.
+  const anyArchivedShown = Object.values(showArchived).some(Boolean)
+  const archived = useProjectConversations(anyArchivedShown ? projectId : null, 'archived')
 
   const byAgent = useMemo(() => {
     const grouped = new Map<string, AgentConversation[]>()
@@ -52,6 +62,16 @@ export function AgentTree({
     }
     return grouped
   }, [data])
+
+  const archivedByAgent = useMemo(() => {
+    const grouped = new Map<string, AgentConversation[]>()
+    for (const conversation of archived.data?.conversations ?? []) {
+      const bucket = grouped.get(conversation.agent)
+      if (bucket) bucket.push(conversation)
+      else grouped.set(conversation.agent, [conversation])
+    }
+    return grouped
+  }, [archived.data])
 
   return (
     <div className="ml-7 flex flex-col gap-0.5">
@@ -66,6 +86,32 @@ export function AgentTree({
         // Waiting anywhere beneath a collapsed agent still has to be visible, or collapsing the
         // agent hides the thing the attention state exists to surface.
         const needsAttention = conversations.some((c) => c.attention === 'waiting')
+        const archivedCount = data?.archived_by_agent?.[agent.name] ?? 0
+        const archivedShown = showArchived[agent.name] ?? false
+
+        const menuItems: RowMenuItem[] = [
+          {
+            id: 'new-conversation',
+            label: 'New conversation',
+            onSelect: () => onNewConversation?.(projectId, agent.name),
+          },
+          {
+            id: 'settings',
+            label: 'Agent settings',
+            onSelect: () => onOpenAgentSettings?.(projectId, agent.name),
+          },
+          {
+            id: 'archived',
+            label: archivedShown ? 'Hide archived' : `Show archived (${archivedCount})`,
+            disabled: archivedCount === 0,
+            reason: 'Nothing archived yet',
+            onSelect: () => {
+              // Showing them is only useful under an expanded agent.
+              if (!expanded) onToggleAgent(agent.name)
+              setShowArchived((state) => ({ ...state, [agent.name]: !archivedShown }))
+            },
+          },
+        ]
 
         return (
           <div key={agent.id}>
@@ -116,6 +162,12 @@ export function AgentTree({
                   style={{ background: agent.status === 'running' ? 'var(--green)' : 'var(--text-3)' }}
                 />
               </button>
+              <RowMenu
+                label={`Actions for ${agent.name}`}
+                testId={`agent-menu-${projectId}-${agent.name}`}
+                persistent={active}
+                items={menuItems}
+              />
             </div>
 
             {expanded && (
@@ -123,6 +175,7 @@ export function AgentTree({
                 {visible.map((conversation) => (
                   <ConversationRow
                     key={conversation.id}
+                    projectId={projectId}
                     conversation={conversation}
                     active={activeProject && activeConversation === conversation.id}
                     onOpen={() => onOpenConversation?.(projectId, agent.name, conversation.id)}
@@ -145,6 +198,17 @@ export function AgentTree({
                       : `Show ${hidden} more`}
                   </button>
                 )}
+                {archivedShown &&
+                  (archivedByAgent.get(agent.name) ?? []).map((conversation) => (
+                    <ConversationRow
+                      key={conversation.id}
+                      projectId={projectId}
+                      conversation={conversation}
+                      active={activeProject && activeConversation === conversation.id}
+                      onOpen={() => onOpenConversation?.(projectId, agent.name, conversation.id)}
+                      testId={`rail-archived-${conversation.id}`}
+                    />
+                  ))}
                 {conversations.length === 0 && (
                   <span
                     className="px-2 py-1 text-[11px]"

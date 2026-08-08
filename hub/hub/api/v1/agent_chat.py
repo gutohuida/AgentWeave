@@ -111,6 +111,9 @@ class ProjectConversationsResponse(BaseModel):
 
     conversations: List[ConversationResponse]
     archived_count: int
+    # The same count broken down per agent, because the agent row's menu offers "Show archived
+    # (N)" for that agent alone. Only agents with at least one archived conversation appear.
+    archived_by_agent: Dict[str, int] = {}
 
 
 class ChatHistoryResponse(BaseModel):
@@ -286,14 +289,16 @@ async def list_project_conversations(
         .where(*predicates)
         .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     )
-    archived_count = await session.scalar(
-        select(func.count())
-        .select_from(Conversation)
+    archived = await session.execute(
+        select(Conversation.agent, func.count())
         .where(Conversation.project_id == project_id, Conversation.lifecycle == "archived")
+        .group_by(Conversation.agent)
     )
+    archived_by_agent = {agent: count for agent, count in archived.all()}
     return ProjectConversationsResponse(
         conversations=await _to_response(session, list(result.scalars())),
-        archived_count=archived_count or 0,
+        archived_count=sum(archived_by_agent.values()),
+        archived_by_agent=archived_by_agent,
     )
 
 

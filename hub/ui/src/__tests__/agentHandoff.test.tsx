@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
-import { NEW_CONVERSATION_ID } from '@/lib/navigation'
+
 import { ControlledConversation } from './support/ControlledConversation'
 
 let outputLines: AgentOutputLine[] = []
@@ -128,14 +128,15 @@ describe('agent conversation handoff', () => {
       conversation_id: 'conv-old',
     })
     expect(triggerBody(0).message).toContain('aw-checkpoint skill')
-    // The handover to a fresh conversation is the handoff continuing, not the operator leaving:
-    // the preparing state and its notice have to survive the destination moving.
+    // A prepared handoff does not move the destination: there is no conversation to move to
+    // yet, and navigating to the new-conversation surface would take the prepared handoff with
+    // it. The panel stops treating the named conversation as open, and says so.
     await waitFor(() =>
-      expect(onSelectConversation).toHaveBeenCalledWith(NEW_CONVERSATION_ID),
+      expect(screen.getByTestId('session-continuity')).toHaveTextContent(
+        'Preparing durable handoff',
+      ),
     )
-    expect(screen.getByTestId('session-continuity')).toHaveTextContent(
-      'Preparing durable handoff',
-    )
+    expect(onSelectConversation).not.toHaveBeenCalled()
 
     outputLines = [
       {
