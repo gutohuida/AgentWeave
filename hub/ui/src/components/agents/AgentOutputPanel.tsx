@@ -615,7 +615,7 @@ export function AgentOutputPanel({
           className="flex items-center gap-1"
           style={{
             fontSize: 11,
-            color: handoffState === 'ready' || startsFresh ? 'var(--blue)' : 'var(--text-3)',
+            color: startsFresh ? 'var(--blue)' : 'var(--text-3)',
           }}
         >
           <Icon

@@ -95,7 +95,7 @@ describe('durable handoff has a persistent place on the conversation', () => {
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     const handoff = await screen.findByTestId('conversation-handoff')
 
-    expect(handoff).toHaveTextContent('Handoff')
+    expect(handoff).toHaveTextContent('Checkpoint')
     expect(handoff).toBeEnabled()
     // On the header, beside "Fold all turns" — the operator's requirement was an explicit place
     // they can see, because "users might not know or forget about the handoff".
@@ -111,7 +111,7 @@ describe('durable handoff has a persistent place on the conversation', () => {
 
     // Present and disabled, not omitted — the control set must not shift between agents.
     expect(handoff).toBeDisabled()
-    expect(handoff).toHaveAccessibleName('Handoff — Requires an automatically managed runner')
+    expect(handoff).toHaveAccessibleName('Checkpoint — Requires an automatically managed runner')
   })
 
   it('states its reason when no conversation is open', async () => {
@@ -119,7 +119,7 @@ describe('durable handoff has a persistent place on the conversation', () => {
     const handoff = await screen.findByTestId('conversation-handoff')
 
     expect(handoff).toBeDisabled()
-    expect(handoff).toHaveAccessibleName('Handoff — Start a conversation first')
+    expect(handoff).toHaveAccessibleName('Checkpoint — Start a conversation first')
   })
 
   it('states its reason while the agent is busy', async () => {
@@ -127,6 +127,6 @@ describe('durable handoff has a persistent place on the conversation', () => {
     const handoff = await screen.findByTestId('conversation-handoff')
 
     await waitFor(() => expect(handoff).toBeDisabled())
-    expect(handoff).toHaveAccessibleName('Handoff — Unavailable while the agent is busy')
+    expect(handoff).toHaveAccessibleName('Checkpoint — Unavailable while the agent is busy')
   })
 })

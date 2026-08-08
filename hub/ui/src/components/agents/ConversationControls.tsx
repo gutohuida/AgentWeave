@@ -4,7 +4,10 @@ import { Button } from '@/components/ui/button'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { StatusDot, getStatusConfig } from '@/lib/agentStatus'
 
-export type HandoffState = 'idle' | 'preparing' | 'ready'
+/** `ready` is gone. It used to mean "the run that was asked to write a handoff has ended",
+ *  which is the inference this capability removed — readiness is now a property of a checkpoint
+ *  record that exists and passed its probes, decided by the Hub and never inferred from output. */
+export type HandoffState = 'idle' | 'preparing'
 
 interface ConversationControlsProps {
   agent: AgentSummary
@@ -28,8 +31,7 @@ function handoffReason(
 ): string | null {
   if (handoffUnavailable) return 'Requires an automatically managed runner'
   if (!currentConversationId) return 'Start a conversation first'
-  if (handoffState === 'preparing') return 'Already preparing'
-  if (handoffState === 'ready') return 'Already ready — send a message to resume it'
+  if (handoffState === 'preparing') return 'Already writing one'
   if (interactionLocked) return 'Unavailable while the agent is busy'
   return null
 }
@@ -61,8 +63,9 @@ export function ConversationControls({
   const reason = handoffReason(handoffUnavailable, currentConversationId, interactionLocked, handoffState)
   const handoffDisabled = reason !== null
 
-  const handoffLabel =
-    handoffState === 'preparing' ? 'Preparing…' : handoffState === 'ready' ? 'Handoff ready' : 'Handoff'
+  // "Checkpoint" is the vocabulary the product uses now: the record is the thing, and this
+  // button is one way to produce one.
+  const handoffLabel = handoffState === 'preparing' ? 'Checkpointing…' : 'Checkpoint'
 
   return (
     <div className="flex items-center gap-3">
@@ -97,7 +100,7 @@ export function ConversationControls({
         disabled={handoffDisabled}
         aria-disabled={handoffDisabled ? 'true' : undefined}
         aria-label={reason ? `${handoffLabel} — ${reason}` : handoffLabel}
-        title={reason ?? 'Prepare a durable handoff before ending this session'}
+        title={reason ?? 'Write a checkpoint and continue in a new conversation'}
         onClick={onHandoff}
       >
         <Icon name="move_up" size={12} />
