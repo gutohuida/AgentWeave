@@ -65,8 +65,16 @@ Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
       **The rescue is borrowed, not a product property:** a user without those personal skill
       directories gets 1.1's second-run behaviour — no artifact, a question back. Section 0 cannot
       assume the competence observed here.
-- [ ] 1.3 Send the follow-up message and capture what the successor conversation actually receives.
+- [x] 1.3 Send the follow-up message and capture what the successor conversation actually receives.
       Determine whether any current behaviour is worth preserving before it is replaced
+      **Answered: nothing is worth preserving.** The successor receives exactly
+      `RESUME_HANDOFF_PREFIX + "\n\n" + typed message` in a brand-new conversation — no history, no
+      peer messages, no tasks, no overrides, no artifact reference. Both paths the prefix names are
+      wrong: `.agentweave/shared/` exists nowhere, and the real context file is
+      `.agentweave/context/<agent>.md` (already injected into the prompt, so that half is redundant
+      even when corrected). Codex's round-trip closes **by coincidence** — it resolved both the
+      write and the read against its own worktree. Claude's does not: six failed lookups, one
+      sandbox block, then a bare `Glob("*")` rescued it.
 
 **Determine the content**
 

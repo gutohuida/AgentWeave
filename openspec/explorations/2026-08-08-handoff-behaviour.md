@@ -189,6 +189,76 @@ resolved by assuming it.
 
 ---
 
+## 1.3 — What the successor conversation actually receives
+
+### The mechanism, traced
+
+`AgentOutputPanel.tsx:371` sets `startingFresh` once the handoff trigger returns. That makes
+`currentConversationId` `undefined` (`:222`), which makes `startsFresh` true (`:225`), which is the
+condition at `:439` for prefixing. The submission is then
+`postTrigger(RESUME_HANDOFF_PREFIX + "\n\n" + typed, undefined, …)` — **conversation_id null, so a
+brand-new conversation**.
+
+The successor therefore receives **exactly one thing**: the prefix plus the operator's typed
+message. No history, no peer messages, no tasks, no runtime overrides, and no reference to any
+artifact. Confirmed live — the successor conversations opened with a single `operator_input` entry.
+
+### Both paths the prefix names are wrong
+
+Verified on disk: `.agentweave/shared/` exists **nowhere** — not at the project root
+(`project.json` + `worktrees/` only) and not in any worktree. `context.md` exists nowhere in the
+testbed at all. The real file is `.agentweave/context/<agent>.md`, so the prefix is wrong by one
+directory *and* a filename.
+
+### Codex — `run` in `conv-…`, the two bugs cancel
+
+Codex found its checkpoint immediately:
+
+> I found the latest checkpoint at `.agentweave/shared/checkpoints/2026-08-08-1341-pre_handoff.md`
+
+Because it had earlier resolved the *handoff* path against its own worktree, and now resolved the
+*resume* path the same way, the two errors compose into a working round-trip. It confirmed branch,
+HEAD, clean tree, empty task ledger, and flagged the one path that genuinely does not exist:
+
+> Note: I could not find `.agentweave/shared/context.md` at the path you gave
+
+**This works only by coincidence, and only for a runtime that resolves relatively.** Nothing about
+it is a design.
+
+### Claude — six failed lookups, then brute force
+
+`run-a9451359`, 55s, `status=completed`, $0.0723. Claude had written to `.handoffs/`, not to the
+path the prefix names, so the round-trip does not close. In order:
+
+1. `Glob(".agentweave/shared/checkpoints/haiku-1*")` → `No files found`
+2. `Read(".agentweave/shared/context.md")` → not permitted
+3. `Bash(ls …\.agentweave\shared\)` → rejected, `Contains backslash-escaped whitespace`
+4. `PowerShell(Get-ChildItem …\shared\)` → **sandbox-blocked**, *"may only access files in the
+   allowed working directories for this session"*
+5. `Glob(".agentweave/**/*")` → only `context\haiku-1.md`, which it correctly identified as *"just
+   the runtime context file that was injected into the prompt — it's not the handoff checkpoint"*
+6. `Glob("**/handoff*")` and `Glob("**/*.handoff")` → `No files found` (the directory is
+   `.handoffs`, so neither pattern matches)
+
+Only a bare `Glob("*")` surfaced `.handoffs\LATEST.md`, which it then followed to the real
+artifact and summarised correctly. **It recovered — by ignoring the instruction and searching its
+whole worktree.**
+
+### Findings
+
+1. **The successor gets no state at all beyond a prompt.** Everything the rework's sections 2–4
+   propose to deliver — artifact, lineage, peer context, task ownership — is absent today. There is
+   no current behaviour here worth preserving, which is what 1.3 was asked to determine.
+2. **The round-trip closes for Codex and not for Claude, for reasons neither runtime controls.**
+   Any fix must make the location a property of the *product*, not of how a given CLI resolves a
+   relative path.
+3. **Recovery costs a turn and is not guaranteed.** Six failed lookups here; the same agent in
+   1.1's second run gave up and asked a question instead.
+4. **`.agentweave/context/<agent>.md` is already injected into the prompt**, so the prefix telling
+   the agent to go read a context file is redundant even in the version where the path is right.
+
+---
+
 ## 1.4 — Which of `handoff.md`'s sections survive the move to a conversation
 
 Source: `src/agentweave/templates/skills/handoff.md`, 106 lines. It is written for a single agent
