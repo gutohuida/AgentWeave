@@ -32,11 +32,20 @@ class TestCatalogCoverage:
                 assert model.id
                 assert model.label
 
-    def test_unknown_context_window_is_none_not_a_substitute(self):
-        # Opus 5 and Fable 5 have no live-verified context window on this machine.
-        assert model_context_window("claude", "claude-opus-5") is None
-        assert model_context_window("claude", "claude-fable-5") is None
-        # Sonnet 5 and Haiku 4.5 do — live-verified via Claude's own result event.
+    def test_every_declared_claude_model_has_a_context_window(self):
+        """A window is only useful if it is there for every model an agent might run.
+
+        Opus 5 and Fable 5 were `None`, so a Claude agent on either reported no context
+        percentage even once the resolution path was correct — the catalog had nothing to
+        resolve. Filled from Anthropic's published model reference (both 1M), which is a weaker
+        source than the live `result`-event observation behind Sonnet 5 and Haiku 4.5 but a
+        better one than leaving the field blank. `context_window_for_model` returns None for a
+        model the catalog does not declare, so an unknown model still yields no percentage
+        rather than a substituted guess — see `test_context_usage_measurement.py`.
+        """
+        assert model_context_window("claude", "claude-opus-5") == 1_000_000
+        assert model_context_window("claude", "claude-fable-5") == 1_000_000
+        # Live-verified via Claude's own result event.
         assert model_context_window("claude", "claude-sonnet-5") == 1_000_000
         assert model_context_window("claude", "claude-haiku-4-5-20251001") == 200_000
 

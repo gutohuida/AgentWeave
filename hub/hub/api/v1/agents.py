@@ -234,6 +234,36 @@ async def get_agents_launchability(
     return {"agents": results}
 
 
+def _usable_context_reading(rows: List[Any]) -> Any:
+    """Pick the reading to report from an agent's `context_warning` rows, newest first.
+
+    Taking the newest row alone is what made Claude agents report nothing for 329 samples: the
+    end-of-turn message reports a context window with no token count, so the last row to arrive
+    routinely carried no usable percentage and hid the complete one behind it.
+
+    The newest row still wins whenever it carries a percentage. Otherwise the newest row **from
+    the same provider session** that does is used — scoped to the session because a compaction or
+    a fresh session resets usage, and reporting a pre-reset percentage as current would be worse
+    than reporting none. An unscoped fallback would do exactly that.
+    """
+    if not rows:
+        return None
+    newest = rows[0]
+    if not isinstance(newest, dict) or newest.get("percent") is not None:
+        return newest
+    session_id = newest.get("session_id")
+    if session_id is None:
+        return newest
+    for row in rows[1:]:
+        if (
+            isinstance(row, dict)
+            and row.get("percent") is not None
+            and row.get("session_id") == session_id
+        ):
+            return row
+    return newest
+
+
 @router.get("", response_model=List[AgentSummary])
 async def list_agents(
     lifecycle: Literal["open", "archived", "all"] = Query("open"),
@@ -430,7 +460,7 @@ async def list_agents(
     # rows, raising TypeError. The comprehension forces row iteration.
     active_task_counts = {name: cnt for name, cnt in active_task_counts_res}  # noqa: C416
 
-    # Bulk fetch latest context_warning event data per agent
+    # Bulk fetch context_warning event data per agent, newest first.
     ctx_q = (
         select(EventLog)
         .where(
@@ -441,9 +471,12 @@ async def list_agents(
         .order_by(EventLog.agent, EventLog.timestamp.desc())
     )
     ctx_res = await session.execute(ctx_q)
-    context_usage_map: dict[str, Any] = {}
+    ctx_rows_by_agent: dict[str, List[Any]] = {}
     for row in ctx_res.scalars().all():
-        context_usage_map.setdefault(row.agent, row.data)
+        ctx_rows_by_agent.setdefault(row.agent, []).append(row.data)
+    context_usage_map: dict[str, Any] = {
+        agent_name: _usable_context_reading(rows) for agent_name, rows in ctx_rows_by_agent.items()
+    }
 
     # Bulk fetch session started_at: first output timestamp of the most recent
     # session (by last output timestamp) per agent.

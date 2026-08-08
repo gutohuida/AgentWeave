@@ -195,16 +195,48 @@ operator route and the agent route funnel into `create_message_for_actor`.
 Any threshold in section 8 keys on `percent`, which is **always null for Claude agents today**:
 329 samples, zero usable. Unimplementable until fixed.
 
-- [ ] 3.1 Resolve `limit_tokens` from the model catalog rather than depending on two incomplete
+- [x] 3.1 Resolve `limit_tokens` from the model catalog rather than depending on two incomplete
       events colliding, and compute `percent` server-side
-- [ ] 3.2 Fill in `context_window` for `claude-opus-5` and `claude-fable-5`
-      (`model_catalog.py:125,139`), both currently `None`
-- [ ] 3.3 Fix the read path at `agents.py:418-420`, which `setdefault`s the newest single row and so
-      returns whichever incomplete half arrived last
-- [ ] 3.4 Test with the real observed shapes: a `claude` sample with tokens and no limit, one with
-      limit and no tokens, and a complete `codex_appserver` sample
-- [ ] 3.5 Verify live against `:8010` that a Claude agent reports a percentage — the exploration's
-      standing rule is that a captured observation, not a passing test, closes a measurement task
+
+      `output_recording.resolve_usage_limit`, applied in `record_context_usage` — the one funnel
+      every write path already goes through, so the HTTP self-report endpoint and the Hub's own
+      spawn loop get it once rather than twice. It fills gaps and never overwrites: a sample that
+      already carries a limit (Codex reports its own) is returned untouched, and a model the
+      catalog does not declare leaves the fields alone rather than substituting a guess.
+
+      **The enabling change was upstream.** `_claude_usage_sample` recorded no model, so there was
+      nothing to look the window up *by* — Claude names the model on the `assistant` message and
+      the window on the `result` message, and the sampler was reading only the former's usage
+      block. It now carries `message.model`, which is what makes the reading complete on its own
+- [x] 3.2 Fill in `context_window` for `claude-opus-5` and `claude-fable-5`, both `None`. Both 1M,
+      from Anthropic's published model reference — a weaker source than the live `result`-event
+      observation behind Sonnet 5 and Haiku 4.5, and `test_model_catalog.py` now says so rather
+      than asserting the old blank state. Also added `context_window_for_model`, which searches
+      every provider by exact id, then alias, then longest declared prefix: a sample carries the
+      model the run used, not the provider, and providers report dated snapshots the catalog may
+      hold undated
+- [x] 3.3 Fix the read path at `agents.py`, which `setdefault`s the newest single row and so
+      returns whichever incomplete half arrived last.
+
+      `_usable_context_reading`. The newest row still wins when it carries a percentage; otherwise
+      the newest row **from the same provider session** that does. Scoped to the session
+      deliberately: a compaction or a fresh session resets usage, and reporting a pre-reset
+      percentage as current would be worse than reporting none, because it is the number the
+      operator would act on. Pinned by a test
+- [x] 3.4 Test with the real observed shapes: a `claude` sample with tokens and no limit, one with
+      limit and no tokens, and a complete `codex_appserver` sample —
+      `hub/tests/test_context_usage_measurement.py`, 10 tests, shapes taken from the 400 stored
+      samples rather than invented
+- [x] 3.5 Verify live against `:8010` that a Claude agent reports a percentage — the exploration's
+      standing rule is that a captured observation, not a passing test, closes a measurement task.
+
+      **Observed.** Before: all four Claude agents in the testbed reported
+      `context_tokens: null, percent: null`; both Codex agents were fine. After a real `haiku-1`
+      run, `GET /agents` returned `percent: 15.12`, `context_tokens: 30233`,
+      `limit_tokens: 200000`. The stored rows show both halves working: the tokens-carrying rows
+      were written *with* a limit and percent (the write path), and the newest row for the session
+      is still the limit-only end-of-turn report carrying `percent: null` — so the read-path
+      fallback is what surfaced 15.12 rather than nothing
 
 ## 4. The Worker
 

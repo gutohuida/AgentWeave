@@ -196,7 +196,16 @@ def _claude_result_error_message(data: Dict[str, Any], subtype: str) -> str:
     return f"Claude run failed ({subtype or 'unknown error'})"
 
 
-def _claude_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[ContextUsageSample]:
+def _claude_usage_sample(
+    usage: Dict[str, Any], *, source: str, model: Optional[str] = None
+) -> Optional[ContextUsageSample]:
+    """One context-window reading from a Claude `assistant` message's usage block.
+
+    Carries the model the message names, which is what lets the recording path resolve a context
+    window from the catalog. Claude reports the window only in its end-of-turn `result` message,
+    so without the model this sample can never yield a percentage on its own — and waiting for
+    the two to meet is exactly the collision this change removes.
+    """
     input_tokens = usage.get("input_tokens")
     if input_tokens is None:
         return None
@@ -208,6 +217,7 @@ def _claude_usage_sample(usage: Dict[str, Any], *, source: str) -> Optional[Cont
         source=source,
         basis="latest_request_input",
         context_tokens=context_tokens,
+        model=model,
         breakdown={
             "input_tokens": int(input_tokens),
             "cache_read_tokens": int(cache_read),
@@ -261,7 +271,16 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
                         )
                     )
         usage = message.get("usage") if isinstance(message, dict) else None
-        usage_sample = _claude_usage_sample(usage, source=source) if usage else None
+        reported_model = message.get("model") if isinstance(message, dict) else None
+        usage_sample = (
+            _claude_usage_sample(
+                usage,
+                source=source,
+                model=reported_model if isinstance(reported_model, str) else None,
+            )
+            if usage
+            else None
+        )
         if usage_sample is not None:
             usage_sample.session_id = session_id
         return ParsedLine(events=events, usage=usage_sample, session_id=session_id)

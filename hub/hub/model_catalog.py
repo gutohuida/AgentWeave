@@ -122,7 +122,9 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         provider="claude",
         label="Claude Code",
         models=(
-            ModelDescriptor(id="claude-opus-5", label="Opus 5", aliases=("opus",), context_window=None),
+            ModelDescriptor(
+                id="claude-opus-5", label="Opus 5", aliases=("opus",), context_window=1_000_000
+            ),
             ModelDescriptor(
                 id="claude-sonnet-5",
                 label="Sonnet 5",
@@ -136,7 +138,9 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 aliases=("haiku",),
                 context_window=200_000,
             ),
-            ModelDescriptor(id="claude-fable-5", label="Fable 5", aliases=("fable",), context_window=None),
+            ModelDescriptor(
+                id="claude-fable-5", label="Fable 5", aliases=("fable",), context_window=1_000_000
+            ),
         ),
         controls=(
             ControlDescriptor(
@@ -233,6 +237,29 @@ def model_context_window(provider: str, model_id: str) -> Optional[int]:
         return None
     model = entry.model(model_id)
     return model.context_window if model is not None else None
+
+
+def context_window_for_model(model_id: str) -> Optional[int]:
+    """The declared context window for *model_id*, searched across every provider.
+
+    A usage sample carries the model the run actually used, not the provider — the CLI reports
+    what it loaded, and nothing upstream re-derives which catalog entry that was. Matching is
+    exact id, then alias, then longest declared id that the reported one starts with: providers
+    report dated snapshots (`claude-haiku-4-5-20251001`) that the catalog may hold undated, and a
+    window that is right for the family is a better answer than none. Returns None rather than
+    guessing when nothing matches — an unknown window means no percentage, which is honest.
+    """
+    normalized = (model_id or "").strip()
+    if not normalized:
+        return None
+    best: Optional[ModelDescriptor] = None
+    for entry in CATALOG.values():
+        for model in entry.models:
+            if model.id == normalized or normalized in model.aliases:
+                return model.context_window
+            if normalized.startswith(model.id) and (best is None or len(model.id) > len(best.id)):
+                best = model
+    return best.context_window if best is not None else None
 
 
 PERMISSION_MODE_CONTROL = "permission_mode"

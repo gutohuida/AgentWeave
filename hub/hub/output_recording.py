@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .conversations import latest_open_conversation, new_conversation
 from .db.models import AgentOutput, Conversation, EventLog, Run
+from .model_catalog import context_window_for_model
 from .sse import sse_manager
 from .utils import persist_event, short_id
 
@@ -115,6 +116,34 @@ async def record_agent_output(
     return row
 
 
+def resolve_usage_limit(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill in `limit_tokens` from the model catalog, and derive `percent` from it.
+
+    Claude reports how many tokens a request carried but not how large its window is; it reports
+    the window separately, in a different message, with no tokens. Waiting for those two to meet
+    is what produced 329 samples and zero usable percentages. The catalog is authoritative about
+    the window, and the sample already knows its model — so the reading completes here, on its
+    own, at the one place every write path funnels through.
+
+    Nothing is invented: a model the catalog does not declare leaves `limit_tokens` and `percent`
+    as they were. A sample that already carries a limit (Codex reports its own) is untouched.
+    """
+    if payload.get("limit_tokens") is not None or payload.get("percent") is not None:
+        return payload
+    context_tokens = payload.get("context_tokens")
+    if not isinstance(context_tokens, int) or isinstance(context_tokens, bool):
+        return payload
+    model = payload.get("model")
+    limit = context_window_for_model(model) if isinstance(model, str) else None
+    if not limit or limit <= 0:
+        return payload
+    return {
+        **payload,
+        "limit_tokens": limit,
+        "percent": round(min(100.0, max(0.0, (context_tokens / limit) * 100)), 2),
+    }
+
+
 async def record_context_usage(
     db: AsyncSession, project_id: str, agent: str, sample_payload: Dict[str, Any]
 ) -> str:
@@ -122,7 +151,7 @@ async def record_context_usage(
 
     Returns "ok" or "ignored" (a strictly-older observation for the same agent).
     """
-    payload = {**sample_payload, "agent": agent}
+    payload = resolve_usage_limit({**sample_payload, "agent": agent})
     latest_result = await db.execute(
         select(EventLog)
         .where(
