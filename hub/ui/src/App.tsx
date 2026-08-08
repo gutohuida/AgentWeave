@@ -36,6 +36,7 @@ import { useWorkspaceNavigation } from '@/hooks/useWorkspaceNavigation'
 import {
   agentDestination,
   environmentDestination,
+  isNewConversationDestination,
   projectDestination,
   resolveConversationSelection,
   type EnvironmentSection,
@@ -189,8 +190,9 @@ export default function App() {
     content = selectedAgent ? (
       <AgentOutputPanel
         agent={selectedAgent}
-        initialConversationId={destination.conversationId}
-        onConversationChange={(conversationId) => {
+        conversationId={resolvedConversationId}
+        isNewConversation={isNewConversationDestination(destination)}
+        onSelectConversation={(conversationId) => {
           if (destination.conversationId !== conversationId) {
             navigateTo(agentDestination(destination.projectId, destination.agent, conversationId))
           }

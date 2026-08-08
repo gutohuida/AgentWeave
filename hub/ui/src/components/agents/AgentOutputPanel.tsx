@@ -8,7 +8,14 @@ import {
   useAgents,
   useAgentTimeline,
 } from '@/api/agents'
-import { useAgentChatHistory, useAgentConversations, useAgentRecentChat } from '@/api/agentChat'
+import {
+  conversationLabel,
+  useAgentChatHistory,
+  useAgentConversations,
+  useAgentRecentChat,
+  type AgentConversation,
+} from '@/api/agentChat'
+import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
@@ -29,11 +36,19 @@ import { agentColorVars } from '@/lib/agentColors'
 interface AgentOutputPanelProps {
   agent: AgentSummary
   onBackToProject?: () => void
-  initialConversationId?: string | null
-  onConversationChange?: (conversationId: string | null) => void
+  /** The conversation this panel renders, resolved by the destination. `null` means there is
+   *  nothing to render yet — either the agent has no conversations, or the destination is
+   *  deliberately the new-conversation surface, which `isNewConversation` tells apart. */
+  conversationId?: string | null
+  /** True when the operator asked for a new conversation. Kept separate from a null
+   *  `conversationId` so the empty composer survives the conversation list arriving. */
+  isNewConversation?: boolean
+  /** Move the destination. The panel calls this for the moves it causes itself — the trigger
+   *  returning a real conversation id for a first message, or the handoff handing over to a
+   *  fresh one. It never holds the answer; the destination does. */
+  onSelectConversation?: (conversationId: string | null) => void
 }
 
-const NEW_CONVERSATION_VALUE = '__new__'
 const HANDOFF_PROMPT = `Prepare a durable AgentWeave handoff before ending this session.
 
 Invoke your aw-checkpoint skill with reason pre_handoff. Save the current intent, files modified,
@@ -59,11 +74,20 @@ function emptyToUndefined(overrides: Record<string, string>): Record<string, str
   return Object.keys(overrides).length > 0 ? overrides : undefined
 }
 
+/** Titles are capped at 120 characters; the continuity line is one row of 11px text under the
+ *  composer. Shortened here rather than at the source, because the rail wants the whole thing. */
+const CONTINUITY_LABEL_MAX = 44
+function continuityLabel(conversation: AgentConversation): string {
+  const label = conversationLabel(conversation)
+  return label.length > CONTINUITY_LABEL_MAX ? `${label.slice(0, CONTINUITY_LABEL_MAX).trimEnd()}…` : label
+}
+
 export function AgentOutputPanel({
   agent,
   onBackToProject,
-  initialConversationId = null,
-  onConversationChange,
+  conversationId = null,
+  isNewConversation = false,
+  onSelectConversation,
 }: AgentOutputPanelProps) {
   const { lines, isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
@@ -72,11 +96,20 @@ export function AgentOutputPanel({
 
   const { apiKey, selectedProjectId: projectId } = useConfigStore()
   const [isSending, setIsSending] = useState(false)
-  const [selectedConversationId, setSelectedConversationId] = useState<string>(
-    initialConversationId ?? '',
-  )
-  const onConversationChangeRef = useRef(onConversationChange)
-  onConversationChangeRef.current = onConversationChange
+  const onSelectConversationRef = useRef(onSelectConversation)
+  onSelectConversationRef.current = onSelectConversation
+  /** Where the panel itself last sent the destination — the first message of a new conversation
+   *  landing on its real id, or the handoff handing over to a fresh one. The reset below exists
+   *  for the operator *leaving* a conversation; a move the panel just made is a continuation of
+   *  what it was already doing, and resetting it would wipe the state and the notice set in the
+   *  same batch. Recorded as the destination rather than a bare flag so it can only ever suppress
+   *  the arrival it was set for. */
+  const selfDirectedMoveRef = useRef<string | null | undefined>(undefined)
+  const moveTo = (next: string | null) => {
+    if (!onSelectConversationRef.current) return
+    selfDirectedMoveRef.current = next
+    onSelectConversationRef.current(next)
+  }
   const [handoffState, setHandoffState] = useState<HandoffState>('idle')
   const [sessionNotice, setSessionNotice] = useState<string | null>(null)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
@@ -103,21 +136,30 @@ export function AgentOutputPanel({
   const conversationsRef = useRef(conversations)
   conversationsRef.current = conversations
 
+  // Arriving at a different conversation clears everything that described the last one. The
+  // auto-select-most-recent effect that used to sit beside this is gone: it is now part of
+  // resolving the destination (`resolveConversationSelection`), which is what makes it possible
+  // to *not* auto-select onto the new-conversation surface.
   useEffect(() => {
-    setSelectedConversationId(initialConversationId ?? '')
+    const sentTo = selfDirectedMoveRef.current
+    selfDirectedMoveRef.current = undefined
+    const arrivedWhereItSentItself =
+      sentTo !== undefined &&
+      (sentTo === NEW_CONVERSATION_ID ? isNewConversation : sentTo === conversationId)
+    if (arrivedWhereItSentItself) return
     setHandoffState('idle')
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
-    setPendingOverrides({})
     handoffOutputStartRef.current = null
     handoffSawRunningRef.current = false
-  }, [agent.name, initialConversationId])
+  }, [agent.name, conversationId, isNewConversation])
 
-  // The composer's model/effort pills show the currently selected conversation's own
-  // persisted overrides (task: "An override survives reload").
+  // The composer's model/effort pills show the open conversation's own persisted overrides
+  // (task: "An override survives reload"). Task 8.4: this still fires on conversation change now
+  // that the conversation arrives as a prop rather than as local state.
   useEffect(() => {
-    const current = conversationsRef.current.find((c) => c.id === selectedConversationId)
+    const current = conversationsRef.current.find((c) => c.id === conversationId)
     const seeded = current?.runtime_overrides ?? {}
     // Skip the update when the seeded value is already equivalent — without this, a
     // fresh-but-equal object from a react-query refetch would still trigger a render.
@@ -127,25 +169,11 @@ export function AgentOutputPanel({
     // conversations.length (not the array itself) re-seeds once the list first arrives,
     // without depending on an identity that changes more often than its content does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent.name, selectedConversationId, conversations.length])
-
-  useEffect(() => {
-    onConversationChangeRef.current?.(
-      selectedConversationId && selectedConversationId !== NEW_CONVERSATION_VALUE
-        ? selectedConversationId
-        : null,
-    )
-  }, [selectedConversationId])
+  }, [agent.name, conversationId, conversations.length])
 
   useEffect(() => {
     if (agent.status !== 'running') setIsStopping(false)
   }, [agent.status])
-
-  useEffect(() => {
-    if (conversations.length > 0 && !selectedConversationId) {
-      setSelectedConversationId(conversations[0].id)
-    }
-  }, [conversations, selectedConversationId])
 
   useEffect(() => {
     const outputStart = handoffOutputStartRef.current
@@ -191,10 +219,11 @@ export function AgentOutputPanel({
   const handoffUnavailable = agent.runner === 'manual'
   const interactionLocked =
     isRunning || isSending || handoffState === 'preparing'
-  const currentConversationId =
-    selectedConversationId && selectedConversationId !== NEW_CONVERSATION_VALUE
-      ? selectedConversationId
-      : undefined
+  const currentConversationId = conversationId ?? undefined
+  // Sending with nothing open starts a conversation whether or not the operator asked for one
+  // explicitly — a brand-new agent has none to continue.
+  const startsFresh = !currentConversationId
+  const currentConversation = conversations.find((c) => c.id === currentConversationId)
 
   const { data: roster = [] } = useAgents()
   const { data: runners = [] } = useRunners()
@@ -306,14 +335,13 @@ export function AgentOutputPanel({
     // the chain") — this reuses that existing behavior rather than adding a
     // dedicated force-deliver endpoint.
     if (!apiKey || !projectId || isRunning || isSending) return
-    const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
     setIsSending(true)
     try {
       const result = await postTrigger(
         'Continue — deliver the queued messages.',
-        isNew ? undefined : selectedConversationId,
+        currentConversationId,
       )
-      setSelectedConversationId(result.conversation_id)
+      if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
       const notice = queuedNotice(result, `${agent.name} is still not available to receive it`)
       if (notice) setSessionNotice(`Still queued — ${notice}`)
     } catch (err) {
@@ -340,25 +368,24 @@ export function AgentOutputPanel({
         setSessionNotice(`Could not start handoff — ${notice}`)
         return
       }
-      setSelectedConversationId(NEW_CONVERSATION_VALUE)
+      // Self-directed: the handover to a fresh conversation is the handoff continuing, so the
+      // reset effect must leave `handoffState` alone or the next message never resumes it.
+      moveTo(NEW_CONVERSATION_ID)
     } catch (err) {
       console.error('Failed to prepare handoff:', err)
       handoffOutputStartRef.current = null
       handoffSawRunningRef.current = false
       setHandoffState('idle')
-      setSelectedConversationId(currentConversationId)
       setSessionNotice('Failed to prepare handoff')
     } finally {
       setIsSending(false)
     }
   }
 
+  /** The operator switching conversations from a control on this surface. Not self-directed:
+   *  the reset effect should treat it as leaving the current conversation. */
   const selectConversation = (id: string) => {
-    setSelectedConversationId(id)
-    setHandoffState('idle')
-    setSessionNotice(null)
-    handoffOutputStartRef.current = null
-    handoffSawRunningRef.current = false
+    onSelectConversation?.(id)
   }
 
   /** Answer the waiting question, from whichever the operator supplied.
@@ -416,21 +443,20 @@ export function AgentOutputPanel({
     // in the conversation the operator was looking at (operator: "Let's remove the ability and
     // the buttons that enable the user from one screen to send message to another agent. Is
     // counter intuitive.").
-    const isNew = !selectedConversationId || selectedConversationId === NEW_CONVERSATION_VALUE
     const outgoingMessage =
-      isNew && handoffState === 'ready'
+      startsFresh && handoffState === 'ready'
         ? `${RESUME_HANDOFF_PREFIX}\n\n${typedMessage}`
         : typedMessage
-    if (isNew) setSessionNotice('Starting new conversation…')
+    if (startsFresh) setSessionNotice('Starting new conversation…')
     try {
       const result = await postTrigger(
         outgoingMessage,
-        isNew ? undefined : selectedConversationId,
+        currentConversationId,
         agent.name,
         emptyToUndefined(pendingOverrides),
       )
-      setSelectedConversationId(result.conversation_id)
-      if (isNew) setHandoffState('idle')
+      if (result.conversation_id !== currentConversationId) moveTo(result.conversation_id)
+      if (startsFresh) setHandoffState('idle')
       const notice = queuedNotice(result, `${agent.name} is not available to receive it right now`)
       if (notice) {
         setSessionNotice(`Queued — ${notice}`)
@@ -493,7 +519,7 @@ export function AgentOutputPanel({
           conversations={conversations}
           currentConversationId={currentConversationId}
           onSelectConversation={selectConversation}
-          onNewConversation={() => selectConversation(NEW_CONVERSATION_VALUE)}
+          onNewConversation={() => selectConversation(NEW_CONVERSATION_ID)}
           handoffState={handoffState}
           handoffUnavailable={handoffUnavailable}
           interactionLocked={interactionLocked}
@@ -564,28 +590,23 @@ export function AgentOutputPanel({
           className="flex items-center gap-1"
           style={{
             fontSize: 11,
-            color:
-              handoffState === 'ready' || selectedConversationId === NEW_CONVERSATION_VALUE
-                ? 'var(--blue)'
-                : 'var(--text-3)',
+            color: handoffState === 'ready' || startsFresh ? 'var(--blue)' : 'var(--text-3)',
           }}
         >
           <Icon
             name={
-              handoffState === 'preparing'
-                ? 'hourglass_top'
-                : selectedConversationId === NEW_CONVERSATION_VALUE
-                  ? 'move_up'
-                  : 'link'
+              handoffState === 'preparing' ? 'hourglass_top' : startsFresh ? 'move_up' : 'link'
             }
             size={12}
           />
+          {/* A conversation is named by its title here as it is everywhere else — the identifier
+              this used to print is not a label (spec: "Conversations are labelled by title"). */}
           {sessionNotice
-            || (selectedConversationId === NEW_CONVERSATION_VALUE
+            || (startsFresh
               ? 'Next message starts a fresh conversation'
-              : currentConversationId
-                ? `Continuing ${currentConversationId.slice(0, 12)}…`
-                : 'No conversation yet')}
+              : currentConversation
+                ? `Continuing ${continuityLabel(currentConversation)}`
+                : 'Continuing this conversation')}
           </span>
 
           {/* Above the composer, not in the timeline: the agent is blocked right now and the
@@ -607,7 +628,7 @@ export function AgentOutputPanel({
 
           <div className="conversation-composer-surface">
             <Composer
-              key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_VALUE}`}
+              key={`${agent.name}::${currentConversationId ?? NEW_CONVERSATION_ID}`}
               agent={agent.name}
               projectId={projectId ?? ''}
               conversationId={currentConversationId ?? null}
@@ -625,7 +646,7 @@ export function AgentOutputPanel({
               onPendingOverridesChange={setPendingOverrides}
               conversations={conversations}
               onSelectConversation={selectConversation}
-              onNewConversation={() => selectConversation(NEW_CONVERSATION_VALUE)}
+              onNewConversation={() => selectConversation(NEW_CONVERSATION_ID)}
             />
           </div>
         </div>

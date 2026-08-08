@@ -92,11 +92,11 @@
 
 ## 8. Selection lifts into the destination
 
-- [ ] 8.1 Remove `selectedConversationId` from `AgentOutputPanel`; the conversation arrives as a prop
-- [ ] 8.2 Move the auto-select-most-recent behaviour into destination resolution, and make it not fire when the destination is deliberately the new-conversation surface
-- [ ] 8.3 Remove `onConversationChange`'s round trip; navigation writes the destination directly
-- [ ] 8.4 Confirm the existing effect that seeds runtime overrides still fires on conversation change
-- [ ] 8.5 Existing frontend suites green at each step — do not land 8.1–8.3 as one commit
+- [x] 8.1 Remove `selectedConversationId` from `AgentOutputPanel`; the conversation arrives as a prop
+- [x] 8.2 Move the auto-select-most-recent behaviour into destination resolution, and make it not fire when the destination is deliberately the new-conversation surface
+- [x] 8.3 Remove `onConversationChange`'s round trip; navigation writes the destination directly
+- [x] 8.4 Confirm the existing effect that seeds runtime overrides still fires on conversation change
+- [x] 8.5 Existing frontend suites green at each step — do not land 8.1–8.3 as one commit
 
 ## 9. Controls rehoused, dead surfaces removed
 

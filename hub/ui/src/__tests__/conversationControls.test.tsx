@@ -5,6 +5,7 @@ import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse, TimelineEntry } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { ControlledConversation } from './support/ControlledConversation'
 
 let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
@@ -135,8 +136,8 @@ describe('conversation controls — placement and overflow menu', () => {
   })
 
   it('shows turn actions, the active-agent indicator, and context usage in the header at rest', async () => {
-    render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Conversation actions' })).toBeInTheDocument()
@@ -150,16 +151,16 @@ describe('conversation controls — placement and overflow menu', () => {
   })
 
   it('shows stop only while the agent is running', () => {
-    const { rerender } = render(<AgentOutputPanel agent={idleAgent} />)
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     expect(screen.queryByRole('button', { name: /Stop/ })).not.toBeInTheDocument()
 
-    rerender(<AgentOutputPanel agent={runningAgent} />)
+    rerender(<AgentOutputPanel agent={runningAgent} conversationId="conv-old" />)
     expect(screen.getByRole('button', { name: /Stop/ })).toBeInTheDocument()
   })
 
   it('hides provider session identity from the resting surface', async () => {
-    render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     expect(document.body.textContent).not.toContain(conversation.provider_session_id)
     expect(screen.queryByText(/session:/i)).not.toBeInTheDocument()
@@ -167,8 +168,8 @@ describe('conversation controls — placement and overflow menu', () => {
 
   it('opens the overflow menu with items in fixed order, keyboard-activatable, focus returns to trigger on close', async () => {
     const user = userEvent.setup()
-    render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<ControlledConversation agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     const trigger = screen.getByRole('button', { name: 'Conversation actions' })
     await user.click(trigger)
@@ -209,21 +210,29 @@ describe('conversation controls — placement and overflow menu', () => {
       conversation,
       { ...conversation, id: 'conv-second', provider_session_id: 'provider-second' },
     ]
-    const onConversationChange = vi.fn()
+    const onSelectConversation = vi.fn()
     const user = userEvent.setup()
-    render(<AgentOutputPanel agent={idleAgent} onConversationChange={onConversationChange} />)
-    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith('conv-old'))
+    render(
+      <ControlledConversation
+        agent={idleAgent}
+        conversationId="conv-old"
+        onSelectConversation={onSelectConversation}
+      />,
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'),
+    )
 
     await user.click(screen.getByRole('button', { name: 'Conversation actions' }))
     await user.click(await screen.findByRole('menuitem', { name: /conv-second/ }))
 
-    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith('conv-second'))
+    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-second'))
   })
 
   it('shows an unavailable action disabled with its reason', async () => {
     const user = userEvent.setup()
-    render(<AgentOutputPanel agent={manualAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={manualAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     await user.click(screen.getByRole('button', { name: 'Conversation actions' }))
     const handoffItem = await screen.findByRole('menuitem', { name: /Handoff/ })
@@ -233,8 +242,8 @@ describe('conversation controls — placement and overflow menu', () => {
 
   it('opens agent details without unmounting the conversation, and returns focus on close', async () => {
     const user = userEvent.setup()
-    render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     const trigger = screen.getByRole('button', { name: 'Conversation actions' })
     await user.click(trigger)
@@ -264,8 +273,8 @@ describe('conversation controls — placement and overflow menu', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const user = userEvent.setup()
 
-    render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     expect(screen.queryByRole('button', { name: /^Target agent:/ })).not.toBeInTheDocument()
 
@@ -300,8 +309,8 @@ describe('conversation controls — context usage placement', () => {
   })
 
   it('renders nothing when no context-usage event has been received', async () => {
-    render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     expect(screen.queryByTestId('context-usage')).not.toBeInTheDocument()
   })
 
@@ -316,8 +325,8 @@ describe('conversation controls — context usage placement', () => {
         observed_at: 0,
       },
     }
-    render(<AgentOutputPanel agent={agentWithUsage} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    render(<AgentOutputPanel agent={agentWithUsage} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
     expect(screen.getByTestId('context-usage')).toBeInTheDocument()
   })
 })
@@ -343,8 +352,8 @@ describe('conversation controls — banner stack', () => {
     sseConnectionState = 'reconnecting'
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-    const { rerender } = render(<AgentOutputPanel agent={idleAgent} />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('conv-old'))
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'hello' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
@@ -355,7 +364,7 @@ describe('conversation controls — banner stack', () => {
     expect(banners[1]).toHaveTextContent('disconnected')
 
     sseConnectionState = 'open'
-    rerender(<AgentOutputPanel agent={idleAgent} />)
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
 
     await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(1))
     banners = screen.getAllByRole('alert')
@@ -410,32 +419,32 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     // which is not what this view renders. Driving content through `recordedEntries` is what
     // actually exercises the conversation, and is why the previous version of this test could
     // not observe the defect.
-    const { rerender } = render(<AgentOutputPanel agent={idleAgent} />)
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     const output = screen.getByTestId('conversation-output')
 
     setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 40 })
     recordedEntries = [timelineEntry('1')]
-    rerender(<AgentOutputPanel agent={idleAgent} />)
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     expect(output.scrollTop).toBe(1000)
 
     // Scrolled away — a new entry must not move the viewport.
     setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 40 })
     fireEvent.scroll(output)
     recordedEntries = [...recordedEntries, timelineEntry('2')]
-    rerender(<AgentOutputPanel agent={idleAgent} />)
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     expect(output.scrollTop).toBe(0)
 
     // Back at the bottom — following resumes.
     setScrollGeometry(output, { scrollTop: 960, scrollHeight: 1000, clientHeight: 40 })
     fireEvent.scroll(output)
     recordedEntries = [...recordedEntries, timelineEntry('3')]
-    rerender(<AgentOutputPanel agent={idleAgent} />)
+    rerender(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     expect(output.scrollTop).toBe(1000)
   })
 
   it('lands at the newest entry when the conversation opens, and resumes following', () => {
     recordedEntries = [timelineEntry('1'), timelineEntry('2'), timelineEntry('3')]
-    const { rerender } = render(<AgentOutputPanel agent={idleAgent} />)
+    const { rerender } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     const output = screen.getByTestId('conversation-output')
 
     // Put the operator partway up a long history with following suspended.
@@ -444,7 +453,7 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     expect(output.scrollTop).toBe(0)
 
     // Switching to another agent's conversation re-runs the open path.
-    rerender(<AgentOutputPanel agent={{ ...idleAgent, name: 'other' }} />)
+    rerender(<AgentOutputPanel agent={{ ...idleAgent, name: 'other' }} conversationId="conv-old" />)
 
     expect(output.scrollTop).toBe(1000)
     expect(screen.queryByRole('button', { name: 'Jump to newest' })).not.toBeInTheDocument()
@@ -452,7 +461,7 @@ describe('conversation controls — autoscroll follows scroll position', () => {
 
   it('offers a way back to the newest entry only while following is suspended', async () => {
     recordedEntries = [timelineEntry('1')]
-    render(<AgentOutputPanel agent={idleAgent} />)
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     const output = screen.getByTestId('conversation-output')
 
     // Following: no control.
@@ -471,7 +480,7 @@ describe('conversation controls — autoscroll follows scroll position', () => {
   })
 
   it('does not reintroduce a pause or resume scroll toggle', () => {
-    render(<AgentOutputPanel agent={idleAgent} />)
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     expect(
       screen.queryByRole('button', { name: /Pause scroll|Resume scroll/ }),
     ).not.toBeInTheDocument()

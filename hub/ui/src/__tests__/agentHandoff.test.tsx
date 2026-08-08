@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
-import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { NEW_CONVERSATION_ID } from '@/lib/navigation'
+import { ControlledConversation } from './support/ControlledConversation'
 
 let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
@@ -107,12 +108,16 @@ describe('agent conversation handoff', () => {
   })
 
   it('checkpoints the old session and resumes the handoff in exactly one new session', async () => {
-    const onConversationChange = vi.fn()
+    const onSelectConversation = vi.fn()
     const user = userEvent.setup()
-    const view = render(<AgentOutputPanel agent={agent} onConversationChange={onConversationChange} />)
+    const view = render(
+      <ControlledConversation
+        agent={agent}
+        conversationId="conv-old"
+        onSelectConversation={onSelectConversation}
+      />,
+    )
     expect(screen.getAllByTestId('conversation-header')).toHaveLength(1)
-
-    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith('conv-old'))
 
     await user.click(screen.getByLabelText('Conversation actions'))
     await user.click(await screen.findByRole('menuitem', { name: /Handoff/ }))
@@ -123,7 +128,11 @@ describe('agent conversation handoff', () => {
       conversation_id: 'conv-old',
     })
     expect(triggerBody(0).message).toContain('aw-checkpoint skill')
-    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith(null))
+    // The handover to a fresh conversation is the handoff continuing, not the operator leaving:
+    // the preparing state and its notice have to survive the destination moving.
+    await waitFor(() =>
+      expect(onSelectConversation).toHaveBeenCalledWith(NEW_CONVERSATION_ID),
+    )
     expect(screen.getByTestId('session-continuity')).toHaveTextContent(
       'Preparing durable handoff',
     )
@@ -139,7 +148,13 @@ describe('agent conversation handoff', () => {
         payload: { phase: 'completed' },
       },
     ]
-    view.rerender(<AgentOutputPanel agent={agent} onConversationChange={onConversationChange} />)
+    view.rerender(
+      <ControlledConversation
+        agent={agent}
+        conversationId="conv-old"
+        onSelectConversation={onSelectConversation}
+      />,
+    )
 
     await waitFor(() =>
       expect(screen.getByTestId('session-continuity')).toHaveTextContent('Handoff ready'),
@@ -170,7 +185,7 @@ describe('agent conversation handoff', () => {
         payload: { phase: 'started' },
       },
     ]
-    await waitFor(() => expect(onConversationChange).toHaveBeenCalledWith('conv-new'))
+    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-new'))
 
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: 'And now continue normally.' },

@@ -133,12 +133,12 @@ describe('running-agent composer', () => {
         waiting_reason: 'agent is already running',
       }), { status: 200 }))
 
-    const view = render(<AgentOutputPanel agent={runningAgent} />)
+    const view = render(<AgentOutputPanel agent={runningAgent} conversationId={conversation.id} />)
     const composer = screen.getByRole('textbox')
     const send = screen.getByRole('button', { name: 'Send message' })
 
     await waitFor(() =>
-      expect(screen.getByTestId('session-continuity')).toHaveTextContent(conversation.id),
+      expect(screen.getByTestId('session-continuity')).toHaveTextContent(conversation.title as string),
     )
     expect(composer).toBeEnabled()
 
@@ -156,7 +156,7 @@ describe('running-agent composer', () => {
     expect(screen.queryByText('First follow-up')).not.toBeInTheDocument()
 
     recordedEntries = [queuedEntry('entry-1', 'First follow-up', 1)]
-    view.rerender(<AgentOutputPanel agent={runningAgent} />)
+    view.rerender(<AgentOutputPanel agent={runningAgent} conversationId={conversation.id} />)
     expect(await screen.findByText('First follow-up')).toBeInTheDocument()
     expect(screen.getAllByText('queued')).toHaveLength(1)
 
@@ -173,7 +173,7 @@ describe('running-agent composer', () => {
       queuedEntry('entry-1', 'First follow-up', 1),
       queuedEntry('entry-2', 'Second follow-up', 2),
     ]
-    view.rerender(<AgentOutputPanel agent={runningAgent} />)
+    view.rerender(<AgentOutputPanel agent={runningAgent} conversationId={conversation.id} />)
 
     const first = await screen.findByText('First follow-up')
     const second = await screen.findByText('Second follow-up')
@@ -188,7 +188,7 @@ describe('running-agent composer', () => {
     }))
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-    render(<AgentOutputPanel agent={idleAgent} />)
+    render(<AgentOutputPanel agent={idleAgent} conversationId={conversation.id} />)
     const composer = screen.getByRole('textbox')
     fireEvent.change(composer, { target: { value: 'Please preserve this draft' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
