@@ -10,6 +10,7 @@ import {
 } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTree } from './AgentTree'
+import { RecencyView } from './RecencyView'
 
 export type SidebarPage =
   | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec'
@@ -38,6 +39,11 @@ export const SIDEBAR_MAX_WIDTH = 420
 
 const COLLAPSED_KEY = 'aw.projectRailCollapsed'
 const AGENTS_EXPANDED_KEY = 'aw.railAgentsExpanded'
+const RAIL_VIEW_KEY = 'aw.railView'
+
+/** The tree is the default: the agent roster is what AgentWeave has that a two-level chat
+ *  sidebar does not. The recency view recovers the flat scan the extra level costs. */
+export type RailView = 'tree' | 'recency'
 const SECTION_LABELS: Record<EnvironmentSection, string> = {
   quality: 'Quality',
   instructions: 'Instructions',
@@ -83,6 +89,9 @@ export function Sidebar({
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
     loadFlags(AGENTS_EXPANDED_KEY),
   )
+  const [railView, setRailView] = useState<RailView>(
+    () => (localStorage.getItem(RAIL_VIEW_KEY) as RailView | null) ?? 'tree',
+  )
   /** The tree component keys its agents by bare name; the store keys them by project too. */
   const agentExpansionFor = (projectId: string): Record<string, boolean> => {
     const prefix = `${projectId}/`
@@ -117,6 +126,14 @@ export function Sidebar({
       // Persistence is optional.
     }
   }, [expandedAgents])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(RAIL_VIEW_KEY, railView)
+    } catch {
+      // Persistence is optional.
+    }
+  }, [railView])
 
   return (
     <aside
@@ -173,9 +190,23 @@ export function Sidebar({
         <>
           <div className="flex items-center justify-between px-1 pb-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
-            <Button variant="ghost" size="icon-xs" data-testid="open-existing-project" onClick={onOpenExisting} aria-label="Open existing project" title="Open existing project">
-              <Icon name="folder_open" size={15} />
-            </Button>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                data-testid="rail-view-toggle"
+                data-view={railView}
+                aria-pressed={railView === 'recency'}
+                onClick={() => setRailView((view) => (view === 'tree' ? 'recency' : 'tree'))}
+                aria-label={railView === 'tree' ? 'Switch to recent conversations' : 'Switch to agent tree'}
+                title={railView === 'tree' ? 'Recent conversations' : 'Agent tree'}
+              >
+                <Icon name={railView === 'tree' ? 'schedule' : 'smart_toy'} size={15} />
+              </Button>
+              <Button variant="ghost" size="icon-xs" data-testid="open-existing-project" onClick={onOpenExisting} aria-label="Open existing project" title="Open existing project">
+                <Icon name="folder_open" size={15} />
+              </Button>
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
@@ -220,7 +251,16 @@ export function Sidebar({
                       <Icon name="settings" size={14} />
                     </Button>
                   </div>
-                  {expanded && (
+                  {expanded && railView === 'recency' && (
+                    <RecencyView
+                      projectId={project.id}
+                      agents={project.agents}
+                      activeProject={activeProject}
+                      activeConversation={activeConversation}
+                      onOpenConversation={onOpenConversation}
+                    />
+                  )}
+                  {expanded && railView === 'tree' && (
                     <AgentTree
                       projectId={project.id}
                       agents={project.agents}

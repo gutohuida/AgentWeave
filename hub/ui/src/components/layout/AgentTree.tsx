@@ -129,15 +129,20 @@ export function AgentTree({
                     testId={`rail-conversation-${conversation.id}`}
                   />
                 ))}
-                {hidden > 0 && (
+                {(hidden > 0 || expandedAll) && (
                   <button
                     type="button"
                     className="row-item"
                     data-testid={`conversation-expander-${projectId}-${agent.name}`}
-                    onClick={() => setShowAll((state) => ({ ...state, [agent.name]: true }))}
+                    aria-expanded={expandedAll}
+                    onClick={() =>
+                      setShowAll((state) => ({ ...state, [agent.name]: !expandedAll }))
+                    }
                     style={{ color: 'var(--text-3)' }}
                   >
-                    Show {hidden} more
+                    {expandedAll
+                      ? `Show fewer`
+                      : `Show ${hidden} more`}
                   </button>
                 )}
                 {conversations.length === 0 && (

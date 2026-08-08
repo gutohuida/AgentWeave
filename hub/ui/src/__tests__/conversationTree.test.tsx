@@ -172,7 +172,29 @@ describe('conversations as a navigable level', () => {
 
     fireEvent.click(expander)
     expect(screen.getByTestId(`rail-conversation-conv-${CONVERSATION_DISPLAY_CAP}`)).toBeInTheDocument()
-    expect(screen.queryByTestId('conversation-expander-proj-a-claude')).toBeNull()
+  })
+
+  it('offers a way back once expanded', () => {
+    // Shipped without this: the control vanished after expanding, so an agent with 40
+    // conversations stayed 40 rows tall for the rest of the session.
+    payload = {
+      conversations: Array.from({ length: CONVERSATION_DISPLAY_CAP + 3 }, (_, index) =>
+        conversation({ id: `conv-${index}`, title: `Thread ${index}` }),
+      ),
+      archived_count: 0,
+    }
+    renderRail()
+    expandClaude()
+
+    fireEvent.click(screen.getByTestId('conversation-expander-proj-a-claude'))
+    const collapse = screen.getByTestId('conversation-expander-proj-a-claude')
+    expect(collapse.textContent).toContain('Show fewer')
+
+    fireEvent.click(collapse)
+    expect(screen.queryByTestId(`rail-conversation-conv-${CONVERSATION_DISPLAY_CAP}`)).toBeNull()
+    expect(screen.getByTestId('conversation-expander-proj-a-claude').textContent).toContain(
+      'Show 3 more',
+    )
   })
 
   it('marks a waiting conversation distinctly from a running one', () => {

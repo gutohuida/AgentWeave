@@ -73,11 +73,11 @@
 
 ## 6. Navigation — the recency view
 
-- [ ] 6.1 View toggle in the rail; agent tree is the default; the choice persists to localStorage
-- [ ] 6.2 Recency list of the project's conversations across agents, most recent activity first
-- [ ] 6.3 A persistent 2px leading edge in the owning agent's colour, matching `agentColorVars` — no hover tint
-- [ ] 6.4 The same attention indicator as the tree
-- [ ] 6.5 A "Show archived (N)" control in the recency view, listing the project's archived conversations across agents (operator decision, 2026-08-08: recency hides archived, but the count and the way in must be visible — hiding them silently reads as data loss)
+- [x] 6.1 View toggle in the rail; agent tree is the default; the choice persists to localStorage
+- [x] 6.2 Recency list of the project's conversations across agents, most recent activity first
+- [x] 6.3 A persistent 2px leading edge in the owning agent's colour, matching `agentColorVars` — no hover tint
+- [x] 6.4 The same attention indicator as the tree
+- [x] 6.5 A "Show archived (N)" control in the recency view, listing the project's archived conversations across agents (operator decision, 2026-08-08: recency hides archived, but the count and the way in must be visible — hiding them silently reads as data loss)
 
 ## 7. Row menus and the new-conversation surface
 
@@ -109,7 +109,7 @@
 
 - [x] 10.1 `conversationTree.test.tsx` — conversations listed under an agent, newest first, titled; expander toggles without navigating; agent name opens the most recent conversation
 - [x] 10.2 `conversationCap.test.tsx` — the remainder is behind an expander stating the count, never silently dropped
-- [ ] 10.3 `recencyView.test.tsx` — toggle, persistence, cross-agent ordering, persistent agent colour with no hover dependency
+- [x] 10.3 `recencyView.test.tsx` — toggle, persistence, cross-agent ordering, persistent agent colour with no hover dependency
 - [x] 10.4 `conversationAttention.test.tsx` — a question in one conversation shows as waiting while a different conversation is open
 - [ ] 10.5 `rowMenus.test.tsx` — both menus keyboard-operable, focus returns to trigger, agent settings do not unmount the conversation
 - [ ] 10.6 `newConversationSurface.test.tsx` — agent pre-bound from the tree; agent required from recency; abandonment creates nothing
