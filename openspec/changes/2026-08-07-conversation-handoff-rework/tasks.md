@@ -478,6 +478,28 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
       unrunnable probe is the Hub's failure, not the checkpoint's; failing a checkpoint because
       the grader was unavailable would recreate — in the other direction — exactly what this
       change removes, a status that reports something other than what it names
+
+      **Live-verified against the real database with real CLI spawns.** The suite fakes
+      `subprocess.run` throughout, so nothing in it had ever produced a checkpoint from an actual
+      model. Migrations `0043`–`0045` applied to `hub/data/agentweave.db`.
+
+      `ckpt-3377549f` on `conv-565bde40` (`codex-2`, 10 runs): `ready`, probe `passed`, generation
+      18.8s / 1284 output tokens / 40510 µ$, probe 7.1s / 415 tokens / 25501 µ$. The body was
+      genuinely useful — it recovered a real cross-agent dead end (`haiku-2` could not see a file
+      `codex-2` had written, because they are in separate worktrees) that no computed field holds.
+
+      **That first pass was weak and was not left standing:** three empty sets agreeing with three
+      empty sets. A task and an unanswered question were then seeded as real ground truth and a
+      second checkpoint generated — `ckpt-052550e1`, `previous=ckpt-3377549f`,
+      `lineage=ckpt-3377549f`, so **anchoring and lineage were observed live, not only tested**.
+      Its probe `passed` having actually recovered `task-probe-check` and `q-probe-check` from the
+      rendered artifact. The failure direction was then graded directly rather than assumed: a
+      reader dropping the task and inventing a path returns `failed` with the two findings
+      separated into `missing` and `invented`.
+
+      **`files_changed` was `[]` on both, correctly** — every run on that conversation predates
+      `Run.snapshot_commit_sha`, and `0043` deliberately does not backfill. Recording no files is
+      the designed behaviour for historical turns, not a gap in the computation
 - [ ] 6.6 Blind-resume acceptance test: a reader given only the checkpoint answers the probe
       questions correctly
 - [ ] 6.7 Record `trigger` on every checkpoint. **One prompt for all triggers in v1 — provisional,
