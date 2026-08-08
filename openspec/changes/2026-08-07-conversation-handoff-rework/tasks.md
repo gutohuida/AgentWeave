@@ -208,6 +208,14 @@ operator route and the agent route funnel into `create_message_for_actor`.
       `test_three_messages_on_one_line_of_work_land_in_one_thread`, which touches a newer recipient
       thread between each send so it fails against recency routing rather than passing by accident
 
+      **Also verified live against `:8010`, through `send_message` rather than the API.** Migration
+      `0041` applied to the real database (38 existing conversations, none backfilled, index
+      created). A real `haiku-1` turn called the tool and the Hub created `conv-05a0bbb4` for
+      `codex-1`, `origin: peer`, bound to the sender's `conv-0bdd26ba`. A `codex-1` turn on an
+      unrelated thread then made `conv-8b300c8e` its most recently touched open conversation — the
+      one recency routing would have chosen — and a second `haiku-1` send from the same sender
+      conversation landed back in `conv-05a0bbb4`. Both pings, one thread, with the decoy newer
+
 > **Deferred by the operator (2026-08-08): peer-thread presentation is a follow-up, not part of
 > this section.** Binding per sender-conversation creates more recipient threads than recency
 > routing did. `origin: peer` already exists (`messages.py:138`) so the navigation tree *can*
