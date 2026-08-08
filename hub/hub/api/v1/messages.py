@@ -61,9 +61,12 @@ async def create_message_for_actor(
         msg.conversation_id = source_run.conversation_id
         source_conversation_id = source_run.conversation_id
 
-    recipient_exists = await session.scalar(
-        select(Agent.id).where(Agent.project_id == project_id, Agent.name == body.recipient)
-    )
+    recipient_row = (
+        await session.execute(
+            select(Agent).where(Agent.project_id == project_id, Agent.name == body.recipient)
+        )
+    ).scalars().first()
+    recipient_exists = recipient_row.id if recipient_row is not None else None
     if recipient_exists is None:
         # Recorded on the SENDER's timeline — task 5.3: the Hub, not just the agent's own
         # tool-call error text, must make this visible to the operator. Without this,
@@ -87,6 +90,33 @@ async def create_message_for_actor(
             detail=(
                 f"Unknown recipient '{body.recipient}': no agent by that name is "
                 "registered in this project"
+            ),
+        )
+
+    if recipient_row.lifecycle == "archived":
+        # The archived-*agent* case, distinct from the archived-*conversation* case below: there
+        # is no conversation to name, and opening a new one would not help — nothing runs an
+        # archived agent, so the entry would sit queued forever. Same three-part contract, since
+        # the reason it exists is the same one: the sender should not have to reconstruct its own
+        # message from a context it has already moved past.
+        await persist_event(
+            session,
+            project_id,
+            "agent_action_rejected",
+            {
+                "endpoint": "POST /messages",
+                "reason": "archived_agent",
+                "recipient": body.recipient,
+            },
+            agent=sender,
+            severity="warn",
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Agent '{body.recipient}' is archived and cannot receive messages. Ask the "
+                "operator to unarchive it, or send to a different agent. Your message was not "
+                f"sent. Its content was:\n\n{body.content}"
             ),
         )
 

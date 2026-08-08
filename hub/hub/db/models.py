@@ -128,6 +128,18 @@ class Agent(Base):
     # after the default moved, pinning every existing agent to a value nobody chose.
     permission_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     question_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # An agent is archived, never deleted — its conversations, runs and messages keep their
+    # attribution, and archival is reversible. Mirrors `Conversation.lifecycle` deliberately:
+    # the two are the same act at different scopes, and giving them different vocabularies
+    # would make the rail's two "archived" listings read as unrelated features.
+    # `server_default` as well as `default`: 0038 adds the column with one, so without it here a
+    # freshly created database and an upgraded one would disagree on the schema — and any writer
+    # that does not go through the ORM (migration backfills, and the raw inserts the migration
+    # tests use to build historical states) would hit a NOT NULL failure.
+    lifecycle: Mapped[str] = mapped_column(
+        String(16), default="open", server_default="open", nullable=False
+    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
@@ -137,7 +149,10 @@ class Agent(Base):
 
     project: Mapped["Project"] = relationship(back_populates="agents")
 
-    __table_args__ = (Index("ix_agents_project_name", "project_id", "name"),)
+    __table_args__ = (
+        Index("ix_agents_project_name", "project_id", "name"),
+        CheckConstraint("lifecycle IN ('open', 'archived')", name="ck_agents_lifecycle"),
+    )
 
 
 RUNNER_CLIS = ("claude", "codex")

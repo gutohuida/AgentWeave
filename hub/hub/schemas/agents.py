@@ -41,6 +41,9 @@ class AgentSummary(BaseModel):
     last_seen: Optional[datetime] = None
     message_count: int
     active_task_count: int
+    # "open" or "archived". An agent is archived, never deleted; the default listing excludes
+    # archived ones, so this is only ever "archived" for a caller that asked for them.
+    lifecycle: str = Field(default="open", max_length=16)
     # The CLI this agent runs as. Free-form, not an enum: a Runner record supplies its own `cli`
     # and any value the registry accepts can appear here. "native" is the no-binding fallback.
     runner: str = Field(default="native", max_length=64)

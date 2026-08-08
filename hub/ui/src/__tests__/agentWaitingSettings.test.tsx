@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { AgentInfoTab } from '@/components/agents/AgentInfoTab'
+import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
 
 const updateMutate = vi.fn()
@@ -18,10 +18,22 @@ vi.mock('@/api/charters', () => ({
   useBindAgentCharter: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }))
 
+let roster: AgentSummary[] = []
+
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
-  return { ...actual, useAgentSessions: () => ({ data: [], isLoading: false }) }
+  return {
+    ...actual,
+    useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useAgents: () => ({ data: roster, isLoading: false }),
+  }
 })
+
+/** The page resolves its agent from the roster, so a test supplies one and names it. */
+function renderInteraction(summary: AgentSummary) {
+  roster = [summary]
+  return render(<AgentSettingsPage agent={summary.name} section="interaction" />)
+}
 
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
   return {
@@ -44,7 +56,7 @@ describe('per-agent waiting settings', () => {
   it('shows the default as a placeholder when nothing is set', () => {
     // Not pre-filled with 240: a row storing today's number would keep saying it after the
     // default moved, and the operator could not tell "chosen" from "inherited".
-    render(<AgentInfoTab agent={agent()} />)
+    renderInteraction(agent())
     const input = questionWait()
     expect(input).toHaveValue(null)
     expect(input).toHaveAttribute('placeholder', '240')
@@ -52,14 +64,14 @@ describe('per-agent waiting settings', () => {
   })
 
   it('shows a configured value', () => {
-    render(<AgentInfoTab agent={agent({ question_timeout_seconds: 300 })} />)
+    renderInteraction(agent({ question_timeout_seconds: 300 }))
     expect(questionWait()).toHaveValue(300)
   })
 
   it('saves on blur, not on every keystroke', () => {
     // Typing "45" over "240" passes through "4"; saving that would set a wait shorter than the
     // card takes to render.
-    render(<AgentInfoTab agent={agent({ question_timeout_seconds: 240 })} />)
+    renderInteraction(agent({ question_timeout_seconds: 240 }))
     const input = questionWait()
     fireEvent.change(input, { target: { value: '4' } })
     fireEvent.change(input, { target: { value: '45' } })
@@ -74,7 +86,7 @@ describe('per-agent waiting settings', () => {
   })
 
   it('clears back to the default when emptied', () => {
-    render(<AgentInfoTab agent={agent({ question_timeout_seconds: 300 })} />)
+    renderInteraction(agent({ question_timeout_seconds: 300 }))
     fireEvent.change(questionWait(), { target: { value: '' } })
     fireEvent.blur(questionWait())
     expect(updateMutate).toHaveBeenCalledWith({
@@ -85,7 +97,7 @@ describe('per-agent waiting settings', () => {
   })
 
   it.each([['5'], ['601'], ['0']])('refuses %s without saving', (value) => {
-    render(<AgentInfoTab agent={agent()} />)
+    renderInteraction(agent())
     fireEvent.change(questionWait(), { target: { value } })
     fireEvent.blur(questionWait())
     expect(updateMutate).not.toHaveBeenCalled()
@@ -93,18 +105,38 @@ describe('per-agent waiting settings', () => {
   })
 
   it('does not save a value that has not changed', () => {
-    render(<AgentInfoTab agent={agent({ question_timeout_seconds: 300 })} />)
+    renderInteraction(agent({ question_timeout_seconds: 300 }))
     fireEvent.blur(questionWait())
     expect(updateMutate).not.toHaveBeenCalled()
   })
 
-  it('offers both waits, and the bindings, as settings on the agent', () => {
-    // The point of the change: these are durable per-agent settings, and they live here rather
-    // than behind a gear or in the composer's per-conversation pills.
-    render(<AgentInfoTab agent={agent()} />)
+  it('keeps both waits together under Interaction, and the bindings elsewhere', () => {
+    // These are durable per-agent settings, and they live on the agent rather than behind a gear
+    // or in the composer's per-conversation pills. What changed with the configuration page is
+    // that they no longer share one scrolling panel with the bindings: a section is a claim about
+    // what the operator came to do, and "how long it waits for me" is not "what it runs as".
+    renderInteraction(agent())
     expect(screen.getByLabelText(/Permission decision wait for codex-1/)).toBeInTheDocument()
     expect(screen.getByLabelText(/Answer to a question wait for codex-1/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Runner for codex-1')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Charter for codex-1')).not.toBeInTheDocument()
+  })
+
+  it('puts each binding in its own section', () => {
+    roster = [agent()]
+    const { unmount } = render(<AgentSettingsPage agent="codex-1" section="execution" />)
     expect(screen.getByLabelText('Runner for codex-1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Charter for codex-1')).not.toBeInTheDocument()
+    unmount()
+
+    render(<AgentSettingsPage agent="codex-1" section="charter" />)
     expect(screen.getByLabelText('Charter for codex-1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Runner for codex-1')).not.toBeInTheDocument()
+  })
+
+  it('says so when the agent is not in the roster, rather than rendering an empty page', () => {
+    roster = []
+    render(<AgentSettingsPage agent="codex-1" section="interaction" />)
+    expect(screen.getByTestId('agent-settings-empty')).toHaveTextContent(/no longer in the roster/i)
   })
 })

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AgentInfoTab } from '@/components/agents/AgentInfoTab'
+import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { RunnersPage } from '@/components/runners/RunnersPage'
 
 const createMutate = vi.fn()
@@ -49,7 +49,16 @@ vi.mock('@/api/charters', () => ({
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
-  return { ...actual, useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }) }
+  return {
+    ...actual,
+    useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useAgents: () => ({
+      data: [
+        { name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, runner_id: 'runner-default' },
+      ],
+      isLoading: false,
+    }),
+  }
 })
 
 describe('runner management UI', () => {
@@ -77,17 +86,7 @@ describe('runner management UI', () => {
 
   it('rebinds an agent to a different runner', async () => {
     const user = userEvent.setup()
-    render(
-      <AgentInfoTab
-        agent={{
-          name: 'claude',
-          status: 'idle',
-          message_count: 0,
-          active_task_count: 0,
-          runner_id: 'runner-default',
-        }}
-      />,
-    )
+    render(<AgentSettingsPage agent="claude" section="execution" />)
 
     await user.selectOptions(screen.getByLabelText('Runner for claude'), 'runner-opus')
     expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', runnerId: 'runner-opus' })

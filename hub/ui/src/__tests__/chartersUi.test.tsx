@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChartersPage } from '@/components/charters/ChartersPage'
-import { AgentInfoTab } from '@/components/agents/AgentInfoTab'
+import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 
 const createMutate = vi.fn()
 const bindMutate = vi.fn()
@@ -48,6 +48,12 @@ vi.mock('@/api/agents', async (importOriginal) => {
   return {
     ...actual,
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useAgents: () => ({
+      data: [
+        { name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, charter_id: 'charter-two' },
+      ],
+      isLoading: false,
+    }),
   }
 })
 
@@ -75,19 +81,9 @@ describe('charter management UI', () => {
     )
   })
 
-  it('reassigns a charter from the agent detail view', async () => {
+  it('reassigns a charter from the agent settings page', async () => {
     const user = userEvent.setup()
-    render(
-      <AgentInfoTab
-        agent={{
-          name: 'claude',
-          status: 'idle',
-          message_count: 0,
-          active_task_count: 0,
-          charter_id: 'charter-two',
-        }}
-      />,
-    )
+    render(<AgentSettingsPage agent="claude" section="charter" />)
 
     await user.selectOptions(screen.getByLabelText('Charter for claude'), 'charter-one')
     expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', charterId: 'charter-one' })

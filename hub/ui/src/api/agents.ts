@@ -11,6 +11,8 @@ export interface AgentSummary {
   last_seen?: string
   message_count: number
   active_task_count: number
+  /** "open" or "archived". Only ever "archived" for a caller that asked for archived agents. */
+  lifecycle?: 'open' | 'archived'
   runner?: string  // The bound Runner's CLI; "native" when there is no binding
   display_model?: string  // e.g. "Claude", "Kimi", "Minimax" — derived from runner
   context_usage?: ContextUsage
@@ -121,7 +123,13 @@ export interface AgentSession {
   started_at?: string
 }
 
-export function useAgents() {
+/** Which agents a caller wants. `open` is the default everywhere an agent is *offered*.
+ *
+ *  `all` exists for the one surface that must still resolve an archived agent — its own
+ *  configuration page, which is where unarchiving happens. */
+export type AgentLifecycleFilter = 'open' | 'archived' | 'all'
+
+export function useAgents(lifecycle: AgentLifecycleFilter = 'open') {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const queryClient = useQueryClient()
 
@@ -139,9 +147,36 @@ export function useAgents() {
   // invalidateQueries() reconciliation on reconnect, so the poll fallback
   // this used to need is no longer necessary.
   return useQuery<AgentSummary[]>({
-    queryKey: ['project', projectId, 'agents'],
-    queryFn: () => getJson<AgentSummary[]>(`/api/v1/projects/${projectId}/agents`),
+    // The filter is part of the key: an "all" fetch must not overwrite the open roster every
+    // other surface reads, or opening one settings page would put archived agents in the rail.
+    queryKey: ['project', projectId, 'agents', ...(lifecycle === 'open' ? [] : [lifecycle])],
+    queryFn: () =>
+      getJson<AgentSummary[]>(
+        `/api/v1/projects/${projectId}/agents${lifecycle === 'open' ? '' : `?lifecycle=${lifecycle}`}`,
+      ),
     enabled: isConfigured && !!projectId,
+  })
+}
+
+export function useArchiveAgent() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, archived }: { agent: string; archived: boolean }) =>
+      postJson<{ name: string; lifecycle: string }>(
+        `/api/v1/projects/${projectId}/agents/${agent}/${archived ? 'archive' : 'unarchive'}`,
+        {},
+      ),
+    onSuccess: () => {
+      // Every roster variant, not just the open one — the settings page is reading `all`, and it
+      // is the surface the operator is looking at when this resolves.
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
   })
 }
 

@@ -4,7 +4,7 @@ import asyncio
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, get_args
+from typing import Any, Dict, List, Literal, Optional, Tuple, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import bound_address, project_workspace, worktrees
 from ...agent_colors import next_color_index
+from ...agent_lifecycle import archivable as agent_archivable
+from ...agent_lifecycle import archive as archive_agent_row
+from ...agent_lifecycle import unarchive as unarchive_agent_row
 from ...agent_status import effective_heartbeat_status, heartbeat_is_stale
 from ...auth import get_project
 from ...codex_appserver import APP_SERVER_OPT_OUT_FLAG, uses_app_server
@@ -233,9 +236,20 @@ async def get_agents_launchability(
 
 @router.get("", response_model=List[AgentSummary])
 async def list_agents(
+    lifecycle: Literal["open", "archived", "all"] = Query("open"),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
+    """The project's agent roster.
+
+    Archived agents are excluded by default, and this one filter is what removes them from every
+    surface that offers an agent — the rail, task assignment, the job form, peer recipients, the
+    new-conversation surface — because all of them read this endpoint. Adding the filter at each
+    call site instead would mean one missed site leaves an archived agent selectable.
+
+    `?lifecycle=all` is what the agent's own configuration page asks for: an archived agent must
+    still resolve there, or there would be nowhere to unarchive it from.
+    """
     project_id, _ = project
     cutoff = datetime.now(timezone.utc) - _24H
 
@@ -327,6 +341,18 @@ async def list_agents(
         db_agents[agent_row.name] = agent_row
         if agent_row.name not in session_agents_meta:
             session_agents_meta[agent_row.name] = {}
+
+    # Applied after every source has contributed, not to the Agent query alone: a name also
+    # arrives here from session config, from 24h of activity, and from being a task's assignee.
+    # Filtering only the query would let an archived agent back in through any of those.
+    if lifecycle != "all":
+        wanted = lifecycle
+        session_agents_meta = {
+            name: meta
+            for name, meta in session_agents_meta.items()
+            # An agent with no row cannot have been archived, so it counts as open.
+            if (db_agents[name].lifecycle if name in db_agents else "open") == wanted
+        }
 
     # The bound Runner is the truth about what a Hub-spawned agent actually runs. Without it
     # `_runner`/`_display_model` below fall through to their "native"/"Native" defaults, because
@@ -505,6 +531,7 @@ async def list_agents(
                 last_seen=hb.timestamp if hb else None,
                 message_count=msg_count,
                 active_task_count=task_count,
+                lifecycle=(agent_row.lifecycle if agent_row else "open"),
                 runner=_runner,
                 display_model=_display_model,
                 context_usage=context_usage,
@@ -1360,6 +1387,55 @@ async def get_agent_runtime_context(
         session_data=session_data,
         agent_row=agent_row,
     )
+
+
+async def _owned_agent(session: AsyncSession, project_id: str, name: str) -> Agent:
+    result = await session.execute(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == name)
+    )
+    agent_row = result.scalars().first()
+    if agent_row is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    return agent_row
+
+
+@router.post("/{name}/archive")
+async def archive_agent(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Archive an agent, or refuse with the reason it cannot be archived yet.
+
+    There is deliberately no counterpart that deletes one. See `agent_lifecycle`.
+    """
+    project_id, _ = project
+    agent_row = await _owned_agent(session, project_id, name)
+
+    obstruction = await agent_archivable(session, agent_row)
+    if obstruction is not None:
+        raise HTTPException(status_code=409, detail=obstruction)
+
+    archive_agent_row(agent_row)
+    await session.commit()
+    await session.refresh(agent_row)
+    return {"name": agent_row.name, "lifecycle": agent_row.lifecycle}
+
+
+@router.post("/{name}/unarchive")
+async def unarchive_agent(
+    name: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reopen an archived agent. Never refused — reopening obstructs nothing."""
+    project_id, _ = project
+    agent_row = await _owned_agent(session, project_id, name)
+
+    unarchive_agent_row(agent_row)
+    await session.commit()
+    await session.refresh(agent_row)
+    return {"name": agent_row.name, "lifecycle": agent_row.lifecycle}
 
 
 @router.post("/{name}/heartbeat", status_code=status.HTTP_201_CREATED)

@@ -86,8 +86,9 @@ Named for what an operator is trying to do, not for the shape of the data.
       settings exist at the time — today, a stated "nothing configurable yet", because a section
       that renders blank is indistinguishable from one that failed to load
 - [x] 3.6 **Access** — defined here, populated by the checkpoint change. Same stated empty state
-- [~] 3.7 **Workspace** — worktree, working directory. Section exists; **neither value is rendered
-      yet**
+- [~] 3.7 **Workspace** — worktree, working directory. Renders the agent's provider sessions with
+      the directory each ran in (rehomed here from the deleted `AgentInfoTab` — see 4.1). **The
+      worktree and working directory as such are still not rendered**
 - [x] 3.8 Binding a runner or charter shows what is bound and allows rebinding through the existing
       picker. It does **not** link through to the runner or charter record — rebinding one agent and
       editing a record bound by many are different acts
@@ -97,35 +98,66 @@ Named for what an operator is trying to do, not for the shape of the data.
 An agent is archived, never deleted. No `DELETE` route exists today; this is a commitment not to add
 one, plus the archival that makes its absence workable.
 
-- [ ] 3b.1 `lifecycle` column on `Agent`, constrained to `open` or `archived`, mirroring
+- [x] 3b.1 `lifecycle` column on `Agent`, constrained to `open` or `archived`, mirroring
       `models.py:255,280` for conversations. Migration guarded for a missing table; bump the head
       assertions in `hub/tests/test_migrations.py` **and** `hub/tests/test_project_persistence.py`
-- [ ] 3b.2 Archive and unarchive from the configuration destination. Archival is reversible
-- [ ] 3b.3 Refuse to archive an agent with a run in progress, following `archivable()`
-      (`conversations.py:172`), which refuses rather than destroying
-- [ ] 3b.4 An archived agent stops being offered wherever a working agent is offered — the rail,
+
+      Migration `0038`, plus an `archived_at` alongside it as conversations have. Two departures,
+      both deliberate: the CHECK constraint is **not** added to an existing table, because SQLite
+      cannot add one without a batch rebuild and a rebuild here would have to restate every column
+      and foreign key this revision happens to know about — silently dropping whatever a later
+      revision added. `create_all` builds it for fresh databases and the write paths reject any
+      other value. And the model column carries `server_default` as well as `default`, or a fresh
+      database and an upgraded one would disagree on the schema (caught by
+      `test_migration_0016`, which builds historical states with raw SQL)
+- [x] 3b.2 Archive and unarchive from the configuration destination. Archival is reversible —
+      in *Identity*, which also states that deletion does not exist and why
+- [x] 3b.3 Refuse to archive an agent with a run in progress, following `archivable()`
+      (`conversations.py:172`), which refuses rather than destroying. `agent_lifecycle.archivable`
+      mirrors it, checking the agent's **runs and queue** rather than its conversations'
+      lifecycles: an agent with ten archived conversations and one running turn is still working.
+      The refusal reaches the operator as their next instruction, not as a generic failure
+- [x] 3b.4 An archived agent stops being offered wherever a working agent is offered — the rail,
       peer-message recipients, task assignment, the new-conversation surface. **Enumerate these by
       search rather than by memory; one missed site leaves an archived agent selectable**
-- [ ] 3b.5 An archived agent keeps its history: conversations remain readable, runs and messages keep
+
+      The search found the better answer: all eleven UI consumers read one endpoint. So
+      `GET /agents` takes `?lifecycle=open|archived|all` defaulting to `open`, and that single
+      filter removes archived agents from every surface at once — the rail, `TasksBoard`,
+      `JobForm`, `NewConversationSurface`, `SpecPage`, `StatusBar`, `OverviewPage`,
+      `ActivityLog`. Filtering per call site would have been the version where one missed site
+      leaves an agent selectable. Applied **after** every source has contributed to the roster,
+      not to the `Agent` query alone — a name also arrives from session config, from 24h of
+      activity, and from being a task's assignee
+- [x] 3b.5 An archived agent keeps its history: conversations remain readable, runs and messages keep
       their attribution
-- [ ] 3b.6 Define what happens when a peer sends to an archived agent. The checkpoint change defines
+- [x] 3b.6 Define what happens when a peer sends to an archived agent. The checkpoint change defines
       the archived-*conversation* case; the archived-*agent* case belongs here
-- [ ] 3b.7 Test asserting no route hard-deletes an agent, so one cannot be added without the
+
+      **It was genuinely unhandled** — `create_message_for_actor` checked only that the recipient
+      existed, so a send to an archived agent queued an entry into a conversation nothing would
+      ever run. Now refused with the same three-part contract the archived-conversation case uses:
+      the cause, the remedy (ask the operator to unarchive, or send elsewhere), and the sender's
+      own content restated, so the retry is mechanical
+- [x] 3b.7 Test asserting no route hard-deletes an agent, so one cannot be added without the
       decision being revisited
 
 ## 4. Split configuration from observation
 
-- [ ] 4.1 Status, `latest_status_msg`, `last_seen` and the session list **stay with the
+- [x] 4.1 Status, `latest_status_msg`, `last_seen` and the session list **stay with the
       conversation**. They are observation, they change without anyone configuring anything, and
       they are useful while working
 
-      **Owed now, not later.** Deleting `AgentSettingsDialog` in 2.4 removed `AgentInfoTab`'s only
-      caller — it is referenced by tests alone. Most of what it showed survives elsewhere (status
-      and context usage on the conversation header; task and message counts on the overview agent
-      cards), so what is actually unreachable today is the **provider session list**. That is
-      diagnostic detail, and `agent-conversation-workspace` already confines provider identity to
-      "details or diagnostics" — but it currently has no surface at all. Give it one here
-- [ ] 4.2 `AgentInfoTab` retains only observation, or is removed if nothing is left to justify a tab
+      **Done, with one deliberate departure the operator chose.** Status and context usage were
+      already on the conversation header, and task and message counts on the overview agent cards,
+      so deleting the dialog cost only the **provider session list**. That did *not* go back to the
+      conversation: it went to **Workspace**, because what makes it useful is the directory each
+      session ran in — it answers "where did this agent work", not "what is it doing now".
+      `agent-conversation-workspace` permits provider identity in a details or diagnostic surface,
+      which this is
+- [x] 4.2 `AgentInfoTab` retains only observation, or is removed if nothing is left to justify a tab
+      — **removed.** Once its settings moved to the page and its sessions to *Workspace*, what
+      remained was a status block and two counters that both already render elsewhere
 - [x] 4.3 No setting appears in both places — the editable controls live once, in
       `AgentSettingsControls.tsx`, and are rendered only by the settings page. `AgentInfoTab` still
       imports them but is no longer reachable, which 4.2 resolves
@@ -146,11 +178,13 @@ one, plus the archival that makes its absence workable.
 
 ## 6. Verification
 
-- [~] 6.1 Component tests for the page: sections render, edits persist, the back control returns to
-      the originating context. **Back and section routing are covered; per-section rendering and
-      edit persistence are still only covered indirectly**, through the existing
-      `agentWaitingSettings` / `runnersUi` / `chartersUi` tests that render `AgentInfoTab`. Those
-      should move to the page once 4.2 removes it
+- [x] 6.1 Component tests for the page: sections render, edits persist, the back control returns to
+      the originating context. `agentWaitingSettings` / `runnersUi` / `chartersUi` now render
+      `AgentSettingsPage` at a named section rather than the deleted `AgentInfoTab`, so they assert
+      the composition the operator actually uses. Added: each binding is in its own section and
+      **not** in the others (the split is the change — asserting presence alone would still pass if
+      every section rendered everything), and an agent missing from the roster says so instead of
+      rendering an empty page
 - [x] 6.2 Navigation test: the destination is reachable from both entry points, survives reload, and
       is linkable
 - [x] 6.3 Confirm no setting is editable from two surfaces — see 4.3

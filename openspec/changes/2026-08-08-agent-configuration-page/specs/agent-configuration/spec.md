@@ -113,10 +113,42 @@ conversations, where archival is refused rather than allowed to strand something
 Archival MUST be reversible, and MUST preserve the agent's history: its conversations remain
 readable, and its runs and messages retain their attribution.
 
-An agent with a run in progress MUST NOT be archived.
+An agent with a run in progress MUST NOT be archived, nor one holding undelivered inbound queue
+entries. Both are refused with the reason rather than resolved: stopping a live run from a settings
+page destroys work with no undo, and archiving over a queued entry strands it permanently, because
+nothing delivers to an archived agent.
 
 An archived agent MUST NOT be offered wherever a working agent is offered, including for a new
-conversation, as a message recipient, and as a task assignee.
+conversation, as a message recipient, and as a task assignee. It MUST nonetheless remain reachable
+when explicitly asked for, because its own configuration is where unarchiving happens — an agent
+that could be archived but never found again would be deleted in all but name.
+
+An agent MUST NOT be able to send a message to an archived agent. The send SHALL fail with a
+response carrying three things: that the recipient is archived, what to do instead, and the content
+the sender submitted, restated verbatim. This is the contract `agent-capability-plane` already
+states for an archived conversation, for the same reason — a blocked send that returns only an
+error forces the agent to reconstruct its own message from a context it may have moved past.
+Opening a new conversation instead would not help: nothing runs an archived agent, so the entry
+would sit queued forever.
+
+#### Scenario: Archiving is refused over undelivered messages
+
+- **WHEN** an operator archives an agent holding undelivered inbound queue entries
+- **THEN** the request is refused with the reason
+- **AND** the entries remain queued
+
+#### Scenario: An archived agent is still reachable when asked for
+
+- **WHEN** an archived agent's configuration is requested
+- **THEN** the agent resolves
+- **AND** unarchiving is offered there
+
+#### Scenario: A peer send to an archived agent is refused with its own content
+
+- **WHEN** an agent sends a message to an archived agent
+- **THEN** the send fails
+- **AND** the response states that the recipient is archived, says what to do instead, and restates the submitted content
+- **AND** no queue entry is created for the archived agent
 
 #### Scenario: An archived agent is not offered as a working agent
 
