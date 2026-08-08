@@ -32,7 +32,8 @@ And the existing surface is partly fictional. `agents` has no `role` or `yolo` c
   `2026-08-07-conversation-handoff-rework`; this change provides the container.
 - Runner and charter *management*. Those are already destinations (`RunnersPage`, `ChartersPage`);
   this page binds an agent to them, it does not edit them.
-- Agent deletion. Raised repeatedly as an open question and still unanswered; out of scope here.
+- Agent **deletion**. Decided against rather than deferred — an agent is archived instead, and no
+  permanent-deletion route is to be added. See the decision below.
 - Redesigning project settings. Its pattern is followed, not changed.
 
 ## Decisions
@@ -43,13 +44,25 @@ A conversation is transient and there may be many of them; an agent's configurat
 singular. Nesting the second inside the first means configuration is reached *through* an unrelated
 piece of work, and inherits whatever conversation happens to be selected.
 
-The project pattern already resolves this and is followed: a section list replaces the tab strip
-rather than nesting inside it, and the destination is addressable in the URL so configuration can be
-linked to and returned to.
+The project pattern already resolves this and is followed: in environment mode the sidebar becomes
+the section list plus a back control (`Sidebar.tsx:173-191`), rather than the sections nesting inside
+the surrounding navigation.
 
-Navigation is by back control rather than the left panel, matching project settings. The rationale
-there applies unchanged: a settings surface is somewhere you go and come back from, not somewhere
-you browse laterally.
+**The destination is agent-scoped, not an environment section.** `ENVIRONMENT_SECTIONS` entries carry
+no subject — `runners`, `charters` and `worktrees` are each one page for a whole collection — so
+placing agents there would give one page for every agent, with the agent absent from the URL and
+seven sections per agent competing on it. A fourth destination shape is added instead, carrying the
+agent.
+
+The apparent inconsistency is the argument for it. Environment holds **shared project resources**: a
+runner is bound by many agents, a charter by many agents, a budget by the project. An agent is not a
+shared resource — it is the object the product is organised around, since the rail is projects →
+agents → conversations. Its settings belong to it for the same reason its conversations do.
+
+Rejected: an `agents` entry in `ENVIRONMENT_SECTIONS`. Consistent with the furniture, inconsistent
+with the product, and it cannot address one agent. An environment entry that merely *lists* agents
+and links to each one's settings remains available later as a discoverability aid; it is not needed
+to make this work.
 
 ### Status and sessions are observation and do not move
 
@@ -121,11 +134,58 @@ remove.
 
 This is a rule, not a list, so a future setting is placed by applying it rather than by argument.
 
-### The page is reached from the agent, and returns to where it came from
+### Leaving returns to the agent's conversation, at a fixed target
 
-Entry is from the agent — its row in navigation, and its conversation header. Leaving returns to the
-originating context rather than to a fixed location, because an operator who opened settings from a
-conversation is mid-task in that conversation.
+Entry is from the agent — its row in navigation, and its conversation header. Leaving goes to that
+agent's most recent conversation.
+
+An earlier draft of this design had the back control return to whatever context the operator came
+from. That was wrong on two counts. It departs from the shipped pattern, where "Back to {project}"
+goes to a fixed destination (`App.tsx:207`) rather than a remembered one. And it makes the same
+control land in different places depending on history, while requiring an origin to be stored and a
+fallback for when that origin no longer exists — an archived conversation, or an agent that has
+since been archived itself.
+
+A fixed target costs nothing here because the agent *has* an obvious one. Back to the agent's
+conversation is predictable, needs no stored origin, and keeps the agent as the organising object on
+the way out as well as on the way in.
+
+### Bindings are rebound in place and do not link through
+
+*Execution* and *Charter* show what an agent is bound to and allow rebinding, through the picker
+that already exists (`AgentInfoTab.tsx:352,394`). Neither links through to the runner's or charter's
+own page.
+
+Rebinding an agent and editing a shared record are different acts with different blast radius: a
+runner is bound by many agents, so editing its definition from a surface titled with one agent's
+name is how someone changes every agent while believing they are configuring one. Keeping the two
+apart also means the back control stays one hop deep, with no navigation stack to maintain.
+
+Editing the record itself remains two clicks away through environment → runners or → charters.
+
+### An agent is archived, never deleted
+
+An agent that is no longer wanted is archived. Hard deletion is not offered, and MUST NOT be added
+later without revisiting this decision.
+
+The reason is attribution. Everything in the Hub records the run that produced it, and every run
+records its agent — which is how conversations, messages, tasks, and (once
+`2026-08-07-conversation-handoff-rework` lands) cross-agent participation are attributed. Deleting an
+agent either cascades through that history, destroying the record of work that genuinely happened,
+or orphans it. Neither is acceptable for a system whose value is that it remembers.
+
+This follows the house position rather than inventing one. `archivable()`
+(`conversations.py:172`) refuses to archive a conversation holding an undelivered queue entry, on
+the stated grounds that archiving would strand it permanently — the Hub already prefers refusing to
+silently destroying. Agent archival mirrors conversation archival directly: a `lifecycle` column
+constrained to `open` or `archived`, exactly as `models.py:255,280` does for conversations.
+
+Archiving is reversible. An archived agent keeps its history, its conversations remain readable, and
+it stops appearing where a working agent is offered. It is not triggerable while the agent has a run
+in progress, for the same reason a conversation is not.
+
+No `DELETE` route for an agent exists today, so this decision is additive: it is a commitment not to
+add one, plus the archival that makes the absence workable.
 
 ## Risks
 
@@ -138,13 +198,16 @@ conversation is mid-task in that conversation.
 - **Sections defined ahead of their contents.** *Context* and *Access* are specified before the
   checkpoint change fills them. If that change's settings turn out not to fit, the sections were
   named wrongly — mitigated by naming them for operator intent rather than for the settings.
-- **Scope pull toward agent deletion.** A settings page is where an operator expects to find it, and
-  it is a standing open question. Deferring it will read as an omission.
+- **Archival has reach.** An archived agent must stop being offered wherever a working agent is
+  offered — the rail, the peer-message recipient list, task assignment, the new-conversation
+  surface. Missing one leaves an archived agent selectable, which is worse than not archiving.
+- **Archival interacts with peer delivery.** Once
+  `2026-08-07-conversation-handoff-rework` binds delivery to a conversation, a peer sending to an
+  archived agent needs a defined answer. That change already defines the archived-*conversation*
+  case; the archived-*agent* case is this change's to state.
 
 ## Open questions
 
-- Does the agent settings page belong under the project's `environment` destination alongside
-  runners and charters, or as its own destination hanging off the agent? The first groups
-  configuration together; the second keeps the agent as the organising object.
-- Should binding a runner or charter link through to that record's own page, and if so does the back
-  control return to agent settings or to where the operator originally came from?
+None outstanding. The two that stood here — where the destination lives, and whether bindings link
+through — were resolved by the operator on 2026-08-08 and are recorded above as decisions, together
+with archival replacing deletion.

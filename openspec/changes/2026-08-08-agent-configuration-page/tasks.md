@@ -22,12 +22,14 @@ render.
 
 ## 2. The destination
 
-- [ ] 2.1 Add an agent-settings destination to the navigation model and URL, resolving the open
-      question in `design.md` — under the project's `environment` grouping, or hanging off the agent
-- [ ] 2.2 Page shell following the project-settings pattern: a section list replacing the tab strip,
-      not nested inside it
-- [ ] 2.3 Back control rather than the left navigation panel, returning to the originating context
-      rather than to a fixed location
+- [ ] 2.1 Add a fourth destination shape carrying the agent — `{ kind: 'agent-settings', projectId,
+      agent, section }` — to `lib/navigation.ts` and the URL. **Not** an `ENVIRONMENT_SECTIONS`
+      entry: those carry no subject, so they cannot address one agent
+- [ ] 2.2 Page shell following the environment pattern at `Sidebar.tsx:173-191` — the sidebar becomes
+      the section list plus a back control, rather than sections nesting inside the surrounding
+      navigation
+- [ ] 2.3 Back goes to a **fixed** target: the agent's most recent conversation. No stored origin,
+      matching `App.tsx:207`'s fixed "Back to {project}"
 - [ ] 2.4 Entry points from the agent's navigation row and its conversation header
 - [ ] 2.5 The destination survives reload and is linkable
 
@@ -44,8 +46,30 @@ Named for what an operator is trying to do, not for the shape of the data.
       settings exist at the time
 - [ ] 3.6 **Access** — defined here, populated by the checkpoint change
 - [ ] 3.7 **Workspace** — worktree, working directory
-- [ ] 3.8 Binding a runner or charter shows what is bound and allows rebinding; it does **not** edit
-      the runner or charter record, which have their own destinations
+- [ ] 3.8 Binding a runner or charter shows what is bound and allows rebinding through the existing
+      picker (`AgentInfoTab.tsx:352,394`). It does **not** link through to the runner or charter
+      record — rebinding one agent and editing a record bound by many are different acts
+
+## 3b. Archival
+
+An agent is archived, never deleted. No `DELETE` route exists today; this is a commitment not to add
+one, plus the archival that makes its absence workable.
+
+- [ ] 3b.1 `lifecycle` column on `Agent`, constrained to `open` or `archived`, mirroring
+      `models.py:255,280` for conversations. Migration guarded for a missing table; bump the head
+      assertions in `hub/tests/test_migrations.py` **and** `hub/tests/test_project_persistence.py`
+- [ ] 3b.2 Archive and unarchive from the configuration destination. Archival is reversible
+- [ ] 3b.3 Refuse to archive an agent with a run in progress, following `archivable()`
+      (`conversations.py:172`), which refuses rather than destroying
+- [ ] 3b.4 An archived agent stops being offered wherever a working agent is offered — the rail,
+      peer-message recipients, task assignment, the new-conversation surface. **Enumerate these by
+      search rather than by memory; one missed site leaves an archived agent selectable**
+- [ ] 3b.5 An archived agent keeps its history: conversations remain readable, runs and messages keep
+      their attribution
+- [ ] 3b.6 Define what happens when a peer sends to an archived agent. The checkpoint change defines
+      the archived-*conversation* case; the archived-*agent* case belongs here
+- [ ] 3b.7 Test asserting no route hard-deletes an agent, so one cannot be added without the
+      decision being revisited
 
 ## 4. Split configuration from observation
 

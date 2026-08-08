@@ -42,6 +42,10 @@ are different activities.
   *offered* at creation when the agent's first turn would be materially different without it;
   everything else lives on the page. The rule governs what is offered, not what is required —
   charter remains optional under its existing no-charter contract.
+- **An agent can be archived, and never deleted.** No `DELETE` route exists today; this commits to
+  not adding one and provides the archival that makes its absence workable. Everything in the Hub is
+  attributed to a run and every run to its agent, so deletion would either destroy the record of work
+  that happened or orphan it.
 - The page hosts, but does not define, the agent-level settings introduced by
   `2026-08-07-conversation-handoff-rework`. Those settings' semantics belong to that change; this one
   provides their home.
@@ -53,8 +57,8 @@ are different activities.
   determining what belongs there versus on the page, so the boundary is a decision rather than an
   accident. The existing optional-charter contract is explicitly preserved.
 - **`agent-configuration`** — ADDED. A new capability: configuration is a destination, its sections,
-  what is configuration versus observation, and that a setting with no backing state is not
-  displayed.
+  what is configuration versus observation, archival in place of deletion, and that a setting with no
+  backing state is not displayed.
 
 ## Impact
 

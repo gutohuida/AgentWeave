@@ -100,6 +100,51 @@ A section MUST NOT be named for a concept the product no longer has.
 - **THEN** the binding can be changed
 - **AND** the runner or charter record itself is not edited from this destination
 
+### Requirement: An agent is archived rather than deleted
+
+The Hub SHALL allow an agent to be archived and unarchived, and MUST NOT offer any means of
+permanently deleting one.
+
+Everything the Hub records is attributed to the run that produced it, and every run is attributed to
+its agent. Deleting an agent would either cascade through that history, destroying the record of
+work that genuinely happened, or orphan it. This capability follows the position already taken for
+conversations, where archival is refused rather than allowed to strand something permanently.
+
+Archival MUST be reversible, and MUST preserve the agent's history: its conversations remain
+readable, and its runs and messages retain their attribution.
+
+An agent with a run in progress MUST NOT be archived.
+
+An archived agent MUST NOT be offered wherever a working agent is offered, including for a new
+conversation, as a message recipient, and as a task assignee.
+
+#### Scenario: An archived agent is not offered as a working agent
+
+- **WHEN** an agent is archived
+- **THEN** it is not offered for a new conversation, as a message recipient, or as a task assignee
+
+#### Scenario: History survives archival
+
+- **WHEN** an agent is archived
+- **THEN** its conversations remain readable
+- **AND** its runs and messages retain their attribution
+
+#### Scenario: Archiving is refused during a run
+
+- **WHEN** an operator archives an agent with a run in progress
+- **THEN** the request is refused with the reason
+- **AND** the agent remains active
+
+#### Scenario: Archival is reversible
+
+- **WHEN** an archived agent is unarchived
+- **THEN** it is offered as a working agent again
+
+#### Scenario: No permanent deletion is offered
+
+- **WHEN** an operator views an agent's configuration
+- **THEN** no action permanently deletes the agent
+
 ### Requirement: A setting with no backing state is not presented
 
 The Hub SHALL NOT present an agent setting that has no state behind it, and SHALL NOT expose such a
