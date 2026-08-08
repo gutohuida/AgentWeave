@@ -6,9 +6,7 @@ import { readFileSync } from 'node:fs'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { ComposerModelControls, composerControlClassName } from '@/components/agents/ComposerModelControls'
-import { ComposerConversationRouting } from '@/components/agents/ComposerConversationRouting'
 import type { ModelCatalogResponse } from '@/api/modelCatalog'
-import type { AgentConversation } from '@/api/agentChat'
 
 const CATALOG: ModelCatalogResponse = {
   providers: [
@@ -151,73 +149,6 @@ describe('ComposerModelControls — controls follow the provider', () => {
     fireEvent.click(screen.getByTitle('Effort'))
     fireEvent.click(screen.getByRole('option', { name: 'High' }))
     expect(onChangeControl).toHaveBeenCalledWith('effort', 'high')
-  })
-})
-
-describe('ComposerConversationRouting — a message routes to a stated conversation', () => {
-  const conversations: AgentConversation[] = [
-    {
-      id: 'conv-existing-12345',
-      agent: 'claude',
-      provider_session_id: null,
-      lifecycle: 'open', title: 'A conversation', title_set_by_operator: false, origin: 'operator', attention: 'idle',
-      created_at: '2026-08-02T00:00:00Z',
-      updated_at: '2026-08-02T00:00:00Z',
-    },
-  ]
-
-  it('shows "New" when no conversation is selected, before sending', () => {
-    render(
-      <ComposerConversationRouting
-        conversations={conversations}
-        currentConversationId={null}
-        onSelectConversation={vi.fn()}
-        onNewConversation={vi.fn()}
-      />,
-    )
-    expect(screen.getByTitle('To')).toHaveTextContent('New')
-  })
-
-  it('shows the current conversation id when one is selected, before sending', () => {
-    render(
-      <ComposerConversationRouting
-        conversations={conversations}
-        currentConversationId="conv-existing-12345"
-        onSelectConversation={vi.fn()}
-        onNewConversation={vi.fn()}
-      />,
-    )
-    expect(screen.getByTitle('To')).toHaveTextContent('conv-existing')
-  })
-
-  it('calls onNewConversation when "New conversation" is chosen', () => {
-    const onNewConversation = vi.fn()
-    render(
-      <ComposerConversationRouting
-        conversations={conversations}
-        currentConversationId="conv-existing-12345"
-        onSelectConversation={vi.fn()}
-        onNewConversation={onNewConversation}
-      />,
-    )
-    fireEvent.click(screen.getByTitle('To'))
-    fireEvent.click(screen.getByRole('option', { name: 'New conversation' }))
-    expect(onNewConversation).toHaveBeenCalled()
-  })
-
-  it('calls onSelectConversation with the chosen conversation id', () => {
-    const onSelectConversation = vi.fn()
-    render(
-      <ComposerConversationRouting
-        conversations={conversations}
-        currentConversationId={null}
-        onSelectConversation={onSelectConversation}
-        onNewConversation={vi.fn()}
-      />,
-    )
-    fireEvent.click(screen.getByTitle('To'))
-    fireEvent.click(screen.getByRole('option', { name: /conv-existing/ }))
-    expect(onSelectConversation).toHaveBeenCalledWith('conv-existing-12345')
   })
 })
 

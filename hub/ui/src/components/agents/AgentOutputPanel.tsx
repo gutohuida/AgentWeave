@@ -380,12 +380,6 @@ export function AgentOutputPanel({
     }
   }
 
-  /** The operator switching conversations from a control on this surface. Not self-directed:
-   *  the reset effect should treat it as leaving the current conversation. */
-  const selectConversation = (id: string) => {
-    onSelectConversation?.(id)
-  }
-
   /** Answer the waiting question, from whichever the operator supplied.
    *
    * Typed text wins over a selection: someone who bothered to write meant it, and the options
@@ -519,10 +513,7 @@ export function AgentOutputPanel({
           isRunning={isRunning}
           isStopping={isStopping}
           onStop={handleStop}
-          conversations={conversations}
           currentConversationId={currentConversationId}
-          onSelectConversation={selectConversation}
-          onNewConversation={() => selectConversation(NEW_CONVERSATION_ID)}
           handoffState={handoffState}
           handoffUnavailable={handoffUnavailable}
           interactionLocked={interactionLocked}
@@ -647,9 +638,6 @@ export function AgentOutputPanel({
               effectiveModel={targetRunnerRow?.model ?? null}
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}
-              conversations={conversations}
-              onSelectConversation={selectConversation}
-              onNewConversation={() => selectConversation(NEW_CONVERSATION_ID)}
             />
           </div>
         </div>

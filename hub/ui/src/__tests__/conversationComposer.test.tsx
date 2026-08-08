@@ -65,14 +65,20 @@ describe('Composer — column layout (2026-08-04-hub-charcoal-visual-refresh)', 
     expect(controlRowIndex).toBeGreaterThan(textareaRowIndex)
   })
 
-  it('places the agent selector in the leading slot and send in the trailing slot', () => {
+  it('keeps a leading slot for composer controls and a trailing slot for send', () => {
     const { view } = renderComposer()
     const root = view.container.firstElementChild as HTMLElement
     const leading = root.querySelector('[data-slot="composer-control-row-leading"]') as HTMLElement
     const trailing = root.querySelector('[data-slot="composer-control-row-trailing"]') as HTMLElement
 
-    expect(leading.querySelector('[aria-haspopup="listbox"]')).not.toBeNull()
+    expect(leading).not.toBeNull()
     expect(trailing.querySelector('[aria-label="Send message"]')).not.toBeNull()
+    expect(
+      leading.compareDocumentPosition(trailing) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    // The conversation-routing pill used to live in the leading slot. Conversation selection is
+    // navigation's job now, and no control on this surface may act as a second switcher.
+    expect(root.textContent).not.toContain('New conversation')
   })
 })
 

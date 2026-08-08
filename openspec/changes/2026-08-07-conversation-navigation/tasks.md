@@ -100,11 +100,11 @@
 
 ## 9. Controls rehoused, dead surfaces removed
 
-- [ ] 9.1 Durable handoff becomes a labelled control on the conversation header beside "Fold all turns", disabled with its reason when unavailable
-- [ ] 9.2 Remove "New conversation", the conversation entries, "Handoff" and "Agent details" from `ConversationControls.tsx`
-- [ ] 9.3 Delete the now-empty conversation-actions overflow menu
-- [ ] 9.4 Delete `AgentsPage.tsx` and `AgentDetailPanel.tsx` and their tests; confirm nothing imports them
-- [ ] 9.5 Update any frontend suite that mocked the overflow menu
+- [x] 9.1 Durable handoff becomes a labelled control on the conversation header beside "Fold all turns", disabled with its reason when unavailable
+- [x] 9.2 Remove "New conversation", the conversation entries, "Handoff" and "Agent details" from `ConversationControls.tsx`
+- [x] 9.3 Delete the now-empty conversation-actions overflow menu
+- [x] 9.4 Delete `AgentsPage.tsx` and `AgentDetailPanel.tsx` and their tests; confirm nothing imports them
+- [x] 9.5 Update any frontend suite that mocked the overflow menu
 
 ## 10. Frontend tests
 
@@ -114,7 +114,7 @@
 - [x] 10.4 `conversationAttention.test.tsx` — a question in one conversation shows as waiting while a different conversation is open
 - [x] 10.5 `rowMenus.test.tsx` — both menus keyboard-operable, focus returns to trigger, agent settings do not unmount the conversation
 - [x] 10.6 `newConversationSurface.test.tsx` — agent pre-bound from the tree; agent required from recency; abandonment creates nothing
-- [ ] 10.7 `handoffPlacement.test.tsx` — handoff present and labelled on the header at rest; disabled with reason when unavailable
+- [x] 10.7 `handoffPlacement.test.tsx` — handoff present and labelled on the header at rest; disabled with reason when unavailable
 - [x] 10.8 Assert no conversation identifier appears as a label anywhere in the rail
 
 ## 11. Verification

@@ -5,7 +5,6 @@ import type { AgentOutputLine, AgentSummary } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse, TimelineEntry } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
-import { ControlledConversation } from './support/ControlledConversation'
 
 let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
@@ -104,7 +103,6 @@ const idleAgent: AgentSummary = {
 }
 
 const runningAgent: AgentSummary = { ...idleAgent, status: 'running' }
-const manualAgent: AgentSummary = { ...idleAgent, runner: 'manual' }
 
 const conversation: AgentConversation = {
   id: 'conv-old',
@@ -115,7 +113,7 @@ const conversation: AgentConversation = {
   updated_at: '2026-08-02T10:00:00Z',
 }
 
-describe('conversation controls — placement and overflow menu', () => {
+describe('conversation controls — the resting header', () => {
   beforeEach(() => {
     outputLines = []
     conversations = [conversation]
@@ -135,19 +133,33 @@ describe('conversation controls — placement and overflow menu', () => {
     })
   })
 
-  it('shows turn actions, the active-agent indicator, and context usage in the header at rest', async () => {
+  it('shows turn actions, handoff, the active-agent indicator, and context usage at rest', async () => {
     render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
     await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
 
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Conversation actions' })).toBeInTheDocument()
     expect(screen.getAllByText('claude').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Fold all turns' })).toBeInTheDocument()
+    expect(screen.getByTestId('conversation-handoff')).toBeInTheDocument()
 
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Handoff/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Fold all turns' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Stop turn/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Pause scroll|Resume scroll/ })).not.toBeInTheDocument()
+  })
+
+  it('has no conversation-actions overflow menu, and lists no other conversation', async () => {
+    conversations = [
+      conversation,
+      { ...conversation, id: 'conv-second', title: 'Another conversation' },
+    ]
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+
+    expect(screen.queryByRole('button', { name: 'Conversation actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    // Not a switcher, not even a passive listing: conversation selection is navigation's job.
+    expect(document.body.textContent).not.toContain('Another conversation')
+    expect(document.body.textContent).not.toContain('conv-second')
   })
 
   it('shows stop only while the agent is running', () => {
@@ -164,104 +176,6 @@ describe('conversation controls — placement and overflow menu', () => {
 
     expect(document.body.textContent).not.toContain(conversation.provider_session_id)
     expect(screen.queryByText(/session:/i)).not.toBeInTheDocument()
-  })
-
-  it('opens the overflow menu with items in fixed order, keyboard-activatable, focus returns to trigger on close', async () => {
-    const user = userEvent.setup()
-    const onSelectConversation = vi.fn()
-    render(
-      <ControlledConversation
-        agent={idleAgent}
-        conversationId="conv-old"
-        onSelectConversation={onSelectConversation}
-      />,
-    )
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-
-    const trigger = screen.getByRole('button', { name: 'Conversation actions' })
-    await user.click(trigger)
-
-    const menu = await screen.findByRole('menu')
-    expect(menu).toBeInTheDocument()
-
-    const items = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '')
-    expect(items[0]).toContain('New conversation')
-    expect(items[1]).toContain('conv-old')
-    expect(items[2]).toContain('Handoff')
-    expect(items[3]).toContain('Agent details')
-    expect(items).toHaveLength(4)
-
-    // On open, focus lands on the menu content itself; one ArrowDown moves
-    // it to the first item, which can then be activated by the keyboard alone.
-    const newConversationItem = screen.getByRole('menuitem', { name: 'New conversation' })
-    await user.keyboard('{ArrowDown}')
-    await waitFor(() => expect(newConversationItem).toHaveFocus())
-    await user.keyboard('{Enter}')
-    // Starting a conversation is a destination move now, not local panel state.
-    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('__new__'))
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
-
-    // Re-open and close with Escape — focus must return to the trigger.
-    await user.click(trigger)
-    await screen.findByRole('menu')
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
-    await waitFor(() => expect(trigger).toHaveFocus())
-  })
-
-  it('selects a different conversation from the overflow menu', async () => {
-    conversations = [
-      conversation,
-      { ...conversation, id: 'conv-second', provider_session_id: 'provider-second' },
-    ]
-    const onSelectConversation = vi.fn()
-    const user = userEvent.setup()
-    render(
-      <ControlledConversation
-        agent={idleAgent}
-        conversationId="conv-old"
-        onSelectConversation={onSelectConversation}
-      />,
-    )
-    await waitFor(() =>
-      expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'),
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Conversation actions' }))
-    await user.click(await screen.findByRole('menuitem', { name: /conv-second/ }))
-
-    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-second'))
-  })
-
-  it('shows an unavailable action disabled with its reason', async () => {
-    const user = userEvent.setup()
-    render(<AgentOutputPanel agent={manualAgent} conversationId="conv-old" />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-
-    await user.click(screen.getByRole('button', { name: 'Conversation actions' }))
-    const handoffItem = await screen.findByRole('menuitem', { name: /Handoff/ })
-    expect(handoffItem).toHaveAttribute('aria-disabled', 'true')
-    expect(handoffItem).toHaveTextContent('Requires an automatically managed runner')
-  })
-
-  it('opens agent details without unmounting the conversation, and returns focus on close', async () => {
-    const user = userEvent.setup()
-    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
-    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
-
-    const trigger = screen.getByRole('button', { name: 'Conversation actions' })
-    await user.click(trigger)
-    await user.click(await screen.findByRole('menuitem', { name: 'Agent details' }))
-
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveAccessibleName('claude details')
-    // The conversation underneath is still mounted, not navigated away from.
-    expect(screen.getByTestId('conversation-header')).toBeInTheDocument()
-    expect(screen.getByTestId('conversation-output')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Close details' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it('offers no way to redirect a message to a different agent', async () => {

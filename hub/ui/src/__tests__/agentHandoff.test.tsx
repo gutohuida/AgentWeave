@@ -119,8 +119,7 @@ describe('agent conversation handoff', () => {
     )
     expect(screen.getAllByTestId('conversation-header')).toHaveLength(1)
 
-    await user.click(screen.getByLabelText('Conversation actions'))
-    await user.click(await screen.findByRole('menuitem', { name: /Handoff/ }))
+    await user.click(screen.getByTestId('conversation-handoff'))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(triggerBody(0)).toMatchObject({

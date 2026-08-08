@@ -1,13 +1,8 @@
-import { useRef, useState } from 'react'
-import * as Dialog from '@radix-ui/react-dialog'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Icon } from '@/components/common/Icon'
 import { AgentSummary } from '@/api/agents'
-import { AgentConversation } from '@/api/agentChat'
 import { Button } from '@/components/ui/button'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
 import { StatusDot, getStatusConfig } from '@/lib/agentStatus'
-import { AgentInfoTab } from './AgentInfoTab'
 
 export type HandoffState = 'idle' | 'preparing' | 'ready'
 
@@ -16,29 +11,13 @@ interface ConversationControlsProps {
   isRunning: boolean
   isStopping: boolean
   onStop: () => void
-  conversations: AgentConversation[]
+  /** Undefined when no conversation is open — one of the reasons handoff is unavailable. */
   currentConversationId?: string
-  onSelectConversation: (id: string) => void
-  onNewConversation: () => void
   handoffState: HandoffState
   handoffUnavailable: boolean
   interactionLocked: boolean
   onHandoff: () => void
   onFoldAll: () => void
-}
-
-const itemStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'flex-start',
-  gap: 2,
-  width: '100%',
-  padding: '6px 10px',
-  borderRadius: 'var(--radius-sm)',
-  fontSize: 12,
-  color: 'var(--text-2)',
-  cursor: 'pointer',
-  outline: 'none',
 }
 
 function handoffReason(
@@ -55,23 +34,28 @@ function handoffReason(
   return null
 }
 
+/**
+ * The conversation header's resting control set.
+ *
+ * There is no overflow menu here any more. It held "New conversation", every one of the agent's
+ * conversations, "Handoff" and "Agent details" — three of which belong in navigation and one of
+ * which is too important to hide. Conversation switching moved to the rail, agent settings to the
+ * agent's row menu, and handoff onto this header as a labelled control, visible at rest:
+ * *"handoff needs an explicit place to sit. Where we know it's there. Users might not know or
+ * forget about the handoff."*
+ */
 export function ConversationControls({
   agent,
   isRunning,
   isStopping,
   onStop,
-  conversations,
   currentConversationId,
-  onSelectConversation,
-  onNewConversation,
   handoffState,
   handoffUnavailable,
   interactionLocked,
   onHandoff,
   onFoldAll,
 }: ConversationControlsProps) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const statusCfg = getStatusConfig(agent.status)
 
   const reason = handoffReason(handoffUnavailable, currentConversationId, interactionLocked, handoffState)
@@ -104,127 +88,23 @@ export function ConversationControls({
         </Button>
       )}
 
+      {/* Present and labelled whether or not it can be used: an unavailable handoff states its
+          reason rather than being omitted, so the control set does not shift between agents. */}
+      <Button
+        variant="ghost"
+        size="xs"
+        data-testid="conversation-handoff"
+        disabled={handoffDisabled}
+        aria-disabled={handoffDisabled ? 'true' : undefined}
+        aria-label={reason ? `${handoffLabel} — ${reason}` : handoffLabel}
+        title={reason ?? 'Prepare a durable handoff before ending this session'}
+        onClick={onHandoff}
+      >
+        <Icon name="move_up" size={12} />
+        {handoffLabel}
+      </Button>
+
       <Button variant="ghost" size="xs" onClick={onFoldAll}>Fold all turns</Button>
-
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <Button
-            ref={menuTriggerRef}
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Conversation actions"
-          >
-            <Icon name="more_vert" size={16} />
-          </Button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            align="end"
-            sideOffset={6}
-            style={{
-              minWidth: 220,
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              padding: 4,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-              zIndex: 50,
-            }}
-          >
-            <DropdownMenu.Item style={itemStyle} onSelect={() => onNewConversation()}>
-              New conversation
-            </DropdownMenu.Item>
-
-            {conversations.length === 0 ? (
-              <DropdownMenu.Item style={{ ...itemStyle, opacity: 0.5, cursor: 'not-allowed' }} disabled aria-disabled="true">
-                No conversations yet
-              </DropdownMenu.Item>
-            ) : (
-              conversations.map((conversation) => (
-                <DropdownMenu.Item
-                  key={conversation.id}
-                  style={itemStyle}
-                  onSelect={() => onSelectConversation(conversation.id)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {conversation.id === currentConversationId && (
-                      <Icon name="check" size={12} style={{ color: 'var(--blue)' }} />
-                    )}
-                    {conversation.id.slice(0, 20)}
-                    {conversation.id.length > 20 ? '…' : ''}
-                  </span>
-                </DropdownMenu.Item>
-              ))
-            )}
-
-            <DropdownMenu.Item
-              style={{ ...itemStyle, ...(handoffDisabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
-              disabled={handoffDisabled}
-              aria-disabled={handoffDisabled ? 'true' : undefined}
-              onSelect={(event) => {
-                if (handoffDisabled) {
-                  event.preventDefault()
-                  return
-                }
-                onHandoff()
-              }}
-            >
-              <span>{handoffLabel}</span>
-              {reason && (
-                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{reason}</span>
-              )}
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item style={itemStyle} onSelect={() => setDetailsOpen(true)}>
-              Agent details
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-
-      <Dialog.Root open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--scrim)', zIndex: 60 }} />
-          <Dialog.Content
-            aria-label={`${agent.name} details`}
-            onCloseAutoFocus={(event) => {
-              event.preventDefault()
-              menuTriggerRef.current?.focus()
-            }}
-            style={{
-              position: 'fixed',
-              top: '10vh',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 'min(520px, 92vw)',
-              maxHeight: '78vh',
-              display: 'flex',
-              flexDirection: 'column',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              overflow: 'hidden',
-              zIndex: 61,
-            }}
-          >
-            <Dialog.Title style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-              {agent.name} details
-            </Dialog.Title>
-            <Dialog.Description className="sr-only">
-              Status, sessions, configuration, and statistics for {agent.name}.
-            </Dialog.Description>
-            <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--border)' }}>
-              <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{agent.name}</span>
-              <Dialog.Close asChild>
-                <Button variant="ghost" size="icon-xs" aria-label="Close details">
-                  <Icon name="close" size={16} />
-                </Button>
-              </Dialog.Close>
-            </div>
-            <AgentInfoTab agent={agent} />
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
     </div>
   )
 }

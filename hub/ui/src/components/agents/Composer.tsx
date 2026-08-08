@@ -10,8 +10,6 @@ import {
 import { resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
-import { ComposerConversationRouting } from './ComposerConversationRouting'
-import type { AgentConversation } from '@/api/agentChat'
 
 export const COMPOSER_MIN_ROWS = 3
 const COMPOSER_MAX_ROWS = 12
@@ -56,9 +54,6 @@ export interface ComposerProps {
    *  recency view, where the message cannot go anywhere until an agent is chosen. Stated rather
    *  than left to a silently dead button. */
   disabledReason?: string
-  conversations?: AgentConversation[]
-  onSelectConversation?: (id: string) => void
-  onNewConversation?: () => void
 }
 
 /**
@@ -82,9 +77,6 @@ export function Composer({
   pendingOverrides = {},
   onPendingOverridesChange = () => undefined,
   disabledReason,
-  conversations = [],
-  onSelectConversation = () => undefined,
-  onNewConversation = () => undefined,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -278,12 +270,6 @@ export function Composer({
             onChangeControl={(controlId, value) =>
               onPendingOverridesChange({ ...pendingOverrides, [controlId]: value })
             }
-          />
-          <ComposerConversationRouting
-            conversations={conversations}
-            currentConversationId={conversationId}
-            onSelectConversation={onSelectConversation}
-            onNewConversation={onNewConversation}
           />
         </div>
         <div className="flex items-center gap-2" data-slot="composer-control-row-trailing">
