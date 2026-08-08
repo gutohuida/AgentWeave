@@ -23,7 +23,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
-from ...conversations import archivable, archive, conversation_attention, unarchive
+from ...conversations import (
+    archivable,
+    archive,
+    backfill_titles,
+    conversation_attention,
+    unarchive,
+)
 from ...db.engine import get_session
 from ...db.models import (
     CONVERSATION_TITLE_MAX_LENGTH,
@@ -193,6 +199,7 @@ async def _to_response(
     session: AsyncSession, conversations: List[Conversation]
 ) -> List[ConversationResponse]:
     """Serialise conversations with their attention state, one query for the whole page."""
+    await backfill_titles(session, conversations)
     attention = await conversation_attention(session, [row.id for row in conversations])
     responses = []
     for row in conversations:

@@ -122,6 +122,41 @@ async def conversation_for_provider_session(
     return result.scalar_one_or_none()
 
 
+async def backfill_titles(db: AsyncSession, conversations: List[Conversation]) -> None:
+    """Name any conversation that predates titling, from its first message.
+
+    Lazy rather than a data migration (design.md's migration plan): a migration would have to
+    reproduce `title_from_message` in SQL, and a conversation whose entries were pruned has no
+    title to derive either way. Untitled rows are listed as new, never as their identifier.
+
+    One query for the whole page, and it commits only when something was actually named.
+    """
+    untitled = [c.id for c in conversations if not c.title]
+    if not untitled:
+        return
+
+    rows = await db.execute(
+        select(InboundQueueEntry.conversation_id, InboundQueueEntry.content)
+        .where(InboundQueueEntry.conversation_id.in_(untitled))
+        .order_by(InboundQueueEntry.conversation_id, InboundQueueEntry.arrived_at)
+    )
+    first_message: Dict[str, str] = {}
+    for conversation_id, content in rows:
+        if conversation_id and conversation_id not in first_message:
+            first_message[conversation_id] = content
+
+    named = False
+    for conversation in conversations:
+        if conversation.title:
+            continue
+        title = title_from_message(first_message.get(conversation.id, ""))
+        if title:
+            conversation.title = title
+            named = True
+    if named:
+        await db.commit()
+
+
 async def conversation_id_for_run(db: AsyncSession, run_id: Optional[str]) -> Optional[str]:
     """The conversation a run belongs to, for stamping onto a row the run creates.
 

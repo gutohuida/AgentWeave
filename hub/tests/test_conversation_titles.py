@@ -183,6 +183,67 @@ async def test_an_over_length_rename_is_rejected_with_the_limit(app, auth_header
 
 
 @pytest.mark.asyncio
+async def test_a_conversation_predating_titles_is_named_on_first_read(app, auth_headers) -> None:
+    """The live database had 35 of these. Without a backfill every one reads "New conversation".
+
+    Lazy rather than a data migration: the migration would have to reproduce the truncation rule
+    in SQL, and a conversation whose queue entries were pruned has no title to derive either way.
+    """
+    from sqlalchemy import update
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation
+
+    await _sync_agent(app, auth_headers)
+    created = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "offline", "message": "Investigate the flaky checkout test"},
+        headers=auth_headers,
+    )
+    conversation_id = created.json()["conversation_id"]
+
+    # Back to how a row created before this change looks.
+    async with async_session_factory() as session:
+        await session.execute(
+            update(Conversation).where(Conversation.id == conversation_id).values(title=None)
+        )
+        await session.commit()
+
+    listed = (await _conversations(app, auth_headers))[0]
+    assert listed["title"] == "Investigate the flaky checkout test"
+
+    # Persisted, not computed per request.
+    async with async_session_factory() as session:
+        stored = await session.get(Conversation, conversation_id)
+        assert stored.title == "Investigate the flaky checkout test"
+        assert stored.title_set_by_operator is False
+
+
+@pytest.mark.asyncio
+async def test_a_conversation_with_nothing_to_name_it_stays_untitled(app, auth_headers) -> None:
+    """No message, no title — and the surface says "New conversation" rather than an id."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation
+
+    await _sync_agent(app, auth_headers)
+    async with async_session_factory() as session:
+        session.add(
+            Conversation(
+                id="conv-empty",
+                project_id="proj-test",
+                agent="offline",
+                lifecycle="open",
+                origin="operator",
+            )
+        )
+        await session.commit()
+
+    listed = (await _conversations(app, auth_headers))[0]
+    assert listed["id"] == "conv-empty"
+    assert listed["title"] is None
+
+
+@pytest.mark.asyncio
 async def test_rename_of_an_unknown_conversation_is_not_found(app, auth_headers) -> None:
     await _sync_agent(app, auth_headers)
     response = await app.patch(
