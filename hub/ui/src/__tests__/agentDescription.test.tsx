@@ -59,6 +59,11 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
 })
 
+vi.mock('@/api/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/workspace')>()
+  return { ...actual, useAgentWorkspace: () => ({ data: undefined, isLoading: true, error: null }) }
+})
+
 describe('what an agent is for', () => {
   beforeEach(() => describeMutate.mockClear())
 

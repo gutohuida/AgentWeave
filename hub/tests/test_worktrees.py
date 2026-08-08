@@ -292,3 +292,90 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
     assert {item["agent"] for item in listing.json()} == {"taylor", "uma"}
     assert conflicts.status_code == 200
     assert conflicts.json() == [{"agents": ["taylor", "uma"], "paths": ["f.txt"]}]
+
+
+@pytest.mark.asyncio
+async def test_an_agents_workspace_reads_without_provisioning_one(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """Opening an agent's configuration must not create its worktree.
+
+    The panel answers from `worktree_path`/`branch_name`, which are pure — so an agent that has
+    never run says where it *will* work rather than rendering blank, and looking at the page does
+    not leave a checkout behind. Task 3.7 of 2026-08-08-agent-configuration-page.
+    """
+    await bind_project_workspace(repo)
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/vera", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["isolated"] is True
+    assert body["branch"] == "agentweave/vera"
+    assert body["provisioned"] is False
+    assert body["working_dir"] == str(repo / ".agentweave" / "worktrees" / "vera")
+    assert not (repo / ".agentweave" / "worktrees" / "vera").exists()
+
+    worktrees.ensure_worktree(repo, "vera")
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/vera", headers=auth_headers)
+    assert resp.json()["provisioned"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_read_only_agent_shares_the_project_checkout(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """No branch and nothing to provision — reporting "not provisioned" would imply something
+    is missing, when sharing the checkout is the whole arrangement."""
+    await bind_project_workspace(repo)
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "wren", "contact_mode": "poll", "config": {"read_only": True}},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/wren", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["isolated"] is False
+    assert body["branch"] is None
+    assert body["provisioned"] is True
+    assert body["working_dir"] == str(repo)
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_that_cannot_isolate_says_so_before_a_turn_refuses(
+    app, auth_headers, tmp_path, bind_project_workspace
+):
+    """The same condition `resolve_agent_workspace` fails a spawn on, reported where the operator
+    can read it first rather than afterwards as a run failure."""
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    await bind_project_workspace(plain)
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/xan", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["isolated"] is True
+    assert body["provisioned"] is False
+    assert "not a git repository" in body["unavailable_reason"]
+
+
+@pytest.mark.asyncio
+async def test_the_conflicts_route_is_not_read_as_an_agent_name(app, auth_headers, repo,
+                                                                bind_project_workspace):
+    """`/worktrees/conflicts` is a route, and `conflicts` is a legal agent name — declaration
+    order is the only thing keeping the two apart, so it is worth a test."""
+    await bind_project_workspace(repo)
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_an_illegal_agent_name_is_refused(app, auth_headers, repo, bind_project_workspace):
+    await bind_project_workspace(repo)
+    resp = await app.get(
+        "/api/v1/projects/proj-test/worktrees/not%20a%20name", headers=auth_headers
+    )
+    assert resp.status_code == 400

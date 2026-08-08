@@ -16,3 +16,27 @@ export function useWorkspacePaths() {
     staleTime: 60_000,
   })
 }
+
+export interface AgentWorkspaceInfo {
+  agent: string
+  repo_root: string
+  working_dir: string
+  /** True when this agent gets its own git worktree; false when it shares the project checkout. */
+  isolated: boolean
+  branch?: string | null
+  provisioned: boolean
+  /** Set when isolation cannot be prepared — the same condition that refuses a turn. */
+  unavailable_reason?: string | null
+}
+
+/** Where one agent works on disk. Reading it provisions nothing: the Hub answers from the paths
+ *  it would use, so an agent that has never run still says where it will work. */
+export function useAgentWorkspace(agent: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<AgentWorkspaceInfo>({
+    queryKey: ['project', projectId, 'worktrees', agent],
+    queryFn: () =>
+      getJson<AgentWorkspaceInfo>(`/api/v1/projects/${projectId}/worktrees/${agent}`),
+    enabled: isConfigured && !!projectId && !!agent,
+  })
+}

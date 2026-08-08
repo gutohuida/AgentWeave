@@ -201,6 +201,30 @@ would sit queued forever.
 - **WHEN** an operator views an agent's configuration
 - **THEN** no action permanently deletes the agent
 
+### Requirement: An agent's workspace states where it works and whether that place is its own
+
+The workspace section SHALL state the directory an agent's turn runs in, and whether that
+directory is the agent's own isolated checkout or the project checkout it shares.
+
+Reading it MUST NOT provision anything. An agent that has never run SHALL be told where it will
+work rather than shown an empty section, because a section that renders blank is indistinguishable
+from one that failed to load.
+
+Where an agent's isolation cannot be prepared, the section SHALL state the reason — the same
+condition that would otherwise surface only as a refused turn.
+
+#### Scenario: An agent that has never run
+
+- **WHEN** the operator opens the workspace section for an agent with no checkout yet
+- **THEN** the directory it will work in is stated
+- **AND** no checkout is created by opening the section
+
+#### Scenario: A workspace that cannot isolate
+
+- **WHEN** an agent's project directory cannot provide an isolated checkout
+- **THEN** the section states why
+- **AND** it says so before a turn is refused over it
+
 ### Requirement: An agent has a default permission posture
 
 An agent SHALL carry an optional default permission posture, chosen from the same postures the

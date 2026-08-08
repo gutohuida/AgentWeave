@@ -59,6 +59,11 @@ function renderExecution(summary: AgentSummary) {
 
 const control = () => screen.getByLabelText('Default permissions for codex-1')
 
+vi.mock('@/api/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/workspace')>()
+  return { ...actual, useAgentWorkspace: () => ({ data: undefined, isLoading: true, error: null }) }
+})
+
 describe('an agent has a default permission posture', () => {
   beforeEach(() => postureMutate.mockClear())
 

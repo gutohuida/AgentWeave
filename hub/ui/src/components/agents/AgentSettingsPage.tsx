@@ -3,6 +3,7 @@ import { AgentSummary, useAgents, useAgentSessions, useArchiveAgent } from '@/ap
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
+import { useAgentWorkspace } from '@/api/workspace'
 import { useCopy } from '@/hooks/useCopy'
 import { tint } from '@/lib/colorTint'
 import {
@@ -180,6 +181,7 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
           title="Workspace"
           description="Where this agent does its work on disk."
         >
+          <WorkspaceLocation agent={agent.name} />
           <SettingsRow
             label="Provider sessions"
             description="The provider sessions recorded for this agent, and the directory each ran in. Diagnostic detail — AgentWeave addresses conversations by its own id, never by these."
@@ -221,6 +223,97 @@ function ArchiveControl({ agent }: { agent: AgentSummary }) {
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * Where this agent works, and whether its isolated checkout exists yet.
+ *
+ * Two rows rather than one, because they answer different questions: *which directory* a turn
+ * runs in, and *whether that directory is this agent's alone*. The second is the one that matters
+ * when two agents edit the same repository — an isolated agent's work lands on its own branch and
+ * has to be merged; a shared one edits the project checkout, where a second writer produces a lost
+ * update rather than a conflict.
+ *
+ * Reading this provisions nothing. An agent that has never run still says where it will work,
+ * because a panel that stayed empty until the first turn would read as one that failed to load.
+ *
+ * Isolation itself is not editable here. It is a real stored setting (`config.read_only`) that
+ * nothing offers today, and giving it a control is a change of behaviour — flipping an agent with
+ * uncommitted work in its worktree to the shared checkout would strand that work somewhere the
+ * agent no longer looks. That belongs in its own change, with a decision about what happens to the
+ * existing worktree, not smuggled in behind a panel that was asked to *show* the workspace.
+ */
+function WorkspaceLocation({ agent }: { agent: string }) {
+  const { data, isLoading, error } = useAgentWorkspace(agent)
+
+  if (isLoading) {
+    return (
+      <SettingsRow label="Working directory" description="Where a turn runs.">
+        <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading…</span>
+      </SettingsRow>
+    )
+  }
+  if (!data) {
+    return (
+      <SettingsRow
+        label="Working directory"
+        description="Where a turn runs."
+      >
+        <span className="text-xs" style={{ color: 'var(--amber)' }} role="alert">
+          {error instanceof ApiError ? error.message : 'The project workspace is unavailable.'}
+        </span>
+      </SettingsRow>
+    )
+  }
+
+  return (
+    <>
+      <SettingsRow
+        label="Working directory"
+        description="The directory a turn runs in. Everything this agent reads or writes by relative path resolves from here."
+      >
+        <div>
+          <code
+            className="block truncate text-xs"
+            data-testid="agent-working-dir"
+            style={{
+              background: 'var(--surface-2)',
+              color: 'var(--text-2)',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+          >
+            {data.working_dir}
+          </code>
+          {data.unavailable_reason && (
+            <p role="alert" className="mt-2 text-[11px]" style={{ color: 'var(--amber)' }}>
+              {data.unavailable_reason}
+            </p>
+          )}
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        label="Isolation"
+        description="Whether this agent works in its own checkout. Its own means changes land on its own branch and are merged deliberately; the project checkout means a second writer overwrites rather than conflicts."
+      >
+        <div data-testid="agent-worktree">
+          <span className="text-sm" style={{ color: 'var(--text)' }}>
+            {data.isolated ? 'Its own git worktree' : 'Shares the project checkout'}
+          </span>
+          {data.isolated && (
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+              {data.branch}
+              {' — '}
+              {data.provisioned
+                ? 'checked out and ready'
+                : 'created the first time this agent runs'}
+            </p>
+          )}
+        </div>
+      </SettingsRow>
+    </>
   )
 }
 

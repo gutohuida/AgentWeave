@@ -120,9 +120,30 @@ Named for what an operator is trying to do, not for the shape of the data.
       settings exist at the time — today, a stated "nothing configurable yet", because a section
       that renders blank is indistinguishable from one that failed to load
 - [x] 3.6 **Access** — defined here, populated by the checkpoint change. Same stated empty state
-- [~] 3.7 **Workspace** — worktree, working directory. Renders the agent's provider sessions with
-      the directory each ran in (rehomed here from the deleted `AgentInfoTab` — see 4.1). **The
-      worktree and working directory as such are still not rendered**
+- [x] 3.7 **Workspace** — worktree, working directory, and the agent's provider sessions with the
+      directory each ran in (rehomed here from the deleted `AgentInfoTab` — see 4.1).
+
+      `GET /worktrees/{agent}` answers where an agent works: the directory a turn runs in, whether
+      that directory is the agent's own worktree or the shared project checkout, its branch, and
+      whether the checkout exists yet. **It provisions nothing** — `worktree_path` and
+      `branch_name` are pure, so an agent that has never run says where it *will* work rather
+      than rendering blank, and opening a settings page does not leave a checkout behind. The
+      route is declared after `/conflicts`, which a path parameter would otherwise claim; a test
+      pins that, since `conflicts` is itself a legal agent name.
+
+      Two rows, not one, because they answer different questions: which directory, and whether it
+      is this agent's alone. The second is what matters when two agents edit one repository — an
+      isolated agent's work lands on its own branch and is merged; a shared one edits the project
+      checkout, where a second writer produces a lost update rather than a conflict. A repository
+      that cannot be isolated reports the reason here, which is the same condition
+      `resolve_agent_workspace` fails a spawn on — read before a turn refuses, not after.
+
+      **Isolation is deliberately not made editable.** `config.read_only` is real stored state
+      that nothing offers today, so a control for it is defensible — but flipping an agent with
+      uncommitted work in its worktree over to the shared checkout would strand that work
+      somewhere the agent no longer looks. That needs its own change with a stated answer for the
+      existing worktree, not a control added behind a panel asked to *show* the workspace. Pinned
+      by a test asserting no such control exists, so adding one is a decision rather than a drift
 - [x] 3.8 Binding a runner or charter shows what is bound and allows rebinding through the existing
       picker. It does **not** link through to the runner or charter record — rebinding one agent and
       editing a record bound by many are different acts
