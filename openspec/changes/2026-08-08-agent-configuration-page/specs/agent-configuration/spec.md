@@ -100,6 +100,30 @@ A section MUST NOT be named for a concept the product no longer has.
 - **THEN** the binding can be changed
 - **AND** the runner or charter record itself is not edited from this destination
 
+### Requirement: An agent carries a description written for the operator
+
+An agent SHALL carry an optional operator-written description of what it is for, editable from the
+identity section and returned with the agent's summary.
+
+The description MUST NOT be injected into any agent's turn context. The charter is where an agent's
+behaviour is stated; a second field that also shaped behaviour would leave two places to look when
+an agent acts wrongly, and only one of them would be a contract.
+
+A blank description SHALL be stored as no description, so that "cleared" and "never written" are
+one state rather than two a reader has to distinguish.
+
+#### Scenario: The operator records what an agent is for
+
+- **WHEN** the operator writes a description in the identity section
+- **THEN** it is saved against the agent and shown when the section is next opened
+- **AND** the agent's turn context is unchanged
+
+#### Scenario: Clearing a description
+
+- **WHEN** the operator empties an agent's description
+- **THEN** the agent has no description
+- **AND** it is indistinguishable from an agent whose description was never written
+
 ### Requirement: An agent is archived rather than deleted
 
 The Hub SHALL allow an agent to be archived and unarchived, and MUST NOT offer any means of

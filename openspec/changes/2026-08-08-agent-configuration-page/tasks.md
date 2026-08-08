@@ -74,8 +74,20 @@ Named for what an operator is trying to do, not for the shape of the data.
 > controls moved to `components/agents/AgentSettingsControls.tsx` so that relocating a setting is a
 > change of placement, not a rewrite.
 
-- [~] 3.1 **Identity** — name, description. Name renders. **`description` does not exist**: `Agent`
-      (`models.py:107-131`) has no such column, so this needs a migration and is not a UI-only task
+- [x] 3.1 **Identity** — name, description. Both render; the description is editable, committed on
+      blur rather than per keystroke.
+
+      `Agent.description` is a new `String(256)` column (migration `0039`, guarded for a missing
+      table like `0038`), on `AgentSummary`, and settable through `PATCH /agents/{name}` — where it
+      joins `runner_id`, `charter_id` and the waiting settings in the set a *configured* agent may
+      also change, since an agent does not stop being describable because of how it was declared.
+
+      Two decisions worth stating. **Blank collapses to NULL on write**, so "cleared" and "never
+      written" are one state and no consumer has to test for both. And **nothing injects it into a
+      turn**: the charter is where behaviour is stated, and a second field that also shaped it
+      would leave two places to look when an agent acts wrongly — only one of them a contract. The
+      description is for the human reading a roster of six similarly-named agents. It is not
+      offered at creation, per section 5: an agent's first turn is no different without it
 - [~] 3.2 **Execution** — runner binding, model, default permission posture. Runner binding renders;
       model follows from the bound Runner. **Default permission posture is not here yet** — and this
       is where the stored `config["yolo"]` belongs, per section 1's finding

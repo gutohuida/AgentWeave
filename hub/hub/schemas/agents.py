@@ -36,6 +36,9 @@ CONTEXT_BREAKDOWN_FIELDS = {
 
 class AgentSummary(BaseModel):
     name: str = Field(max_length=64)
+    # What this agent is for, in the operator's words. Absent, not empty, when unset — it is
+    # normalized to NULL on write, so a caller never has to treat "" and null as the same thing.
+    description: Optional[str] = Field(default=None, max_length=256)
     status: str = Field(max_length=64)
     latest_status_msg: Optional[str] = Field(default=None, max_length=10000)
     last_seen: Optional[datetime] = None

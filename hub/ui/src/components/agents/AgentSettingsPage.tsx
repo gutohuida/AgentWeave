@@ -5,7 +5,7 @@ import { ApiError } from '@/api/client'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useCopy } from '@/hooks/useCopy'
 import { tint } from '@/lib/colorTint'
-import { CharterPicker, RunnerPicker, WaitingSetting } from './AgentSettingsControls'
+import { CharterPicker, DescriptionSetting, RunnerPicker, WaitingSetting } from './AgentSettingsControls'
 import type { AgentSettingsSection } from '@/lib/navigation'
 
 interface AgentSettingsPageProps {
@@ -63,6 +63,12 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
             description="How this agent is addressed — by you, and by its peers when they send it a message."
           >
             <span className="text-sm" style={{ color: 'var(--text)' }}>{agent.name}</span>
+          </SettingsRow>
+          <SettingsRow
+            label="Description"
+            description="What this agent is for, for you. Nothing reads it into a turn — the charter is where behaviour is stated."
+          >
+            <DescriptionSetting agent={agent} />
           </SettingsRow>
           <SettingsRow
             label={agent.lifecycle === 'archived' ? 'Archived' : 'Archive'}

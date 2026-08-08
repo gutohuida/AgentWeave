@@ -29,6 +29,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
     useAgents: () => ({ data: roster, isLoading: false }),
     useArchiveAgent: () => ({ mutate: archiveMutate, isPending: false, error: archiveError }),
+    useUpdateAgentDescription: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   }
 })
 

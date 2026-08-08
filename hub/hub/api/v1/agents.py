@@ -526,6 +526,7 @@ async def list_agents(
         summaries.append(
             AgentSummary(
                 name=agent_name,
+                description=(agent_row.description if agent_row else None),
                 status=effective_status,
                 latest_status_msg=effective_status_message,
                 last_seen=hb.timestamp if hb else None,
@@ -1228,6 +1229,31 @@ MIN_WAITING_SECONDS = 10
 MAX_WAITING_SECONDS = 600
 WAITING_SETTING_FIELDS = ("permission_timeout_seconds", "question_timeout_seconds")
 
+# Matches the column. Long enough for a line that says what the agent is for, short enough that it
+# stays a label rather than becoming a second charter written where nothing reads it.
+MAX_DESCRIPTION_CHARS = 256
+
+
+def _validated_description(value: object) -> Optional[str]:
+    """Coerce a description, or refuse it.
+
+    Blank collapses to NULL rather than being stored as "": the two are the same state to every
+    reader, and keeping both would mean every consumer has to test for both.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail="description must be text")
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    if len(trimmed) > MAX_DESCRIPTION_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"description must be at most {MAX_DESCRIPTION_CHARS} characters",
+        )
+    return trimmed
+
 
 def _validated_waiting_seconds(field: str, value: object) -> Optional[int]:
     """Coerce one waiting setting, or refuse it.
@@ -1269,7 +1295,7 @@ async def patch_agent(
     # fields; the waiting settings are newer still. A configured agent needs all of them settable
     # exactly like a self-registered one — an agent does not wait differently for the operator
     # because of how it was declared.
-    _unrestricted_fields = {"runner_id", "charter_id", *WAITING_SETTING_FIELDS}
+    _unrestricted_fields = {"runner_id", "charter_id", "description", *WAITING_SETTING_FIELDS}
     session_data = await _get_session_data(project_id, session)
     if (
         session_data
@@ -1296,6 +1322,9 @@ async def patch_agent(
                 detail=f"Invalid contact_mode '{contact_mode}'. Valid: {', '.join(_CONTACT_MODES)}",
             )
         agent_row.contact_mode = contact_mode
+
+    if "description" in body:
+        agent_row.description = _validated_description(body["description"])
 
     if "mcp_endpoint" in body:
         agent_row.mcp_endpoint = body["mcp_endpoint"]
@@ -1333,6 +1362,7 @@ async def patch_agent(
     return {
         "id": agent_row.id,
         "name": agent_row.name,
+        "description": agent_row.description,
         "contact_mode": agent_row.contact_mode,
         "self_registered": agent_row.self_registered,
         "mcp_endpoint": agent_row.mcp_endpoint,

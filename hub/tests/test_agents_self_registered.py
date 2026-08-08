@@ -568,3 +568,127 @@ async def test_patch_agent_configured_agent_rejected(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_agent_description_round_trips_and_normalizes_blank(app, auth_headers):
+    """A description is set, read back on the summary, and cleared.
+
+    Blank is not a description. It collapses to null on write, so "cleared" and "never written"
+    are the same state and no consumer has to test for both. Task 3.1 of
+    2026-08-08-agent-configuration-page.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "hermes-described", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    # Absent until written — not "".
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    hermes = next(a for a in resp.json() if a["name"] == "hermes-described")
+    assert hermes["description"] is None
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/hermes-described",
+        json={"description": "  Reviews migrations before they ship.  "},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "Reviews migrations before they ship."
+
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    hermes = next(a for a in resp.json() if a["name"] == "hermes-described")
+    assert hermes["description"] == "Reviews migrations before they ship."
+
+    # Whitespace-only clears rather than storing a blank.
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/hermes-described",
+        json={"description": "   "},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["description"] is None
+
+
+@pytest.mark.asyncio
+async def test_agent_description_refuses_overlong_and_non_text(app, auth_headers):
+    """Bounded at the API, not only in the input box.
+
+    The column is String(256); a longer value would be truncated or rejected by the backend
+    depending on the database, which is not a behaviour worth having two of.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "hermes-desc-bounds", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/hermes-desc-bounds",
+        json={"description": "x" * 257},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/hermes-desc-bounds",
+        json={"description": 42},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+    # Neither attempt stored anything.
+    resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
+    hermes = next(a for a in resp.json() if a["name"] == "hermes-desc-bounds")
+    assert hermes["description"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_configured_agent_can_be_described(app, auth_headers):
+    """A description is not a session-config field, so the configured-agent guard must not claim it.
+
+    An agent does not stop being describable because of how it was declared — the same reasoning
+    that made the waiting settings and the runner/charter bindings unrestricted.
+    """
+    # Registered first: once the name is in session config, registration under it is refused, so
+    # this is the only order in which a configured agent has a row to patch at all.
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "claude", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={
+            "data": {
+                "id": "sess-describe",
+                "name": "Test Session",
+                "mode": "hierarchical",
+                "principal": "claude",
+                "agents": {"claude": {"runner": "claude"}},
+            }
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    # The guard still holds for the fields it owns.
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/claude",
+        json={"contact_mode": "mcp-push"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 409
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/agents/claude",
+        json={"description": "The one the session config declared."},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "The one the session config declared."

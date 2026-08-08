@@ -107,6 +107,11 @@ class Agent(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # What this agent is for, in the operator's own words. Never injected into a turn — the
+    # charter is what tells an agent how to behave, and a second field that also shaped behaviour
+    # would leave two places to look when an agent acts wrongly. This one is for the human
+    # reading a roster of six similarly named agents.
+    description: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     contact_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     self_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     mcp_endpoint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)

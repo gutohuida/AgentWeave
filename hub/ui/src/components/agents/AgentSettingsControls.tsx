@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
-import { AgentSummary } from '@/api/agents'
+import {
+  AgentSummary,
+  MAX_AGENT_DESCRIPTION_CHARS,
+  useUpdateAgentDescription,
+} from '@/api/agents'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
 import {
   MAX_WAITING_SECONDS,
@@ -19,6 +23,57 @@ import { SettingsRow } from '@/components/environment/SettingsSection'
  * requires that no setting be editable from two surfaces; that is a statement about where these
  * are *placed*, which is why the placement is deliberately not baked into the controls.
  */
+
+/** What this agent is for, in the operator's own words.
+ *
+ * Committed on blur, like `WaitingSetting` and for the same reason: a mutation per keystroke would
+ * write a sentence a character at a time. Blank clears it — the API stores no description rather
+ * than an empty one, so clearing and never having written are the same state.
+ *
+ * It is a note to the human reading a roster, not an instruction to the agent: nothing injects it
+ * into a turn. The charter is where behaviour is stated, and a second field that also shaped it
+ * would leave two places to look when an agent acts wrongly.
+ */
+export function DescriptionSetting({ agent }: { agent: AgentSummary }) {
+  const update = useUpdateAgentDescription()
+  const stored = agent.description ?? ''
+  const [draft, setDraft] = useState(stored)
+
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    if (trimmed === stored) return
+    update.mutate({ agent: agent.name, description: trimmed === '' ? null : trimmed })
+  }
+
+  return (
+    <div>
+      <textarea
+        value={draft}
+        rows={2}
+        maxLength={MAX_AGENT_DESCRIPTION_CHARS}
+        placeholder="What this agent is for."
+        aria-label={`Description for ${agent.name}`}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        disabled={update.isPending}
+        className="w-full px-3 py-2 rounded-md text-sm resize-y"
+        style={{
+          background: 'var(--surface-3)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          opacity: update.isPending ? 0.6 : 1,
+        }}
+      />
+      {update.isError && (
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>Could not save.</p>
+      )}
+    </div>
+  )
+}
 
 /** One wait, in seconds, or blank for the built-in default.
  *

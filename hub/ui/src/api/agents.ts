@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, postJson } from './client'
+import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { onSseReconnect, useSSE, SSEEvent } from '@/hooks/useSSE'
 
 export interface AgentSummary {
   name: string
+  /** What this agent is for, in the operator's words. Absent when unset — never "". */
+  description?: string | null
   status: string
   latest_status_msg?: string
   last_seen?: string
@@ -170,6 +172,31 @@ export function useArchiveAgent() {
     onSuccess: () => {
       // Every roster variant, not just the open one — the settings page is reading `all`, and it
       // is the surface the operator is looking at when this resolves.
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** The description bound to `MAX_DESCRIPTION_CHARS` in hub/hub/api/v1/agents.py. The API is the
+ *  real guard; the input's maxLength stops the operator typing past it rather than being the only
+ *  thing that catches it. */
+export const MAX_AGENT_DESCRIPTION_CHARS = 256
+
+/** Set or clear what this agent is for. `null` and a blank string are the same thing to the API,
+ *  which normalizes both to no description. */
+export function useUpdateAgentDescription() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, description }: { agent: string; description: string | null }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { description }),
+    onSuccess: () => {
+      // Every roster variant: the settings page reads `all`, and it is the surface being looked at.
       queryClient.invalidateQueries({
         predicate: (query) =>
           query.queryKey[0] === 'project' &&
