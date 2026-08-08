@@ -4,9 +4,9 @@
 **Agent:** Claude Opus 5 (1M context) (Claude Code)
 **Previous handoff:** .claude/handoffs/handoff-0016-2026-08-08-0145-conversation-navigation-backend-and-rail-shipped.md
 **Status:** chunk complete. Six commits, working tree clean.
-`2026-08-07-conversation-navigation` is **79/79 tasks** — every section done, including the
-operator's new 6.6. The change is **not archived**: the operator tests tomorrow and has not
-signed off.
+`2026-08-07-conversation-navigation` is **80/80 tasks** — every section done, including the
+operator's new 6.6 (the recency cap) and 7.8 (the new-conversation headline). The change is
+**not archived**: the operator tests tomorrow and has not signed off.
 
 ## Goal
 
@@ -27,8 +27,8 @@ were raised in, while `Agent.question_timeout_seconds` counts down.
 The Hub is up on **http://localhost:8010**, started **detached** (PowerShell `Start-Process`,
 PID 23456 at the time of writing, working directory `hub/`), so it survives this session. It
 reads `hub/.env`'s `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db` → the real
-`hub/data/agentweave.db`, alembic head `0037`. Served bundle: `assets/index-vcEzH67P.js`,
-`assets/index-FXs9s3Yc.css`. The live project is **`proj-84d218db` ("Testbed")** with agents
+`hub/data/agentweave.db`, alembic head `0037`. Served bundle: `assets/index-CUEzDa2T.js`.
+**`hub/hub/static/ui` is read from disk on each request, so replacing it needs no Hub restart.** The live project is **`proj-84d218db` ("Testbed")** with agents
 `codex-1`, `codex-2`, `file_edit`, `haiku-1`, `haiku-2`, `haiku-3`; 35 open conversations,
 0 archived. API key `aw_live_58ab7d84a1bf7b34eb2d1b424875bacd` (in `hub/.env`).
 
@@ -58,6 +58,9 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
    pill, `AgentsPage.tsx` and `AgentDetailPanel.tsx` deleted. Section 9 + task 10.7.
 6. `7f91131` / `0f3fdd3` — rebuilt `hub/hub/static/ui`, ruff back to baseline, and the
    verification notes.
+7. *(added after the first handoff was written)* the new-conversation surface's headline —
+   *"What should `codex-1` work on?"*, and *"Who should work on this?"* unbound. 28px semibold,
+   centred above the composer. Task 7.8, two new spec scenarios, two new tests.
 
 ### What actually works, verified live against the real database
 
@@ -118,8 +121,9 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
   disabled `reason`. Complete.
 - `hub/ui/src/components/layout/AgentSettingsDialog.tsx` — `AgentInfoTab` in a dialog hosted by
   the rail, with `onCloseFocus` handing focus back to the invoking trigger. Complete.
-- `hub/ui/src/components/agents/NewConversationSurface.tsx` — composer-primary start surface,
-  agent chips, pre-bound or requiring a choice, POSTs `agent/trigger` and hands the resulting
+- `hub/ui/src/components/agents/NewConversationSurface.tsx` — composer-primary start surface:
+  a 28px centred headline (`data-testid="new-conversation-headline"`), centred agent chips,
+  pre-bound or requiring a choice. POSTs `agent/trigger` and hands the resulting
   `conversation_id` up. Complete.
 - `hub/ui/src/__tests__/support/ControlledConversation.tsx` — test harness playing App's half of
   the panel's controlled-component contract. Not a test file itself.
@@ -223,12 +227,22 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
     printed `Continuing ${id.slice(0,12)}…`, and the spec says an identifier is not a label.
 11. **`AgentCard.tsx` was not deleted** even though it is now unreachable. Task 9.4 named two
     files; deleting a third takes the `collaboration_ready` indicator with it.
+12. **The new-conversation headline names the agent, not the project** (operator's choice from
+    four options, 2026-08-08). The project is already in `ProjectHeader` two lines above, and the
+    roster is what AgentWeave has that a chat app does not. The unbound variant is the
+    instruction rather than decoration above one. Rejected: the direct T3 port; a stable
+    project headline with the agent in a subline; *"What's next for X?"*. The agent name is
+    **not** tinted with its identity colour — *"I don't want it to be colorful"* — the chip
+    below already carries the dot.
 
 ## Constraints and user directives (verbatim)
 
 **From this session:**
 - *"The recency should have a conversation limit as well by project."*
 - *"I'm going to sleep. Finish implementing this spec and I'm going to test it tomorrow."*
+- *"Can we just add something cleaver on the composer creation page. The T3 one has in big bold
+  letters 'What should we build in [project_name]'. I want to do something similar tailored for
+  Agentweave."* — answered by task 7.8; they picked the agent-naming option at T3's weight.
 
 **Carried from handoff-0013 through 0016 and still binding:**
 - *"no need for backups everything is test env"*
@@ -298,7 +312,8 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
   the recency view and the six conversation routes were all on disk as described.
 - `pytest hub/tests/ -q` → **1060 passed, 10 skipped** in 2:27.
 - `pytest tests/ -q` → **372 passed, 3 skipped**. (Created `.agentweave/` at the repo root; removed.)
-- `cd hub/ui && npx vitest run` → **577 passed, 67 files** (up from 549).
+- `cd hub/ui && npx vitest run` → **576 passed, 67 files** (up from 549; one obsolete
+  overflow-menu test was removed and two headline tests added after the first count of 577).
 - `npx tsc --noEmit` → clean.
 - `ruff check hub/hub/` → **3 errors, the pre-session baseline.** (A C416 I introduced was fixed.)
 - `npx openspec validate --specs --strict` → **24 passed, 0 failed.**

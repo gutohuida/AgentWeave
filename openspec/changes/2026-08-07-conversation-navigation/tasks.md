@@ -89,6 +89,7 @@
 - [x] 7.5 New-conversation surface: composer-primary, agent pre-bound when started from an agent row
 - [x] 7.6 Started from the recency view, the surface requires an agent to be chosen before sending
 - [x] 7.7 Navigating away without sending leaves no conversation record
+- [x] 7.8 The surface leads with a large question naming the bound agent — *"What should `codex-1` work on?"*, and *"Who should work on this?"* when none is bound (operator decision, 2026-08-08, asked for "something clever… tailored for AgentWeave" against T3's *"What should we build in [project]"*). Names the **agent**, not the project: the project is already in the header, and the roster is what this product has that a chat app does not. Rejected: the direct T3 port (spends the line on the header's information, and "build" is narrower than what agents do); an unchanging project headline with the agent in a subline (stable, but leaves the unbound state with no line that asks the actual question); *"What's next for X?"* (implies a continuing thread, which is exactly what this surface is not)
 
 ## 8. Selection lifts into the destination
 

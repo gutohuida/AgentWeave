@@ -171,6 +171,10 @@ A conversation started from an agent's row SHALL already be bound to that agent.
 started from the recency view, where no agent is implied, SHALL require the operator to choose the
 agent on that surface before the first message can be sent.
 
+The surface SHALL lead with a prominent question naming the bound agent. Where no agent is bound
+that question SHALL instead ask which agent should take the work, so the line states what has to
+happen next rather than sitting above a separate instruction.
+
 No conversation record SHALL be created until the first message is sent, so an abandoned start
 leaves nothing behind.
 
@@ -179,6 +183,17 @@ leaves nothing behind.
 - **WHEN** the operator starts a conversation from an agent's row menu
 - **THEN** the new-conversation surface opens already bound to that agent
 - **AND** no agent choice is required
+
+#### Scenario: The surface leads by naming the agent
+
+- **WHEN** the new-conversation surface opens bound to an agent
+- **THEN** its leading question names that agent
+
+#### Scenario: With no agent bound, the leading question asks for one
+
+- **WHEN** the new-conversation surface opens with no agent bound
+- **THEN** its leading question asks which agent should take the work
+- **AND** choosing one changes the question to name that agent
 
 #### Scenario: Starting from the recency view requires an agent
 

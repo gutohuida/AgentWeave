@@ -59,6 +59,28 @@ describe('starting a conversation', () => {
     expect(screen.queryByTestId('conversation-output')).not.toBeInTheDocument()
   })
 
+  it('asks what the bound agent should work on, by name', () => {
+    renderSurface('claude')
+    expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
+      'What should claude work on?',
+    )
+  })
+
+  it('asks who should work on it when no agent is bound, and follows the choice', async () => {
+    renderSurface(null)
+    // The headline is the instruction here, not decoration above one.
+    expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
+      'Who should work on this?',
+    )
+
+    fireEvent.click(screen.getByTestId('new-conversation-agent-codex'))
+    await waitFor(() =>
+      expect(screen.getByTestId('new-conversation-headline')).toHaveTextContent(
+        'What should codex work on?',
+      ),
+    )
+  })
+
   it('is already bound when started from an agent’s row, and needs no choice', async () => {
     const { onStarted } = renderSurface('claude')
     expect(screen.queryByTestId('composer-disabled-reason')).not.toBeInTheDocument()

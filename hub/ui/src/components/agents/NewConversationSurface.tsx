@@ -83,40 +83,48 @@ export function NewConversationSurface({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4">
-        <div className="flex w-full max-w-[820px] flex-col gap-4" data-testid="new-conversation-surface">
-          <div className="flex flex-col gap-2">
-            <span className="text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
-              {boundAgent ? 'Agent' : 'Choose an agent'}
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {roster.map((candidate) => {
-                const selected = candidate.name === agent
-                return (
-                  <button
-                    key={candidate.name}
-                    type="button"
-                    className="row-item"
-                    style={{ width: 'auto' }}
-                    data-testid={`new-conversation-agent-${candidate.name}`}
-                    data-active={selected ? 'true' : 'false'}
-                    aria-pressed={selected}
-                    // A pre-bound agent is still shown, so the operator can see which one they
-                    // are about to talk to; it just does not have to be chosen.
-                    onClick={() => setChosen(candidate.name)}
-                  >
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: agentColorVars(candidate.color_index).accent }}
-                    />
-                    {candidate.name}
-                  </button>
-                )
-              })}
-            </div>
+        <div className="flex w-full max-w-[820px] flex-col gap-5" data-testid="new-conversation-surface">
+          {/* The one line an operator reads every time they start work. It names the agent
+              rather than the project, because the project is already in the header above and
+              the agent is the thing this product has that a chat app does not. Unbound, the
+              question changes to the one that actually has to be answered first — the line is
+              the instruction, not decoration above one. */}
+          <h1
+            data-testid="new-conversation-headline"
+            className="text-center font-semibold"
+            style={{ fontSize: 28, lineHeight: 1.2, color: 'var(--text)' }}
+          >
+            {agent ? `What should ${agent} work on?` : 'Who should work on this?'}
+          </h1>
+
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {roster.map((candidate) => {
+              const selected = candidate.name === agent
+              return (
+                <button
+                  key={candidate.name}
+                  type="button"
+                  className="row-item"
+                  style={{ width: 'auto' }}
+                  data-testid={`new-conversation-agent-${candidate.name}`}
+                  data-active={selected ? 'true' : 'false'}
+                  aria-pressed={selected}
+                  // A pre-bound agent is still shown, so the operator can see which one they
+                  // are about to talk to; it just does not have to be chosen.
+                  onClick={() => setChosen(candidate.name)}
+                >
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: agentColorVars(candidate.color_index).accent }}
+                  />
+                  {candidate.name}
+                </button>
+              )
+            })}
           </div>
 
           {error && (
-            <span role="alert" className="text-[11px]" style={{ color: 'var(--red)' }}>
+            <span role="alert" className="text-center text-[11px]" style={{ color: 'var(--red)' }}>
               {error}
             </span>
           )}
