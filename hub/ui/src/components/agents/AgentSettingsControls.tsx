@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import {
   AgentSummary,
   MAX_AGENT_DESCRIPTION_CHARS,
+  useUpdateAgentCheckpointMode,
+  useUpdateAgentCheckpointOverride,
   useUpdateAgentDescription,
+  useUpdateAgentGrant,
   useUpdateAgentPermissionDefault,
 } from '@/api/agents'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
@@ -295,6 +298,146 @@ export function CharterPicker({ agent }: { agent: AgentSummary }) {
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update charter binding.
         </p>
+      )}
+    </div>
+  )
+}
+
+/** Token thresholds are entered in thousands and stored as a count. Same conversion as the
+ *  project panel, at the only other place that collects the number. */
+const TOKENS_PER_UNIT = 1000
+
+/**
+ * This agent's checkpoint policy, or the project's.
+ *
+ * The threshold is submitted as a whole — mode and value together — because an override that
+ * inherited its mode from the project would read as a number in a unit nobody chose. Clearing the
+ * value clears the override entirely and the agent goes back to the project's threshold.
+ */
+export function CheckpointOverrideSetting({ agent }: { agent: AgentSummary }) {
+  const updateMode = useUpdateAgentCheckpointMode()
+  const updateThreshold = useUpdateAgentCheckpointOverride()
+  const storedMode = agent.checkpoint_threshold_mode ?? 'percent'
+  const stored = agent.checkpoint_threshold_value ?? null
+  const [unit, setUnit] = useState<'percent' | 'tokens'>(storedMode)
+  const [entry, setEntry] = useState(
+    stored === null ? '' : String(storedMode === 'tokens' ? Math.round(stored / TOKENS_PER_UNIT) : stored),
+  )
+
+  const commit = () => {
+    const parsed = Number(entry)
+    const value = !entry.trim() || !Number.isFinite(parsed) || parsed <= 0
+      ? null
+      : unit === 'tokens' ? Math.round(parsed * TOKENS_PER_UNIT) : Math.round(parsed)
+    updateThreshold.mutate({ agent: agent.name, mode: unit, value, notes: null })
+  }
+
+  const selectStyle = {
+    background: 'var(--surface-3)',
+    color: 'var(--text)',
+    border: '1px solid var(--border)',
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <select
+          value={agent.checkpoint_mode ?? ''}
+          onChange={(event) => updateMode.mutate({ agent: agent.name, mode: event.target.value || null })}
+          aria-label={`Automatic checkpointing for ${agent.name}`}
+          className="w-full px-3 py-2 rounded-md text-sm"
+          style={selectStyle}
+        >
+          <option value="">Inherit the project's setting</option>
+          <option value="off">Off for this agent</option>
+          <option value="offered">Offer me one</option>
+          <option value="automatic">Do it automatically</option>
+        </select>
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+          Whether this agent checkpoints at all. Independent of the threshold below, so an agent can
+          opt out while still accepting the project's threshold.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <select
+          value={unit}
+          onChange={(event) => setUnit(event.target.value as 'percent' | 'tokens')}
+          aria-label={`Threshold unit for ${agent.name}`}
+          className="px-3 py-2 rounded-md text-sm"
+          style={selectStyle}
+        >
+          <option value="percent">Percent</option>
+          <option value="tokens">K tokens</option>
+        </select>
+        <input
+          type="number"
+          min={1}
+          placeholder="Inherit"
+          value={entry}
+          onChange={(event) => setEntry(event.target.value)}
+          onBlur={commit}
+          aria-label={`Checkpoint threshold for ${agent.name}`}
+          className="w-28 px-3 py-2 rounded-md text-sm"
+          style={selectStyle}
+        />
+      </div>
+      <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+        Replaces the project's threshold whole. Leave blank to inherit it.
+      </p>
+      {(updateMode.isError || updateThreshold.isError) && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>
+          Could not update the checkpoint policy.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The two access grants.
+ *
+ * Separate controls because they are separate permissions: a checkpoint is a bounded summary,
+ * while recall returns another agent's recorded output verbatim. Both are closed by default, and
+ * neither can be granted from a charter — a charter is text the model reads, so it must not be
+ * able to widen what the model may reach.
+ */
+export function CheckpointGrantsSetting({ agent }: { agent: AgentSummary }) {
+  const update = useUpdateAgentGrant()
+
+  const rows: Array<{ grant: 'can_read_checkpoints' | 'can_recall'; label: string; hint: string }> = [
+    {
+      grant: 'can_read_checkpoints',
+      label: 'Read other agents’ checkpoints',
+      hint: 'Summaries of where their conversations got to. Still bounded by each checkpoint’s own visibility.',
+    },
+    {
+      grant: 'can_recall',
+      label: 'Recall the observations behind them',
+      hint: 'The original recorded output a checkpoint cites, verbatim. Requires the grant above.',
+    },
+  ]
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => (
+        <label key={row.grant} className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={Boolean(agent[row.grant])}
+            onChange={(event) =>
+              update.mutate({ agent: agent.name, grant: row.grant, enabled: event.target.checked })
+            }
+            aria-label={`${row.label} for ${agent.name}`}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="text-sm" style={{ color: 'var(--text)' }}>{row.label}</span>
+            <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>{row.hint}</span>
+          </span>
+        </label>
+      ))}
+      {update.isError && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>Could not update the grant.</p>
       )}
     </div>
   )

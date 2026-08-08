@@ -30,6 +30,14 @@ export interface AgentSummary {
   question_timeout_seconds?: number | null
   /** What this agent may do when the conversation has not said. `null` is the built-in default. */
   default_permission_mode?: string | null
+  /** Per-agent checkpoint overrides. All null means "inherit the project's". */
+  checkpoint_mode?: 'off' | 'offered' | 'automatic' | null
+  checkpoint_threshold_mode?: 'percent' | 'tokens' | null
+  checkpoint_threshold_value?: number | null
+  checkpoint_notes_value?: number | null
+  /** Two independent grants, both closed by default. Summary access is not transcript access. */
+  can_read_checkpoints?: boolean
+  can_recall?: boolean
 }
 
 export interface AgentLaunchability {
@@ -221,6 +229,78 @@ export function useUpdateAgentPermissionDefault() {
       patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
         default_permission_mode: mode,
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/**
+ * An agent's checkpoint override, applied as a whole threshold or not at all.
+ *
+ * Mode and value travel together. Sending one without the other is refused by the Hub, because an
+ * agent inheriting `percent` and supplying `150` would read as 150% and never fire — configured
+ * to look at, inert in practice.
+ */
+export function useUpdateAgentCheckpointOverride() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, mode, value, notes }: {
+      agent: string
+      mode: 'percent' | 'tokens' | null
+      value: number | null
+      notes: number | null
+    }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
+        checkpoint_threshold_mode: value === null ? null : mode,
+        checkpoint_threshold_value: value,
+        checkpoint_notes_value: value === null ? null : notes,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** Whether this agent checkpoints at all, independently of the threshold it uses. Null inherits. */
+export function useUpdateAgentCheckpointMode() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, mode }: { agent: string; mode: string | null }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { checkpoint_mode: mode }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** One of the two access grants. Separate calls, because they are separate permissions. */
+export function useUpdateAgentGrant() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, grant, enabled }: {
+      agent: string
+      grant: 'can_read_checkpoints' | 'can_recall'
+      enabled: boolean
+    }) => patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { [grant]: enabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         predicate: (query) =>

@@ -586,6 +586,18 @@ async def list_agents(
                 default_permission_mode=(
                     agent_row.default_permission_mode if agent_row else None
                 ),
+                checkpoint_mode=agent_row.checkpoint_mode if agent_row else None,
+                checkpoint_threshold_mode=(
+                    agent_row.checkpoint_threshold_mode if agent_row else None
+                ),
+                checkpoint_threshold_value=(
+                    agent_row.checkpoint_threshold_value if agent_row else None
+                ),
+                checkpoint_notes_value=(
+                    agent_row.checkpoint_notes_value if agent_row else None
+                ),
+                can_read_checkpoints=bool(agent_row.can_read_checkpoints) if agent_row else False,
+                can_recall=bool(agent_row.can_recall) if agent_row else False,
             )
         )
 

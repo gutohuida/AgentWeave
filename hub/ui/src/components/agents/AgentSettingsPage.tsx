@@ -8,6 +8,8 @@ import { useCopy } from '@/hooks/useCopy'
 import { tint } from '@/lib/colorTint'
 import {
   CharterPicker,
+  CheckpointGrantsSetting,
+  CheckpointOverrideSetting,
   DescriptionSetting,
   PermissionDefaultSetting,
   RunnerPicker,
@@ -155,10 +157,12 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
           title="Context"
           description="How this agent's context window is managed across a session boundary."
         >
-          <NotYetPopulated>
-            Automatic checkpoints and their threshold are defined by the conversation-checkpoint
-            change and will appear here. Nothing is configurable yet.
-          </NotYetPopulated>
+          <SettingsRow
+            label="Checkpointing"
+            description="When this agent's conversations are checkpointed, and how full the context gets first. The Hub writes the checkpoint from the conversation's own record; the agent is not asked to."
+          >
+            <CheckpointOverrideSetting agent={agent} />
+          </SettingsRow>
         </SettingsSection>
       )
 
@@ -168,10 +172,12 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
           title="Access"
           description="What this agent may read of other agents' work."
         >
-          <NotYetPopulated>
-            Checkpoint-summary and transcript grants are defined by the conversation-checkpoint
-            change and will appear here. Both are closed until then.
-          </NotYetPopulated>
+          <SettingsRow
+            label="Grants"
+            description="Both closed by default. Reading a summary of a peer's work and reading the raw output behind it are different permissions, so they are granted separately."
+          >
+            <CheckpointGrantsSetting agent={agent} />
+          </SettingsRow>
         </SettingsSection>
       )
 
@@ -387,10 +393,6 @@ function SessionRow({ session }: { session: { id: string; type: string; path: st
   )
 }
 
-function NotYetPopulated({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-1 py-3 text-xs" style={{ color: 'var(--text-3)' }}>
-      {children}
-    </p>
-  )
-}
+/* `NotYetPopulated` lived here and is gone: it held the Context and Access sections open for the
+ * conversation-checkpoint change, and both are now filled. A placeholder kept past the thing it
+ * was waiting for reads as a section that has nothing in it, rather than one that does. */

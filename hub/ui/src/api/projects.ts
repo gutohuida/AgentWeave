@@ -66,17 +66,54 @@ export function useCreateProject() {
   return useProjectPathMutation('create')
 }
 
-export type ProjectSettingsInput = Pick<
-  ProjectSummary,
-  'name' | 'hop_budget' | 'turn_delivery_cap' | 'agent_budget' | 'token_budget' | 'allow_agent_jobs'
->
+/**
+ * The whole settings representation, not a slice of `ProjectSummary`.
+ *
+ * It used to be `Pick<ProjectSummary, …>` of six fields, and `ProjectSummary` carries neither the
+ * conversation-title fields nor the checkpoint ones. Since the endpoint replaces what it receives,
+ * saving from the panel silently reset every field it could not see — observed clearing a whole
+ * checkpoint configuration with a 200. Holding the entire object is what makes a field added
+ * server-side survive a client that has never heard of it.
+ */
+export interface ProjectSettings {
+  name: string
+  hop_budget: number
+  turn_delivery_cap: number
+  agent_budget: number
+  token_budget: number | null
+  allow_agent_jobs: boolean
+  conversation_title_mode: 'truncate' | 'generate'
+  conversation_title_runner_id: string | null
+  checkpoint_mode: 'off' | 'offered' | 'automatic'
+  checkpoint_threshold_mode: 'percent' | 'tokens' | null
+  /** Canonical units: 0-100 under `percent`, an actual token count under `tokens`. The form
+   *  collects thousands and converts, because that is the unit an operator thinks in. */
+  checkpoint_threshold_value: number | null
+  checkpoint_notes_value: number | null
+  checkpoint_runner_id: string | null
+  checkpoint_model: string | null
+}
+
+export type ProjectSettingsInput = ProjectSettings
+
+/** The stored settings, which is what the panel edits. `useProjects()` cannot serve this: its
+ *  summary omits every field added since it was written. */
+export function useProjectSettings(projectId: string | null) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<ProjectSettings>({
+    queryKey: ['project', projectId, 'settings'],
+    queryFn: () => getJson<ProjectSettings>(`/api/v1/projects/${projectId}/settings`),
+    enabled: isConfigured && !!projectId,
+  })
+}
 
 export function useUpdateProjectSettings(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: ProjectSettingsInput) =>
-      putJson<ProjectSettingsInput>(`/api/v1/projects/${projectId}/settings`, input),
+      putJson<ProjectSettings>(`/api/v1/projects/${projectId}/settings`, input),
     onSuccess: (settings) => {
+      queryClient.setQueryData<ProjectSettings>(['project', projectId, 'settings'], settings)
       queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
         current.map((project) => project.id === projectId ? { ...project, ...settings } : project),
       )

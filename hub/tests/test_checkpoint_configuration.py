@@ -240,3 +240,81 @@ async def test_an_unknown_agent_mode_is_refused(app, auth_headers):
         f"/api/v1/projects/{PROJECT}/agents/{name}", json={"checkpoint_mode": "whenever"}, headers=auth_headers
     )
     assert response.status_code == 400
+
+
+# --------------------------------------------------------------------------- partial saves
+
+
+@pytest.mark.asyncio
+async def test_saving_an_unrelated_setting_does_not_clear_checkpointing(app, auth_headers):
+    """Reproduces the defect this change exists to fix.
+
+    `PUT /settings` replaces every field from its model, and every checkpoint field carries a
+    default, so a client that submits only the fields it knows about resets the rest. The settings
+    panel is exactly such a client: `ProjectSettingsInput` is a `Pick` of `ProjectSummary`, which
+    carries neither the checkpoint fields nor the conversation-title ones.
+
+    Observed live before the fix: eight fields configured, eight fields gone, HTTP 200. Silent and
+    destructive, and indistinguishable afterwards from never having configured them.
+    """
+    runner_id = await _runner(app, auth_headers)
+    configured = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        json=_settings(
+            checkpoint_mode="automatic",
+            checkpoint_threshold_mode="percent",
+            checkpoint_threshold_value=80,
+            checkpoint_notes_value=70,
+            checkpoint_runner_id=runner_id,
+            checkpoint_model="claude-haiku-4-5-20251001",
+        ),
+        headers=auth_headers,
+    )
+    assert configured.status_code == 200, configured.text
+
+    # Exactly what the panel submits: the six fields it can see, and nothing else.
+    renamed = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        json={
+            "name": "Renamed",
+            "hop_budget": 6,
+            "turn_delivery_cap": 10,
+            "agent_budget": 8,
+            "token_budget": None,
+            "allow_agent_jobs": False,
+        },
+        headers=auth_headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    after = await app.get(f"/api/v1/projects/{PROJECT}/settings", headers=auth_headers)
+    body = after.json()
+    assert body["name"] == "Renamed"
+    assert body["checkpoint_mode"] == "automatic"
+    assert body["checkpoint_threshold_mode"] == "percent"
+    assert body["checkpoint_threshold_value"] == 80
+    assert body["checkpoint_notes_value"] == 70
+    assert body["checkpoint_runner_id"] == runner_id
+    assert body["checkpoint_model"] == "claude-haiku-4-5-20251001"
+
+
+@pytest.mark.asyncio
+async def test_a_field_sent_as_null_is_still_cleared(app, auth_headers):
+    """Omission must mean "leave alone" without making a deliberate clear impossible — otherwise
+    the fix trades one unreachable state for another."""
+    runner_id = await _runner(app, auth_headers)
+    await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        json=_settings(checkpoint_mode="offered", checkpoint_runner_id=runner_id),
+        headers=auth_headers,
+    )
+    cleared = await app.put(
+        f"/api/v1/projects/{PROJECT}/settings",
+        json=_settings(checkpoint_mode="off", checkpoint_runner_id=None),
+        headers=auth_headers,
+    )
+    assert cleared.status_code == 200, cleared.text
+
+    after = (await app.get(f"/api/v1/projects/{PROJECT}/settings", headers=auth_headers)).json()
+    assert after["checkpoint_mode"] == "off"
+    assert after["checkpoint_runner_id"] is None

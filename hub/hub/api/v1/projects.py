@@ -8,6 +8,7 @@ from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -318,11 +319,34 @@ async def update_project_settings(
 ) -> ProjectSettings:
     resolved_project_id = project_identity[0]
     project = await _operator_project_row(resolved_project_id, session)
+
+    # Merge onto what is stored, rather than replacing from the model's defaults.
+    #
+    # Every field here carries a default, so a client submitting only the fields it knows about
+    # used to reset the rest — silently, with a 200. Observed: a settings save clearing a
+    # project's entire checkpoint configuration, because the panel's `ProjectSettingsInput` is a
+    # `Pick` of `ProjectSummary` and cannot see those fields at all. The note on
+    # `conversation_title_mode` — "defaulted so a client written before this field still
+    # round-trips" — was reaching for exactly this and did not achieve it.
+    #
+    # `exclude_unset` distinguishes "not sent" from "sent as null", so omission means unchanged
+    # and a deliberate clear is still expressible.
+    current = ProjectSettings.model_validate(project, from_attributes=True)
+    submitted = body.model_dump(exclude_unset=True)
+    try:
+        # Validated against the *merged* state, not the fragment. Validating the fragment would
+        # refuse a lone notes value for wanting a threshold the project already has.
+        merged = ProjectSettings.model_validate(
+            {**current.model_dump(), **submitted}
+        )
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
     # Not ForeignKeys — `runners.project_id` already points at `projects`, and closing the loop
     # would make the two unsortable for DDL. Checked here instead, which is also where a
     # cross-project runner id has to be refused anyway.
     for field_name in ("conversation_title_runner_id", "checkpoint_runner_id"):
-        runner_id = getattr(body, field_name)
+        runner_id = getattr(merged, field_name)
         if not runner_id:
             continue
         runner = await session.get(Runner, runner_id)
@@ -333,15 +357,17 @@ async def update_project_settings(
                     f"Unknown runner '{runner_id}': no runner by that id belongs to this project"
                 ),
             )
-    for field, value in body.model_dump().items():
+    for field, value in merged.model_dump().items():
         setattr(project, field, value)
     await session.commit()
 
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(resolved_project_id)
-    await sse_manager.broadcast(resolved_project_id, "project_settings_updated", body.model_dump())
-    return body
+    await sse_manager.broadcast(
+        resolved_project_id, "project_settings_updated", merged.model_dump()
+    )
+    return merged
 
 
 @router.post("/{project_id}/relocate", response_model=ProjectSummary)

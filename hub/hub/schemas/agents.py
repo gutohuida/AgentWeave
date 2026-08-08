@@ -74,6 +74,16 @@ class AgentSummary(BaseModel):
     # or None for the built-in default. The composer reads it so its Permissions pill shows what
     # will actually happen rather than the catalog default.
     default_permission_mode: Optional[str] = Field(default=None, max_length=32)
+    # Per-agent checkpoint overrides. All None means this agent inherits the project's policy;
+    # a stated threshold replaces the project's whole threshold, mode and value together.
+    checkpoint_mode: Optional[str] = Field(default=None, max_length=16)
+    checkpoint_threshold_mode: Optional[str] = Field(default=None, max_length=8)
+    checkpoint_threshold_value: Optional[int] = None
+    checkpoint_notes_value: Optional[int] = None
+    # Two independent grants, both closed by default: reading a peer's checkpoint is not the same
+    # permission as recalling the raw output behind it.
+    can_read_checkpoints: bool = False
+    can_recall: bool = False
 
     model_config = {"from_attributes": True}
 
