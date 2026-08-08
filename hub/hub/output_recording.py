@@ -152,6 +152,34 @@ async def record_context_usage(
     Returns "ok" or "ignored" (a strictly-older observation for the same agent).
     """
     payload = resolve_usage_limit({**sample_payload, "agent": agent})
+
+    # Which conversation this reading belongs to.
+    #
+    # `UsageSample.to_payload` does not carry one — it is built by the runner parsers, which know
+    # a session id and nothing about AgentWeave's own threading. Without it every reading reached
+    # the checkpoint trigger with `conversation_id=None` and was dropped at its first guard, so
+    # **no automatic checkpoint could ever fire**. Resolved here rather than pushed onto every
+    # caller, and resolved read-only: unlike `record_agent_output` this never creates a
+    # conversation, because a usage sample is not evidence that a thread exists.
+    conversation_id = payload.get("conversation_id")
+    if conversation_id is None:
+        session_id = payload.get("session_id")
+        if session_id:
+            conversation_id = (
+                await db.execute(
+                    select(Conversation.id).where(
+                        Conversation.project_id == project_id,
+                        Conversation.agent == agent,
+                        Conversation.provider_session_id == session_id,
+                    )
+                )
+            ).scalar_one_or_none()
+        if conversation_id is None:
+            conversation = await latest_open_conversation(
+                db, project_id=project_id, agent=agent
+            )
+            conversation_id = conversation.id if conversation else None
+        payload["conversation_id"] = conversation_id
     latest_result = await db.execute(
         select(EventLog)
         .where(
@@ -182,5 +210,8 @@ async def record_context_usage(
     # which imports this module.
     from .checkpoint_trigger import consider_from_reading
 
-    consider_from_reading(project_id, agent, sample_payload.get("conversation_id"), payload)
+    # `payload`, not `sample_payload`. The conversation is resolved onto `payload` above;
+    # `sample_payload` is the runner parser's dict, which never carries one — reading it from
+    # there passed None every time and the trigger dropped every reading at its first guard.
+    consider_from_reading(project_id, agent, payload.get("conversation_id"), payload)
     return "ok"

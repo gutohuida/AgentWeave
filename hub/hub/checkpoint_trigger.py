@@ -44,6 +44,14 @@ logger = logging.getLogger(__name__)
 # every one of them.
 _in_flight: set = set()
 
+# Strong references to the dispatched tasks.
+#
+# `asyncio` holds only a weak reference to a running task, so a task whose only reference was the
+# local in the function that created it can be garbage-collected mid-flight. Observed exactly
+# that: readings crossed the threshold, nothing spawned, and because the collected task never ran
+# its `finally`, the conversation stayed in `_in_flight` forever and could never fire again.
+_dispatched: set = set()
+
 _NOTES_REQUEST = """\
 This conversation is approaching the point where the Hub will checkpoint it and continue in a \
 successor.
@@ -53,6 +61,16 @@ are in the middle of doing, what you suspect but have not verified, and what a s
 not repeat. Do not list changed files, tasks, or open questions — the Hub already has those.
 
 Then carry on with your work. This is not a request to stop."""
+
+
+def _declined(conversation_id: str, reason: str) -> None:
+    """Say why a reading did not produce a checkpoint.
+
+    Every exit in `consider` is a decision not to act, and an unexplained one is indistinguishable
+    from a broken trigger — which is what it was: a dropped task reference meant nothing ever
+    fired and nothing ever said so. Debug level, because readings arrive several times a turn.
+    """
+    logger.debug("no checkpoint for %s: %s", conversation_id, reason)
 
 
 async def _notes_already_in_hand(db, conversation_id: str) -> bool:
@@ -151,10 +169,12 @@ async def consider(
 
         policy = resolve_policy(agent, project)
         if not policy.enabled:
+            _declined(conversation_id, "checkpointing is off for this agent and project")
             return None
 
         conversation = await db.get(Conversation, conversation_id)
         if conversation is None or conversation.lifecycle != "open":
+            _declined(conversation_id, "the conversation is missing or not open")
             return None
 
         if should_request_notes(policy, context_tokens=context_tokens, percent=percent):
@@ -174,8 +194,14 @@ async def consider(
             return None
 
         if not should_checkpoint(policy, context_tokens=context_tokens, percent=percent):
+            _declined(
+                conversation_id,
+                f"below the {policy.threshold_mode} threshold of {policy.threshold_value} "
+                f"(tokens={context_tokens}, percent={percent})",
+            )
             return None
         if await _nothing_new_since_last_checkpoint(db, conversation_id):
+            _declined(conversation_id, "nothing has happened since the last checkpoint")
             return None
 
         cli, model, runner_id = await _resolve_runner(db, project)
@@ -262,8 +288,12 @@ def consider_from_reading(
             _in_flight.discard(conversation_id)
 
     try:
-        asyncio.get_running_loop().create_task(_run())
+        task = asyncio.get_running_loop().create_task(_run())
     except RuntimeError:
         # No loop (a synchronous caller, or a test). Nothing to dispatch onto; drop the reading
         # rather than block, since another will arrive within the turn.
         _in_flight.discard(conversation_id)
+        return
+    # Held until it finishes, or asyncio's weak reference lets it be collected mid-flight.
+    _dispatched.add(task)
+    task.add_done_callback(_dispatched.discard)

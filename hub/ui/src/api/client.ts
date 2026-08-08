@@ -56,3 +56,40 @@ export async function putJson<T>(path: string, body: unknown = {}): Promise<T> {
   })
   return res.json() as Promise<T>
 }
+
+/**
+ * Reduce a FastAPI error body to a sentence a person can act on.
+ *
+ * A Pydantic failure arrives as a list of error objects, and `ApiError.message` is the raw
+ * response text — so a refused setting rendered in the UI as
+ * `[{"type":"value_error","loc":["body"],"msg":"Value error, A threshold of 200,000 tokens ..."}]`.
+ * The useful sentence was in there; everything around it was noise.
+ */
+export function readableApiError(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(error.message)
+  } catch {
+    return error.message || fallback
+  }
+  const detail = (parsed as { detail?: unknown })?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        const entry = item as { msg?: string; loc?: unknown[] }
+        // Pydantic prefixes every custom validator message with "Value error, ".
+        const message = String(entry?.msg ?? '').replace(/^Value error,\s*/, '').trim()
+        if (!message) return ''
+        const field = Array.isArray(entry?.loc)
+          ? entry.loc.filter((part) => part !== 'body').join('.')
+          : ''
+        // A message that already reads as a sentence does not need its field name bolted on.
+        return field && !/[A-Z]/.test(message.charAt(0)) ? `${field}: ${message}` : message
+      })
+      .filter(Boolean)
+    if (messages.length) return messages.join('; ')
+  }
+  return fallback
+}

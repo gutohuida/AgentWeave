@@ -425,3 +425,107 @@ async def test_a_quiet_conversation_is_not_checkpointed_over_and_over(app, monke
 
     assert first is not None
     assert second is None
+
+
+# --------------------------------------------------------------------------- dispatch
+
+
+@pytest.mark.asyncio
+async def test_a_dispatched_consideration_is_held_until_it_finishes(app, monkeypatch):
+    """`asyncio` keeps only a weak reference to a running task.
+
+    `consider_from_reading` used to call `create_task` and drop the result, so the task could be
+    collected before it ran — and because its `finally` never executed, the conversation stayed in
+    `_in_flight` and could never fire again. Observed in production: readings crossed a 1,000-token
+    threshold repeatedly, no worker was ever invoked, and nothing reported a problem.
+    """
+    import asyncio
+    import gc
+
+    from hub.checkpoint_trigger import _dispatched, _in_flight, consider_from_reading
+
+    ran = asyncio.Event()
+
+    async def fake_consider(*_args, **_kwargs):
+        await asyncio.sleep(0.05)
+        ran.set()
+
+    monkeypatch.setattr("hub.checkpoint_trigger.consider", fake_consider)
+    consider_from_reading(PROJECT, AGENT, "conv-dispatch", {"context_tokens": 50_000})
+
+    # The reference the fix adds is what survives this.
+    assert len(_dispatched) == 1
+    gc.collect()
+
+    await asyncio.wait_for(ran.wait(), timeout=2)
+    await asyncio.sleep(0)
+
+    assert ran.is_set()
+    # And the guard clears, so the next reading is considered rather than silently skipped.
+    assert "conv-dispatch" not in _in_flight
+
+
+@pytest.mark.asyncio
+async def test_a_reading_with_no_conversation_is_not_dispatched(app):
+    """The guard that swallowed everything until `record_context_usage` learned to resolve one."""
+    from hub.checkpoint_trigger import _dispatched, consider_from_reading
+
+    before = len(_dispatched)
+    consider_from_reading(PROJECT, AGENT, None, {"context_tokens": 50_000})
+    assert len(_dispatched) == before
+
+
+@pytest.mark.asyncio
+async def test_a_real_reading_reaches_the_trigger(app, monkeypatch):
+    """End to end from `record_context_usage`, which is the path production actually uses.
+
+    Every other test here calls `consider` directly, and that is why three separate defects in the
+    wiring between them all shipped undetected: the payload carried no conversation, the dispatched
+    task was collected before it ran, and the conversation was read from the wrong dict. Each one
+    silently dropped every reading while `consider` itself stayed perfectly correct.
+    """
+    import asyncio
+
+    from hub.db.models import Conversation as Conv
+    from hub.output_recording import record_context_usage
+
+    seen = {}
+
+    async def fake_consider(project_id, agent_name, conversation_id, **kwargs):
+        seen.update(
+            project_id=project_id, agent=agent_name, conversation_id=conversation_id, **kwargs
+        )
+
+    monkeypatch.setattr("hub.checkpoint_trigger.consider", fake_consider)
+
+    async with async_session_factory() as db:
+        db.add(
+            Conv(
+                id="conv-reading",
+                project_id=PROJECT,
+                agent=AGENT,
+                lifecycle="open",
+                provider_session_id="sess-reading",
+            )
+        )
+        await db.commit()
+
+        await record_context_usage(
+            db,
+            PROJECT,
+            AGENT,
+            {
+                "status": "measured",
+                "context_tokens": 50_000,
+                "session_id": "sess-reading",
+                "model": "claude-haiku-4-5-20251001",
+                "source": "claude",
+            },
+        )
+        # The dispatch is deliberately not awaited by its caller; let it run.
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+    assert seen.get("conversation_id") == "conv-reading"
+    assert seen.get("context_tokens") == 50_000
+    assert seen.get("agent") == AGENT

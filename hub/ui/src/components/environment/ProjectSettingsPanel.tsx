@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ApiError } from '@/api/client'
+import { readableApiError } from '@/api/client'
 import {
   useProjectSettings,
   useProjects,
@@ -259,7 +259,7 @@ export function ProjectSettingsPanel() {
       </SettingsRow>
       {update.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Settings saved.</div>}
       {relocate.isSuccess && <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>Project directory updated.</div>}
-      {error && <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>{error instanceof ApiError ? error.message : 'The update could not be saved.'}</div>}
+      {error && <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>{readableApiError(error, 'The update could not be saved.')}</div>}
       </form>
     </SettingsSection>
   )

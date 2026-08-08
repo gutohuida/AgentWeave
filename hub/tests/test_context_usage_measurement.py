@@ -228,3 +228,79 @@ async def test_a_reset_is_not_papered_over_with_the_previous_sessions_reading(ap
     row = next(item for item in resp.json() if item["name"] == "ctx-reset")
     assert row["context_usage"]["session_id"] == "sess-new"
     assert row["context_usage"].get("percent") is None
+
+
+@pytest.mark.asyncio
+async def test_a_reading_carries_the_conversation_it_belongs_to(app):
+    """Without this the automatic checkpoint trigger can never fire.
+
+    `UsageSample.to_payload` is built by the runner parsers, which know a provider session id and
+    nothing about AgentWeave's own threading, so it carries no `conversation_id`.
+    `checkpoint_trigger.consider_from_reading` drops any reading without one at its first guard —
+    so every threshold in the product was unreachable while looking configured. Confirmed against
+    677 stored readings: `conversation_id` was null on every single one.
+    """
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation, EventLog
+    from hub.output_recording import record_context_usage
+
+    async with async_session_factory() as db:
+        db.add(
+            Conversation(
+                id="conv-usage",
+                project_id="proj-test",
+                agent="haiku-1",
+                lifecycle="open",
+                provider_session_id="sess-1",
+            )
+        )
+        await db.commit()
+
+        await record_context_usage(
+            db,
+            "proj-test",
+            "haiku-1",
+            {
+                "status": "measured",
+                "context_tokens": 30_000,
+                "session_id": "sess-1",
+                "model": HAIKU,
+                "source": "claude",
+            },
+        )
+
+        row = (
+            await db.execute(
+                select(EventLog)
+                .where(EventLog.event_type == "context_warning")
+                .order_by(EventLog.id.desc())
+                .limit(1)
+            )
+        ).scalars().one()
+
+    assert row.data["conversation_id"] == "conv-usage"
+
+
+@pytest.mark.asyncio
+async def test_a_reading_for_an_agent_with_no_conversation_creates_none(app):
+    """A usage sample is not evidence that a thread exists. `record_agent_output` opens one when
+    output arrives unattributed; a reading must not, or measuring an agent would conjure the
+    conversation it is measured against."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation
+    from hub.output_recording import record_context_usage
+
+    async with async_session_factory() as db:
+        await record_context_usage(
+            db,
+            "proj-test",
+            "nobody",
+            {"status": "measured", "context_tokens": 100, "model": HAIKU, "source": "claude"},
+        )
+        conversations = (await db.execute(select(Conversation))).scalars().all()
+
+    assert conversations == []
