@@ -294,7 +294,7 @@ async def list_project_conversations(
         .where(Conversation.project_id == project_id, Conversation.lifecycle == "archived")
         .group_by(Conversation.agent)
     )
-    archived_by_agent = {agent: count for agent, count in archived.all()}
+    archived_by_agent = dict(archived.all())
     return ProjectConversationsResponse(
         conversations=await _to_response(session, list(result.scalars())),
         archived_count=sum(archived_by_agent.values()),

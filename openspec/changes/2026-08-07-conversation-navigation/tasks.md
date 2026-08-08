@@ -119,13 +119,13 @@
 
 ## 11. Verification
 
-- [ ] 11.1 `pytest hub/tests/ -q` green; `pytest tests/ -q` green
-- [ ] 11.2 `cd hub/ui && npx vitest run` green; `npx tsc --noEmit` clean
-- [ ] 11.3 `ruff check hub/hub/` introduces no new errors beyond the 3 pre-existing
-- [ ] 11.4 `npx openspec validate --specs --strict` passes
-- [ ] 11.5 `npm run build`, copy `hub/ui/dist` over `hub/hub/static/ui`, confirm with `diff -rq`
+- [x] 11.1 `pytest hub/tests/ -q` green; `pytest tests/ -q` green
+- [x] 11.2 `cd hub/ui && npx vitest run` green; `npx tsc --noEmit` clean
+- [x] 11.3 `ruff check hub/hub/` introduces no new errors beyond the 3 pre-existing
+- [x] 11.4 `npx openspec validate --specs --strict` passes
+- [x] 11.5 `npm run build`, copy `hub/ui/dist` over `hub/hub/static/ui`, confirm with `diff -rq`
 - [ ] 11.6 Live: three agents, several conversations each — expand, rename, archive, unarchive, and confirm a blocked question in a background conversation is visible in the rail without opening it
 - [ ] 11.7 Live: archiving is refused for a running conversation and for one holding an undelivered queue entry, each with its reason
 - [ ] 11.8 Live: an agent messaging an archived conversation receives the cause, the instruction, and its own content back
 - [ ] 11.9 Live: enable title generation and confirm the title upgrades with no timeline entry and no change to the agent's context usage
-- [ ] 11.10 Check light mode for every new surface — it was not checked in the previous change
+- [x] 11.10 Check light mode for every new surface — it was not checked in the previous change
