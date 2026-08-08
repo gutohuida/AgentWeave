@@ -1,1 +1,1 @@
-handoff-0019-2026-08-08-1559-checkpoint-designed-config-page-proposed.md
+handoff-0020-2026-08-08-1707-agent-configuration-page-built.md
