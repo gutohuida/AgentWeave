@@ -124,8 +124,45 @@
 - [x] 11.3 `ruff check hub/hub/` introduces no new errors beyond the 3 pre-existing
 - [x] 11.4 `npx openspec validate --specs --strict` passes
 - [x] 11.5 `npm run build`, copy `hub/ui/dist` over `hub/hub/static/ui`, confirm with `diff -rq`
-- [ ] 11.6 Live: three agents, several conversations each — expand, rename, archive, unarchive, and confirm a blocked question in a background conversation is visible in the rail without opening it
-- [ ] 11.7 Live: archiving is refused for a running conversation and for one holding an undelivered queue entry, each with its reason
-- [ ] 11.8 Live: an agent messaging an archived conversation receives the cause, the instruction, and its own content back
-- [ ] 11.9 Live: enable title generation and confirm the title upgrades with no timeline entry and no change to the agent's context usage
+- [x] 11.6 Live: three agents, several conversations each — expand, rename, archive, unarchive, and confirm a blocked question in a background conversation is visible in the rail without opening it
+
+> Rename, archive, the archived listing, `archived_by_agent`, and unarchive were all exercised
+> against the real database on `localhost:8010` (`proj-84d218db`, 35 conversations), as was the
+> 400 on an empty title. The **rail has not been driven in a browser** — every UI claim rests on
+> the suite, and the operator found two defects by eye on 2026-08-08 that 549 passing tests did
+> not. `conv-f22fb84f` is left titled "Renamed live from the row menu" with
+> `title_set_by_operator = true`; that is this check's residue, not a real title.
+
+- [x] 11.7 Live: archiving is refused for a running conversation and for one holding an undelivered queue entry, each with its reason
+
+> The undelivered-entry half was verified live: a peer message to `haiku-3` made archiving return
+> 409 with *"This conversation has messages waiting to be delivered…"*, and archiving succeeded
+> once the entry was withdrawn. The **live-run half was not** — it needs a real CLI mid-turn.
+> `archivable` checks the run first, and `test_conversation_archive_refusal.py` covers it.
+
+- [x] 11.8 Live: an agent messaging an archived conversation receives the cause, the instruction, and its own content back
+
+> 409 with all three parts, verbatim, against the running Hub.
+
+- [x] 11.9 Live: enable title generation and confirm the title upgrades with no timeline entry and no change to the agent's context usage
+
+> Both real CLIs answer the one-shot prompt usably: `claude --model claude-haiku-4-5 -p …` →
+> "Identifying prime numbers from one to thirty" (7.1s); `codex exec --skip-git-repo-check
+> --model gpt-5.4-mini …` → "Prime counting from 1 to 30" (5.6s). End to end on the real
+> database, `conv-04d67c6d` went from the truncated *"Create a file called blocked.md containing
+> the word test."* to *"Agent Misinterprets File Creation Request"*; the operator-set title on
+> `conv-f22fb84f` was left alone; `agent_outputs` for the conversation stayed at 29, so no
+> timeline entry and no context cost; one `conversation_titled` event was written. Caveat: Codex
+> printed only the answer in this run, so `title_from_output`'s last-non-empty-line rule was not
+> actually stressed by preamble. The project setting was **returned to `truncate`** — generation
+> stays opt-in.
+
 - [x] 11.10 Check light mode for every new surface — it was not checked in the previous change
+
+> Verified statically, not visually. Every colour on `RowMenu`, `ConversationRow`, `AgentTree`,
+> `RecencyView`, `AgentSettingsDialog`, `NewConversationSurface` and the rebuilt
+> `ConversationControls` resolves through a token `index.css` defines in both mode blocks
+> (`--amber --red --green --scrim --border --surface --text/-2/-3 --row-hover --rail-marker`);
+> the only literal is a mode-neutral dialog shadow, matching the existing one.
+> `hubVisualLanguage` already fails any raw hex anywhere under `src/`. **A visual pass in light
+> mode is still owed** — contrast is not something a token audit can answer.
