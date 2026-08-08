@@ -892,3 +892,72 @@ class UnaskedQuestion(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (Index("ix_unasked_questions_project_status", "project_id", "status"),)
+
+
+# Every way a worker invocation can end. Kept in one place so the check constraint and
+# `worker.OUTCOMES` cannot drift; a test asserts they agree.
+WORKER_OUTCOMES = (
+    "ok",
+    "unsupported_cli",
+    "unknown_model",
+    "spawn_failed",
+    "nonzero_exit",
+    "timeout",
+    "unparseable",
+    "schema_invalid",
+)
+
+
+class WorkerInvocation(Base):
+    """One out-of-band, single-purpose model call, and what it cost.
+
+    Deliberately not a `Run`: a worker is not a turn, and recording one under an agent's name
+    would make that agent look busy to `turn_scheduler` (see `worker.py`). This table is the
+    whole accounting surface for such calls.
+
+    `runner_id` carries **no foreign key**, on purpose. This is an audit record, and an audit
+    record that a runner deletion could cascade away — or that could block one — is not an audit
+    record. It stores which runner was chosen at the time, which stays true afterwards.
+    """
+
+    __tablename__ = "worker_invocations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # What the call was for — "checkpoint", "probe", … — so cost can be attributed per purpose.
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    # The Hub owns and versions its prompts; a change in output quality must be attributable to
+    # the prompt that produced it, which means the version is recorded, not inferred.
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    cli: Mapped[str] = mapped_column(String(16), nullable=False)
+    model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    exit_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # All nullable: a call that never spawned has no usage, and a provider that does not report a
+    # dimension leaves it unknown rather than zero.
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cache_read_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cache_write_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    reasoning_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cost_usd_micros: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('" + "', '".join(WORKER_OUTCOMES) + "')",
+            name="ck_worker_invocations_outcome",
+        ),
+        CheckConstraint(
+            "error IS NOT NULL OR outcome = 'ok'",
+            name="ck_worker_invocations_failure_explained",
+        ),
+        Index("ix_worker_invocations_project_created", "project_id", "created_at"),
+        Index("ix_worker_invocations_project_kind", "project_id", "kind"),
+    )

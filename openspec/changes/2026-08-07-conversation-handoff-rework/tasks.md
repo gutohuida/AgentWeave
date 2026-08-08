@@ -275,15 +275,71 @@ Any threshold in section 8 keys on `percent`, which is **always null for Claude 
 A Hub-side, out-of-band, single-purpose model invocation. Generalises
 `conversation_titles.py`'s proto-worker.
 
-- [ ] 4.1 Worker abstraction: operator-chosen `Runner` + model, Hub-owned versioned prompt,
+> **The envelope shapes were captured before the parser was written** (`claude` 2.1.221,
+> `codex-cli` 0.146.0), on the exploration's standing rule that an observation beats a passing
+> test. It paid for itself three times over — see 4.3 and 4.5.
+
+- [x] 4.1 Worker abstraction: operator-chosen `Runner` + model, Hub-owned versioned prompt,
       deterministically assembled input, schema-validated output, durable record
-- [ ] 4.2 Reuse `Runner` records and validate the model against the catalog; do **not** use
+
+      `hub/hub/worker.py`. Deliberately **generic**, not checkpoint-shaped: design.md earmarks the
+      same abstraction for the blind-resume probe (Decision 5), and later spec compliance and run
+      review. `run_worker` takes primitives rather than a `Runner` row so a call that can take
+      minutes does not hold a DB session open across it
+- [x] 4.2 Reuse `Runner` records and validate the model against the catalog; do **not** use
       `runner_commands.build_command`, which builds an agent turn (streaming JSON, MCP server,
       permission posture, context file) — none of which applies
-- [ ] 4.3 Blocking spawn with timeout that never raises into its caller, following
+
+      `build_worker_command`, with a test asserting `--permission-mode`, `--mcp-config`,
+      `--allowedTools` and `stream-json` appear nowhere in it — because the tempting fix for any
+      future worker problem is to borrow a flag from `build_command`. `model_is_declared` checks
+      **exact ids only**, matching `runners._reject_undeclared_model` rather than the alias
+      resolution `context_window_for_model` does: a worker that accepted models the runner
+      registry refuses would be the laxer of two gates on the same value
+- [x] 4.3 Blocking spawn with timeout that never raises into its caller, following
       `_run_titler:93`
-- [ ] 4.4 Record every invocation: prompt version, runner, model, tokens, duration, outcome
-- [ ] 4.5 Tests including a worker whose CLI fails, times out, and returns unparseable output
+
+      `_run_worker_process`, classifying its own failure into `timeout` / `spawn_failed` /
+      `nonzero_exit`. **Two properties the capture established, both load-bearing and neither
+      guessable:** `stdin` must be `DEVNULL` or `codex exec` blocks on "Reading additional input
+      from stdin..." indefinitely — observed hanging over six minutes having written zero bytes —
+      and **stderr is never a failure signal**, because a successful codex run writes its banner,
+      its token count *and* a transparently-retried `ERROR ... 503 Service Unavailable` there
+      while exiting 0. Both are pinned by tests
+- [x] 4.4 Record every invocation: prompt version, runner, model, tokens, duration, outcome
+
+      `WorkerInvocation` + migration `0042`; head assertions bumped in `test_migrations.py` and
+      `test_project_persistence.py`. **Tokens are real, not nullable-in-practice** — both CLIs
+      report usage in JSON mode (`claude --output-format json` → `.usage` + `total_cost_usd`;
+      `codex exec --json` → `turn.completed.usage`), which is why JSON mode was chosen over
+      scraping prose. Cache dimensions are carried separately rather than folded into
+      `input_tokens`: the captured claude sample read **2** input tokens against **47091** cache
+      reads, so folding them would misreport the call by four orders of magnitude.
+      `runner_id` carries **no foreign key** — an audit row a runner deletion could cascade away
+      is not an audit row. Eight outcomes rather than a boolean, because a timeout, a missing CLI
+      and a model that answered in prose are three different problems; a test asserts the
+      vocabulary cannot drift from the check constraint.
+
+      **No `Run` row is created**, and a test pins it: `turn_scheduler.schedule_agent` and
+      `trigger_agent_directly` gate on a running `Run` for the agent, so a worker recorded as a
+      run would make that agent look busy and stall its queue until it returned. This trap is
+      documented in `conversation_titles.py` and is the easiest way to get the Worker wrong
+- [x] 4.5 Tests including a worker whose CLI fails, times out, and returns unparseable output
+
+      `hub/tests/test_worker.py`, 23 tests, envelope samples captured verbatim rather than
+      invented. **Capturing first caught a bug that would otherwise have shipped:** the real
+      claude envelope nests `usage`, `iterations` and `modelUsage`, and the first
+      `extract_json_object` — scanning every `{` and keeping the last that parsed — returned the
+      innermost *trailing* object rather than the envelope. A candidate now advances the cursor
+      past its own end, so only top-level objects are considered. `unparseable` (prose) and
+      `schema_invalid` (valid JSON, wrong shape) are separate outcomes, and usage is retained on
+      both — a worker that burned tokens producing garbage still cost money.
+
+      **Correction found in passing, not acted on:** `conversation_titles.title_from_output`
+      justifies its last-non-empty-line heuristic with "Codex prints progress and configuration
+      ahead of its answer". In 0.146.0 all of that goes to *stderr* and stdout is one clean line.
+      The heuristic still works; its stated reason is stale. Titling is not in this change's
+      scope — design.md says it should migrate onto the Worker, which is the right time to fix it
 
 ## 5. The checkpoint record
 
