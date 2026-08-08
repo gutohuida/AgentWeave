@@ -138,3 +138,7 @@ testrun/
 
 # Local scratch output
 prints/
+
+# A stray SQLite file lands here when something is run from the package directory rather than
+# from `hub/`. The real database is `hub/data/`, ignored above; this one is always an accident.
+hub/hub/data/*.db
