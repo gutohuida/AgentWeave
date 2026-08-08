@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useProjects } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { agentColorVars } from '@/lib/agentColors'
 import {
   ENVIRONMENT_SECTIONS,
   isConfigurationDestination,
@@ -10,6 +9,7 @@ import {
   type WorkspaceDestination,
 } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
+import { AgentTree } from './AgentTree'
 
 export type SidebarPage =
   | 'tasks' | 'questions' | 'activity' | 'logs' | 'jobs' | 'quality' | 'instructions' | 'spec'
@@ -19,8 +19,10 @@ interface SidebarProps {
   destination?: WorkspaceDestination
   activePage: SidebarPage | 'overview' | null
   activeAgent?: string | null
+  activeConversation?: string | null
   onOpenProject: (projectId: string) => void
   onOpenAgent: (projectId: string, agent: string) => void
+  onOpenConversation?: (projectId: string, agent: string, conversationId: string) => void
   onOpenEnvironment?: (projectId: string, section: EnvironmentSection) => void
   onAddAgent?: (projectId: string) => void
   onOpenExisting: () => void
@@ -35,6 +37,7 @@ export const SIDEBAR_MIN_WIDTH = 180
 export const SIDEBAR_MAX_WIDTH = 420
 
 const COLLAPSED_KEY = 'aw.projectRailCollapsed'
+const AGENTS_EXPANDED_KEY = 'aw.railAgentsExpanded'
 const SECTION_LABELS: Record<EnvironmentSection, string> = {
   quality: 'Quality',
   instructions: 'Instructions',
@@ -46,19 +49,27 @@ const SECTION_LABELS: Record<EnvironmentSection, string> = {
   settings: 'Settings',
 }
 
-function loadCollapsed(): Record<string, boolean> {
+function loadFlags(key: string): Record<string, boolean> {
   try {
-    return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '{}') as Record<string, boolean>
+    return JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, boolean>
   } catch {
     return {}
   }
 }
 
+/** Agents are keyed by project too — two projects may both have an agent called `claude`, and
+ *  expanding one must not expand the other. */
+function agentKey(projectId: string, agent: string): string {
+  return `${projectId}/${agent}`
+}
+
 export function Sidebar({
   destination,
   activeAgent = null,
+  activeConversation = null,
   onOpenProject,
   onOpenAgent,
+  onOpenConversation,
   onOpenEnvironment,
   onAddAgent,
   onOpenExisting,
@@ -68,7 +79,19 @@ export function Sidebar({
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
   const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => loadFlags(COLLAPSED_KEY))
+  const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(() =>
+    loadFlags(AGENTS_EXPANDED_KEY),
+  )
+  /** The tree component keys its agents by bare name; the store keys them by project too. */
+  const agentExpansionFor = (projectId: string): Record<string, boolean> => {
+    const prefix = `${projectId}/`
+    const scoped: Record<string, boolean> = {}
+    for (const [key, value] of Object.entries(expandedAgents)) {
+      if (key.startsWith(prefix)) scoped[key.slice(prefix.length)] = value
+    }
+    return scoped
+  }
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>()
     for (const project of projects) counts.set(project.name, (counts.get(project.name) ?? 0) + 1)
@@ -86,6 +109,14 @@ export function Sidebar({
       // Persistence is optional.
     }
   }, [collapsed])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AGENTS_EXPANDED_KEY, JSON.stringify(expandedAgents))
+    } catch {
+      // Persistence is optional.
+    }
+  }, [expandedAgents])
 
   return (
     <aside
@@ -190,23 +221,23 @@ export function Sidebar({
                     </Button>
                   </div>
                   {expanded && (
-                    <div className="ml-7 flex flex-col gap-0.5">
-                      {project.agents.map((agent) => {
-                        const colors = agentColorVars(agent.color_index)
-                        const active = activeProject && activeAgent === agent.name
-                        return (
-                          <button key={agent.id} type="button" data-testid={`rail-agent-${project.id}-${agent.name}`} data-active={active ? 'true' : 'false'} onClick={() => onOpenAgent(project.id, agent.name)} className="row-item">
-                            <span data-testid={`rail-agent-color-${project.id}-${agent.name}`} className="h-2 w-2 shrink-0 rounded-full" style={{ background: colors.accent }} />
-                            <span className="min-w-0 flex-1 truncate">{agent.name}</span>
-                            <span className="h-1.5 w-1.5 rounded-full" title={agent.status} style={{ background: agent.status === 'running' ? 'var(--green)' : 'var(--text-3)' }} />
-                          </button>
-                        )
-                      })}
-                      <button type="button" className="row-item" data-testid={`rail-add-agent-${project.id}`} aria-label={`Add agent to ${project.name}`} onClick={() => onAddAgent?.(project.id)}>
-                        <Icon name="person_add" size={14} />
-                        Add agent
-                      </button>
-                    </div>
+                    <AgentTree
+                      projectId={project.id}
+                      agents={project.agents}
+                      activeProject={activeProject}
+                      activeAgent={activeAgent}
+                      activeConversation={activeConversation}
+                      expandedAgents={agentExpansionFor(project.id)}
+                      onToggleAgent={(agent: string) =>
+                        setExpandedAgents((state) => {
+                          const key = agentKey(project.id, agent)
+                          return { ...state, [key]: !state[key] }
+                        })
+                      }
+                      onOpenAgent={onOpenAgent}
+                      onOpenConversation={onOpenConversation}
+                      onAddAgent={onAddAgent}
+                    />
                   )}
                 </div>
               )

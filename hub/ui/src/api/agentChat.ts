@@ -42,16 +42,45 @@ export interface ChatHistoryResponse {
   entries: TimelineEntry[]
 }
 
+/** Whether a conversation needs the operator, without opening it. `waiting` outranks `running`:
+ *  a run blocked on a question is still running, but stopping for the operator is the part they
+ *  have to see. */
+export type ConversationAttention = 'running' | 'waiting' | 'idle'
+
+/** Where a conversation came from, recorded at creation and immutable. `handoff` and `spec` are
+ *  accepted by the Hub with no producer yet. */
+export type ConversationOrigin = 'operator' | 'peer' | 'handoff' | 'spec' | 'job'
+
 export interface AgentConversation {
   id: string
   agent: string
   provider_session_id: string | null
   lifecycle: 'open' | 'archived'
+  /** Null until the first message names it. Never render `id` as the label — see
+   *  `conversationLabel` below. */
+  title: string | null
+  title_set_by_operator: boolean
+  origin: ConversationOrigin
+  attention: ConversationAttention
   created_at: string
   updated_at: string
+  archived_at?: string | null
   /** Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}). Null/empty
    * means the conversation inherits its agent's runner and the catalog's defaults. */
   runtime_overrides?: Record<string, string> | null
+}
+
+export interface ProjectConversations {
+  conversations: AgentConversation[]
+  /** Archived rows are excluded from `conversations`, so their count has to be carried
+   *  separately — a "Show archived (N)" control cannot state N from a list that omitted them. */
+  archived_count: number
+}
+
+/** What navigation shows for a conversation. A conversation with no message yet is labelled as
+ *  new; its identifier is never a label, on any surface. */
+export function conversationLabel(conversation: AgentConversation): string {
+  return conversation.title?.trim() || 'New conversation'
 }
 
 export function useAgentConversations(agent: string | null) {
@@ -71,6 +100,36 @@ export function useAgentConversations(agent: string | null) {
     queryFn: () =>
       getJson<AgentConversation[]>(`/api/v1/projects/${projectId}/agent/${agent}/conversations`),
     enabled: isConfigured && !!projectId && !!agent,
+  })
+}
+
+/** Every conversation in one project, across its agents — what the rail draws.
+ *
+ * One request rather than one per expanded agent: the tree groups these by agent and the recency
+ * view lists them as they come, so switching views costs nothing and expanding an agent shows its
+ * conversations immediately instead of starting a fetch.
+ *
+ * `projectId` is explicit rather than taken from the config store, because the rail renders every
+ * registered project, not only the selected one. */
+export function useProjectConversations(projectId: string | null, lifecycle: 'open' | 'archived' = 'open') {
+  const { isConfigured } = useConfigStore()
+  const queryClient = useQueryClient()
+
+  useSSE((event) => {
+    const data = (event.data ?? {}) as Record<string, unknown>
+    if (data.project_id !== projectId) return
+    if (event.type === 'conversation_updated' || data.conversation_id) {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'conversations'] })
+    }
+  })
+
+  return useQuery<ProjectConversations>({
+    queryKey: ['project', projectId, 'conversations', lifecycle],
+    queryFn: () =>
+      getJson<ProjectConversations>(
+        `/api/v1/projects/${projectId}/conversations?lifecycle=${lifecycle}`,
+      ),
+    enabled: isConfigured && !!projectId,
   })
 }
 

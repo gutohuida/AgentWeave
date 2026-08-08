@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useConfigStore } from '@/store/configStore'
@@ -32,7 +33,17 @@ function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {
     onCreateProject: vi.fn(),
     ...overrides,
   }
-  return { ...render(<Sidebar {...props} />), props }
+  // The rail fetches each project's conversations now that agents expand to them, so it
+  // needs a client even for the tests that never expand an agent.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return {
+    ...render(
+      <QueryClientProvider client={client}>
+        <Sidebar {...props} />
+      </QueryClientProvider>,
+    ),
+    props,
+  }
 }
 
 describe('phase 5 project collection rail', () => {

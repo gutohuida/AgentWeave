@@ -123,6 +123,91 @@ async def test_archiving_an_already_archived_conversation_is_idempotent(
     assert second.json()["lifecycle"] == "archived"
 
 
+async def _project_conversations(app, auth_headers, lifecycle=None):
+    suffix = f"?lifecycle={lifecycle}" if lifecycle else ""
+    response = await app.get(
+        f"/api/v1/projects/proj-test/conversations{suffix}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.asyncio
+async def test_the_project_listing_spans_agents_newest_first(
+    app, auth_headers, drain_conversation
+) -> None:
+    """What the rail reads: one request for every agent's conversations, not one per agent."""
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"alpha": {"runner": "manual"}, "beta": {"runner": "manual"}}}},
+        headers=auth_headers,
+    )
+    first = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "alpha", "message": "Alpha thread"},
+        headers=auth_headers,
+    )
+    second = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "beta", "message": "Beta thread"},
+        headers=auth_headers,
+    )
+
+    body = await _project_conversations(app, auth_headers)
+    assert [row["agent"] for row in body["conversations"]] == ["beta", "alpha"]
+    assert [row["id"] for row in body["conversations"]] == [
+        second.json()["conversation_id"],
+        first.json()["conversation_id"],
+    ]
+    assert [row["title"] for row in body["conversations"]] == ["Beta thread", "Alpha thread"]
+    assert body["archived_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_the_project_listing_counts_archived_it_does_not_show(
+    app, auth_headers, drain_conversation
+) -> None:
+    """A "Show archived (N)" control cannot state N from a response that omitted them."""
+    conversation_id = await _open_conversation(app, auth_headers, drain_conversation)
+    await app.post(
+        f"/api/v1/projects/proj-test/agent/offline/conversations/{conversation_id}/archive",
+        headers=auth_headers,
+    )
+
+    body = await _project_conversations(app, auth_headers)
+    assert body["conversations"] == []
+    assert body["archived_count"] == 1
+
+    archived = await _project_conversations(app, auth_headers, lifecycle="archived")
+    assert [row["id"] for row in archived["conversations"]] == [conversation_id]
+    assert archived["archived_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_the_project_listing_is_scoped_to_its_project(app, auth_headers) -> None:
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Project
+
+    async with async_session_factory() as session:
+        session.add(Project(id="proj-other", name="Other"))
+        await session.commit()
+
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"offline": {"runner": "manual"}}}},
+        headers=auth_headers,
+    )
+    await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "offline", "message": "Mine"},
+        headers=auth_headers,
+    )
+
+    other = await app.get("/api/v1/projects/proj-other/conversations", headers=auth_headers)
+    assert other.status_code == 200
+    assert other.json() == {"conversations": [], "archived_count": 0}
+
+
 @pytest.mark.asyncio
 async def test_archiving_an_unknown_conversation_is_not_found(app, auth_headers) -> None:
     await _sync_agent(app, auth_headers)

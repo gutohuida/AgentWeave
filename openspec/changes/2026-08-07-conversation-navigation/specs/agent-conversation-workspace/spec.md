@@ -54,6 +54,11 @@ persistent leading edge, so the owning agent is readable without hovering or ope
 conversation. The colour MUST match the one used for that agent in the tree and in the conversation
 timeline.
 
+Archived conversations SHALL be excluded from the recency list, and SHALL be reachable from it
+through an explicit control stating how many exist — the same affordance the tree offers per
+agent, offered here across the project. Hiding them without saying they are there reads as data
+loss to an operator who archives often.
+
 #### Scenario: The tree is the default view
 
 - **WHEN** the operator loads the Hub having never chosen a view
@@ -69,6 +74,13 @@ timeline.
 - **WHEN** the recency view is shown
 - **THEN** each conversation carries its agent's identity colour without requiring hover
 - **AND** that colour is the same one the agent carries in the tree and the timeline
+
+#### Scenario: Archived conversations are reachable from the recency view
+
+- **WHEN** the recency view is shown
+- **THEN** archived conversations are not listed among the open ones
+- **AND** a control states how many archived conversations the project has
+- **AND** activating it lists them
 
 #### Scenario: The chosen view survives reload
 

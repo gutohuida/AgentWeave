@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from .accounting import router as accounting_router
 from .agent_actions import router as agent_actions_router
+from .agent_chat import conversations_router as project_conversations_router
 from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
@@ -50,6 +51,7 @@ project_resources_router.include_router(events_router)
 project_resources_router.include_router(agent_trigger_router)
 project_resources_router.include_router(agents_router)
 project_resources_router.include_router(agent_chat_router)
+project_resources_router.include_router(project_conversations_router)
 project_resources_router.include_router(session_sync_router)
 project_resources_router.include_router(jobs_router)
 project_resources_router.include_router(instructions_router)

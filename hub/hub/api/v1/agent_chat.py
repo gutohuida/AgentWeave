@@ -37,6 +37,11 @@ from ...sse import sse_manager
 
 router = APIRouter(prefix="/agent", tags=["agent-chat"])
 
+# Project-scoped rather than agent-scoped: navigation renders every agent's conversations at once,
+# so one request beats one per expanded agent — no waterfall when an agent expands, and the
+# archived count arrives with the rows rather than needing a second call to be countable.
+conversations_router = APIRouter(prefix="/conversations", tags=["conversations"])
+
 TimelineEntryKind = Literal["operator_input", "agent_output", "inbound_peer", "outbound_peer"]
 
 
@@ -88,6 +93,18 @@ class ConversationResponse(BaseModel):
 
 class ConversationRenameRequest(BaseModel):
     title: str
+
+
+class ProjectConversationsResponse(BaseModel):
+    """Every conversation the rail draws, plus what it needs to offer the archive.
+
+    `archived_count` is here rather than derivable from `conversations`, because the list
+    excludes archived rows by default — a "Show archived (N)" control cannot state N from a
+    response that omitted them.
+    """
+
+    conversations: List[ConversationResponse]
+    archived_count: int
 
 
 class ChatHistoryResponse(BaseModel):
@@ -239,6 +256,38 @@ async def list_conversations(
         .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
     )
     return await _to_response(session, list(result.scalars()))
+
+
+@conversations_router.get("", response_model=ProjectConversationsResponse)
+async def list_project_conversations(
+    lifecycle: Literal["open", "archived", "all"] = Query("open"),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every conversation in the project, across its agents, most recent activity first.
+
+    What navigation reads: the tree groups these by agent, the recency view lists them as they
+    come. One request either way, so switching views costs nothing and expanding an agent shows
+    its conversations immediately rather than starting a fetch.
+    """
+    project_id, _ = project
+    predicates = [Conversation.project_id == project_id]
+    if lifecycle != "all":
+        predicates.append(Conversation.lifecycle == lifecycle)
+    result = await session.execute(
+        select(Conversation)
+        .where(*predicates)
+        .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
+    )
+    archived_count = await session.scalar(
+        select(func.count())
+        .select_from(Conversation)
+        .where(Conversation.project_id == project_id, Conversation.lifecycle == "archived")
+    )
+    return ProjectConversationsResponse(
+        conversations=await _to_response(session, list(result.scalars())),
+        archived_count=archived_count or 0,
+    )
 
 
 @router.patch("/{agent}/conversations/{conversation_id}", response_model=ConversationResponse)

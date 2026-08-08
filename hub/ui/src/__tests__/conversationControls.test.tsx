@@ -109,7 +109,7 @@ const conversation: AgentConversation = {
   id: 'conv-old',
   agent: 'claude',
   provider_session_id: 'provider-secret-session',
-  lifecycle: 'open',
+  lifecycle: 'open', title: 'A conversation', title_set_by_operator: false, origin: 'operator', attention: 'idle',
   created_at: '2026-08-02T10:00:00Z',
   updated_at: '2026-08-02T10:00:00Z',
 }

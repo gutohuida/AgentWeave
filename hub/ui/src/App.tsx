@@ -256,8 +256,14 @@ export default function App() {
             destination={destination}
             activePage={activePage}
             activeAgent={destination.kind === 'conversation' ? destination.agent : null}
+            activeConversation={
+              destination.kind === 'conversation' ? destination.conversationId : null
+            }
             onOpenProject={(id) => navigateTo(projectDestination(id))}
             onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent))}
+            onOpenConversation={(id, agent, conversationId) =>
+              navigateTo(agentDestination(id, agent, conversationId))
+            }
             onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
             onAddAgent={(id) => setAgentCreateProjectId(id)}
             onOpenExisting={() => setProjectManagerMode('open')}

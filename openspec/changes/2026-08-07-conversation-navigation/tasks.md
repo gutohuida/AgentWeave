@@ -64,12 +64,12 @@
 
 ## 5. Navigation — the tree gains a level
 
-- [ ] 5.1 `useAgentConversations` becomes usable per-agent from the rail, or add a project-wide conversation listing if per-agent fetches prove too chatty — decide from a measured render, not in advance
-- [ ] 5.2 `Sidebar.tsx`: agent rows gain an expander and a name button as separate controls, matching the project row's existing split
-- [ ] 5.3 Render an agent's open conversations as children, newest activity first, labelled by title
-- [ ] 5.4 Cap the list at a fixed number with an expander stating how many remain
-- [ ] 5.5 Per-conversation attention indicator, with running and waiting visually distinct
-- [ ] 5.6 Persist agent expansion alongside the existing `aw.projectRailCollapsed` state
+- [x] 5.1 Decided: a project-wide listing (`GET /projects/{id}/conversations`). One request rather than one per expanded agent — no fetch waterfall when an agent expands, the recency view of section 6 reads the same cache, and it is where 2.8's archived count belongs
+- [x] 5.2 `Sidebar.tsx`: agent rows gain an expander and a name button as separate controls, matching the project row's existing split
+- [x] 5.3 Render an agent's open conversations as children, newest activity first, labelled by title
+- [x] 5.4 Cap the list at 7 with an expander stating how many remain (operator decision, 2026-08-08: three agents expanded at 7 each still fits a rail without scrolling; one constant, revisit against a real project)
+- [x] 5.5 Per-conversation attention indicator, with running and waiting visually distinct
+- [x] 5.6 Persist agent expansion alongside the existing `aw.projectRailCollapsed` state
 
 ## 6. Navigation — the recency view
 
@@ -77,6 +77,7 @@
 - [ ] 6.2 Recency list of the project's conversations across agents, most recent activity first
 - [ ] 6.3 A persistent 2px leading edge in the owning agent's colour, matching `agentColorVars` — no hover tint
 - [ ] 6.4 The same attention indicator as the tree
+- [ ] 6.5 A "Show archived (N)" control in the recency view, listing the project's archived conversations across agents (operator decision, 2026-08-08: recency hides archived, but the count and the way in must be visible — hiding them silently reads as data loss)
 
 ## 7. Row menus and the new-conversation surface
 
@@ -106,10 +107,10 @@
 
 ## 10. Frontend tests
 
-- [ ] 10.1 `conversationTree.test.tsx` — conversations listed under an agent, newest first, titled; expander toggles without navigating; agent name opens the most recent conversation
-- [ ] 10.2 `conversationCap.test.tsx` — the remainder is behind an expander stating the count, never silently dropped
+- [x] 10.1 `conversationTree.test.tsx` — conversations listed under an agent, newest first, titled; expander toggles without navigating; agent name opens the most recent conversation
+- [x] 10.2 `conversationCap.test.tsx` — the remainder is behind an expander stating the count, never silently dropped
 - [ ] 10.3 `recencyView.test.tsx` — toggle, persistence, cross-agent ordering, persistent agent colour with no hover dependency
-- [ ] 10.4 `conversationAttention.test.tsx` — a question in one conversation shows as waiting while a different conversation is open
+- [x] 10.4 `conversationAttention.test.tsx` — a question in one conversation shows as waiting while a different conversation is open
 - [ ] 10.5 `rowMenus.test.tsx` — both menus keyboard-operable, focus returns to trigger, agent settings do not unmount the conversation
 - [ ] 10.6 `newConversationSurface.test.tsx` — agent pre-bound from the tree; agent required from recency; abandonment creates nothing
 - [ ] 10.7 `handoffPlacement.test.tsx` — handoff present and labelled on the header at rest; disabled with reason when unavailable

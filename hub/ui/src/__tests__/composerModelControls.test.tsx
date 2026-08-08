@@ -160,7 +160,7 @@ describe('ComposerConversationRouting — a message routes to a stated conversat
       id: 'conv-existing-12345',
       agent: 'claude',
       provider_session_id: null,
-      lifecycle: 'open',
+      lifecycle: 'open', title: 'A conversation', title_set_by_operator: false, origin: 'operator', attention: 'idle',
       created_at: '2026-08-02T00:00:00Z',
       updated_at: '2026-08-02T00:00:00Z',
     },

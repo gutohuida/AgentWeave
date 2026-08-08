@@ -25,7 +25,7 @@ const conversation: AgentConversation = {
   id: 'conv-1',
   agent: 'codex-1',
   provider_session_id: 'provider-1',
-  lifecycle: 'open',
+  lifecycle: 'open', title: 'A conversation', title_set_by_operator: false, origin: 'operator', attention: 'idle',
   created_at: '2026-08-07T10:00:00Z',
   updated_at: '2026-08-07T10:00:00Z',
 }

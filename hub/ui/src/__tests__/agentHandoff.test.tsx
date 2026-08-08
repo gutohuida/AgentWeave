@@ -85,7 +85,7 @@ describe('agent conversation handoff', () => {
       id: 'conv-old',
       agent: 'claude',
       provider_session_id: 'session-old',
-      lifecycle: 'open',
+      lifecycle: 'open', title: 'A conversation', title_set_by_operator: false, origin: 'operator', attention: 'idle',
       created_at: '2026-07-29T11:00:00Z',
       updated_at: '2026-07-29T12:00:00Z',
     }]
