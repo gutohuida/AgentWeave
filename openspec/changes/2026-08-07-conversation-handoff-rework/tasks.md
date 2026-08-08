@@ -341,6 +341,22 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
       The heuristic still works; its stated reason is stale. Titling is not in this change's
       scope — design.md says it should migrate onto the Worker, which is the right time to fix it
 
+      **Live-verified against the real database and real CLI spawns.** The suite fakes
+      `subprocess.run` — right for determinism, but it means nothing in it has ever launched a
+      process. Migration `0042` applied to `hub/data/agentweave.db` (`0041 → 0042`, table created,
+      19 columns). Three real invocations, all recorded:
+
+      | cli / model | outcome | ms | in / out | cache read | cost |
+      |---|---|---|---|---|---|
+      | `claude` / `claude-haiku-4-5-20251001` | `ok` | 7282 | 10 / 353 | 21569 | 31074 µ$ |
+      | `codex` / `gpt-5.6-sol` | `ok` | 9703 | 17599 / 43 | 11008 | — |
+      | `claude` / `claude-nonexistent-9` | `unknown_model` | — | — | — | — |
+
+      Both `ok` runs returned a Pydantic-validated object from a genuinely one-shot process.
+      Codex reports no cost, which is the nullable-where-unavailable policy working rather than
+      failing. The undeclared model was refused **before** any spawn — no duration, no tokens,
+      and the reason recorded on the row
+
 ## 5. The checkpoint record
 
 - [ ] 5.1 `Checkpoint` model + migration: identity, `trigger`, `previous_checkpoint_id`,
