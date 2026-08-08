@@ -37,8 +37,10 @@ import {
   agentDestination,
   environmentDestination,
   projectDestination,
+  resolveConversationSelection,
   type EnvironmentSection,
 } from '@/lib/navigation'
+import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
@@ -91,6 +93,29 @@ export default function App() {
     }
   }, [destination, projectId])
 
+  // The same query the rail draws from, so resolving a destination costs no extra request.
+  const currentProjectId = destination.kind === 'zero' ? projectId || '' : destination.projectId
+  const { data: projectConversations } = useProjectConversations(currentProjectId || null)
+  const resolvedConversationId = resolveConversationSelection(
+    destination,
+    projectConversations?.conversations ?? [],
+  )
+
+  // Auto-selection is destination resolution, not a navigation the operator performed: it is
+  // written back with `replace` so Back does not return to the conversation they are already in.
+  // It deliberately does nothing when the destination names a conversation, and nothing when the
+  // destination *is* the new-conversation surface — `resolveConversationSelection` returns null
+  // there, which is the whole reason that sentinel is distinct from "unspecified".
+  useEffect(() => {
+    if (destination.kind !== 'conversation') return
+    if (destination.conversationId !== null) return
+    if (!resolvedConversationId) return
+    navigateTo(
+      agentDestination(destination.projectId, destination.agent, resolvedConversationId),
+      { replace: true },
+    )
+  }, [destination, resolvedConversationId, navigateTo])
+
   useSSE()
 
   if (bootstrapState === 'pending') {
@@ -130,7 +155,6 @@ export default function App() {
   const selectedAgent = destination.kind === 'conversation'
     ? agents.find((agent) => agent.name === destination.agent) ?? null
     : null
-  const currentProjectId = destination.kind === 'zero' ? projectId || '' : destination.projectId
   const currentProject = projects?.find((project) => project.id === currentProjectId)
   const railResizable = activePage !== 'spec'
 

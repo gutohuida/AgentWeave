@@ -1,4 +1,14 @@
 import type { AgentSummary } from '@/api/agents'
+import { NEW_SESSION_ID } from './constants'
+
+/** What a destination's `conversationId` holds when the operator has deliberately asked for a new
+ *  conversation — a record that does not exist yet, because a conversation is created by its first
+ *  message and not by the "new" action (design.md).
+ *
+ *  Distinct from `null`, which means "no conversation named": that one resolves to the agent's most
+ *  recent. Collapsing the two is what would make the conversation list, once it loads, silently
+ *  replace the empty composer the operator just asked for. */
+export const NEW_CONVERSATION_ID = NEW_SESSION_ID
 
 export interface RailProject {
   id: string
@@ -58,6 +68,46 @@ export function agentDestination(
   conversationId: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
   return { kind: 'conversation', projectId, agent, conversationId }
+}
+
+/** The composer-primary surface for a conversation that does not exist yet, bound to `agent`. */
+export function newConversationDestination(
+  projectId: string,
+  agent: string,
+): Extract<WorkspaceDestination, { kind: 'conversation' }> {
+  return agentDestination(projectId, agent, NEW_CONVERSATION_ID)
+}
+
+export function isNewConversationDestination(destination: WorkspaceDestination): boolean {
+  return destination.kind === 'conversation' && destination.conversationId === NEW_CONVERSATION_ID
+}
+
+export interface SelectableConversation {
+  id: string
+  agent: string
+}
+
+/** Which conversation a destination actually opens.
+ *
+ * `AgentOutputPanel` used to answer this itself: it held `selectedConversationId`, seeded it from
+ * the destination, auto-selected `conversations[0]` once the list loaded, and reported changes back
+ * upward — two sources of truth kept in step by effects.
+ *
+ * The auto-select is not deleted along with that state; it is what makes activating an agent open
+ * something. It moves here, where it can also be made *not* to fire for the new-conversation
+ * surface — otherwise the operator's empty composer is replaced by their most recent thread the
+ * moment the conversation list resolves.
+ *
+ * `conversations` must already be ordered most recent activity first; the project listing endpoint
+ * orders it, and re-sorting here would put the destination and the rail out of step. */
+export function resolveConversationSelection(
+  destination: WorkspaceDestination,
+  conversations: SelectableConversation[],
+): string | null {
+  if (destination.kind !== 'conversation') return null
+  if (destination.conversationId === NEW_CONVERSATION_ID) return null
+  if (destination.conversationId) return destination.conversationId
+  return conversations.find((conversation) => conversation.agent === destination.agent)?.id ?? null
 }
 
 /** Returns true when the destination has entered an area with its own

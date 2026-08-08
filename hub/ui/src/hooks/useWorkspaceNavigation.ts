@@ -53,11 +53,15 @@ export function useWorkspaceNavigation(options: ResolveDestinationOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableProjectIds === null ? null : availableProjectIds.join(','), lastOpenedProjectId])
 
+  /** `replace` is for a destination the operator did not ask for — resolving "this agent" to its
+   *  most recent conversation, say. Pushing that would put the same conversation behind Back. */
   const navigate = useCallback(
-    (next: WorkspaceDestination) => {
+    (next: WorkspaceDestination, options?: { replace?: boolean }) => {
       const resolved = resolveDestination(next, { availableProjectIds, lastOpenedProjectId })
       const target = serializeDestination(resolved)
-      window.history.pushState(null, '', target || window.location.pathname)
+      const url = target || window.location.pathname
+      if (options?.replace) window.history.replaceState(null, '', url)
+      else window.history.pushState(null, '', url)
       setDestination(resolved)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
