@@ -10,9 +10,14 @@ import { Composer } from './Composer'
 
 interface NewConversationSurfaceProps {
   projectId: string
-  /** Pre-bound when the operator started from an agent's row menu; null when they started from
-   *  the recency view, where no agent is implied. */
+  /** Who the first message goes to. Pre-selected when the operator started from an agent's row
+   *  menu, null when they started from the recency view — but a *default*, never a binding: the
+   *  roster below stays live either way. */
   agent: string | null
+  /** Retarget the unsent message. Starting from an agent's row is a shortcut, not a commitment;
+   *  arriving with an agent pre-selected and finding the other rows dead is worse than arriving
+   *  with none (operator, 2026-08-08). */
+  onChooseAgent: (agent: string) => void
   /** Called once the first message has created the conversation. */
   onStarted: (agent: string, conversationId: string) => void
   onBackToProject?: () => void
@@ -25,10 +30,15 @@ interface NewConversationSurfaceProps {
  * the bottom of it, which reads as a conversation that has lost its messages. Nothing is written
  * to the Hub here — a conversation is created by its first message (design.md), so abandoning this
  * surface leaves no record and no untitled row in the tree.
+ *
+ * The chosen agent lives in the destination rather than in local state, for the same reason the
+ * open conversation does: two sources of truth for "who is this for" is how a pre-selected agent
+ * ends up outranking the one the operator just clicked.
  */
 export function NewConversationSurface({
   projectId,
-  agent: boundAgent,
+  agent,
+  onChooseAgent,
   onStarted,
   onBackToProject,
 }: NewConversationSurfaceProps) {
@@ -36,13 +46,9 @@ export function NewConversationSurface({
   const { data: roster = [] } = useAgents()
   const { data: runners = [] } = useRunners()
   const { data: workspacePaths = [] } = useWorkspacePaths()
-  // Chosen here rather than in the destination: switching the target before sending is a change
-  // of mind about one unsent message, not a navigation.
-  const [chosen, setChosen] = useState<string | null>(boundAgent)
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
-  const agent = boundAgent ?? chosen
   const agentRow = roster.find((candidate) => candidate.name === agent)
   const runnerRow = runners.find((runner) => runner.id === agentRow?.runner_id)
 
@@ -109,9 +115,7 @@ export function NewConversationSurface({
                   data-testid={`new-conversation-agent-${candidate.name}`}
                   data-active={selected ? 'true' : 'false'}
                   aria-pressed={selected}
-                  // A pre-bound agent is still shown, so the operator can see which one they
-                  // are about to talk to; it just does not have to be chosen.
-                  onClick={() => setChosen(candidate.name)}
+                  onClick={() => onChooseAgent(candidate.name)}
                 >
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"

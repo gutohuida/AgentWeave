@@ -196,6 +196,11 @@ export default function App() {
       <NewConversationSurface
         projectId={destination.projectId}
         agent={destination.agent}
+        // Replace, not push: retargeting an unsent message is a change of mind about one
+        // message, not a place the operator navigated to and might want Back out of.
+        onChooseAgent={(agent) =>
+          navigateTo(newConversationDestination(destination.projectId, agent), { replace: true })
+        }
         onStarted={(agent, conversationId) =>
           navigateTo(agentDestination(destination.projectId, agent, conversationId))
         }

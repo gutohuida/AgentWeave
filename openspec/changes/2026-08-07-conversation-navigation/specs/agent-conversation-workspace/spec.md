@@ -167,9 +167,11 @@ currently open.
 Starting a new conversation SHALL be initiated from navigation and SHALL open a surface whose
 composer is the primary element, rather than an empty transcript.
 
-A conversation started from an agent's row SHALL already be bound to that agent. A conversation
-started from the recency view, where no agent is implied, SHALL require the operator to choose the
-agent on that surface before the first message can be sent.
+A conversation started from an agent's row SHALL open with that agent already selected. That
+selection is a default and not a binding: the surface SHALL let the operator retarget the unsent
+message to any other agent in the project, and the message SHALL then go to the agent they chose.
+A conversation started from the recency view, where no agent is implied, SHALL require the
+operator to choose the agent on that surface before the first message can be sent.
 
 The surface SHALL lead with a prominent question naming the bound agent. Where no agent is bound
 that question SHALL instead ask which agent should take the work, so the line states what has to
@@ -178,11 +180,18 @@ happen next rather than sitting above a separate instruction.
 No conversation record SHALL be created until the first message is sent, so an abandoned start
 leaves nothing behind.
 
-#### Scenario: Starting from an agent binds the agent
+#### Scenario: Starting from an agent selects the agent
 
 - **WHEN** the operator starts a conversation from an agent's row menu
-- **THEN** the new-conversation surface opens already bound to that agent
+- **THEN** the new-conversation surface opens with that agent already selected
 - **AND** no agent choice is required
+
+#### Scenario: A pre-selected agent can still be changed
+
+- **WHEN** the operator started from one agent's row menu and then chooses a different agent
+- **THEN** the surface retargets to the agent they chose
+- **AND** the first message goes to that agent
+- **AND** anything already typed is kept
 
 #### Scenario: The surface leads by naming the agent
 
