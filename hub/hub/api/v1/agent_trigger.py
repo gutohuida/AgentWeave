@@ -1140,13 +1140,14 @@ async def _execute_run(
                     else accounting_sample.merged(rollout_accounting)
                 )
 
+        snapshot_sha: Optional[str] = None
         if worktree is not None:
             # Task 5.3 needs real commits to compare branches with `git merge-tree` —
             # an agent's turn just ends with dirty files in its worktree otherwise, which
             # a conflict check has nothing to diff against. Best-effort: a git failure here
             # must not turn a completed/failed run into something worse than it already is.
             try:
-                await loop.run_in_executor(
+                snapshot_sha = await loop.run_in_executor(
                     None, lambda: worktrees.snapshot_worktree(worktree, agent)
                 )
             except worktrees.GitCommandError:
@@ -1176,6 +1177,9 @@ async def _execute_run(
                 if binding_conflict is not None:
                     run.error = binding_conflict
                 run.ended_at = datetime.now(timezone.utc)
+                # NULL when the turn changed nothing — `snapshot_worktree` commits only a dirty
+                # tree. A checkpoint reads these to say what its conversation changed.
+                run.snapshot_commit_sha = snapshot_sha
                 await record_turn_usage(
                     db,
                     run_id=run_id,
@@ -1506,12 +1510,13 @@ async def _execute_codex_appserver_run(
                     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
             return
 
+        snapshot_sha: Optional[str] = None
         if worktree is not None:
             # Same best-effort snapshot as `_execute_run` — a git failure here must not turn
             # a completed/failed run into something worse than it already is.
             try:
                 loop = asyncio.get_running_loop()
-                await loop.run_in_executor(
+                snapshot_sha = await loop.run_in_executor(
                     None, lambda: worktrees.snapshot_worktree(worktree, agent)
                 )
             except worktrees.GitCommandError:
@@ -1546,6 +1551,8 @@ async def _execute_codex_appserver_run(
                 elif outcome.error:
                     run.error = outcome.error
                 run.ended_at = datetime.now(timezone.utc)
+                # NULL when the turn changed nothing — see `_execute_run`.
+                run.snapshot_commit_sha = snapshot_sha
                 await record_turn_usage(
                     db,
                     run_id=run_id,

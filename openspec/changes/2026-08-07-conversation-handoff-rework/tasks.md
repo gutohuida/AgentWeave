@@ -359,16 +359,64 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
 
 ## 5. The checkpoint record
 
-- [ ] 5.1 `Checkpoint` model + migration: identity, `trigger`, `previous_checkpoint_id`,
+- [x] 5.0 **PREREQUISITE discovered while implementing 5.2 — record the per-turn snapshot commit.**
+
+      `worktrees.snapshot_worktree` has always returned the SHA of the commit a turn produced, and
+      **both call sites in `agent_trigger.py` (`:1150`, `:1515`) discarded it**. Nothing in the
+      schema recorded what a turn changed, so 5.2's "files changed from the conversation's
+      auto-snapshot diffs" was not computable.
+
+      The alternatives were worse and were rejected: matching commits to turns by timestamp is
+      guesswork, because one worktree — and so one branch — is shared by **all** of an agent's
+      concurrent conversations and every auto-snapshot carries the identical message
+      `Auto-snapshot: <agent>'s turn`; diffing the agent's branch as a whole answers a different
+      question for the same reason.
+
+      `Run.snapshot_commit_sha` + migration `0043`, captured at both sites. **No backfill** — those
+      SHAs were never captured and cannot be recovered, so a historical conversation reports no
+      changed files rather than a plausible guess, the rule `0041` set for peer bindings
+- [x] 5.1 `Checkpoint` model + migration: identity, `trigger`, `previous_checkpoint_id`,
       `lineage_id`, `visibility`, envelope fields, body, probe verdict
-- [ ] 5.2 Compute the deterministic half — files changed from the conversation's auto-snapshot
+
+      Migration `0044`; head assertions bumped to `0044`. Five triggers, three statuses
+      (`ready` / `unwritten` / `failed`), three visibilities. **`status <> 'ready' OR body IS NOT
+      NULL` is enforced in the schema, not only in `create_checkpoint`** — the defect this change
+      removes is a readiness signal that meant "the run stopped", and making the state
+      unrepresentable is what stops a future code path reintroducing it. `failed` is reachable only
+      from section 6's probes; section 5 never writes it
+- [x] 5.2 Compute the deterministic half — files changed from the conversation's auto-snapshot
       diffs, tasks by `assignee`, open questions, permission decisions, runtime overrides
-- [ ] 5.3 Never ask the model for a computed field. Test that the envelope is populated even when
+
+      `hub/hub/checkpoints.py`. Nothing in the module asks a model for anything.
+      `worktrees.files_changed_in` uses `git show --name-only` rather than a `sha^..sha` diff:
+      the first commit on a fresh agent branch has no parent and a diff against `sha^` fails
+      outright on it — which is exactly the commit a first-ever checkpoint needs. Permission
+      *denials* are carried, not just grants: an agent refused a tool call and working around it
+      leaves a successor that needs to know why the obvious route is closed. `agent_worktree` uses
+      `worktree_path`, never `ensure_worktree`, so computing a checkpoint cannot have the side
+      effect of provisioning a workspace for an agent that never ran
+- [x] 5.3 Never ask the model for a computed field. Test that the envelope is populated even when
       the Worker returns nothing
-- [ ] 5.4 State the task imprecision explicitly: `tasks` has no `conversation_id`, so the carried
+
+      A body-less checkpoint is `unwritten` and still carries every computed field — the computed
+      half is the verifiable half and does not depend on a model. A whitespace-only body collapses
+      to NULL, so "cleared" and "never written" are one state (the rule `Agent.description`
+      follows) and a worker that returned a newline cannot produce a checkpoint claiming to be
+      readable
+- [x] 5.4 State the task imprecision explicitly: `tasks` has no `conversation_id`, so the carried
       list is the agent's whole list, identical across its concurrent conversations
-- [ ] 5.5 Anchored generation — checkpoint N+1 reads checkpoint N plus only the turns since, not the
+
+      `TASK_SCOPE_NOTE`, carried **in the payload** as `scope: "agent"` plus prose, not only in a
+      docstring. A list that looks conversation-specific and is not is the same class of quiet
+      wrongness this change exists to remove, so the record says so where a reader will see it
+- [x] 5.5 Anchored generation — checkpoint N+1 reads checkpoint N plus only the turns since, not the
       whole transcript
+
+      `covers_from_run_id` / `covers_through_run_id` + `runs_to_cover`. `lineage_id` is the
+      founding checkpoint's own id, carried forward rather than regenerated, so "show me this
+      thread" is one indexed read. An anchor naming a run the conversation no longer has falls
+      back to covering **all** turns and logs it — covering a turn twice is a redundancy, silently
+      covering none is a hole
 
 ## 6. Generation, agent notes, and self-validation
 

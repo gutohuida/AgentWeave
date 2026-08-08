@@ -261,6 +261,23 @@ def snapshot_worktree(worktree: Path, agent: str) -> Optional[str]:
     return sha.stdout.strip()
 
 
+def files_changed_in(worktree: Path, sha: str) -> List[str]:
+    """Paths touched by *sha*, sorted. Empty when the commit cannot be read.
+
+    `git show --name-only` rather than a `sha^..sha` diff, because the first commit on a fresh
+    agent branch has no parent and a diff against `sha^` fails outright on it.
+
+    Best-effort by design: a checkpoint that reports no changed files because a commit was
+    garbage-collected is wrong, but a checkpoint that fails to exist because of it is worse.
+    """
+    result = _run_git(
+        worktree, "show", "--pretty=format:", "--name-only", sha, check=False
+    )
+    if result.returncode != 0:
+        return []
+    return sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})
+
+
 def _commits_not_on_head(repo_root: Path, branch: str) -> List[str]:
     result = _run_git(repo_root, "rev-list", f"HEAD..{branch}", check=False)
     if result.returncode != 0:
