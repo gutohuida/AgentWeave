@@ -15,8 +15,19 @@
 
 ## 0. Correct the stale references — unblocked, do with the rename
 
-These are live defects today. They were gated on the exploration (see below) and on `design.md`,
-both of which are now done. Fold them into section 9's rename rather than doing them twice.
+These are live defects today. **All five are now fixed, together with section 9's rename** — the
+file said to do them once rather than twice, and that is what happened.
+
+**Wider than the task list said.** 0.3 named one dead `agentweave sync-context` hint at
+`diagnostics.py:477`; there were **four** in that file plus `constants.py` and three templates.
+All corrected to say what actually happens now — the Hub re-renders agent context before a run,
+and no command exists to invoke.
+
+**Found in passing, deliberately not acted on:** nothing in `src/` or `hub/hub/` installs
+*anything* from `src/agentweave/templates/skills/`. `aw-checkpoint.md` was deleted because 0.4
+decided it; the other 23 templates are equally unreachable, and `aw-sync.md` in particular is a
+whole skill built around the same removed command. Deleting them is a product decision that needs
+its own change, not a side effect of this one.
 
 > **Ordering correction (2026-08-08): 0.1 was NOT independent — 1.1–1.3 came first, and have now
 > run.** Task 1.1 asks what the agent does when told to invoke a skill it does not have; rewriting
@@ -30,21 +41,21 @@ both of which are now done. Fold them into section 9's rename rather than doing 
 > `aw-checkpoint` therefore cannot fix 0.1 on its own — the path is wrong independently of the
 > skill being missing, which also bears directly on 0.4.
 
-- [ ] 0.1 `AgentOutputPanel.tsx:48-52` (`HANDOFF_PROMPT`) — the prompt instructs the agent to invoke an
+- [x] 0.1 `AgentOutputPanel.tsx:48-52` (`HANDOFF_PROMPT`) — the prompt instructs the agent to invoke an
       `aw-checkpoint` skill that is never installed and write to `.agentweave/shared/checkpoints/`,
       which is never created. Replace with an instruction the agent can actually satisfy, or state
       plainly in the prompt that it must produce the summary inline
-- [ ] 0.2 `AgentOutputPanel.tsx:54-60` (`RESUME_HANDOFF_PREFIX`, the path at `:57`) — the resume
+- [x] 0.2 `AgentOutputPanel.tsx:54-60` (`RESUME_HANDOFF_PREFIX`, the path at `:57`) — the resume
       prefix instructs the successor to read
       `.agentweave/shared/context.md`, which nothing writes. Remove or correct
-- [ ] 0.3 `src/agentweave/diagnostics.py:477` — the remediation hint tells the operator to run
+- [x] 0.3 `src/agentweave/diagnostics.py:477` — the remediation hint tells the operator to run
       `agentweave sync-context`, a command removed in the 56→5 CLI cut. Correct it
-- [ ] 0.4 Decide and record whether `src/agentweave/templates/skills/aw-checkpoint.md` should be
+- [x] 0.4 Decide and record whether `src/agentweave/templates/skills/aw-checkpoint.md` should be
       installed, rewritten, or deleted — it is currently packaged, referenced by a live prompt, and
       reachable by nothing
       **Decided (design.md, "It is called a checkpoint"): deleted.** The capability moves into the
       Hub, so there is nothing for the template to install.
-- [ ] 0.5 `hub/hub/api/v1/agents.py:1444` and `:1474` — the `compact_request` and
+- [x] 0.5 `hub/hub/api/v1/agents.py:1444` and `:1474` — the `compact_request` and
       `new_session_request` inbox messages both instruct the agent to *"Run `/aw-checkpoint`"* and
       to re-read a checkpoint afterwards. Same dead reference as 0.1/0.2; **found during the
       exploration and missing from this section's original list**
@@ -508,20 +519,20 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
 
 ## 7. Recall and permissions
 
-- [ ] 7.1 `recall(id)` MCP tool materialising exact archived content from `agent_outputs` by stable
+- [x] 7.1 `recall(id)` MCP tool materialising exact archived content from `agent_outputs` by stable
       id, scoped to the predecessor conversation in v1
-- [ ] 7.2 Checkpoint carries citations — ids with short previews
-- [ ] 7.3 Two independent grants on the `Agent` record: `read_checkpoint` and `recall`. Closed by
+- [x] 7.2 Checkpoint carries citations — ids with short previews
+- [x] 7.3 Two independent grants on the `Agent` record: `read_checkpoint` and `recall`. Closed by
       default. Summary access is **not** transcript access
-- [ ] 7.4 Enforce at the tool layer against the run's minted credential; identity is never taken
+- [x] 7.4 Enforce at the tool layer against the run's minted credential; identity is never taken
       from a request body or header
-- [ ] 7.5 `visibility` on the checkpoint (`private` / `project` / `granted`); effective access is
+- [x] 7.5 `visibility` on the checkpoint (`private` / `project` / `granted`); effective access is
       agent capability ∩ checkpoint visibility
-- [ ] 7.6 Participation query — `Task.created_by_run_id → Run → (agent, conversation)`. Derived, not
+- [x] 7.6 Participation query — `Task.created_by_run_id → Run → (agent, conversation)`. Derived, not
       stored; no new bookkeeping
-- [ ] 7.7 Test the tester scenario end to end: an agent granted checkpoint reads over three peers
+- [x] 7.7 Test the tester scenario end to end: an agent granted checkpoint reads over three peers
       can read their checkpoints and is **refused** `recall`
-- [ ] 7.8 Grants must not live on the charter — add a test asserting charter text cannot widen
+- [x] 7.8 Grants must not live on the charter — add a test asserting charter text cannot widen
       access
 
 ## 8. Lifecycle, configuration, and visibility
@@ -542,22 +553,22 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
 - [x] 8.7 Where the context window is known, show both readings ("150k — 75% of Haiku 4.5's 200k")
       and refuse a token threshold at or above the window, which would never fire
 - [x] 8.8 Token mode must work where `limit_tokens` is unknown — it needs only `context_tokens`
-- [ ] 8.9 Minimal visibility: the checkpoint renders in the conversation timeline and is readable
+- [x] 8.9 Minimal visibility: the checkpoint renders in the conversation timeline and is readable
       over the API. **In scope** — an invisible checkpoint rebuilds the defect this change removes
 - [x] 8.10 The proactive offer becomes *"I made one, here it is, cut over?"* rather than *"shall I
       ask the agent?"* — generation no longer depends on the agent
 
 ## 9. Rename, and the stale references
 
-- [ ] 9.1 **Checkpoint** is the Hub record; handoff is at most a button that produces one. Rename
+- [x] 9.1 **Checkpoint** is the Hub record; handoff is at most a button that produces one. Rename
       through the UI, API, and specs
-- [ ] 9.2 Rewrite `HANDOFF_PROMPT` and `RESUME_HANDOFF_PREFIX` (`AgentOutputPanel.tsx:48-60`), or
+- [x] 9.2 Rewrite `HANDOFF_PROMPT` and `RESUME_HANDOFF_PREFIX` (`AgentOutputPanel.tsx:48-60`), or
       remove them if Hub-side generation makes them unnecessary. Section 0.1/0.2
-- [ ] 9.3 Fix `agents.py:1444` and `:1474`. Section 0.5
-- [ ] 9.4 Fix `diagnostics.py:477`'s dead `agentweave sync-context` hint. Section 0.3
-- [ ] 9.5 Delete `src/agentweave/templates/skills/aw-checkpoint.md`. Section 0.4
-- [ ] 9.6 Update `hub/ui/src/__tests__/agentHandoff.test.tsx`, which asserts the prompt contains
+- [x] 9.3 Fix `agents.py:1444` and `:1474`. Section 0.5
+- [x] 9.4 Fix `diagnostics.py:477`'s dead `agentweave sync-context` hint. Section 0.3
+- [x] 9.5 Delete `src/agentweave/templates/skills/aw-checkpoint.md`. Section 0.4
+- [x] 9.6 Update `hub/ui/src/__tests__/agentHandoff.test.tsx`, which asserts the prompt contains
       `'aw-checkpoint skill'`
-- [ ] 9.7 Full sweep before committing: `pytest hub/tests/`, `npx vitest run`, `npx tsc --noEmit`,
+- [x] 9.7 Full sweep before committing: `pytest hub/tests/`, `npx vitest run`, `npx tsc --noEmit`,
       `npx openspec validate --changes --strict`, `npm run build` + copy to `hub/hub/static/ui`
       confirmed with `diff -rq`

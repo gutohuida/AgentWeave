@@ -20,6 +20,8 @@ import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
+import { cutOver, takeCheckpoint } from '@/api/checkpoints'
+import { ApiError } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
@@ -49,20 +51,17 @@ interface AgentOutputPanelProps {
   onSelectConversation?: (conversationId: string | null) => void
 }
 
-const HANDOFF_PROMPT = `Prepare a durable AgentWeave handoff before ending this session.
-
-Invoke your aw-checkpoint skill with reason pre_handoff. Save the current intent, files modified,
-decisions and rationale, blockers, exact next steps, and verification commands under
-.agentweave/shared/checkpoints/. Stop after confirming the checkpoint path.`
-
-const RESUME_HANDOFF_PREFIX = `Resume from the latest durable AgentWeave handoff.
-
-Before doing anything else, find and read the newest checkpoint for your agent under
-.agentweave/shared/checkpoints/, then read .agentweave/shared/context.md. Treat the checkpoint
-as authoritative and continue from its Next Steps.
-
-User request:`
-
+/* Both prompts that used to live here are gone, and nothing replaces them.
+ *
+ * They asked the agent to invoke an `aw-checkpoint` skill AgentWeave never installed and to
+ * write beneath `.agentweave/shared/checkpoints/`, a path outside its own worktree — one runtime
+ * was sandbox-blocked from it, the other silently created a nested copy nothing reads. The
+ * successor was then told to read `.agentweave/shared/context.md`, which nothing has ever
+ * written. Both presses reported "Handoff ready", because readiness meant the run had ended.
+ *
+ * The Hub now generates the checkpoint from the conversation's own record and hands it to the
+ * successor as a queued entry, so there is no prompt to send and no file for anyone to find.
+ */
 interface TriggerResult {
   status: string
   waiting_reason?: string | null
@@ -93,7 +92,11 @@ export function AgentOutputPanel({
   conversationId = null,
   onSelectConversation,
 }: AgentOutputPanelProps) {
-  const { lines, isLoading } = useAgentOutput(agent.name)
+  // `lines` is no longer read here. Its only consumer was the effect that watched the output
+  // stream for a completed run in order to call a handoff "ready" — the exact inference this
+  // capability replaces. The hook itself stays: it keeps the output subscription alive and
+  // still answers `isLoading`.
+  const { isLoading } = useAgentOutput(agent.name)
   const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [autoscroll, setAutoscroll] = useState(true)
@@ -124,8 +127,6 @@ export function AgentOutputPanel({
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
-  const handoffOutputStartRef = useRef<number | null>(null)
-  const handoffSawRunningRef = useRef(false)
   const { data: permissionRequests = [] } = usePendingPermissionRequests()
   const { data: unaskedQuestions = [] } = usePendingUnaskedQuestions()
   const { data: openQuestions = [] } = useQuestions(false)
@@ -158,8 +159,6 @@ export function AgentOutputPanel({
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
-    handoffOutputStartRef.current = null
-    handoffSawRunningRef.current = false
   }, [agent.name, conversationId])
 
   // The composer's model/effort pills show the open conversation's own persisted overrides
@@ -182,24 +181,14 @@ export function AgentOutputPanel({
     if (agent.status !== 'running') setIsStopping(false)
   }, [agent.status])
 
-  useEffect(() => {
-    const outputStart = handoffOutputStartRef.current
-    if (handoffState !== 'preparing' || outputStart === null) return
-    if (agent.status === 'running') {
-      handoffSawRunningRef.current = true
-      return
-    }
-
-    const completed = lines.slice(outputStart).some(
-      (line) => line.kind === 'status' && line.payload?.phase === 'completed',
-    )
-    if (completed || handoffSawRunningRef.current) {
-      handoffOutputStartRef.current = null
-      handoffSawRunningRef.current = false
-      setHandoffState('ready')
-      setSessionNotice('Handoff ready — your next message starts fresh and resumes it')
-    }
-  }, [agent.status, handoffState, lines.length])
+  /* The effect that used to sit here is deleted, not replaced.
+   *
+   * It watched the output stream for a completed run and, on seeing one, declared "Handoff
+   * ready". That is precisely the defect this capability removes: readiness meant the run had
+   * ended, so a run that wrote nothing and asked the operator a question was reported ready
+   * twice. Readiness is now a property of a checkpoint record that exists and passed its probes,
+   * which the Hub decides and `handleCheckpoint` reads from the response.
+   */
 
   function handleScroll() {
     const el = containerRef.current
@@ -367,30 +356,44 @@ export function AgentOutputPanel({
     }
   }
 
-  const handleHandoff = async () => {
+  /** Take a checkpoint and continue in a successor.
+   *
+   * Two Hub calls, no agent turn. Generation reads the conversation's record, so this works
+   * whether or not the agent is cooperative, idle, or has anything left to say — which is the
+   * whole point of moving it Hub-side. The successor is handed the checkpoint as a queued
+   * entry, so the operator's next message needs no prefix and carries no instructions.
+   */
+  const handleCheckpoint = async () => {
     if (!apiKey || !projectId || !currentConversationId || isRunning || isSending) return
     setIsSending(true)
     setHandoffState('preparing')
-    setSessionNotice('Preparing durable handoff…')
-    handoffOutputStartRef.current = lines.length
-    handoffSawRunningRef.current = false
+    setSessionNotice('Writing checkpoint…')
     try {
-      const result = await postTrigger(HANDOFF_PROMPT, currentConversationId)
-      const notice = queuedNotice(result, `${agent.name} is not available to receive it`)
-      if (notice) {
-        handoffOutputStartRef.current = null
-        handoffSawRunningRef.current = false
+      const checkpoint = await takeCheckpoint(projectId, currentConversationId)
+      if (checkpoint.status !== 'ready') {
+        // "unwritten" means the envelope is there but generation produced no usable body, and
+        // "failed" means its claims disagreed with the database. Neither is something to hand a
+        // successor, and saying so beats a green tick over an empty record.
         setHandoffState('idle')
-        setSessionNotice(`Could not start handoff — ${notice}`)
+        setSessionNotice(
+          checkpoint.status === 'failed'
+            ? 'Checkpoint failed its own checks — nothing was cut over'
+            : 'Checkpoint has no written summary — nothing was cut over',
+        )
         return
       }
-      setStartingFresh(true)
-    } catch (err) {
-      console.error('Failed to prepare handoff:', err)
-      handoffOutputStartRef.current = null
-      handoffSawRunningRef.current = false
+      const result = await cutOver(projectId, checkpoint.id)
       setHandoffState('idle')
-      setSessionNotice('Failed to prepare handoff')
+      moveTo(result.successor_conversation_id)
+      setSessionNotice('Checkpoint written — continuing in a new conversation')
+    } catch (err) {
+      console.error('Failed to checkpoint:', err)
+      setHandoffState('idle')
+      setSessionNotice(
+        err instanceof ApiError && err.status === 409
+          ? 'Cannot checkpoint yet — finish or stop the run, and let queued messages deliver'
+          : 'Failed to write checkpoint',
+      )
     } finally {
       setIsSending(false)
     }
@@ -451,10 +454,10 @@ export function AgentOutputPanel({
     // in the conversation the operator was looking at (operator: "Let's remove the ability and
     // the buttons that enable the user from one screen to send message to another agent. Is
     // counter intuitive.").
-    const outgoingMessage =
-      startsFresh && handoffState === 'ready'
-        ? `${RESUME_HANDOFF_PREFIX}\n\n${typedMessage}`
-        : typedMessage
+    // No prefix. A successor created by a cutover already has its checkpoint waiting in its
+    // queue, so the operator's message is only their message — where it used to be prepended
+    // with instructions to go and find two files that were never written.
+    const outgoingMessage = typedMessage
     if (startsFresh) setSessionNotice('Starting new conversation…')
     try {
       const result = await postTrigger(
@@ -545,7 +548,7 @@ export function AgentOutputPanel({
           handoffState={handoffState}
           handoffUnavailable={handoffUnavailable}
           interactionLocked={interactionLocked}
-          onHandoff={handleHandoff}
+          onHandoff={handleCheckpoint}
           onFoldAll={() => setFoldAllSignal((s) => s + 1)}
         />
       </div>

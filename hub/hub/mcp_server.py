@@ -406,6 +406,20 @@ def submit_checkpoint_notes(
 
 
 @mcp.tool()
+def recall(observation_id: str) -> Dict[str, Any]:
+    """Retrieve one recorded observation a checkpoint cited, exactly as it was recorded.
+
+    A checkpoint is a summary, and summaries lose detail. Where it lists ids under "Recorded
+    observations", this returns the original text in full — use it instead of guessing at what a
+    summary compressed away, and instead of re-running a tool to find out.
+
+    Only observations cited by a checkpoint you are permitted to read are available. Anything
+    else returns not-found, whether or not it exists.
+    """
+    return _hub_request("GET", f"/recall/{observation_id}")
+
+
+@mcp.tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
     """Request a new agent from a pre-approved template under the project agent budget."""
     return _hub_request(

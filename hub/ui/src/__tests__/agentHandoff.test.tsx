@@ -79,10 +79,24 @@ function triggerBody(callIndex: number): Record<string, unknown> {
   return JSON.parse(fetchMock.mock.calls[callIndex][1].body as string)
 }
 
+function calledUrl(callIndex: number): string {
+  return String(fetchMock.mock.calls[callIndex][0])
+}
+
+/** What the Hub says the generated checkpoint came out as. Only `ready` is cut over to. */
+let checkpointStatus: 'ready' | 'unwritten' | 'failed' = 'ready'
+
 describe('agent conversation handoff', () => {
   beforeEach(() => {
     outputLines = []
     conversations = [{
+      id: 'conv-successor',
+      agent: 'claude',
+      provider_session_id: 'session-new',
+      lifecycle: 'open', title: 'Continued: A conversation', title_set_by_operator: true, origin: 'handoff', attention: 'idle',
+      created_at: '2026-07-29T12:05:00Z',
+      updated_at: '2026-07-29T12:05:00Z',
+    }, {
       id: 'conv-old',
       agent: 'claude',
       provider_session_id: 'session-old',
@@ -90,8 +104,30 @@ describe('agent conversation handoff', () => {
       created_at: '2026-07-29T11:00:00Z',
       updated_at: '2026-07-29T12:00:00Z',
     }]
+    checkpointStatus = 'ready'
     fetchMock.mockReset()
-    fetchMock.mockImplementation((_url, init) => {
+    fetchMock.mockImplementation((url, init) => {
+      const path = String(url)
+      if (path.endsWith('/checkpoint')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          id: 'ckpt-1',
+          conversation_id: 'conv-old',
+          agent: 'claude',
+          trigger: 'operator',
+          status: checkpointStatus,
+          visibility: 'private',
+          lineage_id: 'ckpt-1',
+        }), { status: 201 }))
+      }
+      if (path.endsWith('/cutover')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          checkpoint_id: 'ckpt-1',
+          conversation_id: 'conv-old',
+          successor_conversation_id: 'conv-successor',
+          queue_entry_id: 'entry-1',
+          agent: 'claude',
+        }), { status: 200 }))
+      }
       const body = JSON.parse(init.body as string) as { conversation_id?: string }
       return Promise.resolve(new Response(JSON.stringify({
         status: 'running',
@@ -107,10 +143,10 @@ describe('agent conversation handoff', () => {
     })
   })
 
-  it('checkpoints the old session and resumes the handoff in exactly one new session', async () => {
+  it('takes a Hub-generated checkpoint and cuts over to the successor', async () => {
     const onSelectConversation = vi.fn()
     const user = userEvent.setup()
-    const view = render(
+    render(
       <ControlledConversation
         agent={agent}
         conversationId="conv-old"
@@ -121,34 +157,28 @@ describe('agent conversation handoff', () => {
 
     await user.click(screen.getByTestId('conversation-handoff'))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    expect(triggerBody(0)).toMatchObject({
-      agent: 'claude',
-      conversation_id: 'conv-old',
-    })
-    expect(triggerBody(0).message).toContain('aw-checkpoint skill')
-    // A prepared handoff does not move the destination: there is no conversation to move to
-    // yet, and navigating to the new-conversation surface would take the prepared handoff with
-    // it. The panel stops treating the named conversation as open, and says so.
+    // Two Hub calls and no agent turn. The previous design sent the agent a prompt naming a
+    // skill AgentWeave never installed; generation is now the Hub's job and does not depend on
+    // the agent being cooperative, or even idle.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(calledUrl(0)).toContain('/conversations/conv-old/checkpoint')
+    expect(calledUrl(1)).toContain('/checkpoints/ckpt-1/cutover')
+
+    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-successor'))
     await waitFor(() =>
       expect(screen.getByTestId('session-continuity')).toHaveTextContent(
-        'Preparing durable handoff',
+        'Checkpoint written',
       ),
     )
-    expect(onSelectConversation).not.toHaveBeenCalled()
+  })
 
-    outputLines = [
-      {
-        id: 'handoff-complete',
-        agent: 'claude',
-        session_id: 'session-old',
-        content: 'Completed',
-        timestamp: '2026-07-29T12:00:00Z',
-        kind: 'status',
-        payload: { phase: 'completed' },
-      },
-    ]
-    view.rerender(
+  it('does not cut over when the checkpoint has no written summary', async () => {
+    // "unwritten" means generation produced nothing usable. Handing that to a successor would
+    // rebuild the defect this capability removes: a readiness signal over an empty record.
+    checkpointStatus = 'unwritten'
+    const onSelectConversation = vi.fn()
+    const user = userEvent.setup()
+    render(
       <ControlledConversation
         agent={agent}
         conversationId="conv-old"
@@ -156,8 +186,46 @@ describe('agent conversation handoff', () => {
       />,
     )
 
+    await user.click(screen.getByTestId('conversation-handoff'))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(calledUrl(0)).toContain('/checkpoint')
+    expect(onSelectConversation).not.toHaveBeenCalled()
     await waitFor(() =>
-      expect(screen.getByTestId('session-continuity')).toHaveTextContent('Handoff ready'),
+      expect(screen.getByTestId('session-continuity')).toHaveTextContent(
+        'no written summary',
+      ),
+    )
+  })
+
+  it('does not cut over when the checkpoint failed its own probes', async () => {
+    checkpointStatus = 'failed'
+    const user = userEvent.setup()
+    const onSelectConversation = vi.fn()
+    render(
+      <ControlledConversation
+        agent={agent}
+        conversationId="conv-old"
+        onSelectConversation={onSelectConversation}
+      />,
+    )
+
+    await user.click(screen.getByTestId('conversation-handoff'))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(onSelectConversation).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.getByTestId('session-continuity')).toHaveTextContent('failed its own checks'),
+    )
+  })
+
+  it('sends a plain message afterwards, with no resume prefix', async () => {
+    render(
+      <ControlledConversation
+        agent={agent}
+        conversationId="conv-successor"
+        onSelectConversation={vi.fn()}
+      />,
     )
 
     fireEvent.change(screen.getByRole('textbox'), {
@@ -165,38 +233,14 @@ describe('agent conversation handoff', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-    expect(triggerBody(1)).toMatchObject({
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    // The successor already has the checkpoint waiting in its queue, so the operator's message
+    // is only their message. It used to be prepended with instructions to find two files that
+    // were never written.
+    expect(triggerBody(0)).toEqual({
       agent: 'claude',
-    })
-    expect(triggerBody(1)).not.toHaveProperty('conversation_id')
-    expect(triggerBody(1).message).toContain('Resume from the latest durable AgentWeave handoff')
-    expect(triggerBody(1).message).toContain('Continue implementing the feature.')
-
-    outputLines = [
-      ...outputLines,
-      {
-        id: 'new-session-started',
-        agent: 'claude',
-        session_id: 'session-new',
-        content: 'Started',
-        timestamp: '2026-07-29T12:01:00Z',
-        kind: 'status',
-        payload: { phase: 'started' },
-      },
-    ]
-    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-new'))
-
-    fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'And now continue normally.' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
-    expect(triggerBody(2)).toEqual({
-      agent: 'claude',
-      message: 'And now continue normally.',
-      conversation_id: 'conv-new',
+      message: 'Continue implementing the feature.',
+      conversation_id: 'conv-successor',
     })
   })
 })

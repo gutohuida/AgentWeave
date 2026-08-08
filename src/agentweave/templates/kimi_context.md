@@ -12,7 +12,7 @@ that auto-read `AGENTS.md` or `GEMINI.md`.
 2. Read `.agentweave/context/<agent>.md` if it exists. That file is the canonical
    runtime context and includes your project operating profile, team, quality
    gates, role contracts, project instructions, and project context.
-3. If the file is missing, run `agentweave sync-context --agent <agent>` or ask
+3. If the file is missing, start a turn for the agent in the Hub, which writes it, or ask
    the principal to refresh context.
 
 ## Coordination

@@ -1266,6 +1266,10 @@ MIN_WAITING_SECONDS = 10
 MAX_WAITING_SECONDS = 600
 WAITING_SETTING_FIELDS = ("permission_timeout_seconds", "question_timeout_seconds")
 
+# Access grants, separate from the policy overrides: one governs *when* a checkpoint is taken,
+# the other *who may read* one. Both closed by default.
+CHECKPOINT_GRANT_FIELDS = ("can_read_checkpoints", "can_recall")
+
 CHECKPOINT_OVERRIDE_FIELDS = (
     "checkpoint_mode",
     "checkpoint_threshold_mode",
@@ -1452,6 +1456,7 @@ async def patch_agent(
     # because of how it was declared.
     _unrestricted_fields = {
         "runner_id",
+        *CHECKPOINT_GRANT_FIELDS,
         "charter_id",
         "description",
         "default_permission_mode",
@@ -1525,6 +1530,13 @@ async def patch_agent(
 
     _apply_checkpoint_override(agent_row, body)
 
+    for grant in CHECKPOINT_GRANT_FIELDS:
+        if grant in body:
+            value = body[grant]
+            if not isinstance(value, bool):
+                raise HTTPException(status_code=400, detail=f"{grant} must be true or false")
+            setattr(agent_row, grant, value)
+
     agent_row.updated = datetime.now(timezone.utc)
     await session.commit()
 
@@ -1543,6 +1555,7 @@ async def patch_agent(
         "question_timeout_seconds": agent_row.question_timeout_seconds,
         "default_permission_mode": agent_row.default_permission_mode,
         **{field: getattr(agent_row, field) for field in CHECKPOINT_OVERRIDE_FIELDS},
+        **{field: getattr(agent_row, field) for field in CHECKPOINT_GRANT_FIELDS},
     }
 
 
@@ -1720,10 +1733,17 @@ async def post_compact_request(
         recipient=name,
         subject="compact_request",
         content=(
+            # Was: "Run `/aw-checkpoint` to save your session state" — a skill AgentWeave has
+            # never installed, followed by "re-read your checkpoint", a file nothing wrote.
+            # The Hub now generates checkpoints itself, so the only thing worth asking the agent
+            # for is what its record cannot hold.
             "**Context management: Compact requested**\n\n"
-            "1. Run `/aw-checkpoint` to save your session state.\n"
+            "1. Call `submit_checkpoint_notes` with what this conversation's record cannot "
+            "show: what you are mid-way through, what you suspect but have not verified, and "
+            "what a successor should not repeat. Skip the files, tasks and open questions — "
+            "the Hub already has those.\n"
             "2. Run `/compact` in your session.\n"
-            "3. After compacting, re-read your checkpoint and resume from Next Steps."
+            "3. Carry on. The Hub keeps the checkpoint; you do not need to re-read anything."
         ),
         type="message",
     )
@@ -1750,10 +1770,15 @@ async def post_new_session_request(
         recipient=name,
         subject="new_session_request",
         content=(
+            # Same dead reference as the compact request above, and the same correction: the
+            # successor is handed a Hub-generated checkpoint as a queued entry, so nothing here
+            # depends on the agent writing or finding a file.
             "**Context management: New session requested**\n\n"
-            "1. Run `/aw-checkpoint` to save your session state.\n"
+            "1. Call `submit_checkpoint_notes` with what this conversation's record cannot "
+            "show: work in flight, unverified suspicions, and warnings for whoever continues.\n"
             "2. The operator will start a fresh session for you.\n"
-            "3. The new session will read your checkpoint as its first action."
+            "3. It will be given a checkpoint the Hub generates from this conversation's "
+            "record — you do not need to write or save one."
         ),
         type="message",
     )

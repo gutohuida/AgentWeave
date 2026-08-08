@@ -2,7 +2,7 @@
 <!-- This file lives in .agentweave/ai_context.md -->
 <!--
   WORKFLOW OPTIONS:
-  1. Edit ai_context.md, then run `agentweave sync-context` to regenerate all agent files
+  1. Edit ai_context.md; the Hub re-renders every agent's context file before its next turn
   2. Edit agent files (CLAUDE.md / AGENTS.md / etc.) directly for project-specific updates
   3. Run `agentweave update-template --agent <name>` to research latest AI best practices
 -->
@@ -12,7 +12,7 @@
 > **Purpose:** This is the source of truth for project DNA.
 >
 > **Workflow:**
-> - Edit this file and run `agentweave sync-context` to regenerate all agent files, OR
+> - Edit this file; the Hub re-renders every agent's context file before its next turn, OR
 > - Edit agent files directly for quick project-specific updates, OR
 > - Run `agentweave update-template --agent <name>` to research latest AI capabilities
 

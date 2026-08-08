@@ -173,6 +173,22 @@ class Agent(Base):
     checkpoint_threshold_mode: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     checkpoint_threshold_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     checkpoint_notes_value: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Two independent grants, both closed by default.
+    #
+    # Separate because summary access is not transcript access. A checkpoint is a deliberate,
+    # bounded distillation; `recall` returns another agent's raw recorded output verbatim. An
+    # agent that may read what a peer concluded need not be able to read everything that peer's
+    # tools ever printed, and one flag would make the narrower grant inexpressible.
+    #
+    # These live on the Agent row and nowhere else. A charter is behaviour text the model reads;
+    # if it could widen access, then prose an agent can be persuaded to write would be an
+    # authorisation mechanism.
+    can_read_checkpoints: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    can_recall: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # An agent is archived, never deleted — its conversations, runs and messages keep their
     # attribution, and archival is reversible. Mirrors `Conversation.lifecycle` deliberately:
     # the two are the same act at different scopes, and giving them different vocabularies
@@ -1022,6 +1038,12 @@ class Checkpoint(Base):
 
     # --- The written half. NULL is a real state: status is then "unwritten". ---
     body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Stable ids of the recorded observations this checkpoint summarises, each with a short
+    # preview. A summary is lossy by construction; citations give it an exact escape hatch, so
+    # what the narrative compressed away stays recoverable without re-running a tool and without
+    # similarity search. `recall` materialises one by id.
+    citations: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     # --- The verdict (section 6). NULL until probed. ---
     probe_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)

@@ -9,6 +9,7 @@ from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
 from .charters import router as charters_router
+from .checkpoints import router as checkpoints_router
 from .events import instance_router as instance_events_router
 from .events import router as events_router
 from .fs_browse import router as fs_browse_router
@@ -60,6 +61,7 @@ project_resources_router.include_router(logs_router)
 project_resources_router.include_router(worktrees_router)
 project_resources_router.include_router(inbound_queue_router)
 project_resources_router.include_router(workspace_router)
+project_resources_router.include_router(checkpoints_router)
 project_resources_router.include_router(runners_router)
 project_resources_router.include_router(charters_router)
 v1_router.include_router(project_resources_router)

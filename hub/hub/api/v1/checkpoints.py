@@ -1,0 +1,194 @@
+"""Operator endpoints for checkpoints.
+
+Minimal visibility ships with the record (design.md): a checkpoint the operator cannot see
+rebuilds the exact defect this capability removes — a signal that looks like it works because
+nothing inspects it. Browsing chains, diffing predecessor against successor and reviewing probe
+verdicts are a later change, and cheaper for waiting.
+"""
+
+from typing import List, Optional, Tuple
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ...auth import get_project
+from ...checkpoint_cutover import CutoverRefusedError, cut_over
+from ...checkpoint_generation import generate_checkpoint, render_checkpoint
+from ...db.engine import get_session
+from ...db.models import Checkpoint, Conversation, Project, Runner
+from ...sse import sse_manager
+
+router = APIRouter(tags=["checkpoints"])
+
+
+class CheckpointSummary(BaseModel):
+    id: str
+    conversation_id: str
+    agent: str
+    trigger: str
+    status: str
+    visibility: str
+    probe_status: Optional[str] = None
+    probe_findings: Optional[list] = None
+    previous_checkpoint_id: Optional[str] = None
+    lineage_id: str
+    files_changed: Optional[list] = None
+    open_questions: Optional[list] = None
+    runtime_overrides: Optional[dict] = None
+    citations: Optional[list] = None
+    body: Optional[str] = None
+    created_at: Optional[str] = None
+
+    @classmethod
+    def of(cls, row: Checkpoint) -> "CheckpointSummary":
+        return cls(
+            id=row.id,
+            conversation_id=row.conversation_id,
+            agent=row.agent,
+            trigger=row.trigger,
+            status=row.status,
+            visibility=row.visibility,
+            probe_status=row.probe_status,
+            probe_findings=row.probe_findings,
+            previous_checkpoint_id=row.previous_checkpoint_id,
+            lineage_id=row.lineage_id,
+            files_changed=row.files_changed,
+            open_questions=row.open_questions,
+            runtime_overrides=row.runtime_overrides,
+            citations=row.citations,
+            body=row.body,
+            created_at=row.created_at.isoformat() if row.created_at else None,
+        )
+
+
+async def _conversation_or_404(session: AsyncSession, project_id: str, conversation_id: str):
+    conversation = await session.get(Conversation, conversation_id)
+    if conversation is None or conversation.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Conversation '{conversation_id}' not found")
+    return conversation
+
+
+@router.get("/conversations/{conversation_id}/checkpoints", response_model=List[CheckpointSummary])
+async def list_checkpoints(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every checkpoint for a conversation, newest first."""
+    project_id, _ = project
+    await _conversation_or_404(session, project_id, conversation_id)
+    rows = (
+        (
+            await session.execute(
+                select(Checkpoint)
+                .where(Checkpoint.conversation_id == conversation_id)
+                .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [CheckpointSummary.of(row) for row in rows]
+
+
+@router.get("/checkpoints/{checkpoint_id}/rendered")
+async def get_rendered_checkpoint(
+    checkpoint_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The artifact exactly as a successor receives it — envelope, body and citations."""
+    project_id, _ = project
+    row = await session.get(Checkpoint, checkpoint_id)
+    if row is None or row.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Checkpoint '{checkpoint_id}' not found")
+    return {"id": row.id, "status": row.status, "rendered": render_checkpoint(row)}
+
+
+@router.post(
+    "/conversations/{conversation_id}/checkpoint",
+    response_model=CheckpointSummary,
+    status_code=status.HTTP_201_CREATED,
+)
+async def take_checkpoint(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Generate a checkpoint now, on the operator's say-so.
+
+    Blocking: generation is a real model call and the operator pressed a button expecting a
+    result. Refused when no checkpoint runner is configured rather than falling back to some
+    other agent's runner, which would be a bill nobody agreed to.
+    """
+    project_id, _ = project
+    conversation = await _conversation_or_404(session, project_id, conversation_id)
+
+    project_row = await session.get(Project, project_id)
+    runner = (
+        await session.get(Runner, project_row.checkpoint_runner_id)
+        if project_row and project_row.checkpoint_runner_id
+        else None
+    )
+    if runner is None or runner.project_id != project_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No checkpoint runner is configured for this project. Choose one in project "
+                "settings — the Hub will not spend another agent's runner on your behalf."
+            ),
+        )
+
+    checkpoint = await generate_checkpoint(
+        session,
+        conversation,
+        trigger="operator",
+        cli=runner.cli,
+        model=project_row.checkpoint_model or runner.model,
+        runner_id=runner.id,
+    )
+    await sse_manager.broadcast(
+        project_id,
+        "checkpoint_ready",
+        {
+            "checkpoint_id": checkpoint.id,
+            "conversation_id": conversation_id,
+            "agent": checkpoint.agent,
+            "status": checkpoint.status,
+            "probe_status": checkpoint.probe_status,
+        },
+    )
+    return CheckpointSummary.of(checkpoint)
+
+
+@router.post("/checkpoints/{checkpoint_id}/cutover")
+async def cutover_to_successor(
+    checkpoint_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Open the successor, hand it this checkpoint, and archive the predecessor."""
+    project_id, _ = project
+    checkpoint = await session.get(Checkpoint, checkpoint_id)
+    if checkpoint is None or checkpoint.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Checkpoint '{checkpoint_id}' not found")
+
+    conversation = await _conversation_or_404(session, project_id, checkpoint.conversation_id)
+    try:
+        successor, entry_id = await cut_over(session, conversation, checkpoint)
+    except CutoverRefusedError as exc:
+        # 409, not 400: the request is well-formed and the refusal is about state the operator
+        # can change — finish the run, or let the queue drain.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    payload = {
+        "checkpoint_id": checkpoint.id,
+        "conversation_id": conversation.id,
+        "successor_conversation_id": successor.id,
+        "queue_entry_id": entry_id,
+        "agent": successor.agent,
+    }
+    await sse_manager.broadcast(project_id, "conversation_cut_over", payload)
+    return payload

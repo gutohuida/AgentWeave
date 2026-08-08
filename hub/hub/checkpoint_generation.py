@@ -30,11 +30,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from .checkpoint_access import build_citations
 from .checkpoints import (
     CheckpointEnvelope,
     compute_envelope,
     create_checkpoint,
     latest_checkpoint,
+    runs_to_cover,
 )
 from .db.models import (
     AgentOutput,
@@ -335,6 +337,19 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
         lines.append(
             "_No written summary: generation produced nothing usable for this checkpoint._"
         )
+
+    if checkpoint.citations:
+        lines.append("")
+        lines.append("## Recorded observations")
+        lines.append("")
+        lines.append(
+            "_A summary is lossy. Each id below can be materialised exactly with `recall`, so "
+            "anything compressed away is still recoverable._"
+        )
+        lines.append("")
+        for entry in checkpoint.citations:
+            preview = (entry.get("preview") or "").replace("\n", " ").strip()
+            lines.append(f"- `{entry.get('id')}` — {preview}")
     return "\n".join(lines)
 
 
@@ -436,6 +451,7 @@ async def generate_checkpoint(
     anchor = await latest_checkpoint(db, conversation.id)
     envelope = await compute_envelope(db, conversation, worktree=worktree, anchor=anchor)
     transcript = await _transcript_since(db, conversation, anchor)
+    covered_runs = await runs_to_cover(db, conversation.id, anchor)
 
     # An explicit `notes=` argument wins, so a caller can generate without them deliberately.
     note = None if notes is not None else await pending_notes(db, conversation.id)
@@ -483,11 +499,17 @@ async def generate_checkpoint(
         visibility=visibility,
     )
 
+    # Citations are attached whether or not a body was written: they point at what exists in
+    # `agent_outputs`, so an `unwritten` checkpoint still gives a reader an exact way in.
+    checkpoint.citations = await build_citations(
+        db, conversation.id, [run.id for run in covered_runs]
+    )
+
     if note is not None:
         # Marked consumed even when generation failed. The notes described a moment that has now
         # passed; carrying them into a later checkpoint would present stale intent as current.
         note.consumed_by_checkpoint_id = checkpoint.id
-        await db.commit()
+    await db.commit()
 
     if probe and checkpoint.status == "ready":
         await probe_checkpoint(

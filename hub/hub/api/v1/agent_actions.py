@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_auth import AgentActor, get_agent_actor
+from ...checkpoint_access import AccessDeniedError, recall_observation
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
 from ...db.models import CheckpointNote, Question
@@ -307,6 +308,27 @@ async def submit_checkpoint_notes(
         agent=actor.agent,
     )
     return {"id": note.id, "conversation_id": conversation_id, "recorded": True}
+
+
+@router.get("/recall/{output_id}")
+async def recall(
+    output_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Materialise one observation a checkpoint cited, exactly as it was recorded.
+
+    Identity comes from the run's minted credential via `get_agent_actor` — never from the
+    request, which is the rule the whole agent-actions namespace exists to keep. A caller cannot
+    ask to be someone else, so the grant cannot be talked around.
+    """
+    try:
+        return await recall_observation(session, actor.agent, actor.project_id, output_id)
+    except AccessDeniedError as exc:
+        # 404, not 403. Confirming that an id exists but is out of reach is itself a disclosure,
+        # and "no such observation" and "not cited by a checkpoint you may read" must be
+        # indistinguishable from the outside.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/questions", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)

@@ -474,7 +474,7 @@ def check_project_context() -> list[DiagnosticResult]:
                 "project_context_placeholder",
                 ".agentweave/ai_context.md",
                 "Project context still contains template placeholders.",
-                hint="Update .agentweave/ai_context.md and run agentweave sync-context.",
+                hint="Update .agentweave/ai_context.md; the Hub re-renders agent context on the next turn.",
                 category="context",
             )
         ]
@@ -839,7 +839,7 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
                     "agent_context_stale",
                     agent,
                     f"Agent context file may be stale at {context_path}.",
-                    hint="Run agentweave sync-context or agentweave sync-context --force.",
+                    hint="The Hub re-renders this file when the agent next runs; no command is needed.",
                     category="context",
                 )
             )
@@ -850,7 +850,7 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
                     "agent_context_incomplete",
                     agent,
                     f"Agent context file is missing required sections: {', '.join(missing_sections)}.",
-                    hint="Run agentweave sync-context --force.",
+                    hint="The Hub rewrites this file on the agent's next turn.",
                     category="context",
                     data={"missing_sections": missing_sections},
                 )
@@ -861,7 +861,7 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
                 "agent_context_missing",
                 agent,
                 f"Agent context file is missing at {context_path}.",
-                hint=f"Run agentweave sync-context --agent {agent}.",
+                hint=f"Start a turn for {agent} in the Hub; it writes this file before the run.",
                 category="context",
                 data={
                     "generated_context": str(context_path),
