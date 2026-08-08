@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
+import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 const describeMutate = vi.fn()
 let roster: AgentSummary[] = []
@@ -24,6 +25,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
   return {
     ...actual,
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useAgents: () => ({ data: roster, isLoading: false }),
     useArchiveAgent: () => ({ mutate: vi.fn(), isPending: false, error: null }),
     useUpdateAgentDescription: () => ({
@@ -51,6 +53,11 @@ function renderIdentity(summary: AgentSummary) {
 }
 
 const field = () => screen.getByLabelText('Description for codex-1')
+
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
+})
 
 describe('what an agent is for', () => {
   beforeEach(() => describeMutate.mockClear())

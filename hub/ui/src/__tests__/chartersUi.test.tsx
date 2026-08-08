@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChartersPage } from '@/components/charters/ChartersPage'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
+import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 const createMutate = vi.fn()
 const bindMutate = vi.fn()
@@ -48,6 +49,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
   return {
     ...actual,
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useAgents: () => ({
       data: [
         { name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, charter_id: 'charter-two' },
@@ -55,6 +57,11 @@ vi.mock('@/api/agents', async (importOriginal) => {
       isLoading: false,
     }),
   }
+})
+
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
 })
 
 describe('charter management UI', () => {

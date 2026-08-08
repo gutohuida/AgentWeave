@@ -28,6 +28,8 @@ export interface AgentSummary {
   /** How long this agent waits on the operator. `null` means the built-in default. */
   permission_timeout_seconds?: number | null
   question_timeout_seconds?: number | null
+  /** What this agent may do when the conversation has not said. `null` is the built-in default. */
+  default_permission_mode?: string | null
 }
 
 export interface AgentLaunchability {
@@ -197,6 +199,29 @@ export function useUpdateAgentDescription() {
       patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { description }),
     onSuccess: () => {
       // Every roster variant: the settings page reads `all`, and it is the surface being looked at.
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'project' &&
+          query.queryKey[1] === projectId &&
+          query.queryKey[2] === 'agents',
+      })
+    },
+  })
+}
+
+/** The agent's default posture. `null` clears it back to the built-in default.
+ *
+ * Writing this also rewrites the legacy `config.yolo` flag server-side — they are the same
+ * choice at two ages, not two settings, and the Hub keeps them saying one thing. */
+export function useUpdateAgentPermissionDefault() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, mode }: { agent: string; mode: string | null }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, {
+        default_permission_mode: mode,
+      }),
+    onSuccess: () => {
       queryClient.invalidateQueries({
         predicate: (query) =>
           query.queryKey[0] === 'project' &&

@@ -38,7 +38,7 @@ from ...db.models import (
 )
 from ...inbound_queue import new_entry
 from ...launchability import get_agent_config, probe_agent
-from ...model_catalog import get_provider
+from ...model_catalog import get_provider, permission_mode_values
 from ...output_recording import record_agent_output, record_context_usage
 from ...schemas.agents import (
     AgentHeartbeatCreate,
@@ -548,6 +548,9 @@ async def list_agents(
                 ),
                 question_timeout_seconds=(
                     agent_row.question_timeout_seconds if agent_row else None
+                ),
+                default_permission_mode=(
+                    agent_row.default_permission_mode if agent_row else None
                 ),
             )
         )
@@ -1255,6 +1258,53 @@ def _validated_description(value: object) -> Optional[str]:
     return trimmed
 
 
+# The posture that means "no restraint" — the one value that has to stay reconciled with the
+# legacy `config["yolo"]` flag, because that flag is what `runner_commands` and `codex_appserver`
+# already read and what the collaboration-readiness check already tests.
+FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
+
+
+def _validated_permission_mode(value: object) -> Optional[str]:
+    """Coerce a default posture, or refuse it. `None` means the built-in default.
+
+    Validated against the catalog's declared postures rather than against the agent's bound
+    runner: an agent may have no runner bound, and rebinding one must not silently invalidate a
+    default the operator already chose.
+    """
+    if value is None:
+        return None
+    permitted = {item.id for item in permission_mode_values()}
+    if not isinstance(value, str) or value not in permitted:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "default_permission_mode must be one of: " + ", ".join(sorted(permitted))
+            ),
+        )
+    return value
+
+
+def _apply_default_permission_mode(agent_row: Agent, value: object) -> None:
+    """Set the agent's default posture, and keep `config["yolo"]` saying the same thing.
+
+    `yolo` is not a second setting to maintain — it is the older, two-valued spelling of this
+    one, and it is what `runner_commands._build_claude_command`, `codex_appserver._thread_policy`
+    and the collaboration-readiness check at `get_agents_launchability` actually read. Leaving
+    the two free to disagree produces the specific incoherence of an agent running under "Ask me"
+    while `yolo` suppresses the `--allowedTools` allowlist its own MCP tools need.
+
+    Clearing the posture therefore clears `yolo` as well: "no default" means the built-in
+    default, which is what the settings row says, and an agent that silently stayed at full
+    access after the operator cleared full access would be the worst reading of that.
+    """
+    posture = _validated_permission_mode(value)
+    agent_row.default_permission_mode = posture
+    agent_row.config = {
+        **(agent_row.config or {}),
+        "yolo": posture == FULL_ACCESS_PERMISSION_MODE,
+    }
+
+
 def _validated_waiting_seconds(field: str, value: object) -> Optional[int]:
     """Coerce one waiting setting, or refuse it.
 
@@ -1295,7 +1345,13 @@ async def patch_agent(
     # fields; the waiting settings are newer still. A configured agent needs all of them settable
     # exactly like a self-registered one — an agent does not wait differently for the operator
     # because of how it was declared.
-    _unrestricted_fields = {"runner_id", "charter_id", "description", *WAITING_SETTING_FIELDS}
+    _unrestricted_fields = {
+        "runner_id",
+        "charter_id",
+        "description",
+        "default_permission_mode",
+        *WAITING_SETTING_FIELDS,
+    }
     session_data = await _get_session_data(project_id, session)
     if (
         session_data
@@ -1356,6 +1412,11 @@ async def patch_agent(
         new_config = body["config"] or {}
         agent_row.config = {**(agent_row.config or {}), **new_config}
 
+    # After the config merge, deliberately: a body carrying both must end with the two agreeing,
+    # and the posture is the newer spelling of the same choice, so it is the one that wins.
+    if "default_permission_mode" in body:
+        _apply_default_permission_mode(agent_row, body["default_permission_mode"])
+
     agent_row.updated = datetime.now(timezone.utc)
     await session.commit()
 
@@ -1372,6 +1433,7 @@ async def patch_agent(
         "charter_id": agent_row.charter_id,
         "permission_timeout_seconds": agent_row.permission_timeout_seconds,
         "question_timeout_seconds": agent_row.question_timeout_seconds,
+        "default_permission_mode": agent_row.default_permission_mode,
     }
 
 

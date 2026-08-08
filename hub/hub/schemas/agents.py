@@ -70,6 +70,10 @@ class AgentSummary(BaseModel):
     # How long this agent waits on the operator. None means the built-in default.
     permission_timeout_seconds: Optional[int] = None
     question_timeout_seconds: Optional[int] = None
+    # What this agent may do when the conversation has not said. One of the catalog's postures,
+    # or None for the built-in default. The composer reads it so its Permissions pill shows what
+    # will actually happen rather than the catalog default.
+    default_permission_mode: Optional[str] = Field(default=None, max_length=32)
 
     model_config = {"from_attributes": True}
 

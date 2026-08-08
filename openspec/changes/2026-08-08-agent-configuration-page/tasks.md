@@ -88,9 +88,31 @@ Named for what an operator is trying to do, not for the shape of the data.
       would leave two places to look when an agent acts wrongly — only one of them a contract. The
       description is for the human reading a roster of six similarly-named agents. It is not
       offered at creation, per section 5: an agent's first turn is no different without it
-- [~] 3.2 **Execution** — runner binding, model, default permission posture. Runner binding renders;
-      model follows from the bound Runner. **Default permission posture is not here yet** — and this
-      is where the stored `config["yolo"]` belongs, per section 1's finding
+- [x] 3.2 **Execution** — runner binding, model, default permission posture. Runner binding renders;
+      model follows from the bound Runner; the posture is `Agent.default_permission_mode`
+      (migration `0040`), and it is where the stored `config["yolo"]` finally has an editable home.
+
+      **`yolo` is not a second setting — it is the older, two-valued spelling of this one.**
+      `runner_commands`, `codex_appserver._thread_policy` and the collaboration-readiness check at
+      `get_agents_launchability` all read the flag, so writing the posture rewrites it
+      (`_apply_default_permission_mode`). Letting the two drift produces one specific incoherence:
+      a run under *Ask me* whose `yolo` suppresses the `--allowedTools` allowlist its own MCP tools
+      need. Clearing the posture clears the flag too, because an agent that silently stayed at full
+      access after the operator cleared full access is the worst reading of "cleared".
+
+      **Applied at trigger, not only in the composer.** `trigger_agent_directly` fills the
+      `permission_mode` control in when the conversation states none, so the agent default and a
+      per-run choice are one mechanism rather than two — and a run started by a peer message or a
+      schedule, where there is no composer, still has an answer. That is the case the setting
+      exists for.
+
+      **The composer's pill reads it too**, through the `effectiveControls` prop it already had.
+      Showing is not sending: the pill states what the run will do, and the Hub applies the
+      default itself, so echoing it back would freeze today's default onto the conversation the
+      first time the operator typed anything.
+
+      Validated against the catalog's union of postures rather than the agent's bound provider —
+      an agent may have none bound, and rebinding one must not invalidate a default already chosen
 - [x] 3.3 **Charter** — charter binding
 - [x] 3.4 **Interaction** — permission timeout, question timeout (moved from `AgentInfoTab`'s
       *Waiting for you*)

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
 import { ApiError } from '@/api/client'
+import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 const archiveMutate = vi.fn()
 let archiveError: unknown = null
@@ -27,6 +28,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
   return {
     ...actual,
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useAgents: () => ({ data: roster, isLoading: false }),
     useArchiveAgent: () => ({ mutate: archiveMutate, isPending: false, error: archiveError }),
     useUpdateAgentDescription: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -48,6 +50,11 @@ function renderIdentity(summary: AgentSummary) {
   roster = [summary]
   return render(<AgentSettingsPage agent={summary.name} section="identity" />)
 }
+
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
+})
 
 describe('an agent is archived, never deleted', () => {
   beforeEach(() => {

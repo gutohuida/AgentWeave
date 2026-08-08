@@ -15,6 +15,7 @@ import {
   useAgentRecentChat,
   type AgentConversation,
 } from '@/api/agentChat'
+import { PERMISSION_MODE_CONTROL } from '@/api/modelCatalog'
 import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
@@ -72,6 +73,10 @@ interface TriggerResult {
 function emptyToUndefined(overrides: Record<string, string>): Record<string, string> | undefined {
   return Object.keys(overrides).length > 0 ? overrides : undefined
 }
+
+/** A stable identity for "this agent states no defaults", so the Composer's memoized children do
+ *  not re-render on every parent render for want of one. */
+const EMPTY_CONTROLS: Record<string, string> = {}
 
 /** Titles are capped at 120 characters; the continuity line is one row of 11px text under the
  *  composer. Shortened here rather than at the source, because the rail wants the whole thing. */
@@ -233,6 +238,13 @@ export function AgentOutputPanel({
   const { data: runners = [] } = useRunners()
   const targetAgentRow = roster.find((a) => a.name === agent.name)
   const targetRunnerRow = runners.find((r) => r.id === targetAgentRow?.runner_id)
+  // What the run will do at rest, from the agent rather than from the catalog. The Composer
+  // layers the conversation's own overrides on top of this; it sends only those, so showing the
+  // agent's default here states what will happen without silently turning it into a choice the
+  // operator made for this one conversation.
+  const agentDefaultControls = targetAgentRow?.default_permission_mode
+    ? { [PERMISSION_MODE_CONTROL]: targetAgentRow.default_permission_mode }
+    : EMPTY_CONTROLS
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
   const { data: workspacePaths = [] } = useWorkspacePaths()
@@ -652,6 +664,11 @@ export function AgentOutputPanel({
               workspacePaths={workspacePaths}
               runner={targetRunnerRow?.cli ?? null}
               effectiveModel={targetRunnerRow?.model ?? null}
+              // At rest the Permissions pill has to show what the run will actually do. The Hub
+              // applies the agent's default when the conversation states none, so without this
+              // the pill would sit at the catalog default while the run went elsewhere — the
+              // pill appearing to say one thing and the run doing another.
+              effectiveControls={agentDefaultControls}
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}
             />

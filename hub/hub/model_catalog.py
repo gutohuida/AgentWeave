@@ -235,6 +235,34 @@ def model_context_window(provider: str, model_id: str) -> Optional[int]:
     return model.context_window if model is not None else None
 
 
+PERMISSION_MODE_CONTROL = "permission_mode"
+
+# The posture applied when neither the conversation nor the agent states one. Named here rather
+# than read off one provider's descriptor because it has to hold for an agent with no runner bound
+# at all — there is no provider to ask.
+DEFAULT_PERMISSION_MODE = "acceptEdits"
+
+
+def permission_mode_values() -> List[ControlValue]:
+    """Every posture any provider declares, in catalog order, deduplicated by id.
+
+    An agent's *default* posture is a property of the agent, and an agent may have no runner
+    bound — so it cannot be validated against one provider's control the way a per-run override
+    is. Both providers deliberately declare the same four values with the same labels ("an
+    operator should not have to learn two vocabularies for the same choice"), so the union is
+    that same set; deriving it here rather than restating it means a provider that adds a fifth
+    does not silently make it unofferable as a default.
+    """
+    seen: Dict[str, ControlValue] = {}
+    for entry in CATALOG.values():
+        control = entry.control(PERMISSION_MODE_CONTROL)
+        if control is None:
+            continue
+        for value in control.values:
+            seen.setdefault(value.id, value)
+    return list(seen.values())
+
+
 @dataclass(frozen=True)
 class OverrideRejection:
     control: str

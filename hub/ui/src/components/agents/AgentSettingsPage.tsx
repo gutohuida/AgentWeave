@@ -5,7 +5,13 @@ import { ApiError } from '@/api/client'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useCopy } from '@/hooks/useCopy'
 import { tint } from '@/lib/colorTint'
-import { CharterPicker, DescriptionSetting, RunnerPicker, WaitingSetting } from './AgentSettingsControls'
+import {
+  CharterPicker,
+  DescriptionSetting,
+  PermissionDefaultSetting,
+  RunnerPicker,
+  WaitingSetting,
+} from './AgentSettingsControls'
 import type { AgentSettingsSection } from '@/lib/navigation'
 
 interface AgentSettingsPageProps {
@@ -94,6 +100,12 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
             description="The execution capability this agent is bound to — its CLI, model and flags."
           >
             <RunnerPicker agent={agent} />
+          </SettingsRow>
+          <SettingsRow
+            label="Default permissions"
+            description="What this agent may do when a conversation has not chosen a posture. The composer's Permissions pill overrides it for one conversation; this is what everything else starts from."
+          >
+            <PermissionDefaultSetting agent={agent} />
           </SettingsRow>
         </SettingsSection>
       )

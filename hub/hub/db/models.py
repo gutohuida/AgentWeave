@@ -133,6 +133,12 @@ class Agent(Base):
     # after the default moved, pinning every existing agent to a value nobody chose.
     permission_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     question_timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # What this agent may do when the conversation has not said. One of the postures the model
+    # catalog declares, or NULL for the built-in default — the same reasoning as the waiting
+    # settings above: a row storing today's default would keep saying it after the default moved.
+    # This is the same choice the composer's Permissions pill makes, applied when no run states
+    # one, which is why it is not a vocabulary of its own.
+    default_permission_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # An agent is archived, never deleted — its conversations, runs and messages keep their
     # attribution, and archival is reversible. Mirrors `Conversation.lifecycle` deliberately:
     # the two are the same act at different scopes, and giving them different vocabularies

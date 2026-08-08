@@ -3,7 +3,9 @@ import {
   AgentSummary,
   MAX_AGENT_DESCRIPTION_CHARS,
   useUpdateAgentDescription,
+  useUpdateAgentPermissionDefault,
 } from '@/api/agents'
+import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
 import {
   MAX_WAITING_SECONDS,
@@ -157,6 +159,59 @@ export function WaitingSetting({
         )}
       </div>
     </SettingsRow>
+  )
+}
+
+/** What this agent may do when the conversation has not said.
+ *
+ * The same four postures the composer's Permissions pill offers, and deliberately the same
+ * labels: this is not a second vocabulary for the same choice, it is that choice applied when no
+ * run states one. Blank means the built-in default rather than a stored copy of today's — the
+ * same reasoning as `WaitingSetting`.
+ *
+ * The options come from the catalog's union across providers rather than from the agent's bound
+ * runner, because an agent may have none bound and rebinding one must not invalidate a default
+ * the operator already chose.
+ */
+export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
+  const { data: catalog, isLoading } = useModelCatalog()
+  const update = useUpdateAgentPermissionDefault()
+  const options = permissionModeValues(catalog)
+
+  if (isLoading) {
+    return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading postures...</span>
+  }
+
+  return (
+    <div>
+      <select
+        value={agent.default_permission_mode ?? ''}
+        onChange={(event) => update.mutate({ agent: agent.name, mode: event.target.value || null })}
+        disabled={update.isPending}
+        aria-label={`Default permissions for ${agent.name}`}
+        className="w-full px-3 py-2 rounded-md text-sm"
+        style={{
+          background: 'var(--surface-3)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          opacity: update.isPending ? 0.6 : 1,
+        }}
+      >
+        <option value="">Built-in default (Edit files)</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>{option.label}</option>
+        ))}
+      </select>
+      <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+        Used when a conversation has not chosen one — including runs a peer or a schedule starts,
+        where there is no composer to choose in.
+      </p>
+      {update.isError && (
+        <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
+          Could not update the default posture.
+        </p>
+      )}
+    </div>
   )
 }
 

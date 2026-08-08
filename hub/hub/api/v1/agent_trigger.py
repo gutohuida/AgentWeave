@@ -59,7 +59,11 @@ from ...launchability import (
     resolve_access_path,
     resolve_agent_env,
 )
-from ...model_catalog import WORKSPACE_PERMISSION_MODE, validate_overrides
+from ...model_catalog import (
+    PERMISSION_MODE_CONTROL,
+    WORKSPACE_PERMISSION_MODE,
+    validate_overrides,
+)
 from ...output_recording import record_agent_output, record_context_usage
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
@@ -275,6 +279,15 @@ async def trigger_agent_directly(
     conversation_overrides = dict(conversation.runtime_overrides or {})
     model = conversation_overrides.get("model") or config.get("model")
     control_overrides = {k: v for k, v in conversation_overrides.items() if k != "model"}
+    # The agent's default posture sits between the conversation's own choice and the built-in
+    # fallback. It has to be applied here rather than only in the composer, because a run
+    # triggered by a peer message or a scheduled job has no composer to state one — and those are
+    # exactly the runs where "what may this agent do unattended" is the question being asked.
+    if (
+        agent_row.default_permission_mode
+        and PERMISSION_MODE_CONTROL not in control_overrides
+    ):
+        control_overrides[PERMISSION_MODE_CONTROL] = agent_row.default_permission_mode
     try:
         workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:

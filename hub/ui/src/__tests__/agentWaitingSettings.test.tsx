@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
+import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 const updateMutate = vi.fn()
 
@@ -25,6 +26,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
   return {
     ...actual,
     useAgentSessions: () => ({ data: { sessions: [] }, isLoading: false }),
+    useUpdateAgentPermissionDefault: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
     useAgents: () => ({ data: roster, isLoading: false }),
   }
 })
@@ -49,6 +51,11 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 }
 
 const questionWait = () => screen.getByLabelText(/Answer to a question wait for codex-1/)
+
+vi.mock('@/api/modelCatalog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
+  return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
+})
 
 describe('per-agent waiting settings', () => {
   beforeEach(() => updateMutate.mockClear())

@@ -25,8 +25,12 @@ terminal at which an operator could answer the prompt `manual` raises, and no ap
 exists yet (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`).
 
 Either default is suppressed when the operator has chosen a posture through the `permission_mode`
-control, whose rendered flag arrives in `control_args`. When a run also configures the Hub's own MCP
-server, `--allowedTools "mcp__agentweave__*"` is added so that server's tools stay usable.
+control, whose rendered flag arrives in `control_args`. The agent's own
+`default_permission_mode` arrives by the same route — `trigger_agent_directly` fills the control in
+when the conversation states none, so a chosen default and a per-run choice are one mechanism here
+rather than two, and this module has no separate notion of an agent-level default to keep in step.
+When a run also configures the Hub's own MCP server, `--allowedTools "mcp__agentweave__*"` is added
+so that server's tools stay usable.
 """
 
 from __future__ import annotations
