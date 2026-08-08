@@ -12,11 +12,24 @@
 These are live defects today. They do not depend on this change, on the navigation change, or on
 the exploration. Do them independently.
 
-- [ ] 0.1 `AgentOutputPanel.tsx:37-41` (`HANDOFF_PROMPT`) — the prompt instructs the agent to invoke an
+> **Ordering correction (2026-08-08): 0.1 is NOT independent — run 1.1–1.3 first.**
+> Task 1.1 asks what the agent does when told to invoke a skill it does not have. Rewriting
+> `HANDOFF_PROMPT` destroys the condition 1.1 exists to observe. 1.1 and 1.2 have now been run and
+> are written up in `openspec/explorations/2026-08-08-handoff-behaviour.md`; 1.3 has not. Do not
+> touch 0.1/0.2 until it is.
+>
+> **What 1.1 already establishes about 0.1's shape:** the destination is not merely absent, it is
+> *unreachable*. `.agentweave/shared/checkpoints/` lies outside the agent's allowed working
+> directory (its worktree), so a Claude agent is sandbox-blocked from it and a Codex agent
+> silently creates a second, nested `.agentweave/shared/` inside its own worktree. Installing
+> `aw-checkpoint` therefore cannot fix 0.1 on its own — the path is wrong independently of the
+> skill being missing, which also bears directly on 0.4.
+
+- [ ] 0.1 `AgentOutputPanel.tsx:48-52` (`HANDOFF_PROMPT`) — the prompt instructs the agent to invoke an
       `aw-checkpoint` skill that is never installed and write to `.agentweave/shared/checkpoints/`,
       which is never created. Replace with an instruction the agent can actually satisfy, or state
       plainly in the prompt that it must produce the summary inline
-- [ ] 0.2 `AgentOutputPanel.tsx:43-49` (`RESUME_HANDOFF_PREFIX`, the path at `:46`) — the resume
+- [ ] 0.2 `AgentOutputPanel.tsx:54-60` (`RESUME_HANDOFF_PREFIX`, the path at `:57`) — the resume
       prefix instructs the successor to read
       `.agentweave/shared/context.md`, which nothing writes. Remove or correct
 - [ ] 0.3 `src/agentweave/diagnostics.py:477` — the remediation hint tells the operator to run
@@ -30,13 +43,25 @@ the exploration. Do them independently.
 Each task below is answered with evidence, written into `openspec/explorations/`. "I think" is not
 an answer; a file path, a captured transcript, or an observed run is.
 
+Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
+
 **Observe what exists**
 
-- [ ] 1.1 Trigger the current Handoff against a live Claude agent and capture the full transcript.
+- [x] 1.1 Trigger the current Handoff against a live Claude agent and capture the full transcript.
       What does the agent actually do when told to invoke a skill it does not have? Does it
       improvise something useful, refuse, or silently no-op?
-- [ ] 1.2 Repeat against a live Codex agent. Codex has no project-level skill discovery at all
+      **Answered:** it improvises, well, by silently substituting the operator's own Claude Code
+      `/handoff` skill — and ignores three of the prompt's four instructions (skill name, reason,
+      destination). Artifact landed at `<worktree>/.handoffs/`, which no Hub record references.
+      On a second press with the artifact in context it stops improvising and asks the operator
+      for clarification instead, producing nothing. Both runs set "Handoff ready".
+- [x] 1.2 Repeat against a live Codex agent. Codex has no project-level skill discovery at all
       (`scripts/sync_skills.py` header), so its behaviour may differ from Claude's
+      **Answered:** it differs. Codex never looks for `aw-checkpoint` and never reports it
+      missing; it authors a checkpoint unaided and resolves the destination literally *relative to
+      its own worktree*, creating a nested `worktrees/codex-1/.agentweave/shared/checkpoints/`.
+      The first run was voided by an unattended approval queue (see the exploration's method
+      notes — force `permission_mode` on the trigger).
 - [ ] 1.3 Send the follow-up message and capture what the successor conversation actually receives.
       Determine whether any current behaviour is worth preserving before it is replaced
 
