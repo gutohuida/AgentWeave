@@ -326,6 +326,100 @@ run-ended-therefore-ready check cannot express.
 
 ---
 
+## 1.5 — Structured or markdown
+
+**Decision: hybrid — a structured envelope the Hub fills and validates, carrying one markdown
+body the model writes.**
+
+This follows from 1.4's split rather than from taste. The line between the two groups is
+*verifiability*:
+
+- The Hub-known fields (date, agent, branch, HEAD, predecessor, files touched, overrides) are
+  checkable, so structuring them buys a real thing: a handoff that omits or fudges one can be
+  **failed**. Both failure modes were observed — an invented `2026-08-08T00:00Z`, and "no pending
+  work" concluded from an always-clean worktree.
+- The judgement fields (Goal, Current state, Key decisions, Dead ends, Verification, Next steps,
+  Open questions, Read on resume) cannot be validated by any schema. Forcing them into JSON adds
+  ceremony and removes nothing from the failure surface.
+
+Fully-structured is therefore over-engineering and one-markdown-blob is unverifiable. The
+envelope is what makes 1.11 expressible.
+
+## 1.6 — What a handoff must carry that a single-agent session never had
+
+Checked against the live schema. Four candidates, and they are not equally carryable:
+
+| Candidate | Where it lives | Conversation-scoped? |
+|---|---|---|
+| Outstanding questions | `questions.conversation_id`, `unasked_questions.conversation_id` | **Yes** — carry exactly |
+| Runtime overrides | `Conversation.runtime_overrides` | **Yes** — carry exactly |
+| Peer messages | `Message.conversation_id` (outbound) / `InboundQueueEntry.conversation_id` (inbound) | **Per-side only** — see 1.7 |
+| Tasks the agent owns | `tasks.assignee` | **No** — no `conversation_id` column at all |
+
+Two consequences the design has to absorb:
+
+- **Tasks cannot be scoped to a conversation.** `tasks` is project-scoped with an `assignee`. A
+  handoff can carry "tasks assigned to this agent", which is identical for every concurrent
+  conversation that agent owns. Either that imprecision is accepted and stated, or `tasks` gains a
+  conversation binding — which is a larger change than this one.
+- **Runtime overrides are not cosmetic.** `conv-ee0b0582` carried
+  `{"permission_mode": "manual"}` from an earlier operator session; inheriting it silently is what
+  expired five approvals and failed `run-9058966b` after 11m36s. A successor that silently
+  inherits, or silently drops, a posture will produce exactly that class of confusion.
+
+## 1.7 — Does the peer need to be told? The premise is too generous
+
+The task supposes routing "will resolve to the successor — establish by test whether that is
+correct or merely convenient." It is **neither. It is already wrong today, before handoffs enter
+the picture.**
+
+`messages.py:133` — when a peer omits `conversation_id` (the normal case, since a sender rarely
+knows the recipient's thread ids), delivery goes to `latest_open_conversation(recipient)`:
+`lifecycle='open'` ordered by `updated_at DESC`. **Whatever thread the recipient touched most
+recently**, with no reference to the sender, to prior traffic between the pair, or to the sender's
+own conversation.
+
+Observed in the live database — three messages from `codex-1` to `haiku-1`, one ongoing peer
+exchange by any human reading, delivered into three unrelated `haiku-1` conversations:
+
+| Message | Landed in | That thread is about |
+|---|---|---|
+| `pong` / `Please send a reply.` / `Received.` | `conv-b275cb8d` | *"Send a message to codex-1 asking it to reply…"* |
+| `Please reply with the single word 'ack'.` | `conv-dbaf9847` | *"Create a file called notes.md…"* |
+| `Please respond with the exact phrase: ok 1.` | `conv-f22fb84f` | *"Renamed live from the row menu"* |
+
+Note also that `Message.conversation_id` **is** recorded — but it holds the *sender's* thread
+(`conv-a6b2e314`, a `codex-1` conversation) and is never consulted for delivery. The data to do
+better is already being written and then ignored.
+
+**Answer to the question as asked:** after a handoff the successor is the most-recently-updated
+open conversation, so peer traffic does follow it — by the same accident that scattered it above,
+and only until the agent touches any other thread. Telling `haiku-1` about the handoff would not
+help, because `haiku-1` has no binding to the predecessor to update.
+
+## 1.8 — Should a handoff carry peer relationships forward?
+
+**The question dissolves: there are no peer relationships in the data model to carry.**
+
+There is a per-message `sender`/`recipient` pair and a `conversation_id` pointing at the sender's
+thread. There is no representation of "these two agents are working the same thread", so a
+successor starting peer-blank is not a *default* — it is the only state that exists. Every
+conversation is already peer-blank; peer messages arrive by recency.
+
+This is the finding that most reshapes the slice, and it reshapes it by **narrowing** it. Carrying
+peer context across a handoff is not implementable on top of recency routing; it would be building
+the visible half of a feature whose foundation is missing. Two honest options for 1.9:
+
+1. **Scope the rework to the single-agent case** — artifact, verification, lineage, delivery to
+   the successor — and record peer carry-forward as blocked on conversation-bound peer routing.
+2. **Fix the routing first**, in its own change: bind delivery to the sender's conversation (the
+   column is already populated) or to a durable pair thread, then revisit carry-forward.
+
+Recommend (1) for this change and a separate proposal for the routing defect, which is a live bug
+affecting every peer message today and is not caused by handoffs.
+
+---
+
 ## Method notes for whoever repeats this
 
 - The probe lives outside the repository (`C:\Users\huida\Documents\aw-probe\observe_handoff.py`)

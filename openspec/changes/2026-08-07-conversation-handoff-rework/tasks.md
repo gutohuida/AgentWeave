@@ -88,19 +88,44 @@ Findings live in `openspec/explorations/2026-08-08-handoff-behaviour.md`.
       **Stamp, don't ask:** the whole header block plus Files touched, all Hub-known and all got
       wrong or non-answered by the model. **Keep, model-authored:** Goal, Current state, Key
       decisions, Dead ends, Verification, Next steps, Open questions, Read on resume.
-- [ ] 1.5 Decide whether the artifact is structured (columns or JSON, machine-checkable) or markdown
+- [x] 1.5 Decide whether the artifact is structured (columns or JSON, machine-checkable) or markdown
       (one blob, model-authored). Verification at task 1.11 depends on this answer
-- [ ] 1.6 Determine what a handoff must carry that a single-agent session never had: the peer
+      **Decided: hybrid** — a structured envelope the Hub fills and validates, carrying one
+      markdown body the model writes. The boundary is 1.4's, and it is verifiability: Hub-known
+      fields are checkable so structuring them lets a bad handoff be *failed*; judgement fields
+      cannot be schema-validated, so structuring them adds ceremony and removes no failure.
+- [x] 1.6 Determine what a handoff must carry that a single-agent session never had: the peer
       messages in the thread, the tasks the agent owns, outstanding questions, the conversation's
       runtime overrides
+      **Answered, and they are not equally carryable.** Questions (`questions.conversation_id`,
+      `unasked_questions.conversation_id`) and runtime overrides (`Conversation.runtime_overrides`)
+      are conversation-scoped — carry exactly. Peer messages are per-side only (see 1.7).
+      **Tasks are not conversation-scoped at all** — `tasks` is project-scoped with an `assignee`
+      and has no `conversation_id`, so a handoff can only carry the agent's whole task list,
+      identical across its concurrent conversations. Accept and state that, or bind tasks to
+      conversations in a separate change. Overrides matter concretely: an inherited
+      `{"permission_mode": "manual"}` is what failed `run-9058966b`.
 
 **The multi-agent question — most likely to reshape the slice**
 
-- [ ] 1.7 `claude-1` hands off a conversation in which `haiku-1` participated. Does `haiku-1` need
+- [x] 1.7 `claude-1` hands off a conversation in which `haiku-1` participated. Does `haiku-1` need
       to be told? Its next message routes by `latest_open_conversation`, which will resolve to the
       successor — establish by test whether that is correct or merely convenient
-- [ ] 1.8 Determine whether a handoff should carry the peer relationships forward at all, or whether
+      **Neither — it is already wrong today, independent of handoffs.** `messages.py:133` routes a
+      peer message with no `conversation_id` to `latest_open_conversation(recipient)`: whatever
+      thread the recipient touched most recently. Observed live — three messages from `codex-1` to
+      `haiku-1`, one exchange by any human reading, delivered into three unrelated `haiku-1`
+      threads (`conv-b275cb8d`, `conv-dbaf9847`, `conv-f22fb84f`). `Message.conversation_id` is
+      populated with the *sender's* thread and never consulted for delivery. Telling `haiku-1`
+      would not help: it has no binding to the predecessor to update.
+- [x] 1.8 Determine whether a handoff should carry the peer relationships forward at all, or whether
       a successor starting peer-blank is the right default
+      **The question dissolves — there are no peer relationships in the data model to carry.**
+      Every conversation is already peer-blank; peer messages arrive by recency. Carry-forward is
+      not implementable on top of recency routing. **Recommendation: narrow this change to the
+      single-agent case** (artifact, verification, lineage, delivery) and raise the routing defect
+      as its own proposal — it is a live bug affecting every peer message and is not caused by
+      handoffs.
 
 **Then, and only then**
 
