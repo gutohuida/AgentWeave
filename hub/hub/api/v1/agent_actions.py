@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_auth import AgentActor, get_agent_actor
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
-from ...db.models import Question
+from ...db.models import CheckpointNote, Question
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
 from ...schemas.questions import QuestionCreate, QuestionOption, QuestionResponse
@@ -243,6 +243,70 @@ async def update_shared_task(
         updated_by_run_id=actor.run_id,
         session=session,
     )
+
+
+class AgentCheckpointNotes(BaseModel):
+    """What the agent knows that the record does not.
+
+    Capped near the 1-2k tokens Anthropic recommends for distillation. The caps are not
+    incidental: notes are one input to a checkpoint the Hub is otherwise authoritative for, and an
+    agent allowed to write an essay here would be writing the checkpoint by the back door — which
+    is exactly the arrangement this change replaces.
+    """
+
+    intent: str = Field(max_length=1500)
+    suspicions: List[str] = Field(default_factory=list, max_length=8)
+    warnings: List[str] = Field(default_factory=list, max_length=8)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("suspicions", "warnings")
+    @classmethod
+    def cap_entries(cls, value: List[str]) -> List[str]:
+        for entry in value:
+            if len(entry) > 400:
+                raise ValueError("each entry must be at most 400 characters")
+        return value
+
+
+@router.post("/checkpoint-notes", status_code=status.HTTP_201_CREATED)
+async def submit_checkpoint_notes(
+    body: AgentCheckpointNotes,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record the agent's notes for the next checkpoint of its current conversation.
+
+    Refused outside a conversation: notes are consumed by that conversation's next checkpoint, so
+    a note with nowhere to land is better rejected loudly than stored where nothing will read it.
+    """
+    conversation_id = await conversation_id_for_run(session, actor.run_id)
+    if not conversation_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This run is not attached to a conversation, so notes have nowhere to land.",
+        )
+
+    note = CheckpointNote(
+        id=f"note-{short_id()}",
+        project_id=actor.project_id,
+        conversation_id=conversation_id,
+        agent=actor.agent,
+        run_id=actor.run_id,
+        intent=body.intent,
+        suspicions=list(body.suspicions),
+        warnings=list(body.warnings),
+    )
+    session.add(note)
+    await session.commit()
+    await persist_event(
+        session,
+        actor.project_id,
+        "checkpoint_notes_submitted",
+        {"note_id": note.id, "conversation_id": conversation_id, "agent": actor.agent},
+        agent=actor.agent,
+    )
+    return {"id": note.id, "conversation_id": conversation_id, "recorded": True}
 
 
 @router.post("/questions", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)

@@ -420,16 +420,64 @@ A Hub-side, out-of-band, single-purpose model invocation. Generalises
 
 ## 6. Generation, agent notes, and self-validation
 
-- [ ] 6.1 `submit_checkpoint_notes` MCP tool — schema'd, capped near 1–2k tokens, asking **only**
+- [x] 6.1 `submit_checkpoint_notes` MCP tool — schema'd, capped near 1–2k tokens, asking **only**
       for what is not in the transcript: intent in flight, unverified suspicions, warnings
-- [ ] 6.2 Notes are an *input*, never the artifact. Test that timeout, refusal, and garbage all
+
+      Tool in `mcp_server.py`, endpoint `POST /agent-actions/checkpoint-notes`, storage in
+      `CheckpointNote` (migration `0045`). Caps: intent 1500 chars, 8 entries × 400 chars each.
+      Not incidental — an agent allowed to write at length here would be writing the checkpoint
+      by the back door, which is the arrangement this change replaces.
+
+      **A table, not a column on `conversations`.** "The agent had nothing to add" and "the agent
+      was never asked, or never answered" must stay distinguishable; that is the same reason the
+      spec requires a tool call rather than prose parsing. Notes from a run with no conversation
+      are refused 409 rather than stored where nothing will read them
+- [x] 6.2 Notes are an *input*, never the artifact. Test that timeout, refusal, and garbage all
       still produce a checkpoint
+
+      From the Hub's side, timeout and refusal and silence are one state: no note row. A
+      checkpoint generated without notes says so in its body, so the two absences do not read
+      identically to a successor. **Notes are marked consumed even when generation produced
+      nothing** — otherwise a failed generation leaves stale intent to be picked up by a later
+      checkpoint as though it were current, the same staleness as reporting a pre-compaction
+      context percentage
 - [ ] 6.3 Request notes at the **notes threshold**, below the cutover threshold, so they are not
       written from an already-degraded context
-- [ ] 6.4 Probe the generated checkpoint against database ground truth — files changed, tasks
+      **BLOCKED on section 8.** The threshold configuration this keys on (8.4/8.5) does not exist
+      yet; the input side is complete, so this is the wiring only
+- [x] 6.0 **Generation itself** — `hub/hub/checkpoint_generation.py`, the glue sections 4 and 5
+      were built for. A Hub-owned versioned prompt (`checkpoint/1`), input assembled from the
+      anchor plus only the turns since, `CheckpointBody` as the schema, `render_body` /
+      `render_checkpoint` as the artifact a successor receives.
+
+      **Both sides of the exchange are bounded by when the anchor was taken.** Filtering only the
+      agent's outputs by covered run id — the obvious implementation — would replay every operator
+      message the previous checkpoint already summarised, on every subsequent checkpoint, and
+      `InboundQueueEntry` carries no run to filter by in any case. The transcript trims
+      newest-first, so a conversation that overflows the cap keeps its *recent* turns rather than
+      its opening
+- [x] 6.4 Probe the generated checkpoint against database ground truth — files changed, tasks
       assigned, questions unanswered
-- [ ] 6.5 A checkpoint whose probes disagree with the database is **failed**. "Ready" means a
+
+      A second Worker call (`checkpoint-probe/1`) reading the checkpoint blind, graded by
+      `grade_probe` against the envelope. **The probe reads the whole rendered checkpoint, not the
+      body alone** — a deliberate choice, and the alternative is not merely weaker but broken: the
+      generation prompt is forbidden from asking for computed fields, so the body legitimately
+      contains no file list and a probe of the body in isolation would fail every well-formed
+      checkpoint. Reading the artifact exactly as a successor receives it catches what is real —
+      a body contradicting the envelope, and a render that drops the envelope on the way out.
+
+      Findings separate `missing` from `invented`: a missing path is information the checkpoint
+      lost, an invented one is information it made up, and they call for different fixes. Path
+      separators and leading `./` are normalised, so a reader echoing a Windows path has not
+      "disagreed"
+- [x] 6.5 A checkpoint whose probes disagree with the database is **failed**. "Ready" means a
       record exists and passed, never "the run stopped"
+
+      **A probe that cannot run leaves the checkpoint `ready` with `probe_status` NULL.** An
+      unrunnable probe is the Hub's failure, not the checkpoint's; failing a checkpoint because
+      the grader was unavailable would recreate — in the other direction — exactly what this
+      change removes, a status that reports something other than what it names
 - [ ] 6.6 Blind-resume acceptance test: a reader given only the checkpoint answers the probe
       questions correctly
 - [ ] 6.7 Record `trigger` on every checkpoint. **One prompt for all triggers in v1 — provisional,

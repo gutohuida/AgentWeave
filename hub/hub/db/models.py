@@ -1014,6 +1014,45 @@ class Checkpoint(Base):
     )
 
 
+class CheckpointNote(Base):
+    """What an agent knew that never reached the transcript.
+
+    Hub-side generation cannot recover what was never recorded: what the agent was *about* to do,
+    what it suspects but did not verify, what it would warn a successor away from. So the agent is
+    asked — through a tool, so that the request, the answer, and the *absence* of an answer are
+    all observable, which prompt-and-parse would not be.
+
+    A row, not a column on the conversation, for exactly that reason: "the agent had nothing to
+    add" and "the agent was never asked" must not be the same absence.
+
+    Notes are an **input** to generation and never the artifact. `consumed_by_checkpoint_id`
+    records which checkpoint took them, so a second checkpoint does not silently reuse notes
+    written for the first.
+    """
+
+    __tablename__ = "checkpoint_notes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    conversation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    agent: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What the agent was in the middle of doing when it was asked.
+    intent: Mapped[str] = mapped_column(Text, nullable=False)
+    # Believed but unverified — the things a transcript records as silence.
+    suspicions: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # What a successor should be steered away from.
+    warnings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    consumed_by_checkpoint_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_checkpoint_notes_conversation_created", "conversation_id", "created_at"),
+    )
+
+
 # Every way a worker invocation can end. Kept in one place so the check constraint and
 # `worker.OUTCOMES` cannot drift; a test asserts they agree.
 WORKER_OUTCOMES = (

@@ -224,7 +224,7 @@ def test_migration_0026_preserves_legacy_project_and_bootstrap_secret(tmp_path) 
         command.upgrade(cfg, "head")
 
     project, credential, version = asyncio.run(_read_upgraded_state())
-    assert version == "0044"
+    assert version == "0045"
     assert project["name"] == "Legacy"
     assert project["working_directory"] is None
     assert project["path_key"] is None

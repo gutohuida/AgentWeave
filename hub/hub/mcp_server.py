@@ -375,6 +375,37 @@ def get_answer(question_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
+def submit_checkpoint_notes(
+    intent: str,
+    suspicions: Optional[List[str]] = None,
+    warnings: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Record what you know that this conversation's record does not, for its next checkpoint.
+
+    The Hub writes the checkpoint itself from the conversation record, and already knows which
+    files changed, which tasks are assigned, what is unanswered, and when everything happened.
+    Do not restate any of that here.
+
+    Give only what cannot be read back from the transcript:
+      intent     — what you were in the middle of doing, and what you were about to do next.
+      suspicions — what you believe but did not verify, and what would confirm or refute it.
+      warnings   — what a successor should not repeat, assume, or waste time re-deriving.
+
+    Keep it brief; a few hundred words in total is right. These notes are one input among
+    several, not the checkpoint — the checkpoint is produced whether or not you call this.
+    """
+    return _hub_request(
+        "POST",
+        "/checkpoint-notes",
+        {
+            "intent": intent,
+            "suspicions": list(suspicions or []),
+            "warnings": list(warnings or []),
+        },
+    )
+
+
+@mcp.tool()
 def request_agent(name: str, template: str, task: str) -> Dict[str, Any]:
     """Request a new agent from a pre-approved template under the project agent budget."""
     return _hub_request(
