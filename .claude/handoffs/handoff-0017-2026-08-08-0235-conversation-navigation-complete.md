@@ -1,9 +1,9 @@
-# Handoff: conversation navigation — 79/79, shipped and deployed; nothing driven in a browser
+# Handoff: conversation navigation — 80/80, shipped and deployed; nothing driven in a browser
 
-**Date:** 2026-08-08T02:35 · **Branch:** hub-native-experience · **HEAD:** 0f3fdd3
+**Date:** 2026-08-08T02:35 · **Branch:** hub-native-experience · **HEAD:** 5a4db3c
 **Agent:** Claude Opus 5 (1M context) (Claude Code)
 **Previous handoff:** .claude/handoffs/handoff-0016-2026-08-08-0145-conversation-navigation-backend-and-rail-shipped.md
-**Status:** chunk complete. Six commits, working tree clean.
+**Status:** chunk complete. Seven commits, working tree clean.
 `2026-08-07-conversation-navigation` is **80/80 tasks** — every section done, including the
 operator's new 6.6 (the recency cap) and 7.8 (the new-conversation headline). The change is
 **not archived**: the operator tests tomorrow and has not signed off.
@@ -40,7 +40,7 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
   -WorkingDirectory 'C:\Users\huida\Documents\projects\AgentWeave\hub' -WindowStyle Hidden
 ```
 
-### Six commits this session, oldest first
+### Seven commits this session, oldest first
 
 1. `239d929` — the recency view's per-project cap (`RECENCY_DISPLAY_CAP = 15`) with
    "Show N more" / "Show fewer". The operator's overnight requirement, plus tasks.md 6.6 and a
@@ -83,7 +83,7 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
 
 ### Known-broken / not done
 
-1. **Nothing has been driven in a browser.** Every UI claim rests on 577 frontend tests. On
+1. **Nothing has been driven in a browser.** Every UI claim rests on 576 frontend tests. On
    2026-08-08 the operator found two defects by eye in under a minute that 549 passing tests did
    not. Treat the rail, the row menus, the new-conversation surface and the header's handoff
    button as **unvalidated by eye**.
@@ -338,10 +338,10 @@ Start-Process -FilePath 'C:\Users\huida\AppData\Local\Programs\Python\Python311\
 Branch `hub-native-experience`, HEAD `0f3fdd3`, **working tree clean**. **No upstream — nothing
 has ever been pushed on this branch. 261 commits ahead of `master`** (was 253 at handoff-0016).
 
-Six commits this session: `239d929`, `d0a9247`, `7ad0ad9`, `b947d87`, `e4958fc`, `7f91131`,
-`0f3fdd3` (seven objects; `7f91131` and `0f3fdd3` are the build-artefact and verification pair).
+Commits this session: `239d929`, `d0a9247`, `7ad0ad9`, `b947d87`, `e4958fc`, `7f91131`,
+`0f3fdd3`, `8f81dcc` (this handoff), `5a4db3c` (the headline).
 
-**openspec in flight (6):** `2026-08-07-conversation-navigation` (**79/79, ready to sync and
+**openspec in flight (6):** `2026-08-07-conversation-navigation` (**80/80, ready to sync and
 archive once the operator has looked at it**), `2026-08-07-spec-execution-coordinator` (0/29,
 gated skeleton — do not start), `2026-08-07-conversation-handoff-rework` (0/24, gated skeleton —
 do not start), `2026-08-04-hub-charcoal-visual-refresh` (39/42),
@@ -390,7 +390,7 @@ do not start), `2026-08-04-hub-charcoal-visual-refresh` (39/42),
 
 ## Read on resume
 
-- `openspec/changes/2026-08-07-conversation-navigation/tasks.md` — 79/79 with the §11 prose notes
+- `openspec/changes/2026-08-07-conversation-navigation/tasks.md` — 80/80 with the §11 prose notes
   recording exactly what each live check covered. Start here.
 - `hub/ui/src/components/layout/RowMenu.tsx` and `hub/ui/src/index.css` (the `.row-action` block,
   ~line 380) — next step 2's target if the `⋯` needs to be always visible.
