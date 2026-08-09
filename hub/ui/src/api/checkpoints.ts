@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
+import { useSSE } from '@/hooks/useSSE'
 import { useConfigStore } from '@/store/configStore'
 
 export interface Checkpoint {
@@ -31,9 +32,24 @@ export interface CutoverResult {
   agent: string
 }
 
-/** Every checkpoint for a conversation, newest first. */
+/** Every checkpoint for a conversation, newest first.
+ *
+ * Refreshed on `checkpoint_ready`, which is what the Hub broadcasts when the threshold fires.
+ * Without that subscription the offer existed only in the database: the checkpoint was generated,
+ * probed and stored, and the operator saw nothing until they happened to reload. */
 export function useCheckpoints(conversationId: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const queryClient = useQueryClient()
+
+  useSSE((event) => {
+    if (event.type !== 'checkpoint_ready' && event.type !== 'conversation_cut_over') return
+    const data = (event.data ?? {}) as { conversation_id?: string }
+    if (data.conversation_id !== conversationId) return
+    queryClient.invalidateQueries({
+      queryKey: ['project', projectId, 'checkpoints', conversationId],
+    })
+  })
+
   return useQuery<Checkpoint[]>({
     queryKey: ['project', projectId, 'checkpoints', conversationId],
     queryFn: () =>

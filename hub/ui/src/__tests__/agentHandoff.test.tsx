@@ -46,6 +46,14 @@ vi.mock('@/api/unaskedQuestions', () => ({
   useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
+let offeredCheckpoints: unknown[] = []
+
+vi.mock('@/api/checkpoints', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/checkpoints')>()
+  // The mutations stay real — they go through the mocked fetch, which is what these assert on.
+  return { ...actual, useCheckpoints: () => ({ data: offeredCheckpoints }) }
+})
+
 vi.mock('@/api/queue', () => ({
   useQueuedEntries: () => ({ data: [] }),
   useQueueStatus: () => ({ data: undefined }),
@@ -106,6 +114,7 @@ describe('agent conversation handoff', () => {
       updated_at: '2026-07-29T12:00:00Z',
     }]
     checkpointStatus = 'ready'
+    offeredCheckpoints = []
     fetchMock.mockReset()
     fetchMock.mockImplementation((url, init) => {
       const path = String(url)
@@ -243,5 +252,52 @@ describe('agent conversation handoff', () => {
       message: 'Continue implementing the feature.',
       conversation_id: 'conv-successor',
     })
+  })
+
+  it('offers a checkpoint the Hub made on its own, and cuts over from the offer', async () => {
+    // The reported failure: under "offer me one" the threshold fired, wrote a real probed
+    // checkpoint, and the operator saw nothing — `checkpoint_ready` had no listener anywhere in
+    // the UI, so the offer existed only in the database.
+    offeredCheckpoints = [{
+      id: 'ckpt-auto',
+      conversation_id: 'conv-old',
+      agent: 'claude',
+      trigger: 'context_pressure',
+      status: 'ready',
+      visibility: 'private',
+      lineage_id: 'ckpt-auto',
+    }]
+    const onSelectConversation = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <ControlledConversation
+        agent={agent}
+        conversationId="conv-old"
+        onSelectConversation={onSelectConversation}
+      />,
+    )
+
+    const banner = screen.getByTestId('conversation-banner')
+    expect(banner).toHaveAttribute('data-banner-id', 'checkpoint-offered')
+    // An offer is not a failure, and must not be dressed as one.
+    expect(banner).toHaveAttribute('data-banner-tone', 'offer')
+
+    await user.click(screen.getByTestId('banner-action-checkpoint-offered'))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(calledUrl(0)).toContain('/checkpoints/ckpt-auto/cutover')
+    await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-successor'))
+  })
+
+  it('does not offer a checkpoint that is unwritten or failed', () => {
+    offeredCheckpoints = [
+      { id: 'a', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'unwritten', visibility: 'private', lineage_id: 'a' },
+      { id: 'b', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure', status: 'failed', visibility: 'private', lineage_id: 'b' },
+    ]
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    // Neither has anything a successor could continue from.
+    expect(screen.queryByTestId('banner-action-checkpoint-offered')).not.toBeInTheDocument()
   })
 })

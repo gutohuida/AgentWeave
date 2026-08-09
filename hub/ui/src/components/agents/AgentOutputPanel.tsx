@@ -20,7 +20,7 @@ import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, useQueuedEntries, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
-import { continueConversation, cutOver, takeCheckpoint } from '@/api/checkpoints'
+import { continueConversation, cutOver, takeCheckpoint, useCheckpoints } from '@/api/checkpoints'
 import { ApiError } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
@@ -273,7 +273,53 @@ export function AgentOutputPanel({
 
   // Fixed evaluation order so a cleared condition never reshuffles the ones
   // that remain (design.md: "Conditions are reported in a banner stack").
-  const banners: ConversationBanner[] = [
+  /**
+   * A checkpoint the Hub made on its own, waiting to be acted on.
+   *
+   * Under `offered` the threshold produces a real, probed checkpoint and broadcasts
+   * `checkpoint_ready` — and until now nothing listened, so the offer existed only in the
+   * database. Confirmed on a live agent: two checkpoints written, both ready, both probes
+   * passed, and the operator reported that checkpointing "did not work". A signal nothing
+   * surfaces is the exact defect this capability was built to remove.
+   *
+   * Only `ready` counts. `unwritten` has nothing to read and `failed` disagreed with the
+   * database, and neither is something to offer a successor.
+   */
+  const { data: checkpoints = [] } = useCheckpoints(currentConversationId ?? null)
+  const offeredCheckpoint = checkpoints.find(
+    (checkpoint) => checkpoint.status === 'ready' && checkpoint.trigger === 'context_pressure',
+  )
+
+  const handleCutOver = async () => {
+    if (!projectId || !offeredCheckpoint || isSending) return
+    setIsSending(true)
+    try {
+      const result = await cutOver(projectId, offeredCheckpoint.id)
+      moveTo(result.successor_conversation_id)
+      setSessionNotice('Continuing in a new conversation')
+    } catch (err) {
+      console.error('Failed to cut over:', err)
+      setSessionNotice(
+        err instanceof ApiError && err.status === 409
+          ? 'Cannot cut over yet — finish or stop the run, and let queued messages deliver'
+          : 'Could not cut over',
+      )
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const bannerCandidates: Array<ConversationBanner | null> = [
+    offeredCheckpoint
+      ? {
+          id: 'checkpoint-offered',
+          tone: 'offer' as const,
+          message:
+            'A checkpoint is ready for this conversation. Cutting over continues in a new one '
+            + 'and archives this.',
+          action: { label: 'Cut over', onClick: handleCutOver, pending: isSending },
+        }
+      : null,
     submissionError ? { id: 'run-failure', message: submissionError } : null,
     sseConnectionState === 'reconnecting'
       ? { id: 'stream-loss', message: 'Live updates are disconnected — reconnecting…' }
@@ -281,7 +327,10 @@ export function AgentOutputPanel({
     timelineEntries.some((entry) => entry.hop_budget_exceeded)
       ? { id: 'blocked-queue', message: 'Queued messages are blocked by the hop limit — deliver now to continue.' }
       : null,
-  ].filter((banner): banner is ConversationBanner => banner !== null)
+  ]
+  const banners: ConversationBanner[] = bannerCandidates.filter(
+    (banner): banner is ConversationBanner => banner !== null,
+  )
 
   const handleWithdraw = (entryId: string) => {
     if (!projectId) return
