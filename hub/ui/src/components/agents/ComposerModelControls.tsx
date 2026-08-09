@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ModelPicker } from './ModelPicker'
-import { useModelCatalog, providerForRunner, type ControlDescriptor } from '@/api/modelCatalog'
+import {
+  useModelCatalog,
+  providerForRunner,
+  modelForId,
+  windowForId,
+  type ControlDescriptor,
+  type ProviderDescriptor,
+} from '@/api/modelCatalog'
 
 /** The AgentWeave counterpart of t3code's `composerControlClassName` (design.md Decision
  * 1) — every composer trigger (model, effort, conversation routing, target agent) renders
@@ -157,6 +164,54 @@ function EnumControlPill({
   )
 }
 
+/** The context-window choice, for a model that offers more than one.
+ *
+ * Rendered on the same `ControlPill` shape as Effort rather than as a second `ModelPicker`: the
+ * choice is two or three labelled sizes, not a searchable list the catalog is expected to grow.
+ *
+ * Selecting a window calls `onChangeModel`, because a variant *is* a model id — nothing
+ * downstream of this pill learns a new concept.
+ */
+function WindowPill({
+  provider,
+  effectiveModel,
+  onChangeModel,
+}: {
+  provider: ProviderDescriptor
+  effectiveModel: string | null
+  onChangeModel: (modelId: string) => void
+}) {
+  const model = modelForId(provider, effectiveModel) ?? provider.models.find((m) => m.default)
+  // A model with one window offers no choice, and a pill with one option is not one.
+  if (!model || model.windows.length < 2) return null
+  // Null `effectiveModel` means the provider's default model at its default window — there is no
+  // override to read, so fall through to the declared default rather than showing nothing.
+  const selected =
+    windowForId(provider, effectiveModel)
+    ?? model.windows.find((w) => w.default)
+    ?? model.windows[0]
+
+  return (
+    <ControlPill label="Context" valueLabel={selected?.label ?? '—'}>
+      {(close) => (
+        <>
+          {model.windows.map((variant) => (
+            <ControlOption
+              key={variant.id}
+              active={variant.id === selected?.id}
+              label={variant.label}
+              onSelect={() => {
+                onChangeModel(variant.id)
+                close()
+              }}
+            />
+          ))}
+        </>
+      )}
+    </ControlPill>
+  )
+}
+
 /**
  * Renders the target agent's provider's models and controls, entirely from the catalog —
  * no provider name, model id, or control id is hardcoded here
@@ -178,6 +233,11 @@ export function ComposerModelControls({
   return (
     <>
       <ModelPicker provider={provider} effectiveModel={effectiveModel} onChangeModel={onChangeModel} />
+      <WindowPill
+        provider={provider}
+        effectiveModel={effectiveModel}
+        onChangeModel={onChangeModel}
+      />
       {provider.controls
         .filter((control) => control.kind === 'enum')
         .map((control) => (

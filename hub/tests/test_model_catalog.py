@@ -3,6 +3,7 @@
 from hub.db.models import RUNNER_CLIS
 from hub.model_catalog import (
     CATALOG,
+    context_window_for_model,
     get_provider,
     model_context_window,
     render_control_args,
@@ -128,3 +129,78 @@ class TestProviderLookup:
         entry = get_provider("codex")
         assert entry is not None
         assert entry.provider == "codex"
+
+
+class TestWindowVariants:
+    """A model may offer more than one context window (2026-08-09-model-context-window-variants).
+
+    Live-verified 2026-08-09 against this machine's `claude` CLI, reading each run's own
+    `result.modelUsage.<model>.contextWindow`: Haiku 4.5 is 200,000 at its base id and declares a
+    1,000,000 variant at `[1m]`. `[bogus]` and `[200k]` are both refused by the provider, so the
+    suffix is parsed rather than ignored.
+    """
+
+    BASE = "claude-haiku-4-5-20251001"
+    LONG = "claude-haiku-4-5-20251001[1m]"
+
+    def test_a_variant_resolves_to_its_own_window_not_its_base_models(self):
+        # The whole point of having selected it.
+        assert model_context_window("claude", self.BASE) == 200_000
+        assert model_context_window("claude", self.LONG) == 1_000_000
+
+    def test_the_variant_pass_beats_the_prefix_fallback(self):
+        """The defect this ordering exists to prevent.
+
+        `claude-haiku-4-5-20251001[1m]` starts with `claude-haiku-4-5-20251001`, so the
+        longest-declared-prefix rule would answer 200,000 for the model chosen *because* it holds
+        1,000,000 — reporting a conversation as five times fuller than it is, and checkpointing
+        it on that.
+        """
+        assert context_window_for_model(self.LONG) == 1_000_000
+        assert context_window_for_model(self.BASE) == 200_000
+
+    def test_a_variant_id_is_a_model_id(self):
+        entry = get_provider("claude")
+        assert entry is not None
+        assert entry.model(self.LONG) is entry.model(self.BASE)
+
+    def test_a_variant_is_accepted_as_a_model_override(self):
+        accepted, rejection = validate_overrides("claude", {"model": self.LONG})
+        assert rejection is None
+        assert accepted == {"model": self.LONG}
+
+    def test_an_undeclared_variant_is_still_refused(self):
+        # `[200k]` does not exist — the provider refuses it, and so does the Hub, before spawning.
+        _, rejection = validate_overrides("claude", {"model": f"{self.BASE}[200k]"})
+        assert rejection is not None
+        assert rejection.control == "model"
+
+    def test_a_selected_window_is_carried_to_the_provider_unaltered(self):
+        # "model" is applied by build_command's own path, so it must survive control rendering
+        # untouched rather than being rewritten to the base id.
+        assert render_control_args("claude", {"model": self.LONG}) == []
+        accepted, _ = validate_overrides("claude", {"model": self.LONG})
+        assert accepted["model"] == self.LONG
+
+    def test_models_with_one_window_declare_no_variants(self):
+        """Opus 5, Sonnet 5 and Fable 5 accept `[1m]` but return the same 1,000,000 their base ids
+        already give on this subscription. Declaring two choices producing one outcome would put a
+        control on screen that changes nothing."""
+        entry = get_provider("claude")
+        assert entry is not None
+        for model_id in ("claude-opus-5", "claude-sonnet-5", "claude-fable-5"):
+            model = entry.model(model_id)
+            assert model is not None
+            assert model.windows == ()
+
+    def test_a_declared_window_matches_the_model_it_belongs_to(self):
+        """A variant's default must agree with the model's own declared window, or the two would
+        describe the same spawn differently."""
+        for entry in CATALOG.values():
+            for model in entry.models:
+                if not model.windows:
+                    continue
+                default = next((w for w in model.windows if w.default), None)
+                assert default is not None, f"{model.id} declares windows but no default"
+                assert default.id == model.id
+                assert default.context_window == model.context_window

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Icon, ProviderMark } from '@/components/common/Icon'
 import { composerControlClassName } from './ComposerModelControls'
-import type { ProviderDescriptor } from '@/api/modelCatalog'
+import { modelForId, type ProviderDescriptor } from '@/api/modelCatalog'
 
 const FAVOURITES_STORAGE_KEY = 'aw.composer.favouriteModels'
 
@@ -52,7 +52,10 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
   const rootRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const current = provider.models.find((m) => m.id === effectiveModel) ?? provider.models.find((m) => m.default)
+  // Resolved through `modelForId` rather than by id equality: selecting a context window sets the
+  // model override to that window's own id, so a bare `m.id === effectiveModel` would fail to
+  // find the model and the pill would read "—" for a model that is plainly selected.
+  const current = modelForId(provider, effectiveModel) ?? provider.models.find((m) => m.default)
 
   useEffect(() => {
     if (!open) return
@@ -192,7 +195,9 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
                 </div>
                 {filtered.map((model, index) => {
                   const isFavourite = favourites.has(favouriteKey(provider.provider, model.id))
-                  const active = model.id === (effectiveModel ?? current?.id)
+                  // Against the resolved model, not the raw override: a selected window variant
+                  // carries its own id, and comparing to that would tick nothing.
+                  const active = model.id === current?.id
                   return (
                     <div
                       key={model.id}

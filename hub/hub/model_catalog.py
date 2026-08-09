@@ -11,10 +11,31 @@ Model IDs and context windows below are live-verified, not authored from memory:
 
 - Claude: `claude --help` documents `--model`'s accepted full names and aliases; `--effort`'s
   five values (`low, medium, high, xhigh, max`) come directly from that same `--help` output.
-  Sonnet 5 (1,000,000) and Haiku 4.5 (200,000) context windows were live-verified from Claude's
-  own `result.modelUsage.<model>.contextWindow` (see `runner_parsing.py`'s docstring). Opus 5 and
-  Fable 5 have no live-verified window on this machine, so they declare `context_window=None`
-  (unknown) rather than a guessed value — the rule this catalog exists to enforce.
+  Every context window below was live-verified from Claude's own
+  `result.modelUsage.<model>.contextWindow` (see `runner_parsing.py`'s docstring), on 2026-08-09:
+  Opus 5, Sonnet 5 and Fable 5 at 1,000,000, Haiku 4.5 at 200,000.
+
+  *(This paragraph previously said Opus 5 and Fable 5 declared `context_window=None` because no
+  window had been verified for them, while the code declared 1,000,000 for both. The measurement
+  above settles it in the code's favour; the prose was stale, and a docstring claiming this
+  catalog's central rule is being followed where it visibly was not is worse than no docstring.)*
+
+  **Window variants.** `--model` accepts a `[1m]` suffix selecting a long-context beta, and it is
+  a real selector rather than ignored text: `claude-opus-5[bogus]` and `claude-opus-5[200k]` are
+  both refused ("may not exist or you may not have access to it"), so the provider parses it.
+  There is no suffix that selects a *smaller* window — a variant can only ever offer more.
+
+  Only Haiku 4.5 declares variants, because it is the only model where the two windows differ:
+  200,000 at its base id, 1,000,000 at `[1m]`. Opus 5, Sonnet 5 and Fable 5 accept the suffix but
+  return the same 1,000,000 their base ids already give, and declaring two choices that produce
+  one outcome would put a control on screen that changes nothing.
+
+  **Availability is a property of the subscription, not the model**, which is why entitlement is
+  not declared here. `claude-haiku-4-5-20251001[1m]` is refused on this machine with "The long
+  context beta is not yet available for this subscription" — a refusal about the account, not the
+  id. The same declaration would resolve on an entitled account, and the base windows for Opus and
+  Sonnet would themselves read differently there. The Hub cannot know an account's entitlements
+  without asking the provider, and spawning is how it asks.
 - Codex: read directly from `~/.codex/models_cache.json`, the CLI's own server-synced catalog
   (has a `fetched_at` timestamp and an `etag`) — not from the CLI's `--help` text, which lists no
   models. Only entries with `"visibility": "list"` are included (`codex-auto-review`, visibility
@@ -38,12 +59,33 @@ from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
+class WindowVariant:
+    """One selectable context window for a model, and the exact id that selects it.
+
+    Declared on the model rather than as a `ControlDescriptor` because it is not a control: a
+    control renders to argv through an `ApplySpec`, and this changes the model id itself, which
+    `runner_commands.build_command` applies by its own dedicated path. Making the variant *be* a
+    model id is what keeps the rest of the system out of it — validation, storage, command
+    construction and the usage path all already work on a model id, and none of them learns a
+    second concept.
+    """
+
+    id: str
+    label: str
+    context_window: Optional[int] = None
+    default: bool = False
+
+
+@dataclass(frozen=True)
 class ModelDescriptor:
     id: str
     label: str
     aliases: Tuple[str, ...] = ()
     context_window: Optional[int] = None
     default: bool = False
+    # Empty means one window and nothing to choose, which is every entry that does not say
+    # otherwise — so adding this field changed no existing declaration.
+    windows: Tuple[WindowVariant, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -95,9 +137,24 @@ class ProviderDescriptor:
     controls: Tuple[ControlDescriptor, ...]
 
     def model(self, model_id: str) -> Optional[ModelDescriptor]:
+        """The model *model_id* names — by its own id, or by one of its selectable windows.
+
+        A window variant is a model id in its own right (see `WindowVariant`), so everything that
+        asks "is this a model this provider declares?" has to answer yes for one. That includes
+        `validate_overrides` and `runners._reject_undeclared_model`, neither of which needs to
+        learn what a window is to keep working.
+        """
         for m in self.models:
-            if m.id == model_id:
+            if m.id == model_id or any(w.id == model_id for w in m.windows):
                 return m
+        return None
+
+    def window(self, model_id: str) -> Optional[WindowVariant]:
+        """The selectable window *model_id* names, or None if it names no variant."""
+        for m in self.models:
+            for variant in m.windows:
+                if variant.id == model_id:
+                    return variant
         return None
 
     def control(self, control_id: str) -> Optional[ControlDescriptor]:
@@ -137,6 +194,19 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 label="Haiku 4.5",
                 aliases=("haiku",),
                 context_window=200_000,
+                windows=(
+                    WindowVariant(
+                        id="claude-haiku-4-5-20251001",
+                        label="200K",
+                        context_window=200_000,
+                        default=True,
+                    ),
+                    WindowVariant(
+                        id="claude-haiku-4-5-20251001[1m]",
+                        label="1M",
+                        context_window=1_000_000,
+                    ),
+                ),
             ),
             ModelDescriptor(
                 id="claude-fable-5", label="Fable 5", aliases=("fable",), context_window=1_000_000
@@ -231,10 +301,17 @@ def get_provider(provider: str) -> Optional[ProviderDescriptor]:
 
 
 def model_context_window(provider: str, model_id: str) -> Optional[int]:
-    """The catalog's declared context window for *model_id*, or None if unknown or undeclared."""
+    """The catalog's declared context window for *model_id*, or None if unknown or undeclared.
+
+    A selectable window answers with its own size, not its base model's — that is the whole point
+    of having selected it.
+    """
     entry = get_provider(provider)
     if entry is None:
         return None
+    variant = entry.window(model_id)
+    if variant is not None:
+        return variant.context_window
     model = entry.model(model_id)
     return model.context_window if model is not None else None
 
@@ -244,14 +321,25 @@ def context_window_for_model(model_id: str) -> Optional[int]:
 
     A usage sample carries the model the run actually used, not the provider — the CLI reports
     what it loaded, and nothing upstream re-derives which catalog entry that was. Matching is
-    exact id, then alias, then longest declared id that the reported one starts with: providers
-    report dated snapshots (`claude-haiku-4-5-20251001`) that the catalog may hold undated, and a
-    window that is right for the family is a better answer than none. Returns None rather than
-    guessing when nothing matches — an unknown window means no percentage, which is honest.
+    **selectable window, then** exact id, then alias, then longest declared id that the reported
+    one starts with: providers report dated snapshots (`claude-haiku-4-5-20251001`) that the
+    catalog may hold undated, and a window that is right for the family is a better answer than
+    none. Returns None rather than guessing when nothing matches — an unknown window means no
+    percentage, which is honest.
+
+    **The variant pass must come first, and must be its own full sweep.** A selectable window's id
+    extends its base model's (`claude-haiku-4-5-20251001[1m]` starts with
+    `claude-haiku-4-5-20251001`), so the prefix rule below would otherwise answer 200,000 for the
+    model the operator chose *because* it holds 1,000,000 — reporting a conversation as five times
+    fuller than it is, and checkpointing it on that.
     """
     normalized = (model_id or "").strip()
     if not normalized:
         return None
+    for entry in CATALOG.values():
+        variant = entry.window(normalized)
+        if variant is not None:
+            return variant.context_window
     best: Optional[ModelDescriptor] = None
     for entry in CATALOG.values():
         for model in entry.models:

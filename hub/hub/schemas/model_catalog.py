@@ -7,12 +7,23 @@ from pydantic import BaseModel
 from ..model_catalog import ProviderDescriptor
 
 
+class WindowVariantResponse(BaseModel):
+    id: str
+    label: str
+    context_window: Optional[int]
+    default: bool
+
+
 class ModelDescriptorResponse(BaseModel):
     id: str
     label: str
     aliases: List[str]
     context_window: Optional[int]
     default: bool
+    # Empty for every model that offers one window, which is most of them. The interface renders a
+    # window control only where there is more than one, because a control offering one choice is
+    # not a choice.
+    windows: List[WindowVariantResponse] = []
 
 
 class ControlValueResponse(BaseModel):
@@ -52,6 +63,15 @@ class ProviderDescriptorResponse(BaseModel):
                     aliases=list(m.aliases),
                     context_window=m.context_window,
                     default=m.default,
+                    windows=[
+                        WindowVariantResponse(
+                            id=w.id,
+                            label=w.label,
+                            context_window=w.context_window,
+                            default=w.default,
+                        )
+                        for w in m.windows
+                    ],
                 )
                 for m in descriptor.models
             ],
