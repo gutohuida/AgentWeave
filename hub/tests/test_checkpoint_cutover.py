@@ -569,11 +569,45 @@ async def test_offered_warns_at_the_threshold_and_spends_nothing(app, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_a_dismissed_warning_never_returns(app, monkeypatch):
-    """Re-asking an operator who said "not yet" is the same as not letting them say it."""
+async def test_a_dismissed_warning_does_not_return_while_there_is_room(app, monkeypatch):
+    """Re-asking an operator who said "not yet" is the same as not letting them say it.
+
+    Was `test_a_dismissed_warning_never_returns`, asserted at 99%. "Never" turned out to include
+    the point past which the CLI compacts on its own, which is the one place silence produces the
+    defect the operator dismissed the warning to avoid. The reading here is now below
+    `FINAL_WARNING_PERCENT`; the case above it is covered by the two tests below.
+    """
 
     def explode(*_a, **_k):  # pragma: no cover
         raise AssertionError("a dismissed conversation must not checkpoint")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0) is None
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+
+    # Still dismissed, not re-marked due.
+    assert conversation.checkpoint_warning == "dismissed"
+
+
+@pytest.mark.asyncio
+async def test_a_dismissal_runs_out_of_room_near_the_window(app, monkeypatch):
+    """The dismissal buys time, not the whole conversation.
+
+    Claude Code compacts near 95%. A conversation dismissed early and run to exhaustion would
+    otherwise be summarised by the CLI, on a compaction nobody authored and nothing can inspect —
+    which is the defect this entire capability was built to remove.
+    """
+
+    def explode(*_a, **_k):  # pragma: no cover — a warning still spends nothing
+        raise AssertionError("the final warning must not generate a checkpoint")
 
     async with async_session_factory() as db:
         await _configured_project(db, checkpoint_mode="offered")
@@ -586,9 +620,66 @@ async def test_a_dismissed_warning_never_returns(app, monkeypatch):
 
     async with async_session_factory() as db:
         conversation = await db.get(Conversation, "conv-1")
+        checkpoints = (await db.execute(select(Checkpoint))).scalars().all()
 
-    # Still dismissed, not re-marked due.
+    assert conversation.checkpoint_warning == "final"
+    # Warned, spent nothing — the same bargain as the first warning.
+    assert checkpoints == []
+
+
+@pytest.mark.asyncio
+async def test_the_final_warning_needs_a_percentage_not_a_token_count(app, monkeypatch):
+    """"Near the window" is a statement about a proportion.
+
+    A token count with no window to divide by does not make a smaller version of that statement;
+    it makes none at all. Every other decision in this module refuses to invent a denominator, and
+    this one is no different — a conversation that cannot be measured is left dismissed.
+    """
+
+    def explode(*_a, **_k):  # pragma: no cover
+        raise AssertionError("nothing should happen without a percentage")
+
+    async with async_session_factory() as db:
+        await _configured_project(
+            db,
+            checkpoint_mode="offered",
+            checkpoint_threshold_mode="tokens",
+            checkpoint_threshold_value=1_000,
+            checkpoint_notes_value=None,
+        )
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=999_999, percent=None) is None
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+
     assert conversation.checkpoint_warning == "dismissed"
+
+
+@pytest.mark.asyncio
+async def test_the_final_warning_is_raised_once_not_on_every_reading(app, monkeypatch):
+    """Readings arrive several times a turn; a warning that re-broadcast on each would be noise."""
+
+    def explode(*_a, **_k):  # pragma: no cover
+        raise AssertionError("a conversation already warned must not checkpoint")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "final"
+        await db.commit()
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=99.0) is None
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+
+    assert conversation.checkpoint_warning == "final"
 
 
 @pytest.mark.asyncio
@@ -626,3 +717,114 @@ async def test_a_successor_is_warnable_again(app):
         successor, _ = await cut_over(db, conversation, checkpoint)
 
     assert successor.checkpoint_warning is None
+
+
+@pytest.mark.asyncio
+async def test_the_final_warning_refuses_to_be_dismissed(app, auth_headers):
+    """The state is only reachable *because* a dismissal was already spent.
+
+    Accepting a second one would mean the first bought silence all the way through the provider's
+    own compaction — which is the outcome the operator was avoiding when they dismissed.
+    """
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "final"
+        await db.commit()
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/dismiss-checkpoint-warning",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert "compact" in response.json()["detail"]
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+    assert conversation.checkpoint_warning == "final"
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_warning_still_dismisses(app, auth_headers):
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "due"
+        await db.commit()
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/dismiss-checkpoint-warning",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+    assert conversation.checkpoint_warning == "dismissed"
+
+
+@pytest.mark.asyncio
+async def test_the_backstop_does_not_depend_on_the_configured_threshold(app, monkeypatch):
+    """The regression that live testing caught and the unit tests did not.
+
+    The backstop was originally evaluated *after* `should_checkpoint`, which in token mode reads
+    `context_tokens` alone. A reading carrying a percentage but no token count therefore declined
+    as "below the tokens threshold of 150000" and the final warning was unreachable — observed on
+    the live `conv-c311b78f`, sitting at 96% and silent.
+
+    "Near the window" is a claim about the window filling up, not about the number the operator
+    configured, so it is answered before the threshold is consulted at all.
+    """
+
+    def explode(*_a, **_k):  # pragma: no cover
+        raise AssertionError("the backstop must not generate a checkpoint")
+
+    async with async_session_factory() as db:
+        await _configured_project(
+            db,
+            checkpoint_mode="offered",
+            checkpoint_threshold_mode="tokens",
+            checkpoint_threshold_value=150_000,
+            checkpoint_notes_value=None,
+        )
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    # Percentage known, token count absent — exactly the shape the live reading had.
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=96.0) is None
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+        checkpoints = (await db.execute(select(Checkpoint))).scalars().all()
+
+    assert conversation.checkpoint_warning == "final"
+    assert checkpoints == []
+
+
+@pytest.mark.asyncio
+async def test_a_dismissed_conversation_is_not_asked_for_notes(app, monkeypatch):
+    """It has already crossed its threshold and already declined; notes have nothing left to say
+    to it, and the backstop short-circuits ahead of the notes request to keep that true."""
+
+    def explode(*_a, **_k):  # pragma: no cover
+        raise AssertionError("nothing should spawn")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    # In the notes window (70) but below cutover (80) — the reading that would ordinarily ask.
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=72.0) is None
+
+    async with async_session_factory() as db:
+        entries = (await db.execute(select(InboundQueueEntry))).scalars().all()
+        conversation = await db.get(Conversation, "conv-1")
+
+    assert entries == []
+    assert conversation.checkpoint_warning == "dismissed"

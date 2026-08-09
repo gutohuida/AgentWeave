@@ -150,8 +150,9 @@ async def take_checkpoint(
         runner_id=runner.id,
     )
     # The warning has been answered by doing the thing it asked about. Leaving it `due` would
-    # keep offering a decision the operator has already made.
-    if conversation.checkpoint_warning == "due":
+    # keep offering a decision the operator has already made — and leaving it `final` would keep
+    # showing a warning that cannot be dismissed, about a checkpoint that now exists.
+    if conversation.checkpoint_warning in ("due", "final"):
         conversation.checkpoint_warning = None
         await session.commit()
     await sse_manager.broadcast(
@@ -174,14 +175,29 @@ async def dismiss_checkpoint_warning(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Wave away the warning for this conversation, for good.
+    """Wave away the warning for this conversation, for as long as there is room to keep working.
 
-    Final within the conversation, deliberately: re-asking an operator who has already said "not
-    yet" is the same as not letting them say it. A successor is created with no warning state, so
-    the next conversation in the line warns on its own threshold.
+    Deliberately not re-asked at every subsequent reading: telling an operator who has already
+    said "not yet" that it is still not yet is the same as not letting them say it. A successor is
+    created with no warning state, so the next conversation in the line warns on its own
+    threshold.
+
+    The one exception is the final warning near the window, which this endpoint refuses to
+    dismiss. That state is only reachable *because* a dismissal was already spent, so accepting a
+    second one would mean the first bought silence all the way through the provider's own
+    compaction — the outcome the operator was avoiding when they dismissed.
     """
     project_id, _ = project
     conversation = await _conversation_or_404(session, project_id, conversation_id)
+    if conversation.checkpoint_warning == "final":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This conversation is close enough to the end of its context window that the "
+                "provider will compact it shortly. Take the checkpoint, or keep going knowing "
+                "the summary will be one nobody wrote."
+            ),
+        )
     conversation.checkpoint_warning = "dismissed"
     await session.commit()
     await sse_manager.broadcast(

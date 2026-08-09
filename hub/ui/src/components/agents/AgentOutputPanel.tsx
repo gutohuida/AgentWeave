@@ -328,9 +328,21 @@ export function AgentOutputPanel({
    * The warning hands the decision over instead, and dismissing it is final for this
    * conversation — re-asking someone who said "not yet" is the same as not letting them say it.
    */
-  const checkpointDue =
-    !warningDismissed
-    && conversations.find((item) => item.id === currentConversationId)?.checkpoint_warning === 'due'
+  const checkpointWarning = conversations.find(
+    (item) => item.id === currentConversationId,
+  )?.checkpoint_warning
+
+  const checkpointDue = !warningDismissed && checkpointWarning === 'due'
+
+  /**
+   * The dismissal has run out of room.
+   *
+   * Deliberately not guarded by `warningDismissed`. That flag exists to hide the *first* warning
+   * between the click and the refetch that confirms it — and this state is only reachable because
+   * that click happened, so the flag is true by definition every time this matters. Reading it
+   * here would hide the one warning that cannot be hidden.
+   */
+  const checkpointFinal = checkpointWarning === 'final'
 
   const handleDismissWarning = async () => {
     if (!projectId || !currentConversationId) return
@@ -360,6 +372,22 @@ export function AgentOutputPanel({
             pending: isSending,
           },
           secondaryAction: { label: 'Dismiss', onClick: () => void handleDismissWarning() },
+        }
+      : null,
+    checkpointFinal
+      ? {
+          id: 'checkpoint-final',
+          // A problem, not an offer: what happens next if nothing is done is the loss itself.
+          tone: 'problem' as const,
+          message:
+            'This conversation is nearly out of context. If nothing is written now it will be '
+            + 'compacted by the CLI, and what survives will be a summary nobody wrote.',
+          action: {
+            label: 'Checkpoint now',
+            onClick: () => void handleCheckpoint(),
+            pending: isSending,
+          },
+          // No secondary action, deliberately. Dismissal was already spent to get here.
         }
       : null,
     offeredCheckpoint

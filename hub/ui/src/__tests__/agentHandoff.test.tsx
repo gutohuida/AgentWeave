@@ -336,4 +336,55 @@ describe('agent conversation handoff', () => {
     // Re-asking someone who said "not yet" is the same as not letting them say it.
     expect(screen.queryByTestId('banner-dismiss-checkpoint-due')).not.toBeInTheDocument()
   })
+
+  it('warns once more near the window, and that one cannot be waved away', () => {
+    // A dismissal means "not yet", not "not ever". Read as the latter, a conversation dismissed
+    // early and run to exhaustion gets compacted by the CLI first — the exact defect the whole
+    // capability exists to remove, returning through the door dismissal had to leave open.
+    conversations = conversations.map((c) =>
+      c.id === 'conv-old' ? { ...c, checkpoint_warning: 'final' as const } : c,
+    )
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+
+    const banner = screen.getByTestId('conversation-banner')
+    expect(banner).toHaveAttribute('data-banner-id', 'checkpoint-final')
+    // Not an offer. What happens next if nothing is done is the loss itself.
+    expect(banner).toHaveAttribute('data-banner-tone', 'problem')
+    expect(banner).toHaveTextContent('a summary nobody wrote')
+
+    // The action is there; the escape is not.
+    expect(screen.getByTestId('banner-action-checkpoint-final')).toBeInTheDocument()
+    expect(screen.queryByTestId('banner-dismiss-checkpoint-final')).not.toBeInTheDocument()
+  })
+
+  it('shows the final warning even after a dismissal in this same session', async () => {
+    // `warningDismissed` is a local flag that hides the *first* warning between the click and the
+    // refetch. The final state is only reachable because that click happened, so the flag is true
+    // by definition every time this matters — reading it here would hide the one warning that
+    // cannot be hidden.
+    conversations = conversations.map((c) =>
+      c.id === 'conv-old' ? { ...c, checkpoint_warning: 'due' as const } : c,
+    )
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-due'))
+    await waitFor(() =>
+      expect(screen.queryByTestId('banner-dismiss-checkpoint-due')).not.toBeInTheDocument(),
+    )
+
+    conversations = conversations.map((c) =>
+      c.id === 'conv-old' ? { ...c, checkpoint_warning: 'final' as const } : c,
+    )
+    rerender(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('banner-action-checkpoint-final')).toBeInTheDocument(),
+    )
+  })
 })

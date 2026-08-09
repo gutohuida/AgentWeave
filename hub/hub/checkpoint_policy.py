@@ -31,6 +31,12 @@ DEFAULT_THRESHOLD_VALUE = 80
 # context are themselves exhausted. Ten points of headroom by default.
 DEFAULT_NOTES_VALUE = 70
 
+# The point past which a dismissal is no longer respected — see `needs_final_warning`. Sits between
+# the 80% default above and the ~95% compaction that comment is reasoning about: far enough past
+# any ordinary threshold that reaching it means the operator really did keep going, and far enough
+# short of compaction that there is still a conversation left to checkpoint when they act.
+FINAL_WARNING_PERCENT = 92
+
 
 @dataclass(frozen=True)
 class CheckpointPolicy:
@@ -207,6 +213,24 @@ def should_request_notes(
         context_tokens=context_tokens,
         percent=percent,
     )
+
+
+def needs_final_warning(policy: CheckpointPolicy, *, percent: Optional[float]) -> bool:
+    """Whether a conversation whose warning was dismissed must be warned once more.
+
+    Deliberately takes no `context_tokens`. Every other predicate here accepts both readings
+    because both can answer their question; this one cannot. "Near the window" is a statement
+    about the *proportion* in use, and a token count with no window to divide by does not make a
+    smaller version of that statement — it makes none at all. Accepting the argument would invite
+    a caller to pass it and assume it was used.
+
+    The caller is responsible for having established that the operator already dismissed a
+    warning. A conversation still sitting on an undismissed one has the warning on screen, and
+    replacing it with the same banner is not a second warning.
+    """
+    if not policy.enabled or policy.automatic:
+        return False
+    return percent is not None and percent >= FINAL_WARNING_PERCENT
 
 
 def window_for(model: Optional[str]) -> Optional[int]:

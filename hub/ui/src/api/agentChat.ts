@@ -63,9 +63,11 @@ export interface AgentConversation {
   origin: ConversationOrigin
   attention: ConversationAttention
   /** Where this conversation stands with its checkpoint threshold. `due` warns; `dismissed`
-   *  never warns again, because re-asking an operator who said "not yet" is the same as not
-   *  letting them say it. */
-  checkpoint_warning?: 'due' | 'dismissed' | null
+   *  does not warn again while there is still room to keep working, because re-asking an
+   *  operator who said "not yet" is the same as not letting them say it; `final` is the one
+   *  exception — near the window a dismissal has run out of room, and that warning carries no
+   *  dismiss action because dismissal was already spent to reach it. */
+  checkpoint_warning?: 'due' | 'dismissed' | 'final' | null
   created_at: string
   updated_at: string
   archived_at?: string | null

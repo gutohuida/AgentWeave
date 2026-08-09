@@ -13,9 +13,11 @@ from hub.checkpoint_policy import (
     DEFAULT_NOTES_VALUE,
     DEFAULT_THRESHOLD_MODE,
     DEFAULT_THRESHOLD_VALUE,
+    FINAL_WARNING_PERCENT,
     CheckpointPolicy,
     crosses,
     describe_threshold,
+    needs_final_warning,
     resolve_policy,
     should_checkpoint,
     should_request_notes,
@@ -239,3 +241,33 @@ def test_notes_are_asked_for_under_offered_not_only_automatic():
     """The operator still has to be offered something worth reading."""
     assert should_request_notes(_policy(mode="offered"), context_tokens=None, percent=72.0)
     assert not should_request_notes(_policy(mode="off"), context_tokens=None, percent=72.0)
+
+
+# ------------------------------------------------------- the point a dismissal runs out of room
+
+
+def test_the_final_warning_sits_between_the_default_threshold_and_the_cli_compaction():
+    """It has to be past any ordinary threshold, or it would fire at a conversation the operator
+    has not yet had a chance to dismiss; and short of the ~95% the CLI compacts at, or there would
+    be no conversation left to checkpoint by the time anyone acted."""
+    assert DEFAULT_THRESHOLD_VALUE < FINAL_WARNING_PERCENT < 95
+
+
+def test_a_dismissal_runs_out_of_room_at_the_final_mark():
+    assert not needs_final_warning(_policy(mode="offered"), percent=FINAL_WARNING_PERCENT - 1)
+    assert needs_final_warning(_policy(mode="offered"), percent=FINAL_WARNING_PERCENT)
+    assert needs_final_warning(_policy(mode="offered"), percent=99.0)
+
+
+def test_no_percentage_means_no_final_warning():
+    """"Near the window" is a claim about a proportion. A token count with no window to divide by
+    does not make a smaller version of that claim — it makes none at all, and inventing a
+    denominator to have one is what every other decision here refuses to do."""
+    assert not needs_final_warning(_policy(mode="offered"), percent=None)
+
+
+def test_the_final_warning_belongs_only_to_the_mode_that_asks():
+    """`automatic` generates and hands over at its own threshold, so it never reaches a dismissal
+    to run out of room on; `off` was never warning in the first place."""
+    assert not needs_final_warning(_policy(mode="automatic"), percent=99.0)
+    assert not needs_final_warning(_policy(mode="off"), percent=99.0)

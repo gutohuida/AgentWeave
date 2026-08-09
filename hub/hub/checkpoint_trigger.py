@@ -22,7 +22,13 @@ from sqlalchemy import select
 
 from .checkpoint_cutover import CutoverRefusedError, cut_over
 from .checkpoint_generation import generate_checkpoint
-from .checkpoint_policy import resolve_policy, should_checkpoint, should_request_notes
+from .checkpoint_policy import (
+    FINAL_WARNING_PERCENT,
+    needs_final_warning,
+    resolve_policy,
+    should_checkpoint,
+    should_request_notes,
+)
 from .db.engine import async_session_factory
 from .db.models import (
     Agent,
@@ -177,6 +183,50 @@ async def consider(
             _declined(conversation_id, "the conversation is missing or not open")
             return None
 
+        if not policy.automatic and conversation.checkpoint_warning in ("dismissed", "final"):
+            # A dismissed conversation is done with the ordinary path: it has already crossed its
+            # threshold, already been offered a checkpoint, and already declined. Notes and
+            # generation both have nothing left to say to it.
+            #
+            # The one thing still owed is the backstop. A dismissal means "not yet", and until now
+            # it was read as "not ever" — run to exhaustion, the CLI compacts near 95% and the
+            # conversation continues on a summary nobody authored, which is the exact defect this
+            # capability exists to remove, returning through the one door dismissal had to leave
+            # open. So the dismissal is honoured everywhere except at the end: one more warning,
+            # near the window, which cannot be waved away because the only thing left to happen
+            # after it is the loss itself.
+            #
+            # **Evaluated ahead of `should_checkpoint`, deliberately.** The backstop is a statement
+            # about the window filling up, not about the operator's configured threshold, and
+            # gating it behind that threshold made it unreachable in token mode against a reading
+            # that carried a percentage but no token count — observed live on `conv-c311b78f`,
+            # which sat at 96% and was declined as "below the tokens threshold of 150000".
+            if conversation.checkpoint_warning == "final":
+                _declined(conversation_id, "the final warning is already showing")
+                return None
+            if not needs_final_warning(policy, percent=percent):
+                _declined(
+                    conversation_id,
+                    "the operator dismissed this conversation's warning and it has not "
+                    f"reached {FINAL_WARNING_PERCENT}% (percent={percent})",
+                )
+                return None
+            conversation.checkpoint_warning = "final"
+            await db.commit()
+            await sse_manager.broadcast(
+                project_id,
+                "checkpoint_due",
+                {
+                    "conversation_id": conversation_id,
+                    "agent": agent_name,
+                    "threshold_mode": policy.threshold_mode,
+                    "threshold_value": policy.threshold_value,
+                    "final": True,
+                },
+            )
+            logger.info("final checkpoint warning for %s", conversation_id)
+            return None
+
         if should_request_notes(policy, context_tokens=context_tokens, percent=percent):
             if not await _notes_already_in_hand(db, conversation_id):
                 db.add(
@@ -214,9 +264,10 @@ async def consider(
             # The staleness argument that made this eager still holds, which is why this is a
             # warning and not a promise to generate later: the Hub says the moment has arrived and
             # hands the decision over now, so the artifact is fresh whenever the answer is yes.
-            if conversation.checkpoint_warning == "dismissed":
-                _declined(conversation_id, "the operator dismissed this conversation's warning")
-                return None
+            #
+            # A conversation already `dismissed` or `final` never arrives here — it is handled by
+            # the backstop above, ahead of the threshold checks, because that decision does not
+            # depend on the threshold.
             if conversation.checkpoint_warning != "due":
                 conversation.checkpoint_warning = "due"
                 await db.commit()
