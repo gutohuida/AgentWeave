@@ -1,1 +1,1 @@
-handoff-0022-2026-08-09-0100-checkpoint-capability-shipped-and-hardened.md
+handoff-0023-2026-08-10-0030-final-warning-shipped-window-variants-reverted.md
