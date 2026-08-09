@@ -66,6 +66,7 @@ async def cut_over(
     checkpoint: Checkpoint,
     *,
     hop_depth: int = 0,
+    auto_continue: bool = False,
 ) -> Tuple[Conversation, str]:
     """Open a successor, give it the checkpoint, and archive the predecessor.
 
@@ -125,4 +126,20 @@ async def cut_over(
     logger.info(
         "cut %s over to %s on checkpoint %s", predecessor.id, successor.id, checkpoint.id
     )
+
+    if auto_continue:
+        # Started here rather than left for the operator to trigger with a message. The successor
+        # already holds everything it needs; requiring someone to invent a sentence to get it
+        # moving made the handover a dead end. Imported locally — the scheduler reaches back into
+        # the trigger path that calls this.
+        from .turn_scheduler import schedule_agent
+
+        result = await schedule_agent(predecessor.project_id, predecessor.agent)
+        if result.waiting_reason:
+            # Not an error: the queue entry is durable, so the work is not lost — it simply has
+            # not started yet, and the operator can start it themselves.
+            logger.info(
+                "successor %s did not start immediately: %s", successor.id, result.waiting_reason
+            )
+
     return successor, entry.id

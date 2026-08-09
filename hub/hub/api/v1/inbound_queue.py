@@ -30,6 +30,10 @@ class QueueEntryResponse(BaseModel):
     hop_depth: int
     state: str
     delivered_in_run_id: Optional[str]
+    # Which conversation the entry is addressed to. Already stored; exposed so a surface can tell
+    # "this conversation has work waiting" from "this agent does" — a checkpoint handed to a
+    # successor is the first case, and only that conversation should offer to start it.
+    conversation_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -327,6 +327,10 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         "checkpoint_notes_value": None,
         "checkpoint_runner_id": None,
         "checkpoint_model": None,
+        # Off: a successor waits for an explicit Continue rather than starting a turn nobody
+        # asked for. Off must not mean "type a message to get it moving", which was the friction
+        # this setting exists to remove.
+        "checkpoint_auto_continue": False,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers

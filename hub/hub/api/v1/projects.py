@@ -95,6 +95,9 @@ class ProjectSettings(BaseModel):
     checkpoint_notes_value: Optional[int] = Field(default=None, gt=0)
     checkpoint_runner_id: Optional[str] = Field(default=None, max_length=64)
     checkpoint_model: Optional[str] = Field(default=None, max_length=256)
+    # Whether a successor starts working the moment it is handed its checkpoint. Off means an
+    # explicit Continue button, not "type a message to get it moving".
+    checkpoint_auto_continue: bool = False
 
     model_config = {"extra": "forbid"}
 

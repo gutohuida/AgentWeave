@@ -232,7 +232,12 @@ async def consider(
 
         if policy.automatic and checkpoint.status == "ready":
             try:
-                successor, entry_id = await cut_over(db, conversation, checkpoint)
+                successor, entry_id = await cut_over(
+                    db,
+                    conversation,
+                    checkpoint,
+                    auto_continue=bool(project.checkpoint_auto_continue),
+                )
             except CutoverRefusedError as exc:
                 # The checkpoint stands; only the handover was refused. The operator is told why
                 # rather than being left with a conversation that quietly kept going.

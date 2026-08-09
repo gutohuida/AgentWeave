@@ -100,6 +100,15 @@ class Project(Base):
     # `conversation_title_runner_id` is not.
     checkpoint_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     checkpoint_model: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # Whether a successor starts working the moment it is handed its checkpoint.
+    #
+    # Off by default, because a turn nobody asked for costs tokens. But leaving it off and saying
+    # nothing else made the successor a dead end: the checkpoint sat in its queue and the only way
+    # to start it was to type a message, which is a strange thing to have to invent when the whole
+    # point is that the work continues. Off now means an explicit Continue button instead.
+    checkpoint_auto_continue: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     api_keys: Mapped[List["ApiKey"]] = relationship(back_populates="project")
     messages: Mapped[List["Message"]] = relationship(back_populates="project")

@@ -92,6 +92,8 @@ export interface ProjectSettings {
   checkpoint_notes_value: number | null
   checkpoint_runner_id: string | null
   checkpoint_model: string | null
+  /** Whether a successor starts working the moment it is handed its checkpoint. */
+  checkpoint_auto_continue: boolean
 }
 
 export type ProjectSettingsInput = ProjectSettings

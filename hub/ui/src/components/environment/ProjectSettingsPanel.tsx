@@ -215,6 +215,9 @@ export function ProjectSettingsPanel() {
           style={fieldStyle}
         />
       </SettingsRow>
+      <SettingsRow label="Continue automatically" description="After a checkpoint hands over, start the successor's first turn without waiting to be asked. Off means a Continue button — never a message you have to invent.">
+        <input aria-label="Continue automatically" type="checkbox" checked={form.checkpoint_auto_continue} onChange={(event) => set('checkpoint_auto_continue', event.target.checked)} />
+      </SettingsRow>
       <SettingsRow label="Checkpoint runner" description="Which runner writes checkpoints. A cheap model is usually right — the work runs elsewhere.">
         <select
           aria-label="Checkpoint runner"

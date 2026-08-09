@@ -69,3 +69,26 @@ export async function cutOver(
     `/api/v1/projects/${projectId}/checkpoints/${checkpointId}/cutover`,
   )
 }
+
+export interface ContinueResult {
+  agent: string
+  conversation_id: string
+  started: boolean
+  waiting_reason?: string | null
+}
+
+/**
+ * Start a turn from what is already queued.
+ *
+ * A successor holds its checkpoint as a queue entry, so it has everything it needs and nothing to
+ * say. Making the operator type a message to get it moving turned the handover into a dead end;
+ * this is the same act, named for what it does.
+ */
+export async function continueConversation(
+  projectId: string,
+  conversationId: string,
+): Promise<ContinueResult> {
+  return postJson<ContinueResult>(
+    `/api/v1/projects/${projectId}/conversations/${conversationId}/continue`,
+  )
+}

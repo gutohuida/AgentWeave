@@ -17,10 +17,10 @@ import {
 } from '@/api/agentChat'
 import { PERMISSION_MODE_CONTROL } from '@/api/modelCatalog'
 import { NEW_CONVERSATION_ID } from '@/lib/navigation'
-import { useQueueStatus, withdrawQueueEntry } from '@/api/queue'
+import { useQueueStatus, useQueuedEntries, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
-import { cutOver, takeCheckpoint } from '@/api/checkpoints'
+import { continueConversation, cutOver, takeCheckpoint } from '@/api/checkpoints'
 import { ApiError } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
@@ -236,6 +236,13 @@ export function AgentOutputPanel({
     : EMPTY_CONTROLS
   const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
   const { data: queueStatus } = useQueueStatus(agent.name)
+  /** Undelivered entries addressed to the conversation on screen. A checkpoint handed to a
+   *  successor is exactly this, which is why the Continue control keys on it rather than on
+   *  "was this conversation created by a handoff". */
+  const { data: queuedEntries = [] } = useQueuedEntries(agent.name)
+  const hasQueuedWork = queuedEntries.some(
+    (entry) => entry.conversation_id === currentConversationId,
+  )
   const { data: workspacePaths = [] } = useWorkspacePaths()
   const conversationChat = useAgentChatHistory(agent.name, currentConversationId ?? null)
   const recentChat = useAgentRecentChat(agent.name)
@@ -351,6 +358,26 @@ export function AgentOutputPanel({
       if (notice) setSessionNotice(`Still queued — ${notice}`)
     } catch (err) {
       console.error('Failed to deliver queued messages:', err)
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  /** Start the queued work without inventing a message to carry it.
+   *
+   * Shown when a conversation has undelivered queued entries and no run — which is exactly the
+   * state a successor is in the moment it is handed its checkpoint. */
+  const handleContinue = async () => {
+    if (!apiKey || !projectId || !currentConversationId || isRunning || isSending) return
+    setIsSending(true)
+    try {
+      const result = await continueConversation(projectId, currentConversationId)
+      setSessionNotice(
+        result.started ? 'Continuing…' : `Not started — ${result.waiting_reason ?? 'unknown'}`,
+      )
+    } catch (err) {
+      console.error('Failed to continue:', err)
+      setSessionNotice('Could not start the queued work')
     } finally {
       setIsSending(false)
     }
@@ -609,6 +636,28 @@ export function AgentOutputPanel({
       <div className="conversation-composer-fade shrink-0">
         <div className="mx-auto flex w-full max-w-[820px] flex-col gap-2">
           <BannerStack banners={banners} />
+
+          {/* A successor is handed its checkpoint as a queued entry and then waits. Without this
+              the only way to start it was to type a message, which is a strange thing to invent
+              when the work is already described. Shown only when there is queued work and no run
+              — otherwise the composer is the right control. */}
+          {hasQueuedWork && !isRunning && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="xs"
+                data-testid="conversation-continue"
+                disabled={isSending}
+                onClick={handleContinue}
+              >
+                <Icon name="play_arrow" size={12} />
+                Continue
+              </Button>
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {agent.name} has work waiting — start it without sending a message.
+              </span>
+            </div>
+          )}
 
           <span
           data-testid="session-continuity"

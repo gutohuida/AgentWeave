@@ -25,8 +25,11 @@ describe('canonical context presentation', () => {
   it('retains canonical fields and derives measured percentage from operands', () => {
     expect(normalizeContextUsage({ ...measured, percent: 99 })).toEqual(measured)
     expect(presentContextUsage(measured)).toMatchObject({
-      label: '25%',
-      detail: '250 / 1,000 tokens',
+      // Both readings on the label itself. A percentage answers "how full" but not "of what",
+      // and the window differs by an order of magnitude between models.
+      label: '250 / 1,000 · 25%',
+      // The model names whose window the count is measured against.
+      detail: '250 / 1,000 tokens — gpt-test',
       percent: 25,
       severity: 'normal',
       showBar: true,
@@ -55,7 +58,8 @@ describe('canonical context presentation', () => {
     expect(atWarning).toMatchObject({ severity: 'warning', isPolicyWarning: true })
     expect(atCritical).toMatchObject({ severity: 'critical', isPolicyWarning: true })
     expect(estimated).toMatchObject({
-      label: '95% estimated',
+      // Still marked as estimated; the counts now travel with it.
+      label: '95 / 100 · 95% est.',
       severity: 'neutral',
       isPolicyWarning: false,
     })

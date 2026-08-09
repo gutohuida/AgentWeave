@@ -252,11 +252,17 @@ export function presentContextUsage(value: unknown): ContextPresentation | null 
   let label: string
   let detail: string
   if (percent !== null) {
-    label = `${percent}%${estimated ? ' estimated' : ''}`
-    detail = usage.context_tokens !== null && usage.context_tokens !== undefined
-      ? `${formatTokens(usage.context_tokens)} / ${
+    // Both readings, on screen rather than in a tooltip. The percentage alone answers "how full"
+    // but not "of what" — and the window differs by an order of magnitude between models, which
+    // is the same reason a threshold can be set in either unit.
+    const counted = usage.context_tokens !== null && usage.context_tokens !== undefined
+    label = counted && usage.limit_tokens
+      ? `${formatTokens(usage.context_tokens as number)} / ${formatTokens(usage.limit_tokens)} · ${percent}%${estimated ? ' est.' : ''}`
+      : `${percent}%${estimated ? ' estimated' : ''}`
+    detail = counted
+      ? `${formatTokens(usage.context_tokens as number)} / ${
         usage.limit_tokens ? formatTokens(usage.limit_tokens) : 'unknown'
-      } tokens`
+      } tokens${usage.model ? ` — ${usage.model}` : ''}`
       : `${percent}% of context`
   } else {
     label = `${formatTokens(usage.context_tokens ?? 0)} tokens${estimated ? ' estimated' : ''}`

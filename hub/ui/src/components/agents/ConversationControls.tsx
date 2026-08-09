@@ -80,7 +80,10 @@ export function ConversationControls({
         </span>
       </span>
 
-      <ContextUsageIndicator value={agent.context_usage} compact />
+      {/* Not `compact`: the compact form is a 2px bar with no number, which answers "is it
+          filling up" and nothing else. The conversation header is where an operator decides
+          whether to checkpoint, so it shows the count, the window and the percentage. */}
+      <ContextUsageIndicator value={agent.context_usage} />
 
       <div className="flex-1" />
 

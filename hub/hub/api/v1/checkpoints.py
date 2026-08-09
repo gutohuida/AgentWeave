@@ -163,6 +163,32 @@ async def take_checkpoint(
     return CheckpointSummary.of(checkpoint)
 
 
+@router.post("/conversations/{conversation_id}/continue")
+async def continue_conversation(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start a turn from what is already queued, without inventing a message to carry it.
+
+    A successor is handed its checkpoint as a queue entry, so it has everything it needs and
+    nothing to say. Requiring the operator to type something to get it moving made the handover a
+    dead end — this is the same act, named for what it does.
+    """
+    project_id, _ = project
+    conversation = await _conversation_or_404(session, project_id, conversation_id)
+
+    from ...turn_scheduler import schedule_agent
+
+    result = await schedule_agent(project_id, conversation.agent)
+    return {
+        "agent": conversation.agent,
+        "conversation_id": conversation_id,
+        "started": result.waiting_reason is None,
+        "waiting_reason": result.waiting_reason,
+    }
+
+
 @router.post("/checkpoints/{checkpoint_id}/cutover")
 async def cutover_to_successor(
     checkpoint_id: str,
@@ -176,8 +202,14 @@ async def cutover_to_successor(
         raise HTTPException(status_code=404, detail=f"Checkpoint '{checkpoint_id}' not found")
 
     conversation = await _conversation_or_404(session, project_id, checkpoint.conversation_id)
+    project_row = await session.get(Project, project_id)
     try:
-        successor, entry_id = await cut_over(session, conversation, checkpoint)
+        successor, entry_id = await cut_over(
+            session,
+            conversation,
+            checkpoint,
+            auto_continue=bool(project_row and project_row.checkpoint_auto_continue),
+        )
     except CutoverRefusedError as exc:
         # 409, not 400: the request is well-formed and the refusal is about state the operator
         # can change — finish the run, or let the queue drain.

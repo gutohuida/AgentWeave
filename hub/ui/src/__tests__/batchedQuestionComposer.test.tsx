@@ -62,6 +62,7 @@ vi.mock('@/api/unaskedQuestions', () => ({
 }))
 
 vi.mock('@/api/queue', () => ({
+  useQueuedEntries: () => ({ data: [] }),
   useQueueStatus: () => ({ data: { waiting_count: 0 } }),
   withdrawQueueEntry: vi.fn(),
 }))

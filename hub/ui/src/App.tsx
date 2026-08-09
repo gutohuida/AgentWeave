@@ -191,8 +191,32 @@ export default function App() {
     navigateTo(environmentDestination(currentProjectId, value as Parameters<typeof environmentDestination>[1]))
   }
 
+  /**
+   * An agent that has never held a conversation is starting one.
+   *
+   * Reaching such an agent from the rail produces a destination with an *unspecified*
+   * conversation, which resolves to null because there is nothing to resolve to — and that used
+   * to fall through to the conversation panel, giving a bare composer with no heading and no
+   * indication of whose conversation it was about to be. The start surface is what belongs there.
+   *
+   * Gated on the query having answered: an empty list while it loads is "not known yet", not
+   * "none", and treating the two alike would flash this surface at every agent.
+   */
+  const conversationsKnown = projectConversations !== undefined
+  const agentHasNoConversations =
+    destination.kind === 'conversation' &&
+    destination.agent !== null &&
+    destination.conversationId === null &&
+    conversationsKnown &&
+    !(projectConversations?.conversations ?? []).some(
+      (conversation) => conversation.agent === destination.agent,
+    )
+
   let content: React.ReactNode
-  if (destination.kind === 'conversation' && isNewConversationDestination(destination)) {
+  if (
+    destination.kind === 'conversation' &&
+    (isNewConversationDestination(destination) || agentHasNoConversations)
+  ) {
     // Composer-primary and creating nothing until the first message is sent, so abandoning it
     // leaves no conversation record (spec: "An abandoned start leaves no record").
     content = (

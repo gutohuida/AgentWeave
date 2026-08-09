@@ -49,6 +49,7 @@ vi.mock('@/api/unaskedQuestions', () => ({
   useResolveUnaskedQuestion: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/queue', () => ({
+  useQueuedEntries: () => ({ data: [] }),
   useQueueStatus: () => ({ data: undefined }),
   withdrawQueueEntry: vi.fn(),
 }))
