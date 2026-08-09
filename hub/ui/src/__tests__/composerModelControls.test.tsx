@@ -14,20 +14,8 @@ const CATALOG: ModelCatalogResponse = {
       provider: 'claude',
       label: 'Claude Code',
       models: [
-        { id: 'claude-sonnet-5', label: 'Sonnet 5', aliases: [], context_window: 1_000_000, default: true, windows: [] },
-        { id: 'claude-opus-5', label: 'Opus 5', aliases: [], context_window: null, default: false, windows: [] },
-        // The one model in the real catalog whose two windows genuinely differ.
-        {
-          id: 'claude-haiku-4-5-20251001',
-          label: 'Haiku 4.5',
-          aliases: [],
-          context_window: 200_000,
-          default: false,
-          windows: [
-            { id: 'claude-haiku-4-5-20251001', label: '200K', context_window: 200_000, default: true },
-            { id: 'claude-haiku-4-5-20251001[1m]', label: '1M', context_window: 1_000_000, default: false },
-          ],
-        },
+        { id: 'claude-sonnet-5', label: 'Sonnet 5', aliases: [], context_window: 1_000_000, default: true },
+        { id: 'claude-opus-5', label: 'Opus 5', aliases: [], context_window: null, default: false },
       ],
       controls: [
         {
@@ -47,7 +35,7 @@ const CATALOG: ModelCatalogResponse = {
       provider: 'codex',
       label: 'Codex CLI',
       models: [
-        { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', aliases: [], context_window: 272_000, default: true, windows: [] },
+        { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', aliases: [], context_window: 272_000, default: true },
       ],
       controls: [
         {
@@ -210,76 +198,5 @@ describe('the composer control components hardcode no provider models or control
     for (const literal of ['claude', 'codex', 'sonnet', 'opus', 'gpt-', 'effort', 'medium', 'high']) {
       expect(code, `should not hardcode "${literal}"`).not.toContain(literal)
     }
-  })
-})
-
-describe('ComposerModelControls — the context window is a choice where there is one', () => {
-  it('offers no context pill for a model with one window', () => {
-    // A control offering one choice is not a choice, and the composer is already dense.
-    render(
-      <ComposerModelControls
-        runner="claude"
-        effectiveModel="claude-sonnet-5"
-        effectiveControls={{}}
-        onChangeModel={vi.fn()}
-        onChangeControl={vi.fn()}
-      />,
-      { wrapper },
-    )
-    expect(screen.queryByTitle('Context')).not.toBeInTheDocument()
-  })
-
-  it('offers the windows a model declares, showing the default at rest', () => {
-    render(
-      <ComposerModelControls
-        runner="claude"
-        effectiveModel="claude-haiku-4-5-20251001"
-        effectiveControls={{}}
-        onChangeModel={vi.fn()}
-        onChangeControl={vi.fn()}
-      />,
-      { wrapper },
-    )
-    const pill = screen.getByTitle('Context')
-    expect(pill).toHaveTextContent('200K')
-
-    fireEvent.click(pill)
-    expect(screen.getByRole('option', { name: '1M' })).toBeInTheDocument()
-  })
-
-  it('selects a window by setting the model override to that window own id', () => {
-    // A variant *is* a model id — nothing downstream of this pill learns a second concept.
-    const onChangeModel = vi.fn()
-    render(
-      <ComposerModelControls
-        runner="claude"
-        effectiveModel="claude-haiku-4-5-20251001"
-        effectiveControls={{}}
-        onChangeModel={onChangeModel}
-        onChangeControl={vi.fn()}
-      />,
-      { wrapper },
-    )
-    fireEvent.click(screen.getByTitle('Context'))
-    fireEvent.click(screen.getByRole('option', { name: '1M' }))
-
-    expect(onChangeModel).toHaveBeenCalledWith('claude-haiku-4-5-20251001[1m]')
-  })
-
-  it('still names the model when one of its windows is selected', () => {
-    // A bare id comparison would fail to find the model and the pill would read "—" for a model
-    // that is plainly selected.
-    render(
-      <ComposerModelControls
-        runner="claude"
-        effectiveModel="claude-haiku-4-5-20251001[1m]"
-        effectiveControls={{}}
-        onChangeModel={vi.fn()}
-        onChangeControl={vi.fn()}
-      />,
-      { wrapper },
-    )
-    expect(screen.getByTitle('Model')).toHaveTextContent('Haiku 4.5')
-    expect(screen.getByTitle('Context')).toHaveTextContent('1M')
   })
 })

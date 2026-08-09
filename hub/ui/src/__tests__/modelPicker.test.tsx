@@ -9,9 +9,9 @@ const PROVIDER: ProviderDescriptor = {
   provider: 'claude',
   label: 'Claude Code',
   models: [
-    { id: 'claude-sonnet-5', label: 'Sonnet 5', aliases: [], context_window: 1_000_000, default: true, windows: [] },
-    { id: 'claude-opus-5', label: 'Opus 5', aliases: [], context_window: null, default: false, windows: [] },
-    { id: 'claude-haiku-5', label: 'Haiku 5', aliases: [], context_window: 200_000, default: false, windows: [] },
+    { id: 'claude-sonnet-5', label: 'Sonnet 5', aliases: [], context_window: 1_000_000, default: true },
+    { id: 'claude-opus-5', label: 'Opus 5', aliases: [], context_window: null, default: false },
+    { id: 'claude-haiku-5', label: 'Haiku 5', aliases: [], context_window: 200_000, default: false },
   ],
   controls: [],
 }

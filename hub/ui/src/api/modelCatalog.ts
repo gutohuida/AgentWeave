@@ -2,27 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
-/** One selectable context window for a model, and the exact model id that selects it.
- *
- * A variant *is* a model id, so choosing one is expressed as the ordinary model override — the
- * composer, the trigger payload and the Hub all keep working on the one concept they already had.
- */
-export interface WindowVariant {
-  id: string
-  label: string
-  context_window: number | null
-  default: boolean
-}
-
 export interface ModelDescriptor {
   id: string
   label: string
   aliases: string[]
   context_window: number | null
   default: boolean
-  /** Empty for a model that offers one window. Only rendered as a control where there is more
-   *  than one, because a control offering one choice is not a choice. */
-  windows: WindowVariant[]
 }
 
 export interface ControlValue {
@@ -85,36 +70,6 @@ export function permissionModeValues(catalog: ModelCatalogResponse | undefined):
     }
   }
   return [...seen.values()]
-}
-
-/** The model *modelId* names — by its own id, or by one of its selectable windows.
- *
- * Mirrors `ProviderDescriptor.model` in hub/hub/model_catalog.py. Without this the model pill
- * reads "—" whenever a window variant is selected, because the selected id is not the base
- * model's. */
-export function modelForId(
-  provider: ProviderDescriptor,
-  modelId: string | null,
-): ModelDescriptor | undefined {
-  if (!modelId) return undefined
-  return provider.models.find(
-    (m) => m.id === modelId || m.windows.some((w) => w.id === modelId),
-  )
-}
-
-/** The window currently in force for *modelId*: the variant it names, or the model's own default
- *  variant when it names the base id. Undefined when the model declares no variants. */
-export function windowForId(
-  provider: ProviderDescriptor,
-  modelId: string | null,
-): WindowVariant | undefined {
-  const model = modelForId(provider, modelId)
-  if (!model || model.windows.length < 2) return undefined
-  return (
-    model.windows.find((w) => w.id === modelId)
-    ?? model.windows.find((w) => w.default)
-    ?? model.windows[0]
-  )
 }
 
 export function providerForRunner(runner: string | undefined | null): string | null {
