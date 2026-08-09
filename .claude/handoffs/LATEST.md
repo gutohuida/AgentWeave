@@ -1,1 +1,1 @@
-handoff-0021-2026-08-08-1815-config-page-archived-checkpoint-prereqs-done.md
+handoff-0022-2026-08-09-0100-checkpoint-capability-shipped-and-hardened.md
