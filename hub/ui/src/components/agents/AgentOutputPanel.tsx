@@ -20,7 +20,13 @@ import { NEW_CONVERSATION_ID } from '@/lib/navigation'
 import { useQueueStatus, useQueuedEntries, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
-import { continueConversation, cutOver, takeCheckpoint, useCheckpoints } from '@/api/checkpoints'
+import {
+  continueConversation,
+  cutOver,
+  dismissCheckpointWarning,
+  takeCheckpoint,
+  useCheckpoints,
+} from '@/api/checkpoints'
 import { ApiError } from '@/api/client'
 import { useConfigStore } from '@/store/configStore'
 import { AgentTimeline } from './AgentTimeline'
@@ -127,6 +133,10 @@ export function AgentOutputPanel({
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [isStopping, setIsStopping] = useState(false)
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, string>>({})
+  /** Dismissed in this session, before the stored state has been read back. Cleared on arrival
+   *  at another conversation by the reset effect, which is where every per-conversation flag
+   *  belongs. */
+  const [warningDismissed, setWarningDismissed] = useState(false)
   const { data: permissionRequests = [] } = usePendingPermissionRequests()
   const { data: unaskedQuestions = [] } = usePendingUnaskedQuestions()
   const { data: openQuestions = [] } = useQuestions(false)
@@ -156,6 +166,7 @@ export function AgentOutputPanel({
     if (sentTo !== undefined && sentTo === conversationId) return
     setHandoffState('idle')
     setStartingFresh(false)
+    setWarningDismissed(false)
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
@@ -309,7 +320,48 @@ export function AgentOutputPanel({
     }
   }
 
+  /**
+   * The threshold has been reached and nothing has been spent yet.
+   *
+   * Under `offered` the Hub no longer generates on its own: generating billed a model call
+   * whether or not the operator wanted one, and at a low threshold billed it again every turn.
+   * The warning hands the decision over instead, and dismissing it is final for this
+   * conversation — re-asking someone who said "not yet" is the same as not letting them say it.
+   */
+  const checkpointDue =
+    !warningDismissed
+    && conversations.find((item) => item.id === currentConversationId)?.checkpoint_warning === 'due'
+
+  const handleDismissWarning = async () => {
+    if (!projectId || !currentConversationId) return
+    try {
+      // Hidden here and persisted there. The local flag makes the banner go away on the click
+      // rather than on the next refetch; the stored state is what keeps it away afterwards.
+      setWarningDismissed(true)
+      await dismissCheckpointWarning(projectId, currentConversationId)
+    } catch (err) {
+      console.error('Failed to dismiss the checkpoint warning:', err)
+    }
+  }
+
   const bannerCandidates: Array<ConversationBanner | null> = [
+    checkpointDue
+      ? {
+          id: 'checkpoint-due',
+          tone: 'offer' as const,
+          message:
+            'This conversation has reached its checkpoint threshold. Nothing has been written '
+            + 'yet — checkpoint now, or dismiss this and keep working.',
+          // Called through a closure: `handleCheckpoint` is declared below, and referencing it
+          // directly here would read it before its binding is initialised.
+          action: {
+            label: 'Checkpoint now',
+            onClick: () => void handleCheckpoint(),
+            pending: isSending,
+          },
+          secondaryAction: { label: 'Dismiss', onClick: () => void handleDismissWarning() },
+        }
+      : null,
     offeredCheckpoint
       ? {
           id: 'checkpoint-offered',

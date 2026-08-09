@@ -17,6 +17,11 @@ export interface ConversationBanner {
     onClick: () => void
     pending?: boolean
   }
+  /** Declining, where declining is a real answer rather than just ignoring the banner. */
+  secondaryAction?: {
+    label: string
+    onClick: () => void
+  }
 }
 
 interface BannerStackProps {
@@ -61,6 +66,16 @@ export function BannerStack({ banners }: BannerStackProps) {
             style={{ background: tone.background, borderColor: tone.borderColor, color: tone.color }}
           >
             <span className="flex-1">{banner.message}</span>
+            {banner.secondaryAction && (
+              <Button
+                variant="ghost"
+                size="xs"
+                data-testid={`banner-dismiss-${banner.id}`}
+                onClick={banner.secondaryAction.onClick}
+              >
+                {banner.secondaryAction.label}
+              </Button>
+            )}
             {banner.action && (
               <Button
                 variant="primary"

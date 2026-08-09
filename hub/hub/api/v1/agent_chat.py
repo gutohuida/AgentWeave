@@ -88,6 +88,9 @@ class ConversationResponse(BaseModel):
     # "running" — a run blocked on a question is running, but stopping for the operator is the
     # part they have to see.
     attention: ConversationAttention = "idle"
+    # Where this conversation stands with its checkpoint threshold: null, "due" or "dismissed".
+    # The conversation surface reads it to decide whether to warn.
+    checkpoint_warning: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     archived_at: Optional[datetime] = None

@@ -204,6 +204,35 @@ async def consider(
             _declined(conversation_id, "nothing has happened since the last checkpoint")
             return None
 
+        if not policy.automatic:
+            # Warn, do not spend.
+            #
+            # Generating here billed a model call whether or not the operator wanted one — and at
+            # a low threshold billed it again every turn. An operator who would rather keep
+            # working had already paid for a summary they were about to discard.
+            #
+            # The staleness argument that made this eager still holds, which is why this is a
+            # warning and not a promise to generate later: the Hub says the moment has arrived and
+            # hands the decision over now, so the artifact is fresh whenever the answer is yes.
+            if conversation.checkpoint_warning == "dismissed":
+                _declined(conversation_id, "the operator dismissed this conversation's warning")
+                return None
+            if conversation.checkpoint_warning != "due":
+                conversation.checkpoint_warning = "due"
+                await db.commit()
+                await sse_manager.broadcast(
+                    project_id,
+                    "checkpoint_due",
+                    {
+                        "conversation_id": conversation_id,
+                        "agent": agent_name,
+                        "threshold_mode": policy.threshold_mode,
+                        "threshold_value": policy.threshold_value,
+                    },
+                )
+                logger.info("checkpoint due for %s", conversation_id)
+            return None
+
         cli, model, runner_id = await _resolve_runner(db, project)
         if cli is None:
             logger.info(
@@ -249,9 +278,9 @@ async def consider(
             await sse_manager.broadcast(project_id, "conversation_cut_over", payload)
             return checkpoint.id
 
-        # "Offered" is not "shall I ask the agent to write one?" — it is "I made one, here it
-        # is, cut over?". Generation no longer depends on the agent, so there is nothing to ask
-        # permission for before doing it.
+        # Reached only under `automatic` with a checkpoint that could not be handed over — an
+        # unwritten or failed one. The operator is told it exists rather than left with a
+        # conversation that quietly kept going.
         await sse_manager.broadcast(project_id, "checkpoint_ready", payload)
         return checkpoint.id
 

@@ -367,6 +367,14 @@ class Conversation(Base):
         String(64), nullable=True, index=True
     )
     bound_sender_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Where this conversation stands with its checkpoint threshold: NULL (not warned), `due`
+    # (crossed, waiting on the operator), or `dismissed` (the operator chose to keep working).
+    #
+    # One column, not a `warned` boolean plus a `dismissed` boolean — those two make "dismissed
+    # but never warned" representable, and every reader would then have to decide what that
+    # meant. A successor is created NULL, so dismissing is final for a conversation and not for
+    # a line of work.
+    checkpoint_warning: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

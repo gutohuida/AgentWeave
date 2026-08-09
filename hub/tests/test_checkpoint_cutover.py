@@ -24,6 +24,7 @@ from hub.checkpoints import compute_envelope, create_checkpoint
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     Agent,
+    Checkpoint,
     Conversation,
     InboundQueueEntry,
     Project,
@@ -337,9 +338,12 @@ async def test_crossing_the_threshold_under_automatic_generates_and_cuts_over(ap
 
 
 @pytest.mark.asyncio
-async def test_under_offered_a_checkpoint_is_made_but_nothing_is_cut_over(app, monkeypatch):
-    """Task 8.10. The offer is "I made one, here it is, cut over?" — generation no longer depends
-    on the agent, so there is nothing to ask permission for before doing it."""
+async def test_under_offered_nothing_is_made_and_nothing_is_cut_over(app, monkeypatch):
+    """**This assertion inverted.** It used to read "a checkpoint is made but nothing is cut
+    over", on the reasoning that generation no longer depends on the agent so there is nothing to
+    ask permission for. That reasoning ignored the bill: generating billed a model call whether or
+    not the operator wanted one, and at a low threshold billed it again every turn. `offered` now
+    warns and spends nothing until asked."""
 
     def fake_run(cmd, **kwargs):
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
@@ -348,8 +352,10 @@ async def test_under_offered_a_checkpoint_is_made_but_nothing_is_cut_over(app, m
         await _configured_project(db, checkpoint_mode="offered")
         await _conversation(db)
 
-    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    def explode(*_a, **_k):  # pragma: no cover — `offered` warns; it does not spawn
+        raise AssertionError("offered must not generate")
+
+    monkeypatch.setattr(subprocess, "run", explode)
     checkpoint_id = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
 
     async with async_session_factory() as db:
@@ -360,9 +366,10 @@ async def test_under_offered_a_checkpoint_is_made_but_nothing_is_cut_over(app, m
             .all()
         )
 
-    assert checkpoint_id is not None
+    assert checkpoint_id is None
     assert predecessor.lifecycle == "open"
     assert successors == []
+    assert predecessor.checkpoint_warning == "due"
 
 
 @pytest.mark.asyncio
@@ -405,7 +412,9 @@ async def test_a_quiet_conversation_is_not_checkpointed_over_and_over(app, monke
         return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
 
     async with async_session_factory() as db:
-        await _configured_project(db, checkpoint_mode="offered")
+        # `automatic`, because only that mode generates now — the guard being tested is about
+        # not regenerating, which requires generating in the first place.
+        await _configured_project(db, checkpoint_mode="automatic")
         await _conversation(db)
         db.add(
             Run(
@@ -529,3 +538,91 @@ async def test_a_real_reading_reaches_the_trigger(app, monkeypatch):
     assert seen.get("conversation_id") == "conv-reading"
     assert seen.get("context_tokens") == 50_000
     assert seen.get("agent") == AGENT
+
+
+# --------------------------------------------------------------------------- warn before spending
+
+
+@pytest.mark.asyncio
+async def test_offered_warns_at_the_threshold_and_spends_nothing(app, monkeypatch):
+    """Generating first billed a model call whether or not the operator wanted one — and at a low
+    threshold billed it again every turn. The operator's framing: "if I want to extend a little
+    longer I can"."""
+
+    def explode(*_a, **_k):  # pragma: no cover — the point is that nothing spawns
+        raise AssertionError("a warning must not generate a checkpoint")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        await _conversation(db)
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    result = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+        checkpoints = (await db.execute(select(Checkpoint))).scalars().all()
+
+    assert result is None
+    assert conversation.checkpoint_warning == "due"
+    assert checkpoints == []
+
+
+@pytest.mark.asyncio
+async def test_a_dismissed_warning_never_returns(app, monkeypatch):
+    """Re-asking an operator who said "not yet" is the same as not letting them say it."""
+
+    def explode(*_a, **_k):  # pragma: no cover
+        raise AssertionError("a dismissed conversation must not checkpoint")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    monkeypatch.setattr(subprocess, "run", explode)
+    assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=99.0) is None
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+
+    # Still dismissed, not re-marked due.
+    assert conversation.checkpoint_warning == "dismissed"
+
+
+@pytest.mark.asyncio
+async def test_automatic_still_acts_without_warning_first(app, monkeypatch):
+    """Acting alone is what choosing `automatic` means; a warning there would be a mode that
+    does not do what it says."""
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="automatic")
+        await _conversation(db)
+
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    checkpoint_id = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
+
+    async with async_session_factory() as db:
+        conversation = await db.get(Conversation, "conv-1")
+
+    assert checkpoint_id is not None
+    assert conversation.lifecycle == "archived"
+    assert conversation.checkpoint_warning is None
+
+
+@pytest.mark.asyncio
+async def test_a_successor_is_warnable_again(app):
+    """Dismissal is final for a conversation, not for a line of work."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+        checkpoint = await _ready_checkpoint(db, conversation)
+        successor, _ = await cut_over(db, conversation, checkpoint)
+
+    assert successor.checkpoint_warning is None

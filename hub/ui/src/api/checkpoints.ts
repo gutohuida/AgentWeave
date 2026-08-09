@@ -108,3 +108,13 @@ export async function continueConversation(
     `/api/v1/projects/${projectId}/conversations/${conversationId}/continue`,
   )
 }
+
+/** Wave away the checkpoint warning for this conversation, for good. */
+export async function dismissCheckpointWarning(
+  projectId: string,
+  conversationId: string,
+): Promise<{ conversation_id: string; checkpoint_warning: string }> {
+  return postJson(
+    `/api/v1/projects/${projectId}/conversations/${conversationId}/dismiss-checkpoint-warning`,
+  )
+}

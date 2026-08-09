@@ -300,4 +300,40 @@ describe('agent conversation handoff', () => {
     // Neither has anything a successor could continue from.
     expect(screen.queryByTestId('banner-action-checkpoint-offered')).not.toBeInTheDocument()
   })
+
+  it('warns at the threshold without spending, and the warning can be waved away', async () => {
+    // The operator's point: "if I want to extend a little longer I can". Generating first billed
+    // a model call whether or not they wanted one, and at a low threshold billed it again every
+    // turn.
+    conversations = conversations.map((c) =>
+      c.id === 'conv-old' ? { ...c, checkpoint_warning: 'due' as const } : c,
+    )
+    const user = userEvent.setup()
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+
+    const banner = screen.getByTestId('conversation-banner')
+    expect(banner).toHaveAttribute('data-banner-id', 'checkpoint-due')
+    expect(banner).toHaveTextContent('Nothing has been written yet')
+
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-due'))
+
+    // Dismissal is recorded, and the banner goes on the click rather than on the next refetch.
+    await waitFor(() => expect(calledUrl(0)).toContain('/dismiss-checkpoint-warning'))
+    await waitFor(() =>
+      expect(screen.queryByTestId('banner-dismiss-checkpoint-due')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('does not warn once the warning has been dismissed', () => {
+    conversations = conversations.map((c) =>
+      c.id === 'conv-old' ? { ...c, checkpoint_warning: 'dismissed' as const } : c,
+    )
+    render(
+      <ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />,
+    )
+    // Re-asking someone who said "not yet" is the same as not letting them say it.
+    expect(screen.queryByTestId('banner-dismiss-checkpoint-due')).not.toBeInTheDocument()
+  })
 })

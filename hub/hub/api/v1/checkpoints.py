@@ -149,6 +149,11 @@ async def take_checkpoint(
         model=project_row.checkpoint_model or runner.model,
         runner_id=runner.id,
     )
+    # The warning has been answered by doing the thing it asked about. Leaving it `due` would
+    # keep offering a decision the operator has already made.
+    if conversation.checkpoint_warning == "due":
+        conversation.checkpoint_warning = None
+        await session.commit()
     await sse_manager.broadcast(
         project_id,
         "checkpoint_ready",
@@ -161,6 +166,30 @@ async def take_checkpoint(
         },
     )
     return CheckpointSummary.of(checkpoint)
+
+
+@router.post("/conversations/{conversation_id}/dismiss-checkpoint-warning")
+async def dismiss_checkpoint_warning(
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Wave away the warning for this conversation, for good.
+
+    Final within the conversation, deliberately: re-asking an operator who has already said "not
+    yet" is the same as not letting them say it. A successor is created with no warning state, so
+    the next conversation in the line warns on its own threshold.
+    """
+    project_id, _ = project
+    conversation = await _conversation_or_404(session, project_id, conversation_id)
+    conversation.checkpoint_warning = "dismissed"
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id,
+        "checkpoint_warning_dismissed",
+        {"conversation_id": conversation_id, "agent": conversation.agent},
+    )
+    return {"conversation_id": conversation_id, "checkpoint_warning": "dismissed"}
 
 
 @router.post("/conversations/{conversation_id}/continue")

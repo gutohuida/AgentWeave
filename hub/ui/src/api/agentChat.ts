@@ -62,6 +62,10 @@ export interface AgentConversation {
   title_set_by_operator: boolean
   origin: ConversationOrigin
   attention: ConversationAttention
+  /** Where this conversation stands with its checkpoint threshold. `due` warns; `dismissed`
+   *  never warns again, because re-asking an operator who said "not yet" is the same as not
+   *  letting them say it. */
+  checkpoint_warning?: 'due' | 'dismissed' | null
   created_at: string
   updated_at: string
   archived_at?: string | null
