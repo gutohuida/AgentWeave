@@ -273,6 +273,9 @@ cheap, and it catches the failures that survive a confident-sounding draft.
   `data-requirements` pointing at requirement IDs that exist in the document.
 - Three theme layers (`:root`, `prefers-color-scheme`, `:root[data-theme]`) and the
   same-document anchor-click interceptor are present.
+- The TOC's breakpoint equals the nav width plus `main.content`'s maximum. Below that the
+  document must be one column: a two-column layout that engages before there is room for both
+  makes the text *narrower* as the window gets wider.
 
 **Content (traceability and falsifiability):**
 - Requirement → acceptance criterion → task, in both directions, with no orphans.
@@ -424,7 +427,13 @@ Use this as the starting template. Fill every `<!-- … -->`. Substitution token
     li.task[data-status="done"] .task-desc { color: var(--done); text-decoration:line-through; }
     .req-refs { color: var(--muted); font-size:.85em; }
 
-    @media (max-width: 780px) {
+    /* 1080 = the nav's 220 + `main.content`'s 860 maximum (both border-box). The TOC must not
+       appear before there is room for it *and* a full-width `main`, or the document gets
+       *narrower* as its container gets wider: at one pixel over a lower breakpoint the nav takes
+       its 220 out of a `main` that was already at its maximum. Measured at the old 780: the text
+       lost 215px at 785px of width, and did not recover it until 1080. Keep this number equal to
+       the nav width plus `main.content`'s maximum. */
+    @media (max-width: 1080px) {
       nav.toc { display:none; }
       main.content { margin: 0; padding: 0 1rem 3rem; }
     }
