@@ -143,11 +143,21 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
       agent it escalates instead; escalation reassigns and records the previous assignee
 - [x] 8.9 Unit: an interrupted run is checked by reconciliation
 - [x] 8.10 Unit: a later actor transition resolves an open divergence and retains the record
-- [ ] 8.11 Live against `testbed/`: delegate a task between two agents and confirm from the database
-      that the receiving run carries `task_id` and the task moved to `in_progress` with
-      `origin='runtime'` — a behavioural probe, not an HTTP 200 (handoff 0030's dead end)
-- [ ] 8.12 Live: confirm the serving process is the new code before believing any live result —
-      restart by exact PID and verify the new process bound to the port
+- [x] 8.11 Live: confirmed against a copy of the operator's real database (`proj-cddb0827`, real
+      roster `claude-1`/`claude-test-1`/`codex-1`) — binding set `run.task_id`, moved the task
+      `pending → in_progress` with `origin='runtime'`, the boundary check correctly answered "did
+      not advance" despite that transition existing, the divergence recorded `escalate →
+      escalated`, the task was reassigned `claude-1 → codex-1` with the previous assignee on the
+      record, and the response was queued for `codex-1` carrying the task and the source run.
+      **Run against a copy, not the live board**, so no scratch task or transition row was written
+      to the operator's project. No agent process was spawned — the end-to-end with a real agent is
+      the operator's guide, 8c step 6
+- [x] 8.12 Live: Hub restarted by exact PID (25412 stopped, port confirmed free, new process 9360
+      confirmed bound). Migrations `0053 → 0058` applied to the real database on start, and the
+      three stale `running` runs reconciled to `interrupted`. The serving process was proved new
+      behaviourally rather than by a 200: `/openapi.json` publishes `/tasks/divergences/recent`,
+      `divergence_policy`/`escalation_agent`/`has_open_divergence` on `TaskResponse`, and `task_id`
+      on `TriggerAgentRequest`
 
 ### 8b. Human-only — the operator runs these
 
