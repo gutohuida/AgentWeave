@@ -62,63 +62,111 @@ it or whether it needs the **operator**, and section 7 is the guide for the oper
 - [ ] 4.5 Confirm the SSE `task_updated` broadcast still fires on an accepted transition and does
       **not** fire on a refusal. *Agent-verifiable.*
 
-## 5. The MCP surface
+## 5. Creation, and levelling the transports
 
-- [ ] 5.1 Verify a refusal reaches the agent as a tool failure: `_hub_request`
+Found by the 2026-08-10 scan; the machine was walkable around before this section existed.
+
+- [ ] 5.1 Restrict creation to the entry statuses `pending` and `assigned` in
+      `create_task_for_actor` (`hub/hub/api/v1/tasks.py:65-70`) — the single `Task(` construction
+      site, so one place covers every caller.
+- [ ] 5.2 Narrow `AgentTaskCreate.status` (`hub/hub/api/v1/agent_actions.py:71`) and
+      `TaskCreate.status` (`hub/hub/schemas/tasks.py`) to the entry statuses, so the refusal is a
+      schema error where it can be and a service error where it cannot.
+- [ ] 5.3 Confirm creation records **no** transition (D10), and that a created task's first history
+      entry is its first actual move. *Agent-verifiable.*
+- [ ] 5.4 Test that `POST /agent-actions/tasks` with `status: "approved"` is refused — this is the
+      hole the scan found, and the test is the proof it is shut. *Agent-verifiable.*
+- [ ] 5.5 Assert HTTP and MCP agree on create: neither exposes a status the other does not
+      (`agent-capability-plane`). MCP's `create_task` (`hub/hub/mcp_server.py:206`) exposes none
+      today, so this is satisfied by narrowing HTTP — verify, do not widen MCP.
+
+## 6. The MCP surface
+
+- [ ] 6.1 Verify a refusal reaches the agent as a tool failure: `_hub_request`
       (`hub/hub/mcp_server.py:132-162`) already raises `HubAPIError` on non-2xx, so this is a test,
       not new code. Assert it is not converted into an empty or successful result.
-- [ ] 5.2 Assert the failure text survives `_readable_detail` with the reachable set intact — a
+- [ ] 6.2 Assert the failure text survives `_readable_detail` with the reachable set intact — a
       refused agent's only feedback is that string, and an unreadable one produces blind retries.
-- [ ] 5.3 If anything about the map or statuses ends up restated in `hub/hub/mcp_server.py`, add the
+- [ ] 6.3 If anything about the map or statuses ends up restated in `hub/hub/mcp_server.py`, add the
       agreement test `CLAUDE.md` requires. Prefer not restating it at all.
 
-## 6. Fallout and agent verification
+## 7. The operator's status control
 
-- [ ] 6.1 Run `pytest hub/tests/` and triage every failure: each is either a fixture making a move
-      the map forbids (fix the fixture) or evidence the map is too strict (fix the map, with a note
-      in `design.md` D5). Expected per the Risks section — not a surprise.
-- [ ] 6.2 Run `pytest tests/` — the CLI's `TASK_STATUSES` is read by 1.3 and should be untouched
+Without this, D9's operator-only edges exist in the API and nowhere in the product. The board is
+read-only today: `useUpdateTask` (`hub/ui/src/api/tasks.ts:34`) has no callers.
+
+- [ ] 7.1 Expose the legal-moves-for-this-actor query so the UI asks the map rather than
+      reimplementing it. Either on the task response or as a small endpoint — decide when wiring
+      4.1, and do not let a second copy of the map appear in TypeScript.
+- [ ] 7.2 Add a status action to `hub/ui/src/components/tasks/TaskCard.tsx` offering **only** the
+      operator-legal transitions from the current status, wired to the existing `useUpdateTask`.
+- [ ] 7.3 Surface a refusal usefully if one still occurs — a stale board can offer a move that
+      became illegal. The 409/403 detail is already written for humans; show it rather than a
+      generic failure.
+- [ ] 7.4 Component test: a task in each status offers exactly the operator-legal set and nothing
+      else; a task in `approved` offers `revision_needed` and not `in_progress`.
+      *Agent-verifiable via vitest.*
+- [ ] 7.5 `npm run build`, copy `hub/ui/dist` over `hub/hub/static/ui`, confirm with `diff -rq`
+      (`CLAUDE.md`). Replace the directory rather than copying into it — stale hashed assets
+      otherwise survive and the diff fails.
+
+## 8. Fallout and agent verification
+
+- [ ] 8.1 Run `pytest hub/tests/` and triage failures: each is either a fixture making a move the
+      map forbids (fix the fixture) or evidence the map is too strict (fix the map, with a note in
+      `design.md` D5). **Expected to be small** — a scan found only `test_codex_appserver.py`
+      mentions `approved`/`under_review`, incidentally. If it is large, the map is wrong.
+- [ ] 8.2 Run `pytest tests/` — the CLI's `TASK_STATUSES` is read by 1.3 and should be untouched
       otherwise.
-- [ ] 6.3 End-to-end against a running Hub in `testbed/`, **not the repo root**: an agent run
+- [ ] 8.3 Run `npx vitest run` and `npx tsc --noEmit` for section 7.
+- [ ] 8.4 End-to-end against a running Hub in `testbed/`, **not the repo root**: an agent run
       completes a task, the same run's approval is refused with 403, a second run's approval
       succeeds, and the history shows both runs. *Agent-verifiable via the API.*
-- [ ] 6.4 Confirm a task created before the migration transitions normally and starts its history at
+- [ ] 8.5 Confirm a task created before the migration transitions normally and starts its history at
       that transition, with nothing invented before it (D8). *Agent-verifiable.*
-- [ ] 6.5 Update `openspec/specs/` via `openspec-sync-specs` once the behaviour is real — not before.
+- [ ] 8.6 Update `openspec/specs/` via `openspec-sync-specs` once the behaviour is real — not before.
 
-## 7. Human-only verification — the operator's guide
+## 9. Human-only verification — the operator's guide
 
 None of the below can be verified by the agent: each is a judgement about whether the refusal is
-*usable*, or an operator-role action the agent cannot authentically perform.
+*usable*, or an operator-role action the agent cannot authentically perform. Every step uses the
+status control from section 7 — before it exists, none of these are runnable.
 
-- [ ] 7.1 **Does a refusal tell you what to do next?** In `testbed/`, drive an agent to approve its
+- [ ] 9.1 **Does a refusal tell you what to do next?** In `testbed/`, drive an agent to approve its
       own completed task. Read the error it receives in the conversation.
       **Expect:** it names the current status and what the actor can move to, and the agent
       self-corrects rather than retrying the same call.
       **Failure looks like:** the agent retries identically, or reports a generic failure with no
       status named.
-- [ ] 7.2 **Is the lifecycle workable in a single-operator project?** Take a task from `pending` to
-      `approved` yourself through the UI, with no second agent involved.
-      **Expect:** every step is available to you, including approving work you completed.
-      **Failure looks like:** any point where you are stuck and the only exit is editing the
-      database.
-- [ ] 7.3 **Is early rejection reachable where you would want it?** Reject a task from `pending`, and
-      again from `in_progress`.
-      **Expect:** both succeed for you and are recorded as operator actions.
-      **Failure looks like:** a refusal — meaning the operator-only edges did not land.
-- [ ] 7.4 **Is reopening honest?** Approve a task, then reopen it to `revision_needed`.
+- [ ] 9.2 **Is the lifecycle workable in a single-operator project?** Take a task from `pending` to
+      `approved` yourself, using only the card's status control and no second agent.
+      **Expect:** every step is offered when you need it, including approving work you completed.
+      **Failure looks like:** any point where the control offers nothing and the only exit is
+      `curl` or the database.
+- [ ] 9.3 **Does the control offer the right moves and no others?** At each status, read what it
+      offers.
+      **Expect:** it matches the map's operator column — no move that would be refused, and no
+      missing one you wanted.
+      **Failure looks like:** an offered move that then fails, which is the specific thing D11 set
+      out to avoid.
+- [ ] 9.4 **Is early rejection reachable where you would want it?** Reject a task from `pending`,
+      and again from `in_progress`.
+      **Expect:** both succeed and are recorded as operator actions.
+      **Failure looks like:** the option is absent — meaning the operator-only edges did not land.
+- [ ] 9.5 **Is reopening honest?** Approve a task, then reopen it to `revision_needed`.
       **Expect:** it reopens and the original approval is **still in the history**, not replaced.
       **Failure looks like:** the earlier transitions vanish or are rewritten.
-- [ ] 7.5 **Does `completed → under_review` earn its place?** After using the lifecycle for a few
+- [ ] 9.6 **Does `completed → under_review` earn its place?** After using the lifecycle for a few
       real tasks, judge whether the separate review hop is meaningful or an empty formality an agent
       always performs twice in a row.
       **Expect:** a decision, recorded in `design.md` — collapsing it is a map edit (Risks).
       **This one has no pass/fail; it is the question the design flagged and only use can answer.**
 
-## 8. Closeout
+## 10. Closeout
 
-- [ ] 8.1 All of section 7 answered by the operator, with 7.5's decision written into `design.md`.
-- [ ] 8.2 `pytest hub/tests/`, `pytest tests/`, and `npx openspec validate --changes --strict` green,
-      with real output recorded.
-- [ ] 8.3 Archive via `openspec-archive-change` — **not** before 8.1. A plan existing is not a task
+- [ ] 10.1 All of section 9 answered by the operator, with 9.6's decision written into `design.md`.
+- [ ] 10.2 `pytest hub/tests/`, `pytest tests/`, `npx vitest run`, `npx tsc --noEmit`, and
+      `npx openspec validate --changes --strict` green, with real output recorded.
+- [ ] 10.3 `hub/hub/static/ui` refreshed and `diff -rq` clean (7.5).
+- [ ] 10.4 Archive via `openspec-archive-change` — **not** before 10.1. A plan existing is not a task
       complete (`CLAUDE.md`).

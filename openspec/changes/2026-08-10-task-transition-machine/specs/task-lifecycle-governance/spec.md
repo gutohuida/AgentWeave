@@ -42,6 +42,60 @@ happened.
 - **AND** adding a status in one place without declaring its transitions fails a test rather than
   silently producing an unreachable status
 
+### Requirement: A task may only be created in an entry status
+
+The system SHALL restrict the status a task may be created with to the declared entry statuses
+`pending` and `assigned`, and SHALL refuse creation in any other status. A lifecycle that can be
+entered anywhere is not a lifecycle: without this, a caller reaches `approved` by creating a task
+there rather than by transitioning to it, and no rule about transitions can prevent it.
+
+This restriction SHALL hold identically over direct HTTP and MCP. Where one transport currently
+exposes a status field that the other does not, the transports are brought into agreement by
+narrowing the wider one, not by widening the narrower.
+
+Creation SHALL NOT record a transition — a task's history begins with its first *move*, and its
+entry status is already stated by the task itself.
+
+#### Scenario: Creation in a non-entry status is refused
+
+- **WHEN** a caller creates a task with status `approved`, `completed`, `under_review`,
+  `revision_needed` or `rejected`
+- **THEN** the request is refused
+- **AND** no task is created
+
+#### Scenario: Creation in an entry status succeeds
+
+- **WHEN** a caller creates a task with status `pending` or `assigned`, or states no status
+- **THEN** the task is created
+- **AND** no transition is recorded
+
+#### Scenario: Both transports refuse alike
+
+- **WHEN** creation in a non-entry status is attempted over direct HTTP and through MCP
+- **THEN** neither transport creates the task
+- **AND** neither exposes a status field the other lacks
+
+### Requirement: The operator can perform every transition reserved to them
+
+Every transition the map reserves to the operator SHALL be reachable by the operator through the
+application, not only through the API. A rule that grants the operator exclusive authority while
+providing no surface on which to exercise it grants nothing.
+
+The control SHALL offer only those transitions legal for the operator from the task's current
+status, so an illegal move is not presented and then refused.
+
+#### Scenario: The offered moves match the map
+
+- **WHEN** the operator views a task in a given status
+- **THEN** the transitions offered are exactly those the map declares legal for an operator from
+  that status
+- **AND** transitions reserved to no one, or legal only for agent runs, are not offered
+
+#### Scenario: A reserved transition is reachable
+
+- **WHEN** the operator wishes to reject a task at `pending`, or reopen an `approved` task
+- **THEN** the application provides a way to do it
+
 ### Requirement: Some transitions are the operator's alone
 
 The transition map SHALL declare, per edge, which kinds of actor may take it. The operator SHALL

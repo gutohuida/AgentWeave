@@ -136,15 +136,65 @@ The migration creates an empty table. A pre-existing task's history begins at it
 Inventing a synthetic "created as pending" row would put a claim in an integrity record that nothing
 observed.
 
+### D10 — Creation is constrained, and the transports are levelled by narrowing
+
+Found by the 2026-08-10 scan, after the first draft: the machine was walkable around. `Task` is
+constructed in exactly one place (`hub/hub/api/v1/tasks.py:65`) — the choke-point premise holds for
+creation as it does for update — but that one place applies `status=body.status`, and both
+`TaskCreate` and `AgentTaskCreate` (`hub/hub/api/v1/agent_actions.py:71`) validate membership in the
+eight without caring *which* of the eight. A task could therefore be born `approved`.
+
+Entry statuses are `pending` and `assigned`. `assigned` is included because creating a task already
+directed at an agent is ordinary, and forcing `pending` then an immediate transition would add a
+recorded move that says nothing.
+
+*On the transport asymmetry:* MCP's `create_task` never exposed `status`, so it was already
+narrower than HTTP — which `agent-capability-plane` forbids. Levelling by **narrowing HTTP** rather
+than widening MCP is the choice that also fixes the hole; widening MCP would have propagated it.
+
+*Creation records no transition.* A history entry describes a move. The entry status is a property
+of the task, already visible on it, and inventing a `∅ → pending` row would put a non-event in an
+integrity record (consistent with D8).
+
+### D11 — One small UI slice, because otherwise the operator's authority is theoretical
+
+The same scan found the task board is read-only: `useUpdateTask` exists in
+`hub/ui/src/api/tasks.ts:34` and has **no callers**, and every button in `TasksBoard.tsx` and
+`TaskCard.tsx` is a filter or an expander. D9 gives the operator exclusive edges — early rejection,
+reopening — that they could not reach anywhere in the product.
+
+So `TaskCard` gains a status action offering **only the transitions legal for the operator from the
+current status**, derived from the same map. Offering all eight and letting the API refuse would
+teach the operator to expect failure from their own controls.
+
+*Alternative rejected:* ship backend-only and rewrite the human verification steps to use `curl`.
+Honest, but it leaves half the design unusable, and the test guide would be verifying the API rather
+than the product.
+
+*Alternative rejected:* defer the operator edges to B5. That keeps B1 backend-pure, but ships a
+machine whose refusals the operator cannot override anywhere — the worst intermediate state.
+
+### D12 — Assignment stays ungoverned, and that is recorded rather than silently omitted
+
+`TaskUpdate.assignee` can be set by any actor, with no entitlement check. It is one of the three
+things the operator named as depending on agents remembering, so its absence here needs a reason:
+an assignment rule worth having ("only the assignee may complete") depends on knowing which run is
+working which task, and that binding does not exist
+(`openspec/explorations/2026-08-10-enforcing-the-development-cycle.md`). Building assignment rules
+first would mean guessing at the edge that change will create.
+
 ## Risks / Trade-offs
 
 - **The map is wrong for how the operator actually works, and legal moves start getting refused.**
   → The three uncertain edges are Open Questions, answered before implementation rather than
   discovered in use. The map is one declaration, so correcting it is a one-line change plus a test.
 
-- **Existing tests and seeded fixtures move tasks in ways the map forbids, and the suite lights up.**
-  → Expected, and informative: each failure is either a real illegal move worth fixing or evidence
-  the map is too strict. Triaging them is an explicit task, not a surprise.
+- **Existing tests and seeded fixtures move tasks in ways the map forbids.** → **Smaller than first
+  estimated.** This section originally predicted the suite would "light up". A scan on 2026-08-10
+  found only `hub/tests/test_codex_appserver.py` mentions `approved` or `under_review` at all, and
+  incidentally. Triage remains a task (6.1) but should be budgeted as minutes, not as a phase. The
+  original estimate is corrected here rather than left standing, because an inflated risk is as
+  misleading as a missed one.
 
 - **Author/reviewer separation is only as good as run identity.** A single agent could complete on
   one run and approve on its next run, satisfying the letter of the rule.
