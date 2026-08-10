@@ -18,24 +18,32 @@ export interface SpecPreferences {
 /**
  * The conversation column's range while a document is open beside it.
  *
- * The default is where the composer's control row stops wrapping — measured, not chosen. Below
- * the minimum the conversation stops being a place you can write in; above the maximum the
- * document is the one being crushed, which is the defect this layout exists to fix, mirrored.
+ * There is no design cap. The first version bounded the conversation at 560 on the reasoning that
+ * "a specification is a document to read", which made the document panel impossible to shrink —
+ * the operator could not give the conversation more than 560 however much room there was
+ * (operator, 2026-08-10: "the screen on the right is too big and we can't make it shorter"). The
+ * boundary is now the operator's, floored on each side only where a pane stops being usable.
+ *
+ * The default is where the composer's control row stops wrapping — measured, not chosen.
  */
-export const CONVERSATION_MIN_WIDTH = 420
-export const CONVERSATION_MAX_WIDTH = 560
+export const CONVERSATION_MIN_WIDTH = 380
 export const CONVERSATION_DEFAULT_WIDTH = 480
 
-/** What the document panel needs before it stops being worth opening as a column. Below
+/** What the document panel needs before it stops being worth showing as a column. Below
  *  `CONVERSATION_MIN_WIDTH + SPEC_DOC_MIN_WIDTH` the panel becomes an overlay instead. */
-export const SPEC_DOC_MIN_WIDTH = 560
+export const SPEC_DOC_MIN_WIDTH = 360
+
+/** A sanity bound on the *stored* value, not a design decision: the real ceiling is whatever the
+ *  measurement leaves once the document has its minimum, and it is applied at render time. This
+ *  exists so a hand-edited or stale value cannot produce a nonsense width. */
+export const CONVERSATION_STORAGE_MAX = 4000
 
 export const DEFAULT_SPEC_PREFERENCES: SpecPreferences = {
   conversationWidth: CONVERSATION_DEFAULT_WIDTH,
 }
 
 export function clampConversationWidth(value: number): number {
-  return Math.min(CONVERSATION_MAX_WIDTH, Math.max(CONVERSATION_MIN_WIDTH, Math.round(value)))
+  return Math.min(CONVERSATION_STORAGE_MAX, Math.max(CONVERSATION_MIN_WIDTH, Math.round(value)))
 }
 
 /** A finite number, or the default. `NaN` and `Infinity` are numbers to `typeof`, and both

@@ -16,7 +16,11 @@ export interface RailProject {
   agents: AgentSummary[]
 }
 
-export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'jobs', 'activity'] as const
+/** No `spec` tab. A specification is reached from the composer's Spec pill, in the conversation
+ *  the operator is already in — not by leaving it, going to the project, and choosing a tab. A URL
+ *  still carrying `tab=spec` is unknown here and coerces to the default tab, which is what should
+ *  happen to a link to a place that no longer exists. */
+export const PROJECT_TABS = ['overview', 'tasks', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 export const ENVIRONMENT_SECTIONS = [

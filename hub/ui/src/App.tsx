@@ -47,7 +47,6 @@ import {
 } from '@/lib/navigation'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { useProjectConversations } from '@/api/agentChat'
-import { useSpecList } from '@/api/spec'
 import { useConfigStore } from '@/store/configStore'
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
@@ -147,42 +146,6 @@ export default function App() {
     )
   }, [destination, resolvedConversationId, navigateTo])
 
-  /**
-   * The specification entry point resolves *into* a conversation.
-   *
-   * `tab: 'spec'` survives as a way in — without one, finding a specification would mean already
-   * being in a conversation and knowing to press Ctrl+K — but it stops being a place: it lands the
-   * operator in a conversation with the manifest home document open, which is where specification
-   * work actually happens. Replaced rather than pushed, so Back does not return to a tab that
-   * immediately redirects again.
-   *
-   * Gated on both queries having answered: navigating before the home document is known would
-   * open a conversation with nothing beside it, and the operator would have to go and find the
-   * document they asked for.
-   */
-  const specEntry = destination.kind === 'project' && destination.tab === 'spec'
-  const { data: specList } = useSpecList()
-  useEffect(() => {
-    if (!specEntry || destination.kind !== 'project') return
-    if (projectConversations === undefined || specList === undefined) return
-    const home = specList.home ?? null
-    // Ordered most recent activity first by the listing endpoint.
-    const recent = (projectConversations.conversations ?? [])[0]
-    if (recent) {
-      navigateTo(
-        agentDestination(destination.projectId, recent.agent, recent.id, home),
-        { replace: true },
-      )
-      return
-    }
-    const firstAgent = agents[0]
-    if (!firstAgent) return
-    navigateTo(
-      newConversationDestination(destination.projectId, firstAgent.name, home),
-      { replace: true },
-    )
-  }, [specEntry, destination, projectConversations, specList, agents, navigateTo])
-
   useSSE()
 
   if (bootstrapState === 'pending') {
@@ -233,7 +196,7 @@ export default function App() {
       navigateTo(projectDestination(currentProjectId))
       return
     }
-    if (value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
+    if (value === 'tasks' || value === 'jobs' || value === 'activity') {
       navigateTo(projectDestination(currentProjectId, value))
       return
     }
@@ -336,19 +299,6 @@ export default function App() {
         : <OverviewPage onNavigate={navigate} />
     } else if (destination.tab === 'tasks') {
       projectContent = <TasksBoard />
-    } else if (destination.tab === 'spec') {
-      // Transient: the effect above replaces this destination with a conversation as soon as the
-      // conversation list and the manifest home are known. It stays visible only while they load,
-      // or when the project has no agent to hold the conversation.
-      projectContent = agents.length === 0 && projectConversations !== undefined ? (
-        <div className="flex h-full items-center justify-center px-6 text-center text-sm" style={{ color: 'var(--text-3)' }}>
-          Add an agent to this project to work on its specification.
-        </div>
-      ) : (
-        <div className="flex h-full items-center justify-center text-sm" style={{ color: 'var(--text-3)' }}>
-          Opening the specification…
-        </div>
-      )
     } else if (destination.tab === 'jobs') {
       projectContent = <JobsPage />
     } else if (destination.tab === 'activity') {

@@ -351,3 +351,35 @@ describe('one way to choose an agent', () => {
     expect(occurrences).toBe(1)
   })
 })
+
+describe('the specification is reached from the composer', () => {
+  /* The `spec` project tab is gone. Reaching a specification used to mean leaving the
+   * conversation, going to the project, and choosing a tab — for the surface the product is most
+   * about (operator, 2026-08-10). The pill sits with Model / Effort / Permissions because that is
+   * what it is: it states which document this turn is written against. */
+  it('states which document is open, and opens the picker', async () => {
+    renderChat('spec/a1-probe.html')
+
+    const pill = screen.getByTestId('composer-spec-control')
+    expect(pill).toHaveTextContent('A1 probe')
+    expect(pill).toHaveAttribute('title', 'Spec: A1 probe')
+
+    fireEvent.click(pill)
+    expect(await screen.findByRole('dialog')).toHaveAccessibleName('Search documents')
+  })
+
+  it('is present with no document open, which is how the first one is opened', () => {
+    renderChat(null)
+    const pill = screen.getByTestId('composer-spec-control')
+    expect(pill).toHaveTextContent('None')
+    expect(pill).toHaveAccessibleName('Open a specification document')
+  })
+
+  it('does not double as the close control', () => {
+    // Closing is the panel's own control. A pill whose press means "open" sometimes and "close"
+    // other times is two controls wearing one hat.
+    renderChat('spec/a1-probe.html')
+    expect(screen.getByTestId('spec-document-close')).toBeInTheDocument()
+    expect(screen.getByTestId('composer-spec-control')).not.toHaveAttribute('aria-pressed')
+  })
+})

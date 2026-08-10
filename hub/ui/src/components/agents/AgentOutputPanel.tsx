@@ -60,6 +60,10 @@ interface AgentOutputPanelProps {
    *  added to the operator's message. `null` on every other surface, and on the Spec page
    *  before a document resolves. */
   specDocumentPath?: string | null
+  /** The open document's display name, and the way to choose another. Both come from the
+   *  conversation view, which owns the picker; omitted, the composer renders no Spec pill. */
+  specDocumentLabel?: string | null
+  onOpenSpecPicker?: () => void
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -103,6 +107,8 @@ export function AgentOutputPanel({
   conversationId = null,
   onSelectConversation,
   specDocumentPath = null,
+  specDocumentLabel = null,
+  onOpenSpecPicker,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -871,6 +877,8 @@ export function AgentOutputPanel({
               effectiveControls={agentDefaultControls}
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}
+              onOpenSpecPicker={onOpenSpecPicker}
+              specDocumentLabel={specDocumentLabel}
             />
           </div>
         </div>

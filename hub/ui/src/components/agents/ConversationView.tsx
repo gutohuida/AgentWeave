@@ -11,7 +11,6 @@ import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { buildInventory } from '@/components/spec/specNavigation'
 import {
   CONVERSATION_DEFAULT_WIDTH,
-  CONVERSATION_MAX_WIDTH,
   CONVERSATION_MIN_WIDTH,
   DEFAULT_SPEC_PREFERENCES,
   SPEC_DOC_MIN_WIDTH,
@@ -111,18 +110,15 @@ export function ConversationView({
 
   /* What the conversation may take without pushing the document below its minimum.
    *
-   * `PaneResizer`'s own max is static and cannot know how much room there is, so the ceiling is
-   * budgeted against the measurement and floored at the conversation's own minimum — a ceiling
-   * that falls below the floor would invert the range. The rendered width is clamped by that
-   * budget rather than written back, so narrowing the window does not silently discard the width
-   * the operator chose for a wide one. */
+   * The ceiling is *only* the measurement: whatever is left once the document has its minimum.
+   * There is no design cap on top of it — a cap is what made the document panel impossible to
+   * shrink. Floored at the conversation's own minimum, because a ceiling below the floor would
+   * invert the range. The rendered width is clamped by this budget rather than written back, so
+   * narrowing the window does not silently discard the width the operator chose for a wide one. */
   const conversationMax =
     measuredWidth === null
-      ? CONVERSATION_MAX_WIDTH
-      : Math.max(
-          CONVERSATION_MIN_WIDTH,
-          Math.min(CONVERSATION_MAX_WIDTH, measuredWidth - SPEC_DOC_MIN_WIDTH - DIVIDER_WIDTH),
-        )
+      ? CONVERSATION_DEFAULT_WIDTH
+      : Math.max(CONVERSATION_MIN_WIDTH, measuredWidth - SPEC_DOC_MIN_WIDTH - DIVIDER_WIDTH)
   const conversationWidth = Math.min(preferences.conversationWidth, conversationMax)
 
   // The overlay is opened by opening a document and closed by the operator; the document stays in
@@ -160,6 +156,8 @@ export function ConversationView({
       onBackToProject={onBackToProject}
       onOpenAgentSettings={onOpenAgentSettings}
       specDocumentPath={document}
+      specDocumentLabel={document ? documentNode?.title ?? document : null}
+      onOpenSpecPicker={openPicker}
     />
   )
 

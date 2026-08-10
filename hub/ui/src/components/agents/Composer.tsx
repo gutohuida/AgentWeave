@@ -10,6 +10,7 @@ import {
 import { resolveTriggerResults } from '@/lib/composerTriggerSources'
 import { ComposerTriggerMenu, type ComposerTriggerMenuItem } from './ComposerTriggerMenu'
 import { ComposerModelControls } from './ComposerModelControls'
+import { ComposerSpecControl } from './ComposerSpecControl'
 
 export const COMPOSER_MIN_ROWS = 3
 const COMPOSER_MAX_ROWS = 12
@@ -54,6 +55,11 @@ export interface ComposerProps {
    *  recency view, where the message cannot go anywhere until an agent is chosen. Stated rather
    *  than left to a silently dead button. */
   disabledReason?: string
+  /** Opens the specification document picker. Omitted on surfaces that have no document panel
+   *  to open one into (the new-conversation surface), where the control renders nothing. */
+  onOpenSpecPicker?: () => void
+  /** The open document's display name, for the Spec pill. `null` means none is open. */
+  specDocumentLabel?: string | null
 }
 
 /**
@@ -77,6 +83,8 @@ export function Composer({
   pendingOverrides = {},
   onPendingOverridesChange = () => undefined,
   disabledReason,
+  onOpenSpecPicker,
+  specDocumentLabel = null,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -276,6 +284,12 @@ export function Composer({
               onPendingOverridesChange({ ...pendingOverrides, [controlId]: value })
             }
           />
+          {onOpenSpecPicker && (
+            <ComposerSpecControl
+              documentLabel={specDocumentLabel}
+              onOpenPicker={onOpenSpecPicker}
+            />
+          )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2" data-slot="composer-control-row-trailing">
           {disabledReason && (

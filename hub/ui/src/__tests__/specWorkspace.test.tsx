@@ -6,8 +6,8 @@ import type { ReactNode } from 'react'
 import type { AgentSummary } from '@/api/agents'
 import {
   CONVERSATION_DEFAULT_WIDTH,
-  CONVERSATION_MAX_WIDTH,
   CONVERSATION_MIN_WIDTH,
+  CONVERSATION_STORAGE_MAX,
   DEFAULT_SPEC_PREFERENCES,
   SPEC_DOC_MIN_WIDTH,
   SPEC_PREFERENCES_KEY,
@@ -137,8 +137,8 @@ describe('conversation workspace — proportions', () => {
     expect(screen.getByTestId('conversation-pane')).toHaveStyle({
       width: `${CONVERSATION_DEFAULT_WIDTH}px`,
     })
-    // The document takes the remainder, and never less than its own minimum — "the document gets
-    // the larger share when open" (design.md Decision 2).
+    // The document takes the remainder and never less than its own minimum. It is the *default*
+    // that leaves the document more room, not a rule — the operator can drag past it either way.
     expect(screen.getByTestId('document-pane')).toHaveStyle({ minWidth: `${SPEC_DOC_MIN_WIDTH}px` })
     expect(1600 - CONVERSATION_DEFAULT_WIDTH).toBeGreaterThan(CONVERSATION_DEFAULT_WIDTH)
   })
@@ -164,23 +164,44 @@ describe('conversation workspace — proportions', () => {
     reportWidth(DOCUMENT_COLUMN_BREAKPOINT)
 
     const max = Number(resizer().getAttribute('aria-valuemax'))
-    expect(max).toBeLessThan(CONVERSATION_MAX_WIDTH)
+    expect(max).toBe(CONVERSATION_MIN_WIDTH)
     expect(max + SPEC_DOC_MIN_WIDTH).toBeLessThanOrEqual(DOCUMENT_COLUMN_BREAKPOINT)
+  })
+
+  it('caps the conversation only by the measurement, never by a design maximum', () => {
+    // The first version capped it at 560, which made the document panel impossible to shrink.
+    // The ceiling is now whatever is left once the document has its minimum, and nothing else.
+    renderView()
+    reportWidth(2400)
+
+    const max = Number(resizer().getAttribute('aria-valuemax'))
+    expect(max).toBe(2400 - SPEC_DOC_MIN_WIDTH - 1)
+    expect(max).toBeGreaterThan(CONVERSATION_DEFAULT_WIDTH * 2)
+  })
+
+  it('lets the operator drag the conversation past half the width', () => {
+    saveSpecPreferences({ conversationWidth: 1600 })
+    renderView()
+    reportWidth(2400)
+
+    expect(screen.getByTestId('conversation-pane')).toHaveStyle({ width: '1600px' })
+    // ...and the document keeps its floor rather than vanishing.
+    expect(screen.getByTestId('document-pane')).toHaveStyle({ minWidth: `${SPEC_DOC_MIN_WIDTH}px` })
   })
 
   it('clamps a stored width that no longer fits, without discarding it', () => {
     // A width chosen on a wide window, now shown on a narrow one. The pane shrinks to fit; the
     // preference is untouched, so widening the window restores what the operator chose.
-    saveSpecPreferences({ conversationWidth: CONVERSATION_MAX_WIDTH })
+    saveSpecPreferences({ conversationWidth: 1200 })
     renderView()
     reportWidth(DOCUMENT_COLUMN_BREAKPOINT)
 
     const rendered = Number(
       (screen.getByTestId('conversation-pane') as HTMLElement).style.width.replace('px', ''),
     )
-    expect(rendered).toBeLessThan(CONVERSATION_MAX_WIDTH)
+    expect(rendered).toBeLessThan(1200)
     expect(rendered).toBeGreaterThanOrEqual(CONVERSATION_MIN_WIDTH)
-    expect(loadSpecPreferences().conversationWidth).toBe(CONVERSATION_MAX_WIDTH)
+    expect(loadSpecPreferences().conversationWidth).toBe(1200)
   })
 
   it('resizes from the keyboard and persists the result', () => {
@@ -269,13 +290,14 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
     expect(loadSpecPreferences()).toEqual({ conversationWidth: 500 })
   })
 
-  it('clamps a stored width into its usable range on the way in and on the way out', () => {
+  it('clamps a stored width into a sane range on the way in and on the way out', () => {
     saveSpecPreferences({ conversationWidth: 5 })
     expect(loadSpecPreferences().conversationWidth).toBe(CONVERSATION_MIN_WIDTH)
 
-    // Hand-edited storage, never written by the app.
-    localStorage.setItem(SPEC_PREFERENCES_KEY, JSON.stringify({ conversationWidth: 9999 }))
-    expect(loadSpecPreferences().conversationWidth).toBe(CONVERSATION_MAX_WIDTH)
+    // Hand-edited storage, never written by the app. The upper bound is a sanity bound, not a
+    // design cap — the real ceiling is the measurement, applied at render time.
+    localStorage.setItem(SPEC_PREFERENCES_KEY, JSON.stringify({ conversationWidth: 99999 }))
+    expect(loadSpecPreferences().conversationWidth).toBe(CONVERSATION_STORAGE_MAX)
   })
 
   it('rejects a width that is a number but not a measurement', () => {
