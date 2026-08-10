@@ -187,9 +187,20 @@ export default function App() {
     : null
   const currentProject = projects?.find((project) => project.id === currentProjectId)
 
+  /**
+   * The document open right now, carried onto every conversation the operator moves to.
+   *
+   * A document is what they are working on, not a property of the thread they are working on it
+   * in — so changing agent while reading a specification keeps it open, and changing agent with
+   * it closed keeps it closed (operator, 2026-08-10: *"a memory between agents"*). It is `null`
+   * anywhere that is not a conversation, so arriving from a project tab opens nothing: the
+   * memory is of what is on screen, not a preference that outlives leaving the surface.
+   */
+  const openDocument = destination.kind === 'conversation' ? destination.document : null
+
   const navigate = (value: string) => {
     if (value.startsWith('agent:')) {
-      navigateTo(agentDestination(currentProjectId, value.slice('agent:'.length)))
+      navigateTo(agentDestination(currentProjectId, value.slice('agent:'.length), null, openDocument))
       return
     }
     if (value === 'overview') {
@@ -248,10 +259,12 @@ export default function App() {
         // Replace, not push: retargeting an unsent message is a change of mind about one
         // message, not a place the operator navigated to and might want Back out of.
         onChooseAgent={(agent) =>
-          navigateTo(newConversationDestination(destination.projectId, agent), { replace: true })
+          navigateTo(newConversationDestination(destination.projectId, agent, openDocument), {
+            replace: true,
+          })
         }
         onStarted={(agent, conversationId) =>
-          navigateTo(agentDestination(destination.projectId, agent, conversationId))
+          navigateTo(agentDestination(destination.projectId, agent, conversationId, openDocument))
         }
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
       />
@@ -375,11 +388,13 @@ export default function App() {
               destination.kind === 'conversation' ? destination.conversationId : null
             }
             onOpenProject={(id) => navigateTo(projectDestination(id))}
-            onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent))}
+            onOpenAgent={(id, agent) => navigateTo(agentDestination(id, agent, null, openDocument))}
             onOpenConversation={(id, agent, conversationId) =>
-              navigateTo(agentDestination(id, agent, conversationId))
+              navigateTo(agentDestination(id, agent, conversationId, openDocument))
             }
-            onNewConversation={(id, agent) => navigateTo(newConversationDestination(id, agent))}
+            onNewConversation={(id, agent) =>
+              navigateTo(newConversationDestination(id, agent, openDocument))
+            }
             onOpenEnvironment={(id, section) => navigateTo(environmentDestination(id, section))}
             onOpenAgentSettings={(id, agent, section) =>
               navigateTo(agentSettingsDestination(id, agent, section))
@@ -434,7 +449,7 @@ export default function App() {
           onCreated={(name) => {
             const createdProjectId = agentCreateProjectId
             setAgentCreateProjectId(null)
-            navigateTo(agentDestination(createdProjectId, name))
+            navigateTo(agentDestination(createdProjectId, name, null, openDocument))
           }}
         />
       )}

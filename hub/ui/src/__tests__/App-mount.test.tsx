@@ -28,7 +28,10 @@ vi.mock('@/api/projects', () => ({
       path_display: 'C:/work/AgentWeave', directory_state: 'available', last_opened_at: null,
       last_seen_at: null, hop_budget: 20, turn_delivery_cap: 20, agent_budget: 10,
       token_budget: null, allow_agent_jobs: true,
-      agents: [{ id: 'agent-claude', name: 'claude', color_index: 2, status: 'idle', last_seen: null }],
+      agents: [
+        { id: 'agent-claude', name: 'claude', color_index: 2, status: 'idle', last_seen: null },
+        { id: 'agent-codex', name: 'codex', color_index: 4, status: 'idle', last_seen: null },
+      ],
     }],
     isLoading: false,
   }),
@@ -40,7 +43,10 @@ vi.mock('@/api/projects', () => ({
 }))
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({
-    data: [{ name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, color_index: 2 }],
+    data: [
+      { name: 'claude', status: 'idle', message_count: 0, active_task_count: 0, color_index: 2 },
+      { name: 'codex', status: 'idle', message_count: 0, active_task_count: 0, color_index: 4 },
+    ],
     isLoading: false,
   }),
 }))
@@ -232,5 +238,45 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     render(withQueryClient(<App />))
     expect(screen.getByTestId('page-conversation')).toBeInTheDocument()
     expect(screen.queryByTestId('page-overview')).not.toBeInTheDocument()
+  })
+
+  /* The document is what the operator is working on, not a property of the thread they are
+   * working on it in (operator: "a memory between agents"). */
+  it('keeps an open document open when the agent changes', () => {
+    window.history.pushState(
+      null, '',
+      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.html',
+    )
+    render(withQueryClient(<App />))
+
+    fireEvent.click(screen.getByTestId('rail-agent-proj-test-codex'))
+
+    expect(window.location.search).toContain('agent=codex')
+    expect(window.location.search).toContain('document=spec%2Fspec.html')
+  })
+
+  it('keeps it closed when it was closed', () => {
+    window.history.pushState(null, '', '?project=proj-test&agent=claude&conversation=conv-1')
+    render(withQueryClient(<App />))
+
+    fireEvent.click(screen.getByTestId('rail-agent-proj-test-codex'))
+
+    expect(window.location.search).toContain('agent=codex')
+    expect(window.location.search).not.toContain('document')
+  })
+
+  it('does not resurrect a document when arriving from a project tab', () => {
+    // The memory is of what is on screen, not a preference that outlives leaving the surface.
+    window.history.pushState(
+      null, '',
+      '?project=proj-test&agent=claude&conversation=conv-1&document=spec%2Fspec.html',
+    )
+    render(withQueryClient(<App />))
+    // The project tab bar only exists on a project destination, so leave the conversation first.
+    fireEvent.click(screen.getByTestId('project-name-proj-test'))
+    fireEvent.click(screen.getByTestId('rail-agent-proj-test-claude'))
+
+    expect(window.location.search).toContain('agent=claude')
+    expect(window.location.search).not.toContain('document')
   })
 })
