@@ -62,31 +62,43 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
 
 ## 4. Detecting divergence
 
-- [ ] 4.1 Implement the check per design D6: bound, ended, and no `origin='actor'` transition by this
+- [x] 4.1 Implement the check per design D6: bound, ended, and no `origin='actor'` transition by this
       run on this task
-- [ ] 4.2 Call it at the run-end path in `agent_trigger.py`, for every exit status
-- [ ] 4.3 Call it from `run_reconciliation.reconcile_interrupted_runs` so a crash does not lose a
-      divergence
-- [ ] 4.4 Write the `RunDivergence` row: task status at end, run exit status, policy applied, outcome
-- [ ] 4.5 Resolve open divergences for a task when any later `origin='actor'` transition lands on it —
+- [x] 4.2 Call it at the run-end path in `agent_trigger.py`, for every exit status
+- [x] 4.3 Call it from `run_reconciliation.reconcile_interrupted_runs` so a crash does not lose a
+      divergence. **Narrowed while implementing:** a run whose delivered input was returned to the
+      queue is *not* divergent — that input is about to be handed to a new run bound to the same
+      task, so nothing was dropped, and under `retry` a divergence there would spawn a run racing
+      the redelivery. Spec amended with a scenario
+- [x] 4.4 Write the `RunDivergence` row: task status at end, run exit status, policy applied, outcome
+- [x] 4.5 Resolve open divergences for a task when any later `origin='actor'` transition lands on it —
       inside `apply_transition`, so no caller can reach a transition without it
-- [ ] 4.6 Persist an event and broadcast over SSE, using an operator-facing severity the operator's
+- [x] 4.6 Persist an event and broadcast over SSE, using an operator-facing severity the operator's
       view understands
 
 ## 5. Answering divergence
 
-- [ ] 5.1 `surface`: record, event, broadcast. Start nothing
-- [ ] 5.2 `retry`: start one further run of the same agent bound to the same task, setting
+- [x] 5.1 `surface`: record, event, broadcast. Start nothing
+- [x] 5.2 `retry`: start one further run of the same agent bound to the same task, setting
       `divergence_source_run_id`; skip entirely when the diverging run already carries one (D8)
-- [ ] 5.3 `escalate`: set `task.assignee = escalation_agent`, record the previous assignee, start a
+- [x] 5.3 `escalate`: set `task.assignee = escalation_agent`, record the previous assignee, start a
       bound run of the escalation agent (D9)
-- [ ] 5.4 `escalate` with no escalation agent named falls back to `surface`
-- [ ] 5.5 A `retry` run that itself diverges falls through to `escalate` when the task names an agent,
-      else `surface`
-- [ ] 5.6 Compose the response prompt: the task, its current status, the transitions available to the
+- [x] 5.4 `escalate` with no escalation agent named falls back to `surface`
+- [x] 5.5 A `retry` run that itself diverges falls through to `escalate` when the task names an agent,
+      else `surface`. **Found while implementing:** the bound as planned covered only retry, so an
+      `escalate` run that diverged escalated to the same agent again, forever — the task still
+      carries the same policy and the same escalation agent. A run may now escalate only if it is
+      not itself the product of an escalation, read from the causing divergence's recorded outcome.
+      Spec amended; `test_an_escalation_that_diverges_does_not_escalate_again` holds it
+- [x] 5.6 Compose the response prompt: the task, its current status, the transitions available to the
       run, and — for escalation — the diverging run's identity
-- [ ] 5.7 Route the response run through the existing trigger path, so hop budget, queue limits, and
-      turn depth all apply unchanged
+- [x] 5.7 Route the response run through the existing trigger path, so hop budget, queue limits, and
+      turn depth all apply unchanged. Queued rather than spawned, so a response arriving while the
+      agent is busy waits instead of failing. **Needed migration `0058`:** a divergence response is
+      none of the four existing queue origins, and borrowing `operator` would put the operator's
+      name on work they did not ask for, in the queue they read — the same argument `checkpoint`
+      already makes in `models.py`. `0058` also carries `divergence_source_run_id` onto the entry,
+      since the retry bound lives on the run and a queued answer becomes a run in a later call
 
 ## 6. The operator's surface
 

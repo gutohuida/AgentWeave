@@ -33,6 +33,7 @@ async def reconcile_interrupted_runs() -> int:
     """
     reconciled = 0
     agents_to_schedule = set()
+    divergences_to_evaluate: list[str] = []
     async with async_session_factory() as db:
         result = await db.execute(select(Run).where(Run.status == "running"))
         for run in result.scalars().all():
@@ -44,6 +45,14 @@ async def reconcile_interrupted_runs() -> int:
             reconciled += 1
             returned_entry_ids = await return_run_entries(db, run.id)
             agents_to_schedule.add((run.project_id, run.agent))
+            # A crash is a run boundary too, and a bound run that died holding its task is exactly
+            # what the operator wants to know about. Deferred until after the commit below, so the
+            # check reads the interrupted status rather than "running".
+            #
+            # Skipped when this run's input went back to the queue: the work is about to be handed
+            # to a new run that will bind to the same task, so nothing has been dropped.
+            if run.task_id and not returned_entry_ids:
+                divergences_to_evaluate.append(run.id)
 
             payload = {
                 "agent": run.agent,
@@ -63,6 +72,11 @@ async def reconcile_interrupted_runs() -> int:
 
         if reconciled:
             await db.commit()
+
+    for diverged_run_id in divergences_to_evaluate:
+        from .run_divergence import evaluate_run_end
+
+        await evaluate_run_end(diverged_run_id)
 
     if reconciled:
         logger.warning(

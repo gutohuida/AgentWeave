@@ -22,7 +22,7 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,36 +97,41 @@ async def resolve_task_for_project(session: AsyncSession, task_id: str, project_
 # --------------------------------------------------------------------------------------
 
 
-def task_id_from_entries(entries: Iterable[InboundQueueEntry]) -> Optional[str]:
-    """The task the earliest queued entry names, or None.
+def binding_from_entries(
+    entries: Iterable[InboundQueueEntry],
+) -> Tuple[Optional[str], Optional[str]]:
+    """What the earliest queued entry naming a task says: `(task_id, divergence_source_run_id)`.
 
     A turn can deliver several items and more than one may name a task. The earliest queued wins,
     matching the order `format_turn_prompt` assembles the prompt in — deterministic rather than
     clever. The alternative is a run whose binding depends on delivery timing, which would make the
     boundary check unreproducible.
+
+    Both values come from the *same* entry. Taking the source from a different one would let an
+    unrelated item in the same turn spend a chain's retry hop.
     """
     named = [entry for entry in entries if entry.task_id]
     if not named:
-        return None
+        return None, None
     # `sequence` is the queue's own order and is what `queued_entries` sorts by. Falling back to 0
     # keeps this usable with unflushed entries in tests, where every sequence is None.
     named.sort(key=lambda entry: entry.sequence or 0)
-    return named[0].task_id
+    return named[0].task_id, named[0].divergence_source_run_id
 
 
-async def task_id_for_delivery(
+async def binding_for_delivery(
     session: AsyncSession, entry_ids: Optional[Iterable[str]]
-) -> Optional[str]:
-    """The task named by the earliest of the entries this turn is about to deliver, or None."""
+) -> Tuple[Optional[str], Optional[str]]:
+    """The binding the entries this turn is about to deliver imply."""
     ids = list(entry_ids or [])
     if not ids:
-        return None
+        return None, None
     result = await session.execute(
         select(InboundQueueEntry)
         .where(InboundQueueEntry.id.in_(ids))
         .order_by(InboundQueueEntry.sequence)
     )
-    return task_id_from_entries(result.scalars().all())
+    return binding_from_entries(result.scalars().all())
 
 
 async def bind_run_to_task(

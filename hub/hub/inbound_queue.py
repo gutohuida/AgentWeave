@@ -30,9 +30,12 @@ def new_entry(
     work_dir: Optional[str] = None,
     spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
+    divergence_source_run_id: Optional[str] = None,
 ) -> InboundQueueEntry:
-    if origin_type not in ("operator", "agent", "job", "checkpoint"):
-        raise ValueError("origin_type must be 'operator', 'agent', 'job', or 'checkpoint'")
+    if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence"):
+        raise ValueError(
+            "origin_type must be 'operator', 'agent', 'job', 'checkpoint', or 'divergence'"
+        )
     if (origin_type == "agent") != bool(origin_agent):
         raise ValueError("agent origins require origin_agent; operator origins forbid it")
     if hop_depth < 0:
@@ -53,6 +56,7 @@ def new_entry(
         work_dir=work_dir,
         spec_document=spec_document,
         task_id=task_id,
+        divergence_source_run_id=divergence_source_run_id,
         state="queued",
     )
 

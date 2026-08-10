@@ -196,6 +196,19 @@ async def apply_transition(
         origin=origin,
     )
     session.add(transition)
+
+    if origin == ORIGIN_ACTOR:
+        # A divergence is an open condition, not a verdict: work reaching the ledger closes it,
+        # whoever brought it there. Resolved here, inside the one function every accepted
+        # transition passes through, so no caller can move a task by a route that leaves a stale
+        # divergence showing against it.
+        #
+        # Imported locally: `run_divergence` reads the transition history through the binding
+        # module, which is built on this one.
+        from .run_divergence import resolve_divergences_for_task
+
+        await resolve_divergences_for_task(session, task.id)
+
     return transition
 
 

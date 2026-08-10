@@ -132,6 +132,11 @@ A run's exit status SHALL NOT affect whether it is checked. A run that crashed, 
 interrupted is still a run that ended holding a task nobody moved; the record SHALL name the exit
 status so that a crash is distinguishable from a completed run that forgot.
 
+A run whose queued input was returned to the queue SHALL NOT be recorded as divergent. That input
+is about to be delivered to a new run bound to the same task, so nothing has been dropped —
+recording a divergence would misdescribe it, and under an active policy would start a run racing
+the redelivery.
+
 #### Scenario: A run that completes its task is not divergent
 
 - **WHEN** a bound run moves its task to `completed` and ends
@@ -152,8 +157,15 @@ status so that a crash is distinguishable from a completed run that forgot.
 #### Scenario: A crashed run is checked like any other
 
 - **WHEN** a bound run's process dies and the run is later reconciled to an ended state
+- **AND** it had no queued input to return
 - **THEN** the divergence check is performed
 - **AND** the record names the exit status
+
+#### Scenario: Work handed back to the queue is not a divergence
+
+- **WHEN** a bound run ends and its delivered input is returned to the agent's queue
+- **THEN** no divergence is recorded
+- **AND** no run is started in response
 
 #### Scenario: A divergence closes when the work reaches the ledger
 
@@ -221,11 +233,16 @@ existing task to start runs nobody asked for.
 ### Requirement: A divergence response runs at most one hop
 
 The system SHALL record, on a run started in response to a divergence, the run whose divergence
-caused it. A run carrying that reference SHALL NOT itself trigger a retry.
+caused it. A run carrying that reference SHALL NOT itself trigger a retry, and SHALL NOT trigger an
+escalation unless it was itself started by a retry.
 
 A `retry` whose own run diverges SHALL fall through to `escalate` when the task names an escalation
 agent, and to `surface` otherwise. No sequence of divergences SHALL be able to start an unbounded
-number of runs.
+number of runs: a chain SHALL start at most one retry and at most one escalation before surfacing.
+
+The escalation limit is required, not incidental. An escalated run's task still carries the same
+policy and the same escalation agent, so without it a divergence of that run escalates to the same
+agent again, and does so forever.
 
 The bound applies to a chain, not to a task's lifetime: a run that makes real progress ends the
 chain, and a later independent run that diverges may retry again.
@@ -240,6 +257,13 @@ chain, and a later independent run that diverges may retry again.
 - **WHEN** a run started by `retry` diverges
 - **AND** the task names an escalation agent
 - **THEN** the work is escalated to that agent
+
+#### Scenario: An escalated run that diverges does not escalate again
+
+- **WHEN** a run started by `escalate` itself diverges
+- **AND** the task still names the same escalation agent
+- **THEN** the divergence is surfaced
+- **AND** no further run is started
 
 #### Scenario: Progress resets the chain
 

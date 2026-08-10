@@ -72,11 +72,12 @@ from ...pty_runner import (
     strip_ansi_escapes,
     terminate_process_tree,
 )
+from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
     TaskBindingError,
     bind_run_to_task,
+    binding_for_delivery,
     resolve_task_for_project,
-    task_id_for_delivery,
 )
 from ...runner_commands import (
     OPERATOR_POSTURE,
@@ -505,7 +506,16 @@ async def trigger_agent_directly(
     #
     # A delegated task takes precedence over an explicitly requested one because it is the more
     # specific statement: an operator draining a queue did not choose what those items are about.
-    delegated_task_id = await task_id_for_delivery(session, queue_entry_ids)
+    delegated_task_id, delegated_source_run_id = await binding_for_delivery(
+        session, queue_entry_ids
+    )
+    if delegated_source_run_id is not None:
+        # Carried from the queue entry rather than passed in: the Hub queued this response in an
+        # earlier call, and the retry bound cannot see its own source unless the entry brings it.
+        run.divergence_source_run_id = delegated_source_run_id
+        # The divergence record could not name its response when it was written — the answer was
+        # queued, and only becomes a run here, whenever the agent was next free.
+        await record_response_run(session, delegated_source_run_id, run.id)
     bound_task = None
     if delegated_task_id:
         try:
@@ -1261,6 +1271,10 @@ async def _execute_run(
                     sample=accounting_sample,
                 )
                 await db.commit()
+            # The run boundary. After the commit, so the check reads the run's final state, and
+            # outside the `if run` block for the same reason — a missing run row is not a
+            # divergence, and `evaluate_run_end` says so itself.
+            await evaluate_run_end(run_id)
             await _broadcast_run_lifecycle(
                 db,
                 project_id,
@@ -1644,6 +1658,9 @@ async def _execute_codex_appserver_run(
                     sample=accounting_sample,
                 )
                 await db.commit()
+            # The run boundary, as in `_execute_run`. Both runners reach it, because the check sits
+            # at a boundary AgentWeave owns rather than inside either agent.
+            await evaluate_run_end(run_id)
             await _broadcast_run_lifecycle(
                 db,
                 project_id,

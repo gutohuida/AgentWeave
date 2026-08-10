@@ -473,6 +473,11 @@ class InboundQueueEntry(Base):
     #: one that queued this, so anything passed through the call is lost by the time the run exists.
     #: Read at spawn to bind the receiving run (`2026-08-10-run-task-binding`, design D3).
     task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Set when this entry is the Hub's answer to a divergence, naming the run that diverged. The
+    #: retry bound lives on the *run*, and a queued response becomes a run in a later call — so
+    #: like `task_id` this must survive the queue, or a chain cannot see its own source and cannot
+    #: be bounded (design D8).
+    divergence_source_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
@@ -482,8 +487,12 @@ class InboundQueueEntry(Base):
         # for it and no agent sent it, so both `operator` and `agent` would misstate where it
         # came from — and a signal that reports something other than what it names is the exact
         # defect this capability exists to remove.
+        # `divergence` is the Hub answering a bound run that ended without moving its task —
+        # a retry of the same agent, or an escalation to a stronger one. Its own value for the
+        # same reason `checkpoint` is: no operator asked for it and no agent sent it, so both
+        # would misstate where it came from, in the queue the operator reads.
         CheckConstraint(
-            "origin_type IN ('operator', 'agent', 'job', 'checkpoint')",
+            "origin_type IN ('operator', 'agent', 'job', 'checkpoint', 'divergence')",
             name="ck_inbound_queue_origin_type",
         ),
         CheckConstraint(
@@ -494,7 +503,8 @@ class InboundQueueEntry(Base):
             "(origin_type = 'operator' AND origin_agent IS NULL) OR "
             "(origin_type = 'agent' AND origin_agent IS NOT NULL) OR "
             "(origin_type = 'job' AND origin_agent IS NULL) OR "
-            "(origin_type = 'checkpoint' AND origin_agent IS NULL)",
+            "(origin_type = 'checkpoint' AND origin_agent IS NULL) OR "
+            "(origin_type = 'divergence' AND origin_agent IS NULL)",
             name="ck_inbound_queue_origin_agent",
         ),
         Index(

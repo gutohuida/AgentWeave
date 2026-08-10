@@ -13,10 +13,10 @@ from hub.run_task_binding import (
     POLICIES,
     TaskBindingError,
     bind_run_to_task,
+    binding_from_entries,
     may_retry,
     resolve_task_for_project,
     run_advanced_its_task,
-    task_id_from_entries,
 )
 from hub.task_transition_service import apply_transition, history_for
 from hub.task_transitions import run_actor
@@ -46,13 +46,13 @@ def test_the_earliest_queued_entry_naming_a_task_wins():
         InboundQueueEntry(id="e1", sequence=1, task_id="task-a"),
         InboundQueueEntry(id="e2", sequence=2, task_id="task-b"),
     ]
-    assert task_id_from_entries(entries) == "task-a"
+    assert binding_from_entries(entries) == ("task-a", None)
 
 
 def test_entries_naming_no_task_produce_no_binding():
     """Unbound is legitimate — conversation, questions and exploration are real work."""
     entries = [InboundQueueEntry(id="e1", sequence=1), InboundQueueEntry(id="e2", sequence=2)]
-    assert task_id_from_entries(entries) is None
+    assert binding_from_entries(entries) == (None, None)
 
 
 def test_an_entry_naming_a_task_beats_an_earlier_one_that_does_not():
@@ -60,7 +60,7 @@ def test_an_entry_naming_a_task_beats_an_earlier_one_that_does_not():
         InboundQueueEntry(id="e1", sequence=1),
         InboundQueueEntry(id="e2", sequence=2, task_id="task-b"),
     ]
-    assert task_id_from_entries(entries) == "task-b"
+    assert binding_from_entries(entries) == ("task-b", None)
 
 
 # ---------------------------------------------------------------------------
