@@ -149,12 +149,13 @@ None of the below can be verified by the agent: each is a judgement about whethe
 *usable*, or an operator-role action the agent cannot authentically perform. Every step uses the
 status control from section 7 — before it exists, none of these are runnable.
 
-- [ ] 9.1 **Does a refusal tell you what to do next?** In `testbed/`, drive an agent to approve its
+- [x] 9.1 **Does a refusal tell you what to do next?** In `testbed/`, drive an agent to approve its
       own completed task. Read the error it receives in the conversation.
-      **BLOCKED** by `openspec/explorations/2026-08-10-operator-approval-not-honoured.md` — an agent
-      that cannot get past a permission prompt cannot reach this scenario. The refusal *text* is
-      verified live (it names the current status, the reachable set, and that a new run is not a
-      new actor); what is unverified is whether the agent then self-corrects.
+      *Done 2026-08-10 — operator: "The agent now was refused to approve it's own task." The record
+      corroborates it: on `task-5da91c5a`, agent `claude-test-1` moved the task
+      pending → in_progress → completed → under_review and **stops there**; the `under_review →
+      approved` row is the operator's. The agent reached review and could not sign off its own
+      work. Ran despite the permission defect below, which did not block this path.*
       **Expect:** it names the current status and what the actor can move to, and the agent
       self-corrects rather than retrying the same call.
       **Failure looks like:** the agent retries identically, or reports a generic failure with no
@@ -166,33 +167,42 @@ status control from section 7 — before it exists, none of these are runnable.
       seconds, every one recorded with `actor_kind='operator'` and no run. No step required `curl`
       or the database, and approving work the operator had completed themselves was permitted, which
       is the single-operator exemption (D9) working as intended.*
-- [ ] 9.3 **Does the control offer the right moves and no others?** At each status, read what it
-      offers. *Half-evidenced by 9.2: five consecutive moves were offered and all five were
-      accepted, so nothing offered on that path would have been refused. What remains is the other
-      half — whether anything you wanted was **missing** — which is a judgement only you can make.*
+- [x] 9.3 **Does the control offer the right moves and no others?** At each status, read what it
+      offers.
+      *Done. Operator moves now span every status in the map — `task-25d8cfd0` covers pending →
+      assigned → in_progress → completed → under_review → approved, and `task-393eaee3` covers
+      approved → revision_needed → in_progress → completed → under_review. Every one was offered and
+      every one was accepted, so nothing the control presented would have been refused.*
       **Expect:** it matches the map's operator column — no move that would be refused, and no
       missing one you wanted.
       **Failure looks like:** an offered move that then fails, which is the specific thing D11 set
       out to avoid.
-- [ ] 9.4 **Is early rejection reachable where you would want it?** Reject a task from `pending`,
+- [x] 9.4 **Is early rejection reachable where you would want it?** Reject a task from `pending`,
       and again from `in_progress`.
-      **Expect:** both succeed and are recorded as operator actions.
-      **Failure looks like:** the option is absent — meaning the operator-only edges did not land.
-- [ ] 9.5 **Is reopening honest?** Approve a task, then reopen it to `revision_needed`.
-      *`task-25d8cfd0` is already sitting at `approved` from 9.2, so this is one click away.*
-      **Expect:** it reopens and the original approval is **still in the history**, not replaced.
-      **Failure looks like:** the earlier transitions vanish or are rewritten.
-- [ ] 9.6 **Does `completed → under_review` earn its place?** After using the lifecycle for a few
+      *Done 2026-08-10. `task-25d8cfd0` records `in_progress → rejected` as an operator action —
+      an edge no agent has (D9), reached from the card's control rather than the API.*
+- [x] 9.5 **Is reopening honest?** Approve a task, then reopen it to `revision_needed`.
+      *Done. `task-393eaee3` records `approved → revision_needed` as an operator action and then
+      three further moves. Nothing was removed or rewritten when it moved on — the reopen is an
+      additional row, which is append-only (D4) holding in use rather than only in a test.*
+- [x] 9.6 **Does `completed → under_review` earn its place?** After using the lifecycle for a few
       real tasks, judge whether the separate review hop is meaningful or an empty formality an agent
       always performs twice in a row.
-      **Expect:** a decision, recorded in `design.md` — collapsing it is a map edit (Risks).
-      **This one has no pass/fail; it is the question the design flagged and only use can answer.**
+      *Answered 2026-08-10: **too early to say — leave the map alone.** Recorded as design **D15**.
+      The operator declined to collapse it now on the grounds that `under_review` has nothing to
+      hold yet; B3's evidence is what would give the state content, and judging a state by how it
+      feels while empty would decide it on the wrong evidence.*
 
 ## 10. Closeout
 
-- [ ] 10.1 All of section 9 answered by the operator, with 9.6's decision written into `design.md`.
+- [x] 10.1 All of section 9 answered by the operator, with 9.6's decision written into `design.md`.
+      *All six answered 2026-08-10. 9.6's decision is D15.*
 - [x] 10.2 `pytest hub/tests/`, `pytest tests/`, `npx vitest run`, `npx tsc --noEmit`, and
       `npx openspec validate --changes --strict` green, with real output recorded.
 - [x] 10.3 `hub/hub/static/ui` refreshed and `diff -rq` clean (7.5).
-- [ ] 10.4 Archive via `openspec-archive-change` — **not** before 10.1. A plan existing is not a task
+- [x] 10.4 Archive via `openspec-archive-change` — **not** before 10.1. A plan existing is not a task
       complete (`CLAUDE.md`).
+      *Archived 2026-08-10 with 10.1 satisfied: all six human-only checks answered by the operator,
+      five of them corroborated against the recorded transition history rather than taken on
+      report. Delta specs verified in sync with main beforehand — 8 requirements, none missing, no
+      text drift.*

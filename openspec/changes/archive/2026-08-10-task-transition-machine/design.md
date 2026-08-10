@@ -204,6 +204,26 @@ working which task, and that binding does not exist
 (`openspec/explorations/2026-08-10-enforcing-the-development-cycle.md`). Building assignment rules
 first would mean guessing at the edge that change will create.
 
+### D15 — `completed → under_review` stays, and the question stays open
+
+Task 9.6 asked the operator, after real use, whether the separate review hop is meaningful or an
+empty formality an agent performs twice in a row. Answered 2026-08-10: **too early to say.**
+
+The reasoning is worth keeping, because it is a better answer than either option on offer.
+`under_review` currently holds nothing — no evidence, no reviewer assignment, no gate outcome —
+so judging it now would be judging an empty state, and it would feel like a formality *whatever it
+is eventually for*. B3 is what gives it content. Deciding on today's experience would settle the
+question on the wrong evidence.
+
+So the map is unchanged, and this is not deferred indefinitely: it is deferred to the point where
+the state has something in it. Revisit when B3 lands.
+
+*Alternatives considered and not taken, recorded so they need not be re-derived:* merging the two
+statuses so `completed` means done-and-awaiting-review, with author/reviewer separation guarding
+`completed → approved` (one fewer move, same protection); or auto-advancing, where an agent's move
+to `completed` also records `completed → under_review` (keeps the audit distinction, removes the
+click, costs two rows per completion).
+
 ## Risks / Trade-offs
 
 - **The map is wrong for how the operator actually works, and legal moves start getting refused.**
