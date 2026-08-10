@@ -161,12 +161,31 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
 
 ### 8b. Human-only — the operator runs these
 
-- [ ] 8.13 Does starting work from a card feel like the obvious way to begin a task, or like a second
-      path competing with the composer?
-- [ ] 8.14 Is a divergence legible on the board — can you tell at a glance which tasks were dropped?
+- [x] 8.13 Does starting work from a card feel like the obvious way to begin a task, or like a second
+      path competing with the composer? **Answered 2026-08-10:** *"I think this changes with the
+      phase of the project. So if a user is exploring things or wants to go over the details,
+      starting via composer is the obvious choice, but if it's a project that's underway, starting
+      the task makes more sense because everything is in order already. Both are valid at different
+      cycles."* Neither entry point is redundant and neither should become the "real" one — recorded
+      as D8 of `2026-08-10-blocked-and-conversation-binding`
+- [x] 8.14 Is a divergence legible on the board — can you tell at a glance which tasks were dropped?
+      **No, and the answer was the finding.** Shown the badge, the operator asked *"what is a dropped
+      task?"* — a word only its author understands is not a signal. Relabelled **"Stalled"**, with a
+      title that carries the whole meaning: *"A run worked on this and ended without changing its
+      status. Nothing is running now."* Re-ask once it has been seen in use
 - [ ] 8.15 Does the policy control read as a routing decision rather than as a settings field?
+      **Deferred by the operator** — *"will only know after trying a couple of times."* The question
+      it surfaced instead is now a change of its own: an agent that stops to ask something
+      unforeseen leaves the task unmoved and is currently treated as having dropped it. See
+      `2026-08-10-blocked-and-conversation-binding`
 - [ ] 8.16 Judgement call on design's Open Question 1: over a day's real use, does a divergence per
-      intermediate run of long work read as noise?
+      intermediate run of long work read as noise? **Cannot be answered against this change, and
+      checking why found a worse problem.** Only the first run of a conversation is bound — the
+      composer's trigger sends no `task_id` and nothing propagates a binding across turns — so the
+      feared per-turn noise does not occur, and neither does per-turn coverage. The check fires at
+      the end of turn one, when an agent is *most* legitimately unfinished, then goes silent for the
+      rest of the work including the turn where it actually stops. Answerable only once bindings are
+      inherited: `2026-08-10-blocked-and-conversation-binding`, its task 8.12
 
 ### 8c. User test guide
 

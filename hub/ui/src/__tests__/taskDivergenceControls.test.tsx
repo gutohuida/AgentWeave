@@ -130,7 +130,7 @@ describe('the divergence policy is set where the work is', () => {
   })
 })
 
-describe('a dropped task says so', () => {
+describe('a stalled task says so', () => {
   it('shows nothing when the task is fine', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -141,14 +141,21 @@ describe('a dropped task says so', () => {
     expect(screen.queryByTestId('task-divergence-task-1')).not.toBeInTheDocument()
   })
 
-  it('marks a task a run ended without moving', () => {
+  it('marks a task a run ended without moving, in a word the operator recognised', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
         <TaskCard task={makeTask({ has_open_divergence: true })} />
       </QueryClientProvider>,
     )
-    expect(screen.getByTestId('task-divergence-task-1')).toHaveTextContent('Dropped')
+    // "Dropped" was the first label. Shown it, the operator asked "what is a dropped task?" —
+    // so the badge says "Stalled" and the title carries the whole meaning.
+    const badge = screen.getByTestId('task-divergence-task-1')
+    expect(badge).toHaveTextContent('Stalled')
+    expect(badge).toHaveAttribute(
+      'title',
+      'A run worked on this and ended without changing its status. Nothing is running now.',
+    )
   })
 })
 

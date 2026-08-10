@@ -195,11 +195,16 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
           <StatusBadge status={task.status} />
           {/* A run ended holding this and nothing has moved it since. Amber rather than red: the
               work is not lost and nothing is broken — it is the operator's attention this needs.
-              Clears by itself the moment anyone moves the task. */}
+              Clears by itself the moment anyone moves the task.
+
+              "Stalled", not "Dropped": the operator was shown the first label on 2026-08-10 and
+              asked *"what is a dropped task?"*. A word only its author understands is not a
+              signal. The title says the whole thing, because the badge cannot — what the board
+              claims, and that nothing is actually running. */}
           {task.has_open_divergence && (
             <span
               data-testid={`task-divergence-${task.id}`}
-              title="A run ended without moving this task."
+              title="A run worked on this and ended without changing its status. Nothing is running now."
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -214,7 +219,7 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
               }}
             >
               <Icon name="alert_triangle" size={10} />
-              Dropped
+              Stalled
             </span>
           )}
           <StatusBadge status={task.priority} />
