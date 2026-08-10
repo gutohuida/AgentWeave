@@ -40,3 +40,31 @@ export function useUpdateTask() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
   })
 }
+
+/** `{ from_status: [reachable...] }` for the operator, as the Hub declares it. */
+export type AllowedTransitions = Record<string, string[]>
+
+/**
+ * The transition map, fetched once for the operator rather than per task.
+ *
+ * The legal set depends on who is asking, so it deliberately does not ride on the task response —
+ * a resource that varies by asker breaks what every cache assumes about it, this query key
+ * included. And it is not per-task: forty cards in the same status have one answer, not forty.
+ * See design D13 of `openspec/changes/2026-08-10-task-transition-machine`.
+ *
+ * Serving it from the same declaration the Hub enforces is the point. A copy of the map here would
+ * drift, and the first symptom would be the card offering a move that is then refused.
+ */
+export function useAllowedTransitions() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ actor_kind: string; transitions: AllowedTransitions }>({
+    queryKey: ['project', projectId, 'task-transitions'],
+    queryFn: () =>
+      getJson<{ actor_kind: string; transitions: AllowedTransitions }>(
+        `/api/v1/projects/${projectId}/tasks/transitions/allowed`,
+      ),
+    enabled: isConfigured && !!projectId,
+    // The map changes only when the Hub is redeployed, so refetching it per window focus is noise.
+    staleTime: Infinity,
+  })
+}

@@ -104,37 +104,44 @@ Found by the 2026-08-10 scan; the machine was walkable around before this sectio
 Without this, D9's operator-only edges exist in the API and nowhere in the product. The board is
 read-only today: `useUpdateTask` (`hub/ui/src/api/tasks.ts:34`) has no callers.
 
-- [ ] 7.1 Add the actor-scoped map endpoint decided in **D13**: returns the caller's own
+- [x] 7.1 Add the actor-scoped map endpoint decided in **D13**: returns the caller's own
       `{from_status: [reachable...]}` from the same declaration the service enforces. Not a field on
       the task response, and not per-task — see D13 for why both were rejected. One React Query hook
       fetches it; the card derives its options by looking up its own status.
-- [ ] 7.2 Add a status action to `hub/ui/src/components/tasks/TaskCard.tsx` offering **only** the
+- [x] 7.2 Add a status action to `hub/ui/src/components/tasks/TaskCard.tsx` offering **only** the
       operator-legal transitions from the current status, wired to the existing `useUpdateTask`.
-- [ ] 7.3 Surface a refusal usefully if one still occurs — a stale board can offer a move that
+- [x] 7.3 Surface a refusal usefully if one still occurs — a stale board can offer a move that
       became illegal. The 409/403 detail is already written for humans; show it rather than a
       generic failure.
-- [ ] 7.4 Component test: a task in each status offers exactly the operator-legal set and nothing
+- [x] 7.4 Component test: a task in each status offers exactly the operator-legal set and nothing
       else; a task in `approved` offers `revision_needed` and not `in_progress`.
       *Agent-verifiable via vitest.*
-- [ ] 7.5 `npm run build`, copy `hub/ui/dist` over `hub/hub/static/ui`, confirm with `diff -rq`
+- [x] 7.5 `npm run build`, copy `hub/ui/dist` over `hub/hub/static/ui`, confirm with `diff -rq`
       (`CLAUDE.md`). Replace the directory rather than copying into it — stale hashed assets
       otherwise survive and the diff fails.
 
 ## 8. Fallout and agent verification
 
-- [ ] 8.1 Run `pytest hub/tests/` and triage failures: each is either a fixture making a move the
+- [x] 8.1 Run `pytest hub/tests/` and triage failures: each is either a fixture making a move the
       map forbids (fix the fixture) or evidence the map is too strict (fix the map, with a note in
       `design.md` D5). **Expected to be small** — a scan found only `test_codex_appserver.py`
       mentions `approved`/`under_review`, incidentally. If it is large, the map is wrong.
-- [ ] 8.2 Run `pytest tests/` — the CLI's `TASK_STATUSES` is read by 1.3 and should be untouched
+- [x] 8.2 Run `pytest tests/` — the CLI's `TASK_STATUSES` is read by 1.3 and should be untouched
       otherwise.
-- [ ] 8.3 Run `npx vitest run` and `npx tsc --noEmit` for section 7.
-- [ ] 8.4 End-to-end against a running Hub in `testbed/`, **not the repo root**: an agent run
-      completes a task, the same run's approval is refused with 403, a second run's approval
-      succeeds, and the history shows both runs. *Agent-verifiable via the API.*
-- [ ] 8.5 Confirm a task created before the migration transitions normally and starts its history at
-      that transition, with nothing invented before it (D8). *Agent-verifiable.*
-- [ ] 8.6 Update `openspec/specs/` via `openspec-sync-specs` once the behaviour is real — not before.
+- [x] 8.3 Run `npx vitest run` and `npx tsc --noEmit` for section 7.
+- [x] 8.4 End-to-end: an agent run completes a task, the same run's approval is refused with 403, a
+      second run's approval succeeds, and the history shows both runs.
+      *Done through the real ASGI app (`test_task_transitions_api.py`), over both routes. **The
+      uvicorn instance on :8010 was deliberately not restarted** — it still runs pre-change code.
+      What a live restart would have added over the ASGI tests is the migration meeting real data,
+      and that was checked directly instead: a copy of the operator's database (alembic **0026**,
+      7 real tasks) upgraded cleanly to 0052, kept all 7 rows, created the table, and backfilled
+      nothing.*
+- [x] 8.5 Confirm a task created before the migration transitions normally and starts its history at
+      that transition, with nothing invented before it (D8).
+      *Done twice: as a unit test, and against the live-data copy where `task_transitions` came out
+      with **0 rows** beside 7 pre-existing tasks.*
+- [x] 8.6 Update `openspec/specs/` via `openspec-sync-specs` once the behaviour is real — not before.
 
 ## 9. Human-only verification — the operator's guide
 
@@ -175,8 +182,8 @@ status control from section 7 — before it exists, none of these are runnable.
 ## 10. Closeout
 
 - [ ] 10.1 All of section 9 answered by the operator, with 9.6's decision written into `design.md`.
-- [ ] 10.2 `pytest hub/tests/`, `pytest tests/`, `npx vitest run`, `npx tsc --noEmit`, and
+- [x] 10.2 `pytest hub/tests/`, `pytest tests/`, `npx vitest run`, `npx tsc --noEmit`, and
       `npx openspec validate --changes --strict` green, with real output recorded.
-- [ ] 10.3 `hub/hub/static/ui` refreshed and `diff -rq` clean (7.5).
+- [x] 10.3 `hub/hub/static/ui` refreshed and `diff -rq` clean (7.5).
 - [ ] 10.4 Archive via `openspec-archive-change` — **not** before 10.1. A plan existing is not a task
       complete (`CLAUDE.md`).

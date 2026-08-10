@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import { TaskCard } from '@/components/tasks/TaskCard'
 import { EventRow } from '@/components/activity/EventRow'
@@ -11,7 +12,13 @@ const task = {
 
 describe('phase 5 agent identity colors across project surfaces', () => {
   it('shows the task assignee name with its project-assigned color', () => {
-    render(<TaskCard task={task} assigneeColorIndex={2} />)
+    // TaskCard reads the operator's transition map (B1 §7) to decide which status moves to
+    // offer, so it now needs a query client. The colours this test is about are unaffected.
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <TaskCard task={task} assigneeColorIndex={2} />
+      </QueryClientProvider>,
+    )
     expect(screen.getByText('@claude')).toBeInTheDocument()
     expect(screen.getByTestId('task-assignee-color-claude')).toHaveStyle({ background: 'var(--agent-3)' })
   })

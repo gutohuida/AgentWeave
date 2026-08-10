@@ -1,13 +1,19 @@
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
-import { Task } from '@/api/tasks'
+import { readableApiError } from '@/api/client'
+import { Task, useAllowedTransitions, useUpdateTask } from '@/api/tasks'
 import { StatusBadge } from '@/components/common/Badge'
+import { RowMenu } from '@/components/layout/RowMenu'
 import { agentColorVars } from '@/lib/agentColors'
 
 interface TaskCardProps {
   task: Task
   assigneeColorIndex?: number | null
+}
+
+function statusLabel(status: string): string {
+  return status.replace(/_/g, ' ')
 }
 
 const AGENT_STATUS_STYLES: Record<string, { color: string; bg: string; border: string }> = {
@@ -47,6 +53,15 @@ function agentStatusTitle(task: Task): string {
 
 export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const { data: allowed } = useAllowedTransitions()
+  const updateTask = useUpdateTask()
+
+  // Only what the operator may do from *this* status, read from the Hub's own declaration. The
+  // board can still be stale — a move legal when the card rendered may not be by the time it is
+  // clicked — which is why the refusal below is shown rather than swallowed.
+  const moves = allowed?.transitions?.[task.status] ?? []
+
   const assigneeStatus = task.assignee_status ?? (task.assignee ? 'idle' : null)
   const assigneeStatusStyle = assigneeStatus
     ? AGENT_STATUS_STYLES[assigneeStatus] ?? AGENT_STATUS_STYLES.idle
@@ -92,19 +107,48 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
             )}
           </div>
 
-          {/* Expand/collapse button */}
-          {hasDetails && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setExpanded(!expanded)
-              }}
-              className="shrink-0 p-1 rounded transition-colors"
-              style={{ color: 'var(--text-3)' }}
-            >
-              <Icon name={expanded ? 'expand_less' : 'expand_more'} size={18} />
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {/* The operator's status control. Offers only the moves the map declares legal for an
+                operator from this status, so an illegal one is never presented and then refused. */}
+            {moves.length > 0 && (
+              <RowMenu
+                label={`Change status of ${task.title}`}
+                testId={`task-status-menu-${task.id}`}
+                persistent
+                items={moves.map((next) => ({
+                  id: next,
+                  label: `Move to ${statusLabel(next)}`,
+                  onSelect: () => {
+                    setRefusal(null)
+                    updateTask.mutate(
+                      { id: task.id, status: next },
+                      {
+                        // `ApiError.message` is the raw response body, so a 409 would render as
+                        // JSON. `readableApiError` pulls out the sentence the Hub wrote for a
+                        // human — which is the whole reason the refusal names the reachable set.
+                        onError: (error: unknown) =>
+                          setRefusal(readableApiError(error, 'The Hub refused this change.')),
+                      },
+                    )
+                  },
+                }))}
+              />
+            )}
+
+            {/* Expand/collapse button */}
+            {hasDetails && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setExpanded(!expanded)
+                }}
+                className="shrink-0 p-1 rounded transition-colors"
+                style={{ color: 'var(--text-3)' }}
+              >
+                <Icon name={expanded ? 'expand_less' : 'expand_more'} size={18} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Badges row */}
@@ -184,6 +228,23 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
         <p className="text-[11px] mt-2" style={{ color: 'var(--text-3)' }}>
           {formatDistanceToNow(new Date(task.updated), { addSuffix: true })}
         </p>
+
+        {/* A refused move. The Hub's detail names the current status and what is reachable from
+            it, so it is shown as written rather than replaced with a generic failure — a board
+            that offered a move which has since become illegal should say which, not just "error". */}
+        {refusal && (
+          <p
+            data-testid={`task-status-refusal-${task.id}`}
+            className="text-[11px] mt-2 p-2 rounded"
+            style={{
+              color: 'var(--amber)',
+              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+            }}
+          >
+            {refusal}
+          </p>
+        )}
 
         {/* Expand hint */}
         {hasDetails && !expanded && (
