@@ -49,6 +49,20 @@ export interface SpecInventory {
   history: HistoryGroup[]
 }
 
+/** One row of the folder tree: a directory heading, or a document under it.
+ *
+ *  Flattened with an explicit `depth` rather than nested, because the picker renders it as a
+ *  single list — a flat array keeps DOM order, keyboard order, and reading order the same thing. */
+export interface PathTreeRow {
+  kind: 'directory' | 'document'
+  /** Full path for a document; the directory prefix (no trailing slash) for a directory. */
+  path: string
+  /** The segment for a directory, the document's title for a document. */
+  label: string
+  depth: number
+  node?: SpecNode
+}
+
 export interface SpecSearchResults {
   current: SpecNode[]
   archived: SpecNode[]
@@ -282,4 +296,65 @@ export function searchDocuments(inv: SpecInventory, rawQuery: string): SpecSearc
     archived: rank(inv.nodes.filter((n) => n.archived && !n.missing)),
     missing: rank(inv.nodes.filter((n) => n.missing)),
   }
+}
+
+/**
+ * The inventory as its folder hierarchy.
+ *
+ * The manifest's `parent` tree (`inventory.library`) answers "which document belongs under which"
+ * — a roadmap and its change specs. This answers a different question the operator asked for
+ * directly: where the files actually live. The two disagree often enough that showing one as the
+ * other would mislead: an archived change sits under `spec/changes/archive/<date>-<name>/`
+ * whatever its manifest parent says.
+ *
+ * Every node is included, archived and missing alike. A folder view that hides drift is a folder
+ * view that lies about the folder.
+ *
+ * The leading `spec/` segment is dropped: every path starts with it, so a root everything hangs
+ * from carries no information and costs a level of indentation.
+ */
+export function buildPathTree(nodes: SpecNode[]): PathTreeRow[] {
+  const sorted = [...nodes].sort((a, b) => a.path.localeCompare(b.path))
+  const rows: PathTreeRow[] = []
+  let previous: string[] = []
+
+  for (const node of sorted) {
+    const segments = node.path.split('/')
+    const file = segments.pop() as string
+    // `spec` itself is dropped; everything is beneath it by the path contract.
+    const directories = segments[0] === 'spec' ? segments.slice(1) : segments
+
+    // Emit only the directory segments that differ from the previous document's, so a shared
+    // parent is named once rather than repeated above every child.
+    let shared = 0
+    while (
+      shared < directories.length &&
+      shared < previous.length &&
+      directories[shared] === previous[shared]
+    ) {
+      shared += 1
+    }
+    for (let depth = shared; depth < directories.length; depth += 1) {
+      rows.push({
+        kind: 'directory',
+        path: ['spec', ...directories.slice(0, depth + 1)].join('/'),
+        label: directories[depth],
+        depth,
+      })
+    }
+    previous = directories
+
+    rows.push({
+      kind: 'document',
+      path: node.path,
+      // The title, with the filename beside it at the call site: `spec.html` repeated down a
+      // column of change directories says nothing, and the title is what the operator is looking
+      // for.
+      label: node.title || file,
+      depth: directories.length,
+      node,
+    })
+  }
+
+  return rows
 }

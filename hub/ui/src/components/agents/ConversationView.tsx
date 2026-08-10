@@ -256,6 +256,7 @@ export function ConversationView({
         onOpenChange={setPickerOpen}
         inventory={inventory}
         restoreFocusTo={() => searchOriginRef.current}
+        currentPath={document}
         onSelect={(node) => onOpenDocument(node.path)}
       />
     </div>
