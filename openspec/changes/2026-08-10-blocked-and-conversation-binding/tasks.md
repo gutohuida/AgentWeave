@@ -13,11 +13,22 @@ surface; 7 specs; 8 verification.
 
 ## 1. The status
 
-- [ ] 1.1 Add the ninth status and its four edges to `hub/hub/task_transitions.py` per design D2,
-      with the docstring stating why `blocked → completed` is absent
-- [ ] 1.2 Add it to the two pinned declarations — `src/agentweave/constants.py` and
+- [x] 1.1 Add the ninth status and its four edges to `hub/hub/task_transitions.py` per design D2,
+      with the docstring stating why `blocked → completed` is absent. Also `STATUS_BLOCKED`, named
+      because four modules must ask "is this waiting on a person?" and a bare literal in each is how
+      one ends up spelled differently
+- [x] 1.2 Add it to the two pinned declarations — `src/agentweave/constants.py` and
       `hub/hub/schemas/tasks.py` — which `hub/tests/test_task_transitions.py` already asserts agree
-- [ ] 1.3 Tests for each edge, and for the two refusals: from `pending`, and straight to `completed`
+- [x] 1.3 Tests for each edge, and for the two refusals: from `pending`, and straight to `completed`
+- [x] 1.4 **Found by the pinning, not by inspection:** a *third* declaration exists —
+      `mcp_server.TaskStatus`, the agent-facing `update_task` parameter. `blocked` is deliberately
+      **withheld** from it, so an agent cannot express the request at all (D3); the omission is
+      asserted in `test_task_transitions.py` and `test_mcp_tool_schemas.py` so nobody "completes the
+      list" later
+- [x] 1.5 **Hazard closed at the same time:** `blocked → in_progress` is a legal run edge, so
+      `bind_run_to_task` would have silently unparked a blocked task merely by a run starting — and
+      that run's end would then have recorded a divergence. Guarded explicitly in
+      `run_task_binding.py`
 
 ## 2. Blocking is observed, not asserted
 

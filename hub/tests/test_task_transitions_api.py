@@ -259,6 +259,7 @@ async def test_the_allowed_transitions_endpoint_serves_the_operator_view(app, au
         "pending",
         "assigned",
         "in_progress",
+        "blocked",
         "completed",
         "under_review",
         "revision_needed",
@@ -269,6 +270,12 @@ async def test_the_allowed_transitions_endpoint_serves_the_operator_view(app, au
     assert transitions["approved"] == ["revision_needed"]
     assert transitions["rejected"] == ["pending"]
     assert "rejected" in transitions["in_progress"]
+    # The operator can park work themselves — not every blocker is a question an agent asked — and
+    # can release, reassign or abandon what is parked.
+    assert "blocked" in transitions["in_progress"]
+    assert transitions["blocked"] == ["assigned", "in_progress", "rejected"]
+    # ...but not shortcut it to done. The status control must not offer the edge the map refuses.
+    assert "completed" not in transitions["blocked"]
 
 
 async def test_every_move_the_endpoint_offers_is_actually_accepted(app, auth_headers):

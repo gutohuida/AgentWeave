@@ -12,6 +12,7 @@ from hub.task_transitions import (
     ACTOR_OPERATOR,
     ACTOR_RUN,
     ENTRY_STATUSES,
+    STATUS_BLOCKED,
     STATUSES,
     TRANSITIONS,
     Actor,
@@ -77,7 +78,15 @@ def test_entry_statuses_are_accepted_at_creation(status):
 
 @pytest.mark.parametrize(
     "status",
-    ["in_progress", "completed", "under_review", "revision_needed", "approved", "rejected"],
+    [
+        "in_progress",
+        "blocked",
+        "completed",
+        "under_review",
+        "revision_needed",
+        "approved",
+        "rejected",
+    ],
 )
 def test_non_entry_statuses_are_refused_at_creation(status):
     """The hole the 2026-08-10 scan found: without this, a caller creates a task already `approved`
@@ -131,7 +140,8 @@ def test_agent_cannot_reach_approved_from_anywhere_but_review():
 
 
 @pytest.mark.parametrize(
-    "from_status", ["pending", "assigned", "in_progress", "completed", "revision_needed"]
+    "from_status",
+    ["pending", "assigned", "in_progress", "blocked", "completed", "revision_needed"],
 )
 def test_only_the_operator_may_reject_before_review(from_status):
     assert is_allowed(from_status, "rejected", ACTOR_OPERATOR)
@@ -153,6 +163,62 @@ def test_only_the_operator_may_reopen_a_decided_task(from_status, to_status):
 def test_an_agent_has_no_exit_from_a_decided_task():
     for from_status in ("approved", "rejected"):
         assert allowed_targets(from_status, ACTOR_RUN) == frozenset()
+
+
+# --------------------------------------------------------------------------------------
+# The waiting status (design D2)
+# --------------------------------------------------------------------------------------
+
+
+def test_work_can_stop_to_wait_on_a_person():
+    assert is_allowed("in_progress", STATUS_BLOCKED, ACTOR_RUN)
+    assert is_allowed("in_progress", STATUS_BLOCKED, ACTOR_OPERATOR)
+
+
+def test_waiting_is_reachable_only_from_work_already_started():
+    """A task nobody has started is not blocked, it is pending.
+
+    This is what keeps the status meaning "work began and then hit something" rather than becoming
+    a general-purpose parking space for anything not currently moving.
+    """
+    for from_status in STATUSES - {"in_progress", STATUS_BLOCKED}:
+        for actor_kind in (ACTOR_RUN, ACTOR_OPERATOR):
+            assert not is_allowed(
+                from_status, STATUS_BLOCKED, actor_kind
+            ), f"{from_status} should not reach {STATUS_BLOCKED}"
+
+
+def test_the_answer_returns_the_work_to_progress():
+    assert is_allowed(STATUS_BLOCKED, "in_progress", ACTOR_RUN)
+    assert is_allowed(STATUS_BLOCKED, "in_progress", ACTOR_OPERATOR)
+
+
+def test_waiting_work_cannot_shortcut_to_completed():
+    """The absence of `blocked -> completed` is the point of the whole status (design D2).
+
+    Work that was waiting and is now done passes back through `in_progress` first, so the history
+    says the block ended before the work did. Allowing the shortcut would let a task be recorded as
+    completed while still waiting on a person who never answered.
+    """
+    for actor_kind in (ACTOR_RUN, ACTOR_OPERATOR):
+        assert not is_allowed(STATUS_BLOCKED, "completed", actor_kind)
+
+
+def test_only_the_operator_may_hand_waiting_work_to_someone_else():
+    assert is_allowed(STATUS_BLOCKED, "assigned", ACTOR_OPERATOR)
+    assert not is_allowed(STATUS_BLOCKED, "assigned", ACTOR_RUN)
+
+
+def test_waiting_offers_the_agent_exactly_one_way_out():
+    """Not a dead end for a run — it can resume — but resuming is all it can do.
+
+    Reassigning and abandoning are judgements about whether the work should continue at all, which
+    stay with the operator.
+    """
+    assert allowed_targets(STATUS_BLOCKED, ACTOR_RUN) == frozenset({"in_progress"})
+    assert allowed_targets(STATUS_BLOCKED, ACTOR_OPERATOR) == frozenset(
+        {"in_progress", "assigned", "rejected"}
+    )
 
 
 def test_the_operator_is_still_bound_by_the_map():
@@ -361,13 +427,20 @@ def test_mcp_states_the_statuses_but_holds_no_adjacency():
     needs — so that list is pinned here. It must not restate the *map*: which status follows which
     is knowledge the service enforces, and a copy here would be a second answer that drifts. The
     map reaches the agent as a refusal message instead.
+
+    The literal is every status an agent may *request*, which is all of them except `blocked`. That
+    one is withheld on purpose (design D3): a run does not declare itself waiting on a person, the
+    runtime observes that it is. Leaving it out of the signature means the agent cannot express the
+    request at all, which is a stronger guarantee than refusing it — though the service refuses it
+    too, since the HTTP route is reachable without going through this tool.
     """
     import typing
 
     from hub import mcp_server
-    from hub.task_transitions import STATUSES
+    from hub.task_transitions import STATUS_BLOCKED, STATUSES
 
-    assert set(typing.get_args(mcp_server.TaskStatus)) == STATUSES
+    assert set(typing.get_args(mcp_server.TaskStatus)) == STATUSES - {STATUS_BLOCKED}
+    assert STATUS_BLOCKED in STATUSES, "the withheld status must still be a real status"
 
     source = (Path(__file__).resolve().parents[1] / "hub" / "mcp_server.py").read_text(
         encoding="utf-8"

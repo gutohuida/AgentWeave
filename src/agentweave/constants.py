@@ -281,6 +281,9 @@ TASK_STATUSES = [
     "pending",
     "assigned",
     "in_progress",
+    # Started, then stopped on something only a person can supply. Set by the runtime when a run
+    # ends with an unanswered blocking question, never asserted by an agent.
+    "blocked",
     "completed",
     "under_review",
     "revision_needed",

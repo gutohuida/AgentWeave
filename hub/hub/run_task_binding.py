@@ -34,7 +34,7 @@ from .task_transition_service import (
     TransitionRefusedError,
     apply_transition,
 )
-from .task_transitions import allowed_targets, run_actor
+from .task_transitions import STATUS_BLOCKED, allowed_targets, run_actor
 
 # --------------------------------------------------------------------------------------
 # What a task says should happen when work bound to it is dropped
@@ -149,11 +149,20 @@ async def bind_run_to_task(
     B1's own legality check and the seam B3's evidence checks and B4's completion gates plug into.
     A path that set `task.status` here directly would be a bypass of every gate not yet written.
 
+    A task that is `blocked` binds and stays blocked. `blocked -> in_progress` is a legal edge for a
+    run, so without the explicit guard below the act of starting a run would silently unpark a task
+    still waiting on an unanswered question — and that run's end would then find it un-blocked and
+    record a divergence, which is the bug this whole line of work exists to remove. A block is
+    released by the answer arriving or by the operator saying so, never by something merely starting.
+
     Nothing is committed. The caller stages this alongside the `Run` insert so a bound run whose
     task never moved cannot exist as a partial write.
     """
     run.task_id = task.id
     actor = run_actor(run.id, run.agent)
+
+    if task.status == STATUS_BLOCKED:
+        return None
 
     if "in_progress" not in allowed_targets(task.status, actor.kind):
         return None

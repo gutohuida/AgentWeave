@@ -14,6 +14,17 @@ import pytest
 from hub import mcp_server
 from hub.schemas.messages import _MESSAGE_TYPES
 from hub.schemas.tasks import _PRIORITIES, _TASK_STATUSES
+from hub.task_transitions import STATUS_BLOCKED
+
+#: What an agent may ask `update_task` for: every status the validator accepts except the waiting
+#: one. `blocked` is withheld from the agent surface on purpose (design D3 of
+#: `2026-08-10-blocked-and-conversation-binding`) — the runtime observes that a run is waiting on a
+#: person, by seeing it end with an unanswered blocking question. An agent that could assert the
+#: status could claim to be waiting on someone it never asked.
+#:
+#: Derived from `_TASK_STATUSES` rather than written out, so a ninth status added later still has
+#: to be declared in one place and is still checked here.
+_AGENT_REQUESTABLE_STATUSES = [s for s in _TASK_STATUSES if s != STATUS_BLOCKED]
 
 
 def _schemas():
@@ -46,7 +57,7 @@ def _enum_for(schema, parameter):
     [
         ("send_message", "message_type", _MESSAGE_TYPES),
         ("create_task", "priority", _PRIORITIES),
-        ("update_task", "status", _TASK_STATUSES),
+        ("update_task", "status", _AGENT_REQUESTABLE_STATUSES),
         ("create_job", "session_mode", ["new", "resume"]),
     ],
 )
@@ -61,7 +72,7 @@ def test_constrained_parameter_declares_its_values(tool_name, parameter, expecte
     "alias,runtime",
     [
         (mcp_server.MessageType, _MESSAGE_TYPES),
-        (mcp_server.TaskStatus, _TASK_STATUSES),
+        (mcp_server.TaskStatus, _AGENT_REQUESTABLE_STATUSES),
         (mcp_server.TaskPriority, _PRIORITIES),
     ],
 )
@@ -72,10 +83,24 @@ def test_alias_agrees_with_the_validator_it_mirrors(alias, runtime):
 
 
 def test_update_task_status_is_required_and_therefore_must_be_discoverable():
-    """`status` has no default, so a model must supply one of eight states blind."""
+    """`status` has no default, so a model must supply one of the states blind."""
     schema = _schemas()["update_task"]
     assert "status" in schema.get("required", [])
     assert _enum_for(schema, "status") is not None
+
+
+def test_the_agent_is_never_offered_the_waiting_status():
+    """Stated as its own assertion, not left implicit in a derived list.
+
+    The two tests above would keep passing if `blocked` were quietly added back to both the
+    validator and the agent surface together. This one says the thing that must stay true: an agent
+    cannot ask for the status that means "a person owes me an answer", because being able to assert
+    it is being able to assert it falsely.
+    """
+    declared = _enum_for(_schemas()["update_task"], "status")
+    assert STATUS_BLOCKED not in declared
+    assert STATUS_BLOCKED not in typing.get_args(mcp_server.TaskStatus)
+    assert STATUS_BLOCKED in _TASK_STATUSES, "but it is still a real status the operator can set"
 
 
 class TestReadableDetail:

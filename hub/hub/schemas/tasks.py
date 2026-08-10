@@ -16,6 +16,7 @@ _TASK_STATUSES = [
     "pending",
     "assigned",
     "in_progress",
+    "blocked",
     "completed",
     "under_review",
     "revision_needed",

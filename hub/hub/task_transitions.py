@@ -112,6 +112,23 @@ TRANSITIONS: Mapping[str, Mapping[str, FrozenSet[str]]] = {
     "in_progress": {
         "completed": _BOTH,
         "assigned": _BOTH,
+        "blocked": _BOTH,
+        "rejected": _OPERATOR_ONLY,
+    },
+    # Work that started and then hit something only a person can supply.
+    #
+    # Reachable only from `in_progress`: a task nobody has started is not blocked, it is pending.
+    #
+    # `blocked -> completed` is deliberately absent. Work that was waiting and is now done passes
+    # back through `in_progress`, so the history says the block ended before the work did. The
+    # shortcut would let a task be recorded as completed while still waiting on a person who never
+    # answered — the exact class of untrue record the transition machine exists to prevent.
+    #
+    # Reassignment and rejection stay open to the operator: "this agent is stuck, give it to someone
+    # else" and "this is not worth unblocking" are both real.
+    "blocked": {
+        "in_progress": _BOTH,
+        "assigned": _OPERATOR_ONLY,
         "rejected": _OPERATOR_ONLY,
     },
     "completed": {
@@ -134,6 +151,11 @@ TRANSITIONS: Mapping[str, Mapping[str, FrozenSet[str]]] = {
         "pending": _OPERATOR_ONLY,
     },
 }
+
+#: Named because several modules must ask "is this task waiting on a person?" and a bare string
+#: literal spread across the divergence check, the binding path and the questions route is how one
+#: of them ends up spelled differently and silently never matching.
+STATUS_BLOCKED = "blocked"
 
 #: Every status the machine knows. Pinned to the two independent declarations in
 #: `src/agentweave/constants.py` and `hub/hub/schemas/tasks.py` by

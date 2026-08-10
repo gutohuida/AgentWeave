@@ -33,6 +33,12 @@ except ImportError as exc:
 # layout ever changed. `test_mcp_tool_schemas.py` asserts these agree with the validators, so
 # drift fails in CI rather than at an agent's first call.
 MessageType = Literal["message", "delegation", "review", "discussion", "direct_trigger"]
+# Every status an agent may *request* — which is every status except "blocked". That one is
+# withheld deliberately: a run does not declare itself to be waiting on a person, the runtime
+# observes that it is, by seeing the run end with an unanswered blocking question. An agent that
+# could assert "blocked" could claim to be waiting on someone it never asked, which is the one
+# claim a completion gate would most reward. Do not add it here to "complete the list" —
+# `test_task_transitions.py` asserts this omission on purpose.
 TaskStatus = Literal[
     "pending",
     "assigned",
