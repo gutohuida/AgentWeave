@@ -84,12 +84,19 @@ surface; 7 specs; 8 verification.
 
 ## 6. The operator's surface
 
-- [ ] 6.1 The board shows a blocked task as a **treatment inside the `in_progress` column** (R3) —
-      the card does not move when it blocks or unblocks
-- [ ] 6.2 The card says what it is waiting for (R5's reason), linking the question
-- [ ] 6.3 Unblock from the card
-- [ ] 6.4 Show and release a conversation's binding
-- [ ] 6.5 `npm run build`, `rm -rf hub/hub/static/ui`, copy, confirm with `diff -rq`
+- [x] 6.1 The board shows a blocked task as a **treatment inside the `in_progress` column** (R3) —
+      the card does not move when it blocks or unblocks. Waiting work sorts above running work, and
+      the column count includes it. Without this the card vanished from the board entirely, since
+      `TasksBoard` renders one column per status key
+- [x] 6.2 The card says what it is waiting for (R5's reason). Purple, not the amber of "Stalled":
+      the two are opposites, and colouring them alike would teach the operator to read "someone did
+      the right thing" as a problem
+- [x] 6.3 Unblock from the card, and **park from it** — the status menu collects the reason before
+      sending, honouring the obligation task 3.3 recorded
+- [x] 6.4 Show and release a conversation's binding — an `info`-toned banner above the composer
+      (new tone: a standing statement, not an offer, so it does not read as a prompt to release the
+      binding every time the thread is opened) with "Work on something else"
+- [x] 6.5 `npm run build`, `rm -rf hub/hub/static/ui`, copy, confirm with `diff -rq` — **identical**
 
 ## 7. Specs
 

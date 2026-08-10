@@ -49,6 +49,12 @@ export async function postJson<T>(path: string, body: unknown = {}): Promise<T> 
   return res.json() as Promise<T>
 }
 
+/** DELETE with no body. Used where the thing being removed is a relationship, not a row. */
+export async function deleteJson<T>(path: string): Promise<T> {
+  const res = await fetchWithAuth(path, { method: 'DELETE' })
+  return res.json() as Promise<T>
+}
+
 export async function putJson<T>(path: string, body: unknown = {}): Promise<T> {
   const res = await fetchWithAuth(path, {
     method: 'PUT',

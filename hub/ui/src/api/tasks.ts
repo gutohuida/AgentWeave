@@ -25,6 +25,13 @@ export interface Task {
   escalation_agent?: string | null
   /** A run dropped this task and nothing has moved it since. */
   has_open_divergence: boolean
+  /**
+   * What a `blocked` task is waiting for, in words. Null on every other status.
+   *
+   * A blocked task stays in the In Progress column rather than moving to one of its own, so this
+   * is most of what tells the operator the card is waiting on *them* rather than merely stalled.
+   */
+  blocked_reason?: string | null
 }
 
 export type DivergencePolicy = 'surface' | 'retry' | 'escalate'
@@ -48,8 +55,22 @@ export function useUpdateTask() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, { status }),
+    // `blocked_reason` is required by the Hub when the status is `blocked`, and ignored otherwise —
+    // so it is sent only when present rather than as a null the validator would still have to
+    // reject.
+    mutationFn: ({
+      id,
+      status,
+      blocked_reason,
+    }: {
+      id: string
+      status: string
+      blocked_reason?: string
+    }) =>
+      patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, {
+        status,
+        ...(blocked_reason ? { blocked_reason } : {}),
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
   })
 }

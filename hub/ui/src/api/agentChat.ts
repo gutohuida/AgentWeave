@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, getJson, patchJson, postJson } from './client'
+import { ApiError, deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 import { NEW_SESSION_ID } from '@/lib/constants'
@@ -74,6 +74,14 @@ export interface AgentConversation {
   /** Control id -> value (e.g. {"model": "claude-opus-5", "effort": "high"}). Null/empty
    * means the conversation inherits its agent's runner and the catalog's defaults. */
   runtime_overrides?: Record<string, string> | null
+  /**
+   * The task this thread is about, if it is about one.
+   *
+   * Every turn here binds to it and is checked at its end — which is the whole reason the operator
+   * has to be able to see it. A binding that silently governs whether work is checked, and cannot
+   * be read anywhere, is the mechanism enforcing invisibly.
+   */
+  task_id?: string | null
 }
 
 export interface ProjectConversations {
@@ -189,6 +197,27 @@ function useConversationMutation<Variables extends ConversationRef>(
 export function useRenameConversation() {
   return useConversationMutation<ConversationRef & { title: string }>((variables) =>
     patchJson<AgentConversation>(conversationPath(variables), { title: variables.title }),
+  )
+}
+
+/**
+ * Stop attributing this thread's turns to the task it is bound to.
+ *
+ * The operator's half of the release rule. The other half is automatic — approving or rejecting the
+ * task releases every thread bound to it. Nothing infers a release from what the conversation seems
+ * to be about, because a wrong guess silently stops checking runs.
+ *
+ * A plain function rather than a mutation hook, matching `dismissCheckpointWarning` and
+ * `withdrawQueueEntry`: the panel that calls it is rendered in tests without a QueryClientProvider,
+ * so a hook here would make every one of those tests fail on a provider they do not need.
+ */
+export function releaseConversationTask(
+  projectId: string,
+  agent: string,
+  conversationId: string,
+): Promise<AgentConversation> {
+  return deleteJson<AgentConversation>(
+    `/api/v1/projects/${projectId}/agent/${agent}/conversations/${conversationId}/task`,
   )
 }
 

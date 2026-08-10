@@ -13,6 +13,7 @@ import {
   useAgentChatHistory,
   useAgentConversations,
   useAgentRecentChat,
+  releaseConversationTask,
   type AgentConversation,
 } from '@/api/agentChat'
 import { PERMISSION_MODE_CONTROL } from '@/api/modelCatalog'
@@ -149,6 +150,7 @@ export function AgentOutputPanel({
    *  at another conversation by the reset effect, which is where every per-conversation flag
    *  belongs. */
   const [warningDismissed, setWarningDismissed] = useState(false)
+  const [releasedBinding, setReleasedBinding] = useState(false)
   const { data: permissionRequests = [] } = usePendingPermissionRequests()
   const { data: unaskedQuestions = [] } = usePendingUnaskedQuestions()
   const { data: openQuestions = [] } = useQuestions(false)
@@ -179,6 +181,7 @@ export function AgentOutputPanel({
     setHandoffState('idle')
     setStartingFresh(false)
     setWarningDismissed(false)
+    setReleasedBinding(false)
     setSessionNotice(null)
     setSubmissionError(null)
     setIsStopping(false)
@@ -368,7 +371,44 @@ export function AgentOutputPanel({
     }
   }
 
+  /**
+   * The task every turn in this thread is bound to, and checked against at its end.
+   *
+   * Shown because the binding is otherwise invisible: it decides whether work is checked, it now
+   * survives across turns, and an operator who cannot see it cannot tell why a thread keeps
+   * attributing turns to something they have moved on from. Releasing is the one thing nothing
+   * infers on their behalf.
+   */
+  // Hidden here and dropped there, the same shape as the checkpoint dismissal: the banner goes on
+  // the click, and the refetch is what keeps it gone.
+  const boundTaskId = releasedBinding
+    ? null
+    : conversations.find((item) => item.id === currentConversationId)?.task_id
+
   const bannerCandidates: Array<ConversationBanner | null> = [
+    boundTaskId
+      ? {
+          id: 'conversation-task-binding',
+          // Neither an offer nor a problem: it is a statement of what this thread is for.
+          tone: 'info' as const,
+          message: `Every turn here counts towards task ${boundTaskId}, and is checked when it ends.`,
+          secondaryAction: {
+            label: 'Work on something else',
+            onClick: () => {
+              if (!projectId || !currentConversationId) return
+              setReleasedBinding(true)
+              void releaseConversationTask(projectId, agent.name, currentConversationId).catch(
+                (err) => {
+                  // Put it back. A binding that looks released but is not would leave the operator
+                  // believing this thread no longer counts towards the task while it still does.
+                  setReleasedBinding(false)
+                  console.error('Failed to release the conversation binding:', err)
+                },
+              )
+            },
+          },
+        }
+      : null,
     checkpointDue
       ? {
           id: 'checkpoint-due',

@@ -6,14 +6,21 @@ import { Icon } from '@/components/common/Icon'
 import { useAgents } from '@/api/agents'
 import { agentColorVars } from '@/lib/agentColors'
 
+// `blocked` has no column of its own, deliberately. It is not a separate stage of work — it is
+// in-progress work that stopped — and giving it a ninth column both widens a board the operator has
+// already called crowded and makes a card travel out and back as it blocks and unblocks, which
+// reads as progress where there is none. It shows as a treatment on the card instead, inside
+// In Progress (`2026-08-10-blocked-and-conversation-binding`, R3).
+const STATUSES_IN_PROGRESS = ['in_progress', 'blocked']
+
 const COLUMNS = [
-  { key: 'pending',         label: 'Pending',        accentColor: null as string | null },
-  { key: 'assigned',        label: 'Assigned',       accentColor: null as string | null },
-  { key: 'in_progress',     label: 'In Progress',    accentColor: 'var(--blue)' },
-  { key: 'under_review',    label: 'Under Review',   accentColor: 'var(--amber)' },
-  { key: 'completed',       label: 'Completed',      accentColor: null as string | null },
-  { key: 'approved',        label: 'Approved',       accentColor: 'var(--green)' },
-  { key: 'revision_needed', label: 'Needs Revision', accentColor: 'var(--red)' },
+  { key: 'pending',         label: 'Pending',        accentColor: null as string | null, statuses: ['pending'] },
+  { key: 'assigned',        label: 'Assigned',       accentColor: null as string | null, statuses: ['assigned'] },
+  { key: 'in_progress',     label: 'In Progress',    accentColor: 'var(--blue)',         statuses: STATUSES_IN_PROGRESS },
+  { key: 'under_review',    label: 'Under Review',   accentColor: 'var(--amber)',        statuses: ['under_review'] },
+  { key: 'completed',       label: 'Completed',      accentColor: null as string | null, statuses: ['completed'] },
+  { key: 'approved',        label: 'Approved',       accentColor: 'var(--green)',        statuses: ['approved'] },
+  { key: 'revision_needed', label: 'Needs Revision', accentColor: 'var(--red)',          statuses: ['revision_needed'] },
 ]
 
 export function TasksBoard() {
@@ -85,11 +92,16 @@ export function TasksBoard() {
             minWidth: 0,
           }}
         >
-          {COLUMNS.map(({ key, label, accentColor }) => {
-            let col = tasks.filter((t) => t.status === key)
+          {COLUMNS.map(({ key, label, accentColor, statuses }) => {
+            let col = tasks.filter((t) => statuses.includes(t.status))
             if (activeFilter !== null) {
               col = col.filter((t) => t.assignee === activeFilter)
             }
+            // Waiting work first. It is the only kind in this column that needs the operator, and
+            // burying it under running work is how a card that is asking for something goes unread.
+            col = [...col].sort(
+              (a, b) => Number(b.status === 'blocked') - Number(a.status === 'blocked'),
+            )
             return (
               // No `overflow-hidden` here: it makes this column the scrollport for `sticky`
               // below, so the header would pin to a box that never scrolls and travel away with

@@ -9,8 +9,12 @@ export interface ConversationBanner {
    * Every banner used to be red, because every banner was a problem. A checkpoint waiting to be
    * cut over to is not a problem — it is an offer, and colouring it like a failure would say the
    * opposite of what it means.
+   *
+   * `info` is neither: a standing statement about what this conversation is for, which the operator
+   * can act on but is not being asked to. A task binding coloured as an offer would read as a
+   * prompt to release it every time they open the thread.
    */
-  tone?: 'problem' | 'offer'
+  tone?: 'problem' | 'offer' | 'info'
   /** An offer the operator can accept from the banner itself. */
   action?: {
     label: string
@@ -38,6 +42,13 @@ const TONES = {
     background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
     borderColor: 'color-mix(in srgb, var(--blue) 28%, transparent)',
     color: 'var(--blue)',
+  },
+  // Quieter than both, on purpose: this one is always there while the binding is, so anything
+  // louder would compete with the banners that appear because something needs deciding.
+  info: {
+    background: 'var(--surface-3)',
+    borderColor: 'var(--border)',
+    color: 'var(--text-2)',
   },
 } as const
 

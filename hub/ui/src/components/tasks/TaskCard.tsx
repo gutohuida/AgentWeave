@@ -63,6 +63,10 @@ function agentStatusTitle(task: Task): string {
 export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
+  // Open while the operator is saying what a hand-set block is waiting for. The Hub requires the
+  // reason, so a menu that sent the status on its own would offer a move that then fails — the one
+  // thing the allowed-transitions endpoint exists to prevent.
+  const [blockingReason, setBlockingReason] = useState<string | null>(null)
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
   const setHandling = useSetDivergenceHandling()
@@ -88,17 +92,29 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
     (task.deliverables && task.deliverables.length > 0) ||
     task.notes
 
+  // Waiting work sits in the In Progress column rather than a column of its own (R3), so the card
+  // itself has to carry the difference. Purple rather than amber: amber already means "stalled",
+  // and these are opposites — one is an agent that dropped the work, the other is an agent that
+  // correctly refused to guess. Colouring them alike would teach the operator to read the signal
+  // that means "someone did the right thing" as a problem.
+  const isBlocked = task.status === 'blocked'
+  const blockedAccent = 'var(--purple)'
+
   return (
     <div
       style={{
         background: 'var(--surface-2)',
-        border: '1px solid var(--border)',
+        border: `1px solid ${isBlocked ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)` : 'var(--border)'}`,
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
         transition: 'border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease)',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-hi)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = isBlocked ? blockedAccent : 'var(--border-hi)' }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = isBlocked
+          ? `color-mix(in srgb, ${blockedAccent} 45%, transparent)`
+          : 'var(--border)'
+      }}
     >
       {/* Header - always visible */}
       <div
@@ -135,6 +151,13 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
                   label: `Move to ${statusLabel(next)}`,
                   onSelect: () => {
                     setRefusal(null)
+                    if (next === 'blocked') {
+                      // Ask what it is waiting for first. An unexplained block leaves the operator
+                      // working out what they are holding up — which is the position they were in
+                      // when the card said in progress and nothing was happening.
+                      setBlockingReason('')
+                      return
+                    }
                     updateTask.mutate(
                       { id: task.id, status: next },
                       {
@@ -189,6 +212,96 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
             </button>
           </div>
         </div>
+
+        {/* What this task is waiting for, and who it is waiting on. Said in words rather than left
+            to a badge: "blocked" alone puts the operator back where they were when the card said in
+            progress and nothing was happening. */}
+        {isBlocked && (
+          <div
+            data-testid={`task-blocked-${task.id}`}
+            className="mt-2 flex items-start gap-2 rounded px-2 py-1.5"
+            style={{
+              background: `color-mix(in srgb, ${blockedAccent} 10%, transparent)`,
+              border: `1px solid color-mix(in srgb, ${blockedAccent} 25%, transparent)`,
+            }}
+          >
+            <Icon name="help_circle" size={12} style={{ color: blockedAccent, marginTop: 2 }} />
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium" style={{ color: blockedAccent }}>
+                Waiting on you
+              </p>
+              {task.blocked_reason && (
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-2)' }}>
+                  {task.blocked_reason}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Naming what a hand-set block waits for. Required by the Hub, so the control collects it
+            rather than sending a status that would be refused. */}
+        {blockingReason !== null && (
+          <div
+            data-testid={`task-block-reason-${task.id}`}
+            className="mt-2 rounded px-2 py-1.5"
+            style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <label className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+              What is this waiting for?
+            </label>
+            <input
+              autoFocus
+              value={blockingReason}
+              onChange={(e) => setBlockingReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setBlockingReason(null)
+              }}
+              placeholder="e.g. the staging API key"
+              className="mt-1 w-full rounded px-2 py-1 text-xs"
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+              }}
+            />
+            <div className="mt-1.5 flex items-center gap-2">
+              <button
+                data-testid={`task-block-confirm-${task.id}`}
+                disabled={!blockingReason.trim()}
+                onClick={() => {
+                  const reason = blockingReason.trim()
+                  if (!reason) return
+                  setRefusal(null)
+                  updateTask.mutate(
+                    { id: task.id, status: 'blocked', blocked_reason: reason },
+                    {
+                      onSuccess: () => setBlockingReason(null),
+                      onError: (error: unknown) =>
+                        setRefusal(readableApiError(error, 'The Hub refused this change.')),
+                    },
+                  )
+                }}
+                className="rounded px-2 py-0.5 text-[11px]"
+                style={{
+                  background: blockingReason.trim() ? blockedAccent : 'var(--surface-3)',
+                  color: blockingReason.trim() ? 'var(--bg)' : 'var(--text-3)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                Mark waiting
+              </button>
+              <button
+                onClick={() => setBlockingReason(null)}
+                className="text-[11px]"
+                style={{ color: 'var(--text-3)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Badges row */}
         <div className="flex flex-wrap items-center gap-1.5 mt-2">

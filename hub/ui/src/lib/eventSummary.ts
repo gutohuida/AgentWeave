@@ -28,6 +28,10 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
       : data.outcome === 'escalated'
         ? `${data.agent} ended without moving ${data.task_id} — handed to ${data.response_agent}`
         : `${data.agent} ended without moving ${data.task_id} (${data.task_status})`
+    // The opposite of the above, and worded so it cannot be mistaken for it: the agent asked
+    // rather than guessed, and the work is waiting on the operator, not on nobody.
+    case 'task_blocked': return `${data.agent} is waiting on you before continuing "${data.task_title ?? data.task_id}"`
+    case 'task_unblocked': return `your answer released "${data.task_title ?? data.task_id}"`
     case 'watchdog_started': return `transport=${data.transport}`
     case 'watchdog_stopped': return 'watchdog stopped'
     case 'watchdog_ping': return `→ ${data.agent} for msg ${data.msg_id}`
