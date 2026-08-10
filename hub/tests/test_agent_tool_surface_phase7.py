@@ -259,9 +259,7 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
         for agent_name in ("cli-lead", "cli-worker", "cli-template"):
             existing = await session.get(Agent, agent_name)
             if existing is None:
-                session.add(
-                    Agent(id=agent_name, project_id="proj-test", name=agent_name)
-                )
+                session.add(Agent(id=agent_name, project_id="proj-test", name=agent_name))
         session.add(
             Run(
                 id="run-cli-session",
@@ -311,7 +309,14 @@ async def test_full_multi_agent_command_session_needs_no_tool_protocol_server(ap
     question = await app.post(
         "/api/v1/projects/proj-test/questions",
         headers=auth_headers,
-        json={"from_agent": "cli-lead", "question": "Proceed?", "blocking": False, "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
+        json={
+            "from_agent": "cli-lead",
+            "question": "Proceed?",
+            "blocking": False,
+            "header": "Decide",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+            "multi_select": False,
+        },
     )
     assert question.status_code == 201
     answer_poll = await app.get(

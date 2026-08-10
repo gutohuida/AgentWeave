@@ -523,9 +523,7 @@ def test_codex_rollout_accounting_uses_latest_request_delta(tmp_path):
         encoding="utf-8",
     )
 
-    accounting = read_codex_rollout_accounting(
-        "thread-abc", codex_home=tmp_path, model="gpt-5.5"
-    )
+    accounting = read_codex_rollout_accounting("thread-abc", codex_home=tmp_path, model="gpt-5.5")
     assert accounting is not None
     assert accounting.source == "codex_token_count"
     assert accounting.total_tokens == 23

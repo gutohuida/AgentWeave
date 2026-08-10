@@ -173,9 +173,7 @@ class TestCollaborationReadiness:
         assert result["collaboration_reason"] is None
 
     @pytest.mark.asyncio
-    async def test_default_codex_agent_is_collaboration_ready(
-        self, app, auth_headers, bind_runner
-    ):
+    async def test_default_codex_agent_is_collaboration_ready(self, app, auth_headers, bind_runner):
         """A codex agent created with no special configuration can collaborate.
 
         This is the whole point of making app-server the default: the Add-agent dialog sets
@@ -283,9 +281,7 @@ class TestCollaborationReadiness:
         assert "callback address" in result["collaboration_reason"]
 
     @pytest.mark.asyncio
-    async def test_agent_with_no_bound_runner_has_no_collaboration_verdict(
-        self, app, auth_headers
-    ):
+    async def test_agent_with_no_bound_runner_has_no_collaboration_verdict(self, app, auth_headers):
         sync = await app.post(
             "/api/v1/projects/proj-test/session/sync",
             json={"data": {"agents": {"unbound-agent": {"runner": "claude"}}}},

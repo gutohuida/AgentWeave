@@ -59,10 +59,14 @@ async def _conversation_of(message_id: str) -> str | None:
     async with async_session_factory() as session:
         message = await session.get(Message, message_id)
         entry = (
-            await session.execute(
-                select(InboundQueueEntry).where(InboundQueueEntry.message_id == message.id)
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.message_id == message.id)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         return entry.conversation_id if entry else None
 
 
@@ -333,6 +337,6 @@ async def test_an_archived_conversation_is_refused_with_all_three_parts(app, aut
     )
     assert response.status_code == 409
     detail = response.json()["detail"]
-    assert "archived" in detail                      # the cause
-    assert "omitting conversation_id" in detail      # the way out
-    assert CONTENT in detail                         # the agent's own words back
+    assert "archived" in detail  # the cause
+    assert "omitting conversation_id" in detail  # the way out
+    assert CONTENT in detail  # the agent's own words back

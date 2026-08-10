@@ -150,10 +150,14 @@ async def _resolve_runner(db, project: Project, agent_name: str) -> Optional[Run
         if runner is not None and runner.project_id == project.id:
             return runner
     agent = (
-        await db.execute(
-            select(Agent).where(Agent.project_id == project.id, Agent.name == agent_name)
+        (
+            await db.execute(
+                select(Agent).where(Agent.project_id == project.id, Agent.name == agent_name)
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if agent is not None and agent.runner_id:
         return await db.get(Runner, agent.runner_id)
     return None

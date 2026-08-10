@@ -52,4 +52,3 @@ def downgrade() -> None:
     if "capability_token_hash" in columns:
         with op.batch_alter_table("runs", recreate="never") as batch_op:
             batch_op.drop_column("capability_token_hash")
-

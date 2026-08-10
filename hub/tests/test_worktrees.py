@@ -362,8 +362,9 @@ async def test_a_workspace_that_cannot_isolate_says_so_before_a_turn_refuses(
 
 
 @pytest.mark.asyncio
-async def test_the_conflicts_route_is_not_read_as_an_agent_name(app, auth_headers, repo,
-                                                                bind_project_workspace):
+async def test_the_conflicts_route_is_not_read_as_an_agent_name(
+    app, auth_headers, repo, bind_project_workspace
+):
     """`/worktrees/conflicts` is a route, and `conflicts` is a legal agent name — declaration
     order is the only thing keeping the two apart, so it is worth a test."""
     await bind_project_workspace(repo)

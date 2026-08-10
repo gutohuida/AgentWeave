@@ -143,8 +143,10 @@ def test_the_real_claude_envelope_yields_its_answer_and_its_usage():
 
 
 def test_a_claude_error_envelope_is_an_error_but_still_reports_what_it_cost():
-    stdout = '{"is_error":true,"subtype":"error_max_turns","usage":{"input_tokens":5,' \
-             '"output_tokens":0},"result":null}'
+    stdout = (
+        '{"is_error":true,"subtype":"error_max_turns","usage":{"input_tokens":5,'
+        '"output_tokens":0},"result":null}'
+    )
     answer, usage, error = parse_claude_envelope(stdout)
     assert answer is None
     assert "error_max_turns" in error

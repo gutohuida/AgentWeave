@@ -101,9 +101,7 @@ async def test_project_summary_reports_running_for_a_run_with_no_heartbeat(
 
 
 @pytest.mark.asyncio
-async def test_project_summary_agrees_with_agents_endpoint_during_a_run(
-    app, auth_headers
-) -> None:
+async def test_project_summary_agrees_with_agents_endpoint_during_a_run(app, auth_headers) -> None:
     """The rail and the panels read different endpoints; they must not disagree
     about whether the same agent is running."""
     async with async_session_factory() as session:
@@ -128,14 +126,10 @@ async def test_project_summary_agrees_with_agents_endpoint_during_a_run(
 
     projects = await app.get("/api/v1/projects", headers=auth_headers)
     project = next(item for item in projects.json() if item["id"] == "proj-test")
-    rail_status = next(
-        a["status"] for a in project["agents"] if a["name"] == "parity-agent"
-    )
+    rail_status = next(a["status"] for a in project["agents"] if a["name"] == "parity-agent")
 
     agents = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
-    panel_status = next(
-        a["status"] for a in agents.json() if a["name"] == "parity-agent"
-    )
+    panel_status = next(a["status"] for a in agents.json() if a["name"] == "parity-agent")
 
     assert rail_status == panel_status == "running"
 

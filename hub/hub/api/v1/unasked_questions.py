@@ -55,9 +55,7 @@ class UnaskedQuestionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-async def _pending_row(
-    session: AsyncSession, project_id: str, record_id: str
-) -> UnaskedQuestion:
+async def _pending_row(session: AsyncSession, project_id: str, record_id: str) -> UnaskedQuestion:
     """Fetch one record, refusing anything already acted on.
 
     Acting twice would produce two turns racing on one question, which is worse than an error the

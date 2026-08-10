@@ -85,13 +85,9 @@ def upgrade() -> None:
         ).fetchall()
         for run in runs:
             binding = (
-                (run.project_id, run.agent, run.session_id)
-                if run.session_id is not None
-                else None
+                (run.project_id, run.agent, run.session_id) if run.session_id is not None else None
             )
-            conversation_id = (
-                conversation_by_binding.get(binding) if binding is not None else None
-            )
+            conversation_id = conversation_by_binding.get(binding) if binding is not None else None
             if conversation_id is None:
                 identity = binding if binding is not None else (run.project_id, run.agent, run.id)
                 conversation_id = _conversation_id(*identity)

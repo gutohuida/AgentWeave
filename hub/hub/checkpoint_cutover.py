@@ -123,9 +123,7 @@ async def cut_over(
     archive(predecessor)
     await db.commit()
 
-    logger.info(
-        "cut %s over to %s on checkpoint %s", predecessor.id, successor.id, checkpoint.id
-    )
+    logger.info("cut %s over to %s on checkpoint %s", predecessor.id, successor.id, checkpoint.id)
 
     if auto_continue:
         # Started here rather than left for the operator to trigger with a message. The successor

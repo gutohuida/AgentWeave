@@ -105,9 +105,7 @@ async def test_the_same_threshold_is_accepted_when_no_model_is_chosen(app, auth_
     """Task 8.8's other half: an unknown window is not evidence that a number is wrong."""
     response = await app.put(
         f"/api/v1/projects/{PROJECT}/settings",
-        json=_settings(
-            checkpoint_threshold_mode="tokens", checkpoint_threshold_value=250_000
-        ),
+        json=_settings(checkpoint_threshold_mode="tokens", checkpoint_threshold_value=250_000),
         headers=auth_headers,
     )
     assert response.status_code == 200, response.text
@@ -162,9 +160,7 @@ async def test_an_agent_can_override_the_whole_threshold(app, auth_headers):
     assert response.json()["checkpoint_threshold_value"] == 60
 
     async with async_session_factory() as db:
-        row = (
-            await db.execute(select(Agent).where(Agent.name == name))
-        ).scalars().one()
+        row = (await db.execute(select(Agent).where(Agent.name == name))).scalars().one()
     assert (row.checkpoint_threshold_mode, row.checkpoint_threshold_value) == ("percent", 60)
 
 
@@ -213,7 +209,9 @@ async def test_clearing_an_agent_override_returns_it_to_the_projects_threshold(a
 async def test_an_agent_can_opt_out_while_inheriting_the_projects_threshold(app, auth_headers):
     name = await _agent(app, auth_headers)
     response = await app.patch(
-        f"/api/v1/projects/{PROJECT}/agents/{name}", json={"checkpoint_mode": "off"}, headers=auth_headers
+        f"/api/v1/projects/{PROJECT}/agents/{name}",
+        json={"checkpoint_mode": "off"},
+        headers=auth_headers,
     )
     assert response.status_code == 200, response.text
     assert response.json()["checkpoint_mode"] == "off"
@@ -224,10 +222,14 @@ async def test_an_agent_can_opt_out_while_inheriting_the_projects_threshold(app,
 async def test_a_null_agent_mode_means_inherit_not_off(app, auth_headers):
     name = await _agent(app, auth_headers)
     await app.patch(
-        f"/api/v1/projects/{PROJECT}/agents/{name}", json={"checkpoint_mode": "automatic"}, headers=auth_headers
+        f"/api/v1/projects/{PROJECT}/agents/{name}",
+        json={"checkpoint_mode": "automatic"},
+        headers=auth_headers,
     )
     response = await app.patch(
-        f"/api/v1/projects/{PROJECT}/agents/{name}", json={"checkpoint_mode": None}, headers=auth_headers
+        f"/api/v1/projects/{PROJECT}/agents/{name}",
+        json={"checkpoint_mode": None},
+        headers=auth_headers,
     )
     assert response.status_code == 200, response.text
     assert response.json()["checkpoint_mode"] is None
@@ -237,7 +239,9 @@ async def test_a_null_agent_mode_means_inherit_not_off(app, auth_headers):
 async def test_an_unknown_agent_mode_is_refused(app, auth_headers):
     name = await _agent(app, auth_headers)
     response = await app.patch(
-        f"/api/v1/projects/{PROJECT}/agents/{name}", json={"checkpoint_mode": "whenever"}, headers=auth_headers
+        f"/api/v1/projects/{PROJECT}/agents/{name}",
+        json={"checkpoint_mode": "whenever"},
+        headers=auth_headers,
     )
     assert response.status_code == 400
 

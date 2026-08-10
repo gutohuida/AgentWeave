@@ -46,9 +46,7 @@ def upgrade() -> None:
             sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=False),
         )
         op.create_index("ix_agent_job_deletions_job_id", "agent_job_deletions", ["job_id"])
-        op.create_index(
-            "ix_agent_job_deletions_project_id", "agent_job_deletions", ["project_id"]
-        )
+        op.create_index("ix_agent_job_deletions_project_id", "agent_job_deletions", ["project_id"])
         op.create_index("ix_agent_job_deletions_run_id", "agent_job_deletions", ["run_id"])
 
 

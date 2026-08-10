@@ -17,8 +17,7 @@ async def test_ask_and_answer_question(app, auth_headers):
             "question": "Which approach should I use?",
             "blocking": False,
             "header": "Decide",
-            "options": [{"label": "Yes"},
-            {"label": "No"}],
+            "options": [{"label": "Yes"}, {"label": "No"}],
             "multi_select": False,
         },
         headers=auth_headers,
@@ -92,7 +91,14 @@ async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_he
 
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
-        json={"from_agent": "claude", "question": "Which one?", "blocking": True, "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
+        json={
+            "from_agent": "claude",
+            "question": "Which one?",
+            "blocking": True,
+            "header": "Decide",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+            "multi_select": False,
+        },
         headers=auth_headers,
     )
     q_id = resp.json()["id"]
@@ -131,8 +137,10 @@ async def test_a_question_can_offer_options_and_they_survive_the_round_trip(app,
             "blocking": True,
             "header": "Database",
             "multi_select": False,
-            "options": [{"label": "Postgres", "description": "Concurrent writes"},
-                        {"label": "SQLite", "description": ""}],
+            "options": [
+                {"label": "Postgres", "description": "Concurrent writes"},
+                {"label": "SQLite", "description": ""},
+            ],
         },
         headers=auth_headers,
     )

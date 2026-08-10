@@ -41,9 +41,7 @@ async def archivable(db: AsyncSession, agent: Agent) -> Optional[str]:
         .limit(1)
     )
     if running.scalar_one_or_none() is not None:
-        return (
-            f"{agent.name} has a run in progress. Wait for it to finish, or stop it first."
-        )
+        return f"{agent.name} has a run in progress. Wait for it to finish, or stop it first."
 
     queued = await db.execute(
         select(InboundQueueEntry.id)

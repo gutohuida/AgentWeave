@@ -163,7 +163,9 @@ class TestRunTurnHappyPath:
                 "thread/resume": THREAD_START_RESULT,
                 "turn/start": TURN_START_RESULT,
             },
-            notifications=[{"method": "turn/completed", "params": {"turn": {"status": "completed"}}}],
+            notifications=[
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+            ],
         )
         _patch_spawn(monkeypatch, fake)
 
@@ -236,7 +238,9 @@ class TestRunTurnHappyPath:
                 "thread/start": THREAD_START_RESULT,
                 "turn/start": TURN_START_RESULT,
             },
-            notifications=[{"method": "turn/completed", "params": {"turn": {"status": "completed"}}}],
+            notifications=[
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+            ],
         )
         _patch_spawn(monkeypatch, fake)
 
@@ -432,7 +436,9 @@ class TestRunTurnInterrupt:
                 "turn/start": TURN_START_RESULT,
                 "turn/interrupt": {},
             },
-            notifications=[{"method": "turn/completed", "params": {"turn": {"status": "completed"}}}],
+            notifications=[
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+            ],
         )
         _patch_spawn(monkeypatch, fake)
 

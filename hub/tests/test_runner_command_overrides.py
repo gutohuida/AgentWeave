@@ -26,9 +26,7 @@ def test_codex_effort_renders_as_a_config_override():
         prompt="hello",
         control_overrides={"effort": "high"},
     )
-    config_values = [
-        command[i + 1] for i, item in enumerate(command[:-1]) if item == "-c"
-    ]
+    config_values = [command[i + 1] for i, item in enumerate(command[:-1]) if item == "-c"]
     assert "model_reasoning_effort=high" in config_values
 
 
@@ -43,7 +41,9 @@ def test_codex_control_args_precede_resume_subcommand():
     resume_index = command.index("resume")
     # Find the specific -c pair carrying the effort override.
     effort_pair_index = next(
-        i for i, item in enumerate(command) if item == "-c" and command[i + 1] == "model_reasoning_effort=high"
+        i
+        for i, item in enumerate(command)
+        if item == "-c" and command[i + 1] == "model_reasoning_effort=high"
     )
     assert effort_pair_index < resume_index
 

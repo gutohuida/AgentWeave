@@ -117,9 +117,7 @@ def build_command(
     """
     provider = catalog_provider_for_runner(runner)
     control_args = (
-        render_control_args(provider, control_overrides)
-        if provider and control_overrides
-        else []
+        render_control_args(provider, control_overrides) if provider and control_overrides else []
     )
     if runner == "codex":
         return _build_codex_command(

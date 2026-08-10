@@ -155,14 +155,26 @@ async def test_agent_can_read_only_its_own_question_answer(app, auth_headers):
     rejected = await app.post(
         "/api/v1/agent-actions/questions",
         headers=asker_headers,
-        json={"question": "Which path?", "from_agent": "impostor", "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
+        json={
+            "question": "Which path?",
+            "from_agent": "impostor",
+            "header": "Decide",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+            "multi_select": False,
+        },
     )
     assert rejected.status_code == 422
 
     asked = await app.post(
         "/api/v1/agent-actions/questions",
         headers=asker_headers,
-        json={"question": "Which path?", "blocking": True, "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
+        json={
+            "question": "Which path?",
+            "blocking": True,
+            "header": "Decide",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+            "multi_select": False,
+        },
     )
     assert asked.status_code == 201
     question_id = asked.json()["id"]
@@ -235,7 +247,11 @@ async def test_a_refused_action_is_recorded_where_the_operator_can_see_it(app):
 
     async with async_session_factory() as session:
         rows = (
-            (await session.execute(select(EventLog).where(EventLog.event_type == "permission_denied")))
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "permission_denied")
+                )
+            )
             .scalars()
             .all()
         )
@@ -264,7 +280,11 @@ async def test_an_allowed_action_is_not_recorded(app):
 
     async with async_session_factory() as session:
         rows = (
-            (await session.execute(select(EventLog).where(EventLog.event_type == "permission_denied")))
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "permission_denied")
+                )
+            )
             .scalars()
             .all()
         )

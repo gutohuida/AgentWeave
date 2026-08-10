@@ -229,12 +229,8 @@ def test_notes_are_not_asked_for_once_cutover_is_due():
 def test_a_notes_point_that_is_not_earlier_is_ignored_rather_than_honoured():
     """Honouring it would ask for notes at the worst possible moment, which is worse than not
     asking at all."""
-    assert not should_request_notes(
-        _policy(notes_value=80), context_tokens=None, percent=85.0
-    )
-    assert not should_request_notes(
-        _policy(notes_value=90), context_tokens=None, percent=95.0
-    )
+    assert not should_request_notes(_policy(notes_value=80), context_tokens=None, percent=85.0)
+    assert not should_request_notes(_policy(notes_value=90), context_tokens=None, percent=95.0)
 
 
 def test_notes_are_asked_for_under_offered_not_only_automatic():
@@ -260,7 +256,7 @@ def test_a_dismissal_runs_out_of_room_at_the_final_mark():
 
 
 def test_no_percentage_means_no_final_warning():
-    """"Near the window" is a claim about a proportion. A token count with no window to divide by
+    """ "Near the window" is a claim about a proportion. A token count with no window to divide by
     does not make a smaller version of that claim — it makes none at all, and inventing a
     denominator to have one is what every other decision here refuses to do."""
     assert not needs_final_warning(_policy(mode="offered"), percent=None)

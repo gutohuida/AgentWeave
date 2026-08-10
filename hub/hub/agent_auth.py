@@ -67,11 +67,14 @@ async def get_agent_actor(
     # instance_id=None and is not rejected on that basis alone — only a recorded mismatch
     # is distinguishable from "unknown/expired" and worth its own diagnosable reason.
     this_instance = instance_identity.get()
-    if run.instance_id is not None and this_instance is not None and run.instance_id != this_instance:
+    if (
+        run.instance_id is not None
+        and this_instance is not None
+        and run.instance_id != this_instance
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Run credential was issued by a different Hub instance",
         )
 
     return AgentActor(project_id=run.project_id, agent=run.agent, run_id=run.id)
-

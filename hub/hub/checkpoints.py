@@ -65,13 +65,17 @@ class CheckpointEnvelope:
 async def latest_checkpoint(db, conversation_id: str) -> Optional[Checkpoint]:
     """The checkpoint a new one anchors on, or None for a conversation's first."""
     return (
-        await db.execute(
-            select(Checkpoint)
-            .where(Checkpoint.conversation_id == conversation_id)
-            .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
-            .limit(1)
+        (
+            await db.execute(
+                select(Checkpoint)
+                .where(Checkpoint.conversation_id == conversation_id)
+                .order_by(Checkpoint.created_at.desc(), Checkpoint.id.desc())
+                .limit(1)
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
 
 
 async def runs_to_cover(db, conversation_id: str, anchor: Optional[Checkpoint]) -> List[Run]:

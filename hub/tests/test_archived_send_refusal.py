@@ -121,9 +121,7 @@ async def test_nothing_is_written_to_the_archived_conversation(
 
 
 @pytest.mark.asyncio
-async def test_the_message_is_not_silently_rehomed(
-    app, auth_headers, drain_conversation
-) -> None:
+async def test_the_message_is_not_silently_rehomed(app, auth_headers, drain_conversation) -> None:
     """The agent decides where its message goes. A refusal that quietly picked another
     conversation would be worse than the stranding it was meant to prevent."""
     conversation_id = await _archived_conversation(app, auth_headers, drain_conversation)
@@ -170,9 +168,7 @@ async def test_omitting_the_conversation_id_opens_a_new_one(
 
 
 @pytest.mark.asyncio
-async def test_an_open_conversation_id_is_honoured(
-    app, auth_headers, drain_conversation
-) -> None:
+async def test_an_open_conversation_id_is_honoured(app, auth_headers, drain_conversation) -> None:
     """Targeting is not archive-only: naming an open conversation sends into that one."""
     await _sync_agents(app, auth_headers, "sender", "recipient")
     first = await app.post(
@@ -216,9 +212,7 @@ async def test_an_open_conversation_id_is_honoured(
 
 
 @pytest.mark.asyncio
-async def test_a_conversation_belonging_to_another_agent_is_not_found(
-    app, auth_headers
-) -> None:
+async def test_a_conversation_belonging_to_another_agent_is_not_found(app, auth_headers) -> None:
     await _sync_agents(app, auth_headers, "sender", "recipient", "bystander")
     other = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",

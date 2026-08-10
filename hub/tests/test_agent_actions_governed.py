@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Agent, AgentJobDeletion, JobRun, Project, ProjectSession, Run
+from hub.db.models import Agent, AgentJobDeletion, AIJob, JobRun, Project, ProjectSession, Run
 
 
 async def _actor(agent: str = "lead", run_id: str = "run-governed") -> dict[str, str]:

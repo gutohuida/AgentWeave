@@ -163,7 +163,12 @@ class TestMapItemToEvents:
         assert "hello-from-appserver-probe" in events[0].payload["output"]
 
     def test_command_execution_completed_failure_is_marked_error(self):
-        item = {"type": "commandExecution", "id": "call_x", "aggregatedOutput": "boom", "exitCode": 1}
+        item = {
+            "type": "commandExecution",
+            "id": "call_x",
+            "aggregatedOutput": "boom",
+            "exitCode": 1,
+        }
         events = map_item_to_events(item, is_start=False)
         assert events[0].payload["is_error"] is True
 
@@ -185,7 +190,9 @@ class TestMapItemToEvents:
         item = {
             "type": "fileChange",
             "id": "call_1",
-            "changes": [{"path": "C:\\workspace\\out.txt", "diff": "BREACH\n", "kind": {"type": "add"}}],
+            "changes": [
+                {"path": "C:\\workspace\\out.txt", "diff": "BREACH\n", "kind": {"type": "add"}}
+            ],
         }
         events = map_item_to_events(item, is_start=True)
         assert len(events) == 1
@@ -198,7 +205,9 @@ class TestMapItemToEvents:
             "type": "fileChange",
             "id": "call_1",
             "status": "completed",
-            "changes": [{"path": "C:\\workspace\\out.txt", "diff": "hi\n", "kind": {"type": "add"}}],
+            "changes": [
+                {"path": "C:\\workspace\\out.txt", "diff": "hi\n", "kind": {"type": "add"}}
+            ],
         }
         events = map_item_to_events(item, is_start=False)
         assert events[0].kind == "tool_result"
@@ -214,7 +223,11 @@ class TestMapItemToEvents:
             "id": "call_1",
             "status": "declined",
             "changes": [
-                {"path": "C:\\outside\\OUTSIDE_BREACH_MARKER.txt", "diff": "BREACH\n", "kind": {"type": "add"}}
+                {
+                    "path": "C:\\outside\\OUTSIDE_BREACH_MARKER.txt",
+                    "diff": "BREACH\n",
+                    "kind": {"type": "add"},
+                }
             ],
         }
         events = map_item_to_events(item, is_start=False)
@@ -226,7 +239,9 @@ class TestMapItemToEvents:
             "type": "fileChange",
             "id": "call_1",
             "status": "failed",
-            "changes": [{"path": "C:\\workspace\\out.txt", "diff": "hi\n", "kind": {"type": "add"}}],
+            "changes": [
+                {"path": "C:\\workspace\\out.txt", "diff": "hi\n", "kind": {"type": "add"}}
+            ],
         }
         events = map_item_to_events(item, is_start=False)
         assert events[0].payload["is_error"] is True

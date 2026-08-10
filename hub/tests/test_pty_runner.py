@@ -130,8 +130,7 @@ class TestCmdShimUnwrapping:
         """End-to-end proof, against a real shim and a real spawn, that the newline survives."""
         echo = tmp_path / "echoargv.py"
         echo.write_text(
-            "import sys, json\n"
-            "print('START' + json.dumps(sys.argv[1:]) + 'END', flush=True)\n",
+            "import sys, json\n" "print('START' + json.dumps(sys.argv[1:]) + 'END', flush=True)\n",
             encoding="utf-8",
         )
         # Same shape as the real npm shim: one executable, `%*`, no baked-in arguments. The

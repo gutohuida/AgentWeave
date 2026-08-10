@@ -95,18 +95,26 @@ async def recall_observation(db, reader_name: str, project_id: str, output_id: s
     disclosure.
     """
     reader = (
-        await db.execute(
-            select(Agent).where(Agent.project_id == project_id, Agent.name == reader_name)
-        )
-    ).scalars().first()
-
-    output = (
-        await db.execute(
-            select(AgentOutput).where(
-                AgentOutput.id == output_id, AgentOutput.project_id == project_id
+        (
+            await db.execute(
+                select(Agent).where(Agent.project_id == project_id, Agent.name == reader_name)
             )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
+
+    output = (
+        (
+            await db.execute(
+                select(AgentOutput).where(
+                    AgentOutput.id == output_id, AgentOutput.project_id == project_id
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
     if output is None or not output.conversation_id:
         raise AccessDeniedError("No recorded observation by that id is available to you.")
 
@@ -147,11 +155,7 @@ async def participants(db, project_id: str, conversation_id: str) -> List[dict]:
     conflating them gives a `lineage_id` that means two things.
     """
     run_ids = (
-        (
-            await db.execute(
-                select(Run.id).where(Run.conversation_id == conversation_id)
-            )
-        )
+        (await db.execute(select(Run.id).where(Run.conversation_id == conversation_id)))
         .scalars()
         .all()
     )

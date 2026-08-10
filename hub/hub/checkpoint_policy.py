@@ -108,7 +108,9 @@ def resolve_policy(agent: Any, project: Any) -> CheckpointPolicy:
     )
 
 
-def threshold_error(mode: str, value: int, *, context_window: Optional[int] = None) -> Optional[str]:
+def threshold_error(
+    mode: str, value: int, *, context_window: Optional[int] = None
+) -> Optional[str]:
     """Why this threshold is unusable, or None.
 
     The window check is **conditional on the window being known**, which is what reconciles
@@ -145,7 +147,9 @@ def describe_threshold(mode: str, value: int, *, context_window: Optional[int] =
         return f"{value}%"
     thousands = f"{round(value / 1000):,}k"
     if context_window:
-        return f"{thousands} — {round(value / context_window * 100)}% of {context_window // 1000:,}k"
+        return (
+            f"{thousands} — {round(value / context_window * 100)}% of {context_window // 1000:,}k"
+        )
     return thousands
 
 

@@ -940,9 +940,7 @@ class PermissionRequest(Base):
     )
     decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (
-        Index("ix_permission_requests_project_status", "project_id", "status"),
-    )
+    __table_args__ = (Index("ix_permission_requests_project_status", "project_id", "status"),)
 
 
 class UnaskedQuestion(Base):

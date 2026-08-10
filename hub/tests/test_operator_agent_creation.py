@@ -126,7 +126,9 @@ async def test_operator_agent_requires_same_project_launchable_bindings(
 
 
 @pytest.mark.asyncio
-async def test_agent_creation_by_provider_and_model_provisions_a_runner(app, auth_headers, monkeypatch):
+async def test_agent_creation_by_provider_and_model_provisions_a_runner(
+    app, auth_headers, monkeypatch
+):
     """2026-08-04-hub-model-control-and-provisioning: no runner need exist beforehand."""
     monkeypatch.setattr(
         "hub.api.v1.agents.probe_agent",

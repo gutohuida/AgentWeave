@@ -26,10 +26,10 @@ async def _register(app, auth_headers, name: str = "waiter") -> None:
 async def _row(name: str = "waiter") -> Agent:
     async with async_session_factory() as db:
         return (
-            await db.execute(
-                select(Agent).where(Agent.project_id == PROJECT, Agent.name == name)
-            )
-        ).scalars().one()
+            (await db.execute(select(Agent).where(Agent.project_id == PROJECT, Agent.name == name)))
+            .scalars()
+            .one()
+        )
 
 
 async def _patch(app, auth_headers, body: dict, name: str = "waiter"):
@@ -120,9 +120,7 @@ def _reloaded_mcp_server(monkeypatch, **env):
 
 
 def test_the_tool_honours_a_configured_wait(monkeypatch):
-    module = _reloaded_mcp_server(
-        monkeypatch, AW_DECISION_TIMEOUT="45", AW_QUESTION_TIMEOUT="300"
-    )
+    module = _reloaded_mcp_server(monkeypatch, AW_DECISION_TIMEOUT="45", AW_QUESTION_TIMEOUT="300")
     try:
         assert module.OPERATOR_DECISION_TIMEOUT == 45
         assert module.QUESTION_ANSWER_TIMEOUT == 300

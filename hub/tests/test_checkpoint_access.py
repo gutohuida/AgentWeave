@@ -293,7 +293,11 @@ async def test_participation_is_derived_from_runs_not_stored(app):
     # The task was created in conv-a and last touched by the peer in conv-b — which is exactly
     # the cross-agent fact the query exists to surface.
     assert found == [
-        {"agent": PEER, "conversation_id": "conv-b", "tasks": [{"id": "t1", "title": "Shared work"}]}
+        {
+            "agent": PEER,
+            "conversation_id": "conv-b",
+            "tasks": [{"id": "t1", "title": "Shared work"}],
+        }
     ]
 
 

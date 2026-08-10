@@ -270,9 +270,7 @@ def files_changed_in(worktree: Path, sha: str) -> List[str]:
     Best-effort by design: a checkpoint that reports no changed files because a commit was
     garbage-collected is wrong, but a checkpoint that fails to exist because of it is worse.
     """
-    result = _run_git(
-        worktree, "show", "--pretty=format:", "--name-only", sha, check=False
-    )
+    result = _run_git(worktree, "show", "--pretty=format:", "--name-only", sha, check=False)
     if result.returncode != 0:
         return []
     return sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})

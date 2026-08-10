@@ -130,9 +130,10 @@ async def get_queue_status(
         project_row = await session.get(Project, project_id)
         if project_row and all(entry.hop_depth > project_row.hop_budget for entry in entries):
             reason = "hop budget exhausted"
-        elif all(entry.origin_type != "operator" for entry in entries) and (
-            await project_budget_state(session, project_id)
-        )["exhausted"]:
+        elif (
+            all(entry.origin_type != "operator" for entry in entries)
+            and (await project_budget_state(session, project_id))["exhausted"]
+        ):
             reason = "token budget exhausted"
         else:
             config = await get_agent_config(project_id, agent, session)

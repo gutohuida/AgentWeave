@@ -175,9 +175,7 @@ async def record_context_usage(
                 )
             ).scalar_one_or_none()
         if conversation_id is None:
-            conversation = await latest_open_conversation(
-                db, project_id=project_id, agent=agent
-            )
+            conversation = await latest_open_conversation(db, project_id=project_id, agent=agent)
             conversation_id = conversation.id if conversation else None
         payload["conversation_id"] = conversation_id
     latest_result = await db.execute(

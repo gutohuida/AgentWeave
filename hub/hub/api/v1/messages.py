@@ -62,10 +62,14 @@ async def create_message_for_actor(
         source_conversation_id = source_run.conversation_id
 
     recipient_row = (
-        await session.execute(
-            select(Agent).where(Agent.project_id == project_id, Agent.name == body.recipient)
+        (
+            await session.execute(
+                select(Agent).where(Agent.project_id == project_id, Agent.name == body.recipient)
+            )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     recipient_exists = recipient_row.id if recipient_row is not None else None
     if recipient_exists is None:
         # Recorded on the SENDER's timeline — task 5.3: the Hub, not just the agent's own

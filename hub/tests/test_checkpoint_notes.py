@@ -32,11 +32,7 @@ AGENT = "claude-1"
 
 
 async def _conversation_with_run(db, conversation_id="conv-1", run_id="run-1"):
-    db.add(
-        Conversation(
-            id=conversation_id, project_id=PROJECT, agent=AGENT, lifecycle="open"
-        )
-    )
+    db.add(Conversation(id=conversation_id, project_id=PROJECT, agent=AGENT, lifecycle="open"))
     db.add(
         Run(
             id=run_id,

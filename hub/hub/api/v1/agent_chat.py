@@ -224,11 +224,7 @@ async def _owned_conversation(
     elsewhere is not this caller's to learn.
     """
     conversation = await session.get(Conversation, conversation_id)
-    if (
-        conversation is None
-        or conversation.project_id != project_id
-        or conversation.agent != agent
-    ):
+    if conversation is None or conversation.project_id != project_id or conversation.agent != agent:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 

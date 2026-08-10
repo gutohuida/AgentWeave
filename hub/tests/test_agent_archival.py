@@ -34,9 +34,7 @@ async def test_archive_removes_the_agent_from_the_default_roster(app, auth_heade
     await _register(app, auth_headers, "archie")
     assert "archie" in await _names(app, auth_headers)
 
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/archie/archive", headers=auth_headers
-    )
+    resp = await app.post("/api/v1/projects/proj-test/agents/archie/archive", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["lifecycle"] == "archived"
 
@@ -73,12 +71,8 @@ async def test_unarchive_restores_the_agent(app, auth_headers):
 @pytest.mark.asyncio
 async def test_archiving_is_idempotent(app, auth_headers):
     await _register(app, auth_headers, "twice")
-    first = await app.post(
-        "/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers
-    )
-    second = await app.post(
-        "/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers
-    )
+    first = await app.post("/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers)
+    second = await app.post("/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers)
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["lifecycle"] == "archived"
@@ -86,9 +80,7 @@ async def test_archiving_is_idempotent(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_archiving_an_unknown_agent_is_404(app, auth_headers):
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/ghost/archive", headers=auth_headers
-    )
+    resp = await app.post("/api/v1/projects/proj-test/agents/ghost/archive", headers=auth_headers)
     assert resp.status_code == 404
 
 
@@ -110,9 +102,7 @@ async def test_a_running_agent_is_refused_with_a_reason(app, auth_headers):
         )
         await session.commit()
 
-    resp = await app.post(
-        "/api/v1/projects/proj-test/agents/busy/archive", headers=auth_headers
-    )
+    resp = await app.post("/api/v1/projects/proj-test/agents/busy/archive", headers=auth_headers)
     assert resp.status_code == 409
     assert "run in progress" in resp.json()["detail"]
 

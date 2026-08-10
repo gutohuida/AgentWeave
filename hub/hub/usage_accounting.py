@@ -58,11 +58,15 @@ async def record_turn_usage(
 def _summary_from_row(row: Any, *, agent: Optional[str] = None) -> Dict[str, Any]:
     measured_turns = int(row.measured_turns or 0)
     summary: Dict[str, Any] = {
-        "input_tokens": int(row.input_tokens) if measured_turns and row.input_tokens is not None else None,
+        "input_tokens": (
+            int(row.input_tokens) if measured_turns and row.input_tokens is not None else None
+        ),
         "output_tokens": (
             int(row.output_tokens) if measured_turns and row.output_tokens is not None else None
         ),
-        "total_tokens": int(row.total_tokens) if measured_turns and row.total_tokens is not None else None,
+        "total_tokens": (
+            int(row.total_tokens) if measured_turns and row.total_tokens is not None else None
+        ),
         "measured_turns": measured_turns,
         "unavailable_turns": int(row.unavailable_turns or 0),
         "api_equivalent_usd_micros": (
@@ -94,9 +98,7 @@ def budget_state(limit_tokens: Optional[int], used_tokens: Optional[int]) -> Dic
     return {
         "limit_tokens": limit_tokens,
         "used_tokens": used,
-        "remaining_tokens": (
-            max(0, limit_tokens - used) if limit_tokens is not None else None
-        ),
+        "remaining_tokens": (max(0, limit_tokens - used) if limit_tokens is not None else None),
         "exhausted": limit_tokens is not None and used >= limit_tokens,
     }
 

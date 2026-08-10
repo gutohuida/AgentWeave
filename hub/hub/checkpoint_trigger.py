@@ -136,7 +136,9 @@ async def _nothing_new_since_last_checkpoint(db, conversation_id: str) -> bool:
     return newest_run is not None and newest_run == latest
 
 
-async def _resolve_runner(db, project: Project) -> tuple[Optional[str], Optional[str], Optional[str]]:
+async def _resolve_runner(
+    db, project: Project
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """(cli, model, runner_id) for generation — the project's chosen runner.
 
     Returns (None, None, None) when nothing is chosen. Generation is then skipped rather than
@@ -166,10 +168,14 @@ async def consider(
     async with async_session_factory() as db:
         project = await db.get(Project, project_id)
         agent = (
-            await db.execute(
-                select(Agent).where(Agent.project_id == project_id, Agent.name == agent_name)
+            (
+                await db.execute(
+                    select(Agent).where(Agent.project_id == project_id, Agent.name == agent_name)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if project is None:
             return None
 

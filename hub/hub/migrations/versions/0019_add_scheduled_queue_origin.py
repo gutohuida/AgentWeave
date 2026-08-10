@@ -43,6 +43,8 @@ def downgrade() -> None:
     if not {"inbound_queue_entries", "projects"} <= tables:
         return
     conn.execute(
-        sa.text("UPDATE inbound_queue_entries SET origin_type = 'operator' WHERE origin_type = 'job'")
+        sa.text(
+            "UPDATE inbound_queue_entries SET origin_type = 'operator' WHERE origin_type = 'job'"
+        )
     )
     _replace_constraints(include_job=False)

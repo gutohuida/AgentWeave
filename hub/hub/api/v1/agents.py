@@ -90,7 +90,9 @@ class OperatorAgentCreate(BaseModel):
         if self.model is not None and self.provider is None:
             raise ValueError("provider is required when model is given")
         if has_runner == has_provider_model:
-            raise ValueError("Provide either runner_id or both provider and model, not both or neither")
+            raise ValueError(
+                "Provide either runner_id or both provider and model, not both or neither"
+            )
         return self
 
 
@@ -583,9 +585,7 @@ async def list_agents(
                 question_timeout_seconds=(
                     agent_row.question_timeout_seconds if agent_row else None
                 ),
-                default_permission_mode=(
-                    agent_row.default_permission_mode if agent_row else None
-                ),
+                default_permission_mode=(agent_row.default_permission_mode if agent_row else None),
                 checkpoint_mode=agent_row.checkpoint_mode if agent_row else None,
                 checkpoint_threshold_mode=(
                     agent_row.checkpoint_threshold_mode if agent_row else None
@@ -593,9 +593,7 @@ async def list_agents(
                 checkpoint_threshold_value=(
                     agent_row.checkpoint_threshold_value if agent_row else None
                 ),
-                checkpoint_notes_value=(
-                    agent_row.checkpoint_notes_value if agent_row else None
-                ),
+                checkpoint_notes_value=(agent_row.checkpoint_notes_value if agent_row else None),
                 can_read_checkpoints=bool(agent_row.can_read_checkpoints) if agent_row else False,
                 can_recall=bool(agent_row.can_recall) if agent_row else False,
             )
@@ -872,7 +870,7 @@ def _tool_surface_lines() -> List[str]:
         "steps through them in a single sitting, which interrupts them once instead of once per "
         "question. Each entry needs `question`, `header`, `options` and `multi_select`, all "
         "required. `header` is two or three words naming the decision. `options` "
-        "is 2 to 8 entries of `{\"label\", \"description\"}` — the label comes back to you, and "
+        'is 2 to 8 entries of `{"label", "description"}` — the label comes back to you, and '
         "the description is what lets the operator choose without already knowing the trade-off, "
         "so write what picking it actually means rather than restating the label. There is no "
         "way to ask without options: if the decision feels open, offer the answers you consider "
@@ -1353,6 +1351,7 @@ def _apply_checkpoint_override(agent_row: Agent, body: Dict[str, Any]) -> None:
             )
         agent_row.checkpoint_mode = mode
 
+
 # Matches the column. Long enough for a line that says what the agent is for, short enough that it
 # stays a label rather than becoming a second charter written where nothing reads it.
 MAX_DESCRIPTION_CHARS = 256
@@ -1398,9 +1397,7 @@ def _validated_permission_mode(value: object) -> Optional[str]:
     if not isinstance(value, str) or value not in permitted:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "default_permission_mode must be one of: " + ", ".join(sorted(permitted))
-            ),
+            detail=("default_permission_mode must be one of: " + ", ".join(sorted(permitted))),
         )
     return value
 

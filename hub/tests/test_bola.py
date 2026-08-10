@@ -91,7 +91,13 @@ async def project_a_resources(app, project_a):
     # Question
     q_resp = await app.post(
         f"{base}/questions",
-        json={"from_agent": "alice", "question": "project a question", "header": "Decide", "options": [{"label": "Yes"}, {"label": "No"}], "multi_select": False},
+        json={
+            "from_agent": "alice",
+            "question": "project a question",
+            "header": "Decide",
+            "options": [{"label": "Yes"}, {"label": "No"}],
+            "multi_select": False,
+        },
         headers=auth_headers,
     )
     assert q_resp.status_code == 201
@@ -272,9 +278,7 @@ async def test_cross_project_conversation_mutations_return_404(
     b_base = f"/api/v1/projects/{other_project['project_id']}"
     target = f"{b_base}/agent/alice/conversations/{conversation_id}"
 
-    assert (
-        await app.patch(target, json={"title": "Stolen"}, headers=b)
-    ).status_code == 404
+    assert (await app.patch(target, json={"title": "Stolen"}, headers=b)).status_code == 404
     assert (await app.post(f"{target}/archive", headers=b)).status_code == 404
     assert (await app.post(f"{target}/unarchive", headers=b)).status_code == 404
 

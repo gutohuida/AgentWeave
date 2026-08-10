@@ -39,9 +39,7 @@ async def _open_conversation(app, auth_headers, drain_conversation, message="Che
 
 
 @pytest.mark.asyncio
-async def test_archive_and_unarchive_round_trip(
-    app, auth_headers, drain_conversation
-) -> None:
+async def test_archive_and_unarchive_round_trip(app, auth_headers, drain_conversation) -> None:
     conversation_id = await _open_conversation(app, auth_headers, drain_conversation)
     base = f"/api/v1/projects/proj-test/agent/offline/conversations/{conversation_id}"
 
@@ -57,9 +55,7 @@ async def test_archive_and_unarchive_round_trip(
 
 
 @pytest.mark.asyncio
-async def test_the_listing_hides_archived_by_default(
-    app, auth_headers, drain_conversation
-) -> None:
+async def test_the_listing_hides_archived_by_default(app, auth_headers, drain_conversation) -> None:
     conversation_id = await _open_conversation(app, auth_headers, drain_conversation)
     base = f"/api/v1/projects/proj-test/agent/offline/conversations/{conversation_id}"
     await app.post(f"{base}/archive", headers=auth_headers)

@@ -96,11 +96,7 @@ async def test_the_flag_is_recorded_as_a_warn_event_the_activity_view_can_filter
 
     async with async_session_factory() as db:
         events = list(
-            (
-                await db.execute(
-                    select(EventLog).where(EventLog.event_type == "question_not_asked")
-                )
-            )
+            (await db.execute(select(EventLog).where(EventLog.event_type == "question_not_asked")))
             .scalars()
             .all()
         )
@@ -142,9 +138,7 @@ async def test_a_turn_about_to_continue_is_not_flagged(app, auth_headers):
     answered by that turn's input rather than stranded."""
     await _seed_run_output(run_id="run-1")
     async with async_session_factory() as db:
-        db.add(
-            Conversation(id="conv-q", project_id=PROJECT, agent="codex-1", lifecycle="open")
-        )
+        db.add(Conversation(id="conv-q", project_id=PROJECT, agent="codex-1", lifecycle="open"))
         db.add(
             InboundQueueEntry(
                 id="qe-1",
@@ -176,7 +170,9 @@ async def test_a_run_that_did_not_complete_is_not_flagged(app, auth_headers, sta
 async def test_only_the_final_text_output_is_considered(app, auth_headers):
     """A question asked mid-turn and then worked past is not a turn that stopped and waited."""
     await _seed_run_output(run_id="run-1", content="Should I use npm?", sequence=1)
-    await _seed_run_output(run_id="run-1", content="The lockfile is pnpm's, so I used pnpm.", sequence=2)
+    await _seed_run_output(
+        run_id="run-1", content="The lockfile is pnpm's, so I used pnpm.", sequence=2
+    )
     await _flag("run-1")
     assert await _pending() == []
 
@@ -190,7 +186,9 @@ async def test_tool_output_does_not_stand_in_for_the_agents_own_words(app, auth_
 
 
 @pytest.mark.asyncio
-async def test_a_failure_in_the_backstop_never_changes_the_runs_outcome(app, auth_headers, monkeypatch):
+async def test_a_failure_in_the_backstop_never_changes_the_runs_outcome(
+    app, auth_headers, monkeypatch
+):
     """The run is already recorded as finished. A backstop that could fail it would be worse than
     the gap it closes."""
     import hub.api.v1.agent_trigger as trigger
@@ -226,9 +224,7 @@ async def _seed_pending(record_id: str = "unasked-1", agent: str = "codex-1") ->
 @pytest.mark.asyncio
 async def test_pending_records_are_listed_for_the_operator(app, auth_headers):
     await _seed_pending()
-    resp = await app.get(
-        f"/api/v1/projects/{PROJECT}/unasked-questions", headers=auth_headers
-    )
+    resp = await app.get(f"/api/v1/projects/{PROJECT}/unasked-questions", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
@@ -245,9 +241,7 @@ async def test_dismissing_removes_it_from_the_operators_list(app, auth_headers):
     assert resp.status_code == 200
     assert resp.json()["status"] == "dismissed"
 
-    listed = await app.get(
-        f"/api/v1/projects/{PROJECT}/unasked-questions", headers=auth_headers
-    )
+    listed = await app.get(f"/api/v1/projects/{PROJECT}/unasked-questions", headers=auth_headers)
     assert listed.json() == []
 
 
@@ -274,7 +268,9 @@ async def test_an_unknown_record_is_a_404(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_asking_properly_re_prompts_the_agent_with_the_question(app, auth_headers, monkeypatch):
+async def test_asking_properly_re_prompts_the_agent_with_the_question(
+    app, auth_headers, monkeypatch
+):
     """The re-prompt's wording is the mechanism — it is what converts prose into a tool call — so
     it is asserted here rather than left to a click handler."""
     import hub.api.v1.agent_trigger as trigger
@@ -290,9 +286,7 @@ async def test_asking_properly_re_prompts_the_agent_with_the_question(app, auth_
     monkeypatch.setattr(trigger, "trigger_agent_directly", fake_trigger)
 
     async with async_session_factory() as db:
-        db.add(
-            Conversation(id="conv-1", project_id=PROJECT, agent="codex-1", lifecycle="open")
-        )
+        db.add(Conversation(id="conv-1", project_id=PROJECT, agent="codex-1", lifecycle="open"))
         await db.commit()
     await _seed_pending()
 

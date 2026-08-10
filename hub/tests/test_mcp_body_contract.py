@@ -176,5 +176,3 @@ def test_the_helper_would_actually_fail_on_drift(routes, capture):
     capture["body"]["invented_field"] = "drift"
     with pytest.raises(AssertionError, match="Extra inputs are not permitted"):
         _assert_body_is_accepted(routes, capture)
-
-

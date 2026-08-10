@@ -52,7 +52,9 @@ class TestListDirectoryUnit:
         assert listing.entries == []
         assert listing.reason is not None
 
-    @pytest.mark.skipif(os.name == "nt", reason="symlink creation requires elevated privileges on Windows")
+    @pytest.mark.skipif(
+        os.name == "nt", reason="symlink creation requires elevated privileges on Windows"
+    )
     def test_a_symlinked_directory_is_not_traversed(self, tmp_path):
         root = _make_tree(tmp_path)
         outside = tmp_path / "outside"
@@ -84,9 +86,7 @@ class TestListRootsUnit:
     def test_windows_reports_only_drives_present_in_the_logical_drive_bitmask(self):
         # Bit 0 (A) and bit 2 (C) set — B and every other letter absent.
         with patch("hub.fs_browse.os.name", "nt"):  # noqa: SIM117
-            with patch(
-                "hub.fs_browse.ctypes.windll.kernel32.GetLogicalDrives", return_value=0b101
-            ):
+            with patch("hub.fs_browse.ctypes.windll.kernel32.GetLogicalDrives", return_value=0b101):
                 with patch("hub.fs_browse.configured_workspace_root", return_value=None):
                     roots = list_roots()
         assert [r.path for r in roots] == ["A:\\", "C:\\"]

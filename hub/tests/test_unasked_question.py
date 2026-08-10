@@ -9,7 +9,10 @@ from hub.unasked_question import MAX_QUESTION_CHARS, trailing_question
     "text, expected",
     [
         ("Which package manager should I use?", "Which package manager should I use?"),
-        ("I've set up the scaffold.\n\nWhich database should I use?", "Which database should I use?"),
+        (
+            "I've set up the scaffold.\n\nWhich database should I use?",
+            "Which database should I use?",
+        ),
         # Trailing blank lines are how most CLIs end a stream; they must not hide the question.
         ("Which one?\n\n\n", "Which one?"),
         ("- Should I use npm or pnpm?", "Should I use npm or pnpm?"),

@@ -71,9 +71,7 @@ async def test_a_peer_created_conversation_records_peer(app, auth_headers) -> No
 
 
 @pytest.mark.asyncio
-async def test_origin_survives_rename_and_archive(
-    app, auth_headers, drain_conversation
-) -> None:
+async def test_origin_survives_rename_and_archive(app, auth_headers, drain_conversation) -> None:
     await _sync_agents(app, auth_headers, "sender", "recipient")
     await app.post(
         "/api/v1/projects/proj-test/messages",

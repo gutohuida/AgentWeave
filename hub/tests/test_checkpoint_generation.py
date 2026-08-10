@@ -108,7 +108,7 @@ def test_notes_are_marked_as_one_input_the_transcript_can_override():
 
 
 def test_a_checkpoint_generated_without_notes_says_so():
-    """"The agent had nothing to add" and "the agent was never asked" read identically
+    """ "The agent had nothing to add" and "the agent was never asked" read identically
     otherwise."""
     body = render_body(CheckpointBody(**GOOD_BODY), notes_incorporated=False)
     assert "contributed no notes" in body
@@ -347,9 +347,7 @@ async def test_a_probe_that_cannot_run_leaves_the_checkpoint_ready(app, monkeypa
     async with async_session_factory() as db:
         conversation = await _conversation(db)
         _patch_cli(monkeypatch, [_claude_stdout(GOOD_BODY), "the probe CLI fell over"])
-        checkpoint = await generate_checkpoint(
-            db, conversation, trigger="operator", cli="claude"
-        )
+        checkpoint = await generate_checkpoint(db, conversation, trigger="operator", cli="claude")
 
     assert checkpoint.status == "ready"
     assert checkpoint.probe_status is None
@@ -370,9 +368,7 @@ async def test_both_calls_are_accounted_for_under_their_own_prompt_versions(app,
                 ),
             ],
         )
-        checkpoint = await generate_checkpoint(
-            db, conversation, trigger="operator", cli="claude"
-        )
+        checkpoint = await generate_checkpoint(db, conversation, trigger="operator", cli="claude")
         rows = (
             (await db.execute(select(WorkerInvocation).order_by(WorkerInvocation.created_at)))
             .scalars()
@@ -442,9 +438,7 @@ async def test_a_second_checkpoint_does_not_replay_what_the_first_already_covere
             )
         )
         await db.commit()
-        await generate_checkpoint(
-            db, conversation, trigger="operator", cli="claude", probe=False
-        )
+        await generate_checkpoint(db, conversation, trigger="operator", cli="claude", probe=False)
 
     first_prompt, second_prompt = captured[0], captured[1]
     assert "EARLY TURN" in first_prompt
@@ -497,9 +491,7 @@ async def test_a_turn_recorded_in_the_same_instant_as_the_checkpoint_is_not_lost
         )
         await db.commit()
 
-        await generate_checkpoint(
-            db, conversation, trigger="operator", cli="claude", probe=False
-        )
+        await generate_checkpoint(db, conversation, trigger="operator", cli="claude", probe=False)
 
     assert "BOUNDARY TURN" in captured[1]
 
@@ -565,9 +557,7 @@ async def test_a_reader_given_only_the_checkpoint_can_answer_the_probe(app, monk
 
         monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
         monkeypatch.setattr(subprocess, "run", fake_run)
-        checkpoint = await generate_checkpoint(
-            db, conversation, trigger="operator", cli="claude"
-        )
+        checkpoint = await generate_checkpoint(db, conversation, trigger="operator", cli="claude")
 
     assert checkpoint.status == "ready"
     assert checkpoint.probe_status == "passed"

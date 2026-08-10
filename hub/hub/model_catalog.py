@@ -200,7 +200,9 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         provider="codex",
         label="Codex CLI",
         models=(
-            ModelDescriptor(id="gpt-5.6-sol", label="GPT-5.6-Sol", context_window=272_000, default=True),
+            ModelDescriptor(
+                id="gpt-5.6-sol", label="GPT-5.6-Sol", context_window=272_000, default=True
+            ),
             ModelDescriptor(id="gpt-5.6-terra", label="GPT-5.6-Terra", context_window=272_000),
             ModelDescriptor(id="gpt-5.6-luna", label="GPT-5.6-Luna", context_window=272_000),
             ModelDescriptor(id="gpt-5.5", label="GPT-5.5", context_window=272_000),
@@ -381,7 +383,9 @@ def render_control_args(provider: str, overrides: Dict[str, str]) -> List[str]:
         # the renderer still does not know what any control means, only that the value it was
         # given may carry its own rendering.
         selected = next((v for v in control.values if v.id == value), None)
-        spec = selected.apply if selected is not None and selected.apply is not None else control.apply
+        spec = (
+            selected.apply if selected is not None and selected.apply is not None else control.apply
+        )
         if spec.style == "none":
             continue
         rendered = spec.template.format(value=value)

@@ -331,7 +331,9 @@ def ask_user(
                     # A multi-select answer stays a list; everything else is the single string
                     # the operator chose or typed. Returning one shape for both would make every
                     # caller re-split a joined string.
-                    "answer": labels if (pending.get(question_id) and labels) else state.get("answer"),
+                    "answer": (
+                        labels if (pending.get(question_id) and labels) else state.get("answer")
+                    ),
                 }
 
     ordered = [
@@ -557,8 +559,7 @@ def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "allow": False,
             "reason": (
-                "your workspace could not be established, so no action can be checked "
-                "against it"
+                "your workspace could not be established, so no action can be checked " "against it"
             ),
         }
     try:

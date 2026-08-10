@@ -53,9 +53,7 @@ def upgrade() -> None:
                 # SQLite cannot add a foreign-key constraint after table creation
                 # without rebuilding the table (see 0017's conversation_id precedent).
                 if conn.dialect.name != "sqlite":
-                    op.create_foreign_key(
-                        f"fk_agents_{column}", "agents", target, [column], ["id"]
-                    )
+                    op.create_foreign_key(f"fk_agents_{column}", "agents", target, [column], ["id"])
 
 
 def downgrade() -> None:

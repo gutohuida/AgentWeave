@@ -167,20 +167,28 @@ def _call_tool_over_stdio(arguments: dict, workspace_dir: str) -> dict:
                 continue
 
     try:
-        send({
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "test", "version": "1"},
-            },
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"},
+                },
+            }
+        )
         read_response()
         send({"jsonrpc": "2.0", "method": "notifications/initialized"})
-        send({
-            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-            "params": {"name": "approve_tool_call", "arguments": arguments},
-        })
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "approve_tool_call", "arguments": arguments},
+            }
+        )
         return read_response()["result"]
     finally:
         proc.kill()
@@ -477,7 +485,9 @@ def test_codex_without_a_posture_behaves_exactly_as_before():
     params = {"command": "ls", "cwd": "/anywhere"}
     kw = {"own_server_name": "agentweave", "posture": None}
     assert decide_approval(COMMAND_APPROVAL_METHOD, params, yolo=True, **kw)["decision"] == "accept"
-    assert decide_approval(COMMAND_APPROVAL_METHOD, params, yolo=False, **kw)["decision"] == "decline"
+    assert (
+        decide_approval(COMMAND_APPROVAL_METHOD, params, yolo=False, **kw)["decision"] == "decline"
+    )
 
 
 def test_codex_approval_subject_carries_what_the_operator_needs():

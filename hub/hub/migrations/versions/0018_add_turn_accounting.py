@@ -29,9 +29,7 @@ def upgrade() -> None:
         if "initiator" not in run_columns:
             op.add_column(
                 "runs",
-                sa.Column(
-                    "initiator", sa.String(16), nullable=False, server_default="operator"
-                ),
+                sa.Column("initiator", sa.String(16), nullable=False, server_default="operator"),
             )
 
     inspector = sa.inspect(conn)

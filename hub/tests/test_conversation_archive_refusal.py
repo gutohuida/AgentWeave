@@ -121,12 +121,16 @@ async def test_an_undelivered_queue_entry_refuses_the_archive(app, auth_headers)
     # The entry is still queued — nothing was withdrawn or rehomed to make room.
     async with async_session_factory() as session:
         states = (
-            await session.execute(
-                select(InboundQueueEntry.state).where(
-                    InboundQueueEntry.conversation_id == conversation_id
+            (
+                await session.execute(
+                    select(InboundQueueEntry.state).where(
+                        InboundQueueEntry.conversation_id == conversation_id
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert states == ["queued"]
 
 

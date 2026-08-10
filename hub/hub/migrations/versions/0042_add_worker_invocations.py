@@ -83,12 +83,8 @@ def upgrade() -> None:
             name="ck_worker_invocations_failure_explained",
         ),
     )
-    op.create_index(
-        "ix_worker_invocations_conversation_id", _TABLE, ["conversation_id"]
-    )
-    op.create_index(
-        "ix_worker_invocations_project_created", _TABLE, ["project_id", "created_at"]
-    )
+    op.create_index("ix_worker_invocations_conversation_id", _TABLE, ["conversation_id"])
+    op.create_index("ix_worker_invocations_project_created", _TABLE, ["project_id", "created_at"])
     op.create_index("ix_worker_invocations_project_kind", _TABLE, ["project_id", "kind"])
 
 

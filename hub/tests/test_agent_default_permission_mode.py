@@ -140,9 +140,7 @@ async def test_the_agents_default_reaches_a_run_that_states_no_posture(
 
 
 @pytest.mark.asyncio
-async def test_a_conversations_own_choice_beats_the_agents_default(
-    app, auth_headers, bind_runner
-):
+async def test_a_conversations_own_choice_beats_the_agents_default(app, auth_headers, bind_runner):
     """`default` means what a run starts from, not what it is held to."""
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",

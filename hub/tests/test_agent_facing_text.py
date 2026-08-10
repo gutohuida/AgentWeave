@@ -64,7 +64,12 @@ class TestTurnPreamble:
         """It used to instruct `agentweave msg send`, `task create`, `question ask` and
         `agent request`, none of which survived the reduction to five commands."""
         notice = access_path_notice("cli")
-        for removed in ("agentweave msg", "agentweave task", "agentweave question", "agent request"):
+        for removed in (
+            "agentweave msg",
+            "agentweave task",
+            "agentweave question",
+            "agent request",
+        ):
             assert removed not in notice
 
 

@@ -97,9 +97,7 @@ def list_directory(raw_path: str) -> DirectoryListing:
 
     root = configured_workspace_root()
     if root is not None and not _is_within(resolved, root):
-        raise DirectoryBrowseError(
-            f"{resolved} is outside the configured workspace root ({root})"
-        )
+        raise DirectoryBrowseError(f"{resolved} is outside the configured workspace root ({root})")
 
     parent = str(resolved.parent) if resolved.parent != resolved else None
 

@@ -23,9 +23,7 @@ def upgrade() -> None:
         return
     columns = {column["name"] for column in inspector.get_columns("conversations")}
     if "runtime_overrides" not in columns:
-        op.add_column(
-            "conversations", sa.Column("runtime_overrides", sa.JSON(), nullable=True)
-        )
+        op.add_column("conversations", sa.Column("runtime_overrides", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

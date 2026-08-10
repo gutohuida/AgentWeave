@@ -1322,7 +1322,9 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
     await bind_runner("no-addr-agent", cli="claude")
 
     async with async_session_factory() as db:
-        conversation = new_conversation(project_id="proj-test", agent="no-addr-agent", origin="operator")
+        conversation = new_conversation(
+            project_id="proj-test", agent="no-addr-agent", origin="operator"
+        )
         db.add(conversation)
         await db.commit()
         await db.refresh(conversation)
@@ -1370,7 +1372,9 @@ async def test_trigger_reports_its_own_conversation_when_an_older_one_is_schedul
     # A leftover queued entry in an older, still-open conversation — e.g. a peer agent's
     # message that arrived while this agent was busy, or one left by an interrupted run.
     async with async_session_factory() as db:
-        stale_conversation = new_conversation(project_id="proj-test", agent="backlog-claude", origin="operator")
+        stale_conversation = new_conversation(
+            project_id="proj-test", agent="backlog-claude", origin="operator"
+        )
         db.add(stale_conversation)
         await db.flush()
         stale_conversation_id = stale_conversation.id
@@ -1417,9 +1421,7 @@ async def test_trigger_reports_its_own_conversation_when_an_older_one_is_schedul
             row.content: (row.state, row.conversation_id)
             for row in (
                 await db.execute(
-                    select(InboundQueueEntry).where(
-                        InboundQueueEntry.agent == "backlog-claude"
-                    )
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "backlog-claude")
                 )
             )
             .scalars()
@@ -1494,9 +1496,7 @@ async def test_codex_exec_argv_never_carries_a_transport_sentinel(app, auth_head
 
 
 @pytest.mark.asyncio
-async def test_codex_app_server_opt_in_flag_selects_run_turn_not_exec(
-    app, auth_headers
-):
+async def test_codex_app_server_opt_in_flag_selects_run_turn_not_exec(app, auth_headers):
     """Task 2.8: `--app-server` in a bound codex Runner's flags routes the run through
     `codex_appserver.run_turn` instead of `PipeSession`/`codex exec` — and never leaks into
     a `codex exec` argv, since no exec ever happens on this path."""
@@ -1584,9 +1584,7 @@ async def test_codex_app_server_records_output_events_and_usage(app, auth_header
     from hub.db.models import TurnUsage
 
     async with async_session_factory() as db:
-        usage = (
-            await db.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))
-        ).scalar_one()
+        usage = (await db.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))).scalar_one()
         assert usage.input_tokens == 7
         assert usage.output_tokens == 3
         assert usage.total_tokens == 10
@@ -1653,7 +1651,9 @@ async def test_codex_app_server_binding_conflict_fails_run(app, auth_headers):
     await _bind_codex_app_server_runner(app, auth_headers)("appserver-conflict")
 
     async with async_session_factory() as db:
-        conversation = new_conversation(project_id="proj-test", agent="appserver-conflict", origin="operator")
+        conversation = new_conversation(
+            project_id="proj-test", agent="appserver-conflict", origin="operator"
+        )
         conversation.provider_session_id = "thread-already-bound"
         db.add(conversation)
         await db.commit()

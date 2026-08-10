@@ -283,10 +283,7 @@ async def trigger_agent_directly(
     # fallback. It has to be applied here rather than only in the composer, because a run
     # triggered by a peer message or a scheduled job has no composer to state one — and those are
     # exactly the runs where "what may this agent do unattended" is the question being asked.
-    if (
-        agent_row.default_permission_mode
-        and PERMISSION_MODE_CONTROL not in control_overrides
-    ):
+    if agent_row.default_permission_mode and PERMISSION_MODE_CONTROL not in control_overrides:
         control_overrides[PERMISSION_MODE_CONTROL] = agent_row.default_permission_mode
     try:
         workspace_root = await project_workspace.resolve_project_workspace(session, project_id)
@@ -909,9 +906,7 @@ async def _flag_unasked_question(
             {"id": record_id, "agent": agent, "run_id": run_id, "question": question},
         )
     except Exception:  # noqa: BLE001 — a backstop must never worsen the run it observes
-        logger.warning(
-            "Could not check run %s for an unasked question", run_id, exc_info=True
-        )
+        logger.warning("Could not check run %s for an unasked question", run_id, exc_info=True)
 
 
 async def _execute_run(
@@ -1325,8 +1320,12 @@ async def _await_operator_permission(
     await sse_manager.broadcast(
         project_id,
         "permission_requested",
-        {"id": request_id, "agent": agent, "tool_name": _CODEX_APPROVAL_LABELS.get(method, method),
-         "run_id": run_id},
+        {
+            "id": request_id,
+            "agent": agent,
+            "tool_name": _CODEX_APPROVAL_LABELS.get(method, method),
+            "run_id": run_id,
+        },
     )
 
     deadline = asyncio.get_event_loop().time() + (
@@ -1380,7 +1379,13 @@ async def _execute_codex_appserver_run(
     try:
         async with async_session_factory() as db:
             await _broadcast_run_lifecycle(
-                db, project_id, "run_started", agent=agent, run_id=run_id, runner="codex", model=model
+                db,
+                project_id,
+                "run_started",
+                agent=agent,
+                run_id=run_id,
+                runner="codex",
+                model=model,
             )
 
         session_id = known_session_id

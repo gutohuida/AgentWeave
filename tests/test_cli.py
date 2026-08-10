@@ -157,5 +157,3 @@ class TestDownloadWithSha256:
         assert result is False
         # Destination should not exist — the corrupted file must be cleaned up
         assert not dest.exists()
-
-

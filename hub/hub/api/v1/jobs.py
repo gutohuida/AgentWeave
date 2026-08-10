@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AIJob, AgentJobDeletion, JobRun, Project, Run
+from ...db.models import AgentJobDeletion, AIJob, JobRun, Project, Run
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -462,9 +462,7 @@ async def run_job(
     except HTTPException:
         raise
     except Exception as e:
-        await _record_job_run_failure(
-            session, job, "manual", e, requested_by_run_id=run_identity
-        )
+        await _record_job_run_failure(session, job, "manual", e, requested_by_run_id=run_identity)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fire job: {_safe_error_summary(e)}",

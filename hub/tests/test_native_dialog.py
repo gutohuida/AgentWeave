@@ -17,8 +17,10 @@ def _fake_process(*, stdout=b"", stderr=b"", returncode=0, hang_forever=False):
     proc.kill = MagicMock()
     proc.wait = AsyncMock(return_value=returncode)
     if hang_forever:
+
         async def _communicate():
             await asyncio.sleep(3600)
+
         proc.communicate = _communicate
     else:
         proc.communicate = AsyncMock(return_value=(stdout, stderr))
@@ -28,7 +30,10 @@ def _fake_process(*, stdout=b"", stderr=b"", returncode=0, hang_forever=False):
 class TestOpenFolderDialogUnit:
     @pytest.mark.asyncio
     async def test_chosen_path_is_returned(self):
-        with patch("hub.native_dialog.check_availability", return_value=native_dialog.AvailabilityResult(available=True)):  # noqa: SIM117
+        with patch(
+            "hub.native_dialog.check_availability",
+            return_value=native_dialog.AvailabilityResult(available=True),
+        ):  # noqa: SIM117
             with patch(
                 "hub.native_dialog.asyncio.create_subprocess_exec",
                 AsyncMock(return_value=_fake_process(stdout=b"CHOSEN:C:\\Users\\op\\project")),
@@ -39,7 +44,10 @@ class TestOpenFolderDialogUnit:
 
     @pytest.mark.asyncio
     async def test_cancel_is_distinct_from_failure(self):
-        with patch("hub.native_dialog.check_availability", return_value=native_dialog.AvailabilityResult(available=True)):  # noqa: SIM117
+        with patch(
+            "hub.native_dialog.check_availability",
+            return_value=native_dialog.AvailabilityResult(available=True),
+        ):  # noqa: SIM117
             with patch(
                 "hub.native_dialog.asyncio.create_subprocess_exec",
                 AsyncMock(return_value=_fake_process(stdout=b"CANCELLED")),
@@ -51,15 +59,23 @@ class TestOpenFolderDialogUnit:
     @pytest.mark.asyncio
     async def test_timeout_kills_the_subprocess_and_is_not_reported_as_failure(self):
         proc = _fake_process(hang_forever=True)
-        with patch("hub.native_dialog.check_availability", return_value=native_dialog.AvailabilityResult(available=True)):  # noqa: SIM117
-            with patch("hub.native_dialog.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        with patch(
+            "hub.native_dialog.check_availability",
+            return_value=native_dialog.AvailabilityResult(available=True),
+        ):  # noqa: SIM117
+            with patch(
+                "hub.native_dialog.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
+            ):
                 result = await native_dialog.open_folder_dialog(timeout_seconds=0.05)
         assert result.outcome == "timeout"
         proc.kill.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_nonzero_exit_is_reported_as_failure(self):
-        with patch("hub.native_dialog.check_availability", return_value=native_dialog.AvailabilityResult(available=True)):  # noqa: SIM117
+        with patch(
+            "hub.native_dialog.check_availability",
+            return_value=native_dialog.AvailabilityResult(available=True),
+        ):  # noqa: SIM117
             with patch(
                 "hub.native_dialog.asyncio.create_subprocess_exec",
                 AsyncMock(return_value=_fake_process(stderr=b"Tcl error", returncode=1)),
@@ -73,7 +89,9 @@ class TestOpenFolderDialogUnit:
         spawn = AsyncMock()
         with patch(  # noqa: SIM117
             "hub.native_dialog.check_availability",
-            return_value=native_dialog.AvailabilityResult(available=False, reason="no desktop session"),
+            return_value=native_dialog.AvailabilityResult(
+                available=False, reason="no desktop session"
+            ),
         ):
             with patch("hub.native_dialog.asyncio.create_subprocess_exec", spawn):
                 result = await native_dialog.open_folder_dialog()
@@ -84,8 +102,13 @@ class TestOpenFolderDialogUnit:
     @pytest.mark.asyncio
     async def test_a_second_request_while_one_is_open_opens_no_second_dialog(self):
         proc = _fake_process(hang_forever=True)
-        with patch("hub.native_dialog.check_availability", return_value=native_dialog.AvailabilityResult(available=True)):  # noqa: SIM117
-            with patch("hub.native_dialog.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        with patch(
+            "hub.native_dialog.check_availability",
+            return_value=native_dialog.AvailabilityResult(available=True),
+        ):  # noqa: SIM117
+            with patch(
+                "hub.native_dialog.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)
+            ):
                 first = asyncio.create_task(native_dialog.open_folder_dialog(timeout_seconds=1))
                 await asyncio.sleep(0.01)  # let the first request actually acquire the lock
                 with pytest.raises(native_dialog.DialogBusyError):
@@ -97,10 +120,14 @@ class TestOpenFolderDialogUnit:
 
 class TestNativeDialogEndpoints:
     @pytest.mark.asyncio
-    async def test_availability_endpoint_reports_the_reason_when_unavailable(self, app, auth_headers):
+    async def test_availability_endpoint_reports_the_reason_when_unavailable(
+        self, app, auth_headers
+    ):
         with patch(
             "hub.api.v1.native_dialog.native_dialog.check_availability",
-            return_value=native_dialog.AvailabilityResult(available=False, reason="Unsupported platform: 'linux'"),
+            return_value=native_dialog.AvailabilityResult(
+                available=False, reason="Unsupported platform: 'linux'"
+            ),
         ):
             resp = await app.get("/api/v1/fs/native-dialog/availability", headers=auth_headers)
         assert resp.status_code == 200

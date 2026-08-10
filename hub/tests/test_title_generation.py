@@ -118,9 +118,7 @@ def _fake_spawn(monkeypatch, output: str, calls=None):
 
 
 @pytest.mark.asyncio
-async def test_generation_is_off_by_default(
-    app, auth_headers, bind_runner, monkeypatch
-) -> None:
+async def test_generation_is_off_by_default(app, auth_headers, bind_runner, monkeypatch) -> None:
     """A migration must not start spending the operator's tokens."""
     await _sync_agent(app, auth_headers)
     conversation_id = await _conversation(app, auth_headers, bind_runner)
@@ -231,9 +229,7 @@ async def test_an_agent_with_no_runner_is_a_no_op(app, auth_headers, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_a_rename_during_generation_wins(
-    app, auth_headers, bind_runner, monkeypatch
-) -> None:
+async def test_a_rename_during_generation_wins(app, auth_headers, bind_runner, monkeypatch) -> None:
     """The model thinks for seconds. The operator can rename inside that window."""
     await _sync_agent(app, auth_headers)
     conversation_id = await _conversation(app, auth_headers, bind_runner)
@@ -289,9 +285,7 @@ async def test_titling_writes_no_run_row(app, auth_headers, bind_runner, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_titling_adds_no_timeline_entry(
-    app, auth_headers, bind_runner, monkeypatch
-) -> None:
+async def test_titling_adds_no_timeline_entry(app, auth_headers, bind_runner, monkeypatch) -> None:
     """The exchange with the titler is not part of the conversation it names."""
     await _sync_agent(app, auth_headers)
     conversation_id = await _conversation(app, auth_headers, bind_runner)
@@ -344,9 +338,7 @@ async def test_the_setting_round_trips_through_the_operator_api(
         "conversation_title_mode": "generate",
         "conversation_title_runner_id": runner_id,
     }
-    updated = await app.put(
-        "/api/v1/projects/proj-test/settings", json=body, headers=auth_headers
-    )
+    updated = await app.put("/api/v1/projects/proj-test/settings", json=body, headers=auth_headers)
     assert updated.status_code == 200, updated.text
 
     reread = await app.get("/api/v1/projects/proj-test/settings", headers=auth_headers)
@@ -362,8 +354,6 @@ async def test_a_runner_from_another_project_is_rejected(app, auth_headers) -> N
         "conversation_title_mode": "generate",
         "conversation_title_runner_id": "runner-does-not-exist",
     }
-    rejected = await app.put(
-        "/api/v1/projects/proj-test/settings", json=body, headers=auth_headers
-    )
+    rejected = await app.put("/api/v1/projects/proj-test/settings", json=body, headers=auth_headers)
     assert rejected.status_code == 400
     assert "Unknown runner" in rejected.json()["detail"]

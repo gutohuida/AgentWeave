@@ -136,10 +136,7 @@ async def peer_bound_conversation(
         conditions.append(Conversation.bound_sender_agent == sender)
         conditions.append(Conversation.bound_sender_conversation_id.is_(None))
     result = await db.execute(
-        select(Conversation)
-        .where(*conditions)
-        .order_by(Conversation.created_at.desc())
-        .limit(1)
+        select(Conversation).where(*conditions).order_by(Conversation.created_at.desc()).limit(1)
     )
     return result.scalar_one_or_none()
 
@@ -258,9 +255,7 @@ async def conversation_attention(
     attention: Dict[str, str] = dict.fromkeys(ids, "idle")
 
     running = await db.execute(
-        select(Run.conversation_id).where(
-            Run.conversation_id.in_(ids), Run.status == "running"
-        )
+        select(Run.conversation_id).where(Run.conversation_id.in_(ids), Run.status == "running")
     )
     for cid in running.scalars():
         if cid:

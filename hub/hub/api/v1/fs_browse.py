@@ -37,4 +37,6 @@ async def list_fs_directory(
 @router.get("/roots", response_model=RootsResponse)
 async def list_fs_roots(operator: OperatorCredential = Depends(get_operator)):
     del operator
-    return RootsResponse(roots=[DirectoryEntryResponse(name=e.name, path=e.path) for e in list_roots()])
+    return RootsResponse(
+        roots=[DirectoryEntryResponse(name=e.name, path=e.path) for e in list_roots()]
+    )

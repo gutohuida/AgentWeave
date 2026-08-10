@@ -227,9 +227,7 @@ async def _transcript_since(db, conversation: Conversation, anchor: Optional[Che
 def build_generation_prompt(
     *, transcript: str, anchor_body: Optional[str] = None, notes: Optional[str] = None
 ) -> str:
-    anchor_section = (
-        _ANCHOR_SECTION.format(anchor_body=anchor_body) if anchor_body else ""
-    )
+    anchor_section = _ANCHOR_SECTION.format(anchor_body=anchor_body) if anchor_body else ""
     notes_section = _NOTES_SECTION.format(notes=notes) if notes else ""
     return _GENERATION_PROMPT.format(
         anchor_section=anchor_section,
@@ -310,9 +308,7 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
     lines.append("## Open questions")
     lines.append("")
     if checkpoint.open_questions:
-        lines.extend(
-            f"- {q.get('id')} — {q.get('question')}" for q in checkpoint.open_questions
-        )
+        lines.extend(f"- {q.get('id')} — {q.get('question')}" for q in checkpoint.open_questions)
     else:
         lines.append("_None outstanding._")
     lines.append("")
@@ -354,7 +350,9 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
 
 
 def _normalise(values: List[str]) -> set:
-    return {str(value).strip().replace("\\", "/").lstrip("./") for value in values if str(value).strip()}
+    return {
+        str(value).strip().replace("\\", "/").lstrip("./") for value in values if str(value).strip()
+    }
 
 
 def grade_probe(answers: ProbeAnswers, envelope: CheckpointEnvelope) -> Tuple[str, List[Dict]]:
@@ -382,9 +380,7 @@ def grade_probe(answers: ProbeAnswers, envelope: CheckpointEnvelope) -> Tuple[st
         missing = sorted(expected - reported)
         invented = sorted(reported - expected)
         if missing or invented:
-            findings.append(
-                {"dimension": dimension, "missing": missing, "invented": invented}
-            )
+            findings.append({"dimension": dimension, "missing": missing, "invented": invented})
 
     return ("failed" if findings else "passed"), findings
 
@@ -418,8 +414,7 @@ def format_notes(note: CheckpointNote) -> str:
     parts = [f"In flight: {note.intent}"]
     if note.suspicions:
         parts.append(
-            "Unverified suspicions:\n"
-            + "\n".join(f"- {item}" for item in note.suspicions)
+            "Unverified suspicions:\n" + "\n".join(f"- {item}" for item in note.suspicions)
         )
     if note.warnings:
         parts.append(
@@ -553,9 +548,7 @@ async def probe_checkpoint(
     )
 
     if not result.ok or result.parsed is None:
-        logger.info(
-            "probe for checkpoint %s did not run: %s", checkpoint.id, result.outcome
-        )
+        logger.info("probe for checkpoint %s did not run: %s", checkpoint.id, result.outcome)
         return checkpoint
 
     status, findings = grade_probe(result.parsed, envelope)

@@ -272,13 +272,17 @@ async def test_a_reading_carries_the_conversation_it_belongs_to(app):
         )
 
         row = (
-            await db.execute(
-                select(EventLog)
-                .where(EventLog.event_type == "context_warning")
-                .order_by(EventLog.id.desc())
-                .limit(1)
+            (
+                await db.execute(
+                    select(EventLog)
+                    .where(EventLog.event_type == "context_warning")
+                    .order_by(EventLog.id.desc())
+                    .limit(1)
+                )
             )
-        ).scalars().one()
+            .scalars()
+            .one()
+        )
 
     assert row.data["conversation_id"] == "conv-usage"
 

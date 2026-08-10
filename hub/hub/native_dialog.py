@@ -89,7 +89,11 @@ def _has_interactive_desktop() -> bool:
         wsf_visible = 0x0001
 
         class _UserObjectFlags(ctypes.Structure):
-            _fields_ = [("fInherit", ctypes.c_int), ("fReserved", ctypes.c_int), ("dwFlags", ctypes.c_ulong)]
+            _fields_ = [
+                ("fInherit", ctypes.c_int),
+                ("fReserved", ctypes.c_int),
+                ("dwFlags", ctypes.c_ulong),
+            ]
 
         info = _UserObjectFlags()
         needed = ctypes.c_ulong(0)

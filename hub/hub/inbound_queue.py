@@ -74,9 +74,7 @@ async def queued_entries(
     if conversation_id is not None:
         predicates.append(InboundQueueEntry.conversation_id == conversation_id)
     result = await db.execute(
-        select(InboundQueueEntry)
-        .where(*predicates)
-        .order_by(InboundQueueEntry.sequence)
+        select(InboundQueueEntry).where(*predicates).order_by(InboundQueueEntry.sequence)
     )
     return list(result.scalars().all())
 

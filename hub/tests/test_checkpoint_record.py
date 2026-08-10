@@ -160,9 +160,7 @@ async def test_open_questions_and_permission_decisions_are_conversation_scoped(a
     assert [q["question"] for q in envelope.open_questions] == ["Which database?"]
     # Denials are the load-bearing half: an agent refused a tool call and working around it
     # leaves a successor that needs to know why the obvious route is closed.
-    assert [(p["tool"], p["status"]) for p in envelope.permission_decisions] == [
-        ("Bash", "denied")
-    ]
+    assert [(p["tool"], p["status"]) for p in envelope.permission_decisions] == [("Bash", "denied")]
 
 
 @pytest.mark.asyncio
@@ -410,7 +408,7 @@ async def test_the_envelope_survives_a_worker_that_returned_nothing(app):
 
 @pytest.mark.asyncio
 async def test_an_empty_body_is_the_same_state_as_no_body(app):
-    """"Cleared" and "never written" should not be two states with one meaning."""
+    """ "Cleared" and "never written" should not be two states with one meaning."""
     async with async_session_factory() as db:
         conversation = await _conversation(db)
         checkpoint = await create_checkpoint(

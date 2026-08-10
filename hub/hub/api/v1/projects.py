@@ -339,9 +339,7 @@ async def update_project_settings(
     try:
         # Validated against the *merged* state, not the fragment. Validating the fragment would
         # refuse a lone notes value for wanting a threshold the project already has.
-        merged = ProjectSettings.model_validate(
-            {**current.model_dump(), **submitted}
-        )
+        merged = ProjectSettings.model_validate({**current.model_dump(), **submitted})
     except PydanticValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
