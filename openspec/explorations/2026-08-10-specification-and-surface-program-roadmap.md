@@ -172,6 +172,34 @@ close, not a thing to close soon.**
 
 ---
 
+## Standing directive — verification ownership is part of authoring
+
+**Stated by the operator 2026-08-10.** Every spec and every change must work out, *while it is being
+authored*, how it will be manually tested:
+
+1. what the **agent** can verify itself, and the expected behaviour;
+2. what can **only be done by the user** — perceptual (contrast, motion), physical (keyboard,
+   screen reader), or judgement ("does this feel right"); and
+3. a **guide for the user** to run that second set — concrete steps, expected result, and what a
+   failure looks like.
+
+**The evidence this exists to fix:** five tasks — `hub-charcoal-visual-refresh` 8.8–8.10 and
+`hub-contextual-navigation` 4.7 and 7.7 — are marked *"not run — tool limitation, not skipped"* and
+have blocked two otherwise-complete changes across at least four handoffs. Available browser
+automation emulates `prefers-color-scheme` only. Each handoff has restated that twenty minutes of
+operator time would archive both changes, and each has failed to make that twenty minutes
+actionable, because an unchecked box is not a test guide.
+
+**This is also a product requirement, not only a working practice.** It lands in two places:
+
+- **B2** — the format contract carries per-requirement **verification ownership** (agent / human /
+  either). This is one more reason the contract cannot be frozen before B3 and B4 state their needs.
+- **B3** — `manual observation` is already a planned evidence kind. It needs an authoring path: the
+  operator running a guide and recording the outcome *is* evidence, and should satisfy a gate the
+  same way a test result does.
+
+Applies from A1 onward — its own `tasks.md` is the first to be written this way.
+
 ## Sequencing note
 
 This program is gated on the operator's decision (2026-08-10) that **1.0 ships with the
