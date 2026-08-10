@@ -215,3 +215,35 @@ proves the element is reachable where it claims to be.
 `layout-probe.txt` in `claude-1`'s worktree; two completed runs (a question probe and a permission
 probe) in conversation `conv-e7aefe3c`; the conversation's permission override restored to
 **Edit files**; rail width back to 220, expanded; conversation width 480.
+
+## Amendment — 2026-08-10, after the operator reviewed it
+
+The operator looked at the shipped layout and reported six things. Two were plain defects, two were
+design decisions of mine that were wrong, one was a document rather than a bug, and one was a
+request. Recorded here rather than by rewriting `design.md`, so the reversal is legible.
+
+**Defects, fixed (`e428958`):**
+- The document picker and the overlay drawer carried no `z-index`, so
+  `.conversation-header-surface`'s `z-index: 3` painted the conversation header over the open
+  dialog. Both now use `z-50`, as every other modal in the app already did.
+- The rule under the document panel's header is gone — the divider is already the boundary.
+
+**Decisions reversed (`1fa0e15`):**
+- **Decision 2 is withdrawn.** "The document gets the larger share when open" was expressed as a
+  560 cap on the conversation, which made the document panel impossible to shrink. There is no
+  design cap now: minimums of 380 and 360, and the ceiling is only what the measurement leaves.
+  The derived overlay breakpoint falls from 981 to 741 with them.
+- **Decision 1's entry point is withdrawn.** `tab: 'spec'` was kept for discoverability and is now
+  deleted: a Spec pill in the composer states which document the turn is written against and opens
+  the picker. Reaching a specification no longer means leaving the conversation. Recorded because
+  handoff 0026 flagged this as "the decision most worth the operator overruling" — it was.
+
+**Not a bug:** the document rendering black-on-dark was `spec/a1-probe.html`, a four-line stub with
+no `<style>`, so there was no theme layer for `withHubTheme` to switch. A realistic pair written to
+`html-spec-conventions.md` now lives in `testbed/mock-spec/` (uncommitted; `testbed/` is
+disposable), with an uploader that posts them to a running Hub.
+
+**Live re-verification after the reversal:** at the new 380 minimum — with a fourth pill in the
+control row — nothing overflows, clips, or overlaps in either pane; at the new 698 maximum the
+document sits exactly on its 360 floor and the conversation is the larger pane, which the cap had
+made impossible. 73 files, **669 tests** green.

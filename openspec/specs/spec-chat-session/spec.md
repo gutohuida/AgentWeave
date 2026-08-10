@@ -60,8 +60,13 @@ agent is whichever conversation the operator is in.
 The specification workspace SHALL show the selected agent's conversation, and SHALL create one on
 the first message when the agent has none.
 
-Entering the specification workspace SHALL resolve to a conversation rather than to a separate
-screen, opening the specification home document in it.
+Opening a specification SHALL be possible from within the conversation surface itself, without
+navigating away from the conversation first. There SHALL NOT be a separate project destination for
+specifications.
+
+Reaching a specification by leaving the conversation, opening the project, and choosing a tab puts
+the most-used surface in the product behind three navigations. The control that opens one belongs
+where the operator already is.
 
 The Hub MUST NOT record a specification-scoped conversation origin until a specification-scoped
 thread has a defined scope.
@@ -77,10 +82,11 @@ document open in it, which makes the durable relationship a link rather than an 
 - **THEN** a conversation is created by that message
 - **AND** its origin is not a specification-scoped value
 
-#### Scenario: Entering the specification workspace
+#### Scenario: Opening a specification from a conversation
 
-- **WHEN** the operator chooses the specification entry point
-- **THEN** they arrive in a conversation with the specification home document open
+- **WHEN** the operator uses the specification control on the conversation surface
+- **THEN** they choose a document without leaving the conversation
+- **AND** no separate project destination for specifications exists
 
 ### Requirement: The agent is told which document the operator is viewing
 
@@ -145,6 +151,10 @@ every width the surface can be shown at, and no two interactive elements SHALL o
 A control MUST NOT be removed from the surface as it narrows. Where space is insufficient, controls
 SHALL wrap or abbreviate their value while keeping what they control identifiable.
 
+Where a document is shown beside the conversation, the boundary between them SHALL be the
+operator's: each pane SHALL be bounded only by a minimum below which it stops being usable, and
+neither SHALL carry a maximum that prevents the other from being made smaller.
+
 The surface was previously rendered in a pane far narrower than it was designed for, and its control
 row overflowed its container — the permission control, whose current value must be readable before
 sending, was clipped mid-word. Presence in the document is not evidence of this requirement being
@@ -160,3 +170,9 @@ met; the check is geometric.
 
 - **WHEN** the conversation surface narrows
 - **THEN** the permission control still states which posture the run will use
+
+#### Scenario: The operator sizes the boundary
+
+- **WHEN** the operator moves the boundary between the conversation and an open document
+- **THEN** either pane can be made the larger one
+- **AND** each stops only at the width below which it is no longer usable
