@@ -1,9 +1,12 @@
 # Tasks
 
-**Not started, and not to be started without a decision on `design.md`'s open questions** — in
-particular the edge set in D2 and D5's choice about how a blocked task escapes the divergence check.
-`TRANSITIONS` is what B3 and B4 will be written against, so its shape is cheap to settle now and
-expensive to revise later.
+**Unblocked 2026-08-10.** All five of `design.md`'s open questions were settled with the operator
+before any code was written (R1–R5), along with D4's column-vs-join-table and D5's choice of how a
+blocked task escapes the divergence check. `TRANSITIONS` is what B3 and B4 will be written against,
+so its shape was cheap to settle now and expensive to revise later.
+
+The status name is **`blocked`**, and per R3 it renders as a treatment inside the `in_progress`
+column rather than as a ninth column.
 
 Ordered by dependency. 1–3 are the waiting status; 4–5 the conversation binding; 6 the operator's
 surface; 7 specs; 8 verification.
@@ -18,7 +21,8 @@ surface; 7 specs; 8 verification.
 
 ## 2. Blocking is observed, not asserted
 
-- [ ] 2.1 Link a blocking `Question` to the task it blocked (design D4); migration `0059`, guarded
+- [ ] 2.1 Link a blocking `Question` to the task it blocked — a nullable column, not a join table
+      (design D4); migration `0059`, guarded
 - [ ] 2.2 At the run boundary, move a bound task to the waiting status when the run ends with an
       unanswered blocking question, `origin='runtime'`, attributed to the run
 - [ ] 2.3 Answering that question returns the task to `in_progress`, in
@@ -26,12 +30,15 @@ surface; 7 specs; 8 verification.
 - [ ] 2.4 Refuse the waiting status from any agent actor, in `update_task_for_actor` beside the
       divergence-policy guard
 - [ ] 2.5 Tests: an agent cannot reach it; the operator can; a timed-out question leaves the task
-      waiting (design Open Question 2)
+      waiting and nothing unparks it (R2); a **non-blocking** question does not block it (R1)
+- [ ] 2.6 A block carries a reason (R5) — required on an operator-set block, filled from the
+      question text on a runtime-set one
 
 ## 3. A waiting task is not divergent
 
-- [ ] 3.1 Implement D5 option (1): the divergence check excludes a task in the waiting status,
-      leaving `origin` meaning "who caused this" rather than bending it to make the check simpler
+- [ ] 3.1 Implement D5 option (1): the divergence check excludes a task **whose status at the run
+      boundary is `blocked`** — not merely one blocked by this run — leaving `origin` meaning "who
+      caused this" rather than bending it to make the check simpler
 - [ ] 3.2 Tests: no divergence and no response run while waiting; the check applies again once
       released
 
@@ -53,8 +60,9 @@ surface; 7 specs; 8 verification.
 
 ## 6. The operator's surface
 
-- [ ] 6.1 The board shows a waiting task — column or treatment, per design Open Question 3
-- [ ] 6.2 The card says what it is waiting for, linking the question
+- [ ] 6.1 The board shows a blocked task as a **treatment inside the `in_progress` column** (R3) —
+      the card does not move when it blocks or unblocks
+- [ ] 6.2 The card says what it is waiting for (R5's reason), linking the question
 - [ ] 6.3 Unblock from the card
 - [ ] 6.4 Show and release a conversation's binding
 - [ ] 6.5 `npm run build`, `rm -rf hub/hub/static/ui`, copy, confirm with `diff -rq`

@@ -77,8 +77,15 @@ answer to the question the exemption merely suppresses.
 Answering has to know what to release, and the answer must not depend on re-deriving it from the
 run — a run may have been bound to a task the question was not about.
 
-Open: whether this is a column on `Question` or a small join table. A column is enough if a question
-blocks at most one task, which it does today.
+**Settled: a nullable column on `Question`, not a join table.** A question blocks at most one task,
+and `ask_user` gives no way to name several — a join table would model a cardinality nothing can
+produce, and every reader would then have to handle a set where there is only ever one row.
+
+The reason it is a column and not re-derived from `run.task_id` stands: a run may be bound to a task
+the question was not about, and releasing the wrong task is worse than releasing nothing.
+
+Per R5, the block's reason is filled from the question text, so this column is also what lets the
+card say what it is waiting for.
 
 ### D5 — A blocked task is not divergent
 
@@ -93,9 +100,13 @@ That is the one wrinkle worth stating, because it cuts against D3. Two ways out:
 2. treat the block as the run's own final act — `origin='actor'` — on the grounds that the agent
    did do something, namely ask.
 
-**(1) is preferred.** `origin` should keep meaning "who caused this", and the runtime caused it. A
+**(1) is chosen.** `origin` should keep meaning "who caused this", and the runtime caused it. A
 divergence check that has to know about `blocked` is honest; an origin that lies to make a check
 simpler is not.
+
+Note what this means concretely: the exclusion is on the task's *status at the run boundary*, not on
+the transition that got it there. A task already blocked when the run ends is equally not divergent,
+which is what makes a multi-turn blocked task safe under R4's conversation binding.
 
 ### D6 — The binding lives on the conversation; the run still records its own
 
@@ -147,16 +158,62 @@ backfill: a conversation that predates this was not bound, and inventing one wou
 runs nobody asked to be checked. Head assertions bumped in `hub/tests/test_migrations.py` **and**
 `hub/tests/test_project_persistence.py`.
 
-## Open Questions
+## Resolved questions
 
-1. **Does a non-blocking question block the task?** Proposed: no. `ask_user` with `blocking=False`
-   is the agent leaving a note, not stopping.
-2. **What happens to a blocked task when its question times out?** The run has already ended; the
-   question stays unanswered and the task stays blocked. Probably right — it *is* still waiting —
-   but it means a timeout leaves a task parked with no further prompt.
-3. **Should `blocked` show as its own column, or as a treatment on `in_progress`?** A ninth column
-   on a board the operator has already called crowded is not obviously the answer.
-4. **Does the conversation binding belong to the conversation or to the agent?** An agent working
-   one task across two conversations is plausible and would make this the wrong home.
-5. **Should an operator-set block name what it is waiting for?** A free-text reason is cheap and is
-   the difference between "blocked" and "blocked on the API key".
+All five were settled with the operator on 2026-08-10, before any code was written, for the reason
+stated in Context: `TRANSITIONS` is cheap to shape now and expensive to reshape once B3 and B4 are
+written against it.
+
+### R1 — A non-blocking question does not block the task
+
+`ask_user(blocking=False)` is the agent leaving a note and carrying on. Only an unanswered question
+with `blocking=True` moves the task. Blocking on a note would make the status mean "an agent
+mentioned something", which is not a thing anyone is waiting on.
+
+### R2 — A timed-out question leaves the task waiting, and that is all
+
+The timeout is agent-side — `AW_QUESTION_TIMEOUT` is read in the MCP server process, and the Hub's
+`Question` row has no timed-out state; it simply stays unanswered. So a task blocked on a question
+nobody answers stays blocked indefinitely.
+
+**Left as is, deliberately.** The task *is* still waiting, so `blocked` remains truthful, and the
+alternative that looks tidiest is the dangerous one: auto-unblocking to `in_progress` on timeout
+returns the task to the divergence check while the agent is still waiting on the same unanswered
+question — reintroducing exactly the retry-into-a-wall bug this change exists to remove.
+
+A "this has been sitting" staleness surface is the right answer and is **out of scope here**. It
+belongs with the divergence records, which already know how long something has been open, and it
+should cover both parked cases rather than only this one.
+
+### R3 — `blocked` renders as a treatment on `in_progress`, not a ninth column
+
+The status is real either way — this is a board-layout decision only, and `STATUSES` is unaffected.
+
+A blocked card stays in the `in_progress` column with a distinct treatment and a badge naming what
+it is waiting for. The operator has already called the board crowded, and a ninth column widens it
+for a state that is not a separate stage of work: blocked *is* in-progress work, stopped. Keeping it
+in the column also means the card does not move when it blocks and move back when it unblocks, which
+would read as progress where there is none.
+
+### R4 — The binding lives on the conversation
+
+`conversations.task_id`, as D6 proposed. A thread is about a piece of work, and two conversations
+with the same agent about different tasks stay correctly separate.
+
+*Rejected: binding to the agent.* It permits an agent only ever one task, and opening a second
+thread with that agent would silently rebind the first — a wrong binding that stops checking a run,
+which D7 exists to prevent.
+
+*Rejected: conversation binding with an agent-level fallback.* The fallback is a binding nobody set,
+applied by inference. That is the same silent guess D7 refuses, arriving through a different door.
+
+The case that motivated the question — one task worked across two conversations — is handled by
+binding both. That is honest about what is happening, where a single agent-level binding would
+quietly attribute one thread's work to the other.
+
+### R5 — A block names what it is waiting for
+
+A free-text reason on the block. Required when the operator sets it by hand; auto-filled from the
+question text when the runtime sets it. Cheap, and it is the whole difference between "blocked" and
+"blocked on the API key" — which is what R3's badge has to display for the treatment to be worth
+more than a tint.
