@@ -67,12 +67,15 @@ export function ControlPill({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={composerControlClassName}
-        title={label}
+        className={`${composerControlClassName} min-w-0 max-w-full`}
+        // The value is in the tooltip because it is the part that truncates. What the control
+        // *is* never does: `Permissions: Edit fi…` is useless, `Permissions: Edit…` is not.
+        title={`${label}: ${valueLabel}`}
       >
-        <span style={{ color: 'var(--text-3)' }}>{label}: </span>
+        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>{label}: </span>
         {icon}
-        {valueLabel} ▾
+        <span className="min-w-0 truncate">{valueLabel}</span>
+        <span className="shrink-0">▾</span>
       </Button>
       {open && (
         <div

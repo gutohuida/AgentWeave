@@ -2,7 +2,6 @@ import { Icon } from '@/components/common/Icon'
 import { AgentSummary } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { ContextUsageIndicator } from '@/components/context/ContextUsageIndicator'
-import { StatusDot, getStatusConfig } from '@/lib/agentStatus'
 
 /** `ready` is gone. It used to mean "the run that was asked to write a handoff has ended",
  *  which is the inference this capability removed — readiness is now a property of a checkpoint
@@ -58,8 +57,6 @@ export function ConversationControls({
   onHandoff,
   onFoldAll,
 }: ConversationControlsProps) {
-  const statusCfg = getStatusConfig(agent.status)
-
   const reason = handoffReason(handoffUnavailable, currentConversationId, interactionLocked, handoffState)
   const handoffDisabled = reason !== null
 
@@ -68,27 +65,20 @@ export function ConversationControls({
   const handoffLabel = handoffState === 'preparing' ? 'Checkpointing…' : 'Checkpoint'
 
   return (
-    <div className="flex items-center gap-3">
-      {/* Active-agent indicator */}
-      <span className="flex items-center gap-1.5 min-w-0">
-        <StatusDot status={agent.status} size="sm" />
-        <span className="text-xs font-medium truncate" style={{ color: 'var(--text)' }}>
-          {agent.name}
-        </span>
-        <span className="text-[11px]" style={{ color: statusCfg.labelColor }}>
-          {statusCfg.label}
-        </span>
-      </span>
+    // Wraps rather than overflows: this row is now shown in a 420px-wide conversation column as
+    // well as a full-width one, and nothing may leave it at either.
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+      {/* The agent's name and status used to be repeated here, beside the header's own. One
+          header, one identity — the duplication was invisible at full width and became three
+          copies of the same word once the surface was narrowed. */}
 
       {/* Not `compact`: the compact form is a 2px bar with no number, which answers "is it
           filling up" and nothing else. The conversation header is where an operator decides
           whether to checkpoint, so it shows the count, the window and the percentage. */}
       <ContextUsageIndicator value={agent.context_usage} />
 
-      <div className="flex-1" />
-
       {isRunning && (
-        <Button variant="destructive" size="xs" onClick={onStop} disabled={isStopping} title="Terminate the in-progress run">
+        <Button variant="destructive" size="xs" className="shrink-0" onClick={onStop} disabled={isStopping} title="Terminate the in-progress run">
           <Icon name="stop" size={12} />
           {isStopping ? 'Stopping…' : 'Stop turn'}
         </Button>
@@ -99,6 +89,7 @@ export function ConversationControls({
       <Button
         variant="ghost"
         size="xs"
+        className="shrink-0"
         data-testid="conversation-handoff"
         disabled={handoffDisabled}
         aria-disabled={handoffDisabled ? 'true' : undefined}
@@ -110,7 +101,7 @@ export function ConversationControls({
         {handoffLabel}
       </Button>
 
-      <Button variant="ghost" size="xs" onClick={onFoldAll}>Fold all turns</Button>
+      <Button variant="ghost" size="xs" className="shrink-0" onClick={onFoldAll}>Fold all turns</Button>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useProjects } from '@/api/projects'
+import { useProjects, type ProjectSummary } from '@/api/projects'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { agentColorVars } from '@/lib/agentColors'
 import {
   AGENT_SETTINGS_SECTIONS,
   ENVIRONMENT_SECTIONS,
@@ -38,7 +39,10 @@ interface SidebarProps {
   onAddAgent?: (projectId: string) => void
   onOpenExisting: () => void
   onCreateProject: () => void
+  /** Collapsed to an icon rail. The operator's choice and only theirs — no destination writes
+   *  it (`hub-workspace-shell`: "Navigation collapses only when the operator asks"). */
   compact?: boolean
+  onCompactChange?: (compact: boolean) => void
   width?: number
 }
 
@@ -103,6 +107,7 @@ export function Sidebar({
   onOpenExisting,
   onCreateProject,
   compact = false,
+  onCompactChange,
   width = SIDEBAR_WIDTH,
 }: SidebarProps) {
   const { data: projects = [] } = useProjects()
@@ -172,12 +177,37 @@ export function Sidebar({
         padding: compact ? '14px 4px' : '16px 12px',
       }}
     >
-      <div className={compact ? 'mb-3 text-center' : 'mb-5 flex items-center gap-2 px-2'} style={{ fontSize: 13, fontWeight: 700 }}>
+      <div
+        className={compact ? 'mb-3 flex flex-col items-center gap-1' : 'mb-5 flex items-center gap-2 px-2'}
+        style={{ fontSize: 13, fontWeight: 700 }}
+      >
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px]" style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>AW</span>
-        {!compact && <span>AgentWeave</span>}
+        {!compact && <span className="flex-1">AgentWeave</span>}
+        {onCompactChange && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            data-testid="rail-collapse-toggle"
+            aria-pressed={compact}
+            aria-label={compact ? 'Expand navigation' : 'Collapse navigation'}
+            title={compact ? 'Expand navigation' : 'Collapse navigation'}
+            onClick={() => onCompactChange(!compact)}
+          >
+            <Icon name={compact ? 'chevron_right' : 'right_panel_close'} size={15} />
+          </Button>
+        )}
       </div>
 
-      {!compact && agentSettings ? (
+      {compact ? (
+        <CompactRail
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          activeAgent={activeAgent}
+          onOpenProject={onOpenProject}
+          onOpenAgent={onOpenAgent}
+          onCreateProject={onCreateProject}
+        />
+      ) : agentSettings ? (
         <>
           <Button
             variant="ghost"
@@ -214,7 +244,7 @@ export function Sidebar({
             ))}
           </nav>
         </>
-      ) : !compact && configuration ? (
+      ) : configuration ? (
         <>
           <Button
             variant="ghost"
@@ -247,7 +277,7 @@ export function Sidebar({
             ))}
           </nav>
         </>
-      ) : !compact ? (
+      ) : (
         <>
           <div className="flex items-center justify-between px-1 pb-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Projects</span>
@@ -356,7 +386,101 @@ export function Sidebar({
             Add project
           </Button>
         </>
-      ) : null}
+      )}
     </aside>
+  )
+}
+
+/**
+ * The rail while collapsed.
+ *
+ * It renders destinations, not decoration. The previous compact mode gated every branch on
+ * `!compact` and so drew the AW mark and nothing else — no projects, no agents, no way back —
+ * which is a hidden rail, not a collapsed one. Every project and agent reachable when expanded is
+ * reachable here, each with an accessible name, and the active one is marked.
+ *
+ * Conversations are deliberately not here: 40px of width cannot name a conversation, and an
+ * unnamed row is not a destination anyone can choose. The agent leads to its most recent one.
+ */
+function CompactRail({
+  projects,
+  selectedProjectId,
+  activeAgent,
+  onOpenProject,
+  onOpenAgent,
+  onCreateProject,
+}: {
+  projects: ProjectSummary[]
+  selectedProjectId: string | null
+  activeAgent: string | null
+  onOpenProject: (projectId: string) => void
+  onOpenAgent: (projectId: string, agent: string) => void
+  onCreateProject: () => void
+}) {
+  return (
+    <>
+      <nav aria-label="Projects and agents" className="flex min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto">
+        {projects.map((project) => {
+          const activeProject = selectedProjectId === project.id
+          return (
+            <div key={project.id} className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                data-testid={`rail-compact-project-${project.id}`}
+                data-active={activeProject ? 'true' : 'false'}
+                aria-current={activeProject ? 'page' : undefined}
+                aria-label={project.name}
+                title={project.name}
+                onClick={() => onOpenProject(project.id)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-semibold"
+                style={{
+                  background: activeProject ? 'var(--surface-3)' : 'var(--surface-2)',
+                  border: `1px solid ${activeProject ? 'var(--border-hi)' : 'var(--border)'}`,
+                  color: 'var(--text-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                {project.name.slice(0, 2).toUpperCase()}
+              </button>
+              {project.agents.map((agent) => {
+                const colors = agentColorVars(agent.color_index)
+                const active = activeProject && activeAgent === agent.name
+                return (
+                  <button
+                    key={agent.name}
+                    type="button"
+                    data-testid={`rail-compact-agent-${project.id}-${agent.name}`}
+                    data-active={active ? 'true' : 'false'}
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={agent.name}
+                    title={agent.name}
+                    onClick={() => onOpenAgent(project.id, agent.name)}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full"
+                    style={{
+                      background: active ? colors.tint : 'transparent',
+                      border: `1px solid ${active ? colors.border : 'var(--border)'}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ background: colors.accent }} />
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
+      </nav>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        data-testid="create-new-project"
+        onClick={onCreateProject}
+        aria-label="Add project"
+        title="Add project"
+        className="mt-2 self-center"
+      >
+        <Icon name="folder_plus" size={15} />
+      </Button>
+    </>
   )
 }

@@ -49,12 +49,51 @@ const DEFAULT_TAB: ProjectTab = 'overview'
 const DEFAULT_ENVIRONMENT_SECTION: EnvironmentSection = ENVIRONMENT_SECTIONS[0]
 const DEFAULT_AGENT_SETTINGS_SECTION: AgentSettingsSection = AGENT_SETTINGS_SECTIONS[0]
 
+/** The frontend twin of the Hub's `validate_spec_path` (`hub/hub/spec_manifest.py`), kept in
+ *  step by hand as that file's own twin already is.
+ *
+ *  It belongs here because the document arrives as an opaque URL parameter: a destination is the
+ *  first thing to see it and the last thing that can refuse it before it becomes a fetch. */
+const SPEC_PATH_MAX_LENGTH = 255
+const SPEC_PATH_CONTROL_CHARS = /[\x00-\x1f\x7f]/
+
+export function isSpecDocumentPath(value: string): boolean {
+  if (!value || value.length > SPEC_PATH_MAX_LENGTH) return false
+  // Percent-encoding is never used by manifest paths, and allowing it here would let an encoded
+  // traversal segment past the checks below — `specBridge`'s link resolution refuses it likewise.
+  if (value.includes('\\') || value.includes('%')) return false
+  if (value !== value.toLowerCase()) return false
+  if (!value.startsWith('spec/') || !value.endsWith('.html')) return false
+  return value
+    .split('/')
+    .every(
+      (segment) =>
+        segment.length > 0 && !segment.startsWith('.') && !SPEC_PATH_CONTROL_CHARS.test(segment),
+    )
+}
+
+/** An illegal or absent value is *no document*, never an error: someone arriving on a mangled
+ *  link should land in the conversation, not on a dead end. */
+export function parseSpecDocument(value: string | null | undefined): string | null {
+  return typeof value === 'string' && isSpecDocumentPath(value) ? value : null
+}
+
 export type WorkspaceDestination =
   | { kind: 'project'; projectId: string; tab: ProjectTab }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
-  | { kind: 'conversation'; projectId: string; agent: string | null; conversationId: string | null }
+  //
+  // `document` is the specification document open *beside* this conversation. It lives in the
+  // destination rather than in component state so any conversation can open one, and so a reload
+  // restores what the operator was looking at — the same property the conversation itself has.
+  | {
+      kind: 'conversation'
+      projectId: string
+      agent: string | null
+      conversationId: string | null
+      document: string | null
+    }
   // Its own kind rather than an `ENVIRONMENT_SECTIONS` entry: those address a project and carry no
   // subject, so they cannot say *which* agent is being configured. `agent` is non-null by
   // construction — there is no such thing as configuring no agent.
@@ -83,12 +122,25 @@ export function environmentDestination(
   return { kind: 'project', projectId, tab: 'environment', environmentSection: section }
 }
 
+/** `document` defaults to null — most navigations to a conversation are not carrying one. The
+ *  callers that are (opening a document, and the specification entry point) pass it explicitly,
+ *  and `withDocument` below is what keeps an already-open one across a conversation change. */
 export function agentDestination(
   projectId: string,
   agent: string,
   conversationId: string | null = null,
+  document: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
-  return { kind: 'conversation', projectId, agent, conversationId }
+  return { kind: 'conversation', projectId, agent, conversationId, document: parseSpecDocument(document) }
+}
+
+/** Open, change, or close the document beside a conversation without disturbing anything else
+ *  about where the operator is. `null` closes it. */
+export function withDocument(
+  destination: Extract<WorkspaceDestination, { kind: 'conversation' }>,
+  document: string | null,
+): Extract<WorkspaceDestination, { kind: 'conversation' }> {
+  return { ...destination, document: parseSpecDocument(document) }
 }
 
 export function agentSettingsDestination(
@@ -117,8 +169,15 @@ export function agentSettingsBackDestination(
 export function newConversationDestination(
   projectId: string,
   agent: string | null = null,
+  document: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'conversation' }> {
-  return { kind: 'conversation', projectId, agent, conversationId: NEW_CONVERSATION_ID }
+  return {
+    kind: 'conversation',
+    projectId,
+    agent,
+    conversationId: NEW_CONVERSATION_ID,
+    document: parseSpecDocument(document),
+  }
 }
 
 export function isNewConversationDestination(destination: WorkspaceDestination): boolean {
@@ -194,6 +253,11 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   if (destination.kind === 'conversation') {
     if (destination.agent) params.set('agent', destination.agent)
     if (destination.conversationId) params.set('conversation', destination.conversationId)
+    // Re-checked on the way out as well as on the way in: a destination is constructed in more
+    // places than it is parsed, and an illegal path must never reach the URL to be pasted on.
+    if (destination.document && isSpecDocumentPath(destination.document)) {
+      params.set('document', destination.document)
+    }
     return `?${params.toString()}`
   }
   params.set('tab', destination.tab)
@@ -234,7 +298,14 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   // The agentless new-conversation surface has no `agent` to key on, so the sentinel is what
   // identifies it — otherwise a reload there would land on the project overview.
   if (agent || conversation === NEW_CONVERSATION_ID) {
-    return { kind: 'conversation', projectId, agent, conversationId: conversation }
+    return {
+      kind: 'conversation',
+      projectId,
+      agent,
+      conversationId: conversation,
+      // An illegal path resolves to "no document", never to an error page.
+      document: parseSpecDocument(params.get('document')),
+    }
   }
 
   const rawTab = params.get('tab')

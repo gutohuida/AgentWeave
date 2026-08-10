@@ -258,8 +258,13 @@ export function Composer({
           No recipient selector: a message goes to the agent whose conversation this is.
           The selector that used to sit here could redirect a submission to a different
           agent with no trace in the visible timeline. */}
-      <div className="flex items-center justify-between gap-2" data-slot="composer-control-row">
-        <div className="flex items-center gap-2" data-slot="composer-control-row-leading">
+      {/* `flex-wrap`, and every child free to shrink: the row is now shown between 420 and 560px
+          and inside an overlay, where it used to assume it would never be narrow and overflowed
+          its container instead — clipping the permission posture mid-word. Nothing leaves the row
+          at any width; a control that disappears when the pane narrows is one the operator cannot
+          find (design.md Decision 5). */}
+      <div className="flex flex-wrap items-center justify-between gap-2" data-slot="composer-control-row">
+        <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="composer-control-row-leading">
           <ComposerModelControls
             runner={runner}
             effectiveModel={pendingOverrides.model ?? effectiveModel}
@@ -272,7 +277,7 @@ export function Composer({
             }
           />
         </div>
-        <div className="flex items-center gap-2" data-slot="composer-control-row-trailing">
+        <div className="ml-auto flex shrink-0 items-center gap-2" data-slot="composer-control-row-trailing">
           {disabledReason && (
             <span
               className="text-[11px]"

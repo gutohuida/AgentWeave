@@ -656,17 +656,21 @@ export function AgentOutputPanel({
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       <div
-        className="conversation-header-surface flex shrink-0 items-center gap-2 px-4 py-2.5"
+        className="conversation-header-surface flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5"
         data-testid="conversation-header"
       >
         {onBackToProject && (
-          <Button variant="ghost" size="icon-sm" onClick={onBackToProject} aria-label="Back to project" title="Back to project">
+          <Button variant="ghost" size="icon-sm" className="shrink-0" onClick={onBackToProject} aria-label="Back to project" title="Back to project">
             <Icon name="arrow_left" size={16} />
           </Button>
         )}
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
-          <span data-testid={`conversation-agent-color-${agent.name}`} className="h-2 w-2 rounded-full" style={{ background: agentColorVars(agent.color_index).accent }} />
-          {agent.name}
+        {/* The agent's name appears here and nowhere else in this header. It was printed three
+            times when the specification workspace wrapped this surface in its own agent selector;
+            that selector is gone, and the name truncates rather than pushing the controls past
+            the panel's right edge. */}
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+          <span data-testid={`conversation-agent-color-${agent.name}`} className="h-2 w-2 shrink-0 rounded-full" style={{ background: agentColorVars(agent.color_index).accent }} />
+          <span className="truncate">{agent.name}</span>
         </span>
 
         {/* Status chip. Provider session identity is not shown here — see
@@ -674,7 +678,7 @@ export function AgentOutputPanel({
             identity": normal controls use conversation_id only, and provider
             binding is confined to agent details / diagnostics. */}
         <span
-          className="flex items-center gap-1.5"
+          className="flex shrink-0 items-center gap-1.5"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -692,11 +696,12 @@ export function AgentOutputPanel({
           )}
           {agent.status}
         </span>
-        <div className="flex-1" />
+        <div className="min-w-0 flex-1" />
         {onOpenAgentSettings && (
           <Button
             variant="ghost"
             size="icon-sm"
+            className="shrink-0"
             data-testid="conversation-agent-settings"
             onClick={onOpenAgentSettings}
             aria-label={`Settings for ${agent.name}`}
@@ -719,9 +724,11 @@ export function AgentOutputPanel({
         />
       </div>
 
-      {/* Output body. Positioned so the return-to-newest control can float over its lower edge
-          without taking layout space or shifting the conversation when it appears. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      {/* Output body. The return-to-newest control used to float over its lower edge — which put
+          an interactive element on top of whatever entry happened to be scrolled under it, and
+          landed on the run's completion line often enough to be reported. It is a row of its own
+          now: it costs ~28px only while following is suspended, and overlaps nothing. */}
+      <div className="flex min-h-0 flex-1 flex-col">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -751,24 +758,26 @@ export function AgentOutputPanel({
             expresses whether to follow. This states a different intent ("take me back"), and so
             appears only while following is suspended. */}
         {!autoscroll && (
-          <button
-            onClick={() => {
-              scrollToNewest()
-              setAutoscroll(true)
-            }}
-            aria-label="Jump to newest"
-            title="Jump to newest"
-            className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium"
-            style={{
-              background: 'var(--surface-3)',
-              border: '1px solid var(--border-hi)',
-              color: 'var(--text)',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.28)',
-            }}
-          >
-            <Icon name="expand_more" size={13} />
-            Jump to newest
-          </button>
+          <div className="flex shrink-0 justify-center pb-2">
+            <button
+              onClick={() => {
+                scrollToNewest()
+                setAutoscroll(true)
+              }}
+              aria-label="Jump to newest"
+              title="Jump to newest"
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium"
+              style={{
+                background: 'var(--surface-3)',
+                border: '1px solid var(--border-hi)',
+                color: 'var(--text)',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.28)',
+              }}
+            >
+              <Icon name="expand_more" size={13} />
+              Jump to newest
+            </button>
+          </div>
         )}
       </div>
 

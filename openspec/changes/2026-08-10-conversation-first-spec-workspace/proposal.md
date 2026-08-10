@@ -100,4 +100,4 @@ several widths. A DOM-presence assertion alone does not close a task in this cha
 
 Implementation MUST NOT begin until the user explicitly approves this proposal.
 
-**Approved:** _pending_
+**Approved:** 2026-08-10 — operator, on resume ("$resume approved. Apply the spec.").

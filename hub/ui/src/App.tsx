@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { useAgents } from '@/api/agents'
 import { useProjects } from '@/api/projects'
-import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
+import { ConversationView } from '@/components/agents/ConversationView'
 import { AgentCreateDialog } from '@/components/agents/AgentCreateDialog'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { ActivityLog } from '@/components/activity/ActivityLog'
@@ -29,7 +29,6 @@ import { ProjectManagerModal, type ProjectManagerMode } from '@/components/proje
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { RunnersPage } from '@/components/runners/RunnersPage'
-import { SpecPage } from '@/components/spec/SpecPage'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { Button } from '@/components/ui/button'
 import { useSSE } from '@/hooks/useSSE'
@@ -43,13 +42,16 @@ import {
   newConversationDestination,
   projectDestination,
   resolveConversationSelection,
+  withDocument,
   type EnvironmentSection,
 } from '@/lib/navigation'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { useProjectConversations } from '@/api/agentChat'
+import { useSpecList } from '@/api/spec'
 import { useConfigStore } from '@/store/configStore'
 
 const SIDEBAR_WIDTH_KEY = 'aw.sidebarWidth'
+const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
 
 export default function App() {
   const { isConfigured, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
@@ -75,6 +77,15 @@ export default function App() {
     }
     return SIDEBAR_WIDTH
   })
+  /** The operator's own choice, and nothing else's. No destination may write this — a page that
+   *  wants horizontal space does not get to take it from navigation. */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true'
+    } catch {
+      return false
+    }
+  })
 
   useEffect(() => {
     try {
@@ -83,6 +94,14 @@ export default function App() {
       // Persistence is optional.
     }
   }, [sidebarWidth])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(sidebarCollapsed))
+    } catch {
+      // Persistence is optional.
+    }
+  }, [sidebarCollapsed])
 
   useEffect(() => {
     useConfigStore.getState().bootstrap()
@@ -118,10 +137,51 @@ export default function App() {
     if (destination.conversationId !== null) return
     if (!resolvedConversationId) return
     navigateTo(
-      agentDestination(destination.projectId, destination.agent, resolvedConversationId),
+      agentDestination(
+        destination.projectId,
+        destination.agent,
+        resolvedConversationId,
+        destination.document,
+      ),
       { replace: true },
     )
   }, [destination, resolvedConversationId, navigateTo])
+
+  /**
+   * The specification entry point resolves *into* a conversation.
+   *
+   * `tab: 'spec'` survives as a way in — without one, finding a specification would mean already
+   * being in a conversation and knowing to press Ctrl+K — but it stops being a place: it lands the
+   * operator in a conversation with the manifest home document open, which is where specification
+   * work actually happens. Replaced rather than pushed, so Back does not return to a tab that
+   * immediately redirects again.
+   *
+   * Gated on both queries having answered: navigating before the home document is known would
+   * open a conversation with nothing beside it, and the operator would have to go and find the
+   * document they asked for.
+   */
+  const specEntry = destination.kind === 'project' && destination.tab === 'spec'
+  const { data: specList } = useSpecList()
+  useEffect(() => {
+    if (!specEntry || destination.kind !== 'project') return
+    if (projectConversations === undefined || specList === undefined) return
+    const home = specList.home ?? null
+    // Ordered most recent activity first by the listing endpoint.
+    const recent = projectConversations.conversations[0]
+    if (recent) {
+      navigateTo(
+        agentDestination(destination.projectId, recent.agent, recent.id, home),
+        { replace: true },
+      )
+      return
+    }
+    const firstAgent = agents[0]
+    if (!firstAgent) return
+    navigateTo(
+      newConversationDestination(destination.projectId, firstAgent.name, home),
+      { replace: true },
+    )
+  }, [specEntry, destination, projectConversations, specList, agents, navigateTo])
 
   useSSE()
 
@@ -163,7 +223,6 @@ export default function App() {
     ? agents.find((agent) => agent.name === destination.agent) ?? null
     : null
   const currentProject = projects?.find((project) => project.id === currentProjectId)
-  const railResizable = activePage !== 'spec'
 
   const navigate = (value: string) => {
     if (value.startsWith('agent:')) {
@@ -236,15 +295,27 @@ export default function App() {
     )
   } else if (destination.kind === 'conversation') {
     const agentName = destination.agent
+    const conversationDestination = destination
     content = selectedAgent && agentName ? (
-      <AgentOutputPanel
+      <ConversationView
         agent={selectedAgent}
         conversationId={resolvedConversationId}
+        document={destination.document}
         onSelectConversation={(conversationId) => {
           if (destination.conversationId !== conversationId) {
-            navigateTo(agentDestination(destination.projectId, agentName, conversationId))
+            navigateTo(
+              agentDestination(
+                destination.projectId,
+                agentName,
+                conversationId,
+                // The document stays open across a conversation change: it is what the operator
+                // is working on, not a property of the thread they are working on it in.
+                destination.document,
+              ),
+            )
           }
         }}
+        onOpenDocument={(path) => navigateTo(withDocument(conversationDestination, path))}
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
         onOpenAgentSettings={() =>
           navigateTo(agentSettingsDestination(destination.projectId, agentName))
@@ -266,7 +337,18 @@ export default function App() {
     } else if (destination.tab === 'tasks') {
       projectContent = <TasksBoard />
     } else if (destination.tab === 'spec') {
-      projectContent = <SpecPage />
+      // Transient: the effect above replaces this destination with a conversation as soon as the
+      // conversation list and the manifest home are known. It stays visible only while they load,
+      // or when the project has no agent to hold the conversation.
+      projectContent = agents.length === 0 && projectConversations !== undefined ? (
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm" style={{ color: 'var(--text-3)' }}>
+          Add an agent to this project to work on its specification.
+        </div>
+      ) : (
+        <div className="flex h-full items-center justify-center text-sm" style={{ color: 'var(--text-3)' }}>
+          Opening the specification…
+        </div>
+      )
     } else if (destination.tab === 'jobs') {
       projectContent = <JobsPage />
     } else if (destination.tab === 'activity') {
@@ -317,7 +399,7 @@ export default function App() {
             }}
           />
         )}
-        <div className={destination.tab === 'spec' ? 'min-h-0 flex-1 overflow-auto' : 'workspace-content min-h-0 flex-1 overflow-auto'}>{projectContent}</div>
+        <div className="workspace-content min-h-0 flex-1 overflow-auto">{projectContent}</div>
       </div>
     )
   } else {
@@ -358,10 +440,12 @@ export default function App() {
             onAddAgent={(id) => setAgentCreateProjectId(id)}
             onOpenExisting={() => setProjectManagerMode('open')}
             onCreateProject={() => setProjectManagerMode('create')}
-            compact={activePage === 'spec'}
+            compact={sidebarCollapsed}
+            onCompactChange={setSidebarCollapsed}
             width={sidebarWidth}
           />
-          {railResizable && (
+          {/* A collapsed rail has one width, so there is nothing to drag. */}
+          {!sidebarCollapsed && (
             <PaneResizer
               width={sidebarWidth}
               onChange={setSidebarWidth}

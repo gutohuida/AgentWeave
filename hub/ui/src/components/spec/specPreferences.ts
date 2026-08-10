@@ -1,47 +1,41 @@
-// Bounded presentation preferences for the Spec workspace.
+// Bounded presentation preferences for the conversation workspace.
 //
-// FR-10 allows presentation values here and nothing else: no messages, no
-// bridge payloads, no document content, no credentials. Anything unreadable,
-// unparseable, or out of range resets to the default rather than propagating
-// a corrupt value into layout state.
+// FR-10 allows presentation values here and nothing else: no messages, no bridge payloads, no
+// document content, no credentials. Anything unreadable, unparseable, or out of range resets to
+// the default rather than propagating a corrupt value into layout state.
 //
-// The two pane widths joined the two original values when the workspace's fixed 260/520/360
-// layout was replaced by the shared `PaneResizer`: a width the operator chose that does not
-// survive a reload is a control that does not work. They are clamped on read as well as on
-// write, so a stored value from a wider screen — or a hand-edited one — cannot produce a pane
-// too narrow to use or wide enough to crush the document.
+// One value survives from the three-column workspace: the width of the conversation column when a
+// document is open beside it. `chatCollapsed` and `libraryMode` are gone with the surfaces that
+// read them — whether a document is open is now part of the destination, and the Library/History
+// control was deleted along with the navigator column.
 
 const STORAGE_KEY = 'aw.spec.presentation.v1'
 
-export type LibraryMode = 'library' | 'history'
-
 export interface SpecPreferences {
-  chatCollapsed: boolean
-  libraryMode: LibraryMode
-  navWidth: number
-  chatWidth: number
+  conversationWidth: number
 }
 
-export const SPEC_NAV_MIN_WIDTH = 180
-export const SPEC_NAV_MAX_WIDTH = 420
-export const SPEC_CHAT_MIN_WIDTH = 300
-export const SPEC_CHAT_MAX_WIDTH = 640
+/**
+ * The conversation column's range while a document is open beside it.
+ *
+ * The default is where the composer's control row stops wrapping — measured, not chosen. Below
+ * the minimum the conversation stops being a place you can write in; above the maximum the
+ * document is the one being crushed, which is the defect this layout exists to fix, mirrored.
+ */
+export const CONVERSATION_MIN_WIDTH = 420
+export const CONVERSATION_MAX_WIDTH = 560
+export const CONVERSATION_DEFAULT_WIDTH = 480
+
+/** What the document panel needs before it stops being worth opening as a column. Below
+ *  `CONVERSATION_MIN_WIDTH + SPEC_DOC_MIN_WIDTH` the panel becomes an overlay instead. */
+export const SPEC_DOC_MIN_WIDTH = 560
 
 export const DEFAULT_SPEC_PREFERENCES: SpecPreferences = {
-  chatCollapsed: false,
-  libraryMode: 'library',
-  navWidth: 260,
-  chatWidth: 360,
+  conversationWidth: CONVERSATION_DEFAULT_WIDTH,
 }
 
-const LIBRARY_MODES: readonly LibraryMode[] = ['library', 'history']
-
-export function clampNavWidth(value: number): number {
-  return Math.min(SPEC_NAV_MAX_WIDTH, Math.max(SPEC_NAV_MIN_WIDTH, Math.round(value)))
-}
-
-export function clampChatWidth(value: number): number {
-  return Math.min(SPEC_CHAT_MAX_WIDTH, Math.max(SPEC_CHAT_MIN_WIDTH, Math.round(value)))
+export function clampConversationWidth(value: number): number {
+  return Math.min(CONVERSATION_MAX_WIDTH, Math.max(CONVERSATION_MIN_WIDTH, Math.round(value)))
 }
 
 /** A finite number, or the default. `NaN` and `Infinity` are numbers to `typeof`, and both
@@ -72,15 +66,11 @@ export function loadSpecPreferences(): SpecPreferences {
 
   const value = parsed as Record<string, unknown>
   return {
-    chatCollapsed:
-      typeof value.chatCollapsed === 'boolean'
-        ? value.chatCollapsed
-        : DEFAULT_SPEC_PREFERENCES.chatCollapsed,
-    libraryMode: LIBRARY_MODES.includes(value.libraryMode as LibraryMode)
-      ? (value.libraryMode as LibraryMode)
-      : DEFAULT_SPEC_PREFERENCES.libraryMode,
-    navWidth: readWidth(value.navWidth, clampNavWidth, DEFAULT_SPEC_PREFERENCES.navWidth),
-    chatWidth: readWidth(value.chatWidth, clampChatWidth, DEFAULT_SPEC_PREFERENCES.chatWidth),
+    conversationWidth: readWidth(
+      value.conversationWidth,
+      clampConversationWidth,
+      DEFAULT_SPEC_PREFERENCES.conversationWidth,
+    ),
   }
 }
 
@@ -89,12 +79,7 @@ export function saveSpecPreferences(prefs: SpecPreferences): void {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({
-        chatCollapsed: prefs.chatCollapsed,
-        libraryMode: prefs.libraryMode,
-        navWidth: clampNavWidth(prefs.navWidth),
-        chatWidth: clampChatWidth(prefs.chatWidth),
-      })
+      JSON.stringify({ conversationWidth: clampConversationWidth(prefs.conversationWidth) }),
     )
   } catch {
     // Persisting preferences is best-effort; layout must still work without it.

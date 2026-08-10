@@ -139,12 +139,14 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className={composerControlClassName}
-        title="Model"
+        className={`${composerControlClassName} min-w-0 max-w-full`}
+        // Same rule as `ControlPill`: the model's name is what truncates, never the word "Model".
+        title={`Model: ${current?.label ?? effectiveModel ?? '—'}`}
       >
-        <span style={{ color: 'var(--text-3)' }}>Model: </span>
+        <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
         {mark}
-        {current?.label ?? effectiveModel ?? '—'} ▾
+        <span className="min-w-0 truncate">{current?.label ?? effectiveModel ?? '—'}</span>
+        <span className="shrink-0">▾</span>
       </Button>
       {open && (
         <div
