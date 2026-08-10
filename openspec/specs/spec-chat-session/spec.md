@@ -15,55 +15,72 @@ two will happen are all properties of the one conversation surface, governed by
 ### Requirement: The specification workspace uses the one composer
 
 The specification workspace's chat SHALL use the same composer, banner stack, and conversation
-transcript as an agent conversation, and MUST NOT implement its own message input, run trigger, or
-output rendering.
+transcript as an agent conversation, and MUST NOT implement its own message input, run trigger,
+output rendering, or **agent selection**.
 
-An operator working in the specification workspace SHALL be able to answer a permission request,
+An operator working with a specification document SHALL be able to answer a permission request,
 answer a question the agent asked, and see a checkpoint warning, on that surface.
 
-A second implementation is not a styling difference. The surface it replaced could not render a
+A second implementation is not a styling difference. The surface this replaced could not render a
 permission card, a question card, or a checkpoint banner, so an agent that asked the operator
-anything from the specification workspace blocked with nothing shown — and the whole authoring flow
-this capability exists to serve depends on the agent being able to ask.
+anything blocked with nothing shown — and the authoring flow this capability exists to serve
+depends on the agent being able to ask.
 
-#### Scenario: The agent asks the operator a question from the specification workspace
+Agent selection is named here because removing one second implementation admitted another: the
+replacement surface added its own agent picker beside the one navigation already provides. The
+agent is whichever conversation the operator is in.
 
-- **WHEN** an agent working in the specification workspace calls `ask_user`
+#### Scenario: The agent asks the operator a question while a document is open
+
+- **WHEN** an agent calls `ask_user` in a conversation with a specification document open
 - **THEN** the question is presented on that surface
 - **AND** the operator's answer returns to the waiting run
 
-#### Scenario: A tool call requires approval in the specification workspace
+#### Scenario: A tool call requires approval while a document is open
 
-- **WHEN** a run started from the specification workspace is in a permission posture that routes
+- **WHEN** a run in a conversation with a document open is in a permission posture that routes
   decisions to the operator, and the agent attempts a tool call requiring approval
 - **THEN** the approval request is presented on that surface
 - **AND** the operator's decision resolves the run
 
 #### Scenario: One trigger path
 
-- **WHEN** a message is sent from the specification workspace
-- **THEN** it goes through the same run-trigger path an agent conversation uses
+- **WHEN** a message is sent with a specification document open
+- **THEN** it goes through the same run-trigger path every other conversation uses
 - **AND** no surface-specific timeout, session-mode handling, or error vocabulary applies to it
+
+#### Scenario: One way to choose an agent
+
+- **WHEN** the operator changes which agent they are working with
+- **THEN** they do so through navigation
+- **AND** no other surface offers a separate agent selector
 
 ### Requirement: The specification workspace reuses the agent's conversation
 
 The specification workspace SHALL show the selected agent's conversation, and SHALL create one on
 the first message when the agent has none.
 
+Entering the specification workspace SHALL resolve to a conversation rather than to a separate
+screen, opening the specification home document in it.
+
 The Hub MUST NOT record a specification-scoped conversation origin until a specification-scoped
 thread has a defined scope.
 
-`Conversation.origin` accepts a specification value that nothing produces. Producing it here would
+`Conversation.origin` accepts a specification value that nothing produces. Producing it would
 require choosing whether such a thread belongs to a document or to a unit of specification work,
 before either is defined — and the direction taken is that a thread's phase derives from the
 document open in it, which makes the durable relationship a link rather than an origin value.
-Recording data on an axis that is likely to be wrong is worse than recording none.
 
-#### Scenario: First message from the specification workspace
+#### Scenario: First message with a document open
 
 - **WHEN** the operator sends the first message to an agent that has no conversation
 - **THEN** a conversation is created by that message
 - **AND** its origin is not a specification-scoped value
+
+#### Scenario: Entering the specification workspace
+
+- **WHEN** the operator chooses the specification entry point
+- **THEN** they arrive in a conversation with the specification home document open
 
 ### Requirement: The agent is told which document the operator is viewing
 
@@ -88,3 +105,58 @@ something they did not say.
 
 - **WHEN** a run is triggered with no document open
 - **THEN** the canonical context names no document
+
+### Requirement: A specification document opens beside a conversation
+
+A specification document SHALL open as a panel within the conversation view, alongside the
+conversation rather than in a separate screen, and the operator SHALL be able to close it and
+recover the full width for the conversation.
+
+The open document SHALL be part of the addressed destination, so that reloading or sharing the
+location restores both the conversation and the document open in it.
+
+A document panel available in any conversation is what makes the relationship between a thread and
+a document a link the operator makes, rather than a category the thread was born into — which is
+what "a thread's phase derives from the document open in it" requires. A separate specification
+screen forces the opposite: a thread is a specification thread because of where it was opened.
+
+#### Scenario: Opening a document from a conversation
+
+- **WHEN** the operator opens a specification document while in a conversation
+- **THEN** the document is shown beside that conversation
+- **AND** the conversation remains usable without leaving it
+
+#### Scenario: The location survives a reload
+
+- **WHEN** the operator reloads with a document open beside a conversation
+- **THEN** the same conversation and the same document are open
+
+#### Scenario: Closing the document
+
+- **WHEN** the operator closes the document panel
+- **THEN** the conversation occupies the full available width
+- **AND** no specification navigation remains on screen
+
+### Requirement: The conversation surface is legible at every width it is offered at
+
+Every control the conversation surface presents SHALL be fully within its container and legible at
+every width the surface can be shown at, and no two interactive elements SHALL overlap.
+
+A control MUST NOT be removed from the surface as it narrows. Where space is insufficient, controls
+SHALL wrap or abbreviate their value while keeping what they control identifiable.
+
+The surface was previously rendered in a pane far narrower than it was designed for, and its control
+row overflowed its container — the permission control, whose current value must be readable before
+sending, was clipped mid-word. Presence in the document is not evidence of this requirement being
+met; the check is geometric.
+
+#### Scenario: The surface is shown in a narrowed panel
+
+- **WHEN** the conversation surface is shown at its minimum supported width
+- **THEN** every control is within its container and none is clipped
+- **AND** no interactive element overlaps another
+
+#### Scenario: The permission posture stays readable
+
+- **WHEN** the conversation surface narrows
+- **THEN** the permission control still states which posture the run will use
