@@ -1,8 +1,8 @@
 # Roadmap — the specification program and the surfaces it lands on
 
 **Date:** 2026-08-10
-**Status:** proposed structure. Two decisions marked **[DECIDE]** are the operator's and are not
-assumed anywhere below.
+**Status:** structure agreed 2026-08-10. Both **[DECIDE]** items below are now **resolved** — see
+each section.
 **Purpose:** replace four overlapping plans with one sequence, so the same territory stops being
 planned in three vocabularies.
 
@@ -52,7 +52,7 @@ before B3 defines them would be guessing.
 |---|---|---|---|
 | **A1** | **One chat surface, one shell** | — (closes a live defect) | Delete `SpecChatPane`; mount the real `Composer`; add the shared `PaneResizer`; bring `components/spec/` onto current tokens. **Safe to build now: nothing in B can invalidate a deletion** |
 | **A2** | **Shell conformance audit** | Umbrella §10.3's unfinished half | Audit every screen against `mock-full.html`; fix what drifted. Scope discovered by the audit, not guessed now. Includes the task board's chrome |
-| **B0** | **aw-spec honesty repair** | §14.15 (part) | The seeded charter cites six absent skills and a discovery mechanism that does not exist. Small, urgent, independent — **[DECIDE #2]** |
+| **B0** | **aw-spec honesty repair** | §14.15 | The seeded charter cites six absent skills and a discovery mechanism that does not exist. Rewrites it to carry the judgment guidance directly. Small, urgent, independent |
 | **B1** | **Task transition machine** | Coordinator §2, part of §3 | **Absent from all four plans as its own unit.** No spec format, no AI. Closes self-approval |
 | **B2** | **Portable spec authority and identity** | 2026-08-03 child 1; §14.1, §14.17 | HTML stays authoritative (operator decision, 2026-08-10). Stable requirement IDs, semantic digest, file indexer |
 | **B3** | **Traceability, evidence, and drift** | Child 2; §14.2–§14.8; coordinator §5 (part) | Task↔requirement links replace `Task.requirements` JSON |
@@ -111,33 +111,49 @@ to that boundary. The message set should be decided deliberately, not accreted w
 
 ## Two decisions
 
-### [DECIDE #1] — the 2026-08-07 coordinator change
+### [DECIDE #1] — the 2026-08-07 coordinator change — **RESOLVED 2026-08-10: retired**
 
-Approved 2026-08-07; superseded in substance by this roadmap. Options:
+Folded into this roadmap. The change directory is **deleted, not archived** — it never described
+shipped behaviour, and an archived change reads as shipped (the same rule applied to the reverted
+context-window variants on 2026-08-10).
 
-- **Retire it as a change**, keep its exploration running. Its clusters 2 and 3 ask things no other
-  document does — where the AI genuinely sits, what echo-chamber protection means when reviewer and
-  author are the same model family, which evidence kinds satisfy a gate alone. Those feed B4 and B6.
-  Its §2 becomes B1.
-- **Keep it**, and treat B1/B4/B6 as its implementation phases. Fewer documents retired, but the
-  overlap with the 2026-08-03 children stays unresolved.
+What survives, and where:
 
-*Recommendation: retire the change, continue the exploration.* The exploration is producing findings;
-the change's structure is the part that duplicates.
+| Coordinator content | Now lives in |
+|---|---|
+| Cluster 1 findings (1.1–1.4) | `2026-08-10-coordinator-terms-and-format.md` |
+| §2 deterministic state machine | **B1** |
+| §3 gates and evidence | **B3**, **B4** |
+| §4 AI augmentation | **B6** |
+| §5 spec/evidence/gate tools | **B3**, **B4** |
+| §6 conversation integration | **B7** |
+| Unanswered questions 1.5–1.13 | `2026-08-10-authoring-flow-without-skills.md`, final section — **still open, next to explore** |
 
-### [DECIDE #2] — the 24 packaged skill templates
+### [DECIDE #2] — the 24 packaged skill templates — **RESOLVED 2026-08-10: decompose, then delete**
 
-`src/agentweave/templates/skills/` ships 24 templates. **Nothing installs them** — no file under
-`src/` or `hub/` writes `.claude/skills/`. Six are the `aw-spec-*` skills the seeded `spec` charter
-instructs every agent to use.
+Neither of the two options originally offered here. The reasoning is in
+`2026-08-10-authoring-flow-without-skills.md`; in short:
 
-- **Install them** — B0 renders templates into the project's `.claude/skills/` on project creation.
-  The charter becomes true. Larger: 24 templates need review for accuracy against a product that has
-  changed a great deal since they were written.
-- **Delete them and rewrite the charter** — the charter describes what to do rather than which skill
-  to invoke. Smaller and honest, but discards the packaged workflow and closes §14.15 by removing it.
+**`.claude/skills/` is a Claude-only mechanism, and AgentWeave is a multi-runner product.** A Codex
+agent cannot invoke `aw-spec-propose` under any circumstances. Installing the templates would deliver
+the authoring flow to half the product's agents while the seeded charter — which both runners
+receive — instructs all of them to use it.
 
-*No recommendation.* This is a product call about whether packaged skills are part of AgentWeave.
+A skill file is three separable things, and each has a better home:
+
+| Skill content | Goes to | Change |
+|---|---|---|
+| Procedure ("explore, then propose, then apply") | The coordinator's phase machine | B1 / B6 |
+| Format contract (`html-spec-conventions.md`, 541 lines) | A Hub parser that validates and refuses | B2 |
+| Judgment guidance (how to interview, what makes a requirement testable) | The **charter** — already shipped, runner-agnostic, operator-editable | B0 |
+
+The 24 template files are deleted once each part has landed in its home — not because the content is
+worthless, but because a markdown file in a Claude-specific directory is the wrong container for all
+three things it holds.
+
+**Consequences already folded into the table above:** B0 grows to rewrite the seeded `spec` charter;
+B6 is reframed as *how the authoring flow works* rather than an optional augmentation; B2 must not
+freeze the parse contract until B3/B4 have stated their requirements on it.
 
 ---
 
@@ -146,7 +162,7 @@ instructs every agent to use.
 | Document | Disposition |
 |---|---|
 | `2026-08-03-specification-authority-technical.md` | **Retained as the technical design source** for B2–B5. Not superseded — this roadmap sequences it. Its four children become B2, B3, B4, B5 |
-| `changes/2026-08-07-spec-execution-coordinator/` | **[DECIDE #1]** |
+| `changes/2026-08-07-spec-execution-coordinator/` | **Retired and deleted** 2026-08-10. Contents redistributed — see [DECIDE #1] |
 | Umbrella §14 | Marked superseded by B2–B5, per the umbrella's existing reconciliation rule (checkboxes stay unchecked; the successor's task list is authoritative) |
 | Umbrella §15 | Marked superseded by B7 |
 
