@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.engine import async_session_factory
-from .db.models import Agent, Run, RunDivergence, Task
+from .db.models import Agent, Question, Run, RunDivergence, Task
 from .inbound_queue import new_entry
 from .run_task_binding import (
     DEFAULT_POLICY,
@@ -33,11 +33,13 @@ from .run_task_binding import (
     OUTCOME_SURFACED,
     POLICY_ESCALATE,
     POLICY_RETRY,
+    block_task_for_question,
     may_retry,
     run_advanced_its_task,
+    unanswered_blocking_question,
 )
 from .sse import sse_manager
-from .task_transitions import ACTOR_RUN, allowed_targets
+from .task_transitions import ACTOR_RUN, STATUS_BLOCKED, allowed_targets
 from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
@@ -251,6 +253,38 @@ async def record_response_run(
         divergence.response_run_id = response_run_id
 
 
+async def _announce_block(
+    session: AsyncSession,
+    run: Run,
+    task: Task,
+    question: Question,
+) -> None:
+    """Tell the operator's board that a task is now waiting on them.
+
+    `info`, not `warn`. A divergence is `warn` because it wants attention on something that went
+    wrong; this is the mechanism working — the agent asked rather than guessed. Warning about it
+    would train the operator to read the one signal that means "someone did the right thing" as a
+    problem.
+    """
+    payload = {
+        "run_id": run.id,
+        "agent": run.agent,
+        "task_id": task.id,
+        "task_title": task.title,
+        "question_id": question.id,
+        "reason": task.blocked_reason,
+    }
+    await persist_event(
+        session,
+        run.project_id,
+        "task_blocked",
+        payload,
+        agent=run.agent,
+        severity="info",
+    )
+    await sse_manager.broadcast(run.project_id, "task_blocked", payload)
+
+
 async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Optional[str]:
     """The run boundary check. Returns the divergence id when one was recorded.
 
@@ -281,6 +315,23 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         if task is None:
             # The task was deleted while the run held it. There is nothing to have neglected and
             # nothing to route the work to.
+            return None
+
+        # An agent that stopped to ask is not an agent that dropped the work. Park the task on the
+        # question instead, and say so on the board — this is the case that made the whole
+        # `blocked` status necessary: before it, the run ended, the task had not moved, a
+        # divergence was recorded, and under `retry` the agent was started again while still
+        # waiting on the same unanswered question.
+        question = await unanswered_blocking_question(session, run)
+        if question is not None and await block_task_for_question(session, run, task, question):
+            await session.commit()
+            await _announce_block(session, run, task, question)
+            return None
+
+        # Already parked, by this run's earlier turn or by the operator. Excluded on the task's
+        # *status at the boundary*, not on which run parked it (design D5) — which is what makes a
+        # multi-turn blocked task safe now that every turn of a bound conversation is checked.
+        if task.status == STATUS_BLOCKED:
             return None
 
         policy = task.divergence_policy or DEFAULT_POLICY

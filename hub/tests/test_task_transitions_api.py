@@ -42,9 +42,22 @@ async def _create(app, auth_headers, title="A task", status="pending"):
     return response
 
 
-async def _patch(app, headers, task_id, status, *, agent_route=False):
+async def _patch(app, headers, task_id, status, *, agent_route=False, **fields):
     url = f"{AGENT_TASKS}/{task_id}" if agent_route else f"{TASKS}/{task_id}"
-    return await app.patch(url, json={"status": status}, headers=headers)
+    return await app.patch(url, json={"status": status, **fields}, headers=headers)
+
+
+def _required_fields_for(to_status):
+    """What an offered edge needs supplied alongside the status.
+
+    Only `blocked` has anything, and it is required rather than optional by decision (R5): an
+    unexplained block leaves the operator working out what they are holding up. That makes it an
+    obligation on the *control* — a status menu offering "Blocked" must collect a reason before it
+    sends, or it offers a move that fails, which is the contract the test below exists to hold.
+    """
+    if to_status == "blocked":
+        return {"blocked_reason": "Waiting on the staging API key"}
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -295,5 +308,7 @@ async def test_every_move_the_endpoint_offers_is_actually_accepted(app, auth_hea
                 task.status = from_status
                 await session.commit()
 
-            result = await _patch(app, auth_headers, task_id, to_status)
+            result = await _patch(
+                app, auth_headers, task_id, to_status, **_required_fields_for(to_status)
+            )
             assert result.status_code == 200, f"{from_status} -> {to_status}: {result.text}"

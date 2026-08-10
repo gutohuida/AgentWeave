@@ -16,13 +16,33 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import get_session
-from ...db.models import Question
+from ...db.models import Question, Run
 from ...inbound_queue import new_entry
+from ...run_task_binding import release_block_for_answer
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/questions", tags=["questions"])
+
+
+async def _asking_run_has_ended(session: AsyncSession, question: Question) -> bool:
+    """Has the run that asked this question ended, leaving nobody awake to receive the answer?
+
+    Deliberately answers False unless it *knows* the run ended. A blocking question is presumed to
+    have someone waiting on it — that is what `blocking` means, and it is the behaviour measured
+    live — so this only overrides that presumption on positive evidence: a recorded asking run that
+    is no longer running.
+
+    An unrecorded asker (a row predating `created_by_run_id`, or a question posted through the
+    operator route rather than by a run) is left to the presumption. Guessing it had ended would
+    queue an answer the waiting agent already received as its tool result, which is the duplicate
+    turn this shortcut exists to avoid.
+    """
+    if not question.created_by_run_id:
+        return False
+    run = await session.get(Run, question.created_by_run_id)
+    return run is not None and run.status != "running"
 
 
 async def ask_question_for_actor(
@@ -151,13 +171,25 @@ async def answer_question(
     # messages or inbox-poll triggers. They resume autonomous chains in the same
     # governed path as every other operator input.
     #
-    # Skipped for a blocking question: `ask_user` waits and returns the answer as its own tool
-    # result, so the asking agent already has it. Queuing as well told it twice and cost a whole
-    # extra turn — measured live, the agent answered, then woke again and restated the same
-    # directive. A non-blocking question still needs this: nothing is waiting to receive it.
+    # Skipped for a blocking question *whose asker is still running*: `ask_user` waits and returns
+    # the answer as its own tool result, so the asking agent already has it. Queuing as well told it
+    # twice and cost a whole extra turn — measured live, the agent answered, then woke again and
+    # restated the same directive. A non-blocking question still needs this, and so does a blocking
+    # one whose run has since ended: nothing is waiting to receive it.
+    # The answer is what releases a parked task (design D3). Done before the queue decision below,
+    # because whether the asker is still waiting is the same fact both need.
+    released = await release_block_for_answer(session, question)
+
+    # `ask_user` only holds the tool call open while the run lives. A blocking question that
+    # outlived its run — it timed out, or the run crashed — has nobody awake to receive the answer,
+    # so the "already awake" shortcut below would silently drop it and the operator's answer would
+    # reach no one. That is precisely the question that parked a task, so it is precisely the one
+    # that must not vanish.
+    asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
+
     entry = None
     conversation = None
-    if not question.blocking:
+    if not asker_still_waiting:
         conversation = await latest_open_conversation(
             session, project_id=project_id, agent=from_agent
         )
@@ -187,6 +219,14 @@ async def answer_question(
     await sse_manager.broadcast(
         project_id, "question_answered", {"id": question_id, "answer": body.answer}
     )
+    if released is not None:
+        unblocked = {
+            "task_id": released.id,
+            "task_title": released.title,
+            "question_id": question_id,
+        }
+        await persist_event(session, project_id, "task_unblocked", unblocked, agent=from_agent)
+        await sse_manager.broadcast(project_id, "task_unblocked", unblocked)
     # Only a queued answer has a queue event to report, or an agent to wake for it. A blocking
     # asker is already awake and holding the tool call open.
     if entry is not None:

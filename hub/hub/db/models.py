@@ -557,6 +557,15 @@ class Task(Base):
     # Who the work goes to when `divergence_policy` is `escalate`. NULL makes escalation fall back
     # to surfacing — a policy naming nobody cannot route anywhere.
     escalation_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What a `blocked` task is waiting for, in words the operator can act on. Filled from the
+    # question text when the runtime parks the task, supplied by the operator when they park it by
+    # hand. Cleared on release, so a stale reason cannot outlive the block it described.
+    #
+    # The whole difference between a card that says "blocked" and one that says "blocked on the API
+    # key" (`2026-08-10-blocked-and-conversation-binding`, R5). Since a blocked task stays in the
+    # in_progress column rather than moving to one of its own (R3), this text is most of what tells
+    # the operator the card is waiting on *them*.
+    blocked_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -745,6 +754,18 @@ class Question(Base):
     # conversation on every SSE re-render, and a two-hop join through `Run` per row is the wrong
     # shape for that. Nullable because rows predating the column cannot be attributed.
     conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # The task this question parked, when it parked one. Answering it releases *this* task.
+    #
+    # A column rather than a join table because a question blocks at most one task and `ask_user`
+    # offers no way to name several — a join table would model a cardinality nothing can produce
+    # (`2026-08-10-blocked-and-conversation-binding`, design D4).
+    #
+    # Recorded rather than re-derived from the asking run's binding: a run may be bound to a task
+    # the question was not about, and releasing the wrong task is worse than releasing nothing.
+    #
+    # No ForeignKey, matching `created_by_run_id` and `conversation_id` above: the block record must
+    # outlive a deleted task rather than cascade or refuse.
+    blocked_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
 

@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0058", f"expected alembic_version=0058, got {version}"
+    assert version == "0059", f"expected alembic_version=0059, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0058"
+    assert version == "0059"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0058"
+        assert version == "0059"
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0058", f"expected alembic_version=0058, got {version}"
+    assert version == "0059", f"expected alembic_version=0059, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1232,7 +1232,7 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0058"
+        assert version == "0059"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1401,9 +1401,74 @@ def test_migration_0057_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0058"
+        assert version == "0059"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "tasks" not in tables
         assert "run_divergences" not in tables
+
+
+def test_migration_0059_adds_the_block_columns(tmp_path) -> None:
+    db_file = tmp_path / "blocked.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        tasks = {row[1]: row for row in conn.execute("PRAGMA table_info(tasks)")}
+        assert "blocked_reason" in tasks
+        # Nullable, and no default: a task that is not waiting has nothing to say it is waiting for.
+        assert not tasks["blocked_reason"][3]
+        assert tasks["blocked_reason"][4] is None
+
+        questions = {row[1]: row for row in conn.execute("PRAGMA table_info(questions)")}
+        assert "blocked_task_id" in questions
+        assert not questions["blocked_task_id"][3]
+
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(questions)")}
+        assert "ix_questions_blocked_task_id" in indexes
+
+
+def test_migration_0059_leaves_existing_rows_untouched(tmp_path) -> None:
+    """No backfill, and none is possible: nothing before this migration could park a task, so there
+    is no historical block to describe. Inventing one would put "waiting on" text on cards that
+    were never waiting."""
+    db_file = tmp_path / "blocked_backfill.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO tasks "
+            "(id, project_id, title, description, status, priority, created_at, updated) "
+            "VALUES ('t-old', 'p1', 'Old work', '', 'in_progress', 'medium', "
+            "'2026-01-01', '2026-01-01')"
+        )
+        conn.commit()
+
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        reason = conn.execute("SELECT blocked_reason FROM tasks WHERE id='t-old'").fetchone()[0]
+        assert reason is None
+        status = conn.execute("SELECT status FROM tasks WHERE id='t-old'").fetchone()[0]
+        assert status == "in_progress"
+
+
+def test_migration_0059_is_guarded_when_the_tables_do_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches here with neither `tasks` nor
+    `questions`, and must skip rather than fail."""
+    db_file = tmp_path / "early_blocked.db"
+    _create_0034_conversations_state(db_file)
+
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == "0059"
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "tasks" not in tables
+        assert "questions" not in tables

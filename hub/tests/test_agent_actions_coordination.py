@@ -458,3 +458,119 @@ async def test_an_agent_may_still_move_its_task(app):
         json={"status": "completed"},
     )
     assert response.status_code == 200, response.text
+
+
+# ---------------------------------------------------------------------------
+# A block is observed, never asserted
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_agent_cannot_declare_its_own_task_blocked(app):
+    """The one status an agent under a completion gate would most like to reach.
+
+    An agent able to assert it could claim to be waiting on a person it never asked. It is withheld
+    from the MCP `update_task` signature so the request cannot be expressed there at all, and
+    refused here because this HTTP route is reachable without going through the tool.
+    """
+    headers, _ = await _active_run("run-block-1", "worker-block")
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-agent-block",
+                project_id="proj-test",
+                title="Work",
+                status="in_progress",
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/agent-actions/tasks/task-agent-block",
+        headers=headers,
+        json={"status": "blocked", "blocked_reason": "I say I am stuck"},
+    )
+    assert response.status_code == 403, response.text
+    assert "ask_user" in response.json()["detail"]
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-agent-block")
+        assert task.status == "in_progress"
+        assert task.blocked_reason is None
+
+
+@pytest.mark.asyncio
+async def test_the_operator_may_park_a_task_by_hand(app, auth_headers):
+    """Not every blocker is a question an agent asked."""
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-operator-block",
+                project_id="proj-test",
+                title="Work",
+                status="in_progress",
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-operator-block",
+        headers=auth_headers,
+        json={"status": "blocked", "blocked_reason": "Waiting on the staging API key"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "blocked"
+    assert response.json()["blocked_reason"] == "Waiting on the staging API key"
+
+
+@pytest.mark.asyncio
+async def test_a_hand_set_block_must_say_what_it_is_waiting_for(app, auth_headers):
+    """An unexplained block leaves the operator working out what they are holding up — the position
+    they were in when the card said `in_progress` and nothing was happening (R5)."""
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-block-no-reason",
+                project_id="proj-test",
+                title="Work",
+                status="in_progress",
+            )
+        )
+        await session.commit()
+
+    for body in ({"status": "blocked"}, {"status": "blocked", "blocked_reason": "   "}):
+        response = await app.patch(
+            "/api/v1/projects/proj-test/tasks/task-block-no-reason",
+            headers=auth_headers,
+            json=body,
+        )
+        assert response.status_code == 422, response.text
+
+    async with async_session_factory() as session:
+        assert (await session.get(Task, "task-block-no-reason")).status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_leaving_the_waiting_status_drops_what_it_was_waiting_for(app, auth_headers):
+    """Whichever exit it was. A reason outliving its block describes something that already
+    arrived."""
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-block-release",
+                project_id="proj-test",
+                title="Work",
+                status="blocked",
+                blocked_reason="Waiting on the staging API key",
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-block-release",
+        headers=auth_headers,
+        json={"status": "in_progress"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["blocked_reason"] is None

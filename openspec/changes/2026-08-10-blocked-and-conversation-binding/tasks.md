@@ -32,26 +32,35 @@ surface; 7 specs; 8 verification.
 
 ## 2. Blocking is observed, not asserted
 
-- [ ] 2.1 Link a blocking `Question` to the task it blocked — a nullable column, not a join table
-      (design D4); migration `0059`, guarded
-- [ ] 2.2 At the run boundary, move a bound task to the waiting status when the run ends with an
+- [x] 2.1 Link a blocking `Question` to the task it blocked — a nullable column, not a join table
+      (design D4); migration `0059`, guarded. Also `tasks.blocked_reason` in the same migration
+- [x] 2.2 At the run boundary, move a bound task to the waiting status when the run ends with an
       unanswered blocking question, `origin='runtime'`, attributed to the run
-- [ ] 2.3 Answering that question returns the task to `in_progress`, in
+- [x] 2.3 Answering that question returns the task to `in_progress`, in
       `hub/hub/api/v1/questions.py` where the answer lands
-- [ ] 2.4 Refuse the waiting status from any agent actor, in `update_task_for_actor` beside the
+- [x] 2.4 Refuse the waiting status from any agent actor, in `update_task_for_actor` beside the
       divergence-policy guard
-- [ ] 2.5 Tests: an agent cannot reach it; the operator can; a timed-out question leaves the task
+- [x] 2.5 Tests: an agent cannot reach it; the operator can; a timed-out question leaves the task
       waiting and nothing unparks it (R2); a **non-blocking** question does not block it (R1)
-- [ ] 2.6 A block carries a reason (R5) — required on an operator-set block, filled from the
+- [x] 2.6 A block carries a reason (R5) — required on an operator-set block, filled from the
       question text on a runtime-set one
+- [x] 2.7 **Found while wiring 2.3:** `ask_user` only holds the tool call open while the run lives,
+      so a blocking question that outlived its run (timed out, or the run crashed) had nobody awake
+      to receive the answer — and the existing "a blocking asker is already awake" shortcut dropped
+      it silently. That is exactly the question that parked a task. Now queued when the asking run
+      is *known* to have ended; the presumption is otherwise left alone
 
 ## 3. A waiting task is not divergent
 
-- [ ] 3.1 Implement D5 option (1): the divergence check excludes a task **whose status at the run
+- [x] 3.1 Implement D5 option (1): the divergence check excludes a task **whose status at the run
       boundary is `blocked`** — not merely one blocked by this run — leaving `origin` meaning "who
       caused this" rather than bending it to make the check simpler
-- [ ] 3.2 Tests: no divergence and no response run while waiting; the check applies again once
+- [x] 3.2 Tests: no divergence and no response run while waiting; the check applies again once
       released
+- [x] 3.3 **A `blocked` edge obligates the status control.** Because a hand-set block must name what
+      it is waiting for (R5), a menu offering "Blocked" must collect a reason before it sends, or it
+      offers a move that then fails. `test_every_move_the_endpoint_offers_is_actually_accepted`
+      encodes this; **task 6.3 must honour it**
 
 ## 4. The binding moves to the conversation
 

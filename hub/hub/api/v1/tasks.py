@@ -12,10 +12,17 @@ from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AgentHeartbeat, RunDivergence, Task
+from ...run_task_binding import release_reason
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
 from ...sse import sse_manager
 from ...task_transition_service import apply_transition, guard_entry_status
-from ...task_transitions import ACTOR_OPERATOR, Actor, allowed_map_for, operator
+from ...task_transitions import (
+    ACTOR_OPERATOR,
+    STATUS_BLOCKED,
+    Actor,
+    allowed_map_for,
+    operator,
+)
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -229,10 +236,31 @@ async def update_task_for_actor(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
     if body.status is not None:
+        if body.status == STATUS_BLOCKED and not actor.is_operator:
+            # A block is observed, never asserted (design D3). An agent that could declare itself
+            # waiting on a person could claim to be waiting on one it never asked — the one claim a
+            # completion gate would most reward, and the reason `blocked` is also withheld from the
+            # MCP `update_task` signature. The map permits the edge to a run because the *runtime*
+            # takes it on the run's behalf; this is what stops the agent asking for it directly.
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "A task is recorded as waiting on a person because AgentWeave saw the run end "
+                    "with an unanswered blocking question, not because an agent said so. Use "
+                    "ask_user to ask, and the task will be parked for you."
+                ),
+            )
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
         # exception handler turns into 409/403. Nothing has been mutated at that point, so the
         # refusal cannot leave a half-applied update behind.
         await apply_transition(session, task, body.status, actor)
+        # Every exit from the waiting status drops the text, whichever exit it was — released,
+        # reassigned or abandoned. A reason outliving its block describes something that already
+        # arrived.
+        if body.status != STATUS_BLOCKED:
+            release_reason(task)
+        else:
+            task.blocked_reason = body.blocked_reason
     if body.priority is not None:
         task.priority = body.priority
     if body.assignee is not None:

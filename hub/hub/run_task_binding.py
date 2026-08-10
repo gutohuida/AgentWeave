@@ -27,14 +27,14 @@ from typing import Iterable, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import InboundQueueEntry, Run, Task, TaskTransition
+from .db.models import InboundQueueEntry, Question, Run, Task, TaskTransition
 from .task_transition_service import (
     ORIGIN_ACTOR,
     ORIGIN_RUNTIME,
     TransitionRefusedError,
     apply_transition,
 )
-from .task_transitions import STATUS_BLOCKED, allowed_targets, run_actor
+from .task_transitions import STATUS_BLOCKED, allowed_targets, operator, run_actor
 
 # --------------------------------------------------------------------------------------
 # What a task says should happen when work bound to it is dropped
@@ -174,6 +174,127 @@ async def bind_run_to_task(
         # and cannot currently fire for `in_progress`. Caught rather than assumed away: a refusal
         # here must leave the run bound and the task untouched, never propagate and fail the spawn.
         return None
+
+
+# --------------------------------------------------------------------------------------
+# Waiting on a person
+# --------------------------------------------------------------------------------------
+
+#: How much of a question's text becomes the task's blocked reason. Long enough to identify which
+#: question parked the task on a card, short enough not to turn the card into a wall of text —
+#: the full question is one click away on the question itself, which is where it belongs.
+_REASON_LIMIT = 280
+
+
+def _reason_from_question(question: Question) -> str:
+    text = " ".join((question.question or "").split())
+    if len(text) > _REASON_LIMIT:
+        text = text[: _REASON_LIMIT - 1].rstrip() + "…"
+    return f"Waiting on your answer: {text}" if text else "Waiting on your answer."
+
+
+async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optional[Question]:
+    """The question this run asked and is still waiting on, if there is one.
+
+    Only `blocking=True` counts. `ask_user(blocking=False)` is the agent leaving a note and carrying
+    on, and a task parked on a note would make the status mean "an agent mentioned something"
+    (design R1).
+
+    Scoped to questions *this run* opened. A question another run left unanswered is not evidence
+    that this run stopped for it, and treating it as such would park a task on the strength of an
+    unrelated agent's unfinished business.
+
+    Earliest first: a run that asked several is waiting on the first thing it got stuck on, which is
+    the more useful thing to name on the card.
+    """
+    result = await session.execute(
+        select(Question)
+        .where(Question.created_by_run_id == run.id)
+        .where(Question.blocking.is_(True))
+        .where(Question.answered.is_(False))
+        .order_by(Question.created_at, Question.batch_index)
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+async def block_task_for_question(
+    session: AsyncSession,
+    run: Run,
+    task: Task,
+    question: Question,
+) -> Optional[TaskTransition]:
+    """Park `task` because `run` is waiting on `question`. Returns the transition, or None.
+
+    `origin='runtime'` — the Hub observed the block, the agent did not declare it (design D3, and
+    D5's choice of how a blocked task escapes the divergence check). Keeping `origin` meaning "who
+    caused this" is why the divergence check excludes the *status* rather than reading the block as
+    the run advancing its own work.
+
+    The question records which task it parked, so answering it knows what to release without
+    re-deriving it from the run's binding — a run may be bound to a task the question was not about.
+
+    Returns None when the map does not allow it, which is the ordinary case for a task that is not
+    `in_progress`: a run can end with a question open while its task sits in `under_review`, and
+    that is not a block, it is a question about something else.
+    """
+    actor = run_actor(run.id, run.agent)
+    if STATUS_BLOCKED not in allowed_targets(task.status, actor.kind):
+        return None
+
+    try:
+        transition = await apply_transition(
+            session, task, STATUS_BLOCKED, actor, origin=ORIGIN_RUNTIME
+        )
+    except TransitionRefusedError:
+        # Same reasoning as `bind_run_to_task`: a refusal here must leave the run ended and the
+        # task untouched, never propagate and turn a finished run into a failed one.
+        return None
+
+    task.blocked_reason = _reason_from_question(question)
+    question.blocked_task_id = task.id
+    return transition
+
+
+def release_reason(task: Task) -> None:
+    """Clear what a task was waiting for, because it is no longer waiting.
+
+    Called wherever a task leaves `blocked`. Separate from the transition itself so that every exit
+    — the answer arriving, the operator releasing it, reassignment, rejection — drops the text the
+    same way. A reason outliving its block is a card that says it is waiting on something that
+    already arrived.
+    """
+    task.blocked_reason = None
+
+
+async def release_block_for_answer(
+    session: AsyncSession,
+    question: Question,
+) -> Optional[Task]:
+    """The answer arrived, so the task is no longer waiting. Returns the task, if one was released.
+
+    Attributed to the **operator**, with the default `actor` origin: they answered, and answering is
+    what released it. Not a runtime transition — the runtime observes a block, but it does not
+    invent this one, and an origin of `runtime` here would additionally exempt the move from the
+    divergence check for no reason.
+
+    Silent when the task has moved on since. The operator may have rejected or reassigned it while
+    it sat waiting, and an answer arriving afterwards must not drag it back into `in_progress`.
+    """
+    if not question.blocked_task_id:
+        return None
+
+    task = await session.get(Task, question.blocked_task_id)
+    if task is None or task.status != STATUS_BLOCKED:
+        return None
+
+    try:
+        await apply_transition(session, task, "in_progress", operator())
+    except TransitionRefusedError:
+        return None
+
+    release_reason(task)
+    return task
 
 
 # --------------------------------------------------------------------------------------
