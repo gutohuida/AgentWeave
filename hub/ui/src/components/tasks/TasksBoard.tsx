@@ -91,9 +91,22 @@ export function TasksBoard() {
               col = col.filter((t) => t.assignee === activeFilter)
             }
             return (
-              <div key={key} className="flex flex-col gap-2 overflow-hidden">
-                {/* Column header */}
-                <div className="flex items-center justify-between mb-0.5 px-0.5">
+              // No `overflow-hidden` here: it makes this column the scrollport for `sticky`
+              // below, so the header would pin to a box that never scrolls and travel away with
+              // the cards — which is exactly the reported symptom.
+              <div key={key} className="flex flex-col gap-2 min-w-0">
+                {/* Column header. Sticky because the whole grid scrolls as one — without this the
+                    headers leave with the content and a long column becomes a list of cards whose
+                    status you can no longer see. Operator, 2026-08-10: "when I scroll down I lose
+                    what each column means." Opaque background so cards pass behind rather than
+                    through, and a negative top offset absorbs the grid's own padding. */}
+                <div
+                  className="sticky z-10 flex items-center justify-between px-0.5"
+                  // The grid's own 12px padding scrolls with the content, so the header pins at
+                  // -12 to sit flush with the viewport edge and pads that back to cover cards
+                  // passing underneath.
+                  style={{ top: -12, background: 'var(--bg)', paddingTop: 12, paddingBottom: 6 }}
+                >
                   <span
                     className="text-xs font-medium uppercase tracking-wider"
                     style={{ color: accentColor ?? 'var(--text-3)' }}
@@ -110,7 +123,9 @@ export function TasksBoard() {
                     {col.length}
                   </span>
                 </div>
-                <div className="space-y-2 overflow-y-auto">
+                {/* No scroll of its own: the grid already scrolls, and a nested scrollport both
+                    traps the wheel and gives `sticky` above the wrong container to stick to. */}
+                <div className="space-y-2">
                   {col.map((task) => (
                     <TaskCard key={task.id} task={task} assigneeColorIndex={colorsByAgent.get(task.assignee ?? '')} />
                   ))}
