@@ -536,6 +536,50 @@ class Task(Base):
     )
 
 
+class TaskTransition(Base):
+    """One accepted move of a task from one status to another. Never updated, never deleted.
+
+    `Task.updated_by_run_id` cannot answer "who approved this?", because it is a single mutable
+    column: the approving run overwrites the completing one, and the question the review step
+    exists to answer becomes unaskable. Rows here are what author/reviewer separation reads
+    (`openspec/changes/2026-08-10-task-transition-machine/`, design D3).
+
+    Append-only is enforced by there being no write path other than the recorder — no update, no
+    delete — rather than by a database trigger, which would need a different implementation per
+    backend to defend against an actor who already has the database file (D4).
+
+    A task created before this table existed begins its history at its next move. Nothing is
+    backfilled: a synthetic "created as pending" row would put a claim in an integrity record that
+    nothing observed (D8).
+    """
+
+    __tablename__ = "task_transitions"
+
+    # Ordered by an autoincrement key, not by `created_at`, and not by the string id. Several
+    # transitions can be staged in one flush and then share a timestamp to the microsecond, at
+    # which point a random `ttr-…` id decides what order the history reads in — which for a record
+    # whose entire meaning is "this happened, then this" is a corruption rather than an
+    # inconvenience. Same shape as `InboundQueueEntry`, which is ordered for the same reason.
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tasks.id"), nullable=False, index=True
+    )
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    # "run" or "operator". Explicit rather than inferred from run_id being NULL: the two coincide
+    # today, but "no run" and "the operator" are different claims and only one of them is an
+    # authorisation (D2).
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (Index("ix_task_transitions_task_sequence", "task_id", "sequence"),)
+
+
 class Question(Base):
     __tablename__ = "questions"
 

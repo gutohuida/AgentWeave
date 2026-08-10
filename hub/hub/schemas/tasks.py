@@ -24,6 +24,11 @@ _TASK_STATUSES = [
 ]
 _PRIORITIES = ["low", "medium", "high", "critical"]
 
+# Restated from `hub.task_transitions.ENTRY_STATUSES`; the two are pinned together by
+# `hub/tests/test_task_transitions.py`. Restated rather than imported because this module is a
+# leaf that the schemas layer imports widely, and the transition module imports nothing.
+_ENTRY_STATUSES = {"pending", "assigned"}
+
 
 class TaskCreate(BaseModel):
     title: str = Field(max_length=256)
@@ -72,8 +77,11 @@ class TaskCreate(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: str) -> str:
-        if v not in _TASK_STATUSES:
-            raise ValueError(f"status must be one of {_TASK_STATUSES}")
+        # Creation is narrower than update: a task may only *start* at an entry point, or the
+        # machine is walkable around by creating a task already `approved`
+        # (openspec/changes/2026-08-10-task-transition-machine, design D10).
+        if v not in _ENTRY_STATUSES:
+            raise ValueError(f"a new task must start at one of {sorted(_ENTRY_STATUSES)}")
         return v
 
     @field_validator("priority")

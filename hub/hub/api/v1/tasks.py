@@ -14,6 +14,8 @@ from ...db.engine import get_session
 from ...db.models import AgentHeartbeat, Task
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
 from ...sse import sse_manager
+from ...task_transition_service import apply_transition, guard_entry_status
+from ...task_transitions import ACTOR_OPERATOR, Actor, allowed_map_for, operator
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -61,6 +63,11 @@ async def create_task_for_actor(
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
+    # A lifecycle that can be entered anywhere is not a lifecycle (design D10). Without this, a
+    # caller creates a task already `approved` and never transitions at all, so no rule about
+    # transitions can reach it. This is the single `Task(` construction site, so one guard covers
+    # both the operator route and the agent plane.
+    guard_entry_status(body.status)
     task_id = body.id or f"task-{short_id()}"
     task = Task(
         id=task_id,
@@ -174,14 +181,22 @@ async def update_task_for_actor(
     body: TaskUpdate,
     *,
     project_id: str,
-    updated_by_run_id: Optional[str],
+    actor: Actor,
     session: AsyncSession,
 ) -> TaskResponse:
+    """The single choke point both routes share, and therefore where the machine lives.
+
+    `actor` is explicit rather than an `Optional[str]` run id whose absence meant "operator"
+    (design D2): those are different claims, and only one of them is an authorisation.
+    """
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
     if body.status is not None:
-        task.status = body.status
+        # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
+        # exception handler turns into 409/403. Nothing has been mutated at that point, so the
+        # refusal cannot leave a half-applied update behind.
+        await apply_transition(session, task, body.status, actor)
     if body.priority is not None:
         task.priority = body.priority
     if body.assignee is not None:
@@ -191,7 +206,9 @@ async def update_task_for_actor(
     if body.notes is not None:
         task.notes = body.notes
     task.updated = datetime.now(timezone.utc)
-    task.updated_by_run_id = updated_by_run_id
+    # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
+    # append-only history instead; this stays for existing consumers and is not what governs.
+    task.updated_by_run_id = actor.run_id
     await session.commit()
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
@@ -223,6 +240,19 @@ async def update_task(
         task_id,
         body,
         project_id=project_id,
-        updated_by_run_id=None,
+        actor=operator(),
         session=session,
     )
+
+
+@router.get("/transitions/allowed")
+async def allowed_transitions(
+    project: Tuple[str, str] = Depends(get_project),
+):
+    """The operator's own view of the transition map (design D13).
+
+    Served from the same declaration the service enforces, so the control cannot offer a move that
+    is then refused, and the client never holds a second copy of the map. One fetch per session
+    rather than one per card — a board of forty tasks in the same status has one answer, not forty.
+    """
+    return {"actor_kind": ACTOR_OPERATOR, "transitions": allowed_map_for(ACTOR_OPERATOR)}

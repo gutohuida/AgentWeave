@@ -22,12 +22,12 @@ from ...schemas.questions import QuestionCreate, QuestionOption, QuestionRespons
 from ...schemas.tasks import (
     _PRIORITIES,
     _TASK_ID_RE,
-    _TASK_STATUSES,
     TaskCreate,
     TaskResponse,
     TaskUpdate,
 )
 from ...sse import sse_manager
+from ...task_transitions import ENTRY_STATUSES, run_actor
 from ...utils import persist_event, short_id
 from .agents import AgentRequest, request_agent
 from .jobs import create_job, delete_job, run_job, update_job
@@ -81,8 +81,12 @@ class AgentTaskCreate(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: str) -> str:
-        if value not in _TASK_STATUSES:
-            raise ValueError(f"status must be one of {_TASK_STATUSES}")
+        # Entry statuses only, matching `TaskCreate` — and matching MCP's `create_task`, which has
+        # never exposed `status` at all. HTTP was the wider of the two, which
+        # `agent-capability-plane` forbids; it is levelled by narrowing here rather than by
+        # widening MCP, since widening would have propagated the hole instead of closing it.
+        if value not in ENTRY_STATUSES:
+            raise ValueError(f"a new task must start at one of {sorted(ENTRY_STATUSES)}")
         return value
 
     @field_validator("id")
@@ -241,7 +245,7 @@ async def update_shared_task(
         task_id,
         body,
         project_id=actor.project_id,
-        updated_by_run_id=actor.run_id,
+        actor=run_actor(actor.run_id),
         session=session,
     )
 

@@ -4,6 +4,8 @@ The map is the one place the lifecycle is stated, so these tests are the lifecyc
 in executable form: change an edge and exactly the test describing it should fail.
 """
 
+from pathlib import Path
+
 import pytest
 
 from hub.task_transitions import (
@@ -267,3 +269,98 @@ def test_refusal_from_a_dead_end_says_so_rather_than_listing_nothing():
 def test_refusal_for_an_unknown_status_says_it_is_unknown():
     detail = refusal_detail("banana", "approved", ACTOR_OPERATOR)
     assert "unknown status" in detail
+
+
+# --------------------------------------------------------------------------------------
+# Append-only is a property of the source, not of the database (D4)
+# --------------------------------------------------------------------------------------
+
+
+def test_no_application_path_updates_or_deletes_a_transition():
+    """Append-only is enforced by the absence of a write path, not by a database trigger (D4).
+
+    Scans the Hub package for a mutation aimed at TaskTransition. A future `delete(TaskTransition)`
+    or an assignment to a persisted row's field fails here rather than quietly eroding the one
+    record whose value is that nothing in it changes.
+    """
+    from pathlib import Path
+
+    hub_package = Path(__file__).resolve().parents[1] / "hub"
+    offenders = []
+    forbidden = ("delete(TaskTransition", "TaskTransition).where", "update(TaskTransition")
+    for path in hub_package.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for pattern in forbidden:
+            if pattern in source:
+                # `select(TaskTransition).where(...)` is a read and reaches this via the second
+                # pattern, so only flag it when it is not preceded by `select(`.
+                if pattern == "TaskTransition).where" and "select(TaskTransition).where" in source:
+                    continue
+                offenders.append(f"{path.name}: {pattern}")
+    assert offenders == [], f"transition history must be append-only, found: {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# The MCP adapter surfaces a refusal as a failure, not a success (section 6)
+# ---------------------------------------------------------------------------
+
+
+def test_mcp_reports_a_refusal_as_a_failure_carrying_the_reachable_set():
+    """A refused agent's only feedback is this string. `_hub_request` already raises on non-2xx, so
+    what needs proving is that the detail survives `_readable_detail` intact and is never converted
+    into an empty or successful result."""
+    import json
+    import urllib.error
+    from unittest.mock import patch
+
+    from hub.mcp_server import HubAPIError, _hub_request
+    from hub.task_transitions import ACTOR_RUN, refusal_detail
+
+    detail = refusal_detail("in_progress", "approved", ACTOR_RUN)
+    body = json.dumps({"detail": detail}).encode()
+
+    error = urllib.error.HTTPError(
+        url="http://hub/api/v1/agent-actions/tasks/task-1",
+        code=409,
+        msg="Conflict",
+        hdrs=None,
+        fp=None,
+    )
+    error.read = lambda: body  # type: ignore[method-assign]
+
+    with patch("hub.mcp_server._bound_token", return_value="aw_run_x"), patch(
+        "urllib.request.urlopen", side_effect=error
+    ):
+        with pytest.raises(HubAPIError) as excinfo:
+            _hub_request("PATCH", "/tasks/task-1", {"status": "approved"})
+
+    assert excinfo.value.status_code == 409
+    # The agent must be able to correct itself: current status and what it can actually reach.
+    assert "in_progress" in excinfo.value.detail
+    assert "completed" in excinfo.value.detail
+
+
+def test_mcp_states_the_statuses_but_holds_no_adjacency():
+    """`mcp_server.py` is spawned standalone and may import only stdlib + fastmcp, so anything it
+    restates needs an agreement test (CLAUDE.md).
+
+    It legitimately restates the *status list*, as the `TaskStatus` literal its tool signature
+    needs — so that list is pinned here. It must not restate the *map*: which status follows which
+    is knowledge the service enforces, and a copy here would be a second answer that drifts. The
+    map reaches the agent as a refusal message instead.
+    """
+    import typing
+
+    from hub import mcp_server
+    from hub.task_transitions import STATUSES
+
+    assert set(typing.get_args(mcp_server.TaskStatus)) == STATUSES
+
+    source = (Path(__file__).resolve().parents[1] / "hub" / "mcp_server.py").read_text(
+        encoding="utf-8"
+    )
+    for adjacency_marker in ("TRANSITIONS", "allowed_targets", "ENTRY_STATUSES", "is_allowed"):
+        assert adjacency_marker not in source, (
+            f"{adjacency_marker} appears in mcp_server.py — the transition map must not be copied "
+            f"into the adapter"
+        )

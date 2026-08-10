@@ -28,75 +28,75 @@ it or whether it needs the **operator**, and section 7 is the guide for the oper
 
 ## 2. The history table
 
-- [ ] 2.1 Add the `TaskTransition` model to `hub/hub/db/models.py` — `id`, `project_id`, `task_id`
+- [x] 2.1 Add the `TaskTransition` model to `hub/hub/db/models.py` — `id`, `project_id`, `task_id`
       (FK `tasks.id`), `from_status`, `to_status`, `actor_kind`, `run_id` (nullable), `created_at`;
       index `(task_id, created_at)`.
-- [ ] 2.2 Write the migration after `0051_add_queue_entry_spec_document`, **guarded for a missing
+- [x] 2.2 Write the migration after `0051_add_queue_entry_spec_document`, **guarded for a missing
       `tasks` table** in the manner of `0033`/`0034` (`CLAUDE.md`), with a `downgrade` that drops the
       table. No data migration — the table starts empty (D8).
-- [ ] 2.3 Bump the head assertions in `hub/tests/test_migrations.py` **and**
+- [x] 2.3 Bump the head assertions in `hub/tests/test_migrations.py` **and**
       `hub/tests/test_project_persistence.py`. Both are required by `CLAUDE.md`.
       *Agent-verifiable: `pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py`.*
-- [ ] 2.4 Verify the migration applies from an early revision, not only from `0051` — the guard in
+- [x] 2.4 Verify the migration applies from an early revision, not only from `0051` — the guard in
       2.2 exists because upgrades reach it with only that revision's tables. *Agent-verifiable.*
 
 ## 3. The service
 
-- [ ] 3.1 Implement `record_transition` and the reads the rules need — most recent transition into a
+- [x] 3.1 Implement `record_transition` and the reads the rules need — most recent transition into a
       given status, and full history for a task. **No update or delete path** (D4).
-- [ ] 3.2 Implement the legality check: refuse an undeclared edge, and refuse a declared edge whose
+- [x] 3.2 Implement the legality check: refuse an undeclared edge, and refuse a declared edge whose
       permitted actors exclude the caller. The refusal carries the current status and the set
       reachable *by that actor*.
-- [ ] 3.3 Implement author/reviewer separation: refuse `approved`, `rejected` or `revision_needed`
+- [x] 3.3 Implement author/reviewer separation: refuse `approved`, `rejected` or `revision_needed`
       from `under_review` when the requesting run is the run that recorded the move into `completed`.
       Read it from the history, never from `Task.updated_by_run_id` — that column is the thing that
       gets overwritten.
-- [ ] 3.4 Implement the same-status no-op (D7): succeed, record nothing.
-- [ ] 3.5 Add a test asserting no application code path updates or deletes a `task_transitions` row.
+- [x] 3.4 Implement the same-status no-op (D7): succeed, record nothing.
+- [x] 3.5 Add a test asserting no application code path updates or deletes a `task_transitions` row.
       *Agent-verifiable — grep-style assertion over the Hub package, in the spirit of the existing
       source-contract tests in `hub/ui/src/__tests__/hubVisualLanguage.test.ts`.*
 
 ## 4. Wiring it in
 
-- [ ] 4.1 Change `update_task_for_actor` (`hub/hub/api/v1/tasks.py:172`) to take the explicit actor
+- [x] 4.1 Change `update_task_for_actor` (`hub/hub/api/v1/tasks.py:172`) to take the explicit actor
       (D2) and to route every status change through the service. Non-status fields keep their
       current behaviour.
-- [ ] 4.2 Update the operator route (`hub/hub/api/v1/tasks.py:214`) to pass an operator actor, and
+- [x] 4.2 Update the operator route (`hub/hub/api/v1/tasks.py:214`) to pass an operator actor, and
       the agent route (`hub/hub/api/v1/agent_actions.py:234`) to pass a run actor. After this, no
       caller infers operator-ness from a null run id.
-- [ ] 4.3 Map refusals to their status codes: **409** for an illegal transition, **403** for an
+- [x] 4.3 Map refusals to their status codes: **409** for an illegal transition, **403** for an
       actor rule (D6), each with a detail naming the reason and the reachable set.
-- [ ] 4.4 Keep `Task.updated_by_run_id` written as today. It stays the materialised latest writer;
+- [x] 4.4 Keep `Task.updated_by_run_id` written as today. It stays the materialised latest writer;
       the history is what the rules read. Removing it is not in this change.
-- [ ] 4.5 Confirm the SSE `task_updated` broadcast still fires on an accepted transition and does
+- [x] 4.5 Confirm the SSE `task_updated` broadcast still fires on an accepted transition and does
       **not** fire on a refusal. *Agent-verifiable.*
 
 ## 5. Creation, and levelling the transports
 
 Found by the 2026-08-10 scan; the machine was walkable around before this section existed.
 
-- [ ] 5.1 Restrict creation to the entry statuses `pending` and `assigned` in
+- [x] 5.1 Restrict creation to the entry statuses `pending` and `assigned` in
       `create_task_for_actor` (`hub/hub/api/v1/tasks.py:65-70`) — the single `Task(` construction
       site, so one place covers every caller.
-- [ ] 5.2 Narrow `AgentTaskCreate.status` (`hub/hub/api/v1/agent_actions.py:71`) and
+- [x] 5.2 Narrow `AgentTaskCreate.status` (`hub/hub/api/v1/agent_actions.py:71`) and
       `TaskCreate.status` (`hub/hub/schemas/tasks.py`) to the entry statuses, so the refusal is a
       schema error where it can be and a service error where it cannot.
-- [ ] 5.3 Confirm creation records **no** transition (D10), and that a created task's first history
+- [x] 5.3 Confirm creation records **no** transition (D10), and that a created task's first history
       entry is its first actual move. *Agent-verifiable.*
-- [ ] 5.4 Test that `POST /agent-actions/tasks` with `status: "approved"` is refused — this is the
+- [x] 5.4 Test that `POST /agent-actions/tasks` with `status: "approved"` is refused — this is the
       hole the scan found, and the test is the proof it is shut. *Agent-verifiable.*
-- [ ] 5.5 Assert HTTP and MCP agree on create: neither exposes a status the other does not
+- [x] 5.5 Assert HTTP and MCP agree on create: neither exposes a status the other does not
       (`agent-capability-plane`). MCP's `create_task` (`hub/hub/mcp_server.py:206`) exposes none
       today, so this is satisfied by narrowing HTTP — verify, do not widen MCP.
 
 ## 6. The MCP surface
 
-- [ ] 6.1 Verify a refusal reaches the agent as a tool failure: `_hub_request`
+- [x] 6.1 Verify a refusal reaches the agent as a tool failure: `_hub_request`
       (`hub/hub/mcp_server.py:132-162`) already raises `HubAPIError` on non-2xx, so this is a test,
       not new code. Assert it is not converted into an empty or successful result.
-- [ ] 6.2 Assert the failure text survives `_readable_detail` with the reachable set intact — a
+- [x] 6.2 Assert the failure text survives `_readable_detail` with the reachable set intact — a
       refused agent's only feedback is that string, and an unreadable one produces blind retries.
-- [ ] 6.3 If anything about the map or statuses ends up restated in `hub/hub/mcp_server.py`, add the
+- [x] 6.3 If anything about the map or statuses ends up restated in `hub/hub/mcp_server.py`, add the
       agreement test `CLAUDE.md` requires. Prefer not restating it at all.
 
 ## 7. The operator's status control

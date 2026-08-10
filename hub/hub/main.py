@@ -21,6 +21,7 @@ from .config import settings
 from .db.engine import init_db
 from .run_reconciliation import reconcile_interrupted_runs
 from .scheduler import init_scheduler, shutdown_scheduler
+from .task_transition_service import TransitionRefusedError
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,16 @@ def create_app() -> FastAPI:
         if server:
             bound_address.observe(server[0], server[1])
         return await call_next(request)
+
+    # One handler rather than a try/except at each of the four call sites — the two task routes
+    # times create-and-update. `detail` is written for a reader who has to correct themselves, and
+    # the MCP adapter surfaces it verbatim, so this shape is an agent's only feedback on a refusal.
+    @app.exception_handler(TransitionRefusedError)
+    async def _transition_refused(request: Request, exc: TransitionRefusedError):
+        return UTF8JSONResponse(
+            status_code=exc.http_status,
+            content={"detail": exc.detail},
+        )
 
     @app.get("/health", include_in_schema=False)
     async def health():
