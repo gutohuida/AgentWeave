@@ -34,9 +34,14 @@ jobs = ["croniter>=2.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "black>=23.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0",
+    # Upper bounds on the three tools CI *gates* on. Unpinned, a new major breaks
+    # the build with no code change: black 26's style reformatted 78 files and
+    # mypy 2 refused `python_version = "3.8"` outright, both discovered as CI
+    # failures rather than as a deliberate upgrade. Floors stay low so the 3.8/3.9
+    # matrix legs can still resolve `.[dev]` — lint only runs on the 3.11 leg.
+    "black>=23.0,<27",
+    "ruff>=0.1.0,<0.16",
+    "mypy>=1.0,<3",
     "pyyaml>=6.0",
     "types-PyYAML>=6.0",
 ]
@@ -71,6 +76,14 @@ line-length = 100
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
 ignore = ["E501", "UP045", "UP006", "UP037"]
 
+[tool.ruff.lint.per-file-ignores]
+# Stacked `with patch(...)` is the idiomatic shape for these tests, and the CLI
+# suite must run on 3.8/3.9, which have no parenthesized context managers — so
+# "combine into one `with`" means a single overlong line or backslash
+# continuations, both worse than the nesting SIM117 objects to.
+"tests/**" = ["SIM117"]
+"hub/tests/**" = ["SIM117"]
+
 [tool.ruff.lint.isort]
 # Both distributions are first-party here; without this, `hub` and `agentweave`
 # absolute imports get sorted into the third-party block.
@@ -88,7 +101,11 @@ extend-immutable-calls = [
 ]
 
 [tool.mypy]
-python_version = "3.8"
+# Not the package's runtime floor, which stays at `requires-python = ">=3.8"`.
+# mypy 2 refuses to target anything below 3.10 ("Python 3.8 is not supported"),
+# so this is the lowest version it will accept. Actual 3.8/3.9 compatibility is
+# covered by the CI test matrix, which runs pytest on both.
+python_version = "3.10"
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true

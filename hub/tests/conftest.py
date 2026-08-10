@@ -16,7 +16,8 @@ from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
 from hub.db.models import Base  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
 from hub.project_workspace import (
-    resolve_project_workspace as _REAL_RESOLVE_PROJECT_WORKSPACE,
+    # A module-level constant holding the unpatched original, not a function alias.
+    resolve_project_workspace as _REAL_RESOLVE_PROJECT_WORKSPACE,  # noqa: N812
 )  # noqa: E402
 
 

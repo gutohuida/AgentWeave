@@ -121,7 +121,7 @@ async def test_copied_active_worktree_metadata_blocks_relocation(app, tmp_path) 
     relocated = tmp_path / "relocated"
     original.mkdir()
     async with async_session_factory() as session:
-        project = await ProjectLifecycleService(session).open_existing(original)
+        await ProjectLifecycleService(session).open_existing(original)
 
     original.rename(relocated)
     (relocated / ".agentweave" / "worktrees" / "writer").mkdir(parents=True)

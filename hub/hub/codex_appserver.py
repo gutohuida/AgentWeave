@@ -28,6 +28,7 @@ this was confirmed live: a real out-of-workspace write attempt, declined with
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -83,6 +84,7 @@ def uses_app_server(runner_cli: str, flags: Optional[List[str]]) -> bool:
         return False
     return APP_SERVER_OPT_OUT_FLAG not in (flags or [])
 
+
 # Server->client methods this Hub must answer. Verified against
 # `codex app-server generate-json-schema` (CLI 0.146.0) and a live protocol trace.
 ELICITATION_METHOD = "mcpServer/elicitation/request"
@@ -107,7 +109,9 @@ _FAILED_ITEM_STATUSES = ("failed", "declined")
 # should already select a policy that avoids this under yolo, but every request must still get
 # an answer per implications.md §2 — "silence becomes a deadlock").
 _YOLO_PERMISSIONS_GRANT: Dict[str, Any] = {
-    "fileSystem": {"entries": [{"access": "write", "path": {"type": "special", "value": {"kind": "root"}}}]},
+    "fileSystem": {
+        "entries": [{"access": "write", "path": {"type": "special", "value": {"kind": "root"}}}]
+    },
     "network": {"enabled": True},
 }
 
@@ -622,10 +626,8 @@ class AppServerProcess:
         if self._reader_task is not None:
             self._reader_task.cancel()
         if self._proc.stdin is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._proc.stdin.close()
-            except Exception:
-                pass
         if self.is_running():
             if force:
                 self._proc.kill()
@@ -710,7 +712,13 @@ async def run_turn(
                 "mcp_servers": {
                     own_server_name: mcp_server_config(
                         mcp_command,
-                        env_vars=["AW_RUN_TOKEN", "AW_AGENT_IDENTITY", "AW_RUN_ID", "AW_TURN_DEPTH", "HUB_URL"],
+                        env_vars=[
+                            "AW_RUN_TOKEN",
+                            "AW_AGENT_IDENTITY",
+                            "AW_RUN_ID",
+                            "AW_TURN_DEPTH",
+                            "HUB_URL",
+                        ],
                     )
                 }
             }
@@ -742,14 +750,12 @@ async def run_turn(
         while True:
             if should_interrupt is not None and should_interrupt() and not interrupted:
                 interrupted = True
-                try:
+                # Best-effort: if interrupt itself can't be delivered, the deadline/process-
+                # death checks below still guarantee this loop ends.
+                with contextlib.suppress(AppServerError, asyncio.TimeoutError):
                     await session.request(
                         "turn/interrupt", {"threadId": thread_id, "turnId": turn_id}, timeout=10
                     )
-                except (AppServerError, asyncio.TimeoutError):
-                    # Best-effort: if interrupt itself can't be delivered, the deadline/process-
-                    # death checks below still guarantee this loop ends.
-                    pass
 
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
@@ -766,7 +772,12 @@ async def run_turn(
 
             msg_id = msg.get("id")
             method = msg.get("method")
-            if msg_id is not None and method is not None and "result" not in msg and "error" not in msg:
+            if (
+                msg_id is not None
+                and method is not None
+                and "result" not in msg
+                and "error" not in msg
+            ):
                 # A server->client request (approval/elicitation) — must always be answered
                 # (implications.md §2: an unanswered request hangs the turn indefinitely).
                 decision = decide_approval(

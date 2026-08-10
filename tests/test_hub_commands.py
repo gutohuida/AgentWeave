@@ -342,7 +342,7 @@ class TestProjectStatusSummary:
                 assert _hub_project_status_summary(8000) is None
 
 
-class TestOpenProjectCall(object):
+class TestOpenProjectCall:
     """Tests for _hub_open_project and the launch-URL resolution it feeds (task 2.1:
     open failure, and the plumbing behind legacy `proj-default` binding)."""
 
@@ -565,9 +565,7 @@ class TestNativeStartProjectLifecycle:
     def test_zero_project_direct_hub_start_opens_without_a_project(self, tmp_path):
         """A directly started Hub (e.g. Docker, or native with no invocation
         directory) opens with no project selected rather than guessing one."""
-        with patch(
-            "agentweave.cli.urllib.request.urlopen", return_value=self._health_response()
-        ):  # noqa: SIM117
+        with patch("agentweave.cli.urllib.request.urlopen", return_value=self._health_response()):
             with patch("agentweave.cli._hub_open_project") as mock_open_project:
                 with patch("agentweave.cli._open_app_window") as mock_open_window:
                     result = _hub_native_start(port=8000, detach=True, app=True, cwd=None)
