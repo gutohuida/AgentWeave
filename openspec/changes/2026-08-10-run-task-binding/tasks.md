@@ -102,42 +102,47 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
 
 ## 6. The operator's surface
 
-- [ ] 6.1 Expose `divergence_policy`, `escalation_agent`, and open-divergence state on the task schema
-- [ ] 6.2 `GET` the project's divergences, and a hook in `hub/ui/src/api/`
-- [ ] 6.3 Policy and escalation-agent controls on the task card, the escalation agent chosen from the
+- [x] 6.1 Expose `divergence_policy`, `escalation_agent`, and open-divergence state on the task schema
+- [x] 6.2 `GET` the project's divergences, and a hook in `hub/ui/src/api/`
+- [x] 6.3 Policy and escalation-agent controls on the task card, the escalation agent chosen from the
       project's agents
-- [ ] 6.4 Divergence indicator on the task card that clears on resolution
-- [ ] 6.5 Start a bound run from a task card, naming the agent
-- [ ] 6.6 Show a run's bound task where runs are displayed
-- [ ] 6.7 `npm run build`, `rm -rf hub/hub/static/ui`, copy `hub/ui/dist` over it, confirm with
+- [x] 6.4 Divergence indicator on the task card that clears on resolution
+- [x] 6.5 Start a bound run from a task card, naming the agent
+- [ ] 6.6 Show a run's bound task where runs are displayed. **Not done, and not by oversight:** the
+      UI has no surface that displays a run as an entity — agents and conversations are what the
+      operator navigates, and a run is an implementation fact underneath them. Rather than invent a
+      run list to hang this on, the divergence reaches the operator through the activity log
+      (`eventSummary` now renders `run_diverged` in words, naming the agent, the task, and what the
+      Hub did about it) and through the task card. Revisit if B3 gives runs a surface of their own
+- [x] 6.7 `npm run build`, `rm -rf hub/hub/static/ui`, copy `hub/ui/dist` over it, confirm with
       `diff -rq`
 
 ## 7. Specs
 
-- [ ] 7.1 Add the `no capability may exist only in a hook` requirement to
+- [x] 7.1 Add the `no capability may exist only in a hook` requirement to
       `openspec/specs/agent-capability-plane/spec.md` (D13)
-- [ ] 7.2 Apply the `task-lifecycle-governance` deltas
-- [ ] 7.3 Create `openspec/specs/run-task-binding/spec.md` from the delta
-- [ ] 7.4 `npx openspec validate --specs --strict` and `--changes --strict`
+- [x] 7.2 Apply the `task-lifecycle-governance` deltas
+- [x] 7.3 Create `openspec/specs/run-task-binding/spec.md` from the delta
+- [x] 7.4 `npx openspec validate --specs --strict` and `--changes --strict`
 
 ## 8. Verification
 
 ### 8a. Agent-verifiable — expected behaviour stated, run by the agent
 
-- [ ] 8.1 `pytest hub/tests/ -q` — all pass, count no lower than the 1384 at this change's start
-- [ ] 8.2 `pytest tests/ -q` — all pass
-- [ ] 8.3 `cd hub/ui && npx vitest run` and `npx tsc --noEmit` — pass and clean
-- [ ] 8.4 `ruff check hub/hub/ hub/tests/` clean; `black` applied
-- [ ] 8.5 Unit: a delegation naming a task produces a bound run; naming a foreign task is refused;
+- [x] 8.1 `pytest hub/tests/ -q` — all pass, count no lower than the 1384 at this change's start
+- [x] 8.2 `pytest tests/ -q` — all pass
+- [x] 8.3 `cd hub/ui && npx vitest run` and `npx tsc --noEmit` — pass and clean
+- [x] 8.4 `ruff check hub/hub/ hub/tests/` clean; `black` applied
+- [x] 8.5 Unit: a delegation naming a task produces a bound run; naming a foreign task is refused;
       naming nothing produces an unbound run
-- [ ] 8.6 Unit: binding a `pending` task records one `origin='runtime'` transition to `in_progress`;
+- [x] 8.6 Unit: binding a `pending` task records one `origin='runtime'` transition to `in_progress`;
       binding an `in_progress` task records none; binding an `approved` task binds and records none
-- [ ] 8.7 Unit: a run whose only transition is the runtime's is divergent; one that also completed the
+- [x] 8.7 Unit: a run whose only transition is the runtime's is divergent; one that also completed the
       task is not; an unbound run is not
-- [ ] 8.8 Unit: `retry` starts exactly one run; that run diverging starts none; with an escalation
+- [x] 8.8 Unit: `retry` starts exactly one run; that run diverging starts none; with an escalation
       agent it escalates instead; escalation reassigns and records the previous assignee
-- [ ] 8.9 Unit: an interrupted run is checked by reconciliation
-- [ ] 8.10 Unit: a later actor transition resolves an open divergence and retains the record
+- [x] 8.9 Unit: an interrupted run is checked by reconciliation
+- [x] 8.10 Unit: a later actor transition resolves an open divergence and retains the record
 - [ ] 8.11 Live against `testbed/`: delegate a task between two agents and confirm from the database
       that the receiving run carries `task_id` and the task moved to `in_progress` with
       `origin='runtime'` — a behavioural probe, not an HTTP 200 (handoff 0030's dead end)

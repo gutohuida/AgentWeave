@@ -29,6 +29,10 @@ _PRIORITIES = ["low", "medium", "high", "critical"]
 # leaf that the schemas layer imports widely, and the transition module imports nothing.
 _ENTRY_STATUSES = {"pending", "assigned"}
 
+# Restated from `hub.run_task_binding.POLICIES` for the same reason, and pinned to it by
+# `hub/tests/test_run_task_binding.py`.
+_DIVERGENCE_POLICIES = {"surface", "retry", "escalate"}
+
 
 class TaskCreate(BaseModel):
     title: str = Field(max_length=256)
@@ -98,8 +102,25 @@ class TaskUpdate(BaseModel):
     assignee: Optional[str] = Field(default=None, max_length=64)
     description: Optional[str] = Field(default=None, max_length=10000)
     notes: Optional[Any] = None
+    divergence_policy: Optional[str] = Field(default=None, max_length=16)
+    # Deliberately not `Optional[str] = None means leave alone` for this one: clearing an escalation
+    # agent is a thing the operator must be able to do, and `""` is how they say it. Normalised to
+    # NULL below so the column never holds an empty name.
+    escalation_agent: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("divergence_policy")
+    @classmethod
+    def validate_divergence_policy(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in _DIVERGENCE_POLICIES:
+            raise ValueError(f"divergence_policy must be one of {sorted(_DIVERGENCE_POLICIES)}")
+        return v
+
+    @field_validator("escalation_agent")
+    @classmethod
+    def normalise_escalation_agent(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() or None if isinstance(v, str) else v
 
     @model_validator(mode="before")
     @classmethod
@@ -144,5 +165,11 @@ class TaskResponse(BaseModel):
     assignee_status: Optional[str] = Field(default=None, max_length=64)
     assignee_status_msg: Optional[str] = Field(default=None, max_length=10000)
     assignee_last_seen: Optional[datetime] = None
+    divergence_policy: str = Field(default="surface", max_length=16)
+    escalation_agent: Optional[str] = Field(default=None, max_length=64)
+    # Whether a run bound to this task ended without moving it and nothing has since. Computed,
+    # not stored: the durable record is the divergence row, and a second copy on the task would be
+    # one more thing that can disagree with it.
+    has_open_divergence: bool = False
 
     model_config = {"from_attributes": True}

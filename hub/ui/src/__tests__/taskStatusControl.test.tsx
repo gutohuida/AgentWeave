@@ -55,6 +55,8 @@ function makeTask(status: string): Task {
     priority: 'medium',
     created_at: '2026-08-10T10:00:00Z',
     updated: '2026-08-10T10:00:00Z',
+    divergence_policy: 'surface',
+    has_open_divergence: false,
   }
 }
 

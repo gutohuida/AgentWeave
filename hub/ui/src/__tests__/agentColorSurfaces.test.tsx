@@ -8,6 +8,7 @@ import type { Task } from '@/api/tasks'
 const task = {
   id: 'task-1', project_id: 'proj-a', title: 'Ship it', status: 'in_progress', priority: 'high', assignee: 'claude',
   assigner: 'user', created_at: '2026-08-04T09:00:00Z', updated: '2026-08-04T09:00:00Z',
+  divergence_policy: 'surface', has_open_divergence: false,
 } satisfies Task
 
 describe('phase 5 agent identity colors across project surfaces', () => {

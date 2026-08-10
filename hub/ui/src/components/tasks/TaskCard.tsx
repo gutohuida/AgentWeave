@@ -2,7 +2,16 @@ import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { readableApiError } from '@/api/client'
-import { Task, useAllowedTransitions, useUpdateTask } from '@/api/tasks'
+import {
+  DIVERGENCE_POLICY_LABELS,
+  DivergencePolicy,
+  Task,
+  useAllowedTransitions,
+  useSetDivergenceHandling,
+  useStartWorkOnTask,
+  useUpdateTask,
+} from '@/api/tasks'
+import { useAgents } from '@/api/agents'
 import { StatusBadge } from '@/components/common/Badge'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { agentColorVars } from '@/lib/agentColors'
@@ -56,6 +65,12 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
   const [refusal, setRefusal] = useState<string | null>(null)
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
+  const setHandling = useSetDivergenceHandling()
+  const startWork = useStartWorkOnTask()
+  const { data: agents } = useAgents()
+
+  const agentNames = (agents ?? []).map((a) => a.name)
+  const policy = task.divergence_policy ?? 'surface'
 
   // Only what the operator may do from *this* status, read from the Hub's own declaration. The
   // board can still be stale — a move legal when the card rendered may not be by the time it is
@@ -88,7 +103,7 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
       {/* Header - always visible */}
       <div
         className="p-3 cursor-pointer"
-        onClick={() => hasDetails && setExpanded(!expanded)}
+        onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -135,25 +150,73 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
               />
             )}
 
-            {/* Expand/collapse button */}
-            {hasDetails && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setExpanded(!expanded)
-                }}
-                className="shrink-0 p-1 rounded transition-colors"
-                style={{ color: 'var(--text-3)' }}
-              >
-                <Icon name={expanded ? 'expand_less' : 'expand_more'} size={18} />
-              </button>
+            {/* Start work on this task. The Hub binds the run and moves the task itself, so this
+                is the one path where beginning work and the board agreeing about it are the same
+                act rather than two things an agent has to remember to do. */}
+            {agentNames.length > 0 && (
+              <RowMenu
+                label={`Start work on ${task.title}`}
+                testId={`task-start-work-${task.id}`}
+                icon="play_arrow"
+                persistent
+                items={agentNames.map((name) => ({
+                  id: name,
+                  label: `Start ${name} on this`,
+                  onSelect: () => {
+                    setRefusal(null)
+                    startWork.mutate(
+                      { taskId: task.id, agent: name, title: task.title },
+                      {
+                        onError: (error: unknown) =>
+                          setRefusal(readableApiError(error, 'The Hub could not start that run.')),
+                      },
+                    )
+                  },
+                }))}
+              />
             )}
+
+            {/* Expand/collapse button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpanded(!expanded)
+              }}
+              className="shrink-0 p-1 rounded transition-colors"
+              style={{ color: 'var(--text-3)' }}
+            >
+              <Icon name={expanded ? 'expand_less' : 'expand_more'} size={18} />
+            </button>
           </div>
         </div>
 
         {/* Badges row */}
         <div className="flex flex-wrap items-center gap-1.5 mt-2">
           <StatusBadge status={task.status} />
+          {/* A run ended holding this and nothing has moved it since. Amber rather than red: the
+              work is not lost and nothing is broken — it is the operator's attention this needs.
+              Clears by itself the moment anyone moves the task. */}
+          {task.has_open_divergence && (
+            <span
+              data-testid={`task-divergence-${task.id}`}
+              title="A run ended without moving this task."
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--amber) 30%, transparent)',
+                borderRadius: 9999,
+                padding: '1px 6px',
+                fontSize: 10,
+                fontWeight: 500,
+                color: 'var(--amber)',
+              }}
+            >
+              <Icon name="alert_triangle" size={10} />
+              Dropped
+            </span>
+          )}
           <StatusBadge status={task.priority} />
           {task.assignee && (
             <span
@@ -247,15 +310,15 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
         )}
 
         {/* Expand hint */}
-        {hasDetails && !expanded && (
+        {!expanded && (
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--blue)' }}>
-            Click to see details…
+            {hasDetails ? 'Click to see details…' : 'Click for options…'}
           </p>
         )}
       </div>
 
       {/* Expanded details */}
-      {expanded && hasDetails && (
+      {expanded && (
         <div
           className="px-3 pb-3 space-y-3"
           style={{ borderTop: '1px solid var(--border)' }}
@@ -330,6 +393,103 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
                 </p>
               </div>
             )}
+
+            {/* How this task's neglect is answered. Here, on the task, rather than in a settings
+                screen, because it is a routing decision about this work — the cheap agent does it,
+                the expensive one picks up what the cheap one dropped — and a policy that can only
+                be set through an API is a policy nobody sets. */}
+            <div className="mb-3">
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>
+                If a run ends without moving this
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(Object.keys(DIVERGENCE_POLICY_LABELS) as DivergencePolicy[]).map((option) => {
+                  const active = policy === option
+                  return (
+                    <button
+                      key={option}
+                      data-testid={`task-policy-${option}-${task.id}`}
+                      aria-pressed={active}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (active) return
+                        setRefusal(null)
+                        setHandling.mutate(
+                          { id: task.id, divergence_policy: option },
+                          {
+                            onError: (error: unknown) =>
+                              setRefusal(readableApiError(error, 'The Hub refused that setting.')),
+                          },
+                        )
+                      }}
+                      className="text-[11px] px-2 py-1 rounded transition-colors"
+                      style={{
+                        background: active
+                          ? 'color-mix(in srgb, var(--blue) 14%, transparent)'
+                          : 'var(--surface-3)',
+                        border: `1px solid ${
+                          active
+                            ? 'color-mix(in srgb, var(--blue) 35%, transparent)'
+                            : 'var(--border)'
+                        }`,
+                        color: active ? 'var(--blue)' : 'var(--text-2)',
+                        fontWeight: active ? 600 : 500,
+                      }}
+                    >
+                      {DIVERGENCE_POLICY_LABELS[option]}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Only where it means something. Offering an escalation target under "Tell me"
+                  would suggest it does something, and it does not. */}
+              {policy === 'escalate' && (
+                <div className="mt-2">
+                  <label
+                    className="text-[11px] block mb-1"
+                    style={{ color: 'var(--text-3)' }}
+                    htmlFor={`escalation-agent-${task.id}`}
+                  >
+                    Hand it to
+                  </label>
+                  <select
+                    id={`escalation-agent-${task.id}`}
+                    data-testid={`task-escalation-agent-${task.id}`}
+                    value={task.escalation_agent ?? ''}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      setRefusal(null)
+                      setHandling.mutate(
+                        { id: task.id, escalation_agent: e.target.value || null },
+                        {
+                          onError: (error: unknown) =>
+                            setRefusal(readableApiError(error, 'The Hub refused that setting.')),
+                        },
+                      )
+                    }}
+                    className="text-xs w-full p-1.5 rounded"
+                    style={{
+                      background: 'var(--surface-3)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <option value="">Nobody — just tell me</option>
+                    {agentNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  {!task.escalation_agent && (
+                    <p className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
+                      With nobody named, this behaves the same as “Tell me”.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Task ID footer */}
             <div className="mt-3 pt-2 flex items-center gap-2" style={{ borderTop: '1px solid var(--border)' }}>

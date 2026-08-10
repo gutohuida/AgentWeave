@@ -367,3 +367,94 @@ async def test_request_agent_grants_no_binding(app):
 
     assert "task_id" not in BoundAgentRequest.model_fields
     assert BoundAgentRequest.model_fields["task"].annotation is str
+
+
+# ---------------------------------------------------------------------------
+# How a dropped task is answered is the operator's, not the agent's
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_agent_cannot_change_its_own_task_s_divergence_policy(app):
+    """The agent plane shares `TaskUpdate` with the operator route, so without an explicit guard an
+    agent could set its own task to `surface` and disarm the check that exists to catch it dropping
+    the work — the same reason no agent-facing operation binds a run."""
+    headers, _ = await _active_run("run-policy-1", "worker")
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-policy-guard",
+                project_id="proj-test",
+                title="Work",
+                status="in_progress",
+                divergence_policy="retry",
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/agent-actions/tasks/task-policy-guard",
+        headers=headers,
+        json={"divergence_policy": "surface"},
+    )
+    assert response.status_code == 403, response.text
+    assert "operator" in response.json()["detail"]
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-policy-guard")
+        assert task.divergence_policy == "retry"
+
+
+@pytest.mark.asyncio
+async def test_an_agent_cannot_change_its_own_task_s_escalation_agent(app):
+    headers, _ = await _active_run("run-policy-2", "worker2")
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-escalation-guard",
+                project_id="proj-test",
+                title="Work",
+                status="in_progress",
+                divergence_policy="escalate",
+                escalation_agent="reviewer",
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/agent-actions/tasks/task-escalation-guard",
+        headers=headers,
+        json={"escalation_agent": None},
+    )
+    assert response.status_code == 403, response.text
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-escalation-guard")
+        assert task.escalation_agent == "reviewer"
+
+
+@pytest.mark.asyncio
+async def test_an_agent_may_still_move_its_task(app):
+    """The guard is about the policy, not about the ledger. An agent recording real progress is the
+    whole point of the binding."""
+    headers, _ = await _active_run("run-policy-3", "worker3")
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-policy-move",
+                project_id="proj-test",
+                title="Work",
+                status="in_progress",
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/agent-actions/tasks/task-policy-move",
+        headers=headers,
+        json={"status": "completed"},
+    )
+    assert response.status_code == 200, response.text

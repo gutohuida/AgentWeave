@@ -21,6 +21,13 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'task_created': return `"${data.title}" → ${data.assignee ?? 'unassigned'} [${data.priority}]`
     case 'task_status': return `${data.task_id}: ${data.prev} → ${data.status}`
     case 'task_save_failed': return `FAILED to save task ${data.task_id}: "${data.title}"`
+    // A run ended holding work nobody moved. The outcome is what the operator actually needs —
+    // whether the Hub did something about it, or is telling them so they can.
+    case 'run_diverged': return data.outcome === 'retried'
+      ? `${data.agent} ended without moving ${data.task_id} — trying again once`
+      : data.outcome === 'escalated'
+        ? `${data.agent} ended without moving ${data.task_id} — handed to ${data.response_agent}`
+        : `${data.agent} ended without moving ${data.task_id} (${data.task_status})`
     case 'watchdog_started': return `transport=${data.transport}`
     case 'watchdog_stopped': return 'watchdog stopped'
     case 'watchdog_ping': return `→ ${data.agent} for msg ${data.msg_id}`

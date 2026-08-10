@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, Task
+from ...db.models import AgentHeartbeat, RunDivergence, Task
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
 from ...sse import sse_manager
 from ...task_transition_service import apply_transition, guard_entry_status
@@ -21,13 +21,39 @@ from ...utils import persist_event, short_id
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-def _task_response(task: Task, heartbeat: Optional[AgentHeartbeat] = None) -> TaskResponse:
+def _task_response(
+    task: Task,
+    heartbeat: Optional[AgentHeartbeat] = None,
+    *,
+    has_open_divergence: bool = False,
+) -> TaskResponse:
     response = TaskResponse.model_validate(task)
     effective_status, effective_message = effective_heartbeat_status(heartbeat)
     response.assignee_status = effective_status if task.assignee else None
     response.assignee_status_msg = effective_message
     response.assignee_last_seen = heartbeat.timestamp if heartbeat else None
+    response.has_open_divergence = has_open_divergence
     return response
+
+
+async def _tasks_with_open_divergence(
+    session: AsyncSession, project_id: str, task_ids: set[str]
+) -> set[str]:
+    """Which of `task_ids` currently have a run that dropped them and nothing since.
+
+    Computed rather than stored. The durable record is the divergence row; a flag on the task would
+    be a second copy of the same fact, and the first thing it would do is disagree with it.
+    """
+    if not task_ids:
+        return set()
+    result = await session.execute(
+        select(RunDivergence.task_id)
+        .where(RunDivergence.project_id == project_id)
+        .where(RunDivergence.task_id.in_(task_ids))
+        .where(RunDivergence.resolved_at.is_(None))
+        .distinct()
+    )
+    return {row[0] for row in result}
 
 
 async def _latest_heartbeats_by_agent(
@@ -152,8 +178,13 @@ async def list_tasks(
         project_id,
         {task.assignee for task in tasks if task.assignee},
     )
+    diverged = await _tasks_with_open_divergence(session, project_id, {task.id for task in tasks})
     return [
-        _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+        _task_response(
+            task,
+            heartbeats.get(task.assignee) if task.assignee else None,
+            has_open_divergence=task.id in diverged,
+        )
         for task in tasks
     ]
 
@@ -173,7 +204,12 @@ async def get_task(
         project_id,
         {task.assignee} if task.assignee else set(),
     )
-    return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+    diverged = await _tasks_with_open_divergence(session, project_id, {task.id})
+    return _task_response(
+        task,
+        heartbeats.get(task.assignee) if task.assignee else None,
+        has_open_divergence=task.id in diverged,
+    )
 
 
 async def update_task_for_actor(
@@ -205,6 +241,22 @@ async def update_task_for_actor(
         task.description = body.description
     if body.notes is not None:
         task.notes = body.notes
+    if body.divergence_policy is not None or "escalation_agent" in body.model_fields_set:
+        # The operator's, not the agent's. An agent able to set its own task's policy to `surface`
+        # could disarm the check that exists to catch it dropping the work — the same reason no
+        # agent-facing operation binds a run (`2026-08-10-run-task-binding`, design D2).
+        if not actor.is_operator:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "How a dropped task is answered is the operator's setting. An agent cannot "
+                    "change its own task's divergence policy or escalation agent."
+                ),
+            )
+        if body.divergence_policy is not None:
+            task.divergence_policy = body.divergence_policy
+        if "escalation_agent" in body.model_fields_set:
+            task.escalation_agent = body.escalation_agent
     task.updated = datetime.now(timezone.utc)
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
@@ -225,7 +277,12 @@ async def update_task_for_actor(
         project_id,
         {task.assignee} if task.assignee else set(),
     )
-    return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+    diverged = await _tasks_with_open_divergence(session, project_id, {task.id})
+    return _task_response(
+        task,
+        heartbeats.get(task.assignee) if task.assignee else None,
+        has_open_divergence=task.id in diverged,
+    )
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -256,3 +313,44 @@ async def allowed_transitions(
     rather than one per card — a board of forty tasks in the same status has one answer, not forty.
     """
     return {"actor_kind": ACTOR_OPERATOR, "transitions": allowed_map_for(ACTOR_OPERATOR)}
+
+
+@router.get("/divergences/recent")
+async def recent_divergences(
+    limit: int = Query(50, ge=1, le=500),
+    open_only: bool = Query(False),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Runs that ended holding work nobody moved.
+
+    A read of the record rather than of the SSE stream, because the operator needs to see what
+    happened while they were not watching — which is the whole reason this is a table and not only
+    a broadcast (design D10).
+
+    Newest first, and `resolved_at` is included rather than filtered by default: "this was dropped
+    and then picked up" is as worth seeing as "this is still dropped".
+    """
+    project_id, _ = project
+    q = select(RunDivergence).where(RunDivergence.project_id == project_id)
+    if open_only:
+        q = q.where(RunDivergence.resolved_at.is_(None))
+    q = q.order_by(RunDivergence.sequence.desc()).limit(limit)
+    result = await session.execute(q)
+    return [
+        {
+            "id": row.id,
+            "run_id": row.run_id,
+            "agent": row.agent,
+            "task_id": row.task_id,
+            "task_status_at_end": row.task_status_at_end,
+            "run_exit_status": row.run_exit_status,
+            "policy_applied": row.policy_applied,
+            "outcome": row.outcome,
+            "response_run_id": row.response_run_id,
+            "previous_assignee": row.previous_assignee,
+            "created_at": row.created_at,
+            "resolved_at": row.resolved_at,
+        }
+        for row in result.scalars().all()
+    ]

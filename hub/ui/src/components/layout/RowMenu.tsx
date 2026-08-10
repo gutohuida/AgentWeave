@@ -18,6 +18,15 @@ interface RowMenuProps {
   testId: string
   /** Keep the trigger visible without hovering. Set on the row the operator is looking at. */
   persistent?: boolean
+  /**
+   * The trigger's glyph. Defaults to the three dots, which is what "actions for this row" looks
+   * like everywhere in the app and should stay that.
+   *
+   * Set it only when a second menu sits beside the first: two identical three-dot buttons in one
+   * corner are indistinguishable, and the `aria-label` that tells them apart is invisible to
+   * anyone using their eyes.
+   */
+  icon?: string
 }
 
 const ITEM_STYLE: React.CSSProperties = {
@@ -45,7 +54,13 @@ const ITEM_STYLE: React.CSSProperties = {
  * Radix handles the rest of the keyboard contract: arrow keys move between items, Escape closes,
  * and focus returns to the trigger on dismiss.
  */
-export function RowMenu({ label, items, testId, persistent = false }: RowMenuProps) {
+export function RowMenu({
+  label,
+  items,
+  testId,
+  persistent = false,
+  icon = 'more_horiz',
+}: RowMenuProps) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -59,7 +74,7 @@ export function RowMenu({ label, items, testId, persistent = false }: RowMenuPro
           // The trigger sits beside a row that navigates; a click here must not also open it.
           onClick={(event) => event.stopPropagation()}
         >
-          <Icon name="more_horiz" size={15} />
+          <Icon name={icon} size={15} />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
