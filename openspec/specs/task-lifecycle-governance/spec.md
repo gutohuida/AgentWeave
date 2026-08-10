@@ -169,8 +169,8 @@ Specifically:
 ### Requirement: Every accepted transition is recorded append-only
 
 The system SHALL persist one immutable record per accepted status transition, identifying the task,
-the status moved from, the status moved to, the responsible run where one exists, the kind of actor
-(agent run or operator), and the time. Records MUST NOT be updated or deleted by any application
+the status moved from, the status moved to, the responsible run and **agent** where they exist, the kind of
+actor (agent run or operator), and the time. Records MUST NOT be updated or deleted by any application
 path; a correction is a further transition, not an edit.
 
 `Task.status` MAY remain as the materialised current value for reads, but MUST NOT be the only
@@ -200,26 +200,37 @@ durable statement of how the task reached it.
 - **THEN** that transition is recorded
 - **AND** no transitions are invented for the period before the capability existed
 
-### Requirement: An agent run cannot approve the work it produced
+### Requirement: An agent cannot approve the work it produced
 
-The system SHALL refuse a transition to `approved` requested by an agent run when that same run
-recorded the task's transition into `completed`. Author and reviewer MUST be distinct runs.
+The system SHALL refuse a transition to `approved` requested by an agent when that same **agent**
+recorded the task's transition into `completed`. Author and reviewer MUST be distinct **agents**.
+
+Distinctness is on agent identity, not run identity. Every turn an agent takes is a new run, so a
+rule requiring only "a different run" is satisfied by an agent continuing its own work and forbids
+nothing — observed in live use on 2026-08-10, when an agent completed a task on one run and
+approved it on the next.
 
 This rule binds agent runs only. The operator SHALL be permitted to approve work regardless of who
 produced it — a single-operator project would otherwise be unable to approve anything — and the
 history states that an operator did so.
 
-#### Scenario: Self-approval by the completing run is refused
+#### Scenario: Self-approval by the completing agent is refused
 
-- **WHEN** the agent run that moved a task to `completed` requests the move to `approved`
+- **WHEN** the agent that moved a task to `completed` requests the move to `approved`
 - **THEN** the request is refused with a typed error stating that approval requires a different
   actor
 - **AND** the task remains in its pre-request status
 - **AND** no transition is recorded
 
-#### Scenario: A different run may approve
+#### Scenario: A new run of the same agent is still refused
 
-- **WHEN** an agent run other than the one that completed the task requests `approved`
+- **WHEN** the agent that completed a task requests `approved` on a later run
+- **THEN** the request is refused
+- **AND** the refusal states that starting a new run does not make it a different actor
+
+#### Scenario: A different agent may approve
+
+- **WHEN** an agent other than the one that completed the task requests `approved`
 - **AND** the transition is otherwise legal
 - **THEN** the request succeeds
 
@@ -231,7 +242,7 @@ history states that an operator did so.
 
 #### Scenario: Rejection and revision carry the same separation
 
-- **WHEN** the agent run that completed a task requests `rejected` or `revision_needed` on it
+- **WHEN** the agent that completed a task requests `rejected` or `revision_needed` on it
 - **THEN** the request is refused on the same grounds as self-approval
 
 ### Requirement: Governance holds identically over HTTP and MCP

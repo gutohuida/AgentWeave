@@ -151,17 +151,25 @@ status control from section 7 — before it exists, none of these are runnable.
 
 - [ ] 9.1 **Does a refusal tell you what to do next?** In `testbed/`, drive an agent to approve its
       own completed task. Read the error it receives in the conversation.
+      **BLOCKED** by `openspec/explorations/2026-08-10-operator-approval-not-honoured.md` — an agent
+      that cannot get past a permission prompt cannot reach this scenario. The refusal *text* is
+      verified live (it names the current status, the reachable set, and that a new run is not a
+      new actor); what is unverified is whether the agent then self-corrects.
       **Expect:** it names the current status and what the actor can move to, and the agent
       self-corrects rather than retrying the same call.
       **Failure looks like:** the agent retries identically, or reports a generic failure with no
       status named.
-- [ ] 9.2 **Is the lifecycle workable in a single-operator project?** Take a task from `pending` to
+- [x] 9.2 **Is the lifecycle workable in a single-operator project?** Take a task from `pending` to
       `approved` yourself, using only the card's status control and no second agent.
-      **Expect:** every step is offered when you need it, including approving work you completed.
-      **Failure looks like:** any point where the control offers nothing and the only exit is
-      `curl` or the database.
+      *Done 2026-08-10. `task-25d8cfd0` carries the whole walk as five consecutive operator
+      transitions — pending → assigned → in_progress → completed → under_review → approved, over 13
+      seconds, every one recorded with `actor_kind='operator'` and no run. No step required `curl`
+      or the database, and approving work the operator had completed themselves was permitted, which
+      is the single-operator exemption (D9) working as intended.*
 - [ ] 9.3 **Does the control offer the right moves and no others?** At each status, read what it
-      offers.
+      offers. *Half-evidenced by 9.2: five consecutive moves were offered and all five were
+      accepted, so nothing offered on that path would have been refused. What remains is the other
+      half — whether anything you wanted was **missing** — which is a judgement only you can make.*
       **Expect:** it matches the map's operator column — no move that would be refused, and no
       missing one you wanted.
       **Failure looks like:** an offered move that then fails, which is the specific thing D11 set
@@ -171,6 +179,7 @@ status control from section 7 — before it exists, none of these are runnable.
       **Expect:** both succeed and are recorded as operator actions.
       **Failure looks like:** the option is absent — meaning the operator-only edges did not land.
 - [ ] 9.5 **Is reopening honest?** Approve a task, then reopen it to `revision_needed`.
+      *`task-25d8cfd0` is already sitting at `approved` from 9.2, so this is one click away.*
       **Expect:** it reopens and the original approval is **still in the history**, not replaced.
       **Failure looks like:** the earlier transitions vanish or are rewritten.
 - [ ] 9.6 **Does `completed → under_review` earn its place?** After using the lifecycle for a few

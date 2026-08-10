@@ -179,7 +179,13 @@ async def test_an_agent_cannot_approve_its_own_completion_over_http(app, auth_he
     assert response.status_code == 403, response.text
     assert "different actor" in response.json()["detail"]
 
-    # A second run is entitled to it.
+    # And a *new run of the same agent* is still refused — the defect live use found on
+    # 2026-08-10, when a run-based check let an agent approve on its next turn.
+    next_turn = await _active_run("run-author-turn-2", agent="worker")
+    refused = await _patch(app, next_turn, task_id, "approved", agent_route=True)
+    assert refused.status_code == 403, refused.text
+
+    # A genuinely different agent is entitled to it.
     reviewer = await _active_run("run-reviewer", agent="reviewer")
     assert (await _patch(app, reviewer, task_id, "approved", agent_route=True)).status_code == 200
 

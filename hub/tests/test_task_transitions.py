@@ -190,7 +190,19 @@ def test_an_unknown_status_yields_no_targets_rather_than_raising():
 
 def test_a_run_actor_must_carry_a_run_id():
     with pytest.raises(ValueError):
-        Actor(kind=ACTOR_RUN)
+        Actor(kind=ACTOR_RUN, agent="claude")
+
+
+def test_a_run_actor_must_carry_its_agent():
+    """Author/reviewer separation compares the agent, so an actor that cannot name one would slip
+    past the rule the same way the run-based version did."""
+    with pytest.raises(ValueError):
+        Actor(kind=ACTOR_RUN, run_id="run-1")
+
+
+def test_an_operator_actor_must_not_carry_an_agent():
+    with pytest.raises(ValueError):
+        Actor(kind=ACTOR_OPERATOR, agent="claude")
 
 
 def test_an_operator_actor_must_not_carry_a_run_id():
@@ -208,8 +220,9 @@ def test_an_unknown_actor_kind_is_refused():
 def test_the_constructors_build_what_they_say():
     assert operator().is_operator
     assert operator().run_id is None
-    assert not run_actor("run-1").is_operator
-    assert run_actor("run-1").run_id == "run-1"
+    assert not run_actor("run-1", "claude").is_operator
+    assert run_actor("run-1", "claude").run_id == "run-1"
+    assert run_actor("run-1", "claude").agent == "claude"
 
 
 # --------------------------------------------------------------------------------------

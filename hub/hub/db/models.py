@@ -573,6 +573,11 @@ class TaskTransition(Base):
     # authorisation (D2).
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Which agent the run belonged to. Denormalised rather than joined through `runs`: this is an
+    # integrity record and must answer "who approved this" on its own, without depending on a run
+    # row that may be pruned. It is also what author/reviewer separation compares — `run_id` is
+    # not, because every turn is a new run and a run-based check is trivially satisfied.
+    actor_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

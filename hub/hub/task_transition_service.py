@@ -65,15 +65,20 @@ class InvalidEntryStatusError(TransitionRefusedError):
 _REVIEW_OUTCOMES = frozenset({"approved", "rejected", "revision_needed"})
 
 
-async def _run_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
-    """The run responsible for the most recent move of this task into `completed`.
+async def _agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
+    """The **agent** responsible for the most recent move of this task into `completed`.
+
+    Agent, not run. The first version of this compared `run_id`, and live use on 2026-08-10 walked
+    straight through it: an agent completed a task on one run and approved it on its next, which
+    are different runs by construction. Every turn is a new run, so a run-based check is satisfied
+    by an agent merely continuing its own work — it forbade nothing.
 
     Read from the history and never from `Task.updated_by_run_id`: that column is a single mutable
     field which the approving write overwrites, and it being unable to answer this question is the
     whole reason this table exists.
     """
     result = await session.execute(
-        select(TaskTransition.run_id)
+        select(TaskTransition.actor_agent)
         .where(TaskTransition.task_id == task_id)
         .where(TaskTransition.to_status == "completed")
         # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp, and
@@ -96,18 +101,22 @@ async def _guard_author_is_not_reviewer(
     single-operator project unable to approve anything — and the history records that an operator
     did it (design D9).
 
-    Note what this does *not* claim: an agent completing on one run and approving on its next run
-    satisfies the letter of the rule. B1 closes self-approval *within a run*, not collusion across
-    runs; separating agent identity from run identity is a B3/B4 concern.
+    The comparison is on **agent**, so it holds across turns. An earlier version compared runs and
+    was found in live use to forbid nothing, because a new turn is a new run.
+
+    What it still does not claim: two *different* agents belonging to the same operator can review
+    each other freely, which is the intended shape rather than a gap. Nor does it reason about
+    whether the review was diligent — that is B4's evidence gates.
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
-    completing_run = await _run_that_completed(session, task.id)
-    if completing_run is not None and completing_run == actor.run_id:
+    completing_agent = await _agent_that_completed(session, task.id)
+    if completing_agent is not None and completing_agent == actor.agent:
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to {to_status!r}: this run recorded the task's move to "
-            f"'completed', and approving, rejecting or requesting revision of work requires a "
-            f"different actor. Another agent or the operator must review it."
+            f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded the "
+            f"task's move to 'completed', and approving, rejecting or requesting revision of work "
+            f"requires a different actor. Another agent or the operator must review it. Starting a "
+            f"new run does not make you a different actor."
         )
 
 
@@ -161,6 +170,7 @@ async def apply_transition(
         to_status=to_status,
         actor_kind=actor.kind,
         run_id=actor.run_id,
+        actor_agent=actor.agent,
     )
     session.add(transition)
     return transition

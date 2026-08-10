@@ -48,14 +48,23 @@ class Actor:
 
     kind: str
     run_id: Optional[str] = None
+    #: Which agent the run belongs to. Author/reviewer separation compares *this*, not `run_id`:
+    #: every turn an agent takes is a new run, so a run-based check is satisfied automatically by
+    #: an agent simply continuing its own work. Found in first live use, 2026-08-10 — an agent
+    #: completed on one run and approved on the next, and the rule as originally written passed it.
+    agent: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.kind not in ACTOR_KINDS:
             raise ValueError(f"actor kind must be one of {list(ACTOR_KINDS)}, got {self.kind!r}")
         if self.kind == ACTOR_RUN and not self.run_id:
             raise ValueError("an actor of kind 'run' must carry a run_id")
+        if self.kind == ACTOR_RUN and not self.agent:
+            raise ValueError("an actor of kind 'run' must carry the agent it belongs to")
         if self.kind == ACTOR_OPERATOR and self.run_id:
             raise ValueError("an actor of kind 'operator' must not carry a run_id")
+        if self.kind == ACTOR_OPERATOR and self.agent:
+            raise ValueError("an actor of kind 'operator' must not carry an agent")
 
     @property
     def is_operator(self) -> bool:
@@ -67,9 +76,9 @@ def operator() -> Actor:
     return Actor(kind=ACTOR_OPERATOR)
 
 
-def run_actor(run_id: str) -> Actor:
-    """An authenticated agent run."""
-    return Actor(kind=ACTOR_RUN, run_id=run_id)
+def run_actor(run_id: str, agent: str) -> Actor:
+    """An authenticated agent run, and the agent it belongs to."""
+    return Actor(kind=ACTOR_RUN, run_id=run_id, agent=agent)
 
 
 # --------------------------------------------------------------------------------------

@@ -217,11 +217,15 @@ first would mean guessing at the edge that change will create.
   original estimate is corrected here rather than left standing, because an inflated risk is as
   misleading as a missed one.
 
-- **Author/reviewer separation is only as good as run identity.** A single agent could complete on
-  one run and approve on its next run, satisfying the letter of the rule.
-  → Accepted for this change, and stated plainly: B1 closes *self*-approval within a run, not
-  collusion across runs. Distinguishing agent identity from run identity is a B3/B4 concern once
-  evidence exists to reason about.
+- ~~**Author/reviewer separation is only as good as run identity.**~~ **This was wrong, and live
+  use proved it within an hour.** The original text accepted that "a single agent could complete on
+  one run and approve on its next" and filed it as collusion to be handled by B3/B4. It is not an
+  edge case: **every turn is a new run**, so a run-based check is satisfied by an agent merely
+  continuing its own work, and it forbade nothing. On 2026-08-10 the operator's agent completed
+  `task-4c9b26e7` on `run-1ecc4ec7` and approved it on `run-6d704bb8`, and the rule passed it.
+  → Fixed in **D14**: the comparison is on agent identity, and `task_transitions` records
+  `actor_agent` (migration `0053`). The lesson worth keeping is that "accepted limitation" was the
+  wrong category for something on the main path — it should have been a design error.
 
 - **`completed → under_review` as a separate hop may just become a formality an agent always does
   twice in a row.** → Left as-is for now; if it proves to be noise, collapsing it is a map edit.
@@ -230,10 +234,30 @@ first would mean guessing at the edge that change will create.
   cannot self-correct and will retry blindly. → The reachable-set text is part of the requirement,
   and a test asserts the detail survives `_readable_detail` intact.
 
+### D14 — Author and reviewer are distinct *agents*, not distinct runs
+
+Added 2026-08-10 after the first live run. The rule as first built compared `run_id`; see the
+struck-through risk above for why that forbade nothing.
+
+`TaskTransition` therefore records `actor_agent` alongside `run_id`, and
+`_agent_that_completed` reads it. The column is **denormalised rather than joined through `runs`**:
+this is an integrity record and has to answer "who approved this" on its own, without depending on
+a run row that may later be pruned.
+
+*Rows written by 0052 keep `actor_agent` NULL*, and the rule treats NULL as "not the same agent", so
+a task completed before the fix stays approvable rather than becoming permanently stuck. That is the
+honest outcome — the agent that completed it was never recorded, and inventing one would put a guess
+into the record whose whole value is that everything in it happened.
+
+*What this still does not claim:* two different agents under the same operator can review each
+other, which is the intended shape rather than a gap; and nothing here judges whether a review was
+diligent, which is B4's evidence gates.
+
 ## Migration Plan
 
 1. New revision after `0051_add_queue_entry_spec_document`, creating `task_transitions`, guarded for
-   a missing `tasks` table in the manner of `0033`/`0034`.
+   a missing `tasks` table in the manner of `0033`/`0034`. A second revision, `0053`, adds
+   `actor_agent` (D14).
 2. Bump the head assertions in `hub/tests/test_migrations.py` and
    `hub/tests/test_project_persistence.py` (`CLAUDE.md` requires both).
 3. No data migration; the table starts empty (D8).

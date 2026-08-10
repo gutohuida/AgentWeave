@@ -8,7 +8,7 @@ author/reviewer separation, and that a no-op records nothing.
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Task
+from hub.db.models import Task, TaskTransition
 from hub.task_transition_service import (
     ActorNotPermittedError,
     IllegalTransitionError,
@@ -38,7 +38,9 @@ async def _make_task(session, task_id: str, status: str = "pending") -> Task:
 async def test_a_legal_move_changes_the_status_and_records_it(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-legal", "in_progress")
-        transition = await apply_transition(session, task, "completed", run_actor("run-1"))
+        transition = await apply_transition(
+            session, task, "completed", run_actor("run-1", "agent-1")
+        )
         await session.commit()
 
         assert task.status == "completed"
@@ -63,7 +65,7 @@ async def test_restating_the_current_status_records_nothing(app):
     """D7. An agent-plane retry must not manufacture a transition that never happened."""
     async with async_session_factory() as session:
         task = await _make_task(session, "task-noop", "completed")
-        result = await apply_transition(session, task, "completed", run_actor("run-1"))
+        result = await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
         await session.commit()
 
         assert result is None
@@ -81,7 +83,7 @@ async def test_an_illegal_move_is_refused_and_changes_nothing(app):
         task = await _make_task(session, "task-illegal", "in_progress")
 
         with pytest.raises(IllegalTransitionError) as excinfo:
-            await apply_transition(session, task, "approved", run_actor("run-1"))
+            await apply_transition(session, task, "approved", run_actor("run-1", "agent-1"))
 
         assert task.status == "in_progress"
         assert await history_for(session, "task-illegal") == []
@@ -95,12 +97,12 @@ async def test_an_agent_cannot_approve_the_work_its_own_run_completed(app):
     """The hole this change exists to close."""
     async with async_session_factory() as session:
         task = await _make_task(session, "task-self", "in_progress")
-        await apply_transition(session, task, "completed", run_actor("run-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
         await session.commit()
 
         with pytest.raises(ActorNotPermittedError) as excinfo:
-            await apply_transition(session, task, "approved", run_actor("run-1"))
+            await apply_transition(session, task, "approved", run_actor("run-1", "agent-1"))
 
         assert task.status == "under_review"
         assert excinfo.value.http_status == 403
@@ -110,9 +112,9 @@ async def test_an_agent_cannot_approve_the_work_its_own_run_completed(app):
 async def test_a_different_run_may_approve(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-other", "in_progress")
-        await apply_transition(session, task, "completed", run_actor("run-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1"))
-        await apply_transition(session, task, "approved", run_actor("run-2"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "approved", run_actor("run-2", "agent-2"))
         await session.commit()
 
         assert task.status == "approved"
@@ -134,12 +136,12 @@ async def test_the_operator_may_approve_work_they_completed_themselves(app):
 async def test_rejection_and_revision_carry_the_same_separation(app, outcome):
     async with async_session_factory() as session:
         task = await _make_task(session, f"task-sep-{outcome}", "in_progress")
-        await apply_transition(session, task, "completed", run_actor("run-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
         await session.commit()
 
         with pytest.raises(ActorNotPermittedError):
-            await apply_transition(session, task, outcome, run_actor("run-1"))
+            await apply_transition(session, task, outcome, run_actor("run-1", "agent-1"))
 
 
 async def test_separation_reads_the_history_not_the_mutable_column(app):
@@ -147,34 +149,103 @@ async def test_separation_reads_the_history_not_the_mutable_column(app):
     the task in between would erase the completing run and let the author approve after all."""
     async with async_session_factory() as session:
         task = await _make_task(session, "task-hist", "in_progress")
-        await apply_transition(session, task, "completed", run_actor("run-1"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
         # A different run moves it on, overwriting any last-writer field.
-        await apply_transition(session, task, "under_review", run_actor("run-9"))
+        await apply_transition(session, task, "under_review", run_actor("run-9", "agent-9"))
         task.updated_by_run_id = "run-9"
         await session.commit()
 
         with pytest.raises(ActorNotPermittedError):
-            await apply_transition(session, task, "approved", run_actor("run-1"))
+            await apply_transition(session, task, "approved", run_actor("run-1", "agent-1"))
+
+
+async def test_an_agent_cannot_approve_across_a_new_run(app):
+    """The defect live use found on 2026-08-10, and the reason this rule compares agents.
+
+    The first version compared `run_id`. An agent completed a task on one run and approved it on
+    its next — different runs by construction, since every turn is a new run — and the check
+    passed. It forbade nothing in practice.
+    """
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-cross-run", "in_progress")
+        await apply_transition(session, task, "completed", run_actor("run-turn-1", "claude"))
+        await apply_transition(session, task, "under_review", run_actor("run-turn-2", "claude"))
+        await session.commit()
+
+        # A *different run* of the *same agent* must still be refused.
+        with pytest.raises(ActorNotPermittedError) as excinfo:
+            await apply_transition(session, task, "approved", run_actor("run-turn-3", "claude"))
+
+        assert task.status == "under_review"
+        assert "claude" in excinfo.value.detail
+
+
+async def test_a_genuinely_different_agent_may_still_approve(app):
+    """The rule separates agents, not runs — a second agent reviewing the first is the point."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-two-agents", "in_progress")
+        await apply_transition(session, task, "completed", run_actor("run-a", "claude"))
+        await apply_transition(session, task, "under_review", run_actor("run-b", "claude"))
+        await apply_transition(session, task, "approved", run_actor("run-c", "codex"))
+        await session.commit()
+
+        assert task.status == "approved"
+
+
+async def test_a_transition_records_the_agent_not_only_the_run(app):
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-records-agent", "in_progress")
+        transition = await apply_transition(
+            session, task, "completed", run_actor("run-x", "claude")
+        )
+        await session.commit()
+        assert transition.actor_agent == "claude"
+        assert transition.run_id == "run-x"
+
+
+async def test_a_pre_existing_transition_without_an_agent_does_not_block_anyone(app):
+    """Rows written before the agent column existed carry NULL. The rule treats NULL as "not the
+    same agent", so an old task stays approvable rather than becoming permanently stuck — the
+    honest outcome, since who completed it was never recorded (migration 0053)."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-legacy", "under_review")
+        session.add(
+            TaskTransition(
+                id="ttr-legacy",
+                project_id="proj-test",
+                task_id="task-legacy",
+                from_status="in_progress",
+                to_status="completed",
+                actor_kind="run",
+                run_id="run-old",
+                actor_agent=None,
+            )
+        )
+        await session.commit()
+
+        await apply_transition(session, task, "approved", run_actor("run-new", "claude"))
+        await session.commit()
+        assert task.status == "approved"
 
 
 async def test_the_most_recent_completion_is_the_one_that_counts(app):
     """After a revision cycle, the run that completed it *this* time is the author."""
     async with async_session_factory() as session:
         task = await _make_task(session, "task-cycle", "in_progress")
-        await apply_transition(session, task, "completed", run_actor("run-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-2"))
-        await apply_transition(session, task, "revision_needed", run_actor("run-2"))
-        await apply_transition(session, task, "in_progress", run_actor("run-3"))
-        await apply_transition(session, task, "completed", run_actor("run-3"))
-        await apply_transition(session, task, "under_review", run_actor("run-3"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", run_actor("run-2", "agent-2"))
+        await apply_transition(session, task, "revision_needed", run_actor("run-2", "agent-2"))
+        await apply_transition(session, task, "in_progress", run_actor("run-3", "agent-3"))
+        await apply_transition(session, task, "completed", run_actor("run-3", "agent-3"))
+        await apply_transition(session, task, "under_review", run_actor("run-3", "agent-3"))
         await session.commit()
 
         # run-3 completed most recently, so run-3 may not approve.
         with pytest.raises(ActorNotPermittedError):
-            await apply_transition(session, task, "approved", run_actor("run-3"))
+            await apply_transition(session, task, "approved", run_actor("run-3", "agent-3"))
 
         # run-1 completed an earlier cycle and is no longer the author.
-        await apply_transition(session, task, "approved", run_actor("run-1"))
+        await apply_transition(session, task, "approved", run_actor("run-1", "agent-1"))
         await session.commit()
         assert task.status == "approved"
 
@@ -183,14 +254,14 @@ async def test_an_agent_cannot_reopen_a_decided_task(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-reopen-agent", "approved")
         with pytest.raises(IllegalTransitionError):
-            await apply_transition(session, task, "revision_needed", run_actor("run-1"))
+            await apply_transition(session, task, "revision_needed", run_actor("run-1", "agent-1"))
 
 
 async def test_the_operator_can_reopen_and_the_earlier_history_survives(app):
     async with async_session_factory() as session:
         task = await _make_task(session, "task-reopen-op", "in_progress")
-        await apply_transition(session, task, "completed", run_actor("run-1"))
-        await apply_transition(session, task, "under_review", run_actor("run-1"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
+        await apply_transition(session, task, "under_review", run_actor("run-1", "agent-1"))
         await apply_transition(session, task, "approved", operator())
         await apply_transition(session, task, "revision_needed", operator())
         await session.commit()
@@ -241,7 +312,7 @@ async def test_history_is_never_backfilled_for_a_pre_existing_task(app):
         await session.commit()
         assert await history_for(session, "task-old") == []
 
-        await apply_transition(session, task, "completed", run_actor("run-1"))
+        await apply_transition(session, task, "completed", run_actor("run-1", "agent-1"))
         await session.commit()
 
         history = await history_for(session, "task-old")

@@ -245,7 +245,7 @@ async def update_shared_task(
         task_id,
         body,
         project_id=actor.project_id,
-        actor=run_actor(actor.run_id),
+        actor=run_actor(actor.run_id, actor.agent),
         session=session,
     )
 

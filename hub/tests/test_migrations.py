@@ -125,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0052. The full
+    migration runs cleanly and the version lands at 0053. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -133,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0052).
+    # Verify alembic_version is at the latest revision (0053).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0052", f"expected alembic_version=0052, got {version}"
+    assert version == "0053", f"expected alembic_version=0053, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0052"
+    assert version == "0053"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0052"
+        assert version == "0053"
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0052", f"expected alembic_version=0052, got {version}"
+    assert version == "0053", f"expected alembic_version=0053, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1180,7 +1180,9 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
     _run_alembic_with(db_url)
 
     with sqlite3.connect(db_file) as conn:
-        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
         assert "task_transitions" in tables
 
         columns = {row[1] for row in conn.execute("PRAGMA table_info(task_transitions)")}
@@ -1193,6 +1195,7 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
             "to_status",
             "actor_kind",
             "run_id",
+            "actor_agent",
             "created_at",
         }
 
@@ -1201,7 +1204,9 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
 
         # Author/reviewer separation asks "which run moved this task into `completed`", so run_id
         # must be nullable — an operator transition has no run — and both from/to are required.
-        nullable = {row[1]: not row[3] for row in conn.execute("PRAGMA table_info(task_transitions)")}
+        nullable = {
+            row[1]: not row[3] for row in conn.execute("PRAGMA table_info(task_transitions)")
+        }
         assert nullable["run_id"] is True
         assert nullable["from_status"] is False
         assert nullable["to_status"] is False
@@ -1226,8 +1231,10 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0052"
-        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert version == "0053"
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
         assert "tasks" not in tables
         assert "task_transitions" not in tables
 
@@ -1248,6 +1255,8 @@ def test_migration_0052_downgrade_drops_the_history(tmp_path) -> None:
         command.downgrade(cfg, "0051")
 
     with sqlite3.connect(db_file) as conn:
-        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
         assert "task_transitions" not in tables
         assert "tasks" in tables
