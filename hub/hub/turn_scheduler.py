@@ -69,6 +69,12 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         if initiator == "autonomous" and budget["exhausted"]:
             return ScheduleResult(waiting_reason="token budget exhausted")
         work_dir = controlling_operator.work_dir if controlling_operator is not None else None
+        # Read from the same entry `work_dir` comes from, for the same reason: a turn can batch
+        # several entries, and the operator's own is the one whose viewing position describes
+        # what they asked. An agent's or a job's entry never carries one.
+        spec_document = (
+            controlling_operator.spec_document if controlling_operator is not None else None
+        )
 
         try:
             response = await trigger_agent_directly(
@@ -77,6 +83,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 message=format_turn_prompt(selected),
                 conversation_id=conversation.id,
                 work_dir=work_dir,
+                spec_document=spec_document,
                 session=db,
                 queue_entry_ids=[entry.id for entry in selected],
                 turn_depth=min(entry.hop_depth for entry in selected),

@@ -100,4 +100,4 @@ carries both sections; the human guide is concrete steps with expected results, 
 
 Implementation MUST NOT begin until the user explicitly approves this proposal.
 
-**Approved:** _pending_
+**Approved:** 2026-08-10 — operator ("spec approved").

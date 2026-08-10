@@ -33,6 +33,7 @@ from ...db.models import (
     Project,
     ProjectInstructions,
     ProjectSession,
+    ProjectSpec,
     Run,
     Runner,
     Task,
@@ -899,6 +900,7 @@ async def _render_hub_agent_context(
     agent_row: Optional[Agent],
     work_dir: Optional[str] = None,
     isolated: bool = False,
+    spec_document: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -922,6 +924,12 @@ async def _render_hub_agent_context(
     (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`). They are optional because the
     same renderer serves `GET /agents/agent-context`, which is asked outside any run and so has no
     workspace to describe.
+
+    `spec_document` is the specification document the operator has open in the specification
+    workspace, when they have one. It is rendered only when the Hub can confirm the document
+    exists for this project — the operator can only be looking at a document the inventory
+    listed, so a path that resolves to no row is a stale client value, and naming it would be a
+    guess. Absent, it renders nothing at all rather than a placeholder.
     """
     registered = agent_row is not None
     missing: List[str] = []
@@ -985,6 +993,32 @@ async def _render_hub_agent_context(
             "- Resolve every path against this directory. Files outside it are normally refused."
         )
         lines.append("")
+
+    # Where the operator is looking, when they are looking at a specification document. Stated as
+    # context for what they ask, never as an instruction: the operator sending "why does this say
+    # that?" from the specification workspace means the open document, and without this line the
+    # agent has no way to know which one.
+    if spec_document:
+        open_spec = (
+            (
+                await db.execute(
+                    select(ProjectSpec).where(
+                        ProjectSpec.project_id == project_id,
+                        ProjectSpec.path == spec_document,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if open_spec is not None:
+            lines.append("### Open specification document")
+            lines.append(f"- The operator is viewing `{open_spec.path}` in the Hub's Spec view.")
+            lines.append(
+                "- This is where they are looking right now. Treat it as context for what they "
+                "ask, not as an instruction to act on it."
+            )
+            lines.append("")
 
     lines.append("### Team")
     if roster:

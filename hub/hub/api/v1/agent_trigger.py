@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import bound_address, instance_identity, project_workspace, worktrees
@@ -84,6 +84,7 @@ from ...runner_parsing import (
     parse_codex_line,
     read_codex_rollout_accounting,
 )
+from ...spec_manifest import SpecPathError, validate_spec_path
 from ...sse import sse_manager
 from ...unasked_question import trailing_question
 from ...usage_accounting import record_turn_usage
@@ -146,6 +147,25 @@ class TriggerAgentRequest(BaseModel):
         "'effort': 'high'}), validated against the model catalog and persisted onto the "
         "conversation before it is scheduled.",
     )
+    spec_document: Optional[str] = Field(
+        default=None,
+        max_length=512,
+        description="The specification document the operator has open, when the message comes "
+        "from the specification workspace. Carried into the canonical turn context, never into "
+        "the stored message.",
+    )
+
+    @field_validator("spec_document")
+    @classmethod
+    def _validate_spec_document(cls, v: Optional[str]) -> Optional[str]:
+        # Same validator the sync endpoint uses, so one definition of a legal specification path
+        # serves both the write and the read. An empty string is "no document open", not a path.
+        if v is None or v == "":
+            return None
+        try:
+            return validate_spec_path(v)
+        except SpecPathError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class TriggerAgentResponse(BaseModel):
@@ -195,6 +215,7 @@ async def trigger_agent_directly(
     queue_entry_ids: Optional[List[str]] = None,
     turn_depth: Optional[int] = None,
     initiator: str = "operator",
+    spec_document: Optional[str] = None,
 ) -> TriggerAgentResponse:
     """Validate and spawn *agent* directly, returning its run identifier.
 
@@ -348,6 +369,11 @@ async def trigger_agent_directly(
         # write was refused.
         work_dir=effective_work_dir,
         isolated=isolated_workspace is not None,
+        # Which specification document the operator has open, when the message came from the
+        # specification workspace. Deliberately here and not prepended to `message`: the message
+        # is the durable record of what the operator said, and re-reading the conversation later
+        # must not show them saying something they did not.
+        spec_document=spec_document,
     )
     context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
     try:
@@ -637,6 +663,7 @@ async def trigger_agent(
         session_id=body.session_id,
         conversation_id=conversation.id,
         work_dir=body.work_dir,
+        spec_document=body.spec_document,
     )
     session.add(entry)
     conversation.updated_at = entry.arrived_at

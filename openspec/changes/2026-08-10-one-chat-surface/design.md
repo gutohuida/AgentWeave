@@ -93,3 +93,19 @@ deleted. On the live testbed the endpoint returned `{"specs":[],"home":null,"man
 That is this change's fixture mechanism. It is not a user journey and must not be presented as one —
 it exists so A1 can be verified against a real rendered document before B0/B2 give documents a real
 producer.
+
+### The fixture command, so verification is reproducible (task 1.3)
+
+Against the live testbed Hub on `:8010`, project `proj-cddb0827`:
+
+```bash
+curl -s -X POST http://localhost:8010/api/v1/projects/proj-cddb0827/project/specs/sync \
+  -H "Authorization: Bearer $AW_KEY" -H 'Content-Type: application/json' \
+  -d '{"path":"spec/a1-probe.html","content":"<html><body><h1>A1 probe</h1><h2 id=\"s1\">Section one</h2><p>Fixture document for the one-chat-surface change.</p></body></html>"}'
+```
+
+Then `GET /api/v1/projects/proj-cddb0827/project/specs` lists it with `state: "unindexed"` and
+resolves `home` to it, and `GET .../project/spec?path=spec/a1-probe.html` returns the content. The
+Hub rejects `X-API-Key`; the header must be `Authorization: Bearer <key>`. The spec routes sit
+under `project_resources_router`, so the path contains `/project/` twice by design —
+`/api/v1/projects/{id}/project/specs`, not `/api/v1/specs`.

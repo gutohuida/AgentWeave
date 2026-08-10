@@ -464,6 +464,10 @@ class InboundQueueEntry(Base):
         String(64), ForeignKey("conversations.id"), nullable=True
     )
     work_dir: Mapped[Optional[str]] = mapped_column(String(4096), nullable=True)
+    #: The specification document the operator had open when they sent this input, when it came
+    #: from the specification workspace. Carried on the entry rather than through the scheduler
+    #: call because a busy agent's turn starts from a later call than the one that queued it.
+    spec_document: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
