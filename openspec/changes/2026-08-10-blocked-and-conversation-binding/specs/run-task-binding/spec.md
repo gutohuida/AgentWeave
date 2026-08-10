@@ -91,3 +91,48 @@ still waiting for the same thing.
 
 - **WHEN** a waiting task is released and a later bound run ends without moving it
 - **THEN** that run is divergent as normal
+
+### Requirement: Starting a run does not release a waiting task
+
+Binding a run to a task that is waiting on a person SHALL leave that task waiting. The system SHALL
+NOT move it back to the in-progress status as a consequence of a run starting.
+
+The edge out of the waiting status exists, so without this rule the act of starting a run would
+release the block — and that run's end would then find the task no longer waiting and record a
+divergence against work that was never dropped. A block ends when the answer arrives or the operator
+ends it, never because something started.
+
+#### Scenario: A run bound to a waiting task leaves it waiting
+
+- **WHEN** a run is bound to a task that is waiting on a person
+- **THEN** the run records the task
+- **AND** the task is still waiting
+
+#### Scenario: A later turn on a waiting task is not divergent
+
+- **WHEN** a further run in a bound conversation ends while its task is still waiting
+- **THEN** no divergence is recorded
+
+### Requirement: An answer reaches an asker whose run has ended
+
+Where a blocking question is answered after the run that asked it has ended, the system SHALL
+deliver the answer as queued input rather than relying on the asking run to receive it as a result.
+
+A blocking ask holds its run open only while that run lives. A question that outlived its run — it
+timed out, or the run failed — has nobody waiting to receive the answer, and that is precisely the
+question that caused a task to be recorded as waiting. An answer that reaches no one leaves the
+operator believing they have unblocked work that is still stopped.
+
+Where the system cannot establish that the asking run has ended, it SHALL assume the asker is still
+waiting. Delivering a duplicate costs a turn; assuming wrongly in the other direction loses the
+answer.
+
+#### Scenario: The answer is queued when the asker has ended
+
+- **WHEN** a blocking question is answered after its asking run has ended
+- **THEN** the answer is queued for the agent
+
+#### Scenario: The answer is not duplicated for an asker still waiting
+
+- **WHEN** a blocking question is answered while its asking run is still open
+- **THEN** the answer is not also queued

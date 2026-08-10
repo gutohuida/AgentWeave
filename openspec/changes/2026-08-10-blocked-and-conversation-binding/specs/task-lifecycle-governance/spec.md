@@ -68,3 +68,64 @@ is the one claim a completion gate would most reward.
 
 - **WHEN** the operator moves a task into or out of the waiting status
 - **THEN** the transition is accepted and recorded as an operator action
+
+### Requirement: A waiting task names what it is waiting for
+
+A task in the waiting status SHALL carry a human-readable statement of what it is waiting for. Where
+the system recorded the block, that statement SHALL be derived from the question asked. Where the
+operator sets it directly, the system SHALL require the statement and SHALL refuse the transition
+without one.
+
+The statement SHALL be cleared whenever the task leaves the waiting status, by any route.
+
+A status alone leaves the operator working out what they are holding up, which is the position they
+were already in when the task said work was under way and nothing was happening. The status answers
+"why is nothing moving"; only the statement answers "what do you need from me".
+
+#### Scenario: A system-recorded block explains itself
+
+- **WHEN** a run ends with an unanswered question and its task is recorded as waiting
+- **THEN** the task states what it is waiting for
+- **AND** that statement identifies the question asked
+
+#### Scenario: An operator block without a statement is refused
+
+- **WHEN** the operator moves a task to the waiting status without saying what it is waiting for
+- **THEN** the transition is refused
+- **AND** the task is unchanged
+
+#### Scenario: Leaving the waiting status clears the statement
+
+- **WHEN** a waiting task moves to any other status
+- **THEN** it no longer states what it is waiting for
+
+#### Scenario: A control offering the waiting status collects the statement
+
+- **WHEN** an operator surface offers a move to the waiting status
+- **THEN** it obtains the statement before requesting the move
+
+### Requirement: Only an unanswered blocking question makes a task wait
+
+The system SHALL record a task as waiting only on account of a question that is unanswered, marked
+as blocking, and asked by the run whose end is being evaluated.
+
+A question that does not block is the agent leaving a note and continuing; a task parked on one would
+make the status mean that an agent mentioned something. A question left open by a different run is
+not evidence that this run stopped for it.
+
+#### Scenario: A non-blocking question does not make a task wait
+
+- **WHEN** a run ends having asked a non-blocking question and without moving its task
+- **THEN** the task is not recorded as waiting
+- **AND** the run is divergent as normal
+
+#### Scenario: An answered question does not make a task wait
+
+- **WHEN** a run ends having asked a question that was answered, without moving its task
+- **THEN** the task is not recorded as waiting
+
+#### Scenario: Another run's open question does not make this task wait
+
+- **WHEN** a run ends without moving its task
+- **AND** the only unanswered blocking question was asked by a different run
+- **THEN** the task is not recorded as waiting

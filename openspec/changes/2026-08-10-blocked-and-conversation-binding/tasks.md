@@ -100,25 +100,42 @@ surface; 7 specs; 8 verification.
 
 ## 7. Specs
 
-- [ ] 7.1 Apply the three delta specs
-- [ ] 7.2 `npx openspec validate --specs --strict` and `--changes --strict`
+- [x] 7.1 Apply the three delta specs — plus the requirements the implementation earned:
+      the waiting reason (R5, with the control obligation), only-an-unanswered-blocking-question
+      (R1), starting-a-run-does-not-release, and an answer reaching an asker whose run has ended
+- [x] 7.2 `npx openspec validate --specs --strict` — **29 passed**; `--changes --strict` — **7 passed**
 
 ## 8. Verification
 
 ### 8a. Agent-verifiable
 
-- [ ] 8.1 `pytest hub/tests/ -q` and `pytest tests/ -q` — all pass, counts no lower than at start
-- [ ] 8.2 `cd hub/ui && npx vitest run`, `npx tsc --noEmit` — pass and clean
-- [ ] 8.3 `ruff check hub/hub/ hub/tests/` clean; `black` applied
-- [ ] 8.4 Unit: every new edge accepted, `pending → blocked` and `blocked → completed` refused
-- [ ] 8.5 Unit: a run ending with an unanswered blocking question leaves its task waiting, recorded
+- [x] 8.1 `pytest hub/tests/ -q` — **1481 passed, 10 skipped** (1437 at this change's start).
+      `pytest tests/ -q` — **372 passed, 3 skipped**
+- [x] 8.2 `npx vitest run` — **739 passed across 79 files** (726 at start); `npx tsc --noEmit` clean
+- [x] 8.3 `ruff check hub/hub/ hub/tests/ src/` clean; `black --check` — 287 files unchanged
+- [x] 8.4 Unit: every new edge accepted, `pending → blocked` and `blocked → completed` refused
+- [x] 8.5 Unit: a run ending with an unanswered blocking question leaves its task waiting, recorded
       `origin='runtime'` and naming the run
-- [ ] 8.6 Unit: answering releases it; an agent requesting it is refused
-- [ ] 8.7 Unit: a waiting task produces no divergence and no response run
-- [ ] 8.8 Unit: turn 2 of a bound conversation is bound and checked — the hole this change exists
+- [x] 8.6 Unit: answering releases it; an agent requesting it is refused
+- [x] 8.7 Unit: a waiting task produces no divergence and no response run
+- [x] 8.8 Unit: turn 2 of a bound conversation is bound and checked — the hole this change exists
       to close
-- [ ] 8.9 Live: behavioural probe against a database copy, and confirm the serving process is new by
-      what it publishes rather than by a 200
+- [x] 8.9 Live: Hub restarted by exact PID (9360 stopped, port confirmed free, new process **22012**
+      confirmed bound). Serving process proved new **behaviourally** — `/openapi.json` publishes
+      `blocked_reason` on `TaskUpdate` and `TaskResponse`, `task_id` on `ConversationResponse`, and
+      the `DELETE .../conversations/{id}/task` route. Migrations `0058 → 0060` applied to the real
+      database, with **no backfill**: 0 bound conversations, 0 blocked tasks.
+
+      Behavioural probe against a **copy** of the operator's real database (`proj-cddb0827`, real
+      conversation `conv-e7aefe3c`, agent `claude-1`), all six steps as designed: bound run moved
+      the task to `in_progress`; the run ended with an unanswered blocking question and the task
+      became `blocked` with the question's text as its reason, the question recording which task it
+      parked, and **zero divergences despite a `retry` policy** — the case that made this change
+      necessary; turn two inherited the binding, did **not** unpark the task, and was not divergent;
+      the answer released it to `in_progress` and cleared the reason; a later run that dropped it
+      *was* divergent (`div-418dbaf9`), so the check resumes; the terminal release unbound the
+      thread. The copy was deleted; **the operator's live board was not written to** (0 probe rows,
+      0 bound conversations).
 
 ### 8b. Human-only — the operator runs these
 
