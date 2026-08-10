@@ -425,6 +425,11 @@ export default function App() {
             onBackFromAgentSettings={(id, agent) =>
               navigateTo(agentSettingsBackDestination(agentSettingsDestination(id, agent)))
             }
+            // The rail stands in for the project tree while the Spec screen is open, so choosing
+            // a document is a rail action there.
+            onOpenSpecDocument={(id, path) =>
+              navigateTo(projectDestination(id, 'spec', path), { replace: true })
+            }
             onAddAgent={(id) => setAgentCreateProjectId(id)}
             onOpenExisting={() => setProjectManagerMode('open')}
             onCreateProject={() => setProjectManagerMode('create')}

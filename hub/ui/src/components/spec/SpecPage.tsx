@@ -1,19 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { PaneResizer } from '@/components/layout/PaneResizer'
 import { useSpecEvents, useSpecList } from '@/api/spec'
 import { SpecDocumentPanel } from './SpecDocumentPanel'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
 import { buildInventory, resolveSelection } from './specNavigation'
-import { SpecTree } from './SpecTree'
-import {
-  SPEC_TREE_DEFAULT_WIDTH,
-  SPEC_TREE_MAX_WIDTH,
-  SPEC_TREE_MIN_WIDTH,
-  DEFAULT_SPEC_PREFERENCES,
-  loadSpecPreferences,
-  saveSpecPreferences,
-} from './specPreferences'
 
 interface SpecPageProps {
   /** The document open, from the destination — so this screen is linkable and survives a reload
@@ -29,28 +19,17 @@ interface SpecPageProps {
  * columns, collapsed the Hub rail to make room, and crushed the conversation into 360px. The
  * conversation is not here at all: working on a specification *with an agent* is the conversation
  * view's job, reached from the composer's Spec pill. This is the other half — the specification as
- * the thing you are working on rather than the thing you are working beside (operator: "just to
- * focus on spec").
+ * the thing you are working on rather than the thing you are working beside.
  *
- * So it is the document, the folder tree that chooses one, and nothing else.
+ * And there is no navigation column either. Choosing a document is the rail's job while this
+ * screen is open (`SpecRailNav`), the way it is Environment's job while that is open — a screen
+ * that needs navigation uses the rail rather than growing a second one beside it. So what is left
+ * here is the document, which is the whole point of the screen.
  */
 export function SpecPage({ document: openDocument, onOpenDocument }: SpecPageProps) {
   const { data: specList, isLoading, refetch } = useSpecList()
   useSpecEvents()
   const inventory = useMemo(() => buildInventory(specList), [specList])
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  const [preferences, setPreferences] = useState(DEFAULT_SPEC_PREFERENCES)
-  useEffect(() => {
-    setPreferences(loadSpecPreferences())
-  }, [])
-  const setTreeWidth = useCallback((treeWidth: number) => {
-    setPreferences((prev) => {
-      const next = { ...prev, treeWidth }
-      saveSpecPreferences(next)
-      return next
-    })
-  }, [])
 
   /* Arriving with no document named opens the manifest home, then `spec/spec.html`, then the first
    * readable current document — `resolveSelection`'s existing order. Written back to the
@@ -94,31 +73,7 @@ export function SpecPage({ document: openDocument, onOpenDocument }: SpecPagePro
   }
 
   return (
-    <div ref={containerRef} className="flex h-full min-w-0 overflow-hidden" data-testid="spec-page">
-      <nav
-        aria-label="Specification documents"
-        data-testid="spec-page-tree"
-        className="min-h-0 shrink-0 overflow-y-auto py-2"
-        style={{ width: preferences.treeWidth, background: 'var(--surface)' }}
-      >
-        <SpecTree
-          inventory={inventory}
-          currentPath={openDocument}
-          onSelect={(node) => onOpenDocument(node.path)}
-          density="rail"
-        />
-      </nav>
-
-      <PaneResizer
-        width={preferences.treeWidth}
-        onChange={setTreeWidth}
-        defaultWidth={SPEC_TREE_DEFAULT_WIDTH}
-        min={SPEC_TREE_MIN_WIDTH}
-        max={SPEC_TREE_MAX_WIDTH}
-        label="Resize document navigation"
-        containerRef={containerRef}
-      />
-
+    <div className="flex h-full min-w-0 overflow-hidden" data-testid="spec-page">
       <div className="min-h-0 min-w-0 flex-1">
         {openDocument ? (
           <SpecDocumentPanel

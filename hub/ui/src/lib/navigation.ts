@@ -245,6 +245,18 @@ export function isAgentSettingsDestination(
   return destination.kind === 'agent-settings'
 }
 
+/** The Spec screen, which takes the rail over for its own navigation the way configuration does.
+ *
+ *  A screen that needs navigation uses the rail rather than growing a second one beside it
+ *  (operator: "two navigations are weird"). Kept as its own predicate rather than folded into
+ *  `isSectionedDestination`: that one is a type guard callers narrow on to read a section, and
+ *  this destination has no section. */
+export function isSpecDestination(
+  destination: WorkspaceDestination,
+): destination is { kind: 'project'; projectId: string; tab: 'spec'; document?: string | null } {
+  return destination.kind === 'project' && destination.tab === 'spec'
+}
+
 /** True in either configuration area. The Sidebar swaps into section-list-plus-back mode on this,
  *  because the shell is the same whichever subject is being configured. */
 export function isSectionedDestination(destination: WorkspaceDestination): boolean {

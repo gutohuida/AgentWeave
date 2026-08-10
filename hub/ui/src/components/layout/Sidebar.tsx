@@ -8,11 +8,13 @@ import {
   ENVIRONMENT_SECTIONS,
   isAgentSettingsDestination,
   isConfigurationDestination,
+  isSpecDestination,
   type AgentSettingsSection,
   type EnvironmentSection,
   type WorkspaceDestination,
 } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
+import { SpecRailNav } from '@/components/spec/SpecRailNav'
 import { AgentTree } from './AgentTree'
 import { RecencyView } from './RecencyView'
 
@@ -36,6 +38,8 @@ interface SidebarProps {
   /** Where the settings page's back control goes — a fixed target, the agent's most recent
    *  conversation, mirroring "Back to {project}" rather than remembering an origin. */
   onBackFromAgentSettings?: (projectId: string, agent: string) => void
+  /** Opening a specification document while the rail is standing in for the project tree. */
+  onOpenSpecDocument?: (projectId: string, path: string) => void
   onAddAgent?: (projectId: string) => void
   onOpenExisting: () => void
   onCreateProject: () => void
@@ -103,6 +107,7 @@ export function Sidebar({
   onOpenEnvironment,
   onOpenAgentSettings,
   onBackFromAgentSettings,
+  onOpenSpecDocument,
   onAddAgent,
   onOpenExisting,
   onCreateProject,
@@ -139,6 +144,8 @@ export function Sidebar({
     : null
   const agentSettings =
     destination && isAgentSettingsDestination(destination) ? destination : null
+  const spec = destination && isSpecDestination(destination) ? destination : null
+  const specProject = spec ? projects.find((project) => project.id === spec.projectId) : null
 
   useEffect(() => {
     try {
@@ -169,7 +176,7 @@ export function Sidebar({
       className="workspace-rail flex h-full shrink-0 flex-col"
       data-testid="sidebar"
       data-compact={compact ? 'true' : 'false'}
-      data-mode={configuration || agentSettings ? 'section' : 'project'}
+      data-mode={configuration || agentSettings || spec ? 'section' : 'project'}
       style={{
         width: compact ? SIDEBAR_COMPACT_WIDTH : width,
         background: 'var(--rail)',
@@ -206,6 +213,13 @@ export function Sidebar({
           onOpenProject={onOpenProject}
           onOpenAgent={onOpenAgent}
           onCreateProject={onCreateProject}
+        />
+      ) : spec ? (
+        <SpecRailNav
+          projectName={specProject?.name ?? 'project'}
+          currentPath={spec.document ?? null}
+          onSelect={(path) => onOpenSpecDocument?.(spec.projectId, path)}
+          onBack={() => onOpenProject(spec.projectId)}
         />
       ) : agentSettings ? (
         <>

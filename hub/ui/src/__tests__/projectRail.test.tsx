@@ -21,6 +21,26 @@ const projects = [
 
 vi.mock('@/api/projects', () => ({ useProjects: () => ({ data: projects, isLoading: false }) }))
 
+const SPEC_HOME = 'spec/spec.html'
+const SPEC_CHANGE = 'spec/changes/queued-message-delivery/spec.html'
+vi.mock('@/api/spec', () => ({
+  useSpecList: () => ({
+    data: {
+      specs: [
+        { path: 'spec/spec.html', title: 'Specification', kind: 'baseline', state: 'filed', parent: null, order: 0 },
+        { path: 'spec/changes/queued-message-delivery/spec.html', title: 'Queued message delivery', kind: 'change-spec', state: 'filed', parent: null, order: 10 },
+      ],
+      home: 'spec/spec.html',
+      diagnostics: [],
+      missing: [],
+    },
+    isLoading: false,
+    refetch: () => {},
+  }),
+  useSpec: () => ({ data: undefined, refetch: () => {} }),
+  useSpecEvents: () => {},
+}))
+
 function renderRail(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {
   const props: React.ComponentProps<typeof Sidebar> = {
     activePage: 'overview',
@@ -196,5 +216,68 @@ describe('the collapsed rail', () => {
     fireEvent.click(screen.getByTestId('rail-collapse-toggle'))
     expect(onCompactChange).toHaveBeenCalledWith(true)
     expect(screen.getByTestId('sidebar')).toHaveAttribute('data-compact', 'false')
+  })
+})
+
+/* The rail stands in for the project tree while the Spec screen is open, the way it already does
+ * for Environment and agent settings (operator: "Is it possible to make it like the config screen
+ * where the navigation replaces the left navigation? Two navigations are weird."). */
+describe('the rail while the Spec screen is open', () => {
+  const specDestination = {
+    kind: 'project' as const,
+    projectId: 'proj-a',
+    tab: 'spec' as const,
+    document: SPEC_CHANGE,
+  }
+
+  beforeEach(() => {
+    cleanup()
+    localStorage.clear()
+    useConfigStore.setState({ selectedProjectId: 'proj-a' })
+  })
+
+  it('replaces the project tree with the specification tree', () => {
+    renderRail({ destination: specDestination, activePage: 'spec' })
+
+    expect(screen.getByTestId('spec-rail-tree')).toBeInTheDocument()
+    expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toBeInTheDocument()
+    // The project tree is not also there — that is the whole point.
+    expect(screen.queryByTestId('rail-project-proj-a')).not.toBeInTheDocument()
+    expect(screen.getByTestId('sidebar')).toHaveAttribute('data-mode', 'section')
+  })
+
+  it('gives the rail back in one press', () => {
+    const onOpenProject = vi.fn()
+    renderRail({ destination: specDestination, activePage: 'spec', onOpenProject })
+
+    fireEvent.click(screen.getByTestId('spec-rail-back'))
+    expect(onOpenProject).toHaveBeenCalledWith('proj-a')
+  })
+
+  it('marks the open document and opens another', () => {
+    const onOpenSpecDocument = vi.fn()
+    renderRail({ destination: specDestination, activePage: 'spec', onOpenSpecDocument })
+
+    expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toHaveAttribute('aria-current', 'true')
+    fireEvent.click(screen.getByTestId(`spec-tree-document-${SPEC_HOME}`))
+    expect(onOpenSpecDocument).toHaveBeenCalledWith('proj-a', SPEC_HOME)
+  })
+
+  it('folds a directory away, and remembers it', () => {
+    const { unmount } = renderRail({ destination: specDestination, activePage: 'spec' })
+
+    const folder = screen.getByTestId('spec-tree-directory-spec/changes')
+    expect(folder).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId(`spec-tree-document-${SPEC_CHANGE}`)).toBeInTheDocument()
+
+    fireEvent.click(folder)
+    expect(screen.queryByTestId(`spec-tree-document-${SPEC_CHANGE}`)).not.toBeInTheDocument()
+    // The folder itself stays, or there would be no way to unfold it.
+    expect(screen.getByTestId('spec-tree-directory-spec/changes')).toHaveAttribute('aria-expanded', 'false')
+
+    // A tree that forgets what you folded away is a tree you fold away again every time.
+    unmount()
+    renderRail({ destination: specDestination, activePage: 'spec' })
+    expect(screen.queryByTestId(`spec-tree-document-${SPEC_CHANGE}`)).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
@@ -83,16 +83,20 @@ beforeEach(() => {
 })
 
 describe('the Spec screen', () => {
-  it('shows the folder tree and the document, and no conversation', () => {
+  it('is the document, and nothing else', () => {
     renderPage(HOME)
-    expect(screen.getByTestId('spec-page-tree')).toBeInTheDocument()
     expect(screen.getByTestId('spec-document-panel')).toBeInTheDocument()
-    expect(screen.getByTestId(`spec-tree-document-${CHANGE}`)).toBeInTheDocument()
 
-    // The whole point of the screen: nothing to be beside.
+    // No conversation — that is the point of the screen.
     expect(screen.queryByTestId('conversation-header')).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByTestId('composer-spec-control')).not.toBeInTheDocument()
+
+    // And no navigation column: choosing a document is the rail's job while this screen is open,
+    // the way it is Environment's job while that is open (operator: "two navigations are weird").
+    expect(screen.queryByTestId('spec-page-tree')).not.toBeInTheDocument()
+    expect(screen.queryByTestId(`spec-tree-document-${CHANGE}`)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('pane-resizer')).not.toBeInTheDocument()
   })
 
   it('offers no close control, because there is nothing behind the panel', () => {
@@ -105,29 +109,12 @@ describe('the Spec screen', () => {
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith(HOME))
   })
 
-  it('opens a document from the tree', () => {
+  it('opens another document from the breadcrumb picker', async () => {
     const { onOpenDocument } = renderPage(HOME)
-    fireEvent.click(screen.getByTestId(`spec-tree-document-${CHANGE}`))
+    fireEvent.click(screen.getByTestId('spec-document-breadcrumb'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByTestId(`spec-tree-document-${CHANGE}`))
     expect(onOpenDocument).toHaveBeenCalledWith(CHANGE)
-  })
-
-  it('marks the open document in the tree', () => {
-    renderPage(CHANGE)
-    expect(screen.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByTestId(`spec-tree-document-${HOME}`)).not.toHaveAttribute('aria-current')
-  })
-
-  it('sizes its navigation column, and remembers it', () => {
-    renderPage(HOME)
-    const resizer = screen.getByTestId('pane-resizer')
-    expect(resizer).toHaveAttribute('aria-label', 'Resize document navigation')
-
-    fireEvent.keyDown(resizer, { key: 'ArrowRight' })
-    // Persisted separately from the conversation width: they size different things on different
-    // screens, and one number for both would move a column the operator was not looking at.
-    const stored = JSON.parse(localStorage.getItem('aw.spec.presentation.v1') as string)
-    expect(stored.treeWidth).toBe(288)
-    expect(stored.conversationWidth).toBe(480)
   })
 
   it('says so when the project has no specification at all', () => {

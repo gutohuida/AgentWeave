@@ -332,7 +332,7 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
     } as never)
 
     const stored = JSON.parse(localStorage.getItem(SPEC_PREFERENCES_KEY) as string)
-    expect(Object.keys(stored).sort()).toEqual(['conversationWidth', 'treeWidth'])
+    expect(Object.keys(stored)).toEqual(['conversationWidth'])
     expect(localStorage.getItem(SPEC_PREFERENCES_KEY)).not.toContain('aw_live_SECRET')
   })
 
