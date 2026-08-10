@@ -273,9 +273,12 @@ cheap, and it catches the failures that survive a confident-sounding draft.
   `data-requirements` pointing at requirement IDs that exist in the document.
 - Three theme layers (`:root`, `prefers-color-scheme`, `:root[data-theme]`) and the
   same-document anchor-click interceptor are present.
-- The TOC's breakpoint equals the nav width plus `main.content`'s maximum. Below that the
-  document must be one column: a two-column layout that engages before there is room for both
-  makes the text *narrower* as the window gets wider.
+- The TOC's breakpoint equals the nav width plus the **prose measure**. Below that the document
+  must be one column: a two-column layout that engages before there is room for both makes the
+  text *narrower* as the window gets wider.
+- Prose is capped at `--measure`, not `main.content`. Capping the container instead leaves a void
+  beside the text and squeezes tables into the same narrow column; tables, task lists and section
+  headings break out to the full width, sharing the prose's left edge.
 - **The layout survives its own TOC being hidden.** The Hub sets `nav.toc { display: none }`
   after reading the anchors, so `main` must not depend on the nav occupying space — no fixed
   grid track for it, no width computed by subtracting it. Check by setting that rule by hand and
@@ -343,6 +346,8 @@ Use this as the starting template. Fill every `<!-- … -->`. Substitution token
     /* 1. Light-mode defaults (also used standalone, outside the Hub) */
     :root {
       color-scheme: light dark;
+      /* The reading measure for prose, and the outer bound for what breaks out of it. */
+      --measure: 78ch; --wide: 1200px;
       --bg:#ffffff; --surface:#f6f7f9; --surface-2:#eef0f3; --fg:#1a1a1a; --muted:#5b6472;
       --border:#e2e4e9; --accent:#2563eb; --done:#0a7f3f; --warn:#8a6400; --warn-bg:#fff3cd;
       --danger:#b3261e; --danger-bg:#fdeaea;
@@ -398,7 +403,18 @@ Use this as the starting template. Fill every `<!-- … -->`. Substitution token
     nav.toc a:hover { background: var(--surface-2); color: var(--fg); }
     nav.toc a.active { background: var(--surface-2); color: var(--accent); font-weight:600; }
 
-    main.content { flex:1; min-width:0; max-width: 860px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+    main.content { flex:1; min-width:0; max-width: var(--wide); margin: 0 auto; padding: 0 1.5rem 3rem; }
+
+    /* Prose keeps a reading measure; the things that earn width take it.
+       Capping `main.content` itself leaves a column of text with a large void beside it — and
+       squeezes the requirements and task tables into that same column, which is where the width
+       is actually wanted. Body text stops at `--measure`; tables and task lists run the full
+       column. Everything shares one left edge, so a break-out reads as deliberate. */
+    main.content p, main.content dl, main.content ol.algorithm, main.content ul:not(.tasks),
+    main.content .note, main.content .example, main.content .warning, main.content .issue {
+      max-width: var(--measure);
+    }
+    main.content table, main.content ul.tasks, main.content section > h2 { max-width: none; }
 
     /* Sticky page header: title, status, live progress bar */
     header.spec-header {
@@ -437,13 +453,15 @@ Use this as the starting template. Fill every `<!-- … -->`. Substitution token
     li.task[data-status="done"] .task-desc { color: var(--done); text-decoration:line-through; }
     .req-refs { color: var(--muted); font-size:.85em; }
 
-    /* 1080 = the nav's 220 + `main.content`'s 860 maximum (both border-box). The TOC must not
-       appear before there is room for it *and* a full-width `main`, or the document gets
-       *narrower* as its container gets wider: at one pixel over a lower breakpoint the nav takes
-       its 220 out of a `main` that was already at its maximum. Measured at the old 780: the text
-       lost 215px at 785px of width, and did not recover it until 1080. Keep this number equal to
-       the nav width plus `main.content`'s maximum. */
-    @media (max-width: 1080px) {
+    /* 940 = the nav's 220 + `--measure` (673px at this font) + the 3rem of padding — measured,
+       not arithmetic: 900 looked right and still cost the text 36px at 905. Tied to the *prose*
+       measure, not to `--wide`: prose must never reflow shorter as the container grows, and
+       it is now capped independently of `main.content`. The TOC must not appear before there is
+       room for it and a full-measure column, or the document gets *narrower* as its container
+       gets wider — measured at the old 780, the text lost 215px at 785px of width and did not
+       recover it until 1080. A table does narrow by the nav's width at this one crossing, which
+       is mild and corrects itself as the window widens. */
+    @media (max-width: 940px) {
       nav.toc { display:none; }
       main.content { margin: 0; padding: 0 1rem 3rem; }
     }
