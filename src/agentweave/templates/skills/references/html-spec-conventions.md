@@ -276,6 +276,10 @@ cheap, and it catches the failures that survive a confident-sounding draft.
 - The TOC's breakpoint equals the nav width plus `main.content`'s maximum. Below that the
   document must be one column: a two-column layout that engages before there is room for both
   makes the text *narrower* as the window gets wider.
+- **The layout survives its own TOC being hidden.** The Hub sets `nav.toc { display: none }`
+  after reading the anchors, so `main` must not depend on the nav occupying space — no fixed
+  grid track for it, no width computed by subtracting it. Check by setting that rule by hand and
+  confirming `main` is unchanged.
 
 **Content (traceability and falsifiability):**
 - Requirement → acceptance criterion → task, in both directions, with no orphans.
@@ -373,7 +377,13 @@ Use this as the starting template. Fill every `<!-- … -->`. Substitution token
     h1,h2,h3 { line-height:1.25; }
     a { color: var(--accent); }
 
-    /* Sticky left table of contents */
+    /* Sticky left table of contents.
+       `display: flex` on `body` above is load-bearing, not a style preference: the Hub's bridge
+       sets `nav.toc { display: none }` once it has read the anchors, because the shell renders
+       its own outline. A layout that reserves a fixed track for the nav — `grid-template-columns:
+       220px 1fr`, say — drops `main` into that track the moment the nav is hidden and squashes
+       the text to the nav's width. The document MUST stay correctly laid out with its TOC
+       hidden. */
     nav.toc {
       position: sticky; top: 0; align-self: flex-start; width: 220px; flex-shrink: 0;
       height: 100vh; overflow-y: auto; padding: 1.25rem 1rem; background: var(--surface);

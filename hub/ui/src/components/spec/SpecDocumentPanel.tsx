@@ -64,7 +64,13 @@ export function SpecDocumentPanel({
   const [activeSection, setActiveSection] = useState<string | null>(null)
   const [pendingFragment, setPendingFragment] = useState<string | null>(null)
   const [navStatus, setNavStatus] = useState<string | null>(null)
-  const [outlineOpen, setOutlineOpen] = useState(false)
+  /* Open by default, because the bridge does not ask before removing the alternative.
+   *
+   * `specBridge` hides the document's own `nav.toc` as soon as it has collected the anchors —
+   * "safe only now that the shell has a working replacement for it". That replacement is this
+   * strip, and it defaulted to closed: the removal was unconditional while the replacement was
+   * opt-in, so a document opened at rest had no table of contents anywhere. */
+  const [outlineOpen, setOutlineOpen] = useState(true)
   const [showDriftDetails, setShowDriftDetails] = useState(false)
 
   // A new document has its own outline and its own active section.

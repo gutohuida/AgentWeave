@@ -178,16 +178,27 @@ describe('outline and link routing (FR-5, FR-6, FR-7)', () => {
     ],
   }
 
-  it('offers the outline only once the document reports a usable TOC', async () => {
+  it('offers the outline only once the document reports a usable TOC, and shows it', async () => {
     renderView()
     expect(screen.queryByTestId('spec-outline-toggle')).not.toBeInTheDocument()
 
     postFromFrame(toc)
 
-    fireEvent.click(await screen.findByTestId('spec-outline-toggle'))
-    const outline = within(screen.getByTestId('spec-outline'))
+    // Shown without being asked for: the bridge hides the document's own `nav.toc` as soon as it
+    // reads the anchors, so an opt-in replacement would leave no table of contents at all.
+    const outline = within(await screen.findByTestId('spec-outline'))
     expect(outline.getByText('Summary')).toBeInTheDocument()
     expect(outline.getByText('Requirements')).toBeInTheDocument()
+    expect(screen.getByTestId('spec-outline-toggle')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('lets the operator put the outline away again', async () => {
+    renderView()
+    postFromFrame(toc)
+    await screen.findByTestId('spec-outline')
+
+    fireEvent.click(screen.getByTestId('spec-outline-toggle'))
+    expect(screen.queryByTestId('spec-outline')).not.toBeInTheDocument()
   })
 
   it('shows no outline when the document has no usable TOC', () => {
@@ -206,7 +217,7 @@ describe('outline and link routing (FR-5, FR-6, FR-7)', () => {
   it('tracks the active section reported by the document', async () => {
     renderView()
     postFromFrame(toc)
-    fireEvent.click(await screen.findByTestId('spec-outline-toggle'))
+    await screen.findByTestId('spec-outline')
 
     postFromFrame({
       channel: SPEC_BRIDGE_CHANNEL,
