@@ -77,7 +77,12 @@ export function SpecDocumentPicker({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--scrim)' }} />
+        {/* `z-50`, matching every other modal in the app. Without it the overlay and the dialog
+            sit at `z-index: auto`, and `.conversation-header-surface`'s `z-index: 3` — which
+            exists so the blurred header sits above the scrolling output — paints the conversation
+            header straight over the top of them. A portal is later in the document but that only
+            decides order between elements at the same level. */}
+        <Dialog.Overlay style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'var(--scrim)' }} />
         <Dialog.Content
           aria-label="Search documents"
           onCloseAutoFocus={(event) => {
@@ -88,6 +93,7 @@ export function SpecDocumentPicker({
           }}
           style={{
             position: 'fixed',
+            zIndex: 50,
             top: '12vh',
             left: '50%',
             transform: 'translateX(-50%)',

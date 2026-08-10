@@ -31,7 +31,9 @@ export function Drawer({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--scrim)' }} />
+        {/* `z-50`, matching every other modal in the app — see `SpecDocumentPicker` for what
+            happens without it. */}
+        <Dialog.Overlay style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'var(--scrim)' }} />
         <Dialog.Content
           aria-label={title}
           data-testid="workspace-drawer"
@@ -43,6 +45,7 @@ export function Drawer({
           }}
           style={{
             position: 'fixed',
+            zIndex: 50,
             top: 0,
             bottom: 0,
             [side]: 0,

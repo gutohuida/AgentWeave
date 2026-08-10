@@ -114,10 +114,11 @@ export function SpecDocumentPanel({
       data-testid="spec-document-panel"
       style={{ background: 'var(--bg)' }}
     >
-      <div
-        className="flex shrink-0 items-center gap-2 px-3 py-2"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
+      {/* No rule under the header. The panel already has a boundary — the divider on its left —
+          and a second horizontal line across the top read as a seam cutting the document off from
+          the control that names it (operator, 2026-08-10). The header's own background is what
+          separates it from the document. */}
+      <div className="flex shrink-0 items-center gap-2 px-3 py-2">
         {/* The breadcrumb is the way to another document: it opens the same Ctrl+K search that
             already covers the whole inventory, rather than a second, worse copy of it. */}
         <button
