@@ -20,6 +20,7 @@ from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
 from .db.engine import init_db
 from .run_reconciliation import reconcile_interrupted_runs
+from .run_task_binding import TaskBindingError
 from .scheduler import init_scheduler, shutdown_scheduler
 from .task_transition_service import TransitionRefusedError
 
@@ -195,6 +196,16 @@ def create_app() -> FastAPI:
     # the MCP adapter surfaces it verbatim, so this shape is an agent's only feedback on a refusal.
     @app.exception_handler(TransitionRefusedError)
     async def _transition_refused(request: Request, exc: TransitionRefusedError):
+        return UTF8JSONResponse(
+            status_code=exc.http_status,
+            content={"detail": exc.detail},
+        )
+
+    @app.exception_handler(TaskBindingError)
+    async def _task_binding_refused(request: Request, exc: TaskBindingError):
+        # One handler rather than a raise at each site, for the same reason the transition one is:
+        # the refusal reaches HTTP and MCP identically, and a route that forgot to translate it
+        # would turn a nameable problem into a 500.
         return UTF8JSONResponse(
             status_code=exc.http_status,
             content={"detail": exc.detail},

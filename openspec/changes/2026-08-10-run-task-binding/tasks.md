@@ -44,20 +44,20 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
 
 ## 3. Binding a run
 
-- [ ] 3.1 New `hub/hub/run_task_binding.py`: resolve a binding from a trigger cause, apply the
+- [x] 3.1 New `hub/hub/run_task_binding.py`: resolve a binding from a trigger cause, apply the
       automatic transition through `apply_transition(..., origin='runtime')`, and answer "did this run
       move its task?" — no HTTP, no spawn logic, mirroring how `task_transitions.py` stays inert
-- [ ] 3.2 Validate a delegated `task_id` against the sending run's project in the agent plane; refuse
+- [x] 3.2 Validate a delegated `task_id` against the sending run's project in the agent plane; refuse
       with a message naming the failing id, and keep the delegation deliverable unbound rather than
       losing it
-- [ ] 3.3 Carry `task_id` from the delegation onto the `InboundQueueEntry` in `hub/hub/inbound_queue.py`
-- [ ] 3.4 Resolve the binding at the single `Run(` creation site (`agent_trigger.py:474`): earliest
+- [x] 3.3 Carry `task_id` from the delegation onto the `InboundQueueEntry` in `hub/hub/inbound_queue.py`
+- [x] 3.4 Resolve the binding at the single `Run(` creation site (`agent_trigger.py:474`): earliest
       queued entry naming a task wins (D3), else the trigger request's explicit task id, else unbound
-- [ ] 3.5 Accept an explicit task id on the operator trigger request schema, validated against the
+- [x] 3.5 Accept an explicit task id on the operator trigger request schema, validated against the
       project
-- [ ] 3.6 Apply the automatic transition inside the same commit as the `Run` insert, so a bound run
+- [x] 3.6 Apply the automatic transition inside the same commit as the `Run` insert, so a bound run
       whose task never moved cannot exist as a partial write
-- [ ] 3.7 Leave `request_agent`'s free-text `task` alone, and add a test asserting it grants no
+- [x] 3.7 Leave `request_agent`'s free-text `task` alone, and add a test asserting it grants no
       binding (D3)
 
 ## 4. Detecting divergence

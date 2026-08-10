@@ -299,3 +299,71 @@ async def test_permission_decisions_require_a_bound_run(app):
         json={"tool_name": "Write", "allowed": False, "reason": "x"},
     )
     assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# A delegated task is runtime state, not message decoration (run-task-binding)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_delegated_task_reaches_the_queue_entry(app, auth_headers):
+    """On the `Message` alone the task went nowhere, which is why the board depended on agents
+    remembering. It has to survive the queue to bind the run that eventually does the work."""
+    from hub.db.models import InboundQueueEntry
+
+    await _sync_agent(app, auth_headers, "receiver")
+    headers, _ = await _active_run("run-delegate-1", "delegator")
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(id="task-delegated", project_id="proj-test", title="Work", status="pending")
+        )
+        await session.commit()
+
+    response = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={"recipient": "receiver", "content": "please do this", "task_id": "task-delegated"},
+    )
+    assert response.status_code == 201, response.text
+
+    async with async_session_factory() as session:
+        entry = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "receiver")
+                )
+            )
+            .scalars()
+            .first()
+        )
+        assert entry is not None
+        assert entry.task_id == "task-delegated"
+
+
+@pytest.mark.asyncio
+async def test_a_delegation_naming_an_unknown_task_is_refused(app, auth_headers):
+    """Refused at the moment of the call, in the tool result the agent is already reading, rather
+    than through a run that quietly starts unbound and is never checked at its boundary."""
+    await _sync_agent(app, auth_headers, "receiver-2")
+    headers, _ = await _active_run("run-delegate-2", "delegator-2")
+
+    response = await app.post(
+        "/api/v1/agent-actions/messages",
+        headers=headers,
+        json={"recipient": "receiver-2", "content": "do it", "task_id": "task-nonexistent"},
+    )
+    assert response.status_code == 404, response.text
+    assert "task-nonexistent" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_request_agent_grants_no_binding(app):
+    """`request_agent(name, template, task)` takes `task` as free text — a description of work for
+    an agent that may not exist yet, not a reference to a row. It gains no binding power here, and
+    an agent must not be able to acquire one through it (design D3)."""
+    from hub.api.v1.agent_actions import BoundAgentRequest
+
+    assert "task_id" not in BoundAgentRequest.model_fields
+    assert BoundAgentRequest.model_fields["task"].annotation is str

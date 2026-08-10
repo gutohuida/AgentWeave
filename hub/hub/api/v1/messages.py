@@ -13,6 +13,7 @@ from ...conversations import name_conversation, new_conversation, peer_bound_con
 from ...db.engine import get_session
 from ...db.models import Agent, Conversation, Message, Run
 from ...inbound_queue import new_entry, project_limits
+from ...run_task_binding import resolve_task_for_project
 from ...schemas.common import SuccessResponse
 from ...schemas.messages import MessageCreate, MessageResponse
 from ...sse import sse_manager
@@ -29,6 +30,11 @@ async def create_message_for_actor(
     run_id: Optional[str],
     session: AsyncSession,
 ) -> Message:
+    if body.task_id:
+        # Validated here, at the moment of the call, rather than at spawn. A task the sender cannot
+        # see is a mistake worth learning about in the tool result they are already reading — not
+        # through a run that quietly starts unbound and is never checked at its boundary.
+        await resolve_task_for_project(session, body.task_id, project_id)
     msg = Message(
         id=f"msg-{short_id()}",
         project_id=project_id,
@@ -197,6 +203,11 @@ async def create_message_for_actor(
         hop_depth=hop_depth,
         message_id=msg.id,
         conversation_id=recipient_conversation.id,
+        # A named task is runtime state, not message decoration: carried on the entry so it
+        # survives the queue and binds the run that eventually does the work. On the message alone
+        # it went nowhere, which is why the board depended on agents remembering
+        # (`2026-08-10-run-task-binding`, design D3).
+        task_id=msg.task_id,
     )
     name_conversation(recipient_conversation, body.content)
     session.add_all([msg, entry])

@@ -1,0 +1,203 @@
+"""What a run is working on, and whether it did it.
+
+Before this module a run did not know what task it was for. `Run` carried project, agent, session,
+conversation, pid and heartbeat and nothing about the work, so the only way a task's status could
+stay current was an agent remembering to say so — not a discipline problem but a missing edge in
+the data model (`openspec/changes/2026-08-10-run-task-binding/`, and the exploration
+`2026-08-10-enforcing-the-development-cycle.md`).
+
+Two capabilities live here, and they are the same edge read in both directions:
+
+**Binding** — the runtime attaches a run to the one task that caused it, and moves that task to
+`in_progress` itself. The agent is never asked, so it cannot forget.
+
+**The boundary question** — when the run ends, did it move its task? Asked at the run boundary,
+which AgentWeave owns for every runner, rather than inside the agent, which is what makes it
+enforcement rather than instruction.
+
+Deliberately narrow: this module resolves, binds, and answers. It starts no processes and writes no
+divergence records — spawning a response to a divergence needs the trigger path, and a module that
+both decides and spawns would be impossible to test without one.
+"""
+
+from __future__ import annotations
+
+from typing import Iterable, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .db.models import InboundQueueEntry, Run, Task, TaskTransition
+from .task_transition_service import (
+    ORIGIN_ACTOR,
+    ORIGIN_RUNTIME,
+    TransitionRefusedError,
+    apply_transition,
+)
+from .task_transitions import allowed_targets, run_actor
+
+# --------------------------------------------------------------------------------------
+# What a task says should happen when work bound to it is dropped
+# --------------------------------------------------------------------------------------
+
+#: Record it and show it. Starts nothing, spends nothing.
+POLICY_SURFACE = "surface"
+#: Run the same agent once more, bound to the same task.
+POLICY_RETRY = "retry"
+#: Reassign to the task's escalation agent and run that one.
+POLICY_ESCALATE = "escalate"
+
+#: Pinned to the column's declared default in `db/models.py` by test. `surface` being the default is
+#: load-bearing rather than incidental: it is what every task already on a board acquires, so
+#: introducing this capability cannot start runs nobody asked for (design D7).
+POLICIES = frozenset({POLICY_SURFACE, POLICY_RETRY, POLICY_ESCALATE})
+DEFAULT_POLICY = POLICY_SURFACE
+
+#: What was actually done. Differs from the policy whenever one fell back — `escalate` naming no
+#: agent, or a retry that had already spent its single hop.
+OUTCOME_SURFACED = "surfaced"
+OUTCOME_RETRIED = "retried"
+OUTCOME_ESCALATED = "escalated"
+OUTCOMES = frozenset({OUTCOME_SURFACED, OUTCOME_RETRIED, OUTCOME_ESCALATED})
+
+
+class TaskBindingError(Exception):
+    """A named task that cannot be bound. Carries the HTTP status a route should send.
+
+    A 404 rather than a 403 for a task in another project: the caller's authority is not in
+    question, the row is simply not one they can see, and saying "forbidden" would confirm the id
+    exists somewhere.
+    """
+
+    http_status = 404
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+async def resolve_task_for_project(session: AsyncSession, task_id: str, project_id: str) -> Task:
+    """The task, or a refusal naming which id failed and why.
+
+    Validated at the moment of the call rather than at spawn, so an agent naming a task it cannot
+    see learns immediately, in the tool result it is already reading, rather than through a run
+    that quietly starts unbound.
+    """
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise TaskBindingError(
+            f"Task {task_id!r} does not exist in this project. A delegation may only name a task "
+            f"in the project the delegating run belongs to."
+        )
+    return task
+
+
+# --------------------------------------------------------------------------------------
+# Binding
+# --------------------------------------------------------------------------------------
+
+
+def task_id_from_entries(entries: Iterable[InboundQueueEntry]) -> Optional[str]:
+    """The task the earliest queued entry names, or None.
+
+    A turn can deliver several items and more than one may name a task. The earliest queued wins,
+    matching the order `format_turn_prompt` assembles the prompt in — deterministic rather than
+    clever. The alternative is a run whose binding depends on delivery timing, which would make the
+    boundary check unreproducible.
+    """
+    named = [entry for entry in entries if entry.task_id]
+    if not named:
+        return None
+    # `sequence` is the queue's own order and is what `queued_entries` sorts by. Falling back to 0
+    # keeps this usable with unflushed entries in tests, where every sequence is None.
+    named.sort(key=lambda entry: entry.sequence or 0)
+    return named[0].task_id
+
+
+async def task_id_for_delivery(
+    session: AsyncSession, entry_ids: Optional[Iterable[str]]
+) -> Optional[str]:
+    """The task named by the earliest of the entries this turn is about to deliver, or None."""
+    ids = list(entry_ids or [])
+    if not ids:
+        return None
+    result = await session.execute(
+        select(InboundQueueEntry)
+        .where(InboundQueueEntry.id.in_(ids))
+        .order_by(InboundQueueEntry.sequence)
+    )
+    return task_id_from_entries(result.scalars().all())
+
+
+async def bind_run_to_task(
+    session: AsyncSession,
+    run: Run,
+    task: Task,
+) -> Optional[TaskTransition]:
+    """Attach `run` to `task` and start the task if it can be started.
+
+    Returns the transition when one was made, else None. Both are ordinary outcomes: binding is a
+    statement about the run, not a claim about the task's status, so a task already `completed`
+    binds and moves nowhere.
+
+    The move goes through `apply_transition` with `origin='runtime'` — B1's own entry point, with
+    B1's own legality check and the seam B3's evidence checks and B4's completion gates plug into.
+    A path that set `task.status` here directly would be a bypass of every gate not yet written.
+
+    Nothing is committed. The caller stages this alongside the `Run` insert so a bound run whose
+    task never moved cannot exist as a partial write.
+    """
+    run.task_id = task.id
+    actor = run_actor(run.id, run.agent)
+
+    if "in_progress" not in allowed_targets(task.status, actor.kind):
+        return None
+
+    try:
+        return await apply_transition(session, task, "in_progress", actor, origin=ORIGIN_RUNTIME)
+    except TransitionRefusedError:
+        # The reachability check above already covers the map, so this is the author/reviewer path
+        # and cannot currently fire for `in_progress`. Caught rather than assumed away: a refusal
+        # here must leave the run bound and the task untouched, never propagate and fail the spawn.
+        return None
+
+
+# --------------------------------------------------------------------------------------
+# The boundary question
+# --------------------------------------------------------------------------------------
+
+
+async def run_advanced_its_task(session: AsyncSession, run: Run) -> bool:
+    """Did `run` move its bound task itself?
+
+    `origin='actor'` is the whole point. The runtime's automatic move to `in_progress` is a
+    transition by this run on this task, so a query that did not exclude it would answer True for
+    every bound run and the check would report nothing (design D5).
+
+    An unbound run returns True — it has no task to have neglected, and the caller should not have
+    to special-case it before asking.
+    """
+    if not run.task_id:
+        return True
+    result = await session.execute(
+        select(TaskTransition.sequence)
+        .where(TaskTransition.run_id == run.id)
+        .where(TaskTransition.task_id == run.task_id)
+        .where(TaskTransition.origin == ORIGIN_ACTOR)
+        .limit(1)
+    )
+    return result.first() is not None
+
+
+def may_retry(run: Run) -> bool:
+    """Whether a divergence of `run` may be answered by starting another run of the same agent.
+
+    This is the entire retry bound (design D8). A run started in answer to a divergence carries the
+    run that caused it, and never triggers one of its own — so `A diverges → B` can only be
+    followed by escalation or surfacing. There is no max-attempts field to misconfigure and no loop
+    is expressible.
+
+    The bound is per chain, not per task lifetime: a response run that does move its task ends the
+    chain, and a later independent run bound to the same task starts a fresh one.
+    """
+    return run.divergence_source_run_id is None

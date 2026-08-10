@@ -72,6 +72,12 @@ from ...pty_runner import (
     strip_ansi_escapes,
     terminate_process_tree,
 )
+from ...run_task_binding import (
+    TaskBindingError,
+    bind_run_to_task,
+    resolve_task_for_project,
+    task_id_for_delivery,
+)
 from ...runner_commands import (
     OPERATOR_POSTURE,
     SUPPORTED_RUNNERS,
@@ -154,6 +160,13 @@ class TriggerAgentRequest(BaseModel):
         "from the specification workspace. Carried into the canonical turn context, never into "
         "the stored message.",
     )
+    task_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="The task this run is being started for. Binds the run and moves the task to "
+        "in_progress when that move is legal. Operator-supplied: an agent cannot bind its own run, "
+        "because a run that never binds is never checked at its boundary.",
+    )
 
     @field_validator("spec_document")
     @classmethod
@@ -216,6 +229,8 @@ async def trigger_agent_directly(
     turn_depth: Optional[int] = None,
     initiator: str = "operator",
     spec_document: Optional[str] = None,
+    task_id: Optional[str] = None,
+    divergence_source_run_id: Optional[str] = None,
 ) -> TriggerAgentResponse:
     """Validate and spawn *agent* directly, returning its run identifier.
 
@@ -482,7 +497,32 @@ async def trigger_agent_directly(
         initiator=initiator,
         capability_token_hash=hash_run_token(run_token),
         instance_id=instance_identity.get(),
+        divergence_source_run_id=divergence_source_run_id,
     )
+
+    # The binding, and the automatic move it causes, are staged here — before delivery, which is
+    # what commits — so a bound run whose task never moved cannot exist as a partial write.
+    #
+    # A delegated task takes precedence over an explicitly requested one because it is the more
+    # specific statement: an operator draining a queue did not choose what those items are about.
+    delegated_task_id = await task_id_for_delivery(session, queue_entry_ids)
+    bound_task = None
+    if delegated_task_id:
+        try:
+            bound_task = await resolve_task_for_project(session, delegated_task_id, project_id)
+        except TaskBindingError:
+            # Validated once already, when the delegation was sent. If the task has since been
+            # deleted the turn still runs, unbound: refusing to start would let removing a row
+            # cancel work the agent was legitimately asked to do.
+            bound_task = None
+    elif task_id:
+        # Asked for explicitly, now, by the operator or by a divergence response. A refusal here is
+        # the right answer — nothing else in the request implies the work.
+        bound_task = await resolve_task_for_project(session, task_id, project_id)
+
+    if bound_task is not None:
+        await bind_run_to_task(session, run, bound_task)
+
     delivered = []
     if queue_entry_ids:
         delivered = await deliver_entries_with_run(
@@ -631,6 +671,12 @@ async def trigger_agent(
         conversation = new_conversation(project_id=project_id, agent=body.agent, origin="operator")
         session.add(conversation)
 
+    if body.task_id:
+        # Refused now, while the operator is looking at the response, rather than at spawn — a
+        # request that names a task the project does not have is a mistake, not a reason to start
+        # an unbound run whose boundary is then never checked.
+        await resolve_task_for_project(session, body.task_id, project_id)
+
     if body.overrides:
         agent_row_result = await session.execute(
             select(Agent).where(Agent.project_id == project_id, Agent.name == body.agent)
@@ -664,6 +710,10 @@ async def trigger_agent(
         conversation_id=conversation.id,
         work_dir=body.work_dir,
         spec_document=body.spec_document,
+        # Carried on the entry rather than held for the spawn, so an operator starting work from a
+        # board card binds through the same path a delegation does. The scheduler may start this
+        # agent's turn from a later call than this one, and anything held only here would be gone.
+        task_id=body.task_id,
     )
     session.add(entry)
     conversation.updated_at = entry.arrived_at

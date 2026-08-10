@@ -29,6 +29,7 @@ def new_entry(
     conversation_id: Optional[str] = None,
     work_dir: Optional[str] = None,
     spec_document: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> InboundQueueEntry:
     if origin_type not in ("operator", "agent", "job", "checkpoint"):
         raise ValueError("origin_type must be 'operator', 'agent', 'job', or 'checkpoint'")
@@ -51,6 +52,7 @@ def new_entry(
         conversation_id=conversation_id,
         work_dir=work_dir,
         spec_document=spec_document,
+        task_id=task_id,
         state="queued",
     )
 
