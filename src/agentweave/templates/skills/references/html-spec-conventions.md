@@ -322,6 +322,14 @@ identically offline. Beyond "clean and readable," every spec must be:
      inside the Hub regardless of OS preference. Each MUST also set `color-scheme` to its own
      mode — leaving the `light dark` default lets the browser keep drawing scrollbars and form
      controls from the OS preference, against a page whose colors have already been decided.
+
+  Inside the Hub the *neutrals* — `--bg`, `--surface`, `--surface-2`, `--border`, `--fg`,
+  `--muted` — are additionally remapped onto the dashboard's own ramp, because the document
+  fills a region whose every ancestor paints the page ground: a document keeping its own ground
+  reads as a slab laid over the page rather than part of it. Author them anyway, for standalone
+  viewing, but express every surface in terms of these tokens rather than hard-coded colors, or
+  the remap will skip whatever was hard-coded and that block alone will keep the old ground.
+  The meaning-carrying hues (`--accent`, `--warn`, `--done`, `--danger`) are never remapped.
 - **Consistent visual language.** Clear, distinct styling for `.note` / `.example` /
   `.warning` / `.issue`, colored MUST/SHOULD/MAY badges in the requirements table, and
   `.task[data-status="done"]` struck through.

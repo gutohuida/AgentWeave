@@ -13,7 +13,7 @@ import projectTabsSource from '@/components/layout/ProjectTabs.tsx?raw'
 import conversationControlsSource from '@/components/agents/ConversationControls.tsx?raw'
 import composerSource from '@/components/agents/Composer.tsx?raw'
 import agentTimelineSource from '@/components/agents/AgentTimeline.tsx?raw'
-import { HUB_SURFACE, withHubTheme } from '@/components/spec/SpecFrame'
+import { HUB_NEUTRALS, withHubTheme } from '@/components/spec/SpecFrame'
 
 const cssSource = readFileSync('src/index.css', 'utf8')
 
@@ -183,12 +183,28 @@ describe('Hub UI mock alignment contracts', () => {
 })
 
 describe('the embedded spec document adopts the Hub it is embedded in', () => {
-  it('restates --surface exactly as index.css declares it', () => {
+  it('restates the neutral ramp exactly as index.css declares it', () => {
     // The frame is sandboxed onto an opaque origin and cannot read a custom property across
-    // that boundary, so the value is a literal in SpecFrame.tsx. This is the assertion that
+    // that boundary, so the values are literals in SpecFrame.tsx. This is the assertion that
     // keeps the copy honest — change the palette and this fails rather than drifting.
-    expect(cssSource).toMatch(new RegExp(`--surface:\\s*${HUB_SURFACE.dark}\\b`))
-    expect(cssSource).toMatch(new RegExp(`--surface:\\s*${HUB_SURFACE.light}\\b`))
+    const escape = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    for (const [mode, block] of [
+      ['dark', cssSource.slice(cssSource.indexOf('[data-mode="dark"]'), cssSource.indexOf('[data-mode="light"]'))],
+      ['light', cssSource.slice(cssSource.indexOf('[data-mode="light"]'))],
+    ] as const) {
+      const n = HUB_NEUTRALS[mode]
+      for (const [token, value] of [
+        ['--bg', n.bg],
+        ['--surface', n.surface],
+        ['--surface-2', n.surface2],
+        ['--border', n.border],
+        ['--text', n.fg],
+        ['--text-2', n.muted],
+      ] as const) {
+        expect(block, `${mode} ${token} should still be ${value}`)
+          .toMatch(new RegExp(`${escape(token)}:\\s*${escape(value)}\\s*;`))
+      }
+    }
   })
 
   it('pins color-scheme to the Hub mode so the scrollbar stops following the OS', () => {
@@ -197,11 +213,31 @@ describe('the embedded spec document adopts the Hub it is embedded in', () => {
     expect(withHubTheme(doc, 'dark')).toContain('color-scheme:dark !important')
   })
 
-  it("overrides the document's ground to the composer's surface", () => {
-    expect(withHubTheme('<html><head></head><body></body></html>', 'dark'))
-      .toContain(`--bg:${HUB_SURFACE.dark} !important`)
-    expect(withHubTheme('<html><head></head><body></body></html>', 'light'))
-      .toContain(`--bg:${HUB_SURFACE.light} !important`)
+  it("grounds the document on the page, not on a lift plane, and keeps the ramp coherent", () => {
+    // Every ancestor of the frame paints --bg, so the document is the region. Re-grounding
+    // without also moving --surface would invert the lift: the conventions' own #f6f7f9 is
+    // darker than the Hub's light --bg.
+    for (const mode of ['light', 'dark'] as const) {
+      const themed = withHubTheme('<html><head></head><body></body></html>', mode)
+      expect(themed).toContain(`--bg:${HUB_NEUTRALS[mode].bg} !important`)
+      expect(themed).toContain(`--surface:${HUB_NEUTRALS[mode].surface} !important`)
+      expect(themed).toContain(`--surface-2:${HUB_NEUTRALS[mode].surface2} !important`)
+    }
+    // Lifted blocks must read as lifted in both modes: light lifts toward white, dark away
+    // from black. Asserted as a relationship so a future palette edit cannot quietly flatten it.
+    const lum = (hex: string) => parseInt(hex.slice(1, 3), 16)
+    expect(lum(HUB_NEUTRALS.light.surface)).toBeGreaterThan(lum(HUB_NEUTRALS.light.bg))
+    expect(lum(HUB_NEUTRALS.dark.surface)).toBeGreaterThan(lum(HUB_NEUTRALS.dark.bg))
+  })
+
+  it('recolours only the neutrals, leaving the meaning-carrying hues alone', () => {
+    // accent / warn / done / danger say something inside the specification; they are not the
+    // Hub's to restyle.
+    const themed = withHubTheme('<html><head></head><body></body></html>', 'dark')
+    const override = themed.match(/<style data-hub-theme-override>([\s\S]*?)<\/style>/)?.[1] ?? ''
+    for (const token of ['--accent', '--warn', '--done', '--danger']) {
+      expect(override, `${token} should not be overridden`).not.toContain(`${token}:`)
+    }
   })
 
   it('lands the override inside <head>, never ahead of the doctype', () => {
@@ -218,7 +254,7 @@ describe('the embedded spec document adopts the Hub it is embedded in', () => {
     const once = withHubTheme('<html><head></head><body></body></html>', 'light')
     const twice = withHubTheme(once, 'dark')
     expect(twice.match(/data-hub-theme-override/g)).toHaveLength(1)
-    expect(twice).toContain(`--bg:${HUB_SURFACE.dark} !important`)
-    expect(twice).not.toContain(HUB_SURFACE.light)
+    expect(twice).toContain(`--bg:${HUB_NEUTRALS.dark.bg} !important`)
+    expect(twice).not.toContain(HUB_NEUTRALS.light.bg)
   })
 })

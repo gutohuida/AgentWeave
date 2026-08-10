@@ -9,11 +9,31 @@ import {
   type TocAnchor,
 } from './specBridge'
 
-// The composer's surface, restated. The spec document is sandboxed onto an opaque origin, so
-// it cannot read the Hub's custom properties — the value has to travel as a literal.
-// `hubVisualLanguage.test.ts` asserts these agree with `--surface` in index.css, the same way
+// The Hub's neutral ramp, restated. The spec document is sandboxed onto an opaque origin, so
+// it cannot read the Hub's custom properties — the values have to travel as literals.
+// `hubVisualLanguage.test.ts` asserts every one of them agrees with index.css, the same way
 // mcp_server.py's restated constants are pinned to their source.
-export const HUB_SURFACE = { light: '#ffffff', dark: '#151518' } as const
+//
+// Only the neutrals are mapped. The document's accent, warn, done and danger hues are left
+// alone: those carry meaning inside the specification and are not the Hub's to recolour.
+export const HUB_NEUTRALS = {
+  light: {
+    bg: '#fafafa',
+    surface: '#ffffff',
+    surface2: '#f4f4f5',
+    border: 'rgba(0,0,0,0.09)',
+    fg: '#18181b',
+    muted: '#5c5c66',
+  },
+  dark: {
+    bg: '#0a0a0b',
+    surface: '#151518',
+    surface2: '#1d1d21',
+    border: 'rgba(255,255,255,0.07)',
+    fg: '#f5f5f6',
+    muted: '#8e8e98',
+  },
+} as const
 
 // Two things the embedding fixes, both of which a standalone document gets right on its own
 // and only gets wrong *inside the Hub*:
@@ -25,19 +45,31 @@ export const HUB_SURFACE = { light: '#ffffff', dark: '#151518' } as const
 //     dark"). Inside the frame the mode is not a preference to be honoured, it is already
 //     decided, so it is pinned to the one the Hub is in.
 //
-//  2. `--bg`. The document's own ground is #ffffff / #15171c; the composer it sits beside is
-//     #ffffff / #151518. Identical in light and a few points off in dark, which is exactly the
-//     kind of near-match that reads as a mistake. The document is a panel in the Hub, so it
-//     takes the Hub's panel colour (operator: "make the background of the spec the same color
-//     as the composer background").
+//  2. The neutral ramp. Every ancestor of the frame paints `--bg`, so the document IS the
+//     region — not a card sitting in one. It previously painted a lift colour there and read
+//     as a slab laid over the page: "in dark mode the spec background still looks gray in
+//     comparison and in light mode it looks white… where the spec lives doesn't blend well."
+//
+//     The ground alone is not enough to move. The document's own `--surface` (#f6f7f9) is
+//     *darker* than the Hub's light `--bg` (#fafafa), so re-grounding without re-mapping the
+//     rest would invert every lifted block — notes and code would sink instead of lift. The
+//     ramp only stays coherent if it moves together, so `--surface` and `--surface-2` take the
+//     Hub's lift planes and the document ends up in the Hub's graphite rather than its own
+//     blue-tinted grey.
 //
 // `!important` rather than source order: the conventions' own `:root[data-theme="light"]` rule
 // outranks a bare `:root`, and where this <style> lands relative to it depends on the document.
 function themeOverride(mode: 'light' | 'dark'): string {
+  const n = HUB_NEUTRALS[mode]
   return (
     `<style data-hub-theme-override>:root{` +
     `color-scheme:${mode} !important;` +
-    `--bg:${HUB_SURFACE[mode]} !important;` +
+    `--bg:${n.bg} !important;` +
+    `--surface:${n.surface} !important;` +
+    `--surface-2:${n.surface2} !important;` +
+    `--border:${n.border} !important;` +
+    `--fg:${n.fg} !important;` +
+    `--muted:${n.muted} !important;` +
     `}</style>`
   )
 }
@@ -149,9 +181,10 @@ export const SpecFrame = forwardRef<SpecFrameHandle, SpecFrameProps>(function Sp
         window.setTimeout(() => requestToc(frameRef.current?.contentWindow ?? null), 0)
       }
       className="w-full h-full border-0"
-      // Matches the ground the document paints inside itself, so nothing flashes a different
-      // colour before srcdoc parses and overscroll has nothing else to reveal.
-      style={{ background: 'var(--surface)' }}
+      // Matches the ground the document paints inside itself — which is the page's own ground —
+      // so nothing flashes a different colour before srcdoc parses, and overscroll has nothing
+      // else to reveal.
+      style={{ background: 'var(--bg)' }}
     />
   )
 })
