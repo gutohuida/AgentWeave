@@ -13,6 +13,7 @@ import projectTabsSource from '@/components/layout/ProjectTabs.tsx?raw'
 import conversationControlsSource from '@/components/agents/ConversationControls.tsx?raw'
 import composerSource from '@/components/agents/Composer.tsx?raw'
 import agentTimelineSource from '@/components/agents/AgentTimeline.tsx?raw'
+import { HUB_SURFACE, withHubTheme } from '@/components/spec/SpecFrame'
 
 const cssSource = readFileSync('src/index.css', 'utf8')
 
@@ -21,19 +22,20 @@ describe('Hub UI mock alignment contracts', () => {
     for (const declaration of [
       '--bg:          #0a0a0b',
       '--rail:        #101012',
-      '--top:         #0d0d0f',
       '--surface:     #151518',
       '--surface-2:   #1d1d21',
       '--primary:     #fafafa',
       '--bg:          #fafafa',
       '--rail:        #f4f4f5',
-      '--top:         #ffffff',
       '--surface:     #ffffff',
       '--surface-2:   #f4f4f5',
       '--primary:     #18181b',
     ]) {
       expect(cssSource).toContain(declaration)
     }
+    // `--top` was a plane defined for exactly one element, the tab strip. Removed rather than
+    // left unreferenced, so the palette does not carry a colour nothing uses.
+    expect(cssSource).not.toMatch(/--top:/)
   })
 
   it('defines every shared surface used by project dialogs', () => {
@@ -92,7 +94,12 @@ describe('Hub UI mock alignment contracts', () => {
     // found). SetupModal's light/dark mode-preview swatches are the one legitimate exception:
     // they show what each mode looks like regardless of which mode is currently active, so
     // they cannot be expressed as a token that itself changes per mode.
-    const HEX_EXEMPT = new Set(['components/layout/SetupModal.tsx'])
+    // SpecFrame.tsx is the second: the spec document is sandboxed onto an opaque origin, so a
+    // `var(--surface)` reference cannot cross into it and the value must travel as a literal.
+    // What this rule actually guards against — a hex quietly surviving a ramp swap — is covered
+    // instead by 'restates --surface exactly as index.css declares it' below, which fails the
+    // moment the palette moves and the copy does not.
+    const HEX_EXEMPT = new Set(['components/layout/SetupModal.tsx', 'components/spec/SpecFrame.tsx'])
     const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/
 
     function listTsxFiles(dir: string): string[] {
@@ -136,8 +143,14 @@ describe('Hub UI mock alignment contracts', () => {
     expect(composerSource).toContain("from '@/components/ui/button'")
   })
 
-  it('the tab strip carries only a plane change at its boundary, not a dividing line (§6)', () => {
+  it('the tab strip carries neither a dividing line nor a plane change at its boundary (§6)', () => {
+    // §6 removed the line and kept a plane change. The operator then read the remaining plane
+    // as a band laid over the screen — "it pops up in a bad way… make it the same color" — so
+    // the strip now paints nothing at all and sits on `--bg` with everything else.
     expect(projectTabsSource).not.toMatch(/borderBottom/)
+    // Scoped to the style attribute so prose about the removal does not trip it.
+    expect(projectTabsSource).not.toMatch(/style=\{\{[^}]*background/)
+    expect(projectTabsSource).not.toMatch(/var\(--top\)/)
   })
 
   it('nothing paints a darker region around the composer (2026-08-06-hub-collaboration-and-conversation-fixes §4)', () => {
@@ -166,5 +179,46 @@ describe('Hub UI mock alignment contracts', () => {
     // a new turn was appended.
     expect(agentTimelineSource).not.toMatch(/foldOverride\[key\]\s*\?\?\s*!isLastTurn/)
     expect(agentTimelineSource).toMatch(/foldOverride\[key\]\s*\?\?\s*false/)
+  })
+})
+
+describe('the embedded spec document adopts the Hub it is embedded in', () => {
+  it('restates --surface exactly as index.css declares it', () => {
+    // The frame is sandboxed onto an opaque origin and cannot read a custom property across
+    // that boundary, so the value is a literal in SpecFrame.tsx. This is the assertion that
+    // keeps the copy honest — change the palette and this fails rather than drifting.
+    expect(cssSource).toMatch(new RegExp(`--surface:\\s*${HUB_SURFACE.dark}\\b`))
+    expect(cssSource).toMatch(new RegExp(`--surface:\\s*${HUB_SURFACE.light}\\b`))
+  })
+
+  it('pins color-scheme to the Hub mode so the scrollbar stops following the OS', () => {
+    const doc = '<html><head><style>:root{color-scheme:light dark}</style></head><body></body></html>'
+    expect(withHubTheme(doc, 'light')).toContain('color-scheme:light !important')
+    expect(withHubTheme(doc, 'dark')).toContain('color-scheme:dark !important')
+  })
+
+  it("overrides the document's ground to the composer's surface", () => {
+    expect(withHubTheme('<html><head></head><body></body></html>', 'dark'))
+      .toContain(`--bg:${HUB_SURFACE.dark} !important`)
+    expect(withHubTheme('<html><head></head><body></body></html>', 'light'))
+      .toContain(`--bg:${HUB_SURFACE.light} !important`)
+  })
+
+  it('lands the override inside <head>, never ahead of the doctype', () => {
+    // A <style> prepended before <!DOCTYPE html> drops the document into quirks mode.
+    const themed = withHubTheme('<!DOCTYPE html><html><head><title>S</title></head><body>x</body></html>', 'dark')
+    expect(themed.indexOf('<!DOCTYPE html>')).toBe(0)
+    expect(themed).toMatch(/<style data-hub-theme-override>[\s\S]*<\/style><\/head>/)
+
+    const fragment = withHubTheme('<p>no head</p>', 'dark')
+    expect(fragment.indexOf('<p>no head</p>')).toBe(0)
+  })
+
+  it('re-theming replaces the previous override instead of stacking another', () => {
+    const once = withHubTheme('<html><head></head><body></body></html>', 'light')
+    const twice = withHubTheme(once, 'dark')
+    expect(twice.match(/data-hub-theme-override/g)).toHaveLength(1)
+    expect(twice).toContain(`--bg:${HUB_SURFACE.dark} !important`)
+    expect(twice).not.toContain(HUB_SURFACE.light)
   })
 })

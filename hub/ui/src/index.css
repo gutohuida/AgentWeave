@@ -21,7 +21,6 @@
        a region as a region. */
     --bg:          #0a0a0b;
     --rail:        #101012;
-    --top:         #0d0d0f;
     --surface:     #151518;
     --surface-2:   #1d1d21;
     --surface-3:   #26262b;
@@ -100,7 +99,6 @@
   [data-mode="light"] {
     --bg:          #fafafa;
     --rail:        #f4f4f5;
-    --top:         #ffffff;
     --surface:     #ffffff;
     --surface-2:   #f4f4f5;
     --surface-3:   #e9e9ec;

@@ -319,7 +319,9 @@ identically offline. Beyond "clean and readable," every spec must be:
   1. Light-mode values on `:root` (also the default when opened as a plain file).
   2. A `@media (prefers-color-scheme: dark)` override for standalone dark-mode viewing.
   3. Explicit `:root[data-theme="light"]` / `:root[data-theme="dark"]` overrides, which win
-     inside the Hub regardless of OS preference.
+     inside the Hub regardless of OS preference. Each MUST also set `color-scheme` to its own
+     mode — leaving the `light dark` default lets the browser keep drawing scrollbars and form
+     controls from the OS preference, against a page whose colors have already been decided.
 - **Consistent visual language.** Clear, distinct styling for `.note` / `.example` /
   `.warning` / `.issue`, colored MUST/SHOULD/MAY badges in the requirements table, and
   `.task[data-status="done"]` struck through.
@@ -371,13 +373,20 @@ Use this as the starting template. Fill every `<!-- … -->`. Substitution token
         --danger:#ff7a72; --danger-bg:#3a2020;
       }
     }
-    /* 3. Explicit override — the Hub stamps this on <html> to match its own toggle */
+    /* 3. Explicit override — the Hub stamps this on <html> to match its own toggle.
+          `color-scheme` MUST be resolved here too, not left at `light dark`. That value tells
+          the browser the document handles both and to paint scrollbars and form controls from
+          the *OS* preference — so a document stamped `light` on a dark-mode OS renders a dark
+          scrollbar down the side of a white page. Once `data-theme` is present the mode is
+          decided, and the UA chrome has to be told which one won. */
     :root[data-theme="light"] {
+      color-scheme: light;
       --bg:#ffffff; --surface:#f6f7f9; --surface-2:#eef0f3; --fg:#1a1a1a; --muted:#5b6472;
       --border:#e2e4e9; --accent:#2563eb; --done:#0a7f3f; --warn:#8a6400; --warn-bg:#fff3cd;
       --danger:#b3261e; --danger-bg:#fdeaea;
     }
     :root[data-theme="dark"] {
+      color-scheme: dark;
       --bg:#15171c; --surface:#1c1f26; --surface-2:#22262e; --fg:#e6e8ec; --muted:#9aa3b2;
       --border:#2a2e37; --accent:#6c9bff; --done:#3ddc84; --warn:#f0c04c; --warn-bg:#3a301a;
       --danger:#ff7a72; --danger-bg:#3a2020;
