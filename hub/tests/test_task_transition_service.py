@@ -324,3 +324,78 @@ async def test_refusals_share_a_base_so_routes_can_catch_one_type(app):
     assert issubclass(IllegalTransitionError, TransitionRefusedError)
     assert issubclass(ActorNotPermittedError, TransitionRefusedError)
     assert issubclass(InvalidEntryStatusError, TransitionRefusedError)
+
+
+# ---------------------------------------------------------------------------
+# The transition origin (run-task-binding, design D5)
+# ---------------------------------------------------------------------------
+
+
+async def test_a_transition_defaults_to_actor_caused(app):
+    """`actor` is the default because it is what almost every caller is, and because a default of
+    `runtime` would let a forgotten argument quietly exempt a real transition from the divergence
+    check."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-origin-default", "pending")
+        transition = await apply_transition(session, task, "in_progress", operator())
+        await session.commit()
+
+        assert transition is not None
+        assert transition.origin == "actor"
+
+
+async def test_a_runtime_transition_records_its_cause_and_still_names_the_run(app):
+    """The system acts *as* the run, not instead of it: the run and agent are still recorded, and
+    only the cause differs. That is what lets author/reviewer separation keep working unchanged
+    while the divergence check can still tell the two apart."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-origin-runtime", "pending")
+        transition = await apply_transition(
+            session, task, "in_progress", run_actor("run-bind", "worker"), origin="runtime"
+        )
+        await session.commit()
+
+        assert transition is not None
+        assert transition.origin == "runtime"
+        assert transition.run_id == "run-bind"
+        assert transition.actor_agent == "worker"
+        assert transition.actor_kind == "run"
+
+
+async def test_the_runtime_cannot_make_a_move_the_run_could_not(app):
+    """A `runtime` transition is the same call with the same `Actor`, so it meets the same map.
+    An automatic move that is not an edge available to the run does not happen."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-origin-illegal", "in_progress")
+
+        with pytest.raises(IllegalTransitionError):
+            await apply_transition(
+                session, task, "approved", run_actor("run-bind", "worker"), origin="runtime"
+            )
+        assert task.status == "in_progress"
+
+
+async def test_an_unknown_origin_is_refused(app):
+    """There is no CHECK constraint behind this column — it sits on an existing table, and a
+    table-level CHECK naming a column makes that column undroppable in SQLite — so this is where a
+    bad value is caught."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-origin-bad", "pending")
+
+        with pytest.raises(ValueError, match="origin must be one of"):
+            await apply_transition(session, task, "in_progress", operator(), origin="magic")
+
+
+async def test_a_runtime_transition_still_binds_author_reviewer_separation(app):
+    """The agent recorded on an automatic move is the run's agent, so later review of that task is
+    judged against it exactly as if the agent had asked."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-origin-separation", "in_progress")
+        await apply_transition(
+            session, task, "completed", run_actor("run-a", "worker"), origin="runtime"
+        )
+        await apply_transition(session, task, "under_review", run_actor("run-b", "worker"))
+        await session.commit()
+
+        with pytest.raises(ActorNotPermittedError):
+            await apply_transition(session, task, "approved", run_actor("run-c", "worker"))

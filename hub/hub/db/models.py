@@ -468,6 +468,11 @@ class InboundQueueEntry(Base):
     #: from the specification workspace. Carried on the entry rather than through the scheduler
     #: call because a busy agent's turn starts from a later call than the one that queued it.
     spec_document: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    #: The task this input is about, when a delegation named one. Carried on the entry for the same
+    #: reason `spec_document` is: a busy agent's turn starts from a later scheduler call than the
+    #: one that queued this, so anything passed through the call is lost by the time the run exists.
+    #: Read at spawn to bind the receiving run (`2026-08-10-run-task-binding`, design D3).
+    task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
@@ -527,9 +532,28 @@ class Task(Base):
     notes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # What happens when a run bound to this task ends without the task moving.
+    #
+    # Per task rather than per project because the operator's stated use — a cheap model doing the
+    # work and an expensive one resolving what it could not — is a property of the work, not of the
+    # project. One project-wide switch would change behaviour for everything at once.
+    #
+    # Defaults to `surface`, and that default is load-bearing rather than incidental: it is what
+    # every task already on a board acquires, so introducing this capability cannot start runs
+    # nobody asked for (`2026-08-10-run-task-binding`, design D7).
+    divergence_policy: Mapped[str] = mapped_column(
+        String(16), default="surface", server_default="surface", nullable=False
+    )
+    # Who the work goes to when `divergence_policy` is `escalate`. NULL makes escalation fall back
+    # to surfacing — a policy naming nobody cannot route anywhere.
+    escalation_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
+    # No CHECK on `divergence_policy`, matching `status` and `priority` on this table, which have
+    # none. A table-level CHECK naming a column also makes that column undroppable in SQLite, which
+    # would make 0056 irreversible. The values are declared in `run_task_binding.py` and validated
+    # on the way in.
     __table_args__ = (
         Index("ix_tasks_project_status", "project_id", "status"),
         Index("ix_tasks_project_assignee", "project_id", "assignee"),
@@ -578,11 +602,95 @@ class TaskTransition(Base):
     # row that may be pruned. It is also what author/reviewer separation compares — `run_id` is
     # not, because every turn is a new run and a run-based check is trivially satisfied.
     actor_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # "actor" or "runtime" — what caused this transition to be requested.
+    #
+    # `runtime` means the Hub made the move on the run's behalf, at a moment the run did not
+    # choose: today, moving a task to `in_progress` because a run bound to it. The run and agent
+    # are still recorded, because the system acts *as* the run rather than instead of it — which
+    # is also why there is no third actor kind (design D5).
+    #
+    # The divergence check is why this column exists. It asks "did this run advance its task?", and
+    # the runtime's own auto-transition is a transition by that run on that task — so without a
+    # recorded cause it answers yes for every bound run, and the check reports nothing.
+    #
+    # Rows written before this existed read as `actor`, which is what was true for all of them.
+    origin: Mapped[str] = mapped_column(
+        String(16), default="actor", server_default="actor", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
 
+    # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,
+    # and the second is not merely pragmatic: a table-level CHECK naming a column makes that column
+    # undroppable in SQLite, so the constraint would make 0056 irreversible; and the values are
+    # already declared once in `task_transitions.py` and pinned by test, which is where a reader
+    # looks for them.
     __table_args__ = (Index("ix_task_transitions_task_sequence", "task_id", "sequence"),)
+
+
+class RunDivergence(Base):
+    """One occurrence of a bound run ending without its task moving.
+
+    A record, not only an event. An SSE broadcast vanishes: the operator needs to see what happened
+    while they were not watching, and "how often does this agent drop its work?" is a question worth
+    being able to ask (`2026-08-10-run-task-binding`, design D10). B3's evidence model wants the
+    same rows.
+
+    Mutable in exactly one respect — `resolved_at` is stamped when a later actor transition lands on
+    the task, because a divergence is an open condition rather than a verdict, and long work
+    spanning several turns opens one that closes as soon as the work reaches the ledger. Nothing
+    else is updated and nothing is deleted; the row survives its own resolution.
+    """
+
+    __tablename__ = "run_divergences"
+
+    # Autoincrement, for the reason `TaskTransition` and `InboundQueueEntry` are: rows staged in one
+    # flush share `created_at` to the microsecond, and a random id deciding the order of a record
+    # whose meaning is "this happened, then this" is a corruption rather than an inconvenience.
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # Denormalised for the same reason `TaskTransition.actor_agent` is: this must answer "who
+    # dropped this" without depending on a run row that may later be pruned.
+    agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tasks.id"), nullable=False, index=True
+    )
+    # Where the task stood when the run ended, and how the run ended. The exit status is what makes
+    # a crash distinguishable from a run that completed and forgot — both are divergent, and they
+    # deserve different reactions from a reader.
+    task_status_at_end: Mapped[str] = mapped_column(String(32), nullable=False)
+    run_exit_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    # The policy the task carried at the moment of divergence, and what was actually done. They
+    # differ whenever a policy fell back: `escalate` with no agent named, or a retry that had
+    # already spent its one hop.
+    policy_applied: Mapped[str] = mapped_column(String(16), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The run started in response, when one was.
+    response_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Who the task was assigned to before an escalation reassigned it. Escalation moving the
+    # assignee is deliberate — leaving it pointing at the agent that just dropped the work would
+    # make the board disagree with reality — and this is what makes it reversible (design D9).
+    previous_assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_run_divergences_project_task", "project_id", "task_id"),
+        Index("ix_run_divergences_project_resolved", "project_id", "resolved_at"),
+        CheckConstraint(
+            "policy_applied IN ('surface', 'retry', 'escalate')",
+            name="ck_run_divergences_policy",
+        ),
+        CheckConstraint(
+            "outcome IN ('surfaced', 'retried', 'escalated')",
+            name="ck_run_divergences_outcome",
+        ),
+    )
 
 
 class Question(Base):
@@ -764,6 +872,24 @@ class Run(Base):
     conversation_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("conversations.id"), nullable=True
     )
+    # The one task this run was started for, or NULL.
+    #
+    # Set by the **runtime** at spawn, from the cause of the run — a delegation naming a task, or
+    # the operator starting work from a board card. No agent-facing operation creates, changes or
+    # clears it: an agent able to bind itself is an agent able to never bind, and an unbound run is
+    # never divergent, so self-binding would reintroduce one level down the forgetting this column
+    # exists to remove (`2026-08-10-run-task-binding`, design D2).
+    #
+    # NULL means unbound, and unbound is legitimate — exploration, conversation, questions and
+    # scheduled work are real work with no task. An unbound run is never checked at the boundary.
+    task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # The run whose divergence caused this one to be started, or NULL.
+    #
+    # This is the whole retry bound (D8). A run carrying it never triggers another retry, so
+    # `A diverges → B` can only ever be followed by escalation or surfacing. There is no
+    # max-attempts field to misconfigure and no loop is expressible. The bound is per chain, not
+    # per task lifetime: a response run that does move its task ends the chain.
+    divergence_source_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="running", nullable=False, index=True)
     pid: Mapped[Optional[int]] = mapped_column(nullable=True)
     exit_code: Mapped[Optional[int]] = mapped_column(nullable=True)

@@ -136,18 +136,40 @@ def guard_entry_status(status: str) -> None:
         )
 
 
+#: What caused a transition to be *requested*. `runtime` means the Hub made the move on the run's
+#: behalf at a moment the run did not choose — today, moving a task to `in_progress` because a run
+#: bound to it. The run and agent are still recorded, because the system acts *as* the run rather
+#: than instead of it, which is why there is no third actor kind
+#: (`2026-08-10-run-task-binding`, design D5).
+ORIGIN_ACTOR = "actor"
+ORIGIN_RUNTIME = "runtime"
+ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME})
+
+
 async def apply_transition(
     session: AsyncSession,
     task: Task,
     to_status: str,
     actor: Actor,
+    origin: str = ORIGIN_ACTOR,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
     Raises `TransitionRefusedError` (or a subclass) instead of mutating when the move is not permitted.
     The caller commits; this function stages the change and the history row together so a refusal
     after a partial write is not possible.
+
+    `origin` defaults to `actor` because that is what almost every caller is, and because a default
+    of `runtime` would let a forgotten argument quietly exempt a real transition from the divergence
+    check. Only the run→task binding passes `runtime`, and a source scan in
+    `hub/tests/test_task_transitions.py` holds that true.
+
+    A `runtime` transition is subject to every legality and actor rule a requested one is: it is the
+    *same* call, with the same `Actor`. The runtime cannot make a move the run could not.
     """
+    if origin not in ORIGINS:
+        raise ValueError(f"origin must be one of {sorted(ORIGINS)}, got {origin!r}")
+
     from_status = task.status
 
     # D7: restating the current status is a no-op that records nothing. An agent plane retry would
@@ -171,6 +193,7 @@ async def apply_transition(
         actor_kind=actor.kind,
         run_id=actor.run_id,
         actor_agent=actor.agent,
+        origin=origin,
     )
     session.add(transition)
     return transition

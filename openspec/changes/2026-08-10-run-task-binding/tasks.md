@@ -5,35 +5,41 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
 
 ## 1. Schema
 
-- [ ] 1.1 Add `Run.task_id` (nullable, `String(64)`, indexed) and `Run.divergence_source_run_id`
+- [x] 1.1 Add `Run.task_id` (nullable, `String(64)`, indexed) and `Run.divergence_source_run_id`
       (nullable, `String(64)`) to `hub/hub/db/models.py`, with a docstring stating that the binding
       is set by the runtime and that NULL means unbound and unchecked
-- [ ] 1.2 Migration `0054` for both columns, guarded for a missing `runs` table in the manner of
+- [x] 1.2 Migration `0054` for both columns, guarded for a missing `runs` table in the manner of
       `0052`/`0053`
-- [ ] 1.3 Add `InboundQueueEntry.task_id` (nullable) with a comment stating why it lives on the entry
+- [x] 1.3 Add `InboundQueueEntry.task_id` (nullable) with a comment stating why it lives on the entry
       rather than passing through the scheduler call — the same reason `spec_document` does
-- [ ] 1.4 Migration `0055` for the queue column, guarded
-- [ ] 1.5 Add `Task.divergence_policy` (`String(16)`, server default `'surface'`, check constraint on
-      the three values) and `Task.escalation_agent` (nullable `String(64)`)
-- [ ] 1.6 Add `TaskTransition.origin` (`String(16)`, server default `'actor'`, check constraint on
-      `actor`/`runtime`), with the docstring explaining that without it the runtime's own
-      auto-transition satisfies the divergence check (design D5)
-- [ ] 1.7 Migration `0056` for 1.5 and 1.6, guarded; no backfill — the server defaults are the values
+- [x] 1.4 Migration `0055` for the queue column, guarded
+- [x] 1.5 Add `Task.divergence_policy` (`String(16)`, server default `'surface'`) and
+      `Task.escalation_agent` (nullable `String(64)`). **No CHECK constraint** — see 1.6
+- [x] 1.6 Add `TaskTransition.origin` (`String(16)`, server default `'actor'`), with the docstring
+      explaining that without it the runtime's own auto-transition satisfies the divergence check
+      (design D5). **No CHECK constraint, deviating from the plan:** a table-level CHECK naming a
+      column makes that column undroppable in SQLite, so it made `0056` irreversible — caught by
+      `test_migration_0052_downgrade_drops_the_history`. It is also the consistent choice: the
+      neighbouring `actor_kind`, `tasks.status` and `tasks.priority` carry no CHECK either. The
+      values are declared in `task_transition_service.ORIGINS` and enforced there, with a test. The
+      CHECKs on the new `run_divergences` table are kept — a new table is dropped whole, so the
+      problem does not arise, and `runs.initiator` sets that precedent
+- [x] 1.7 Migration `0056` for 1.5 and 1.6, guarded; no backfill — the server defaults are the values
       that are true for every pre-existing row (D12)
-- [ ] 1.8 Add the `RunDivergence` model per design D10, keyed on an autoincrement `sequence` primary
+- [x] 1.8 Add the `RunDivergence` model per design D10, keyed on an autoincrement `sequence` primary
       key with a separate `id` string, following `TaskTransition`
-- [ ] 1.9 Migration `0057` for `run_divergences`, guarded for missing `runs`, `tasks` and `projects`
-- [ ] 1.10 Bump the head assertion to `0057` in **both** `hub/tests/test_migrations.py` and
+- [x] 1.9 Migration `0057` for `run_divergences`, guarded for missing `runs`, `tasks` and `projects`
+- [x] 1.10 Bump the head assertion to `0057` in **both** `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py`, and add per-migration tests following the three `0052`
       tests
 
 ## 2. The transition origin
 
-- [ ] 2.1 Add an `origin` parameter to `task_transition_service.apply_transition`, defaulting to
+- [x] 2.1 Add an `origin` parameter to `task_transition_service.apply_transition`, defaulting to
       `actor`, and write it onto the `TaskTransition` row
-- [ ] 2.2 Assert in `hub/tests/test_task_transitions.py` that no call site outside the binding module
+- [x] 2.2 Assert in `hub/tests/test_task_transitions.py` that no call site outside the binding module
       passes `origin='runtime'` — a source scan, in the manner of the existing append-only scan
-- [ ] 2.3 Confirm `Actor` and `ACTOR_KINDS` are unchanged, and add a test asserting the actor kinds
+- [x] 2.3 Confirm `Actor` and `ACTOR_KINDS` are unchanged, and add a test asserting the actor kinds
       remain exactly `run` and `operator` (D5, and the spec's "actor kinds remain unchanged")
 
 ## 3. Binding a run

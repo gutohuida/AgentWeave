@@ -125,7 +125,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     The migrations are additive (they add/alter columns but don't create
     the base tables — those are created by `Base.metadata.create_all` in
     `init_db`). So this test verifies what alembic itself does: that every
-    migration runs cleanly and the version lands at 0053. The full
+    migration runs cleanly and the version lands at 0057. The full
     end-to-end test (create_all + alembic) is
     `test_init_db_runs_alembic_for_file_db` below.
     """
@@ -133,7 +133,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run_alembic_with(db_url)
 
-    # Verify alembic_version is at the latest revision (0053).
+    # Verify alembic_version is at the latest revision (0057).
     import aiosqlite
 
     async def _check_version() -> str:
@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0053", f"expected alembic_version=0053, got {version}"
+    assert version == "0057", f"expected alembic_version=0057, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0053"
+    assert version == "0057"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0053"
+        assert version == "0057"
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0053", f"expected alembic_version=0053, got {version}"
+    assert version == "0057", f"expected alembic_version=0057, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1196,6 +1196,7 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
             "actor_kind",
             "run_id",
             "actor_agent",
+            "origin",
             "created_at",
         }
 
@@ -1231,7 +1232,7 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0053"
+        assert version == "0057"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1260,3 +1261,149 @@ def test_migration_0052_downgrade_drops_the_history(tmp_path) -> None:
         }
         assert "task_transitions" not in tables
         assert "tasks" in tables
+
+
+def test_migration_0054_adds_the_run_task_binding(tmp_path) -> None:
+    """A run must be able to say what task it was started for, and whether it is a retry.
+
+    Both nullable: a run with no cause naming a task is unbound, which is legitimate, and only a run
+    started in response to a divergence carries a source. NULL in either is a statement, not a gap.
+    """
+    db_file = tmp_path / "binding.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1]: row for row in conn.execute("PRAGMA table_info(runs)")}
+        assert "task_id" in columns
+        assert "divergence_source_run_id" in columns
+        # row[3] is `notnull`
+        assert columns["task_id"][3] == 0
+        assert columns["divergence_source_run_id"][3] == 0
+
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(runs)")}
+        assert "ix_runs_task_id" in indexes
+
+        # Nullable with no server default is what "cannot backfill" means structurally: a run that
+        # predates the binding was genuinely unbound, and there is no value the migration could
+        # write that would not be a guess. row[4] is `dflt_value`.
+        assert columns["task_id"][4] is None
+        assert columns["divergence_source_run_id"][4] is None
+
+
+def test_migration_0055_adds_the_queue_entry_task(tmp_path) -> None:
+    """A delegation's task has to survive the queue: a busy agent's turn starts from a later
+    scheduler call than the one that queued the input."""
+    db_file = tmp_path / "queue_task.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1]: row for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")}
+        assert "task_id" in columns
+        assert columns["task_id"][3] == 0
+
+
+def test_migration_0056_defaults_are_the_pre_change_behaviour(tmp_path) -> None:
+    """The two defaults are what makes this change safe to ship onto an existing board.
+
+    Every transition recorded before `origin` existed was asked for by an actor, because nothing
+    else could write one. Every task predating the policy gets `surface`, so introducing the
+    capability starts no run nobody asked for.
+    """
+    db_file = tmp_path / "defaults.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("INSERT INTO projects (id, name, created_at) VALUES ('p1', 'P', '2026-01-01')")
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, description, status, priority, "
+            "created_at, updated) VALUES ('task-old', 'p1', 'T', '', 'pending', 'medium', "
+            "'2026-01-01', '2026-01-01')"
+        )
+        conn.execute(
+            "INSERT INTO task_transitions (id, project_id, task_id, from_status, to_status, "
+            "actor_kind, created_at) VALUES ('ttr-old', 'p1', 'task-old', 'pending', "
+            "'in_progress', 'operator', '2026-01-01')"
+        )
+        conn.commit()
+
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        policy, escalation = conn.execute(
+            "SELECT divergence_policy, escalation_agent FROM tasks WHERE id = 'task-old'"
+        ).fetchone()
+        assert policy == "surface"
+        assert escalation is None
+
+        origin = conn.execute(
+            "SELECT origin FROM task_transitions WHERE id = 'ttr-old'"
+        ).fetchone()[0]
+        assert origin == "actor"
+
+
+def test_migration_0057_creates_the_divergence_record(tmp_path) -> None:
+    db_file = tmp_path / "divergences.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "run_divergences" in tables
+
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(run_divergences)")}
+        assert columns == {
+            "sequence",
+            "id",
+            "project_id",
+            "run_id",
+            "agent",
+            "task_id",
+            "task_status_at_end",
+            "run_exit_status",
+            "policy_applied",
+            "outcome",
+            "response_run_id",
+            "previous_assignee",
+            "created_at",
+            "resolved_at",
+        }
+
+        # Ordering is the point: two divergences recorded in the same instant must read back in
+        # the order they happened, which `created_at` cannot promise.
+        pk = [row[1] for row in conn.execute("PRAGMA table_info(run_divergences)") if row[5]]
+        assert pk == ["sequence"]
+
+        nullable = {
+            row[1]: not row[3] for row in conn.execute("PRAGMA table_info(run_divergences)")
+        }
+        assert nullable["resolved_at"] is True
+        assert nullable["response_run_id"] is True
+        assert nullable["previous_assignee"] is True
+        assert nullable["outcome"] is False
+        assert nullable["policy_applied"] is False
+
+
+def test_migration_0057_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
+    """Same guard as 0052, for the same reason: an upgrade from an early revision arrives here with
+    no `tasks` for the foreign key to point at, and must skip rather than fail."""
+    db_file = tmp_path / "early_divergences.db"
+    _create_0034_conversations_state(db_file)
+
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == "0057"
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "tasks" not in tables
+        assert "run_divergences" not in tables

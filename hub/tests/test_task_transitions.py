@@ -377,3 +377,46 @@ def test_mcp_states_the_statuses_but_holds_no_adjacency():
             f"{adjacency_marker} appears in mcp_server.py — the transition map must not be copied "
             f"into the adapter"
         )
+
+
+# --------------------------------------------------------------------------------------
+# The transition origin, and the two things that keep it honest (run-task-binding, D5)
+# --------------------------------------------------------------------------------------
+
+
+def test_the_actor_kinds_are_unchanged_by_the_runtime_origin():
+    """The runtime is a *cause*, not an actor.
+
+    A third actor kind would require every edge in the map to declare whether the runtime may take
+    it, and would admit moves no one is accountable for. Recording the cause separately leaves the
+    map — and author/reviewer separation, which reads agent identity — untouched.
+    """
+    from hub.task_transitions import ACTOR_KINDS
+
+    assert set(ACTOR_KINDS) == {"run", "operator"}
+
+
+def test_only_the_binding_module_may_record_a_runtime_transition():
+    """A source scan, in the manner of the append-only scan above.
+
+    `origin='runtime'` exempts a transition from the divergence check — it says "the Hub did this,
+    not the agent". A second caller acquiring it would silently make its own transitions invisible
+    to the run-boundary check, which is the failure this whole capability exists to prevent. The
+    default is `actor` for the same reason: a forgotten argument must not exempt anything.
+    """
+    from pathlib import Path
+
+    from hub.task_transition_service import ORIGIN_RUNTIME
+
+    hub_package = Path(__file__).resolve().parents[1] / "hub"
+    permitted = {"run_task_binding.py", "task_transition_service.py"}
+    offenders = []
+    for path in hub_package.rglob("*.py"):
+        if path.name in permitted:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if f'origin="{ORIGIN_RUNTIME}"' in source or f"origin='{ORIGIN_RUNTIME}'" in source:
+            offenders.append(path.name)
+    assert offenders == [], (
+        "only the run→task binding may record a runtime-caused transition, " f"found: {offenders}"
+    )
