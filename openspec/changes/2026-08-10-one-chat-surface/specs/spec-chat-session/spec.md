@@ -1,3 +1,40 @@
+## REMOVED Requirements
+
+### Requirement: Spec tab continues the agent's most recent session
+
+**Reason**: Every mechanism it names is gone. It required the surface to send
+`session_mode: "resume"` with no `session_id` "so the trigger endpoint emits no session tag and the
+watchdog resolves the agent's last saved session" — the watchdog was deleted by
+`archive/2026-08-03-single-runtime`, and `session_mode` is a deprecated legacy field on the trigger
+request. The behaviour the requirement wanted survives, and is stronger: the surface shows the
+agent's own conversation and continues it, which is stated by "The specification workspace reuses
+the agent's conversation" below. Its "Runner independence" scenario also survives there — the
+surface has no runner-specific handling because it has no trigger implementation at all.
+
+**Migration**: None for an operator; the surface continues the agent's work as before. What changes
+is that continuity is expressed in conversations rather than in provider sessions, which the
+`agent-conversation-workspace` capability already governs.
+
+### Requirement: Deliberate new session
+
+**Reason**: Described a one-shot "start a new session" control in the Spec tab, which the deleted
+`SpecChatPane` owned. Starting fresh is now the conversation model's own affordance — a new
+conversation — reachable from navigation and from the composer, and shared with every other
+surface. Keeping a Spec-tab-specific version of it would be the second implementation this change
+exists to remove.
+
+**Migration**: Start a new conversation for the agent instead. The first message creates it, and
+abandoning it leaves no record.
+
+### Requirement: Session continuity is visible
+
+**Reason**: Required the Spec tab to state whether the next message continues something. It still
+does — the shared composer's continuity line says either "Continuing &lt;title&gt;" or "Next message
+starts a fresh conversation" — but as a property of the one conversation surface rather than of
+this tab. Restating it as a Spec-tab requirement would let the two drift.
+
+**Migration**: None. The indication is present and is now identical on every surface.
+
 ## ADDED Requirements
 
 ### Requirement: The specification workspace uses the one composer

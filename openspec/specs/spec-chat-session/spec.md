@@ -1,73 +1,90 @@
 # spec-chat-session Specification
 
 ## Purpose
-Session continuity for the agent chat embedded in the Hub Spec tab: which CLI session a
-message continues, how a user deliberately starts a fresh one, and how that state is made
-visible so context is never lost silently.
+The chat in the Hub's specification workspace: which surface it is, whose conversation it shows,
+and what the agent is told about where the operator is looking.
+
+It is deliberately thin. The three requirements it used to carry — session resume, a deliberate
+new-session control, and a visible continuity indicator — were removed by
+`2026-08-10-one-chat-surface`: each described a mechanism this surface owned, and the point of that
+change is that this surface owns no mechanism. Continuity, starting fresh, and saying which of the
+two will happen are all properties of the one conversation surface, governed by
+`agent-conversation-workspace`.
 
 ## Requirements
-### Requirement: Spec tab continues the agent's most recent session
+### Requirement: The specification workspace uses the one composer
 
-The Hub Spec tab's embedded agent chat MUST continue the selected agent's most
-recent session rather than starting a new one on every message. It MUST request
-this by sending `session_mode: "resume"` with no `session_id`, so the trigger
-endpoint emits no session tag and the watchdog resolves the agent's last saved
-session.
+The specification workspace's chat SHALL use the same composer, banner stack, and conversation
+transcript as an agent conversation, and MUST NOT implement its own message input, run trigger, or
+output rendering.
 
-#### Scenario: Second message continues the first conversation
+An operator working in the specification workspace SHALL be able to answer a permission request,
+answer a question the agent asked, and see a checkpoint warning, on that surface.
 
-- **WHEN** the user sends a message to an agent that has a saved session
-- **THEN** the agent MUST continue that session
-- **AND** the agent MUST retain the context of the earlier turns in that session
+A second implementation is not a styling difference. The surface it replaced could not render a
+permission card, a question card, or a checkpoint banner, so an agent that asked the operator
+anything from the specification workspace blocked with nothing shown — and the whole authoring flow
+this capability exists to serve depends on the agent being able to ask.
 
-#### Scenario: First message to an agent with no saved session
+#### Scenario: The agent asks the operator a question from the specification workspace
 
-- **WHEN** the user sends a message to an agent that has no saved session
-- **THEN** a new session MUST be started
-- **AND** no error MUST be surfaced to the user
+- **WHEN** an agent working in the specification workspace calls `ask_user`
+- **THEN** the question is presented on that surface
+- **AND** the operator's answer returns to the waiting run
 
-#### Scenario: Warm agent pulled into the Spec tab
+#### Scenario: A tool call requires approval in the specification workspace
 
-- **WHEN** the user selects an agent whose most recent session was started outside
-  the Spec tab
-- **THEN** that session MUST be continued
-- **AND** the agent MUST retain the context of the work it was previously doing
+- **WHEN** a run started from the specification workspace is in a permission posture that routes
+  decisions to the operator, and the agent attempts a tool call requiring approval
+- **THEN** the approval request is presented on that surface
+- **AND** the operator's decision resolves the run
 
-#### Scenario: Runner independence
+#### Scenario: One trigger path
 
-- **WHEN** the selected agent uses any supported runner
-- **THEN** the resume behaviour MUST be identical
-- **AND** the Spec tab MUST NOT contain any runner-specific session handling
+- **WHEN** a message is sent from the specification workspace
+- **THEN** it goes through the same run-trigger path an agent conversation uses
+- **AND** no surface-specific timeout, session-mode handling, or error vocabulary applies to it
 
-### Requirement: Deliberate new session
+### Requirement: The specification workspace reuses the agent's conversation
 
-The Spec tab MUST let the user start a fresh session for the selected agent
-without leaving the Spec tab, so a long or derailed session can be abandoned.
+The specification workspace SHALL show the selected agent's conversation, and SHALL create one on
+the first message when the agent has none.
 
-#### Scenario: User starts a new session
+The Hub MUST NOT record a specification-scoped conversation origin until a specification-scoped
+thread has a defined scope.
 
-- **WHEN** the user chooses to start a new session and sends a message
-- **THEN** that message MUST be sent with `session_mode: "new"`
-- **AND** the agent MUST start a session with no prior context
+`Conversation.origin` accepts a specification value that nothing produces. Producing it here would
+require choosing whether such a thread belongs to a document or to a unit of specification work,
+before either is defined — and the direction taken is that a thread's phase derives from the
+document open in it, which makes the durable relationship a link rather than an origin value.
+Recording data on an axis that is likely to be wrong is worse than recording none.
 
-#### Scenario: New session applies once
+#### Scenario: First message from the specification workspace
 
-- **WHEN** the user has started a new session and sends a further message
-- **THEN** that message MUST continue the newly created session
-- **AND** it MUST NOT start another new session
+- **WHEN** the operator sends the first message to an agent that has no conversation
+- **THEN** a conversation is created by that message
+- **AND** its origin is not a specification-scoped value
 
-### Requirement: Session continuity is visible
+### Requirement: The agent is told which document the operator is viewing
 
-The Spec tab MUST make it apparent whether the next message will continue an
-existing session or begin a new one, so the user is never surprised by lost
-context.
+When the operator has a specification document open, the Hub SHALL include that document in the
+canonical turn context. When no document is open, the Hub SHALL include nothing rather than a
+guessed value.
 
-#### Scenario: Continuing an existing session
+The document reference MUST NOT be added to the operator's message.
 
-- **WHEN** the selected agent has a saved session
-- **THEN** the Spec tab MUST indicate that the conversation will continue
+Turn context is rebuilt every turn and consumed identically by every runner, so the value tracks the
+operator's navigation without being resent and without depending on the runner's own extension
+format. Putting it in the message body would make a durable record of what the operator said contain
+something they did not say.
 
-#### Scenario: No session yet
+#### Scenario: A document is open
 
-- **WHEN** the selected agent has no saved session
-- **THEN** the Spec tab MUST indicate that the next message starts a new session
+- **WHEN** a run is triggered from the specification workspace with a document open
+- **THEN** the canonical context for that turn names the document
+- **AND** the operator's message is unchanged
+
+#### Scenario: No document is open
+
+- **WHEN** a run is triggered with no document open
+- **THEN** the canonical context names no document
