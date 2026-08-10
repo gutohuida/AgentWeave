@@ -106,14 +106,77 @@ palette.
       project header has zero border-bottom and matches the ground plane exactly; a real turn
       rendered 2 independently-collapsible work blocks. 390×800 narrow-viewport pass not run
       (background-automation session had no interactive resize control available this session).
-- [ ] 8.8 Live keyboard pass: the composer control row is reachable and shows focus. Not run —
-      deferred; unit coverage already exercises the control row's DOM structure and the two controls'
-      accessible roles, but not a live Tab-key traversal.
-- [ ] 8.9 Contrast check: text, primary controls, and the accent ring against the new ramp in both
-      modes. Not run — no automated contrast-checking tool available this session; the ramp values
-      were chosen for headroom per design.md but a numeric contrast ratio check is still open.
-- [ ] 8.10 Reduced-motion check — carried forward as unavailable through current tooling
-      (`preview_set_appearance` emulates `prefers-color-scheme` only). Still unresolved.
+- [ ] 8.8 **Live keyboard pass through the composer control row.** *Partially verified 2026-08-10;
+      the live half is still yours.*
+      **Verified by the agent:** in the running Hub, the composer's tab order from the text area is
+      `textarea → Model → Effort → Permissions`, all four with `tabIndex 0`, and the stylesheet does
+      define `:focus-visible` treatments. The chat pane holds 12 focusable elements in total.
+      **Do this:** click the message text area on any conversation, then press Tab four times, then
+      Shift+Tab four times.
+      **Expect:** focus lands on Model, Effort, then Permissions, each with a visible ring; Shift+Tab
+      retraces the same path back to the text area; Enter or Space opens the focused pill's menu and
+      Escape closes it, returning focus to the pill.
+      **It failed if:** any pill is skipped, shows no visible ring, opens its menu without returning
+      focus on Escape, or the order differs between Tab and Shift+Tab.
+      *The agent cannot run this: the available automation's key press does not move real focus —
+      re-tested 2026-08-10 with `Tab` from a focused text area, and `document.activeElement` did not
+      change. Dispatching a synthetic `keydown` does not drive the browser's own focus engine.*
+
+- [x] 8.9 **Contrast check: text and semantic colours against the new ramp, both modes.**
+      **Run 2026-08-10.** The earlier "no automated contrast-checking tool available" is no longer
+      true — WCAG 2.1 relative luminance is arithmetic, and it was computed directly from the token
+      values in `index.css`, then cross-checked against 54 live rendered elements on the running Hub
+      (28 failing, all of them one token).
+
+      Ratios, AA thresholds 4.5 for normal text and 3.0 for large text and non-text UI:
+
+      | | `--bg` | `--surface` | `--surface-2` | `--surface-3` |
+      |---|---|---|---|---|
+      | **dark** `--text` | 18.16 | 16.73 | 15.42 | 13.82 |
+      | dark `--text-2` | 6.10 | 5.62 | 5.18 | 4.64 |
+      | dark **`--text-3`** | **2.99** | **2.76** | **2.54** | **2.28** |
+      | dark `--green` / `--amber` / `--blue` | 9.91 / 11.33 / 6.65 | 9.13 / 10.44 / 6.12 | 8.42 / 9.62 / 5.64 | 7.54 / 8.62 / 5.06 |
+      | dark `--red` / `--purple` | 5.86 / 5.00 | 5.40 / 4.61 | 4.98 / 4.25 | 4.46 / 3.81 |
+      | **light** `--text` | 16.97 | 17.72 | 16.12 | 14.62 |
+      | light `--text-2` | 6.33 | 6.61 | 6.01 | 5.45 |
+      | light **`--text-3`** | **3.11** | **3.24** | **2.95** | **2.68** |
+      | light **`--green`** | **3.21** | **3.35** | **3.05** | **2.76** |
+      | light **`--amber`** | **3.15** | **3.28** | **2.99** | **2.71** |
+      | light `--red` / `--blue` / `--purple` | 4.46 / 4.89 / 5.35 | 4.65 / 5.10 / 5.59 | 4.23 / 4.64 / 5.08 | 3.84 / 4.21 / 4.61 |
+
+      **Result: the check ran and the ramp does not pass.** `--text` and `--text-2` clear AA
+      comfortably in both modes, and the accent (`--ring`, which resolves to `--blue`) clears the
+      3.0 non-text bar everywhere. `--text-3` fails AA for normal text on **every** surface in
+      **both** modes, and it is not decorative — timestamps, the session-continuity line, composer
+      placeholders, status labels, and secondary metadata all use it. In light mode `--green` and
+      `--amber` also fall below 4.5, and below 3.0 on `--surface-3`.
+
+      **The remediation is a design decision, not a defect fix — see 8.11.**
+
+- [ ] 8.10 **Reduced-motion check.** *Still unrunnable by the agent; re-confirmed 2026-08-10.*
+      **Do this:** turn on Windows → Settings → Accessibility → Visual effects → Animation effects
+      **off**, reload the Hub, then: resize a pane, collapse and expand the chat pane, open and close
+      a compact drawer, and switch conversations.
+      **Expect:** each of those changes state instantly, with no fade, slide, or width animation; and
+      every state stays distinguishable without the motion — a collapsed pane still reads as
+      collapsed, an open drawer still reads as open.
+      **It failed if:** anything still animates, or a state that was only legible *because* it moved
+      becomes ambiguous once it does not.
+      *The agent cannot run this: `preview_set_appearance` emulates `prefers-color-scheme` only, and
+      a CSS media query cannot be forced from page JavaScript.*
+
+- [ ] 8.11 **DECISION (operator): what contrast bar does 1.0 hold itself to?** Raised by 8.9.
+      Meeting **AA 4.5** for `--text-3` needs `#5c5c66 → #8c8c96` (dark) and `#8e8e98 → #686872`
+      (light). Note what that costs: `#8c8c96` is within one step of today's `--text-2` (`#8e8e98`),
+      so **AA at 4.5 collapses the three-level neutral text ramp into two.** The ramp is the thing
+      the charcoal refresh was for.
+      Meeting **3.0** — the bar for large text and non-text UI, and where many design systems put
+      incidental text — needs only `#5c5c66 → #6f6f79` (dark) and `#8e8e98 → #85858f` (light), which
+      preserves three distinct levels. Light-mode `--green → #0f9963` and `--amber → #bb760d` would
+      clear 3.0 on every surface.
+      Three options: hold AA 4.5 and lose the third level; hold 3.0 and keep it; or keep today's
+      values and record the exemption deliberately. This is a look-and-feel call and it is yours —
+      the operator chose this ramp, and no agent should quietly relight the product overnight.
 
 **Note (found during 8.7):** `getComputedStyle` on `background-color` read a stale mid-transition
 value while the browser tab was backgrounded (`preview_open` with `open:false`) — Chrome throttles

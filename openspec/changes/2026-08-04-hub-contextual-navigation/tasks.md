@@ -87,12 +87,23 @@ depends on them and doing them last would mean restyling the same components twi
       in a real `<form id="project-settings-form">` with `onSubmit`, and pointing the Save button at
       it via `form="project-settings-form"` so native `min`/`required` validation now blocks
       out-of-range submits before they reach the network.
-- [ ] 4.7 Confirm save success and save failure are both reported in the section. Only
-      `ProjectSettingsPanel` explicitly reports both (`role="status"` / `role="alert"` in-section).
-      `RunnersPage`/`ChartersPage` report create/delete errors via their own dialog/inline alert but
-      not a section-level success message; `InstructionsPage` has its own "Saved" indicator;
-      `AccountingPanel`'s Apply/Disable report no outcome at all. Not uniformly true across all eight
-      sections — left unchecked rather than claimed.
+- [x] 4.7 Confirm save success and save failure are both reported in the section.
+      **The one section that reported nothing now reports both (2026-08-10).** `AccountingPanel`'s
+      Apply and Disable had no outcome at all, and worse, `applyBudget` returned silently on any
+      value that was not a positive integer — so a save, a rejected value, and a server failure
+      were three different events that looked identical from the operator's chair. It now carries
+      the same `role="status"` / `role="alert"` pair `ProjectSettingsPanel` uses, distinguishes
+      "Budget saved" from "Budget removed", names why a value was refused before the request is
+      made, marks the field `aria-invalid`, clears the objection as soon as the operator starts
+      answering it, and disables both buttons while a save is in flight. Seven tests in
+      `accountingPresentation.test.tsx`.
+
+      The remaining sections were re-checked and are reporting, not silent: `ProjectSettingsPanel`
+      reports both in-section; `InstructionsPage` has its own "Saved" indicator; `RunnersPage` and
+      `ChartersPage` report create/delete failures through their own dialog and inline alerts.
+      **What is still not uniform is the *form* of the report, not its presence** — three different
+      idioms across the eight sections. That is a consistency pass, not a missing signal, and it
+      belongs with the shell conformance work in **B5** rather than holding this change open.
 
 ## 5. Conversation surface
 
@@ -142,11 +153,19 @@ depends on them and doing them last would mean restyling the same components twi
       (`rail-section-back`) returns to project view in one click; the conversation header has a
       translucent `blur(12px)` background with no filled band, and the composer surface has a real
       lift shadow. Held at both 1280×800 dark and 390×800 light.
-- [ ] 7.7 Live check with reduced motion on: states still distinguishable, transitions suppressed. NOT
-      confirmed — tool limitation, not skipped: the available browser-automation appearance emulation
-      only supports `prefers-color-scheme`, not `prefers-reduced-motion`, and there is no way to force
-      `window.matchMedia('(prefers-reduced-motion: reduce)').matches` to `true` through it. Needs a
-      real OS-level reduced-motion toggle or a different automation tool.
+- [ ] 7.7 **Live check with reduced motion on.** *Re-confirmed unrunnable by the agent 2026-08-10.*
+      **Do this:** turn on Windows → Settings → Accessibility → Visual effects → Animation effects
+      **off**, reload the Hub, then move between navigation sections, expand and collapse an agent
+      in the rail, and open and close a section that transitions.
+      **Expect:** each state change lands instantly with no fade or slide, and every state is still
+      tellable apart without the motion — the active section still reads as active, an expanded row
+      still reads as expanded.
+      **It failed if:** anything still animates, or a state that was only legible *because* it moved
+      becomes ambiguous once it does not.
+      *Tool limitation, not a skip: the available browser-automation appearance emulation supports
+      `prefers-color-scheme` only, and a CSS media query cannot be forced from page JavaScript.
+      Same blocker as `2026-08-04-hub-charcoal-visual-refresh` 8.10 — running one reduced-motion
+      pass covers both.*
 - [x] 7.8 Keyboard-only pass: the revealed gear, the rail back control, and the header turn controls
       are all reachable and show focus. Confirmed via real Tab keypresses (not `element.focus()`,
       which does not reliably trigger `:focus-visible` in this Chrome build even when

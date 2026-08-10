@@ -6,13 +6,22 @@ import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustion
 
 let snapshot: AccountingSnapshot
 const mutate = vi.fn()
+/** The mutation's reported outcome. The panel reports success and failure in-section, so the
+ *  tests have to be able to put it in each of those states. */
+let mutationState: {
+  isPending: boolean
+  isSuccess: boolean
+  isError: boolean
+  error: unknown
+  variables: number | null | undefined
+}
 
 vi.mock('@/api/accounting', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/accounting')>()
   return {
     ...actual,
     useAccounting: () => ({ data: snapshot, isLoading: false }),
-    useUpdateTokenBudget: () => ({ mutate, isPending: false }),
+    useUpdateTokenBudget: () => ({ mutate, ...mutationState }),
   }
 })
 
@@ -65,6 +74,13 @@ describe('accounting presentation', () => {
   beforeEach(() => {
     snapshot = baseSnapshot()
     mutate.mockReset()
+    mutationState = {
+      isPending: false,
+      isSuccess: false,
+      isError: false,
+      error: null,
+      variables: undefined,
+    }
   })
 
   it('shows totals, unavailable usage, allowance precedence, and exhaustion control', () => {
@@ -104,6 +120,79 @@ describe('accounting presentation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Disable' }))
     expect(mutate).toHaveBeenCalledWith(null)
+  })
+
+  describe('the budget control reports what happened (contextual-navigation 4.7)', () => {
+    it('refuses a value that is not a budget, and says why, without calling the API', () => {
+      render(<AccountingPanel />)
+      const input = screen.getByLabelText('Project token budget')
+
+      fireEvent.change(input, { target: { value: '-5' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+      // The whole defect: this used to do nothing at all, which from the operator's chair is
+      // indistinguishable from a save that silently failed.
+      expect(mutate).not.toHaveBeenCalled()
+      expect(screen.getByText(/whole number of tokens greater than zero/)).toHaveAttribute(
+        'role',
+        'alert',
+      )
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+    })
+
+    it('points an empty field at Disable rather than refusing silently', () => {
+      render(<AccountingPanel />)
+      fireEvent.change(screen.getByLabelText('Project token budget'), { target: { value: '' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+      expect(mutate).not.toHaveBeenCalled()
+      expect(screen.getByText(/press Disable to remove the limit/)).toBeInTheDocument()
+    })
+
+    it('clears its objection as soon as the operator answers it', () => {
+      render(<AccountingPanel />)
+      const input = screen.getByLabelText('Project token budget')
+      fireEvent.change(input, { target: { value: '0' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+      expect(screen.getByText(/greater than zero/)).toBeInTheDocument()
+
+      fireEvent.change(input, { target: { value: '5000' } })
+      expect(screen.queryByText(/greater than zero/)).not.toBeInTheDocument()
+      expect(input).not.toHaveAttribute('aria-invalid')
+    })
+
+    it('confirms a saved budget', () => {
+      mutationState = { ...mutationState, isSuccess: true, variables: 5000 }
+      snapshot.budget.exhausted = false
+      render(<AccountingPanel />)
+      expect(screen.getByRole('status')).toHaveTextContent('Budget saved.')
+    })
+
+    it('says a removal was a removal, not a save', () => {
+      mutationState = { ...mutationState, isSuccess: true, variables: null }
+      snapshot.budget.exhausted = false
+      render(<AccountingPanel />)
+      expect(screen.getByRole('status')).toHaveTextContent('Budget removed')
+    })
+
+    it('reports a server failure in the section', () => {
+      mutationState = {
+        ...mutationState,
+        isError: true,
+        error: new Error('nope'),
+        variables: 5000,
+      }
+      snapshot.budget.exhausted = false
+      render(<AccountingPanel />)
+      expect(screen.getByRole('alert')).toHaveTextContent(/could not be saved|nope/)
+    })
+
+    it('does not offer Disable while a save is in flight', () => {
+      mutationState = { ...mutationState, isPending: true }
+      render(<AccountingPanel />)
+      expect(screen.getByRole('button', { name: 'Disable' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    })
   })
 
   it('renders the compact exhausted warning used by the conversation shell', () => {

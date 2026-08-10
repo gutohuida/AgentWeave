@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAccounting, useUpdateTokenBudget } from '@/api/accounting'
+import { readableApiError } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { BudgetExhaustionNotice } from './BudgetExhaustionNotice'
@@ -36,6 +37,10 @@ export function AccountingPanel() {
   const { data, isLoading } = useAccounting()
   const updateBudget = useUpdateTokenBudget()
   const [budgetInput, setBudgetInput] = useState('')
+  /** Why a submit was refused before it reached the network. A rejected value used to do
+   *  nothing at all — the operator pressed Apply and the page did not move, which is
+   *  indistinguishable from a save that silently failed. */
+  const [inputError, setInputError] = useState<string | null>(null)
 
   useEffect(() => {
     setBudgetInput(data?.budget.limit_tokens?.toString() ?? '')
@@ -45,8 +50,29 @@ export function AccountingPanel() {
 
   const applyBudget = () => {
     const value = Number(budgetInput)
-    if (Number.isInteger(value) && value > 0) updateBudget.mutate(value)
+    if (budgetInput.trim() === '') {
+      setInputError('Enter a number of tokens, or press Disable to remove the limit.')
+      return
+    }
+    if (!Number.isInteger(value) || value <= 0) {
+      setInputError('The budget must be a whole number of tokens greater than zero.')
+      return
+    }
+    setInputError(null)
+    updateBudget.mutate(value)
   }
+
+  const disableBudget = () => {
+    setInputError(null)
+    updateBudget.mutate(null)
+  }
+
+  // What the last completed save did, so "saved" and "removed" do not read the same.
+  const savedLabel = updateBudget.isSuccess
+    ? updateBudget.variables === null
+      ? 'Budget removed — autonomous turns are no longer paused by a project limit.'
+      : 'Budget saved.'
+    : null
 
   return (
     <SettingsSection title="Budgets" description="Token usage for this project and its agents, and the limit that pauses autonomous turns.">
@@ -90,15 +116,48 @@ export function AccountingPanel() {
             aria-label="Project token budget"
             inputMode="numeric"
             value={budgetInput}
-            onChange={(event) => setBudgetInput(event.target.value)}
+            onChange={(event) => {
+              setBudgetInput(event.target.value)
+              // Typing is the operator answering the complaint; keeping it on screen while they
+              // fix it would leave them reading a stale objection.
+              if (inputError) setInputError(null)
+            }}
+            aria-invalid={inputError ? true : undefined}
             placeholder="Disabled"
             className="block w-32 rounded px-2 py-1.5 text-xs"
             style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', color: 'var(--text)' }}
           />
           <Button variant="primary" size="sm" onClick={applyBudget} disabled={updateBudget.isPending}>Apply</Button>
-          <Button variant="outline" size="sm" onClick={() => updateBudget.mutate(null)}>Disable</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={disableBudget}
+            disabled={updateBudget.isPending}
+          >
+            Disable
+          </Button>
         </div>
       </SettingsRow>
+
+      {/* Both outcomes are reported in the section, the way `ProjectSettingsPanel` does it.
+          Neither Apply nor Disable used to report anything at all: a save, a rejected value and a
+          server failure were three different events that looked identical from the operator's
+          chair. */}
+      {savedLabel && !inputError && !updateBudget.isError && (
+        <div role="status" className="py-3 text-xs" style={{ color: 'var(--green)' }}>
+          {savedLabel}
+        </div>
+      )}
+      {inputError && (
+        <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>
+          {inputError}
+        </div>
+      )}
+      {updateBudget.isError && !inputError && (
+        <div role="alert" className="py-3 text-xs" style={{ color: 'var(--red)' }}>
+          {readableApiError(updateBudget.error, 'The budget could not be saved.')}
+        </div>
+      )}
     </SettingsSection>
   )
 }
