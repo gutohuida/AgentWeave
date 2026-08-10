@@ -1,20 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import type { AgentSummary } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse } from '@/api/agentChat'
 import type { PermissionRequest } from '@/api/permissions'
 import type { Question } from '@/api/questions'
 import { useConfigStore } from '@/store/configStore'
-import { SpecChat } from '@/components/spec/SpecChat'
 
-/* The specification workspace's chat is the one conversation surface.
+/* Working on a specification uses the one conversation surface.
  *
- * The surface this replaced (`SpecChatPane`) could not render a permission card, a question
- * card, or a checkpoint banner — searching it for `permission|question|checkpoint|Banner`
- * returned nothing — so an agent that asked the operator anything from the Spec page blocked
- * with nothing shown. That is the defect this change exists to fix, so it is demonstrated here
- * rather than asserted: these tests render the real `SpecChat`, mounting the real
- * `AgentOutputPanel`, `Composer`, `PermissionRequestCard` and `AgentQuestionCard`.
+ * The surface this replaced (`SpecChatPane`) could not render a permission card, a question card,
+ * or a checkpoint banner — searching it for `permission|question|checkpoint|Banner` returned
+ * nothing — so an agent that asked the operator anything from the Spec page blocked with nothing
+ * shown. That is the defect this capability exists to fix, so it is demonstrated rather than
+ * asserted: these tests render the real `ConversationView`, mounting the real `AgentOutputPanel`,
+ * `Composer`, `PermissionRequestCard` and `AgentQuestionCard`, with a document open beside them.
+ *
+ * `SpecChat` — the intermediate wrapper, and its agent `<select>` — is gone. Which conversation is
+ * on screen is the destination's answer (`conversationSelection.test.ts`), and which agent is the
+ * rail's. The last describe here is the check that would have caught that `<select>`.
  */
 
 let conversations: AgentConversation[] = []
@@ -30,6 +35,21 @@ vi.mock('@/hooks/useSSE', () => ({
   getBufferedEvents: () => [],
   cancelReconnect: () => {},
   __resetSSEStateForTest: () => {},
+}))
+
+vi.mock('@/api/spec', () => ({
+  useSpecList: () => ({
+    data: {
+      specs: [{ path: 'spec/a1-probe.html', title: 'A1 probe', state: 'filed', parent: null, order: 0 }],
+      home: 'spec/a1-probe.html',
+      diagnostics: [],
+      missing: [],
+    },
+    isLoading: false,
+    refetch: () => {},
+  }),
+  useSpec: () => ({ data: { path: 'spec/a1-probe.html', content: '<html></html>' }, refetch: () => {} }),
+  useSpecEvents: () => {},
 }))
 
 vi.mock('@/api/agents', async (importOriginal) => {
@@ -93,13 +113,20 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
   return { ...actual, useModelCatalog: () => ({ data: undefined }) }
 })
 
+import { ConversationView } from '@/components/agents/ConversationView'
+
 const fetchMock = vi.fn()
 ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = fetchMock
 
-const AGENTS: AgentSummary[] = [
-  { name: 'speccer', status: 'idle', message_count: 0, active_task_count: 0, runner: 'claude' },
-  { name: 'other', status: 'idle', message_count: 0, active_task_count: 0, runner: 'codex' },
-]
+const SPECCER: AgentSummary = {
+  name: 'speccer',
+  status: 'idle',
+  message_count: 0,
+  active_task_count: 0,
+  runner: 'claude',
+}
+
+let queryClient: QueryClient
 
 function conversation(overrides: Partial<AgentConversation> = {}): AgentConversation {
   return {
@@ -117,17 +144,25 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
   }
 }
 
-function renderChat(documentPath: string | null = 'spec/a1-probe.html') {
-  const onSelectedAgentChange = vi.fn()
+function renderChat(
+  documentPath: string | null = 'spec/a1-probe.html',
+  conversationId: string | null = null,
+) {
+  const onOpenDocument = vi.fn()
   const utils = render(
-    <SpecChat
-      agents={AGENTS}
-      selectedAgent="speccer"
-      onSelectedAgentChange={onSelectedAgentChange}
-      documentPath={documentPath}
-    />
+    <QueryClientProvider client={queryClient}>
+      <ConversationView
+        agent={SPECCER}
+        conversationId={conversationId}
+        document={documentPath}
+        onSelectConversation={() => {}}
+        onOpenDocument={onOpenDocument}
+        onBackToProject={() => {}}
+        onOpenAgentSettings={() => {}}
+      />
+    </QueryClientProvider> as ReactNode,
   )
-  return { ...utils, onSelectedAgentChange }
+  return { ...utils, onOpenDocument }
 }
 
 /** The JSON body of the Nth /agent/trigger call. */
@@ -146,6 +181,7 @@ async function send(text: string) {
 
 beforeEach(() => {
   cleanup()
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   conversations = []
   openQuestions = []
   permissionRequests = []
@@ -167,18 +203,19 @@ beforeEach(() => {
   })
 })
 
-describe('the specification workspace mounts the one composer', () => {
+describe('a conversation with a document open mounts the one composer', () => {
   it('renders the shared composer rather than a second message input', () => {
     renderChat()
     expect(screen.getByTestId('conversation-output')).toBeInTheDocument()
     expect(screen.getByTestId('conversation-header')).toBeInTheDocument()
+    expect(screen.getByTestId('spec-document-panel')).toBeInTheDocument()
     expect(screen.getByRole('textbox')).toBeInTheDocument()
   })
 
   it('creates a conversation with the first message when the agent has none', async () => {
     renderChat()
     expect(screen.getByTestId('session-continuity')).toHaveTextContent(
-      'Next message starts a fresh conversation'
+      'Next message starts a fresh conversation',
     )
 
     await send('what does this document say?')
@@ -192,22 +229,10 @@ describe('the specification workspace mounts the one composer', () => {
     expect(JSON.stringify(body)).not.toContain('origin')
   })
 
-  it('continues the agent’s own most recent conversation when it has one', () => {
-    conversations = [
-      conversation({ id: 'conv-old', updated_at: '2026-08-09T10:00:00Z', title: 'Older' }),
-      conversation({ id: 'conv-new', updated_at: '2026-08-10T12:00:00Z', title: 'Newest' }),
-    ]
-    renderChat()
-    expect(screen.getByTestId('session-continuity')).toHaveTextContent('Continuing Newest')
-  })
-
-  it('ignores an archived conversation when choosing which one is on screen', () => {
-    conversations = [
-      conversation({ id: 'conv-archived', updated_at: '2026-08-10T18:00:00Z', lifecycle: 'archived' }),
-      conversation({ id: 'conv-open', updated_at: '2026-08-10T09:00:00Z', title: 'Still open' }),
-    ]
-    renderChat()
-    expect(screen.getByTestId('session-continuity')).toHaveTextContent('Continuing Still open')
+  it('continues the conversation the destination names', () => {
+    conversations = [conversation({ id: 'conv-old', title: 'Older' })]
+    renderChat('spec/a1-probe.html', 'conv-old')
+    expect(screen.getByTestId('session-continuity')).toHaveTextContent('Continuing Older')
   })
 })
 
@@ -229,7 +254,7 @@ describe('the open document travels as context, not as the message', () => {
   })
 })
 
-describe('the operator can be involved from the specification workspace', () => {
+describe('the operator can be involved while a document is open', () => {
   it('renders a question the agent asked, and answers it', async () => {
     openQuestions = [
       {
@@ -304,36 +329,25 @@ describe('the operator can be involved from the specification workspace', () => 
   })
 })
 
-describe('picking which agent the operator is talking to', () => {
-  it('offers the roster when there is more than one agent', () => {
-    const { onSelectedAgentChange } = renderChat()
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'other' } })
-    expect(onSelectedAgentChange).toHaveBeenCalledWith('other')
-  })
-
-  it('offers no picker when there is only one agent to pick', () => {
-    render(
-      <SpecChat
-        agents={[AGENTS[0]]}
-        selectedAgent="speccer"
-        onSelectedAgentChange={vi.fn()}
-        documentPath={null}
-      />
-    )
+describe('one way to choose an agent', () => {
+  /* Task 5.5, and the lesson rather than the line.
+   *
+   * A1 removed a second implementation of a chat surface and, in the same change, introduced a
+   * second implementation of *agent selection* — a raw `<select>` beside the rail that already
+   * did the job, which is why the agent's name appeared three times in one header. The standing
+   * check is "how many ways does the application offer to do this?"
+   */
+  it('offers no agent selector on the conversation surface', () => {
+    renderChat()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Agent')).not.toBeInTheDocument()
-    expect(screen.getByRole('textbox')).toBeInTheDocument()
+    expect(document.querySelectorAll('select')).toHaveLength(0)
   })
 
-  it('says so when the project has no agent at all', () => {
-    render(
-      <SpecChat
-        agents={[]}
-        selectedAgent=""
-        onSelectedAgentChange={vi.fn()}
-        documentPath={null}
-      />
-    )
-    expect(screen.getByText('No agent')).toBeInTheDocument()
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  it('names the agent exactly once in the conversation header', () => {
+    renderChat()
+    const header = screen.getByTestId('conversation-header')
+    const occurrences = (header.textContent ?? '').split('speccer').length - 1
+    expect(occurrences).toBe(1)
   })
 })

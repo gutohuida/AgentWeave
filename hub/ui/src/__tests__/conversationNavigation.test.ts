@@ -35,6 +35,8 @@ describe('phase 1 conversation navigation contract', () => {
       projectId: 'proj-1',
       agent: 'claude',
       conversationId: null,
+      // The document open beside the conversation is part of the destination; none here.
+      document: null,
     })
   })
 

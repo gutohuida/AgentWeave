@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
@@ -59,8 +59,16 @@ vi.mock('@/components/overview/OverviewPage', () => ({
 vi.mock('@/components/tasks/TasksBoard', () => ({
   TasksBoard: () => <div data-testid="page-tasks" />,
 }))
-vi.mock('@/components/spec/SpecPage', () => ({
-  SpecPage: () => <div data-testid="page-spec" />,
+// There is no Spec page any more — `tab: 'spec'` resolves into a conversation with the manifest
+// home document open. The list is mocked because that resolution reads `home` from it.
+vi.mock('@/api/spec', () => ({
+  useSpecList: () => ({
+    data: { specs: [{ path: 'spec/spec.html' }], home: 'spec/spec.html', diagnostics: [], missing: [] },
+    isLoading: false,
+    refetch: () => {},
+  }),
+  useSpec: () => ({ data: undefined, refetch: () => {} }),
+  useSpecEvents: () => {},
 }))
 vi.mock('@/components/jobs/JobsPage', () => ({
   JobsPage: () => <div data-testid="page-jobs" />,
@@ -138,7 +146,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
 
   it('does not mount any project page not selected', () => {
     render(withQueryClient(<App />))
-    for (const id of ['page-tasks', 'page-spec', 'page-jobs', 'page-activity']) {
+    for (const id of ['page-tasks', 'page-jobs', 'page-activity']) {
       expect(screen.queryByTestId(id)).not.toBeInTheDocument()
     }
   })
@@ -167,8 +175,22 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
 
   it('reflects the active tab in the URL', () => {
     render(withQueryClient(<App />))
+    fireEvent.click(screen.getByTestId('project-tab-tasks'))
+    expect(window.location.search).toContain('tab=tasks')
+  })
+
+  it('resolves the Spec entry point into a conversation with the home document open', async () => {
+    render(withQueryClient(<App />))
     fireEvent.click(screen.getByTestId('project-tab-spec'))
-    expect(window.location.search).toContain('tab=spec')
+
+    // A way in, not a place: the tab resolves into a conversation, and Back does not return to a
+    // destination that immediately redirects again.
+    await waitFor(() => expect(window.location.search).toContain('document=spec%2Fspec.html'))
+    expect(window.location.search).toContain('agent=claude')
+    expect(window.location.search).not.toContain('tab=spec')
+    // No project tab bar: this is a conversation now, not a project page. (The agent in this
+    // fixture has no conversations yet, so the surface is the composer-primary start one.)
+    expect(screen.queryByTestId('active-page-wrapper')).not.toBeInTheDocument()
   })
 
   it('Overview surfaces Questions inline without changing tab', () => {

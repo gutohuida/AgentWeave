@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
+import type { AgentSummary } from '@/api/agents'
 
 /* What used to be `specManifestRepair.test.tsx`.
  *
@@ -12,6 +13,9 @@ import { useConfigStore } from '@/store/configStore'
  * Its three tests went with it. Everything here is about the drift *report*, which stays —
  * showing a condition and offering to act on it are different things, and only the second one
  * was broken.
+ *
+ * The report moved with the document: it is part of the panel that opens beside a conversation,
+ * not of a page that no longer exists.
  */
 
 vi.mock('@/hooks/useSSE', () => ({
@@ -22,11 +26,10 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
-// The chat is the whole conversation surface now, with its own suite
-// (`specChatSurface.test.tsx`). Stubbed here so these assertions stay about the drift report
-// rather than about every api module the conversation surface reads.
-vi.mock('@/components/spec/SpecChat', () => ({
-  SpecChat: () => <div data-testid="spec-chat" />,
+// The conversation is the whole agent surface, with its own suites. Stubbed here so these
+// assertions stay about the drift report rather than about every api module it reads.
+vi.mock('@/components/agents/AgentOutputPanel', () => ({
+  AgentOutputPanel: () => <div data-testid="conversation-surface" />,
 }))
 
 // Controlled by each test.
@@ -51,15 +54,39 @@ vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'spec', status: 'idle' }] }),
 }))
 
-import { SpecPage } from '@/components/spec/SpecPage'
+import { ConversationView } from '@/components/agents/ConversationView'
 
 let queryClient: QueryClient
+
+const agent: AgentSummary = {
+  name: 'spec',
+  status: 'idle',
+  message_count: 0,
+  active_task_count: 0,
+  runner: 'claude',
+}
 
 function withQueryClient(node: ReactNode) {
   return <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
 }
 
-describe('Spec tab — manifest drift report', () => {
+function renderPanel(document: string | null = 'spec/spec.html') {
+  return render(
+    withQueryClient(
+      <ConversationView
+        agent={agent}
+        conversationId="conv-1"
+        document={document}
+        onSelectConversation={() => {}}
+        onOpenDocument={() => {}}
+        onBackToProject={() => {}}
+        onOpenAgentSettings={() => {}}
+      />,
+    ),
+  )
+}
+
+describe('the document panel — manifest drift report', () => {
   beforeEach(() => {
     cleanup()
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -84,7 +111,7 @@ describe('Spec tab — manifest drift report', () => {
   })
 
   it('shows no drift banner when there is no drift', () => {
-    render(withQueryClient(<SpecPage />))
+    renderPanel()
     expect(screen.queryByText(/drift item/)).not.toBeInTheDocument()
   })
 
@@ -93,7 +120,7 @@ describe('Spec tab — manifest drift report', () => {
       { code: 'unfiled_document', path: 'spec/extra.html' },
       { code: 'stale_row', path: 'spec/old.html' },
     ]
-    render(withQueryClient(<SpecPage />))
+    renderPanel()
     expect(screen.getByText('2 spec manifest drift items')).toBeInTheDocument()
   })
 
@@ -103,17 +130,17 @@ describe('Spec tab — manifest drift report', () => {
       { code: 'missing_document', path: 'spec/changes/gone/spec.html' },
     ]
     specListResult.data.missing = [{ path: 'spec/changes/gone/spec.html' }]
-    render(withQueryClient(<SpecPage />))
+    renderPanel()
     expect(screen.getByText('2 spec manifest drift items')).toBeInTheDocument()
     fireEvent.click(screen.getByText('2 spec manifest drift items'))
-    // The missing path appears exactly once (from `missing`, not duplicated
-    // by the `missing_document` diagnostic).
+    // The missing path appears exactly once (from `missing`, not duplicated by the
+    // `missing_document` diagnostic).
     expect(screen.getAllByText(/spec\/changes\/gone\/spec\.html/)).toHaveLength(1)
   })
 
   it('expands to list diagnostic details on click', () => {
     specListResult.data.diagnostics = [{ code: 'unfiled_document', path: 'spec/extra.html' }]
-    render(withQueryClient(<SpecPage />))
+    renderPanel()
     expect(screen.queryByText(/unfiled_document/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('1 spec manifest drift item'))
     expect(screen.getByText(/unfiled_document — spec\/extra\.html/)).toBeInTheDocument()
@@ -121,7 +148,7 @@ describe('Spec tab — manifest drift report', () => {
 
   it('reports drift without offering to repair it', () => {
     specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
-    render(withQueryClient(<SpecPage />))
+    renderPanel()
 
     expect(screen.getByText('1 spec manifest drift item')).toBeInTheDocument()
     // The button instructed an uninstalled skill. A deterministic reindexer belongs in B2,
@@ -129,17 +156,11 @@ describe('Spec tab — manifest drift report', () => {
     expect(screen.queryByText('Repair manifest')).not.toBeInTheDocument()
   })
 
-  it('prefers the manifest home over spec/spec.html for default selection', () => {
-    specListResult.data.specs = [
-      { path: 'spec/spec.html' },
-      { path: 'spec/agentweave-spec.html', title: 'Baseline', kind: 'baseline', state: 'filed' },
-    ]
-    specListResult.data.home = 'spec/agentweave-spec.html'
-    render(withQueryClient(<SpecPage />))
-    // The flat path selector was replaced by the document library, so home
-    // selection is now observed as the current row rather than a select value.
-    // Scoped to the library because the iframe also titles itself with the path.
-    const library = within(screen.getByTestId('spec-document-list'))
-    expect(library.getByTitle('spec/agentweave-spec.html')).toHaveAttribute('aria-current', 'true')
+  it('reports nothing at all when no document is open', () => {
+    specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
+    renderPanel(null)
+    // Drift belongs to the document panel. With no document open the conversation is the whole
+    // surface, and nothing specification-shaped is left on screen.
+    expect(screen.queryByText(/drift item/)).not.toBeInTheDocument()
   })
 })

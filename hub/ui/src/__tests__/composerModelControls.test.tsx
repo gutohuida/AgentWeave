@@ -73,8 +73,8 @@ describe('ComposerModelControls — controls follow the provider', () => {
       />,
       { wrapper },
     )
-    expect(screen.getByTitle('Model')).toHaveTextContent('Sonnet 5')
-    expect(screen.getByTitle('Effort')).toHaveTextContent('Medium')
+    expect(screen.getByTitle(/^Model:/)).toHaveTextContent('Sonnet 5')
+    expect(screen.getByTitle(/^Effort:/)).toHaveTextContent('Medium')
   })
 
   it('re-derives the presented controls when the runner changes to a different provider', () => {
@@ -88,7 +88,7 @@ describe('ComposerModelControls — controls follow the provider', () => {
       />,
       { wrapper },
     )
-    expect(screen.getByTitle('Model')).toHaveTextContent('Sonnet 5')
+    expect(screen.getByTitle(/^Model:/)).toHaveTextContent('Sonnet 5')
 
     rerender(
       <ComposerModelControls
@@ -99,8 +99,8 @@ describe('ComposerModelControls — controls follow the provider', () => {
         onChangeControl={vi.fn()}
       />,
     )
-    expect(screen.getByTitle('Model')).toHaveTextContent('GPT-5.6-Sol')
-    expect(screen.getByTitle('Effort')).toHaveTextContent('Low')
+    expect(screen.getByTitle(/^Model:/)).toHaveTextContent('GPT-5.6-Sol')
+    expect(screen.getByTitle(/^Effort:/)).toHaveTextContent('Low')
   })
 
   it('renders nothing for a runner the catalog does not declare', () => {
@@ -129,7 +129,7 @@ describe('ComposerModelControls — controls follow the provider', () => {
       />,
       { wrapper },
     )
-    fireEvent.click(screen.getByTitle('Model'))
+    fireEvent.click(screen.getByTitle(/^Model:/))
     fireEvent.click(screen.getByRole('option', { name: 'Opus 5' }))
     expect(onChangeModel).toHaveBeenCalledWith('claude-opus-5')
   })
@@ -146,7 +146,7 @@ describe('ComposerModelControls — controls follow the provider', () => {
       />,
       { wrapper },
     )
-    fireEvent.click(screen.getByTitle('Effort'))
+    fireEvent.click(screen.getByTitle(/^Effort:/))
     fireEvent.click(screen.getByRole('option', { name: 'High' }))
     expect(onChangeControl).toHaveBeenCalledWith('effort', 'high')
   })
@@ -177,7 +177,7 @@ describe('composer controls share one bare, content-sized appearance (composer/c
       />,
       { wrapper },
     )
-    const trigger = screen.getByTitle('Model')
+    const trigger = screen.getByTitle(/^Model:/)
     expect(trigger.tagName).toBe('BUTTON')
     expect(trigger.className).toMatch(/focus-visible:ring-2/)
   })

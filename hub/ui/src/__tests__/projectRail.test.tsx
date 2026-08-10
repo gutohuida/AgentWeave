@@ -127,3 +127,74 @@ describe('phase 5 project collection rail', () => {
     expect(onCreateProject).toHaveBeenCalledOnce()
   })
 })
+
+/* `hub-workspace-shell`: "Navigation collapses only when the operator asks, and stays navigable
+ * when it does."
+ *
+ * The previous compact mode gated every branch on `!compact`, so it rendered the "AW" avatar and
+ * nothing else — no projects, no agents, no way back, and no way to undo it. A rail that renders
+ * no destinations is hidden, not collapsed. */
+describe('the collapsed rail', () => {
+  beforeEach(() => {
+    cleanup()
+    useConfigStore.setState({ selectedProjectId: 'proj-a' })
+  })
+
+  it('reaches every project and agent the expanded rail reaches, by name', () => {
+    renderRail({ compact: true, onCompactChange: vi.fn() })
+
+    for (const project of projects) {
+      // By accessible name, not by pixel: an icon nobody can name is not a destination.
+      expect(screen.getByTestId(`rail-compact-project-${project.id}`)).toHaveAccessibleName(
+        project.name,
+      )
+      for (const agent of project.agents) {
+        expect(
+          screen.getByTestId(`rail-compact-agent-${project.id}-${agent.name}`),
+        ).toHaveAccessibleName(agent.name)
+      }
+    }
+  })
+
+  it('navigates from the collapsed rail', () => {
+    const onOpenProject = vi.fn()
+    const onOpenAgent = vi.fn()
+    renderRail({ compact: true, onCompactChange: vi.fn(), onOpenProject, onOpenAgent })
+
+    fireEvent.click(screen.getByTestId('rail-compact-project-proj-b'))
+    expect(onOpenProject).toHaveBeenCalledWith('proj-b')
+
+    fireEvent.click(screen.getByTestId('rail-compact-agent-proj-a-claude'))
+    expect(onOpenAgent).toHaveBeenCalledWith('proj-a', 'claude')
+  })
+
+  it('indicates the active project and agent', () => {
+    renderRail({ compact: true, onCompactChange: vi.fn(), activeAgent: 'claude' })
+    expect(screen.getByTestId('rail-compact-project-proj-a')).toHaveAttribute('data-active', 'true')
+    expect(screen.getByTestId('rail-compact-project-proj-b')).toHaveAttribute('data-active', 'false')
+    expect(screen.getByTestId('rail-compact-agent-proj-a-claude')).toHaveAttribute('data-active', 'true')
+    // Same agent name, different project: the active marker follows the project too.
+    expect(screen.getByTestId('rail-compact-agent-proj-b-codex')).toHaveAttribute('data-active', 'false')
+  })
+
+  it('can be expanded again from within itself', () => {
+    const onCompactChange = vi.fn()
+    renderRail({ compact: true, onCompactChange })
+
+    const toggle = screen.getByTestId('rail-collapse-toggle')
+    expect(toggle).toHaveAttribute('aria-label', 'Expand navigation')
+    fireEvent.click(toggle)
+    expect(onCompactChange).toHaveBeenCalledWith(false)
+  })
+
+  it('is collapsed by the operator, and by nobody else', () => {
+    const onCompactChange = vi.fn()
+    renderRail({ compact: false, onCompactChange })
+
+    // The rail has no destination-derived collapse of its own: the only thing that changes it is
+    // this control, and the state lives outside the component entirely.
+    fireEvent.click(screen.getByTestId('rail-collapse-toggle'))
+    expect(onCompactChange).toHaveBeenCalledWith(true)
+    expect(screen.getByTestId('sidebar')).toHaveAttribute('data-compact', 'false')
+  })
+})

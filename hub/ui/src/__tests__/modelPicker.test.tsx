@@ -17,7 +17,7 @@ const PROVIDER: ProviderDescriptor = {
 }
 
 function open() {
-  fireEvent.click(screen.getByTitle('Model'))
+  fireEvent.click(screen.getByTitle(/^Model:/))
 }
 
 describe('ModelPicker — search, grouping, favourites (composer/chrome refinement §4b)', () => {
@@ -87,7 +87,7 @@ describe('ModelPicker — search, grouping, favourites (composer/chrome refineme
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Add Haiku 5 to favourites' }))
     expect(onChangeModel).not.toHaveBeenCalled()
-    expect(screen.getByTitle('Model')).toHaveTextContent('Sonnet 5')
+    expect(screen.getByTitle(/^Model:/)).toHaveTextContent('Sonnet 5')
   })
 
   it('supports full keyboard operation: open, narrow, move, select', () => {
@@ -108,7 +108,7 @@ describe('ModelPicker — search, grouping, favourites (composer/chrome refineme
     fireEvent.keyDown(screen.getByLabelText('Search models'), { key: 'Escape' })
     expect(onChangeModel).not.toHaveBeenCalled()
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-    expect(screen.getByTitle('Model')).toHaveTextContent('Sonnet 5')
+    expect(screen.getByTitle(/^Model:/)).toHaveTextContent('Sonnet 5')
   })
 
   it('declares no fixed width on the picker (content-derived per §2, task 4b.10)', () => {

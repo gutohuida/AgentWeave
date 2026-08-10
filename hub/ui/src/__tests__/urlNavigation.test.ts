@@ -8,8 +8,10 @@ import {
   isSectionedDestination,
   parseDestination,
   projectDestination,
+  isSpecDocumentPath,
   resolveDestination,
   serializeDestination,
+  withDocument,
   type WorkspaceDestination,
 } from '@/lib/navigation'
 
@@ -226,5 +228,78 @@ describe('phase 5 URL navigation contract', () => {
         resolveDestination(null, { availableProjectIds: null, lastOpenedProjectId: 'proj-2' }),
       ).toEqual(projectDestination('proj-2'))
     })
+  })
+})
+
+describe('the open document is part of the conversation destination', () => {
+  const DOC = 'spec/roadmaps/agentweave-reconstruction.html'
+
+  it('round-trips a conversation with a document open beside it', () => {
+    const destination = agentDestination('proj-1', 'claude', 'conv-123', DOC)
+    expect(parseDestination(serializeDestination(destination))).toEqual(destination)
+  })
+
+  it('carries no document parameter when none is open', () => {
+    const destination = agentDestination('proj-1', 'claude', 'conv-123')
+    expect(destination.document).toBeNull()
+    expect(serializeDestination(destination)).not.toContain('document')
+  })
+
+  it('opens, changes, and closes the document without disturbing where the operator is', () => {
+    const base = agentDestination('proj-1', 'claude', 'conv-123')
+    const opened = withDocument(base, DOC)
+    expect(opened).toEqual({ ...base, document: DOC })
+    expect(withDocument(opened, 'spec/spec.html').document).toBe('spec/spec.html')
+    expect(withDocument(opened, null).document).toBeNull()
+  })
+
+  it('rejects a path that is not a legal specification path, resolving to no document', () => {
+    // The same contract `validate_spec_path` applies server-side. An illegal value is "no
+    // document", never an error page.
+    const illegal = [
+      '../etc/passwd',
+      'spec/../../secret.html',
+      'notspec/spec.html',
+      'spec/spec.txt',
+      'spec/SPEC.html',
+      'spec//spec.html',
+      'spec/.hidden/spec.html',
+      'spec/%2e%2e/spec.html',
+      'spec\windows\spec.html',
+      '',
+    ]
+    for (const value of illegal) {
+      expect(isSpecDocumentPath(value)).toBe(false)
+      expect(parseDestination(`?project=proj-1&agent=claude&document=${encodeURIComponent(value)}`))
+        .toMatchObject({ document: null })
+    }
+    expect(isSpecDocumentPath(DOC)).toBe(true)
+  })
+
+  it('never lets an illegal path reach the URL, however the destination was constructed', () => {
+    const forged = {
+      kind: 'conversation' as const,
+      projectId: 'proj-1',
+      agent: 'claude',
+      conversationId: 'conv-1',
+      document: '../../etc/passwd',
+    }
+    expect(serializeDestination(forged)).not.toContain('document')
+  })
+
+  it('keeps the document across a conversation change', () => {
+    // The document is what the operator is working on, not a property of the thread they are
+    // working on it in.
+    const first = agentDestination('proj-1', 'claude', 'conv-1', DOC)
+    const second = agentDestination('proj-1', 'claude', 'conv-2', first.document)
+    expect(second.document).toBe(DOC)
+  })
+
+  it('a resolved conversation destination keeps its document', () => {
+    const requested = agentDestination('proj-1', 'claude', 'conv-1', DOC)
+    expect(resolveDestination(requested, {
+      availableProjectIds: ['proj-1'],
+      lastOpenedProjectId: null,
+    })).toEqual(requested)
   })
 })

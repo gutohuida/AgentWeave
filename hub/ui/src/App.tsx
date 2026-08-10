@@ -167,7 +167,7 @@ export default function App() {
     if (projectConversations === undefined || specList === undefined) return
     const home = specList.home ?? null
     // Ordered most recent activity first by the listing endpoint.
-    const recent = projectConversations.conversations[0]
+    const recent = (projectConversations.conversations ?? [])[0]
     if (recent) {
       navigateTo(
         agentDestination(destination.projectId, recent.agent, recent.id, home),
