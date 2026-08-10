@@ -12,7 +12,11 @@ from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import AgentHeartbeat, RunDivergence, Task
-from ...run_task_binding import release_reason
+from ...run_task_binding import (
+    TERMINAL_FOR_BINDING,
+    release_conversations_bound_to,
+    release_reason,
+)
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
 from ...sse import sse_manager
 from ...task_transition_service import apply_transition, guard_entry_status
@@ -261,6 +265,11 @@ async def update_task_for_actor(
             release_reason(task)
         else:
             task.blocked_reason = body.blocked_reason
+        # There is no more working to do at these, so a thread that stayed bound would keep
+        # attributing turns to a task the operator has already decided about — and put stalled
+        # markers on work they approved (design D7).
+        if body.status in TERMINAL_FOR_BINDING:
+            await release_conversations_bound_to(session, task)
     if body.priority is not None:
         task.priority = body.priority
     if body.assignee is not None:

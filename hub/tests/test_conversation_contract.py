@@ -497,6 +497,11 @@ def test_no_code_path_deletes_conversations_outside_reset() -> None:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
+            # A route decorator's `delete` is the HTTP verb, not a row deletion — and one whose
+            # `response_model` happens to be a ConversationResponse would otherwise read as the
+            # very thing this scan forbids. Removing a *field* is not removing the row.
+            if stripped.startswith("@"):
+                continue
             if "delete(" in stripped and "Conversation" in stripped:
                 offending.append(f"{path}:{lineno}: {stripped}")
     assert offending == [], f"found a code path deleting Conversation rows: {offending}"

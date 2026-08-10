@@ -64,19 +64,23 @@ surface; 7 specs; 8 verification.
 
 ## 4. The binding moves to the conversation
 
-- [ ] 4.1 `conversations.task_id`; migration `0060`, guarded, no backfill
-- [ ] 4.2 At spawn, inherit the conversation's binding when delivered entries name no task; an entry
+- [x] 4.1 `conversations.task_id`; migration `0060`, guarded, no backfill
+- [x] 4.2 At spawn, inherit the conversation's binding when delivered entries name no task; an entry
       that names one wins and rebinds the conversation
-- [ ] 4.3 Keep `Run.task_id` as the per-run record (D6) and assert in test that it is still what
+- [x] 4.3 Keep `Run.task_id` as the per-run record (D6) and assert in test that it is still what
       transitions and divergences are attributed to
-- [ ] 4.4 Tests: a follow-up composer turn is bound and checked; naming a different task rebinds;
-      an unbound conversation stays unbound
+- [x] 4.4 Tests: a follow-up composer turn is bound and checked; naming a different task rebinds;
+      an unbound conversation stays unbound; a deleted or foreign task unbinds rather than failing
+      the turn
 
 ## 5. Releasing
 
-- [ ] 5.1 Release on a terminal transition of the bound task
-- [ ] 5.2 An explicit operator release
-- [ ] 5.3 Test that nothing infers a release from conversation content (D7)
+- [x] 5.1 Release on a terminal transition of the bound task — `approved`/`rejected` only.
+      `completed` and `under_review` deliberately excluded: work under review comes back often, and
+      releasing there would unbind precisely the thread about to do the revisions
+- [x] 5.2 An explicit operator release — `DELETE /agent/{agent}/conversations/{id}/task`, idempotent
+- [x] 5.3 Test that nothing infers a release from conversation content (D7) — a source scan, since
+      the failure it guards against is a *new* caller quietly clearing a binding
 
 ## 6. The operator's surface
 

@@ -367,6 +367,24 @@ class Conversation(Base):
         String(64), nullable=True, index=True
     )
     bound_sender_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The task this thread is about, and the durable half of the run→task binding.
+    #
+    # Without it only the *first* run of a conversation was ever bound: starting work from a board
+    # card sent a task id, a follow-up typed into the composer did not, and nothing carried the
+    # binding across turns. So a five-turn piece of work was checked once, at the end of turn one —
+    # when an agent is most legitimately unfinished — and was invisible for the turn where it
+    # actually stopped. The mechanism was noisiest where it mattered least and silent where it
+    # mattered most (`2026-08-10-blocked-and-conversation-binding`).
+    #
+    # A run still records its own `Run.task_id` (design D6). Transitions and divergences are
+    # attributed to a run, and an integrity record that had to join through a conversation to say
+    # which task it was about would be weaker for it.
+    #
+    # Released explicitly, or automatically when the bound task reaches a terminal status. Never
+    # inferred from what the operator seems to be talking about: a wrong guess silently stops
+    # checking a run, and a mechanism that quietly stops enforcing is worse than one that never
+    # started (design D7).
+    task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # Where this conversation stands with its checkpoint threshold: NULL (not warned), `due`
     # (crossed, waiting on the operator), or `dismissed` (the operator chose to keep working).
     #

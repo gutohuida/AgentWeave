@@ -98,6 +98,10 @@ class ConversationResponse(BaseModel):
     # means the conversation inherits its agent's runner and the catalog's control defaults —
     # this is what the composer reads to show the values the next message will use.
     runtime_overrides: Optional[Dict[str, str]] = None
+    # The task this thread is about, if it is about one. Every turn here binds to it and is checked
+    # at its end — which is what the composer has to be able to show, and what the operator has to
+    # be able to let go of.
+    task_id: Optional[str] = None
 
 
 class ConversationRenameRequest(BaseModel):
@@ -327,6 +331,32 @@ async def rename_conversation(
 
     conversation.title = title
     conversation.title_set_by_operator = True
+    await session.commit()
+    await session.refresh(conversation)
+    await _broadcast_conversation(project_id, conversation)
+    return (await _to_response(session, [conversation]))[0]
+
+
+@router.delete("/{agent}/conversations/{conversation_id}/task", response_model=ConversationResponse)
+async def release_conversation_task(
+    agent: str,
+    conversation_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Stop attributing this thread's turns to the task it was bound to.
+
+    The operator's half of design D7. The other half is automatic — approving or rejecting the task
+    releases every thread bound to it. Nothing else does: a binding is never dropped because the
+    conversation *seems* to have moved on, since a wrong guess silently stops checking runs, and a
+    mechanism that quietly stops enforcing is worse than one that never started.
+
+    Idempotent. Releasing an unbound thread is not an error; it is the state the caller asked for.
+    """
+    project_id, _ = project
+    conversation = await _owned_conversation(session, project_id, agent, conversation_id)
+
+    conversation.task_id = None
     await session.commit()
     await session.refresh(conversation)
     await _broadcast_conversation(project_id, conversation)

@@ -76,7 +76,9 @@ from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
     TaskBindingError,
     bind_run_to_task,
+    binding_for_conversation,
     binding_for_delivery,
+    rebind_conversation,
     resolve_task_for_project,
 )
 from ...runner_commands import (
@@ -529,6 +531,17 @@ async def trigger_agent_directly(
         # Asked for explicitly, now, by the operator or by a divergence response. A refusal here is
         # the right answer — nothing else in the request implies the work.
         bound_task = await resolve_task_for_project(session, task_id, project_id)
+
+    if bound_task is not None:
+        # This turn named a task, so the thread follows it. The more specific statement wins, and
+        # the operator does not have to release an old binding before starting something else here.
+        rebind_conversation(conversation, bound_task)
+    else:
+        # Nothing named one, so inherit what the thread is already about. This is the whole point of
+        # the conversation binding: without it a follow-up typed into the composer sends no task id,
+        # and every turn after the first went unchecked — including the one where the agent actually
+        # stopped.
+        bound_task = await binding_for_conversation(session, conversation, project_id)
 
     if bound_task is not None:
         await bind_run_to_task(session, run, bound_task)

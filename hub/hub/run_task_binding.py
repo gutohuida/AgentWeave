@@ -177,6 +177,65 @@ async def bind_run_to_task(
 
 
 # --------------------------------------------------------------------------------------
+# The binding that outlives one run
+# --------------------------------------------------------------------------------------
+
+#: Statuses at which a conversation's binding releases itself. Work that has been approved or
+#: abandoned is finished being worked on, and a thread that kept attributing turns to it would put
+#: stalled markers on a task the operator has already decided about (design D7).
+#:
+#: `completed` and `under_review` are deliberately absent: work under review comes back often, and
+#: releasing there would unbind precisely the thread that is about to do the revisions.
+TERMINAL_FOR_BINDING: Tuple[str, ...] = ("approved", "rejected")
+
+
+async def binding_for_conversation(
+    session: AsyncSession,
+    conversation,
+    project_id: str,
+) -> Optional[Task]:
+    """The task this thread is already about, if it is about one and that task still exists.
+
+    Inheritance is what makes turn two of a piece of work checked at all. Silent when the task has
+    been deleted since — the turn still runs, unbound, because removing a row must not cancel work
+    the operator asked for.
+    """
+    task_id = getattr(conversation, "task_id", None)
+    if not task_id:
+        return None
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        return None
+    return task
+
+
+def rebind_conversation(conversation, task: Optional[Task]) -> None:
+    """Point the thread at `task`, or at nothing.
+
+    Called when a turn names a task of its own — an operator starting work from a card, or a
+    delegation carrying one. The more specific statement wins, and the thread follows it, so the
+    operator does not have to release the old binding before starting something else here.
+    """
+    conversation.task_id = task.id if task is not None else None
+
+
+async def release_conversations_bound_to(session: AsyncSession, task: Task) -> int:
+    """Unbind every conversation pointed at `task`. Returns how many were released.
+
+    Called when the task reaches a status there is no more working to do at. Not inferred from what
+    a thread seems to be about — the only two triggers are this and an explicit operator release,
+    because a binding that quietly disappears stops checking runs without saying so.
+    """
+    from .db.models import Conversation
+
+    result = await session.execute(select(Conversation).where(Conversation.task_id == task.id))
+    conversations = list(result.scalars().all())
+    for conversation in conversations:
+        conversation.task_id = None
+    return len(conversations)
+
+
+# --------------------------------------------------------------------------------------
 # Waiting on a person
 # --------------------------------------------------------------------------------------
 
