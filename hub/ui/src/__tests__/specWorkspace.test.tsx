@@ -152,7 +152,7 @@ describe('conversation workspace — proportions', () => {
   })
 
   it('restores a stored width, which is what makes the control work', () => {
-    saveSpecPreferences({ conversationWidth: 520 })
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 520 })
     renderView()
     reportWidth(1600)
 
@@ -180,7 +180,7 @@ describe('conversation workspace — proportions', () => {
   })
 
   it('lets the operator drag the conversation past half the width', () => {
-    saveSpecPreferences({ conversationWidth: 1600 })
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 1600 })
     renderView()
     reportWidth(2400)
 
@@ -192,7 +192,7 @@ describe('conversation workspace — proportions', () => {
   it('clamps a stored width that no longer fits, without discarding it', () => {
     // A width chosen on a wide window, now shown on a narrow one. The pane shrinks to fit; the
     // preference is untouched, so widening the window restores what the operator chose.
-    saveSpecPreferences({ conversationWidth: 1200 })
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 1200 })
     renderView()
     reportWidth(DOCUMENT_COLUMN_BREAKPOINT)
 
@@ -217,7 +217,7 @@ describe('conversation workspace — proportions', () => {
   })
 
   it('restores the default width on double-click', () => {
-    saveSpecPreferences({ conversationWidth: 540 })
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 540 })
     renderView()
     reportWidth(1600)
 
@@ -286,12 +286,12 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
   })
 
   it('round-trips a valid width', () => {
-    saveSpecPreferences({ conversationWidth: 500 })
-    expect(loadSpecPreferences()).toEqual({ conversationWidth: 500 })
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 500 })
+    expect(loadSpecPreferences()).toEqual({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 500 })
   })
 
   it('clamps a stored width into a sane range on the way in and on the way out', () => {
-    saveSpecPreferences({ conversationWidth: 5 })
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, conversationWidth: 5 })
     expect(loadSpecPreferences().conversationWidth).toBe(CONVERSATION_MIN_WIDTH)
 
     // Hand-edited storage, never written by the app. The upper bound is a sanity bound, not a
@@ -324,6 +324,7 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
 
   it('persists only the allowed keys, never content or credentials', () => {
     saveSpecPreferences({
+      ...DEFAULT_SPEC_PREFERENCES,
       conversationWidth: 500,
       // Extra fields must not survive the write.
       apiKey: 'aw_live_SECRET',
@@ -331,7 +332,7 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
     } as never)
 
     const stored = JSON.parse(localStorage.getItem(SPEC_PREFERENCES_KEY) as string)
-    expect(Object.keys(stored)).toEqual(['conversationWidth'])
+    expect(Object.keys(stored).sort()).toEqual(['conversationWidth', 'treeWidth'])
     expect(localStorage.getItem(SPEC_PREFERENCES_KEY)).not.toContain('aw_live_SECRET')
   })
 

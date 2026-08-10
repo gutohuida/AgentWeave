@@ -16,11 +16,14 @@ export interface RailProject {
   agents: AgentSummary[]
 }
 
-/** No `spec` tab. A specification is reached from the composer's Spec pill, in the conversation
- *  the operator is already in — not by leaving it, going to the project, and choosing a tab. A URL
- *  still carrying `tab=spec` is unknown here and coerces to the default tab, which is what should
- *  happen to a link to a place that no longer exists. */
-export const PROJECT_TABS = ['overview', 'tasks', 'jobs', 'activity'] as const
+/** `spec` is a destination again, and deliberately a *different* one from what it was.
+ *
+ *  It was deleted when the composer gained its Spec pill, because reaching a specification while
+ *  working with an agent should not mean leaving the conversation. That is still true and the pill
+ *  is still how that is done. This is the other thing: a place to go when the specification is what
+ *  you are working on rather than what you are working *beside* — the document and its navigation,
+ *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
+export const PROJECT_TABS = ['overview', 'tasks', 'spec', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 export const ENVIRONMENT_SECTIONS = [
@@ -83,7 +86,9 @@ export function parseSpecDocument(value: string | null | undefined): string | nu
 }
 
 export type WorkspaceDestination =
-  | { kind: 'project'; projectId: string; tab: ProjectTab }
+  // `document` is carried on the Spec tab for the same reason the conversation carries one: which
+  // document is open is part of where you are, so it survives a reload and can be linked to.
+  | { kind: 'project'; projectId: string; tab: ProjectTab; document?: string | null }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
@@ -115,8 +120,13 @@ export function buildRailProjects(
 export function projectDestination(
   projectId: string,
   tab: ProjectTab = DEFAULT_TAB,
+  document: string | null = null,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
-  return { kind: 'project', projectId, tab }
+  const parsed = parseSpecDocument(document)
+  // Only the Spec tab has anywhere to put one; carrying it on Tasks would be a field nothing reads.
+  return parsed && tab === 'spec'
+    ? { kind: 'project', projectId, tab, document: parsed }
+    : { kind: 'project', projectId, tab }
 }
 
 export function environmentDestination(
@@ -268,6 +278,9 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   if (destination.tab === 'environment') {
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
   }
+  if (destination.tab === 'spec' && destination.document && isSpecDocumentPath(destination.document)) {
+    params.set('document', destination.document)
+  }
   return `?${params.toString()}`
 }
 
@@ -325,7 +338,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as ProjectTab)
     : DEFAULT_TAB
-  return projectDestination(projectId, tab)
+  return projectDestination(projectId, tab, parseSpecDocument(params.get('document')))
 }
 
 export interface ResolveDestinationOptions {

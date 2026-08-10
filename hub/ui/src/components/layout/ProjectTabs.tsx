@@ -4,6 +4,7 @@ import { PROJECT_TABS, type ProjectTab } from '@/lib/navigation'
 const LABELS: Record<ProjectTab, string> = {
   overview: 'Overview',
   tasks: 'Tasks',
+  spec: 'Spec',
   jobs: 'Jobs',
   activity: 'Activity',
 }

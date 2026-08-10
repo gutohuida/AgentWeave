@@ -29,6 +29,7 @@ import { ProjectManagerModal, type ProjectManagerMode } from '@/components/proje
 import { QualityHealthPanel } from '@/components/quality/QualityHealthPanel'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import { RunnersPage } from '@/components/runners/RunnersPage'
+import { SpecPage } from '@/components/spec/SpecPage'
 import { TasksBoard } from '@/components/tasks/TasksBoard'
 import { Button } from '@/components/ui/button'
 import { useSSE } from '@/hooks/useSSE'
@@ -207,7 +208,7 @@ export default function App() {
       navigateTo(projectDestination(currentProjectId))
       return
     }
-    if (value === 'tasks' || value === 'jobs' || value === 'activity') {
+    if (value === 'tasks' || value === 'spec' || value === 'jobs' || value === 'activity') {
       navigateTo(projectDestination(currentProjectId, value))
       return
     }
@@ -312,6 +313,17 @@ export default function App() {
         : <OverviewPage onNavigate={navigate} />
     } else if (destination.tab === 'tasks') {
       projectContent = <TasksBoard />
+    } else if (destination.tab === 'spec') {
+      projectContent = (
+        <SpecPage
+          document={destination.document ?? null}
+          // Replace: which document the Spec screen resolved to is not a place the operator
+          // navigated to, and Back should leave the screen rather than walk its documents.
+          onOpenDocument={(path) =>
+            navigateTo(projectDestination(destination.projectId, 'spec', path), { replace: true })
+          }
+        />
+      )
     } else if (destination.tab === 'jobs') {
       projectContent = <JobsPage />
     } else if (destination.tab === 'activity') {
@@ -362,7 +374,18 @@ export default function App() {
             }}
           />
         )}
-        <div className="workspace-content min-h-0 flex-1 overflow-auto">{projectContent}</div>
+        {/* The Spec screen lays out its own two panes edge to edge, so it opts out of
+            `workspace-content`'s centred 1180px column and page padding — those are for a page of
+            content, and this is a workspace. */}
+        <div
+          className={
+            destination.tab === 'spec'
+              ? 'min-h-0 flex-1 overflow-hidden'
+              : 'workspace-content min-h-0 flex-1 overflow-auto'
+          }
+        >
+          {projectContent}
+        </div>
       </div>
     )
   } else {

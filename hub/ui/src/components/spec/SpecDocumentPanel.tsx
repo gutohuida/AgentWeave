@@ -26,7 +26,9 @@ interface SpecDocumentPanelProps {
   /** Choosing a document is the Ctrl+K picker, which the conversation view owns because it must
    *  also be reachable when no document is open at all. The breadcrumb opens it. */
   onOpenPicker: () => void
-  onClose: () => void
+  /** Omitted on the Spec screen, where there is nothing behind the panel to reveal. Closing a
+   *  document is a conversation-view action, because there the conversation is underneath. */
+  onClose?: () => void
   onRefresh: () => void
 }
 
@@ -180,16 +182,18 @@ export function SpecDocumentPanel({
         >
           <Icon name="refresh" size={16} />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          data-testid="spec-document-close"
-          onClick={onClose}
-          aria-label="Close document"
-          title="Close document"
-        >
-          <Icon name="close" size={16} />
-        </Button>
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            data-testid="spec-document-close"
+            onClick={onClose}
+            aria-label="Close document"
+            title="Close document"
+          >
+            <Icon name="close" size={16} />
+          </Button>
+        )}
       </div>
 
       {/* Drift summary — only rendered when the Hub reports manifest drift. */}

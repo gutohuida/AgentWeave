@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useMemo, useState } from 'react'
-import { Icon } from '@/components/common/Icon'
-import { buildPathTree, searchDocuments, type SpecInventory, type SpecNode } from './specNavigation'
+import { searchDocuments, type SpecInventory, type SpecNode } from './specNavigation'
+import { SpecTree } from './SpecTree'
 
 interface SpecDocumentPickerProps {
   open: boolean
@@ -31,19 +31,6 @@ const rowStyle: React.CSSProperties = {
   textAlign: 'left',
   cursor: 'pointer',
   borderRadius: 'var(--radius-sm)',
-}
-
-/** What sits on the right of a tree row.
- *
- *  The filename is there to disambiguate a column of change directories that all contain
- *  `spec.html` — so it is worth nothing when the document has no manifest title and its label
- *  *is* the filename, which printed `a1-probe.html` twice on one row. Drift and archive dates
- *  outrank it: they say something the label cannot. */
-function trailingLabel(label: string, path: string, node?: SpecNode): string {
-  if (node?.missing) return 'missing'
-  if (node?.archived) return node.archiveDate ?? 'archived'
-  const filename = path.slice(path.lastIndexOf('/') + 1)
-  return filename === label ? '' : filename
 }
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
@@ -90,7 +77,6 @@ export function SpecDocumentPicker({
    * than an empty box waiting to be told what to look for. Typing replaces it with matches: a
    * tree is for finding your way around something you cannot yet name, a ranked flat list is for
    * when you can. */
-  const tree = useMemo(() => buildPathTree(inventory.nodes), [inventory])
   const browsing = query.trim().length === 0
 
   const choose = (node: SpecNode) => {
@@ -155,59 +141,7 @@ export function SpecDocumentPicker({
           />
           <div className="overflow-y-auto p-1.5" data-testid="spec-picker-results">
             {browsing ? (
-              tree.length === 0 ? (
-                <p style={{ padding: 10, fontSize: 12, color: 'var(--text-3)' }}>
-                  No specification documents yet.
-                </p>
-              ) : (
-                tree.map((row) =>
-                  row.kind === 'directory' ? (
-                    <div
-                      key={`dir:${row.path}`}
-                      data-testid={`spec-picker-directory-${row.path}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '7px 10px 3px',
-                        paddingLeft: 10 + row.depth * 14,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: 'var(--text-3)',
-                      }}
-                    >
-                      <Icon name="folder_open" size={12} />
-                      {row.label}
-                    </div>
-                  ) : (
-                    <button
-                      key={`doc:${row.path}`}
-                      type="button"
-                      data-testid={`spec-picker-document-${row.path}`}
-                      // Missing documents stay visible so drift is never hidden, and unselectable
-                      // because there is nothing to open.
-                      disabled={row.node?.missing}
-                      aria-current={row.path === currentPath ? 'true' : undefined}
-                      data-active={row.path === currentPath ? 'true' : 'false'}
-                      onClick={() => row.node && choose(row.node)}
-                      style={{
-                        ...rowStyle,
-                        paddingLeft: 10 + row.depth * 14,
-                        ...(row.node?.missing ? { cursor: 'not-allowed', opacity: 0.55 } : null),
-                        ...(row.path === currentPath
-                          ? { background: 'var(--surface-2)', color: 'var(--text)' }
-                          : null),
-                      }}
-                    >
-                      <Icon name="article" size={12} />
-                      <span className="truncate">{row.label}</span>
-                      <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)' }}>
-                        {trailingLabel(row.label, row.path, row.node)}
-                      </span>
-                    </button>
-                  ),
-                )
-              )
+              <SpecTree inventory={inventory} currentPath={currentPath} onSelect={choose} />
             ) : (
               <>
             {empty && (

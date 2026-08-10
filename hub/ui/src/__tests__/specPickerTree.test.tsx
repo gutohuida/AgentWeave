@@ -7,6 +7,10 @@ import type { SpecListResponse } from '@/api/spec'
 
 /* The picker opens on the specification as it is organised, not on an empty box.
  *
+ * The tree itself is `SpecTree`, shared with the Spec screen's navigation column — one list with
+ * one set of rules, rather than two that have to be kept in step. Its testids are `spec-tree-*`
+ * for that reason.
+ *
  * The flat ranked list is still what a query produces — the two answer different questions, and
  * which one is showing is decided by whether anything has been typed (operator, 2026-08-10:
  * "show the tree of spec... how each files are organized the folder etc").
@@ -90,14 +94,14 @@ describe('the picker browses before it searches', () => {
   it('shows the tree with nothing typed', () => {
     renderPicker()
     const results = within(screen.getByTestId('spec-picker-results'))
-    expect(results.getByTestId('spec-picker-directory-spec/changes')).toBeInTheDocument()
-    expect(results.getByTestId('spec-picker-directory-spec/roadmaps')).toBeInTheDocument()
-    expect(results.getByTestId(`spec-picker-document-${CHANGE}`)).toHaveTextContent('Queued message delivery')
+    expect(results.getByTestId('spec-tree-directory-spec/changes')).toBeInTheDocument()
+    expect(results.getByTestId('spec-tree-directory-spec/roadmaps')).toBeInTheDocument()
+    expect(results.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveTextContent('Queued message delivery')
   })
 
   it('shows the filename beside the title, because spec.html repeats down a column', () => {
     renderPicker()
-    expect(screen.getByTestId(`spec-picker-document-${CHANGE}`)).toHaveTextContent('spec.html')
+    expect(screen.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveTextContent('spec.html')
   })
 
   it('does not print the filename twice when it is also the title', () => {
@@ -112,30 +116,30 @@ describe('the picker browses before it searches', () => {
     render(
       <SpecDocumentPicker open onOpenChange={() => {}} inventory={unfiled} onSelect={vi.fn()} />,
     )
-    const row = screen.getByTestId('spec-picker-document-spec/a1-probe.html')
+    const row = screen.getByTestId('spec-tree-document-spec/a1-probe.html')
     expect(row.textContent?.match(/a1-probe\.html/g)).toHaveLength(1)
   })
 
   it('still shows the archive date rather than the filename for an archived document', () => {
     renderPicker()
-    expect(screen.getByTestId(`spec-picker-document-${ARCHIVED}`)).toHaveTextContent('2026-07-29')
+    expect(screen.getByTestId(`spec-tree-document-${ARCHIVED}`)).toHaveTextContent('2026-07-29')
   })
 
   it('marks the document already open', () => {
     renderPicker(CHANGE)
-    expect(screen.getByTestId(`spec-picker-document-${CHANGE}`)).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByTestId(`spec-picker-document-${SECOND}`)).not.toHaveAttribute('aria-current')
+    expect(screen.getByTestId(`spec-tree-document-${CHANGE}`)).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByTestId(`spec-tree-document-${SECOND}`)).not.toHaveAttribute('aria-current')
   })
 
   it('opens a document from the tree', () => {
     const { onSelect } = renderPicker()
-    fireEvent.click(screen.getByTestId(`spec-picker-document-${SECOND}`))
+    fireEvent.click(screen.getByTestId(`spec-tree-document-${SECOND}`))
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ path: SECOND }))
   })
 
   it('keeps a missing document visible and unselectable in the tree', () => {
     const { onSelect } = renderPicker()
-    const missing = screen.getByTestId('spec-picker-document-spec/changes/gone/spec.html')
+    const missing = screen.getByTestId('spec-tree-document-spec/changes/gone/spec.html')
     expect(missing).toBeDisabled()
     fireEvent.click(missing)
     expect(onSelect).not.toHaveBeenCalled()
@@ -146,7 +150,7 @@ describe('the picker browses before it searches', () => {
     renderPicker()
     await user.type(screen.getByPlaceholderText(/Search by title/), 'handoff')
 
-    expect(screen.queryByTestId('spec-picker-directory-spec/changes')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('spec-tree-directory-spec/changes')).not.toBeInTheDocument()
     const results = within(screen.getByTestId('spec-picker-results'))
     expect(results.getByText('Agent handoff')).toBeInTheDocument()
     expect(results.queryByText('Queued message delivery')).not.toBeInTheDocument()
@@ -159,6 +163,6 @@ describe('the picker browses before it searches', () => {
     await user.type(input, 'handoff')
     await user.clear(input)
 
-    expect(screen.getByTestId('spec-picker-directory-spec/changes')).toBeInTheDocument()
+    expect(screen.getByTestId('spec-tree-directory-spec/changes')).toBeInTheDocument()
   })
 })

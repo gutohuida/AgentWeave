@@ -13,6 +13,10 @@ const STORAGE_KEY = 'aw.spec.presentation.v1'
 
 export interface SpecPreferences {
   conversationWidth: number
+  /** The Spec screen's own navigation column. Separate from `conversationWidth`: they size
+   *  different things on different screens, and one number for both would move a column the
+   *  operator was not looking at. */
+  treeWidth: number
 }
 
 /**
@@ -38,8 +42,17 @@ export const SPEC_DOC_MIN_WIDTH = 360
  *  exists so a hand-edited or stale value cannot produce a nonsense width. */
 export const CONVERSATION_STORAGE_MAX = 4000
 
+export const SPEC_TREE_MIN_WIDTH = 200
+export const SPEC_TREE_MAX_WIDTH = 460
+export const SPEC_TREE_DEFAULT_WIDTH = 280
+
 export const DEFAULT_SPEC_PREFERENCES: SpecPreferences = {
   conversationWidth: CONVERSATION_DEFAULT_WIDTH,
+  treeWidth: SPEC_TREE_DEFAULT_WIDTH,
+}
+
+export function clampTreeWidth(value: number): number {
+  return Math.min(SPEC_TREE_MAX_WIDTH, Math.max(SPEC_TREE_MIN_WIDTH, Math.round(value)))
 }
 
 export function clampConversationWidth(value: number): number {
@@ -79,6 +92,7 @@ export function loadSpecPreferences(): SpecPreferences {
       clampConversationWidth,
       DEFAULT_SPEC_PREFERENCES.conversationWidth,
     ),
+    treeWidth: readWidth(value.treeWidth, clampTreeWidth, DEFAULT_SPEC_PREFERENCES.treeWidth),
   }
 }
 
@@ -87,7 +101,10 @@ export function saveSpecPreferences(prefs: SpecPreferences): void {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ conversationWidth: clampConversationWidth(prefs.conversationWidth) }),
+      JSON.stringify({
+        conversationWidth: clampConversationWidth(prefs.conversationWidth),
+        treeWidth: clampTreeWidth(prefs.treeWidth),
+      }),
     )
   } catch {
     // Persisting preferences is best-effort; layout must still work without it.

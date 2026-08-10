@@ -116,6 +116,9 @@ vi.mock('@/components/environment/ProjectSettingsPanel', () => ({
 vi.mock('@/components/agents/AgentOutputPanel', () => ({
   AgentOutputPanel: () => <div data-testid="page-conversation" />,
 }))
+vi.mock('@/components/spec/SpecPage', () => ({
+  SpecPage: () => <div data-testid="page-spec" />,
+}))
 
 // Stub the layout chrome too so the test focuses on routing.
 vi.mock('@/components/layout/StatusBar', () => ({
@@ -153,7 +156,7 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
 
   it('does not mount any project page not selected', () => {
     render(withQueryClient(<App />))
-    for (const id of ['page-tasks', 'page-jobs', 'page-activity']) {
+    for (const id of ['page-tasks', 'page-spec', 'page-jobs', 'page-activity']) {
       expect(screen.queryByTestId(id)).not.toBeInTheDocument()
     }
   })
@@ -186,16 +189,16 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(window.location.search).toContain('tab=tasks')
   })
 
-  it('offers no Spec tab — the specification is reached from the composer', () => {
+  it('offers the Spec tab as a place to focus on the specification', () => {
+    // Both routes exist and mean different things: the tab is the specification as the thing you
+    // are working on, the composer's Spec pill is it as the thing you are working beside.
     render(withQueryClient(<App />))
-    // The tab is gone, and a link still carrying `tab=spec` lands on the default tab rather than
-    // on a place that no longer exists.
-    expect(screen.queryByTestId('project-tab-spec')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('project-tab-spec'))
 
-    window.history.pushState(null, '', '?project=proj-test&tab=spec')
-    cleanup()
-    render(withQueryClient(<App />))
-    expect(screen.getByTestId('page-overview')).toBeInTheDocument()
+    expect(window.location.search).toContain('tab=spec')
+    expect(screen.getByTestId('page-spec')).toBeInTheDocument()
+    // No conversation on this screen — that is the whole point of it.
+    expect(screen.queryByTestId('page-conversation')).not.toBeInTheDocument()
   })
 
   it('Overview surfaces Questions inline without changing tab', () => {
