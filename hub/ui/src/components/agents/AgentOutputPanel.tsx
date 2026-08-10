@@ -55,6 +55,11 @@ interface AgentOutputPanelProps {
    *  returning a real conversation id for a first message. It never holds the answer; the
    *  destination does. */
   onSelectConversation?: (conversationId: string | null) => void
+  /** The specification document the operator has open, when this panel is the specification
+   *  workspace's chat. Sent with the trigger so the Hub can name it in the turn context; never
+   *  added to the operator's message. `null` on every other surface, and on the Spec page
+   *  before a document resolves. */
+  specDocumentPath?: string | null
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -97,6 +102,7 @@ export function AgentOutputPanel({
   onOpenAgentSettings,
   conversationId = null,
   onSelectConversation,
+  specDocumentPath = null,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -434,6 +440,10 @@ export function AgentOutputPanel({
         message: triggerMessage,
         conversation_id: conversationId,
         overrides,
+        // Where the operator is looking, not what they said. The Hub renders it into the turn
+        // context and never into the stored message. Omitted entirely when there is nothing
+        // open, so the Hub is told "no document" rather than an empty string to interpret.
+        spec_document: specDocumentPath ?? undefined,
       }),
     })
     if (!response.ok) {

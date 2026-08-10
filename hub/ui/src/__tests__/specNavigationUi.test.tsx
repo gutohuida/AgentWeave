@@ -36,8 +36,13 @@ vi.mock('@/api/spec', () => ({
 
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'spec', status: 'idle' }] }),
-  useAgentOutput: () => ({ lines: [], isLoading: false }),
-  useAgentSessions: () => ({ data: { sessions: [] } }),
+}))
+
+// The chat pane is now the whole conversation surface, covered by its own suite
+// (`specChatSurface.test.tsx`). Stubbed so these assertions stay about navigation rather than
+// about every api module the conversation surface reads.
+vi.mock('@/components/spec/SpecChat', () => ({
+  SpecChat: () => <div data-testid="spec-chat" />,
 }))
 
 vi.mock('@/api/client', () => ({ fetchWithAuth: vi.fn() }))

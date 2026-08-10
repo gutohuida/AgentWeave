@@ -1,8 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
+
+/* What used to be `specManifestRepair.test.tsx`.
+ *
+ * The "Repair manifest" button is gone (A1 task 3.5, design.md Decision 4): it composed
+ * "Run aw-spec-reindex to repair spec/index.json" and sent it to an agent chosen by a hardcoded
+ * name convention, through a second bespoke trigger path, instructing a skill nothing installs.
+ * Its three tests went with it. Everything here is about the drift *report*, which stays —
+ * showing a condition and offering to act on it are different things, and only the second one
+ * was broken.
+ */
 
 vi.mock('@/hooks/useSSE', () => ({
   useSSE: () => {},
@@ -10,6 +20,13 @@ vi.mock('@/hooks/useSSE', () => ({
   getBufferedEvents: () => [],
   cancelReconnect: () => {},
   __resetSSEStateForTest: () => {},
+}))
+
+// The chat is the whole conversation surface now, with its own suite
+// (`specChatSurface.test.tsx`). Stubbed here so these assertions stay about the drift report
+// rather than about every api module the conversation surface reads.
+vi.mock('@/components/spec/SpecChat', () => ({
+  SpecChat: () => <div data-testid="spec-chat" />,
 }))
 
 // Controlled by each test.
@@ -30,22 +47,8 @@ vi.mock('@/api/spec', () => ({
   useSpecEvents: () => {},
 }))
 
-let agents: {
-  name: string
-  status: string
-  message_count: number
-  active_task_count: number
-}[]
-
 vi.mock('@/api/agents', () => ({
-  useAgents: () => ({ data: agents }),
-  useAgentOutput: () => ({ lines: [], isLoading: false }),
-  useAgentSessions: () => ({ data: { sessions: [] } }),
-}))
-
-const fetchWithAuth = vi.fn()
-vi.mock('@/api/client', () => ({
-  fetchWithAuth: (...args: unknown[]) => fetchWithAuth(...args),
+  useAgents: () => ({ data: [{ name: 'spec', status: 'idle' }] }),
 }))
 
 import { SpecPage } from '@/components/spec/SpecPage'
@@ -56,22 +59,10 @@ function withQueryClient(node: ReactNode) {
   return <QueryClientProvider client={queryClient}>{node}</QueryClientProvider>
 }
 
-function triggerBody(call = 0): Record<string, unknown> {
-  const [path, init] = fetchWithAuth.mock.calls[call] as [string, RequestInit]
-  expect(path).toBe('/api/v1/projects/proj-test/agent/trigger')
-  return JSON.parse(init.body as string)
-}
-
-describe('Spec tab — manifest drift and repair', () => {
+describe('Spec tab — manifest drift report', () => {
   beforeEach(() => {
     cleanup()
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    fetchWithAuth.mockReset()
-    fetchWithAuth.mockResolvedValue({ ok: true, status: 200 })
-    agents = [
-      { name: 'spec', status: 'idle', message_count: 0, active_task_count: 0 },
-      { name: 'other', status: 'idle', message_count: 0, active_task_count: 0 },
-    ]
     specListResult = {
       data: {
         specs: [{ path: 'spec/spec.html', state: 'unindexed' }],
@@ -128,49 +119,14 @@ describe('Spec tab — manifest drift and repair', () => {
     expect(screen.getByText(/unfiled_document — spec\/extra\.html/)).toBeInTheDocument()
   })
 
-  it('sends a bounded repair message to the idle spec-role agent', async () => {
-    specListResult.data.diagnostics = [{ code: 'unfiled_document', path: 'spec/extra.html' }]
-    specListResult.data.missing = [{ path: 'spec/changes/gone/spec.html' }]
-    render(withQueryClient(<SpecPage />))
-
-    fireEvent.click(screen.getByText('Repair manifest'))
-    await waitFor(() => expect(fetchWithAuth).toHaveBeenCalled())
-
-    const body = triggerBody()
-    expect(body.agent).toBe('spec')
-    expect(body.session_mode).toBe('resume')
-    const message = body.message as string
-    expect(message).toContain('aw-spec-reindex')
-    expect(message).toContain('unfiled_document')
-    expect(message).toContain('spec/extra.html')
-    expect(message).toContain('spec/changes/gone/spec.html')
-  })
-
-  it('falls back to the selected chat agent when no spec-role agent is idle', async () => {
-    agents = [
-      { name: 'spec', status: 'running', message_count: 0, active_task_count: 0 },
-      { name: 'other', status: 'idle', message_count: 0, active_task_count: 0 },
-    ]
+  it('reports drift without offering to repair it', () => {
     specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
     render(withQueryClient(<SpecPage />))
 
-    // Default agent selection prefers the spec role even while busy, so pick
-    // the fallback explicitly via the chat agent selector.
-    fireEvent.change(screen.getByDisplayValue('spec'), { target: { value: 'other' } })
-
-    await waitFor(() => expect(screen.getByText('Repair manifest')).not.toBeDisabled())
-    fireEvent.click(screen.getByText('Repair manifest'))
-    await waitFor(() => expect(fetchWithAuth).toHaveBeenCalled())
-    expect(triggerBody().agent).toBe('other')
-  })
-
-  it('disables the repair button when no eligible agent exists', () => {
-    agents = [
-      { name: 'spec', status: 'running', message_count: 0, active_task_count: 0 },
-    ]
-    specListResult.data.diagnostics = [{ code: 'stale_row', path: 'spec/old.html' }]
-    render(withQueryClient(<SpecPage />))
-    expect(screen.getByText('Repair manifest')).toBeDisabled()
+    expect(screen.getByText('1 spec manifest drift item')).toBeInTheDocument()
+    // The button instructed an uninstalled skill. A deterministic reindexer belongs in B2,
+    // where the manifest format it repairs against will exist.
+    expect(screen.queryByText('Repair manifest')).not.toBeInTheDocument()
   })
 
   it('prefers the manifest home over spec/spec.html for default selection', () => {

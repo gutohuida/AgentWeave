@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 
 interface PaneResizerProps {
-  /** Current width of the pane to the left, in px. */
+  /** Current width of the pane this divider sizes, in px. */
   width: number
   onChange: (width: number) => void
   /** Restored on double-click. */
@@ -9,14 +9,27 @@ interface PaneResizerProps {
   min: number
   max: number
   label?: string
+  /**
+   * The element the width is measured inside. Omitted, the width is measured from the viewport's
+   * left edge — correct for the Hub rail, which starts there, and wrong for any pane that does
+   * not. The specification workspace sits to the right of that rail, so its dividers pass the
+   * workspace container and get a width that means the same thing whatever is left of it.
+   */
+  containerRef?: React.RefObject<HTMLElement | null>
+  /**
+   * Which side of the divider the sized pane is on. `left` is the default and grows rightward;
+   * `right` grows leftward and is measured from the container's right edge, so a chat pane on
+   * the far side reports its own width rather than everything to its left.
+   */
+  side?: 'left' | 'right'
 }
 
 /**
- * The boundary between the navigation rail and the content area.
+ * The boundary between two panes.
  *
- * The resizer owns the dividing line rather than the rail owning a border, for
- * two reasons: the panes then share one ground plane with a single separation
- * signal, and hover feedback on the boundary comes for free.
+ * The resizer owns the dividing line rather than either pane owning a border, for two reasons:
+ * the panes then share one ground plane with a single separation signal, and hover feedback on
+ * the boundary comes for free.
  *
  * The hit area is deliberately wider than the visible line — you should not
  * have to hit a 1px target. The line itself stays 1px and only changes colour,
@@ -29,12 +42,24 @@ export function PaneResizer({
   min,
   max,
   label = 'Resize navigation',
+  containerRef,
+  side = 'left',
 }: PaneResizerProps) {
   const dragging = useRef(false)
 
   const clamp = useCallback(
     (value: number) => Math.min(max, Math.max(min, value)),
     [min, max],
+  )
+
+  /** Pointer position -> the width of the pane this divider sizes. */
+  const widthAt = useCallback(
+    (clientX: number) => {
+      const bounds = containerRef?.current?.getBoundingClientRect()
+      if (!bounds) return clientX
+      return side === 'right' ? bounds.right - clientX : clientX - bounds.left
+    },
+    [containerRef, side],
   )
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -53,8 +78,7 @@ export function PaneResizer({
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging.current) return
-    // Measured from the viewport edge because the rail starts there.
-    onChange(clamp(e.clientX))
+    onChange(clamp(widthAt(e.clientX)))
   }
 
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -71,9 +95,11 @@ export function PaneResizer({
     document.body.style.userSelect = ''
   }
 
-  // Keyboard resizing keeps the control operable without a pointer.
+  // Keyboard resizing keeps the control operable without a pointer. The arrow keys move the
+  // divider, not the number: on a pane that grows leftward, ArrowLeft makes it wider, so the
+  // key and the thing on screen agree.
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = e.shiftKey ? 32 : 8
+    const step = (e.shiftKey ? 32 : 8) * (side === 'right' ? -1 : 1)
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       onChange(clamp(width - step))

@@ -2,12 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
-import { fetchWithAuth } from '@/api/client'
-import { useSpec, useSpecEvents, useSpecList, type SpecDiagnostic, type SpecMissingEntry } from '@/api/spec'
-import { useQueryClient } from '@tanstack/react-query'
+import { useSpec, useSpecEvents, useSpecList } from '@/api/spec'
 import { useAgents } from '@/api/agents'
 import { useConfigStore } from '@/store/configStore'
-import { SpecChatPane } from './SpecChatPane'
+import { SpecChat } from './SpecChat'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
 import { SpecFrame, type SpecFrameHandle } from './SpecFrame'
 import { SpecNavigator } from './SpecNavigator'
@@ -21,36 +19,17 @@ import {
 } from './specPreferences'
 import type { TocAnchor } from './specBridge'
 
-// Bounded, deterministic instruction for the spec-repair agent — built from
-// the Hub's own computed drift set (never a client-side guess), capped so
-// the message stays readable and finite regardless of how much drift exists.
-const MAX_REPAIR_ITEMS = 50
-
-function buildRepairMessage(diagnostics: SpecDiagnostic[], missing: SpecMissingEntry[]): string {
-  const lines: string[] = ['Run aw-spec-reindex to repair spec/index.json. Detected drift:']
-  const capped = diagnostics.slice(0, MAX_REPAIR_ITEMS)
-  for (const d of capped) {
-    const parts = [d.code]
-    if (d.path) parts.push(d.path)
-    if (d.field) parts.push(`field=${d.field}`)
-    if (d.expected != null) parts.push(`expected=${d.expected}`)
-    if (d.actual != null) parts.push(`actual=${d.actual}`)
-    lines.push(`- ${parts.join(' ')}`)
-  }
-  if (diagnostics.length > capped.length) {
-    lines.push(`…and ${diagnostics.length - capped.length} more diagnostic(s)`)
-  }
-  if (missing.length > 0) {
-    lines.push('Missing manifest entries (declared in spec/index.json, no file found):')
-    for (const m of missing.slice(0, MAX_REPAIR_ITEMS)) {
-      lines.push(`- ${m.path}`)
-    }
-    if (missing.length > MAX_REPAIR_ITEMS) {
-      lines.push(`…and ${missing.length - MAX_REPAIR_ITEMS} more missing entr(y/ies)`)
-    }
-  }
-  return lines.join('\n')
-}
+/* The "Repair manifest" button that used to live here is gone, and nothing replaces it yet.
+ *
+ * It composed `"Run aw-spec-reindex to repair spec/index.json"` and sent it to "an idle agent
+ * named `spec` first, else the selected chat agent" — instructing a skill nothing installs, at
+ * an agent identified by a hardcoded name convention, through a second bespoke trigger path.
+ *
+ * Reimplementing it deterministically here would mean writing a manifest repairer before the
+ * manifest format and parser it repairs against are defined, so it goes to B2 as code. The
+ * drift it responded to cannot occur meanwhile: nothing produces specification documents today.
+ * The drift *report* below stays — a condition worth showing is not the same as a button.
+ */
 
 const REJECTION_TEXT: Record<string, string> = {
   external: 'That link points outside the specification and was not opened.',
@@ -91,9 +70,8 @@ export function SpecPage() {
   // Auto-refresh list + open spec when a spec_updated SSE event arrives
   useSpecEvents()
 
-  const { mode, apiKey, selectedProjectId: projectId } = useConfigStore()
+  const { mode } = useConfigStore()
   const { data: agents } = useAgents()
-  const queryClient = useQueryClient()
   const [selectedAgent, setSelectedAgent] = useState<string>('')
 
   // Default agent: one named 'spec', else the first available agent.
@@ -103,16 +81,6 @@ export function SpecPage() {
     const preferred = agents.find((a) => a.name === 'spec') ?? agents[0]
     setSelectedAgent(preferred.name)
   }, [agents, selectedAgent])
-
-  const agent = agents?.find((a) => a.name === selectedAgent)
-
-  // Messages resume the agent's last saved session by default. `startNewSession`
-  // is a one-shot escape: it applies to the next message only, so the message
-  // after it continues the session that was just created.
-  const [startNewSession, setStartNewSession] = useState(false)
-  useEffect(() => {
-    setStartNewSession(false)
-  }, [selectedAgent])
 
   // Presentation preferences only — never content, payloads, or credentials.
   const [preferences, setPreferences] = useState(DEFAULT_SPEC_PREFERENCES)
@@ -191,47 +159,7 @@ export function SpecPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPicker])
 
-  // Repair target: an idle agent named `spec` first, else the selected chat agent.
-  const idleSpecAgent = agents?.find((a) => a.name === 'spec' && a.status !== 'running')
-  const repairTarget = idleSpecAgent ?? agent
-  const repairTargetBusy = repairTarget?.status === 'running'
-  const [isRepairing, setIsRepairing] = useState(false)
-  const [repairError, setRepairError] = useState<string | null>(null)
   const [showDriftDetails, setShowDriftDetails] = useState(false)
-  const repairDisabled = !hasDrift || !repairTarget || repairTargetBusy || isRepairing
-
-  const handleRepair = async () => {
-    if (repairDisabled || !repairTarget || !apiKey || !projectId) return
-    setIsRepairing(true)
-    setRepairError(null)
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), 15000)
-    try {
-      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/agent/trigger`, {
-        method: 'POST',
-        body: JSON.stringify({
-          agent: repairTarget.name,
-          message: buildRepairMessage(diagnostics, missing),
-          session_mode: startNewSession ? 'new' : 'resume',
-        }),
-        signal: controller.signal,
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      setStartNewSession(false)
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
-      await queryClient.refetchQueries({ queryKey: ['agents'], type: 'active' })
-    } catch (err) {
-      console.error('Failed to trigger spec repair:', err)
-      setRepairError(
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Request timed out; check the watchdog and try again'
-          : 'Failed to send repair request'
-      )
-    } finally {
-      window.clearTimeout(timeoutId)
-      setIsRepairing(false)
-    }
-  }
 
   const handleRefresh = () => {
     refetchList()
@@ -301,19 +229,6 @@ export function SpecPage() {
               </span>
               <Icon name={showDriftDetails ? 'expand_less' : 'expand_more'} size={14} />
             </button>
-            <div className="flex items-center gap-2">
-              {repairError && <span style={{ color: 'var(--red)' }}>{repairError}</span>}
-              <span style={{ color: 'var(--text-3)' }}>
-                {!repairTarget
-                  ? 'No agent available to repair'
-                  : repairTargetBusy
-                    ? `${repairTarget.name} is busy`
-                    : `Target: ${repairTarget.name}`}
-              </span>
-              <Button variant="outline" size="xs" onClick={handleRepair} disabled={repairDisabled}>
-                {isRepairing ? 'Sending…' : 'Repair manifest'}
-              </Button>
-            </div>
           </div>
           {showDriftDetails && (
             <ul className="flex flex-col gap-0.5 pl-5" style={{ color: 'var(--text-3)' }}>
@@ -352,6 +267,10 @@ export function SpecPage() {
       <SpecWorkspace
         chatCollapsed={preferences.chatCollapsed}
         onChatCollapsedChange={(collapsed) => updatePreferences({ chatCollapsed: collapsed })}
+        navWidth={preferences.navWidth}
+        chatWidth={preferences.chatWidth}
+        onNavWidthChange={(navWidth) => updatePreferences({ navWidth })}
+        onChatWidthChange={(chatWidth) => updatePreferences({ chatWidth })}
         navigation={
           <SpecNavigator
             inventory={inventory}
@@ -396,13 +315,11 @@ export function SpecPage() {
           )
         }
         chat={
-          <SpecChatPane
+          <SpecChat
             agents={agents}
             selectedAgent={selectedAgent}
             onSelectedAgentChange={setSelectedAgent}
-            startNewSession={startNewSession}
-            onStartNewSessionChange={setStartNewSession}
-            apiKey={apiKey}
+            documentPath={selectedPath}
           />
         }
       />

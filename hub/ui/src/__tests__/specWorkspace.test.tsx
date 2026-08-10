@@ -12,6 +12,10 @@ import {
   DEFAULT_SPEC_PREFERENCES,
   loadSpecPreferences,
   saveSpecPreferences,
+  SPEC_CHAT_MAX_WIDTH,
+  SPEC_CHAT_MIN_WIDTH,
+  SPEC_NAV_MAX_WIDTH,
+  SPEC_NAV_MIN_WIDTH,
   SPEC_PREFERENCES_KEY,
 } from '@/components/spec/specPreferences'
 
@@ -49,18 +53,33 @@ afterEach(() => {
   ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = original
 })
 
-function renderWorkspace(chatCollapsed = false) {
+function renderWorkspace(
+  chatCollapsed = false,
+  widths: { navWidth?: number; chatWidth?: number } = {}
+) {
   const onChatCollapsedChange = vi.fn()
+  const onNavWidthChange = vi.fn()
+  const onChatWidthChange = vi.fn()
   const utils = render(
     <SpecWorkspace
       chatCollapsed={chatCollapsed}
       onChatCollapsedChange={onChatCollapsedChange}
+      navWidth={widths.navWidth ?? SPEC_NAV_WIDTH}
+      chatWidth={widths.chatWidth ?? SPEC_CHAT_WIDTH}
+      onNavWidthChange={onNavWidthChange}
+      onChatWidthChange={onChatWidthChange}
       navigation={<div data-testid="nav-content">Navigation</div>}
       document={<div data-testid="doc-content">Document</div>}
       chat={<div data-testid="chat-content">Chat</div>}
     />
   )
-  return { ...utils, onChatCollapsedChange }
+  return { ...utils, onChatCollapsedChange, onNavWidthChange, onChatWidthChange }
+}
+
+/** The two dividers, in DOM order: navigation first, chat second. */
+function resizers() {
+  const all = screen.getAllByTestId('pane-resizer')
+  return { nav: all[0], chat: all[1] }
 }
 
 describe('spec workspace — mode boundary (FR-8)', () => {
@@ -94,7 +113,7 @@ describe('spec workspace — mode boundary (FR-8)', () => {
     )
   })
 
-  it('keeps the fixed panes within the wide budget', () => {
+  it('keeps the default panes within the wide budget', () => {
     renderWorkspace()
     reportWidth(SPEC_WIDE_BREAKPOINT)
 
@@ -103,8 +122,8 @@ describe('spec workspace — mode boundary (FR-8)', () => {
     expect(screen.getByTestId('spec-document-pane')).toHaveStyle({
       minWidth: `${SPEC_DOC_MIN_WIDTH}px`,
     })
-    // The breakpoint measures the workspace, which excludes the Hub rail, so
-    // the two panes plus the document minimum must exactly fit within it.
+    // The breakpoint measures the workspace, which excludes the Hub rail, so the two panes
+    // plus the document minimum — and now the two dividers between them — must fit within it.
     expect(SPEC_NAV_WIDTH + SPEC_DOC_MIN_WIDTH + SPEC_CHAT_WIDTH).toBeLessThanOrEqual(
       SPEC_WIDE_BREAKPOINT
     )
@@ -130,6 +149,100 @@ describe('spec workspace — mode boundary (FR-8)', () => {
 
     expect(screen.queryByTestId('spec-chat-pane')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Expand chat')).toBeInTheDocument()
+  })
+})
+
+describe('spec workspace — operator-sized panes', () => {
+  it('offers a divider on each boundary in wide mode', () => {
+    renderWorkspace()
+    reportWidth(1600)
+
+    const all = screen.getAllByTestId('pane-resizer')
+    expect(all).toHaveLength(2)
+    expect(all[0]).toHaveAttribute('aria-label', 'Resize document navigation')
+    expect(all[1]).toHaveAttribute('aria-label', 'Resize chat')
+  })
+
+  it('reports the width of the pane it sizes, not the position of the divider', () => {
+    renderWorkspace()
+    reportWidth(1600)
+
+    expect(resizers().nav).toHaveAttribute('aria-valuenow', String(SPEC_NAV_WIDTH))
+    expect(resizers().chat).toHaveAttribute('aria-valuenow', String(SPEC_CHAT_WIDTH))
+  })
+
+  it('resizes each pane from the keyboard, in the direction the pane grows', () => {
+    const { onNavWidthChange, onChatWidthChange } = renderWorkspace()
+    reportWidth(1600)
+
+    // Navigation grows rightward.
+    fireEvent.keyDown(resizers().nav, { key: 'ArrowRight' })
+    expect(onNavWidthChange).toHaveBeenLastCalledWith(SPEC_NAV_WIDTH + 8)
+
+    // The chat pane grows leftward, so ArrowLeft is what makes it wider — the key and the
+    // thing on screen have to agree.
+    fireEvent.keyDown(resizers().chat, { key: 'ArrowLeft' })
+    expect(onChatWidthChange).toHaveBeenLastCalledWith(SPEC_CHAT_WIDTH + 8)
+  })
+
+  it('restores a default width on double-click', () => {
+    const { onNavWidthChange } = renderWorkspace(false, { navWidth: 400 })
+    reportWidth(1600)
+
+    fireEvent.dblClick(resizers().nav)
+    expect(onNavWidthChange).toHaveBeenLastCalledWith(SPEC_NAV_WIDTH)
+  })
+
+  it('renders the widths it is given', () => {
+    renderWorkspace(false, { navWidth: 300, chatWidth: 420 })
+    reportWidth(1600)
+
+    expect(screen.getByTestId('spec-nav-pane')).toHaveStyle({ width: '300px' })
+    expect(screen.getByTestId('spec-chat-pane')).toHaveStyle({ width: '420px' })
+  })
+
+  it('never lets a side pane squeeze the document below its minimum', () => {
+    // At the breakpoint the three panes exactly fill the workspace, so navigation has no room
+    // to grow at all — its ceiling has to come from the measurement, not from the constant.
+    renderWorkspace()
+    reportWidth(SPEC_WIDE_BREAKPOINT)
+
+    const navMax = Number(resizers().nav.getAttribute('aria-valuemax'))
+    const chatMax = Number(resizers().chat.getAttribute('aria-valuemax'))
+    expect(navMax).toBeLessThan(SPEC_NAV_MAX_WIDTH)
+    expect(chatMax).toBeLessThan(SPEC_CHAT_MAX_WIDTH)
+    expect(navMax + SPEC_DOC_MIN_WIDTH + SPEC_CHAT_WIDTH).toBeLessThanOrEqual(
+      SPEC_WIDE_BREAKPOINT
+    )
+  })
+
+  it('clamps a stored width that no longer fits, without discarding it', () => {
+    // A width chosen on a wide window, now shown on a narrow one. The pane shrinks to fit; the
+    // preference is untouched, so widening the window restores what the operator chose.
+    const { onNavWidthChange } = renderWorkspace(false, { navWidth: SPEC_NAV_MAX_WIDTH })
+    reportWidth(SPEC_WIDE_BREAKPOINT)
+
+    const rendered = Number(
+      (screen.getByTestId('spec-nav-pane') as HTMLElement).style.width.replace('px', '')
+    )
+    expect(rendered).toBeLessThan(SPEC_NAV_MAX_WIDTH)
+    expect(rendered).toBeGreaterThanOrEqual(SPEC_NAV_MIN_WIDTH)
+    expect(onNavWidthChange).not.toHaveBeenCalled()
+  })
+
+  it('has no dividers in compact mode, where the drawers do the work', () => {
+    renderWorkspace()
+    reportWidth(800)
+    expect(screen.queryAllByTestId('pane-resizer')).toHaveLength(0)
+  })
+
+  it('leaves only the navigation divider when the chat pane is collapsed', () => {
+    renderWorkspace(true)
+    reportWidth(1600)
+
+    const all = screen.getAllByTestId('pane-resizer')
+    expect(all).toHaveLength(1)
+    expect(all[0]).toHaveAttribute('aria-label', 'Resize document navigation')
   })
 })
 
@@ -188,8 +301,52 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
   })
 
   it('round-trips valid values', () => {
-    saveSpecPreferences({ chatCollapsed: true, libraryMode: 'history' })
-    expect(loadSpecPreferences()).toEqual({ chatCollapsed: true, libraryMode: 'history' })
+    saveSpecPreferences({
+      chatCollapsed: true,
+      libraryMode: 'history',
+      navWidth: 300,
+      chatWidth: 420,
+    })
+    expect(loadSpecPreferences()).toEqual({
+      chatCollapsed: true,
+      libraryMode: 'history',
+      navWidth: 300,
+      chatWidth: 420,
+    })
+  })
+
+  it('keeps a pane width across a reload, which is what makes the control work', () => {
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, navWidth: 340 })
+    expect(loadSpecPreferences().navWidth).toBe(340)
+  })
+
+  it('clamps a stored width into its usable range on the way in and on the way out', () => {
+    saveSpecPreferences({ ...DEFAULT_SPEC_PREFERENCES, navWidth: 5, chatWidth: 5000 })
+    expect(loadSpecPreferences()).toMatchObject({
+      navWidth: SPEC_NAV_MIN_WIDTH,
+      chatWidth: SPEC_CHAT_MAX_WIDTH,
+    })
+
+    // Hand-edited storage, never written by the app.
+    localStorage.setItem(
+      SPEC_PREFERENCES_KEY,
+      JSON.stringify({ ...DEFAULT_SPEC_PREFERENCES, navWidth: 9999, chatWidth: 1 })
+    )
+    expect(loadSpecPreferences()).toMatchObject({
+      navWidth: SPEC_NAV_MAX_WIDTH,
+      chatWidth: SPEC_CHAT_MIN_WIDTH,
+    })
+  })
+
+  it('rejects a width that is a number but not a measurement', () => {
+    // NaN and Infinity are numbers to `typeof`, and both survive a clamp as themselves.
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      localStorage.setItem(
+        SPEC_PREFERENCES_KEY,
+        JSON.stringify({ ...DEFAULT_SPEC_PREFERENCES, navWidth: bad })
+      )
+      expect(loadSpecPreferences().navWidth).toBe(DEFAULT_SPEC_PREFERENCES.navWidth)
+    }
   })
 
   it('resets corrupt JSON to defaults', () => {
@@ -208,7 +365,11 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
       SPEC_PREFERENCES_KEY,
       JSON.stringify({ chatCollapsed: true, libraryMode: 42 })
     )
-    expect(loadSpecPreferences()).toEqual({ chatCollapsed: true, libraryMode: 'library' })
+    expect(loadSpecPreferences()).toEqual({
+      ...DEFAULT_SPEC_PREFERENCES,
+      chatCollapsed: true,
+      libraryMode: 'library',
+    })
   })
 
   it('resets a non-object payload', () => {
@@ -218,8 +379,9 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
     }
   })
 
-  it('persists only the two allowed keys, never content or credentials', () => {
+  it('persists only the allowed keys, never content or credentials', () => {
     saveSpecPreferences({
+      ...DEFAULT_SPEC_PREFERENCES,
       chatCollapsed: true,
       libraryMode: 'history',
       // Extra fields must not survive the write.
@@ -228,7 +390,12 @@ describe('spec preferences — bounded persistence (FR-10)', () => {
     } as never)
 
     const stored = JSON.parse(localStorage.getItem(SPEC_PREFERENCES_KEY) as string)
-    expect(Object.keys(stored).sort()).toEqual(['chatCollapsed', 'libraryMode'])
+    expect(Object.keys(stored).sort()).toEqual([
+      'chatCollapsed',
+      'chatWidth',
+      'libraryMode',
+      'navWidth',
+    ])
     expect(localStorage.getItem(SPEC_PREFERENCES_KEY)).not.toContain('aw_live_SECRET')
   })
 
