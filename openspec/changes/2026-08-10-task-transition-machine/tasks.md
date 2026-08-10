@@ -5,17 +5,26 @@ it or whether it needs the **operator**, and section 7 is the guide for the oper
 
 ## 1. The transition map
 
-- [ ] 1.1 Create `hub/hub/task_transitions.py` declaring the map from `design.md` D5 as edges that
+- [x] 1.1 Create `hub/hub/task_transitions.py` declaring the map from `design.md` D5 as edges that
       carry their permitted actor kinds. One declaration, no second copy of the status list.
-- [ ] 1.2 Define the actor type the service takes: kind (`run` | `operator`) plus an optional run id.
+      *Done: 8 statuses, 18 edges. `allowed_map_for()` also serves D13's endpoint from the same
+      declaration, so the client cannot hold a second copy either.*
+- [x] 1.2 Define the actor type the service takes: kind (`run` | `operator`) plus an optional run id.
       This is what D2 replaces the bare `Optional[str]` with.
-- [ ] 1.3 Add `hub/tests/test_task_transitions.py` asserting the map's key set equals
+      *Done: frozen `Actor` that refuses a run without a run id **and** an operator carrying one —
+      the second check is what makes the D2 privilege escalation unstateable rather than merely
+      unlikely.*
+- [x] 1.3 Add `hub/tests/test_task_transitions.py` asserting the map's key set equals
       `TASK_STATUSES` in `src/agentweave/constants.py:280` **and** `_TASK_STATUSES` in
       `hub/hub/schemas/tasks.py:15`, so a ninth status cannot be added without declaring its edges.
-      *Agent-verifiable: the test fails when a status is added to one list only.*
-- [ ] 1.4 Unit-test the map directly: every legal edge accepted for its declared actors, a
+      *Done, and confirmed non-vacuous: both sets resolve to the same 8 through real imports.*
+- [x] 1.4 Unit-test the map directly: every legal edge accepted for its declared actors, a
       representative illegal edge refused, `in_progress → approved` refused, and every
-      operator-only edge refused for a run. *Agent-verifiable.*
+      operator-only edge refused for a run.
+      *Done — 51 tests. Beyond the listed cases they also pin the structural invariants: no
+      self-edge (D7 is the service's job, not an edge), no edge to an undeclared status, the
+      operator's set a superset of the agent's everywhere, and the operator still refused an
+      undeclared move (D9).*
 
 ## 2. The history table
 
@@ -95,9 +104,10 @@ Found by the 2026-08-10 scan; the machine was walkable around before this sectio
 Without this, D9's operator-only edges exist in the API and nowhere in the product. The board is
 read-only today: `useUpdateTask` (`hub/ui/src/api/tasks.ts:34`) has no callers.
 
-- [ ] 7.1 Expose the legal-moves-for-this-actor query so the UI asks the map rather than
-      reimplementing it. Either on the task response or as a small endpoint — decide when wiring
-      4.1, and do not let a second copy of the map appear in TypeScript.
+- [ ] 7.1 Add the actor-scoped map endpoint decided in **D13**: returns the caller's own
+      `{from_status: [reachable...]}` from the same declaration the service enforces. Not a field on
+      the task response, and not per-task — see D13 for why both were rejected. One React Query hook
+      fetches it; the card derives its options by looking up its own status.
 - [ ] 7.2 Add a status action to `hub/ui/src/components/tasks/TaskCard.tsx` offering **only** the
       operator-legal transitions from the current status, wired to the existing `useUpdateTask`.
 - [ ] 7.3 Surface a refusal usefully if one still occurs — a stale board can offer a move that

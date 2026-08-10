@@ -174,6 +174,27 @@ than the product.
 *Alternative rejected:* defer the operator edges to B5. That keeps B1 backend-pure, but ships a
 machine whose refusals the operator cannot override anywhere — the worst intermediate state.
 
+### D13 — The UI reads one actor-scoped map, not per-task permissions
+
+Settled before implementation (it was parked inside task 7.1, and an unmade decision inside a task
+list is where estimates break). The client needs to know which moves to offer without holding a
+second copy of the map in TypeScript. Three options were considered:
+
+1. **`allowed_transitions` on the task response.** Rejected. The legal set is *per-actor*, so the
+   same task would return different JSON to an agent and to the operator. A representation that
+   varies by who asked breaks the assumption every consumer and every cache makes about a resource —
+   including React Query, whose key is the task, not the task-and-asker.
+2. **A per-task permissions endpoint.** Rejected. A board with forty cards makes forty requests to
+   render, and the answer is identical for every card in the same status.
+3. **One actor-scoped map endpoint** — chosen. It returns the caller's own view of the map,
+   `{from_status: [reachable...]}`, once. The client derives a card's options from the task's
+   current status by lookup.
+
+This keeps the map single-sourced (option 3 serves the same declaration the service enforces),
+costs one request per session rather than per task, and leaves the task response actor-independent.
+A stale map can still offer a move that has since become illegal, which is why task 7.3 requires the
+refusal to be surfaced rather than swallowed.
+
 ### D12 — Assignment stays ungoverned, and that is recorded rather than silently omitted
 
 `TaskUpdate.assignee` can be set by any actor, with no entitlement check. It is one of the three
