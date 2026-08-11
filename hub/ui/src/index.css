@@ -34,7 +34,11 @@
     /* Text */
     --text:        #f5f5f6;
     --text-2:      #8e8e98;
-    --text-3:      #5c5c66;
+    /* Third level holds WCAG 3.0 — the bar for large text and non-text UI — on every
+       surface, not AA 4.5. At 4.5 this token lands within one step of --text-2 and the
+       three-level ramp collapses into two; the ramp is what the charcoal refresh was for.
+       Deliberate, measured, and recorded: hub-charcoal-visual-refresh task 8.11. */
+    --text-3:      #6f6f79;
 
     /* Semantic */
     --destructive:    #f4525f;
@@ -109,12 +113,15 @@
 
     --text:        #18181b;
     --text-2:      #5c5c66;
-    --text-3:      #8e8e98;
+    /* See the dark ramp above: 3.0 on every surface, not AA 4.5, to keep three levels. */
+    --text-3:      #85858f;
 
     --destructive:    #dc2f3c;
     --destructive-fg: #ffffff;
-    --green:       #16a06a;
-    --amber:       #c47f16;
+    /* Darkened from #16a06a / #c47f16, which fell below 3.0 on --surface-2 and --surface-3.
+       The dark-mode pair already cleared it and is unchanged. */
+    --green:       #0f9963;
+    --amber:       #bb760d;
     --red:         #dc2f3c;
     --blue:        #5063d8;
     --purple:      #8b3fd4;

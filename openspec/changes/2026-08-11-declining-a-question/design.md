@@ -96,6 +96,29 @@ own docstring warns that if the two disagree, the operator reads one question an
 Changing the order here is therefore changing it in one place, which is the whole reason that
 selector exists.
 
+### D7 — A decline carries no reason and cannot be reopened
+
+Both were built as questions rather than assumptions, put to the operator on 2026-08-11, and both
+were declined. Recorded here because "we never got round to it" and "we decided against it" are
+different states, and only the second one is safe for a later session to build on.
+
+A reason field would tax the thing the feature exists to provide. Declining is the *cheap* escape
+from a question you do not want to answer; making it demand a sentence first turns a dismissal back
+into a reply, which is the friction that produced the original complaint — a question sitting on
+screen that the operator had already mentally moved past.
+
+Reopening is worse than merely unnecessary. It reintroduces the loop D4 exists to prevent: a
+reopened question is once again an unanswered blocking question, so the boundary check re-parks the
+task the decline just released, and the operator's decision is undone by the mechanism meant to
+honour it. Guarding that would mean a third state — declined-but-reopenable — for a case the agent
+already covers by asking again.
+
+What makes both safe to omit is D5's sorting. The reason a decline felt irreversible was that a
+stale question could get back in front of a live one; now that it cannot, "the agent will ask
+again" is a real answer rather than a hope. The record is kept either way — `declined` and
+`declined_at` are stored, nothing deletes the row — so surfacing declined questions later remains
+possible without a migration if the need ever appears.
+
 ## Risks / Trade-offs
 
 - **An agent that treats a decline as an answer** → it is told `answered: False`, and the payload

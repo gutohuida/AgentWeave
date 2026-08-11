@@ -85,6 +85,51 @@ introduce a colour literal outside the token system.
 - **WHEN** the application's components are checked for colour values
 - **THEN** no component declares a raw hex or `rgba()` colour in place of a semantic token
 
+### Requirement: The text ramp keeps three levels and every level clears a stated contrast bar
+
+The neutral text ramp SHALL provide three visually distinguishable levels in both modes, and every
+level SHALL reach a contrast ratio of at least **3.0** against every surface it can be set on — the
+ground plane and all three elevated surfaces.
+
+The two primary levels SHALL additionally reach **AA 4.5** for normal text. The 3.0 bar applies to
+the third level only, and to the semantic status hues.
+
+3.0 rather than AA 4.5 for the third level is a deliberate, recorded exemption. Raising it to 4.5
+brings it within one perceptual step of the second level, collapsing the three-level ramp into two;
+the ramp carries the distinction between primary content, secondary content, and incidental
+metadata, so preserving it is preferred to a uniform bar. The exemption SHALL NOT be widened beyond
+the third level and the status hues.
+
+This bar SHALL be enforced by an automated check against the stylesheet, not merely documented, so
+that a later palette change that falls below it fails rather than ships.
+
+#### Scenario: Every text level is legible on every surface
+
+- **WHEN** any neutral text level is rendered on the ground plane or any elevated surface, in either
+  mode
+- **THEN** its contrast ratio against that surface is at least 3.0
+
+#### Scenario: The exemption stays narrow
+
+- **WHEN** the primary and secondary text levels are measured against every surface in either mode
+- **THEN** each reaches at least 4.5
+
+#### Scenario: The three levels remain distinguishable
+
+- **WHEN** the ramp is measured level against level
+- **THEN** each level is perceptibly separated from the one above it, and the levels recede in order
+  from the ground plane
+
+#### Scenario: Status hues are legible on every surface
+
+- **WHEN** a semantic status colour is rendered on any surface in either mode
+- **THEN** its contrast ratio against that surface is at least 3.0
+
+#### Scenario: A regression below the bar fails the build
+
+- **WHEN** a palette token is changed so that any level falls below its stated bar
+- **THEN** the automated contrast check fails and identifies the token, the surface, and the ratio
+
 ### Requirement: Emphasis is monochrome and the accent marks state only
 
 The primary control fill SHALL be monochrome — near-white against the dark ground and near-black

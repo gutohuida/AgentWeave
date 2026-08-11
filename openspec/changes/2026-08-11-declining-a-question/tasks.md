@@ -84,6 +84,12 @@ surface; 5 specs; 6 verification.
       moved on — or does it read as an error?
 - [x] 6.11 Does declining ever lose something you wanted back? (D1 keeps the record; nothing surfaces
       it yet — this is the check on whether that matters.)
+      **Settled 2026-08-11 by the operator: neither a reason nor a reopen.** Both were offered
+      explicitly and both declined. A decline ends the matter; requiring an explanation would tax
+      the cheap escape the feature exists to provide, and if the question still matters the agent
+      asks again — which the `asker_waiting` sort now keeps out of the way of. **D7 records this.**
+      This closes the open question carried since the change was proposed; the shipped behaviour is
+      confirmed as intended, not as a deferral.
 
 ### 6c. User test guide
 

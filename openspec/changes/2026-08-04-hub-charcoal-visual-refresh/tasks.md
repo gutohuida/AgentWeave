@@ -165,7 +165,7 @@ palette.
       *The agent cannot run this: `preview_set_appearance` emulates `prefers-color-scheme` only, and
       a CSS media query cannot be forced from page JavaScript.*
 
-- [ ] 8.11 **DECISION (operator): what contrast bar does 1.0 hold itself to?** Raised by 8.9.
+- [x] 8.11 **DECISION (operator): what contrast bar does 1.0 hold itself to?** Raised by 8.9.
       Meeting **AA 4.5** for `--text-3` needs `#5c5c66 → #8c8c96` (dark) and `#8e8e98 → #686872`
       (light). Note what that costs: `#8c8c96` is within one step of today's `--text-2` (`#8e8e98`),
       so **AA at 4.5 collapses the three-level neutral text ramp into two.** The ramp is the thing
@@ -177,6 +177,34 @@ palette.
       Three options: hold AA 4.5 and lose the third level; hold 3.0 and keep it; or keep today's
       values and record the exemption deliberately. This is a look-and-feel call and it is yours —
       the operator chose this ramp, and no agent should quietly relight the product overnight.
+
+      **Settled 2026-08-11: hold 3.0 on every surface, and keep three levels.** Applied in
+      `hub/ui/src/index.css`:
+
+      | token | mode | was | now | worst surface |
+      |---|---|---|---|---|
+      | `--text-3` | dark | `#5c5c66` | `#6f6f79` | 2.28 → **3.03** |
+      | `--text-3` | light | `#8e8e98` | `#85858f` | 2.68 → **3.01** |
+      | `--green` | light | `#16a06a` | `#0f9963` | 2.76 → **3.01** |
+      | `--amber` | light | `#c47f16` | `#bb760d` | 2.71 → **3.04** |
+
+      Ratios recomputed independently of 8.9's table, not copied from it. `--surface-3` is the
+      worst case in both modes and is what the fourth column reports; every other surface clears by
+      more. The dark-mode `--green`/`--amber` pair already passed and is untouched, as are `--text`
+      and `--text-2`, which remain comfortably AA.
+
+      **What 4.5 would have cost, measured:** at AA the gap between `--text-2` and `--text-3` falls
+      to **1.03** (dark) and **1.20** (light) — the two levels become the same colour to the eye.
+      At 3.0 the gap is **1.53** and **1.81**. That is the whole reason for the choice, so it is
+      the thing the regression test asserts.
+
+      **Enforced, not just recorded:** `hub/ui/src/__tests__/contrastRamp.test.ts` parses
+      `index.css`, computes every text level and status hue against all four surfaces, and fails
+      below 3.0 — plus AA 4.5 for `--text`/`--text-2`, so the exemption stays narrow to the third
+      level. It asserts the ramp keeps three distinguishable, correctly-ordered levels. Confirmed
+      to fail on the pre-decision palette before being kept (dark `--text-3` on `--bg`, 2.99).
+      Computed from the stylesheet rather than pinned to literals: the contract is "whatever the
+      colours are, they clear the bar", which is what was decided.
 
 **Note (found during 8.7):** `getComputedStyle` on `background-color` read a stale mid-transition
 value while the browser tab was backgrounded (`preview_open` with `open:false`) — Chrome throttles
