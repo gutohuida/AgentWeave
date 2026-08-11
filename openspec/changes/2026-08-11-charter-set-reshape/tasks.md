@@ -81,18 +81,20 @@ restatement of a coded rule. Escalation resolves to the operator via `ask_user`.
 
 ## 6. Verification — agent-verifiable
 
-- [ ] 6.1 `pytest hub/tests/ -q` green; record the count against the 1500 baseline.
-- [ ] 6.2 `pytest tests/ -q` green (372 baseline).
-- [ ] 6.3 `npx openspec validate --changes --strict` and `--specs --strict` pass.
-- [ ] 6.4 Seed a **fresh** project against a scratch database and read back
+- [x] 6.1 `pytest hub/tests/ -q` green; record the count against the 1500 baseline.
+      **1512 passed, 10 skipped.** Against the 1514 baseline: -24 (12 fewer charter files x 2
+      parametrized honesty tests), +18 (9 files x 2 new parametrized assertions), +4 standalone.
+- [x] 6.2 `pytest tests/ -q` green (372 baseline). **372 passed, 3 skipped** — no CLI code touched.
+- [x] 6.3 `npx openspec validate --changes --strict` and `--specs --strict` pass. **4 and 31.**
+- [x] 6.4 Seed a **fresh** project against a scratch database and read back
       `GET /api/v1/projects/<id>/charters`: exactly nine, names matching the manifest, content
       matching the files byte for byte.
-- [ ] 6.5 Seed a database that already holds the old 21 and confirm the Hub adds, removes, and
+- [x] 6.5 Seed a database that already holds the old 21 and confirm the Hub adds, removes, and
       rewrites nothing (the D8 asymmetry, and the one most likely to be "helpfully" broken later).
-- [ ] 6.6 Grep the nine shipped charters for the full defect inventory in the proposal's table —
+- [x] 6.6 Grep the nine shipped charters for the full defect inventory in the proposal's table —
       `aw-spec-`, `shared/`, `spec/index.json`, `agentweave.yml`, `roles.json`, `watchdog`,
       `principal`, and each removed charter's display title. Zero hits.
-- [ ] 6.7 Confirm no live database was written to by any of the above.
+- [x] 6.7 Confirm no live database was written to by any of the above.
 
 ## 7. Verification — human-only (the operator runs these)
 
