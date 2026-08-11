@@ -197,13 +197,38 @@
 - [x] 7.6 `npm run build`, refresh `hub/hub/static/ui`, confirm with `diff -rq`.
 
       Built, copied, `diff -rq` reports identical.
-- [ ] 7.7 Re-run the standalone probe from the exploration
+- [x] 7.7 Re-run the standalone probe from the exploration
       (`testbed/scratch/run_probe.sh`) at 0s and 65s and confirm both still allow — the fix must not
       regress the path that already worked.
-- [ ] 7.8 Behavioural probe against a **copy** of the real database: open a request, expire it both
+
+      | delay | approver called | allow returned | tool executed | elapsed |
+      |---|---|---|---|---|
+      | 0s | yes | yes | **yes** — `hello.txt` written | 11s |
+      | 65s | yes | yes | **yes** — `hello.txt` written | 78s |
+
+      Matches the pre-change run (10s / 72s). No regression.
+- [x] 7.8 Behavioural probe against a **copy** of the real database: open a request, expire it both
       ways (timeout report, and run-end sweep), confirm the decide route refuses afterwards. Delete
       the copy; write nothing to the live board.
-- [ ] 7.9 Restart the Hub by exact PID and confirm `/openapi.json` publishes the new route.
+
+      `testbed/scratch/expiry_db_probe.py` (gitignored, like the other probes). Against a copy of
+      `hub/data/agentweave.db` — project `proj-cddb0827` "Testbed", carried through every migration
+      rather than built by `create_all` as the suite's schema is. **14/14 checks passed**, both
+      closing routes: the schema accepts the new row, stores `"expired"`, leaves `decided_at` and
+      `decided_by` NULL, refuses the late approval with the 409, drops it from the default list, and
+      keeps it in the widened one.
+
+      **This is what confirms D-"no migration needed" rather than assuming it.**
+
+      Live board verified untouched afterwards: `permission_requests` still `[('allowed', 2)]`, zero
+      probe rows, zero probe credentials. The copy did not delete on the first attempt — the async
+      engine still held the file — so it was removed explicitly and its absence confirmed.
+- [x] 7.9 Restart the Hub by exact PID and confirm `/openapi.json` publishes the new route.
+
+      PID 21272 stopped, restarted via WMI as PID **19508** on `:8010`. `/openapi.json` now lists
+      **six** permission routes, the sixth being
+      `POST /api/v1/agent-actions/permission-requests/{request_id}/expire`. The pre-restart process
+      listed five, which is the before/after rather than a bare assertion.
 
 ## 8. Verification — human-only (the operator runs these)
 
