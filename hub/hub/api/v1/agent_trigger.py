@@ -65,6 +65,7 @@ from ...model_catalog import (
     validate_overrides,
 )
 from ...output_recording import record_agent_output, record_context_usage
+from ...permission_requests import expire_pending_for_run
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
     PipeSession,
@@ -1086,6 +1087,9 @@ async def _execute_run(
                 run.status = "failed"
                 run.error = str(exc)
                 run.ended_at = datetime.now(timezone.utc)
+                # Nothing spawned, so nothing can have asked — swept anyway, because the rule is
+                # "a terminal run leaves nothing pending", not "the paths where we expect some".
+                await expire_pending_for_run(db, run_id)
                 await record_turn_usage(
                     db,
                     run_id=run_id,
@@ -1275,6 +1279,10 @@ async def _execute_run(
                 # NULL when the turn changed nothing — `snapshot_worktree` commits only a dirty
                 # tree. A checkpoint reads these to say what its conversation changed.
                 run.snapshot_commit_sha = snapshot_sha
+                # A run that is over has stopped waiting on anything, so nothing it opened may
+                # still read as answerable. In the same transaction as `ended_at`: the two facts
+                # must not be separable by a reader.
+                await expire_pending_for_run(db, run_id)
                 await record_turn_usage(
                     db,
                     run_id=run_id,
@@ -1600,6 +1608,8 @@ async def _execute_codex_appserver_run(
                     run.status = "failed"
                     run.error = str(exc)
                     run.ended_at = datetime.now(timezone.utc)
+                    # See `_execute_run`'s spawn-failure branch.
+                    await expire_pending_for_run(db, run_id)
                     await record_turn_usage(
                         db,
                         run_id=run_id,
@@ -1662,6 +1672,10 @@ async def _execute_codex_appserver_run(
                 run.ended_at = datetime.now(timezone.utc)
                 # NULL when the turn changed nothing — see `_execute_run`.
                 run.snapshot_commit_sha = snapshot_sha
+                # See `_execute_run`. A no-op on the Codex path's own approvals, which expire
+                # themselves at their `asyncio.TimeoutError` — the guard is `status == "pending"`,
+                # so arriving second changes nothing rather than double-writing.
+                await expire_pending_for_run(db, run_id)
                 await record_turn_usage(
                     db,
                     run_id=run_id,

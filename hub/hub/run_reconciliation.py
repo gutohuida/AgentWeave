@@ -18,6 +18,7 @@ from sqlalchemy import select
 from .db.engine import async_session_factory
 from .db.models import Run
 from .inbound_queue import return_run_entries
+from .permission_requests import expire_pending_for_run
 from .pty_runner import pid_alive
 from .sse import sse_manager
 from .utils import persist_event
@@ -43,6 +44,10 @@ async def reconcile_interrupted_runs() -> int:
             run.status = "interrupted"
             run.ended_at = datetime.now(timezone.utc)
             reconciled += 1
+            # The restart case is the one this matters most for: a Hub bounced while an operator
+            # decision was on screen leaves a row nobody will ever poll again, and without this
+            # the card outlives not just its run but the Hub process that served it.
+            await expire_pending_for_run(db, run.id)
             returned_entry_ids = await return_run_entries(db, run.id)
             agents_to_schedule.add((run.project_id, run.agent))
             # A crash is a run boundary too, and a bound run that died holding its task is exactly

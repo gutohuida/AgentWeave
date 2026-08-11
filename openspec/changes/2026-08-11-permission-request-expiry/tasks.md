@@ -26,35 +26,80 @@
 
 ## 2. The Hub closes what the run stops waiting on
 
-- [ ] 2.1 Add `POST /agent-actions/permission-requests/{id}/expire` in `agent_actions.py`, beside the
+- [x] 2.1 Add `POST /agent-actions/permission-requests/{id}/expire` in `agent_actions.py`, beside the
       existing agent-facing routes and authenticated the same way — run-bound identity, never an
       agent name from a body or header.
-- [ ] 2.2 Scope it per design D6: only `pending` → `expired`, only for a request belonging to the
+
+      `expire_permission_request`, immediately after `poll_permission_request`. Identity comes from
+      `Depends(get_agent_actor)` alone; the body is empty by design, so there is nothing in it to
+      trust.
+- [x] 2.2 Scope it per design D6: only `pending` → `expired`, only for a request belonging to the
       calling run, idempotent on an already-terminal row (success, no change, no error). Carries no
       reason — `_report_decision` reports the decision; this reports only that nobody is listening.
-- [ ] 2.3 Write `decided_at`/`decided_by` in a way that keeps a timeout distinguishable from an
+
+      Scoped on `run_id == actor.run_id` — *narrower than the poll route beside it*, which scopes on
+      `agent`. One run must not be able to close another's decision even under the same agent name.
+- [x] 2.3 Write `decided_at`/`decided_by` in a way that keeps a timeout distinguishable from an
       answer, which `db/models.py:1157-1159` says `decided_at` is for. State which you chose.
+
+      **Chosen: expiry leaves both NULL.** The model's sentence is only true if a timeout does not
+      set `decided_at` — so the invariant is now `decided_at is not None` ⟺ a human answered. `status`
+      carries the terminal fact; `decided_at` carries who and when. Asserted in 4.1.
 
 ## 3. The run reports, and the run's end sweeps
 
-- [ ] 3.1 `mcp_server._ask_operator` — call the expiry endpoint on the timeout path before returning
+- [x] 3.1 `mcp_server._ask_operator` — call the expiry endpoint on the timeout path before returning
       its denial. **Best-effort exactly like `_report_decision`**: every failure swallowed, no
       exception escaping, and no change to the decision or its timing. The denial must be returned
       even if the Hub is unreachable.
-- [ ] 3.2 Add one helper that expires a run's pending requests, and call it from **both** run-end
+
+      `_report_wait_ended`, written next to `_report_decision` and on the same terms.
+
+      **One thing changed beyond the task, deliberately.** The poll loop treated `"expired"` as
+      `"the operator refused this action"`. Before this change nothing could expire a Claude row, so
+      that branch was unreachable; the sweep makes it reachable, and it would have told the agent a
+      person refused it when no person was involved. Now expired reads *"this request is no longer
+      open, so it was not approved"*. Same decision, no invented refuser.
+- [x] 3.2 Add one helper that expires a run's pending requests, and call it from **both** run-end
       sites (`agent_trigger.py:1270` and `:1656`), in the transaction that already sets `run.status`
       and `run.ended_at`. One helper, two call sites — per D5, writing it twice is how the two paths
       drift.
-- [ ] 3.3 **Check the assumption**: search for every place a run reaches a terminal status. If there
+
+      `hub/hub/permission_requests.py` — `expire_pending_for_run(db, run_id)`, one `UPDATE ... WHERE
+      status = 'pending'`, caller commits so it joins the existing transaction.
+- [x] 3.3 **Check the assumption**: search for every place a run reaches a terminal status. If there
       is a third, call the helper there too and record that the set was verified rather than assumed.
-- [ ] 3.4 Confirm the Codex path is unaffected — it already expires its own row at
+
+      **The assumption was wrong, and this is the task that caught it. There are five sites, not
+      two.** Beyond `:1270` and `:1656`:
+
+      | site | what it is | why it matters |
+      |---|---|---|
+      | `agent_trigger.py:1086` | PTY spawn failure (`FileNotFoundError`) | nothing spawned, so nothing asked — swept anyway |
+      | `agent_trigger.py:1600` | Codex spawn failure | as above |
+      | `run_reconciliation.py:43` | **Hub restart orphan sweep** | **the worst case there is** |
+
+      The reconciliation site is the one that most needed this: a Hub bounced while a card is on
+      screen leaves a row whose run no longer exists in *any* process, so before this the card
+      outlived not just its run but the Hub that served it — permanently, across every subsequent
+      restart. It also uses a **sixth terminal status, `"interrupted"`**, which a grep for
+      completed/failed/stopped does not find. `scheduler.py:401` was examined and **excluded**: it is
+      a `JobRun`, not a `Run`.
+- [x] 3.4 Confirm the Codex path is unaffected — it already expires its own row at
       `agent_trigger.py:1451`, and the sweep must be a harmless no-op after it, not a double write.
+
+      Unaffected. `:1451` guards on `status == "pending"` and so does the helper, so whichever runs
+      second matches no rows. Asserted in 6.3.
 
 ## 4. Refuse a decision nobody is waiting for
 
-- [ ] 4.1 `permissions.py` — the 409 guard already exists and already says the right thing. Confirm it
+- [x] 4.1 `permissions.py` — the 409 guard already exists and already says the right thing. Confirm it
       now fires for `expired`, and that the row's status, `decided_at`, and `decided_by` are left
       untouched when it does.
+
+      Confirmed, no code change. The guard was always correct; nothing ever reached it. Asserted in
+      `test_a_run_that_stops_waiting_leaves_no_answerable_request`: 409, `"moved on"` in the detail,
+      and `status == "expired"` with both `decided_at` and `decided_by` still NULL.
 - [ ] 4.2 Surface the 409 in the UI as "the run has moved on" rather than a generic failure. An
       operator who hits the race must learn what happened, per D3.
 

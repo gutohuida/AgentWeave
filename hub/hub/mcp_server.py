@@ -677,6 +677,19 @@ def _report_decision(tool_name: str, decision: Dict[str, Any], tool_use_id: str)
         pass
 
 
+def _report_wait_ended(request_id: str) -> None:
+    """Tell the Hub this run has stopped waiting on a request, so the card stops pretending.
+
+    Best-effort on exactly the terms `_report_decision` sets out, and for the same reason: the
+    decision is already made by the time this runs. A Hub that is down must not delay the answer,
+    change it, or raise — the run's end sweeps what this fails to report (design D1).
+    """
+    try:  # noqa: SIM105 - kept explicit; contextlib.suppress hides how deliberate this is
+        _hub_request("POST", f"/permission-requests/{request_id}/expire")
+    except Exception:  # noqa: BLE001, SIM105 - deliberately total and explicit; see docstring
+        pass
+
+
 def _ask_operator(tool_name: str, tool_input: Dict[str, Any], tool_use_id: str) -> Dict[str, Any]:
     """Put the decision to the operator and block until they answer or the wait runs out.
 
@@ -711,8 +724,17 @@ def _ask_operator(tool_name: str, tool_input: Dict[str, Any], tool_use_id: str) 
             continue
         if state.get("status") == "allowed":
             return {"allow": True, "reason": "the operator approved this action"}
-        if state.get("status") in ("denied", "expired"):
+        if state.get("status") == "denied":
             return {"allow": False, "reason": "the operator refused this action"}
+        if state.get("status") == "expired":
+            # Someone else closed the request — the run-end sweep, or a previous report. Saying
+            # "the operator refused" here would attribute a refusal to a person who never made one.
+            return {
+                "allow": False,
+                "reason": "this request is no longer open, so it was not approved",
+            }
+
+    _report_wait_ended(request_id)
     return {
         "allow": False,
         "reason": (

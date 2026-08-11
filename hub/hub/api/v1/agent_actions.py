@@ -623,3 +623,47 @@ async def poll_permission_request(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no such permission request")
     return {"id": row.id, "status": row.status}
+
+
+@router.post("/permission-requests/{request_id}/expire")
+async def expire_permission_request(
+    request_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Report that this run has stopped waiting on a decision.
+
+    Not a decision — `record_permission_decision` reports those. This says only that nobody is
+    listening any more, so the operator must not keep being offered a card whose answer can no
+    longer reach anyone.
+
+    `decided_at` is deliberately left NULL. The model states that it is what distinguishes an
+    answer from a timeout, and it can only do that if a timeout does not set it: after this,
+    `decided_at is not None` means exactly "a human answered this".
+
+    Idempotent on an already-terminal row, and silent about it. The run reports and the run's end
+    sweeps (design D1), so arriving second is the normal case, not an error.
+    """
+    from ...db.models import PermissionRequest
+
+    row = (
+        await session.execute(
+            select(PermissionRequest).where(
+                PermissionRequest.id == request_id,
+                PermissionRequest.project_id == actor.project_id,
+                PermissionRequest.run_id == actor.run_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such permission request")
+
+    if row.status == "pending":
+        row.status = "expired"
+        await session.commit()
+        await sse_manager.broadcast(
+            actor.project_id,
+            "permission_decided",
+            {"id": row.id, "agent": row.agent, "status": row.status},
+        )
+    return {"id": row.id, "status": row.status}

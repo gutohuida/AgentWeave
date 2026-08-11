@@ -55,14 +55,17 @@ async def _open_request(app, headers) -> str:
     return opened.json()["id"]
 
 
-async def _status(request_id: str) -> str:
+async def _row(request_id: str) -> PermissionRequest:
     async with async_session_factory() as session:
-        row = (
+        return (
             await session.execute(
                 select(PermissionRequest).where(PermissionRequest.id == request_id)
             )
         ).scalar_one()
-        return row.status
+
+
+async def _status(request_id: str) -> str:
+    return (await _row(request_id)).status
 
 
 @pytest.mark.asyncio
@@ -101,24 +104,31 @@ async def test_a_run_that_stops_waiting_leaves_no_answerable_request(app, auth_h
     )
     assert decided.status_code == 409, decided.text
     assert "moved on" in decided.json()["detail"]
-    assert await _status(request_id) == "expired"
+
+    # Task 4.1 — the refusal leaves no trace of a decision. `decided_at` is what tells an answer
+    # apart from a timeout (db/models.py), so a refused click must not be what sets it.
+    row = await _row(request_id)
+    assert row.status == "expired"
+    assert row.decided_at is None
+    assert row.decided_by is None
 
 
 @pytest.mark.asyncio
 async def test_a_request_does_not_survive_the_run_that_raised_it(app, auth_headers):
     """Task 1.1, the second half — the run never reports at all.
 
-    Reporting is best-effort by design, and a killed run never gets to report. This is the
-    same defect reached without touching the expire route, so it fails on the defect itself
-    rather than on an absent endpoint: the run is over, and the operator can still "approve".
+    Reporting is best-effort by design, and a killed or crashed run never gets to report. The
+    defect is reached here without the expire route, through the run-end path that costs the
+    operator most: the Hub is bounced while a card is on screen, and the row it leaves behind
+    outlives not just its run but the process that served it.
     """
+    from hub.run_reconciliation import reconcile_interrupted_runs
+
     headers = await _waiting_run()
     request_id = await _open_request(app, headers)
 
-    async with async_session_factory() as session:
-        run = await session.get(Run, RUN_ID)
-        run.status = "stopped"
-        await session.commit()
+    # No pid: the restarted Hub has no process to check, which is what makes the run orphaned.
+    assert await reconcile_interrupted_runs() == 1
 
     assert await _status(request_id) != "pending"
 
