@@ -13,6 +13,27 @@ import {
   useUpdateCharter,
 } from '@/api/charters'
 
+const SUMMARY_LENGTH = 160
+
+/**
+ * A short summary for the collapsed row.
+ *
+ * `line-clamp` alone clamps only what is painted — the full document stays in the DOM, so a
+ * screen reader would read every charter in full and the disclosure would buy its user
+ * nothing. Truncating here makes the collapsed state actually be a summary.
+ *
+ * The leading `# Heading` is dropped because it repeats the charter's name, which is already
+ * the line above it.
+ */
+export function charterSummary(content: string): string {
+  const withoutTitle = content.replace(/^\s*#\s+.*(\r?\n|$)/, '')
+  const flattened = withoutTitle.replace(/\s+/g, ' ').trim()
+  if (flattened.length <= SUMMARY_LENGTH) return flattened
+  const cut = flattened.slice(0, SUMMARY_LENGTH)
+  const lastSpace = cut.lastIndexOf(' ')
+  return `${(lastSpace > SUMMARY_LENGTH / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
+}
+
 function errorDetail(error: unknown): string {
   if (!(error instanceof Error)) return 'Could not delete charter'
   try {
@@ -31,6 +52,27 @@ export function ChartersPage() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Charter | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  // Which charters are open for reading. Held per-id rather than as a single selection so
+  // two can be compared side by side — the whole reason this is a disclosure and not a
+  // modal. Deliberately not persisted: it describes what is being looked at right now.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+
+  const toggleExpanded = (id: string) => {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  }
+
+  const collapse = (id: string) => {
+    setExpanded((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
+  }
 
   if (isLoading) {
     return (
@@ -73,41 +115,89 @@ export function ChartersPage() {
           />
         ) : (
           <div className="flex flex-col">
-            {charters.map((charter) => (
-              <div
-                key={charter.id}
-                className="flex items-start justify-between gap-4 border-b py-2.5"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                    {charter.name}
-                  </p>
-                  <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs" style={{ color: 'var(--text-3)' }}>
-                    {charter.content || 'No content'}
-                  </p>
+            {charters.map((charter) => {
+              const isExpanded = expanded.has(charter.id)
+              return (
+                <div
+                  key={charter.id}
+                  className="border-b py-2.5"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    {/* The toggle target is the text region only. The destructive control
+                        deliberately sits outside it — a click meant for the row must not be
+                        able to land on delete. */}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(charter.id)}
+                      aria-expanded={isExpanded}
+                      aria-controls={`charter-content-${charter.id}`}
+                      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${charter.name}`}
+                      className="flex min-w-0 flex-1 items-start gap-1.5 text-left"
+                    >
+                      <Icon
+                        name={isExpanded ? 'expand_more' : 'chevron_right'}
+                        size={16}
+                        className="mt-0.5 shrink-0"
+                        style={{ color: 'var(--text-3)' }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium" style={{ color: 'var(--text)' }}>
+                          {charter.name}
+                        </span>
+                        {!isExpanded && (
+                          <span
+                            className="mt-1 line-clamp-2 block text-xs"
+                            style={{ color: 'var(--text-3)' }}
+                          >
+                            {charterSummary(charter.content) || 'No content'}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="ghost" size="icon-xs" onClick={() => setEditing(charter)} aria-label={`Edit ${charter.name}`}>
+                        <Icon name="edit" size={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => {
+                          setDeleteError(null)
+                          deleteCharter.mutate(charter.id, {
+                            onError: (error: unknown) => setDeleteError(errorDetail(error)),
+                            onSuccess: () => collapse(charter.id),
+                          })
+                        }}
+                        disabled={deleteCharter.isPending}
+                        aria-label={`Delete ${charter.name}`}
+                      >
+                        <Icon name="delete" size={16} />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Styled as text, not as a form. A read-only textarea would reintroduce the
+                      read/write ambiguity this view exists to remove. */}
+                  {isExpanded && (
+                    <div id={`charter-content-${charter.id}`} className="mt-2 pl-[22px]">
+                      {charter.content ? (
+                        <p
+                          className="whitespace-pre-wrap font-mono text-xs leading-relaxed"
+                          style={{ color: 'var(--text-2)' }}
+                        >
+                          {charter.content}
+                        </p>
+                      ) : (
+                        <p className="text-xs italic" style={{ color: 'var(--text-3)' }}>
+                          This charter has no content, so it contributes nothing to an agent&apos;s turn.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="icon-xs" onClick={() => setEditing(charter)} aria-label={`Edit ${charter.name}`}>
-                    <Icon name="edit" size={16} />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => {
-                      setDeleteError(null)
-                      deleteCharter.mutate(charter.id, {
-                        onError: (error: unknown) => setDeleteError(errorDetail(error)),
-                      })
-                    }}
-                    disabled={deleteCharter.isPending}
-                    aria-label={`Delete ${charter.name}`}
-                  >
-                    <Icon name="delete" size={16} />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
