@@ -11,6 +11,8 @@ export interface PermissionRequest {
   tool_use_id: string
   tool_input: Record<string, unknown>
   status: 'pending' | 'allowed' | 'denied' | 'expired'
+  /** The operator has seen this expired request and cleared it from view. */
+  dismissed: boolean
   created_at: string
   decided_at: string | null
   decided_by: string | null
@@ -57,6 +59,24 @@ export function useDecidePermissionRequest() {
   return useMutation({
     mutationFn: ({ id, allow }: { id: string; allow: boolean }) =>
       postJson(`/api/v1/projects/${projectId}/permission-requests/${id}/decide`, { allow }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'permission-requests'] })
+    },
+  })
+}
+
+/** Clear an expired request the operator has finished looking at.
+ *
+ * Expired cards accumulate deliberately — a run of missed decisions is worth seeing — but a pile
+ * that cannot be cleared stops carrying information. This is the acknowledgement, not a decision:
+ * the request keeps whatever terminal status it reached.
+ */
+export function useDismissPermissionRequest() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      postJson(`/api/v1/projects/${projectId}/permission-requests/${id}/dismiss`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'permission-requests'] })
     },

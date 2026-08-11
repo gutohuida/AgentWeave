@@ -66,6 +66,7 @@ vi.mock('@/api/questions', () => ({
 vi.mock('@/api/permissions', () => ({
   usePendingPermissionRequests: () => ({ data: [] }),
   useDecidePermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissPermissionRequest: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/api/unaskedQuestions', () => ({

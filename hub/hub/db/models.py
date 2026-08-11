@@ -1172,6 +1172,16 @@ class PermissionRequest(Base):
     tool_input: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     # "pending" | "allowed" | "denied" | "expired"
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False, index=True)
+    # The operator has finished looking at an expired request and cleared it from view.
+    #
+    # Separate from `status` on purpose. `status` is the run-facing fact — what the agent was told,
+    # and the audit record of who authorised what. Whether the operator has since tidied the card
+    # away says nothing about that, and folding the two would make "dismissed" look like a decision
+    # to every reader of `status`, including the run's own poll.
+    dismissed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     decided_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False

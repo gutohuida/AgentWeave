@@ -76,3 +76,30 @@ An expired request SHALL NOT be answerable.
 
 - **WHEN** the operator views a permission request that expired and one they decided
 - **THEN** the two are visibly different
+
+### Requirement: The operator can clear an expired request they have seen
+
+The Hub SHALL let the operator dismiss an expired permission request, after which it is no longer
+presented to them. Dismissing SHALL NOT change what the agent was told or who authorised what.
+
+Expired requests accumulate deliberately, because a run of missed decisions is something the
+operator should see building up. A pile that cannot be cleared stops being a signal, so
+acknowledgement has to be possible without pretending a decision was made.
+
+A request that is still pending SHALL NOT be dismissable. The run is still waiting on it, and
+clearing it from view would refuse it by neglect while appearing to be housekeeping.
+
+#### Scenario: An expired request is cleared once seen
+
+- **WHEN** the operator dismisses an expired permission request
+- **THEN** it is no longer presented to them, and its status and decision record are unchanged
+
+#### Scenario: A request still being waited on cannot be cleared
+
+- **WHEN** the operator attempts to dismiss a request that is still pending
+- **THEN** the attempt is refused, and the request remains presented for a decision
+
+#### Scenario: Dismissing twice is harmless
+
+- **WHEN** an already-dismissed request is dismissed again
+- **THEN** it is unchanged and no error is surfaced

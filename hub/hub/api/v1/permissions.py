@@ -36,6 +36,7 @@ class PermissionRequestResponse(BaseModel):
     tool_use_id: str
     tool_input: dict
     status: str
+    dismissed: bool
     created_at: datetime
     decided_at: datetime | None
     decided_by: str | None
@@ -65,7 +66,10 @@ async def list_permission_requests(
     query = select(PermissionRequest).where(PermissionRequest.project_id == project_id)
     if pending_only:
         statuses = ["pending", "expired"] if include_expired else ["pending"]
-        query = query.where(PermissionRequest.status.in_(statuses))
+        query = query.where(
+            PermissionRequest.status.in_(statuses),
+            PermissionRequest.dismissed.is_(False),
+        )
     query = query.order_by(PermissionRequest.created_at.desc()).limit(100)
     return list((await session.execute(query)).scalars().all())
 
@@ -125,4 +129,54 @@ async def decide_permission_request(
         "permission_decided",
         {"id": row.id, "agent": row.agent, "status": row.status},
     )
+    return row
+
+
+@router.post("/{request_id}/dismiss", response_model=PermissionRequestResponse)
+async def dismiss_permission_request(
+    request_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Clear an expired request from view once the operator has seen it.
+
+    An expired card stays up so the operator learns their agent gave up without them, and they
+    accumulate on purpose — an operator missing decisions should see that piling up. But there was
+    no way to say "I have seen this", so the pile only ever grew, and a signal that cannot be
+    cleared stops being a signal.
+
+    Only an expired request may be dismissed. A pending one is still being waited on, and clearing
+    it from the screen would deny it by neglect. An answered one is not shown in the first place.
+
+    The row is kept, not deleted: that the operator was asked, did not answer in time, and later
+    acknowledged it is exactly what the record is for.
+    """
+    project_id, _ = project
+    row = (
+        await session.execute(
+            select(PermissionRequest).where(
+                PermissionRequest.id == request_id,
+                PermissionRequest.project_id == project_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such permission request")
+    if row.status == "pending":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "this request is still waiting on you; answer it rather than clearing it away",
+        )
+
+    # Idempotent: dismissing twice is the state the caller asked for, not a conflict.
+    if not row.dismissed:
+        row.dismissed = True
+        row.dismissed_at = datetime.now(timezone.utc)
+        await session.commit()
+        await session.refresh(row)
+        await sse_manager.broadcast(
+            project_id,
+            "permission_decided",
+            {"id": row.id, "agent": row.agent, "status": row.status},
+        )
     return row

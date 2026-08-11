@@ -4,12 +4,14 @@ import { PermissionRequestCard } from '@/components/agents/PermissionRequestCard
 import type { PermissionRequest } from '@/api/permissions'
 
 const decide = vi.fn()
+const dismiss = vi.fn()
 /** The mutation's own state, so a test can put the card in the "the run moved on" case. */
 const decideState: Record<string, unknown> = {}
 
 vi.mock('@/api/permissions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/permissions')>()),
   useDecidePermissionRequest: () => ({ mutate: decide, isPending: false, ...decideState }),
+  useDismissPermissionRequest: () => ({ mutate: dismiss, isPending: false }),
 }))
 
 function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
@@ -21,6 +23,7 @@ function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest 
     tool_use_id: 'toolu_1',
     tool_input: { file_path: 'C:/outside/secrets.txt', content: 'x' },
     status: 'pending',
+    dismissed: false,
     created_at: new Date().toISOString(),
     decided_at: null,
     decided_by: null,
@@ -30,6 +33,7 @@ function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest 
 
 beforeEach(() => {
   decide.mockClear()
+  dismiss.mockClear()
   for (const key of Object.keys(decideState)) delete decideState[key]
 })
 
@@ -50,6 +54,12 @@ describe('permission request card', () => {
       />
     )
     expect(screen.getByText('rm -rf /tmp/x')).toBeInTheDocument()
+  })
+
+  it('offers no way to clear a request that is still being waited on', () => {
+    // Tidying a live card off the screen would deny it by neglect while the run still waits.
+    render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
+    expect(screen.queryByTestId('permission-dismiss-perm-1')).not.toBeInTheDocument()
   })
 
   it('sends the operator decision both ways', () => {
@@ -135,6 +145,13 @@ describe('a request the run stopped waiting on', () => {
   it('tells the operator what to change so they do not miss the next one', () => {
     render(<PermissionRequestCard requests={[request({ status: 'expired' })]} agent="haiku-1" />)
     expect(screen.getByText(/permission timeout/)).toBeInTheDocument()
+  })
+
+  it('can be cleared away once the operator has seen it', () => {
+    // They accumulate deliberately, but a pile with no way to clear it stops being a signal.
+    render(<PermissionRequestCard requests={[request({ status: 'expired' })]} agent="haiku-1" />)
+    fireEvent.click(screen.getByTestId('permission-dismiss-perm-1'))
+    expect(dismiss).toHaveBeenCalledWith({ id: 'perm-1' })
   })
 
   it('is not the same state as one the operator answered', () => {

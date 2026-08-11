@@ -301,3 +301,102 @@ async def test_an_expired_request_stays_visible_but_an_answered_one_does_not(app
     # The default is unchanged: only what can still be acted on.
     default = await app.get("/api/v1/projects/proj-test/permission-requests", headers=auth_headers)
     assert [row["id"] for row in default.json()] == []
+
+
+async def _visible(app, auth_headers) -> list:
+    listed = await app.get(
+        "/api/v1/projects/proj-test/permission-requests?include_expired=true", headers=auth_headers
+    )
+    assert listed.status_code == 200, listed.text
+    return [row["id"] for row in listed.json()]
+
+
+@pytest.mark.asyncio
+async def test_the_operator_can_clear_an_expired_request_they_have_seen(app, auth_headers):
+    """Expired cards accumulate on purpose, but a pile that cannot be cleared stops being a
+    signal. Dismissing acknowledges one without pretending it was decided."""
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+    await app.post(
+        f"/api/v1/agent-actions/permission-requests/{request_id}/expire", headers=headers
+    )
+    assert request_id in await _visible(app, auth_headers)
+
+    dismissed = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/dismiss",
+        headers=auth_headers,
+    )
+    assert dismissed.status_code == 200, dismissed.text
+    assert dismissed.json()["dismissed"] is True
+    assert request_id not in await _visible(app, auth_headers)
+
+    # Dismissal is housekeeping, not a decision: the run-facing record is untouched.
+    row = await _row(request_id)
+    assert row.status == "expired"
+    assert row.decided_at is None
+    assert row.decided_by is None
+    assert row.dismissed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_a_request_still_being_waited_on_cannot_be_cleared_away(app, auth_headers):
+    """Clearing a pending card off the screen would deny it by neglect while the run still
+    waits for an answer. It has to be answered, not tidied."""
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+
+    refused = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/dismiss",
+        headers=auth_headers,
+    )
+    assert refused.status_code == 409, refused.text
+    assert "still waiting on you" in refused.json()["detail"]
+    assert await _status(request_id) == "pending"
+    assert request_id in await _visible(app, auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_dismissing_twice_is_not_an_error(app, auth_headers):
+    """The card can be clicked again from a stale render, and the second click asks for the
+    state the row is already in."""
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+    await app.post(
+        f"/api/v1/agent-actions/permission-requests/{request_id}/expire", headers=headers
+    )
+
+    for _ in range(2):
+        again = await app.post(
+            f"/api/v1/projects/proj-test/permission-requests/{request_id}/dismiss",
+            headers=auth_headers,
+        )
+        assert again.status_code == 200, again.text
+        assert again.json()["dismissed"] is True
+
+
+@pytest.mark.asyncio
+async def test_dismissing_does_not_revive_the_conversation_or_the_request(app, auth_headers):
+    """A dismissed request must not come back through any of the surfaces that read these
+    rows — neither the operator's list nor the run's own poll."""
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+    await app.post(
+        f"/api/v1/agent-actions/permission-requests/{request_id}/expire", headers=headers
+    )
+    await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/dismiss",
+        headers=auth_headers,
+    )
+
+    # The run still reads the terminal status it acted on; dismissal is not its business.
+    polled = await app.get(
+        f"/api/v1/agent-actions/permission-requests/{request_id}", headers=headers
+    )
+    assert polled.json()["status"] == "expired"
+
+    decided = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/decide",
+        headers=auth_headers,
+        json={"allow": True},
+    )
+    assert decided.status_code == 409, decided.text

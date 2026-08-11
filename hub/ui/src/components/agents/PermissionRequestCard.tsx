@@ -2,8 +2,10 @@ import { Button } from '@/components/ui/button'
 import {
   PermissionRequest,
   useDecidePermissionRequest,
+  useDismissPermissionRequest,
 } from '@/api/permissions'
 import { readableApiError } from '@/api/client'
+import { Icon } from '@/components/common/Icon'
 
 interface PermissionRequestCardProps {
   requests: PermissionRequest[]
@@ -37,6 +39,7 @@ function describe(request: PermissionRequest): string {
 
 export function PermissionRequestCard({ requests, agent }: PermissionRequestCardProps) {
   const decide = useDecidePermissionRequest()
+  const dismiss = useDismissPermissionRequest()
   // Expired ones are kept alongside pending. Answered ones are not: those the operator dealt
   // with, and re-showing them would bury the one they missed.
   const open = requests.filter(
@@ -74,6 +77,22 @@ export function PermissionRequestCard({ requests, agent }: PermissionRequestCard
                 >
                   no longer waiting
                 </span>
+              )}
+              {/* Only on an expired card. A pending request must be answered, not cleared away:
+                  tidying it off the screen would deny it by neglect while the run still waits. */}
+              {expired && (
+                <button
+                  type="button"
+                  aria-label="Dismiss this expired request"
+                  title="Clear this from view. The agent has already moved on."
+                  data-testid={`permission-dismiss-${request.id}`}
+                  disabled={dismiss.isPending}
+                  onClick={() => dismiss.mutate({ id: request.id })}
+                  className="ml-auto shrink-0 p-0.5 rounded"
+                  style={{ color: 'var(--text-3)', background: 'transparent', border: 'none' }}
+                >
+                  <Icon name="x" size={14} />
+                </button>
               )}
             </div>
             <p

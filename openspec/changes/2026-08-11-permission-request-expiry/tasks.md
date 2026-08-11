@@ -232,10 +232,46 @@
 
 ## 8. Verification — human-only (the operator runs these)
 
-- [ ] 8.1 Does an expired card tell you what happened, or just look broken?
-- [ ] 8.2 Having missed one, do you know what to change so you do not miss the next?
-- [ ] 8.3 Is an expired card distinguishable from one you answered, at a glance?
-- [ ] 8.4 Do expired cards accumulate into clutter over a real session?
+- [x] 8.1 Does an expired card tell you what happened, or just look broken?
+
+      **Operator ran the guide on 2026-08-11: "It works, tested."** All five steps pass live —
+      including the two links no automated test could reach, a real Claude timing out against a real
+      Hub, and a Stop mid-wait.
+- [x] 8.2 Having missed one, do you know what to change so you do not miss the next?
+- [x] 8.3 Is an expired card distinguishable from one you answered, at a glance?
+- [x] 8.4 Do expired cards accumulate into clutter over a real session?
+
+      **One defect found, and it is the one this question was asked to find.** Operator: *"the card
+      saying that the agent was refused doesn't have a dismiss button. It stays there forever. It
+      should pile up but the user should be able to dismiss it."*
+
+      The design's answer to clutter (D4, and the risk table) was that accumulation is a signal worth
+      seeing. That is right, and incomplete: a signal with no way to acknowledge it stops being a
+      signal and becomes wallpaper. Section 10 closes it.
+
+## 10. Clearing an expired request (found in 8.4)
+
+- [x] 10.1 `dismissed` / `dismissed_at` on `PermissionRequest`, **beside `status` rather than a new
+      status value.** `status` is the run-facing fact — what the agent was told, and the record of
+      who authorised what. Whether the operator has tidied the card away says nothing about that,
+      and a `"dismissed"` status would read as a decision to every reader of the column, including
+      the run's own poll loop. Exactly the reasoning `questions.declined` sits beside `answered` on.
+- [x] 10.2 Migration `0062`, guarded for a missing table like 0038-0061. `dismissed` is NOT NULL with
+      a server default, because SQLite rewrites the table to add the column and existing rows need a
+      value from the database rather than the ORM. **No backfill:** expired requests predating this
+      stay visible, since marking them dismissed would claim the operator cleared something they
+      were never given a way to clear.
+- [x] 10.3 Head assertions bumped to `0062` in **both** `test_migrations.py` (9 sites) and
+      `test_project_persistence.py` (1), per CLAUDE.md.
+- [x] 10.4 `POST /projects/{id}/permission-requests/{id}/dismiss`, operator-facing beside `decide`.
+      Idempotent. **Refuses a pending request with 409** — clearing a live card off the screen would
+      deny it by neglect while the run still waits.
+- [x] 10.5 The list route excludes dismissed rows; `dismissed` exposed on the schema.
+- [x] 10.6 A dismiss `×` on the expired card only, reusing `AgentQuestionCard`'s decline control —
+      same position, same `Icon name="x"`, same `--text-3`. No second icon system, no raw hex.
+- [x] 10.7 Tests: 4 backend (cleared once seen; pending refused; dismissing twice; a dismissed row
+      does not revive through the operator list, the run's poll, or the decide route) and 2 frontend
+      (the control clears an expired card; it is absent on a pending one).
 
 ## 9. User test guide
 
