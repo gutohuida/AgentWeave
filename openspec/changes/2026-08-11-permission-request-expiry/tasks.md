@@ -2,12 +2,27 @@
 
 ## 1. Reproduce before fixing
 
-- [ ] 1.1 Write a failing test at the **HTTP route level** — the seam nothing currently covers. Open a
+- [x] 1.1 Write a failing test at the **HTTP route level** — the seam nothing currently covers. Open a
       request through `POST /agent-actions/permission-requests`, let the wait lapse without a
       decision, then assert the row is *not* pending and that `POST .../decide` is refused. It must
       fail on today's code for the stated reason, not for a setup error.
-- [ ] 1.2 Confirm the second symptom in the same test or beside it: a stale pending row keeps its
+
+      `hub/tests/test_permission_request_lifecycle.py`, **3 tests, all failing as intended**. Written
+      in two halves deliberately: the reported-timeout half fails `405 Method Not Allowed` (the
+      expire route is absent), which alone would only prove an endpoint is missing, so
+      `test_a_request_does_not_survive_the_run_that_raised_it` reaches the same defect *without*
+      touching the new route and fails `assert 'pending' != 'pending'` — the defect verbatim.
+
+      **The diagnosis was confirmed against the routes, not carried from the exploration.** A
+      throwaway probe (written, run, deleted) opened a request, ended the run, and found the row
+      `STILL_LISTED: True` and `POST .../decide` returning **`200 allowed`** — the false record of an
+      authorisation that never took effect, exactly as D3 describes.
+- [x] 1.2 Confirm the second symptom in the same test or beside it: a stale pending row keeps its
       conversation marked as waiting (`conversations.py:268-269`). Fixing 2 and 3 must clear it.
+
+      `test_an_expired_request_stops_pinning_its_conversation_as_waiting` asserts `attention ==
+      "waiting"` while pending (passes today — the symptom is real), then that it stops after expiry
+      **and** after the run leaves `running`, so it cannot pass on the run's status alone.
 
 ## 2. The Hub closes what the run stops waiting on
 
