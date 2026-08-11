@@ -106,7 +106,8 @@ Three options, and the middle one is chosen deliberately:
 
 - *Leave them seeding until phase guidance exists.* Rejected: they stay wrong in the meantime, and
   "temporary" is how the current 21 got here.
-- **Park the text under `openspec/changes/charter-set-reshape/parked-phase-guidance/`.** Chosen. The
+- **Park the text under `openspec/changes/2026-08-11-charter-set-reshape/parked-phase-guidance/`.**
+  Chosen. The
   change carries its own leftovers, and archiving carries them with it, so the change that builds
   phase guidance has the source at a findable path rather than in a diff.
 - *Delete and rely on git history.* Rejected: recoverable is not the same as findable. Nobody greps

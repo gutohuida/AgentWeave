@@ -26,6 +26,30 @@ def _bundled_charters() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def test_every_seeded_charter_lives_directly_in_the_bundled_directory():
+    """Seeding is manifest-keyed, so the manifest key is the only thing that chooses a file.
+
+    Both seeding paths (`db/engine.py:_seed_default_charters` and
+    `project_lifecycle.py`) build their path as `charters_dir / f"{key}.md"` with no
+    glob, so a key containing a separator or `..` is the only way seeding could reach
+    text outside this directory. `2026-08-11-charter-set-reshape` parks removed charter
+    content under `openspec/`, and this asserts that content is unreachable by
+    construction rather than by where it happens to sit today — which is why this checks
+    the invariant and not the parked path, since that path moves when the change is
+    archived.
+    """
+    charters = json.loads((CHARTER_DIR / "charters.json").read_text(encoding="utf-8"))["charters"]
+    assert charters, "an empty manifest would make every assertion here vacuous"
+
+    for key in charters:
+        assert "/" not in key and "\\" not in key, f"charter key {key!r} contains a path separator"
+        assert ".." not in key, f"charter key {key!r} could escape the bundled directory"
+
+        resolved = (CHARTER_DIR / f"{key}.md").resolve()
+        assert resolved.parent == CHARTER_DIR.resolve(), f"{key!r} resolves outside {CHARTER_DIR}"
+        assert resolved.is_file(), f"manifest key {key!r} has no file; it would seed an empty charter"
+
+
 @pytest.mark.asyncio
 async def test_bundled_role_guides_seed_initial_charters(app, auth_headers):
     response = await app.get("/api/v1/projects/proj-test/charters", headers=auth_headers)

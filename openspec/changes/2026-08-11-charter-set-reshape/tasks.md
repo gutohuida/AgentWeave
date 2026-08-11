@@ -2,15 +2,15 @@
 
 ## 1. Park what is being removed but not discarded
 
-- [ ] 1.1 Create `openspec/changes/charter-set-reshape/parked-phase-guidance/` and move the verbatim
-      text of `explorer.md`, `implementer.md`, `context_keeper.md` into it, plus the procedural
-      sections cut from `spec.md` (the skill routing table, the `spec/` inventory rules, the
-      `spec/index.json` manifest duties). One file each, unedited.
-- [ ] 1.2 Add a `README.md` to that directory stating what it is: reference material for the change
+- [x] 1.1 Create `openspec/changes/2026-08-11-charter-set-reshape/parked-phase-guidance/` and move
+      the verbatim text of `explorer.md`, `implementer.md`, `context_keeper.md` into it, plus the
+      procedural sections cut from `spec.md` (the skill routing table, the `spec/` inventory rules,
+      the `spec/index.json` manifest duties). One file each, unedited.
+- [x] 1.2 Add a `README.md` to that directory stating what it is: reference material for the change
       that builds phase guidance, loaded by nothing, seeded by nothing. Name the requirement it is
       waiting on (`agent-charter` "A charter names an accountability, not an activity") so a reader
       arriving cold knows why the text was cut rather than deleted.
-- [ ] 1.3 Assert it is inert — no code path reads `parked-phase-guidance/`, and the charter glob in
+- [x] 1.3 Assert it is inert — no code path reads `parked-phase-guidance/`, and the charter glob in
       `hub/hub/data/charters/` cannot reach it.
 
 ## 2. Rewrite the six surviving charters
