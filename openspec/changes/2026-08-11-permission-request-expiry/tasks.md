@@ -100,43 +100,103 @@
       Confirmed, no code change. The guard was always correct; nothing ever reached it. Asserted in
       `test_a_run_that_stops_waiting_leaves_no_answerable_request`: 409, `"moved on"` in the detail,
       and `status == "expired"` with both `decided_at` and `decided_by` still NULL.
-- [ ] 4.2 Surface the 409 in the UI as "the run has moved on" rather than a generic failure. An
+- [x] 4.2 Surface the 409 in the UI as "the run has moved on" rather than a generic failure. An
       operator who hits the race must learn what happened, per D3.
+
+      The Hub's sentence is rendered verbatim via the existing `readableApiError`, keyed to the
+      request the operator actually clicked so a failure on one card cannot appear under another.
+      Styled as the codebase's other refusals are — `role="alert"`, `var(--red)` — rather than a
+      new treatment.
 
 ## 5. The operator sees that the agent gave up
 
-- [ ] 5.1 Keep an expired request visible instead of filtering it out. `list_permission_requests`
+- [x] 5.1 Keep an expired request visible instead of filtering it out. `list_permission_requests`
       defaults to `pending_only=True` — decide whether expired rows arrive via that endpoint or
       alongside, and say which in the task notes.
-- [ ] 5.2 `PermissionRequestCard.tsx` — an expired request reads as expired and offers no allow/deny.
+
+      **Chosen: the same endpoint, behind a new `include_expired` flag** which the UI sets. The
+      default is untouched, so nothing else that lists requests changes meaning.
+
+      *Rejected: dropping the filter and sorting it out client-side.* The query is capped at 100
+      rows ordered newest-first, so in a busy project the answered history would push the requests
+      that still matter off the end — a correctness bug dressed as a simplification.
+- [x] 5.2 `PermissionRequestCard.tsx` — an expired request reads as expired and offers no allow/deny.
       Reuse the "no longer waiting" treatment from `2026-08-11-declining-a-question` rather than
       inventing a second visual language for the same idea (D4).
-- [ ] 5.3 Expired and operator-answered must be visibly different, not one grey state for both.
-- [ ] 5.4 Use the `Icon` component; introduce no second icon system and no raw hex.
+
+      The same words, position and token as `AgentQuestionCard`: a `--text-3` marker reading **"no
+      longer waiting"** beside the eyebrow, with the explanation in its `title`. Allow/Deny are not
+      rendered at all rather than disabled — a greyed button invites a click that cannot work.
+      Beneath it, the one thing the operator can act on: raise this agent's permission timeout.
+- [x] 5.3 Expired and operator-answered must be visibly different, not one grey state for both.
+
+      They cannot collapse: an answered request is not rendered at all, and never was. Asserted
+      from both ends — `allowed`/`denied` render nothing (frontend), and the list route omits an
+      answered request while keeping the expired one (backend).
+- [x] 5.4 Use the `Icon` component; introduce no second icon system and no raw hex.
+
+      No icon was needed — the marker is text, as it is on the question card it copies. No hex:
+      `var(--text-3)` and `var(--red)`.
 
 ## 6. Close the test gap
 
-- [ ] 6.1 Make 1.1 pass.
-- [ ] 6.2 Cover the full lifecycle over **real HTTP routes**, not a stubbed `_hub_request`: open →
+- [x] 6.1 Make 1.1 pass.
+- [x] 6.2 Cover the full lifecycle over **real HTTP routes**, not a stubbed `_hub_request`: open →
       expire-on-timeout → decide is refused; open → run ends → row expired; open → operator allows →
       run sees `allowed`.
-- [ ] 6.3 Test the race directly: decide and expire arriving together leave exactly one terminal
+
+      All three, plus the poll the run actually reads to turn an answer into "allow".
+- [x] 6.3 Test the race directly: decide and expire arriving together leave exactly one terminal
       status, whichever lands first.
-- [ ] 6.4 Test that an unreachable Hub on the expiry call still returns the run's denial, unchanged
+
+      Both orders. `test_an_answer_already_given_is_not_overwritten_by_the_sweep` asserts the sweep
+      matches **0 rows** after an answer — an unconditional write would erase a decision the run had
+      already acted on. `test_expiring_twice_is_not_an_error` covers the reverse and is also 3.4's
+      evidence that arriving second is a no-op rather than a double write.
+- [x] 6.4 Test that an unreachable Hub on the expiry call still returns the run's denial, unchanged
       and undelayed — the rule the whole reporting path is built on.
-- [ ] 6.5 `test_permission_approver.py` — the timeout test currently asserts only the local denial
+
+      Asserts the message is unchanged **and** that the call does not add a retry or backoff to a
+      turn already being held open.
+- [x] 6.5 `test_permission_approver.py` — the timeout test currently asserts only the local denial
       against a stubbed Hub. Extend it to assert the write-back is attempted.
-- [ ] 6.6 Frontend tests for the expired card: marked, not answerable, distinct from answered.
-- [ ] 6.7 A test that a conversation stops reading as "waiting" once its request expires.
+
+      Done, and one test added beyond the task: an expired request must not be reported to the agent
+      as *"the operator refused this action"* (see 3.1).
+- [x] 6.6 Frontend tests for the expired card: marked, not answerable, distinct from answered.
+
+      6 new tests in `permissionRequestCard.test.tsx` (10 → 16), including the 409 race and that a
+      failure on one card is not shown under another.
+- [x] 6.7 A test that a conversation stops reading as "waiting" once its request expires.
+
+      `test_an_expired_request_stops_pinning_its_conversation_as_waiting`, over the conversations
+      route rather than by calling `conversation_attention` directly.
 
 ## 7. Verification — agent-verifiable
 
-- [ ] 7.1 `pytest hub/tests/ -q` green; record the count against the 1500 baseline.
-- [ ] 7.2 `pytest tests/ -q` green (372 baseline).
-- [ ] 7.3 `npx vitest run` green (759 baseline across 80 files); `npx tsc --noEmit` clean.
-- [ ] 7.4 `ruff check hub/ src/` and `black` clean.
-- [ ] 7.5 `npx openspec validate --changes --strict` and `--specs --strict` pass.
-- [ ] 7.6 `npm run build`, refresh `hub/hub/static/ui`, confirm with `diff -rq`.
+- [x] 7.1 `pytest hub/tests/ -q` green; record the count against the 1500 baseline.
+
+      **1510 passed, 10 skipped** — 1500 plus the 10 added here. No pre-existing test changed
+      behaviour.
+- [x] 7.2 `pytest tests/ -q` green (372 baseline).
+
+      **372 passed, 3 skipped** — exactly the baseline; no CLI code was touched.
+- [x] 7.3 `npx vitest run` green (759 baseline across 80 files); `npx tsc --noEmit` clean.
+
+      **765 passed across 80 files** — 759 plus the 6 added. `tsc --noEmit` clean.
+- [x] 7.4 `ruff check hub/ src/` and `black` clean.
+
+      `ruff`: all checks passed. `black --check` on all 8 files touched here: unchanged.
+      **Not fixed, and stated rather than quietly swept:** `black` also flags four files this change
+      never touches — `test_accounting_budget.py`, `test_task_transitions.py`,
+      `test_project_workspace_unavailable.py`, `test_agent_trigger.py`. Pre-existing drift;
+      reformatting them here would bury this change's diff in unrelated noise.
+- [x] 7.5 `npx openspec validate --changes --strict` and `--specs --strict` pass.
+
+      **10 changes passed, 29 specs passed.**
+- [x] 7.6 `npm run build`, refresh `hub/hub/static/ui`, confirm with `diff -rq`.
+
+      Built, copied, `diff -rq` reports identical.
 - [ ] 7.7 Re-run the standalone probe from the exploration
       (`testbed/scratch/run_probe.sh`) at 0s and 65s and confirm both still allow — the fix must not
       regress the path that already worked.

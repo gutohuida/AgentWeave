@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -344,14 +345,21 @@ def test_an_unreachable_hub_denies_rather_than_hanging(workspace, monkeypatch):
 
 
 def test_an_unanswered_request_is_denied_when_the_wait_runs_out(workspace, monkeypatch):
-    """Never returns nothing and never waits forever — an unanswered request suspends the turn."""
+    """Never returns nothing and never waits forever — an unanswered request suspends the turn.
+
+    Task 6.5: the denial is only half of it. Giving up without telling the Hub is the defect this
+    whole change exists to fix — the run stops waiting, the card does not, and the operator's
+    approval is recorded against an action that never ran.
+    """
     from hub import mcp_server
 
     monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
     monkeypatch.setattr(mcp_server, "OPERATOR_DECISION_TIMEOUT", 0.05)
     monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+    calls = []
 
     def hub(method, path, *_a, **_k):
+        calls.append((method, path))
         if method == "POST" and path == "/permission-requests":
             return {"id": "perm-1", "status": "pending"}
         return {"id": "perm-1", "status": "pending"}
@@ -360,6 +368,55 @@ def test_an_unanswered_request_is_denied_when_the_wait_runs_out(workspace, monke
     answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
     assert answer["behavior"] == "deny"
     assert "no operator answered" in answer["message"]
+    assert ("POST", "/permission-requests/perm-1/expire") in calls
+
+
+def test_the_denial_survives_a_hub_that_cannot_be_told_about_it(workspace, monkeypatch):
+    """Task 6.4 — reporting the timeout is best-effort on exactly `_report_decision`'s terms.
+
+    The decision is already made by the time the report goes out, so a Hub that is down must not
+    turn it into an exception, a hang, or a different answer. The run's end sweeps what this
+    fails to report (design D1), which is why it is allowed to fail at all.
+    """
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+    monkeypatch.setattr(mcp_server, "OPERATOR_DECISION_TIMEOUT", 0.05)
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+
+    def hub(method, path, *_a, **_k):
+        if path.endswith("/expire"):
+            raise RuntimeError("hub is down")
+        return {"id": "perm-1", "status": "pending"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    started = time.monotonic()
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+    assert answer["behavior"] == "deny"
+    assert "no operator answered" in answer["message"]
+    # Undelayed: a failed report must not add a retry or a backoff to a turn already held open.
+    assert time.monotonic() - started < 5
+
+
+def test_an_expired_request_is_not_reported_to_the_agent_as_a_refusal(workspace, monkeypatch):
+    """Nobody refused it. Before the sweep existed nothing could expire a Claude row, so this
+    branch was unreachable; now that the run's end can close a request out from under a live
+    poll, saying "the operator refused this action" would invent a person who was not there."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("AW_PERMISSION_POSTURE", mcp_server.OPERATOR_POSTURE)
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+
+    def hub(method, path, *_a, **_k):
+        if method == "POST":
+            return {"id": "perm-1", "status": "pending"}
+        return {"id": "perm-1", "status": "expired"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    answer = json.loads(mcp_server.approve_tool_call("Write", {"file_path": "a.txt"}, "tu"))
+    assert answer["behavior"] == "deny"
+    assert "operator" not in answer["message"]
+    assert "no longer open" in answer["message"]
 
 
 @pytest.mark.parametrize(

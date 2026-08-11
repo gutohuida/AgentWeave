@@ -4,10 +4,12 @@ import { PermissionRequestCard } from '@/components/agents/PermissionRequestCard
 import type { PermissionRequest } from '@/api/permissions'
 
 const decide = vi.fn()
+/** The mutation's own state, so a test can put the card in the "the run moved on" case. */
+const decideState: Record<string, unknown> = {}
 
 vi.mock('@/api/permissions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/permissions')>()),
-  useDecidePermissionRequest: () => ({ mutate: decide, isPending: false }),
+  useDecidePermissionRequest: () => ({ mutate: decide, isPending: false, ...decideState }),
 }))
 
 function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
@@ -26,8 +28,12 @@ function request(overrides: Partial<PermissionRequest> = {}): PermissionRequest 
   }
 }
 
+beforeEach(() => {
+  decide.mockClear()
+  for (const key of Object.keys(decideState)) delete decideState[key]
+})
+
 describe('permission request card', () => {
-  beforeEach(() => decide.mockClear())
 
   it('names the agent, the tool, and what it wants to touch', () => {
     render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
@@ -108,6 +114,63 @@ describe('permission request card — codex shapes', () => {
       />
     )
     expect(screen.getByText(/the provider sent none/)).toBeInTheDocument()
+  })
+})
+
+describe('a request the run stopped waiting on', () => {
+  it('says it is no longer waiting instead of disappearing', () => {
+    // Vanishing is indistinguishable from a bug, and withholds the one fact worth having:
+    // the agent gave up and carried on without the operator.
+    render(<PermissionRequestCard requests={[request({ status: 'expired' })]} agent="haiku-1" />)
+    expect(screen.getByTestId('permission-request-perm-1')).toBeInTheDocument()
+    expect(screen.getByTestId('permission-expired-perm-1')).toBeInTheDocument()
+  })
+
+  it('cannot be answered', () => {
+    render(<PermissionRequestCard requests={[request({ status: 'expired' })]} agent="haiku-1" />)
+    expect(screen.queryByTestId('permission-allow-perm-1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('permission-deny-perm-1')).not.toBeInTheDocument()
+  })
+
+  it('tells the operator what to change so they do not miss the next one', () => {
+    render(<PermissionRequestCard requests={[request({ status: 'expired' })]} agent="haiku-1" />)
+    expect(screen.getByText(/permission timeout/)).toBeInTheDocument()
+  })
+
+  it('is not the same state as one the operator answered', () => {
+    // An answered request is not shown at all, so "grey for both" is not reachable: allowed and
+    // denied stay filtered out while expired stays visible.
+    for (const status of ['allowed', 'denied'] as const) {
+      const { unmount } = render(
+        <PermissionRequestCard requests={[request({ status })]} agent="haiku-1" />
+      )
+      expect(screen.queryByTestId('permission-request-perm-1')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('permission-expired-perm-1')).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+})
+
+describe('losing the race to the run', () => {
+  it('says the run moved on rather than failing silently', async () => {
+    // The 409 the Hub already wrote for exactly this: answered at t=119s, given up at t=120s.
+    const { ApiError } = await import('@/api/client')
+    decideState.isError = true
+    decideState.variables = { id: 'perm-1', allow: true }
+    decideState.error = new ApiError(
+      409,
+      JSON.stringify({ detail: 'this request was already expired; the run has moved on' })
+    )
+    render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
+    expect(screen.getByTestId('permission-error-perm-1')).toHaveTextContent(/the run has moved on/)
+  })
+
+  it('does not blame a request the operator did not click', () => {
+    decideState.isError = true
+    decideState.variables = { id: 'perm-2', allow: true }
+    decideState.error = new Error('boom')
+    render(<PermissionRequestCard requests={[request()]} agent="haiku-1" />)
+    expect(screen.queryByTestId('permission-error-perm-1')).not.toBeInTheDocument()
   })
 })
 

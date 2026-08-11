@@ -172,3 +172,132 @@ async def test_an_expired_request_stops_pinning_its_conversation_as_waiting(app,
         await session.commit()
 
     assert await attention() != "waiting"
+
+
+@pytest.mark.asyncio
+async def test_the_path_that_already_worked_still_works(app, auth_headers):
+    """Task 6.2 — answering in time, over the real routes on both sides.
+
+    The fix touches the timeout path; this is the one that was never broken, and the one an
+    operator would notice regressing first.
+    """
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+
+    decided = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/decide",
+        headers=auth_headers,
+        json={"allow": True},
+    )
+    assert decided.status_code == 200, decided.text
+
+    # What the run's poll loop reads to turn this into "allow".
+    polled = await app.get(
+        f"/api/v1/agent-actions/permission-requests/{request_id}", headers=headers
+    )
+    assert polled.status_code == 200, polled.text
+    assert polled.json()["status"] == "allowed"
+
+    row = await _row(request_id)
+    assert row.decided_at is not None
+    assert row.decided_by == "operator"
+
+
+@pytest.mark.asyncio
+async def test_an_answer_already_given_is_not_overwritten_by_the_sweep(app, auth_headers):
+    """Task 6.3 — the race, in the order that would destroy an answer.
+
+    Both transitions are guarded on "pending", so whichever lands first wins. If the sweep were
+    an unconditional write, a decision the operator made and the run acted on would be recorded
+    afterwards as never having been answered.
+    """
+    from hub.permission_requests import expire_pending_for_run
+
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+
+    allowed = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/decide",
+        headers=auth_headers,
+        json={"allow": True},
+    )
+    assert allowed.status_code == 200
+
+    async with async_session_factory() as session:
+        assert await expire_pending_for_run(session, RUN_ID) == 0
+        await session.commit()
+
+    row = await _row(request_id)
+    assert row.status == "allowed"
+    assert row.decided_by == "operator"
+
+
+@pytest.mark.asyncio
+async def test_expiring_twice_is_not_an_error(app):
+    """Task 6.3 — the run reports after the sweep already ran, which is the normal case.
+
+    Reporting is best-effort and unordered with respect to the sweep, so arriving second must be
+    a silent no-op. Raising here would put an exception on the path whose whole contract is that
+    it never raises.
+    """
+    from hub.permission_requests import expire_pending_for_run
+
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+
+    async with async_session_factory() as session:
+        assert await expire_pending_for_run(session, RUN_ID) == 1
+        await session.commit()
+
+    again = await app.post(
+        f"/api/v1/agent-actions/permission-requests/{request_id}/expire", headers=headers
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["status"] == "expired"
+
+
+@pytest.mark.asyncio
+async def test_one_run_cannot_close_another_runs_request(app):
+    """Scoping, per D6. Narrower than the poll route beside it, which scopes on agent: two runs
+    of the same agent must not be able to answer for each other."""
+    owner = await _waiting_run()
+    request_id = await _open_request(app, owner)
+
+    other = await _waiting_run(run_id="run-other", conversation_id="conv-other")
+    refused = await app.post(
+        f"/api/v1/agent-actions/permission-requests/{request_id}/expire", headers=other
+    )
+    assert refused.status_code == 404, refused.text
+    assert await _status(request_id) == "pending"
+
+
+@pytest.mark.asyncio
+async def test_an_expired_request_stays_visible_but_an_answered_one_does_not(app, auth_headers):
+    """Task 5.1 — what the operator is still shown.
+
+    Expired stays: a card that vanished would be indistinguishable from a bug. Answered goes:
+    they dealt with it, and re-showing it would bury the one they missed.
+    """
+    headers = await _waiting_run()
+    expired_id = await _open_request(app, headers)
+    answered_id = await _open_request(app, headers)
+
+    await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{answered_id}/decide",
+        headers=auth_headers,
+        json={"allow": True},
+    )
+    await app.post(
+        f"/api/v1/agent-actions/permission-requests/{expired_id}/expire", headers=headers
+    )
+
+    listed = await app.get(
+        "/api/v1/projects/proj-test/permission-requests?include_expired=true", headers=auth_headers
+    )
+    ids = [row["id"] for row in listed.json()]
+    assert expired_id in ids
+    assert answered_id not in ids
+
+    # The default is unchanged: only what can still be acted on.
+    default = await app.get("/api/v1/projects/proj-test/permission-requests", headers=auth_headers)
+    assert [row["id"] for row in default.json()] == []

@@ -48,13 +48,24 @@ async def list_permission_requests(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
     pending_only: bool = True,
+    include_expired: bool = False,
 ):
     """List permission requests, newest first. Pending-only by default — that is what the
-    operator can still act on."""
+    operator can still act on.
+
+    `include_expired` widens that to what the operator still needs to *see*: a request whose run
+    gave up waiting is not actionable, but a card that simply vanished would leave them without
+    the one fact worth having — their agent proceeded without them.
+
+    Kept as a second flag rather than folded into `pending_only`, because the honest alternative
+    is dropping the filter entirely, and the query is capped at 100 rows: in a busy project the
+    answered history would push the requests that still matter off the end of the list.
+    """
     project_id, _ = project
     query = select(PermissionRequest).where(PermissionRequest.project_id == project_id)
     if pending_only:
-        query = query.where(PermissionRequest.status == "pending")
+        statuses = ["pending", "expired"] if include_expired else ["pending"]
+        query = query.where(PermissionRequest.status.in_(statuses))
     query = query.order_by(PermissionRequest.created_at.desc()).limit(100)
     return list((await session.execute(query)).scalars().all())
 

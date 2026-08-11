@@ -16,11 +16,15 @@ export interface PermissionRequest {
   decided_by: string | null
 }
 
-/** Permission requests waiting on the operator.
+/** Permission requests waiting on the operator, and the ones that stopped waiting.
  *
  * A run blocks while one of these is pending and gives up after its own timeout, so this
  * refetches on a short interval as well as on SSE: arriving late is the same as not arriving,
  * and a dropped event would leave an agent waiting for a card that never appeared.
+ *
+ * Expired ones are fetched too. A card that silently disappeared would be indistinguishable
+ * from a bug, and would withhold the thing the operator most needs to know: the agent gave up
+ * and proceeded without them.
  */
 export function usePendingPermissionRequests() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
@@ -39,7 +43,9 @@ export function usePendingPermissionRequests() {
   return useQuery<PermissionRequest[]>({
     queryKey: ['project', projectId, 'permission-requests'],
     queryFn: () =>
-      getJson<PermissionRequest[]>(`/api/v1/projects/${projectId}/permission-requests`),
+      getJson<PermissionRequest[]>(
+        `/api/v1/projects/${projectId}/permission-requests?include_expired=true`
+      ),
     enabled: isConfigured && !!projectId,
     refetchInterval: 3000,
   })
