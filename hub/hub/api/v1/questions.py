@@ -18,7 +18,7 @@ from ...conversations import (
 from ...db.engine import get_session
 from ...db.models import Question, Run
 from ...inbound_queue import new_entry
-from ...run_task_binding import release_block_for_answer
+from ...run_task_binding import release_block_for_question
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
@@ -126,7 +126,32 @@ async def list_questions(
         q = q.where(Question.answered == answered)
     q = q.order_by(Question.created_at).offset(offset).limit(limit)
     result = await session.execute(q)
-    return result.scalars().all()
+    rows = list(result.scalars().all())
+    return await _with_asker_state(session, rows)
+
+
+async def _with_asker_state(session: AsyncSession, rows: List[Question]) -> List[QuestionResponse]:
+    """Attach `asker_waiting` to each question, in one query rather than one per row.
+
+    The panel re-reads this list on every SSE tick, so a per-row lookup for the asking run would be
+    a query per outstanding question on every render.
+    """
+    run_ids = {row.created_by_run_id for row in rows if row.created_by_run_id}
+    ended: set = set()
+    if run_ids:
+        result = await session.execute(
+            select(Run.id).where(Run.id.in_(run_ids)).where(Run.status != "running")
+        )
+        ended = set(result.scalars().all())
+
+    responses = []
+    for row in rows:
+        response = QuestionResponse.model_validate(row, from_attributes=True)
+        # Unknown asker → presumed waiting (design D5). Only a run positively known to have ended
+        # marks the question inert.
+        response.asker_waiting = row.created_by_run_id not in ended
+        responses.append(response)
+    return responses
 
 
 @router.get("/{question_id}", response_model=QuestionResponse)
@@ -178,7 +203,7 @@ async def answer_question(
     # one whose run has since ended: nothing is waiting to receive it.
     # The answer is what releases a parked task (design D3). Done before the queue decision below,
     # because whether the asker is still waiting is the same fact both need.
-    released = await release_block_for_answer(session, question)
+    released = await release_block_for_question(session, question)
 
     # `ask_user` only holds the tool call open while the run lives. A blocking question that
     # outlived its run — it timed out, or the run crashed — has nobody awake to receive the answer,
@@ -252,4 +277,70 @@ async def answer_question(
         from ...turn_scheduler import schedule_agent
 
         await schedule_agent(project_id, from_agent)
+    return question
+
+
+@router.post("/{question_id}/decline", response_model=QuestionResponse)
+async def decline_question(
+    question_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close a question without answering it.
+
+    The operator's escape from a question they do not intend to answer — most often one whose agent
+    has already given up and asked again, which otherwise sits at the head of the queue in front of
+    the question someone is actually waiting on.
+
+    The row is kept, not deleted: that the operator was asked and chose not to answer is exactly the
+    kind of thing the record exists to hold.
+
+    A blocking asker that is still waiting learns this on its next poll and stops waiting, rather
+    than spending its whole question timeout on an answer that has been decided against
+    (`2026-08-11-declining-a-question`, D2). Nothing is queued to it — unlike an answer, a decline
+    carries no content for the agent to act on beyond the fact itself.
+    """
+    project_id, _ = project
+    question = await session.get(Question, question_id)
+    if question is None or question.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    if question.answered:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This question has already been answered. Declining it would discard a decision "
+                "that was already made."
+            ),
+        )
+
+    # Idempotent: declining twice is the state the caller asked for, not a conflict.
+    if not question.declined:
+        question.declined = True
+        question.declined_at = datetime.now(timezone.utc)
+
+    # Same function the answer path uses (design D3): the operator has said no answer is coming, so
+    # a task held waiting on this question is no longer waiting on anyone.
+    released = await release_block_for_question(session, question)
+
+    await session.commit()
+    await session.refresh(question)
+
+    payload = {"id": question_id, "agent": question.from_agent}
+    await persist_event(
+        session, project_id, "question_declined", payload, agent=question.from_agent
+    )
+    await sse_manager.broadcast(project_id, "question_declined", payload)
+
+    if released is not None:
+        unblocked = {
+            "task_id": released.id,
+            "task_title": released.title,
+            "question_id": question_id,
+        }
+        await persist_event(
+            session, project_id, "task_unblocked", unblocked, agent=question.from_agent
+        )
+        await sse_manager.broadcast(project_id, "task_unblocked", unblocked)
+
     return question

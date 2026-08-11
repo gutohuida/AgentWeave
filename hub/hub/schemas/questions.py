@@ -67,5 +67,19 @@ class QuestionResponse(BaseModel):
     batch_size: int = 1
     created_at: datetime
     answered_at: Optional[datetime] = None
+    # The operator closed this without answering. Distinct from `answered` on purpose: an empty
+    # answer says they responded with nothing, this says they chose not to respond
+    # (`2026-08-11-declining-a-question`, D1).
+    declined: bool = False
+    declined_at: Optional[datetime] = None
+    # Whether anyone is still waiting on this question.
+    #
+    # Computed from the asking run rather than stored: the `runs` table already holds it, and a
+    # stored copy would go stale at exactly the transition it exists to describe — the run ending.
+    #
+    # Defaults to `True` when the asking run is unknown, matching the answer path's presumption.
+    # Guessing the other way would mark a live question inert and sort it behind dead ones, which is
+    # the worse error of the two.
+    asker_waiting: bool = True
 
     model_config = {"from_attributes": True}

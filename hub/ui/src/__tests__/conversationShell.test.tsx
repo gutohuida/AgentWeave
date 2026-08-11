@@ -40,7 +40,10 @@ vi.mock('@/api/status', () => ({
   useStatus: () => ({ data: { project_id: 'proj-test', project_name: 'AgentWeave' } }),
   useSessionSync: () => ({ data: undefined }),
 }))
-vi.mock('@/api/questions', () => ({ useQuestions: () => ({ data: [] }) }))
+vi.mock('@/api/questions', () => ({
+  useQuestions: () => ({ data: [] }),
+  useDeclineQuestion: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/api/messages', () => ({ useMessages: () => ({ data: [] }) }))
 
 vi.mock('@/components/overview/OverviewPage', () => ({

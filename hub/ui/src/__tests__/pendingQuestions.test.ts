@@ -112,3 +112,76 @@ describe('which question the operator is answering', () => {
     expect(active.total).toBe(1)
   })
 })
+
+describe('a question nobody is waiting on gets out of the way', () => {
+  it('never picks a declined question', () => {
+    const questions = [
+      question({ id: 'q-declined', declined: true, created_at: '2026-08-07T09:00:00Z' }),
+      question({ id: 'q-open', created_at: '2026-08-07T10:00:00Z' }),
+    ]
+
+    expect(activeQuestionFor(questions, 'codex-1').question?.id).toBe('q-open')
+  })
+
+  it('returns nothing when every question has been declined', () => {
+    const questions = [question({ id: 'q-a', declined: true }), question({ id: 'q-b', declined: true })]
+
+    expect(activeQuestionFor(questions, 'codex-1').question).toBeNull()
+  })
+
+  it('asks the live question first, even though the stale one is older', () => {
+    /**
+     * The case that started this: an agent asks, gives up, asks again. Strict oldest-first showed
+     * the dead question and routed the answer to it — correctly, and confusingly.
+     */
+    const questions = [
+      question({ id: 'q-stale', asker_waiting: false, created_at: '2026-08-07T09:00:00Z' }),
+      question({ id: 'q-live', asker_waiting: true, created_at: '2026-08-07T10:00:00Z' }),
+    ]
+
+    expect(activeQuestionFor(questions, 'codex-1').question?.id).toBe('q-live')
+  })
+
+  it('treats an absent asker_waiting as still waiting', () => {
+    // Matches the Hub's own presumption for a question with no recorded asking run.
+    const questions = [
+      question({ id: 'q-known-stale', asker_waiting: false, created_at: '2026-08-07T09:00:00Z' }),
+      question({ id: 'q-unknown', created_at: '2026-08-07T11:00:00Z' }),
+    ]
+
+    expect(activeQuestionFor(questions, 'codex-1').question?.id).toBe('q-unknown')
+  })
+
+  it('keeps a batch contiguous — the property the live-first sort depends on', () => {
+    /**
+     * Putting a whole-queue predicate ahead of the within-batch order is only safe because every
+     * question in a batch comes from one `ask_user` call by one run, so they share one
+     * `asker_waiting`. If that ever stopped holding, a batch would interleave with another and the
+     * "2 of 3" counter would step through questions from two different asks.
+     */
+    const stale = batchOf(3).map((q) => ({ ...q, id: `stale-${q.id}`, asker_waiting: false }))
+    const live = batchOf(3).map((q) => ({
+      ...q,
+      id: `live-${q.id}`,
+      batch_id: 'qbatch-2',
+      asker_waiting: true,
+      created_at: `2026-08-07T11:0${q.batch_index}:00Z`,
+    }))
+
+    // Interleaved on the way in, so ordering is doing the work rather than input order.
+    const mixed = [stale[0], live[0], stale[1], live[1], stale[2], live[2]]
+    const active = activeQuestionFor(mixed, 'codex-1')
+
+    expect(active.question?.id).toBe('live-q-1')
+    expect(active.step).toBe(1)
+    expect(active.total).toBe(3)
+  })
+
+  it('falls back to the stale batch once the live one is answered', () => {
+    const stale = batchOf(1).map((q) => ({ ...q, id: 'stale-only', asker_waiting: false }))
+    const active = activeQuestionFor(stale, 'codex-1')
+
+    // Still offered — declining is what removes it, not staleness on its own.
+    expect(active.question?.id).toBe('stale-only')
+  })
+})

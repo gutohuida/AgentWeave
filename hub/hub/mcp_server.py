@@ -294,7 +294,15 @@ def ask_user(
             continuing — you must then poll `get_answer` yourself, and a turn that ends first
             loses the questions.
 
-    Returns a list under "answers", one entry per question, in the order you asked them.
+    Returns a list under "answers", one entry per question, in the order you asked them. Each entry
+    says which of three things happened, and they mean different things:
+
+      answered=True                — the operator answered; "answer" holds it.
+      declined=True                — the operator saw it and chose not to answer. Nothing further
+                                     is coming, so do not ask the same thing again. Decide it
+                                     yourself and say plainly which way you went and why.
+      answered=False, declined=False — nobody responded before the wait ran out. Unlike a decline,
+                                     this does not mean the operator saw it.
     """
     asked = list(questions)
     result = _hub_request(
@@ -334,12 +342,28 @@ def ask_user(
                     "question_id": question_id,
                     "question": state.get("question"),
                     "answered": True,
+                    "declined": False,
                     # A multi-select answer stays a list; everything else is the single string
                     # the operator chose or typed. Returning one shape for both would make every
                     # caller re-split a joined string.
                     "answer": (
                         labels if (pending.get(question_id) and labels) else state.get("answer")
                     ),
+                }
+            elif state.get("declined"):
+                # The operator closed it without answering, so there is nothing further to wait
+                # for. Ending here rather than at the deadline is the point: waiting out the
+                # timeout would spend the interval on a decision already made and arrive at a
+                # weaker conclusion than the one available now.
+                #
+                # Reported as a decline, not as an expiry. An expiry means nobody was there; a
+                # decline means someone was and chose not to answer, which says the call is yours.
+                answers[question_id] = {
+                    "question_id": question_id,
+                    "question": state.get("question"),
+                    "answered": False,
+                    "declined": True,
+                    "answer": None,
                 }
 
     ordered = [
@@ -349,12 +373,17 @@ def ask_user(
                 "question_id": question_id,
                 "question": asked[index].get("question") if index < len(asked) else None,
                 "answered": False,
+                # Nothing was recorded for this one before the deadline, so it expired rather than
+                # being declined — a distinction the caller is entitled to.
+                "declined": False,
                 "answer": None,
             },
         )
         for index, question_id in enumerate(question_ids)
     ]
     unanswered = [entry for entry in ordered if not entry["answered"]]
+    declined = [entry for entry in ordered if entry.get("declined")]
+    expired = [entry for entry in unanswered if not entry.get("declined")]
     payload: Dict[str, Any] = {
         "success": True,
         "question_ids": question_ids,
@@ -362,23 +391,44 @@ def ask_user(
         "answers": ordered,
     }
     if unanswered:
-        payload["note"] = (
-            f"{len(unanswered)} of {len(ordered)} question(s) went unanswered within "
-            f"{QUESTION_ANSWER_TIMEOUT}s. Continue as best you can and say plainly which "
-            "decisions you made without an answer."
+        # Said separately because the two call for the same action but rest on different facts: a
+        # decline is a decision the operator made and handed back, an expiry is silence. Reporting
+        # both as "went unanswered" would lose that, and it is the more useful half.
+        parts = []
+        if declined:
+            parts.append(
+                f"{len(declined)} of {len(ordered)} question(s) were declined — the operator saw "
+                "them and chose not to answer. Do not re-ask those."
+            )
+        if expired:
+            parts.append(
+                f"{len(expired)} of {len(ordered)} question(s) went unanswered within "
+                f"{QUESTION_ANSWER_TIMEOUT}s."
+            )
+        parts.append(
+            "Continue as best you can and say plainly which decisions you made without an answer."
         )
+        payload["note"] = " ".join(parts)
     return payload
 
 
 @mcp.tool()
 def get_answer(question_id: str) -> Dict[str, Any]:
-    """Check whether the operator answered a previously asked question."""
+    """Check whether the operator answered a previously asked question.
+
+    A question can also be *declined* — the operator closed it without answering. That is settled,
+    not pending: nothing further is coming, and the decision is yours to make.
+    """
     question = _hub_request("GET", f"/questions/{question_id}")
     answered = bool(question.get("answered"))
+    declined = bool(question.get("declined"))
     return {
         "answered": answered,
+        "declined": declined,
         "answer": question.get("answer"),
-        "pending": not answered,
+        # A declined question is not waiting on anyone, so reporting it as pending would have a
+        # poller wait forever for something that has already been decided.
+        "pending": not answered and not declined,
     }
 
 

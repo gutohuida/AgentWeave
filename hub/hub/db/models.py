@@ -784,6 +784,16 @@ class Question(Base):
     # No ForeignKey, matching `created_by_run_id` and `conversation_id` above: the block record must
     # outlive a deleted task rather than cascade or refuse.
     blocked_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # The operator closed this without answering it.
+    #
+    # Beside `answered` rather than folded into it (`2026-08-11-declining-a-question`, D1). An empty
+    # answer claims the operator said nothing in response; declining claims they chose not to
+    # respond at all. Collapsing the two would make every reader of `answered` treat a decline as an
+    # answer — including `unanswered_blocking_question`, which decides whether a task is parked.
+    declined: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    declined_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
 

@@ -23,8 +23,20 @@ const NONE: ActiveQuestion = { question: null, step: 0, total: 0 }
  */
 export function activeQuestionFor(questions: Question[], agent: string): ActiveQuestion {
   const pending = questions
-    .filter((q) => q.from_agent === agent && !q.answered)
+    .filter((q) => q.from_agent === agent && !q.answered && !q.declined)
     .sort((a, b) => {
+      // Questions someone is actually waiting on come first.
+      //
+      // Strict oldest-first put a dead question at the head of the queue: an agent asks, gives up,
+      // asks again, and the operator is shown the first one while the second is what anyone is
+      // waiting for. Their answer then lands on the question they were shown — correctly, and
+      // confusingly (`2026-08-11-declining-a-question`, D6).
+      //
+      // Safe to put a whole-queue predicate ahead of the within-batch order because every question
+      // in a batch is created by one `ask_user` call from one run, so a batch shares one
+      // `asker_waiting` and cannot be split by this. `pendingQuestions.test.ts` asserts that.
+      const byWaiting = Number(b.asker_waiting !== false) - Number(a.asker_waiting !== false)
+      if (byWaiting !== 0) return byWaiting
       const byIndex = (a.batch_index ?? 0) - (b.batch_index ?? 0)
       if (byIndex !== 0) return byIndex
       return (a.created_at ?? '').localeCompare(b.created_at ?? '')

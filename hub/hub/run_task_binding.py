@@ -263,6 +263,11 @@ async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optio
     that this run stopped for it, and treating it as such would park a task on the strength of an
     unrelated agent's unfinished business.
 
+    A question the operator declined does not count either
+    (`2026-08-11-declining-a-question`, D4). Without that exclusion this check would immediately undo
+    a decline: the operator closes the question, the task is released, the run ends, and the task is
+    parked again on the very question they just closed.
+
     Earliest first: a run that asked several is waiting on the first thing it got stuck on, which is
     the more useful thing to name on the card.
     """
@@ -271,6 +276,7 @@ async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optio
         .where(Question.created_by_run_id == run.id)
         .where(Question.blocking.is_(True))
         .where(Question.answered.is_(False))
+        .where(Question.declined.is_(False))
         .order_by(Question.created_at, Question.batch_index)
         .limit(1)
     )
@@ -326,11 +332,16 @@ def release_reason(task: Task) -> None:
     task.blocked_reason = None
 
 
-async def release_block_for_answer(
+async def release_block_for_question(
     session: AsyncSession,
     question: Question,
 ) -> Optional[Task]:
-    """The answer arrived, so the task is no longer waiting. Returns the task, if one was released.
+    """The question is settled, so the task is no longer waiting. Returns the task, if one was
+    released.
+
+    Settled means answered *or* declined. One function rather than two, because the two differ only
+    in what settled it and a block released one way but not the other is exactly the bug this
+    guards (`2026-08-11-declining-a-question`, D3).
 
     Attributed to the **operator**, with the default `actor` origin: they answered, and answering is
     what released it. Not a runtime transition — the runtime observes a block, but it does not

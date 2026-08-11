@@ -287,3 +287,100 @@ def test_each_questions_own_multi_select_governs_its_answer_shape(monkeypatch):
     result = mcp_server.ask_user([one(multi_select=False), one(multi_select=True)])
     assert result["answers"][0]["answer"] == "Postgres"
     assert result["answers"][1]["answer"] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# The operator can decline, and the wait ends there
+# ---------------------------------------------------------------------------
+
+
+def test_a_decline_ends_the_wait_without_running_to_the_deadline(monkeypatch):
+    """Waiting out the timeout would spend the interval on a decision already made, and arrive at a
+    weaker conclusion than the one available now (design D2)."""
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(mcp_server, "QUESTION_ANSWER_TIMEOUT", 30)
+    polls = {"n": 0}
+
+    def hub(method, path, *_a, **_k):
+        if method == "POST":
+            return batch_post(["q-1"])
+        polls["n"] += 1
+        if polls["n"] < 3:
+            return {"answered": False, "declined": False}
+        return {"answered": False, "declined": True, "question": "which colour?"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user([one()])
+
+    # Ended on the decline rather than after 30s of polling at 0.01s intervals.
+    assert polls["n"] == 3
+    assert result["answers"][0]["declined"] is True
+    assert result["answers"][0]["answered"] is False
+    assert result["answers"][0]["answer"] is None
+
+
+def test_a_decline_is_reported_differently_from_an_expiry(monkeypatch):
+    """An expiry means nobody was there; a decline means someone was and chose not to answer. The
+    second says the call is the agent's, which is the more useful half."""
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(mcp_server, "QUESTION_ANSWER_TIMEOUT", 0.05)
+
+    def declining(method, path, *_a, **_k):
+        if method == "POST":
+            return batch_post(["q-1"])
+        return {"answered": False, "declined": True}
+
+    def silent(method, path, *_a, **_k):
+        if method == "POST":
+            return batch_post(["q-1"])
+        return {"answered": False, "declined": False}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", declining)
+    declined = mcp_server.ask_user([one()])
+
+    monkeypatch.setattr(mcp_server, "_hub_request", silent)
+    expired = mcp_server.ask_user([one()])
+
+    assert declined["answers"][0]["declined"] is True
+    assert expired["answers"][0]["declined"] is False
+    assert "declined" in declined["note"]
+    assert "declined" not in expired["note"]
+    # Both still say the agent must proceed and account for what it decided alone.
+    for payload in (declined, expired):
+        assert "without an answer" in payload["note"]
+
+
+def test_a_mixed_batch_reports_each_outcome(monkeypatch):
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(mcp_server, "QUESTION_ANSWER_TIMEOUT", 30)
+
+    def hub(method, path, *_a, **_k):
+        if method == "POST":
+            return batch_post(["q-1", "q-2"])
+        if path.endswith("q-1"):
+            return {"answered": True, "answer": "the answer", "answer_labels": []}
+        return {"answered": False, "declined": True}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user([one("first?"), one("second?")])
+
+    first, second = result["answers"]
+    assert (first["answered"], first["declined"]) == (True, False)
+    assert first["answer"] == "the answer"
+    assert (second["answered"], second["declined"]) == (False, True)
+    assert result["answered"] is False
+
+
+def test_get_answer_reports_a_decline_as_settled_rather_than_pending(monkeypatch):
+    """A poller told a declined question is still pending waits forever for a decision already
+    made."""
+
+    def hub(method, path, *_a, **_k):
+        return {"answered": False, "declined": True, "answer": None}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.get_answer("q-1")
+
+    assert result["declined"] is True
+    assert result["pending"] is False
+    assert result["answered"] is False

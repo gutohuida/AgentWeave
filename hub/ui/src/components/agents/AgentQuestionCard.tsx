@@ -16,6 +16,10 @@ interface AgentQuestionCardProps {
   /** Set once the operator starts typing: a written answer supersedes any selection, so the
    *  selection stops looking chosen. */
   isTyping: boolean
+  /** Close this question without answering it. Omitted, no dismiss control is offered. */
+  onDecline?: (questionId: string) => void
+  /** True while a decline is in flight. */
+  isDeclining?: boolean
 }
 
 /** The question an agent is waiting on, rendered as part of the composer.
@@ -32,6 +36,8 @@ export function AgentQuestionCard({
   onToggle,
   isResponding,
   isTyping,
+  onDecline,
+  isDeclining = false,
 }: AgentQuestionCardProps) {
   const { question, step, total } = activeQuestionFor(questions, agent)
 
@@ -58,6 +64,10 @@ export function AgentQuestionCard({
   if (!question) return null
   const options = question.options ?? []
   const multi = question.multi_select === true
+  // The asking run has ended, so its `ask_user` call is gone: nothing is holding for this, and an
+  // answer now would only be queued as a message. Said out loud because otherwise a question that
+  // reads exactly like a live one asks the operator for something nobody is waiting on.
+  const nobodyWaiting = question.asker_waiting === false
 
   return (
     <div className="conversation-interject" data-testid={`agent-question-${question.id}`}>
@@ -70,6 +80,29 @@ export function AgentQuestionCard({
           <span className="interject-count" data-testid="agent-question-count">
             {step}/{total}
           </span>
+        )}
+        {nobodyWaiting && (
+          <span
+            data-testid="agent-question-stale"
+            title="The run that asked this has ended. Answering now would reach it as a new message, not as the answer it was waiting for."
+            style={{ fontSize: 10, color: 'var(--text-3)' }}
+          >
+            no longer waiting
+          </span>
+        )}
+        {onDecline && (
+          <button
+            type="button"
+            aria-label="Dismiss this question without answering"
+            title="Dismiss without answering"
+            data-testid={`agent-question-decline-${question.id}`}
+            disabled={isResponding || isDeclining}
+            onClick={() => onDecline(question.id)}
+            className="ml-auto shrink-0 p-0.5 rounded"
+            style={{ color: 'var(--text-3)', background: 'transparent', border: 'none' }}
+          >
+            <Icon name="x" size={14} />
+          </button>
         )}
       </div>
 

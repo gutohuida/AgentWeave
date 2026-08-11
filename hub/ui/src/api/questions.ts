@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson, patchJson } from './client'
+import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 export interface QuestionOption {
@@ -29,6 +29,14 @@ export interface Question {
   batch_size?: number
   created_at: string
   answered_at?: string
+  /** The operator closed this without answering. Distinct from `answered`: an empty answer says
+   *  they responded with nothing, this says they chose not to respond. */
+  declined?: boolean
+  declined_at?: string | null
+  /** Whether anyone is still waiting on this. False once the asking run has ended — its `ask_user`
+   *  call is gone, so nothing receives an answer as a result any more. Absent means "assume yes",
+   *  which matches the Hub's own presumption for a question with no recorded asker. */
+  asker_waiting?: boolean
 }
 
 export function useQuestions(answered?: boolean) {
@@ -56,6 +64,26 @@ export function useAnswerQuestion() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'questions'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'status'] })
+    },
+  })
+}
+
+/**
+ * Close a question without answering it.
+ *
+ * Also invalidates tasks: a question that had parked a task as blocked releases it, so the board is
+ * stale the moment this succeeds.
+ */
+export function useDeclineQuestion() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      postJson<Question>(`/api/v1/projects/${projectId}/questions/${id}/decline`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'questions'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'status'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
     },
   })
 }

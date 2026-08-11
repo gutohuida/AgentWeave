@@ -145,7 +145,15 @@ def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):
         ],
         "blocking": True,
     }
-    assert get_answer("q-1") == {"answered": True, "answer": "yes", "pending": False}
+    # `declined` is reported alongside `answered`: a question the operator closed without answering
+    # is settled, not pending, and a poller told otherwise would wait forever for a decision that
+    # has already been made.
+    assert get_answer("q-1") == {
+        "answered": True,
+        "declined": False,
+        "answer": "yes",
+        "pending": False,
+    }
 
 
 def test_request_agent_uses_bound_run_without_requester_field(hub):

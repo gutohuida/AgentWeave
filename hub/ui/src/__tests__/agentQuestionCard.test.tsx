@@ -246,3 +246,49 @@ describe('agent question panel', () => {
     expect(container.innerHTML).not.toContain('--amber')
   })
 })
+
+describe('closing a question without answering it', () => {
+  it('offers a dismiss control when one is wired up', () => {
+    const decline = vi.fn()
+    renderCard(question(), { onDecline: decline })
+
+    fireEvent.click(screen.getByTestId('agent-question-decline-q-1'))
+    expect(decline).toHaveBeenCalledWith('q-1')
+  })
+
+  it('offers none when the surface does not support it', () => {
+    renderCard(question())
+
+    expect(screen.queryByTestId('agent-question-decline-q-1')).toBeNull()
+  })
+
+  it('does not let a decline be fired twice while one is in flight', () => {
+    const decline = vi.fn()
+    renderCard(question(), { onDecline: decline, isDeclining: true })
+
+    const button = screen.getByTestId('agent-question-decline-q-1') as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+  })
+
+  it('says when nobody is waiting on the question any more', () => {
+    /**
+     * The asking run has ended, so its `ask_user` call is gone. Without saying so, a dead question
+     * reads exactly like a live one and asks the operator for something nobody will receive.
+     */
+    renderCard(question({ asker_waiting: false }))
+
+    expect(screen.getByTestId('agent-question-stale')).toBeTruthy()
+  })
+
+  it('says nothing of the sort while someone is still waiting', () => {
+    renderCard(question({ asker_waiting: true }))
+
+    expect(screen.queryByTestId('agent-question-stale')).toBeNull()
+  })
+
+  it('says nothing of the sort when the asker is simply unknown', () => {
+    renderCard(question())
+
+    expect(screen.queryByTestId('agent-question-stale')).toBeNull()
+  })
+})

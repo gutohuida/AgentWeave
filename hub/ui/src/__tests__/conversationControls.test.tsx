@@ -44,6 +44,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: [] }),
   useAnswerQuestion: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeclineQuestion: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/api/permissions', () => ({

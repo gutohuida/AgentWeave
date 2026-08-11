@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0060", f"expected alembic_version=0060, got {version}"
+    assert version == "0061", f"expected alembic_version=0061, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0060"
+    assert version == "0061"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0060"
+        assert version == "0061"
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0060", f"expected alembic_version=0060, got {version}"
+    assert version == "0061", f"expected alembic_version=0061, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1232,7 +1232,7 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0060"
+        assert version == "0061"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1401,7 +1401,7 @@ def test_migration_0057_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0060"
+        assert version == "0061"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1466,7 +1466,7 @@ def test_migration_0059_is_guarded_when_the_tables_do_not_exist(tmp_path) -> Non
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0060"
+        assert version == "0061"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1524,8 +1524,70 @@ def test_migration_0060_is_guarded_when_conversations_does_not_exist(tmp_path) -
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0060"
+        assert version == "0061"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "conversations" not in tables
+
+
+def test_migration_0061_adds_the_declined_state(tmp_path) -> None:
+    db_file = tmp_path / "declined.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1]: row for row in conn.execute("PRAGMA table_info(questions)")}
+        assert "declined" in columns
+        assert "declined_at" in columns
+        # NOT NULL with a server default: SQLite rewrites the table to add the column, and existing
+        # rows need a value from the database rather than from the ORM.
+        assert columns["declined"][3] == 1
+        assert columns["declined"][4] is not None
+        assert not columns["declined_at"][3]
+
+
+def test_migration_0061_declines_no_existing_question(tmp_path) -> None:
+    """No backfill, and the absence is the decision: marking historical unanswered questions as
+    declined would claim the operator made a decision they never made."""
+    db_file = tmp_path / "declined_backfill.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO questions "
+            "(id, project_id, from_agent, question, answered, blocking, options, "
+            "answer_labels, multi_select, batch_index, batch_size, created_at) "
+            "VALUES ('q-old', 'p1', 'worker', 'Old question', 0, 1, '[]', '[]', 0, 0, 1, "
+            "'2026-01-01')"
+        )
+        conn.commit()
+
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        row = conn.execute(
+            "SELECT declined, declined_at, answered FROM questions WHERE id='q-old'"
+        ).fetchone()
+        assert row[0] == 0
+        assert row[1] is None
+        assert row[2] == 0
+
+
+def test_migration_0061_is_guarded_when_questions_does_not_exist(tmp_path) -> None:
+    db_file = tmp_path / "early_declined.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0024')")
+
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        assert version == "0061"
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "questions" not in tables

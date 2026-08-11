@@ -39,7 +39,7 @@ import { UnaskedQuestionCard } from './UnaskedQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
 import { usePendingUnaskedQuestions } from '@/api/unaskedQuestions'
 import { activeQuestionFor } from '@/lib/pendingQuestions'
-import { useAnswerQuestion, useQuestions } from '@/api/questions'
+import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { ConversationControls, type HandoffState } from './ConversationControls'
 import { agentColorVars } from '@/lib/agentColors'
 
@@ -155,6 +155,7 @@ export function AgentOutputPanel({
   const { data: unaskedQuestions = [] } = usePendingUnaskedQuestions()
   const { data: openQuestions = [] } = useQuestions(false)
   const answerQuestion = useAnswerQuestion()
+  const declineQuestion = useDeclineQuestion()
   const [questionSelection, setQuestionSelection] = useState<string[]>([])
   const [composerDraft, setComposerDraft] = useState('')
   // The same selector the card renders from. Deriving it separately here was safe while only one
@@ -635,6 +636,12 @@ export function AgentOutputPanel({
     setComposerDraft('')
   }
 
+  /** Close a question without answering it, and drop any selection made against it. */
+  const handleDeclineQuestion = (questionId: string) => {
+    setQuestionSelection([])
+    declineQuestion.mutate({ id: questionId })
+  }
+
   const handleQuestionToggle = (label: string) => {
     if (!pendingQuestion) return
     if (pendingQuestion.multi_select !== true) {
@@ -892,6 +899,8 @@ export function AgentOutputPanel({
             onToggle={handleQuestionToggle}
             isResponding={answerQuestion.isPending}
             isTyping={composerDraft.trim().length > 0}
+            onDecline={handleDeclineQuestion}
+            isDeclining={declineQuestion.isPending}
           />
 
           <div className="conversation-composer-surface">

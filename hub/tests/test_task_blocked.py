@@ -19,7 +19,7 @@ from sqlalchemy import select
 from hub.db.engine import async_session_factory
 from hub.db.models import InboundQueueEntry, Question, Run, RunDivergence, Task
 from hub.run_divergence import evaluate_run_end
-from hub.run_task_binding import bind_run_to_task, release_block_for_answer
+from hub.run_task_binding import bind_run_to_task, release_block_for_question
 from hub.task_transitions import STATUS_BLOCKED
 
 
@@ -274,7 +274,7 @@ async def test_answering_returns_the_work_to_progress_and_drops_the_reason(app):
     async with async_session_factory() as session:
         question = await session.get(Question, "q-run-blk-10")
         question.answered = True
-        released = await release_block_for_answer(session, question)
+        released = await release_block_for_question(session, question)
         await session.commit()
         assert released is not None
 
@@ -302,7 +302,7 @@ async def test_an_answer_arriving_late_does_not_drag_back_a_task_that_moved_on(a
 
     async with async_session_factory() as session:
         question = await session.get(Question, "q-run-blk-11")
-        assert await release_block_for_answer(session, question) is None
+        assert await release_block_for_question(session, question) is None
         assert (await _reload(session, "task-blk-11")).status == "rejected"
 
 
@@ -319,7 +319,7 @@ async def test_a_question_that_parked_nothing_releases_nothing(app):
         )
         session.add(question)
         await session.commit()
-        assert await release_block_for_answer(session, question) is None
+        assert await release_block_for_question(session, question) is None
 
 
 # ---------------------------------------------------------------------------
