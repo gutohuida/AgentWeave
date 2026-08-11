@@ -86,9 +86,15 @@ async def test_register_agent_invalid_contact_mode(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_get_context_returns_charter_content(app, auth_headers):
-    """The direct compatibility lookup resolves a stable charter ID."""
+    """The direct compatibility lookup resolves a stable charter ID.
+
+    Any seeded charter exercises this path, so take the first one the project has rather
+    than naming one. Hardcoding a display name made this test fail when the starter set
+    changed (`2026-08-11-charter-set-reshape`), for a reason unrelated to what it checks.
+    """
     charters = (await app.get("/api/v1/projects/proj-test/charters", headers=auth_headers)).json()
-    charter = next(item for item in charters if item["name"] == "Backend Developer")
+    assert charters, "no seeded charters, so this test would be vacuous"
+    charter = charters[0]
     resp = await app.get(
         f"/api/v1/projects/proj-test/agents/context?charter={charter['id']}",
         headers=auth_headers,

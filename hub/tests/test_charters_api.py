@@ -47,7 +47,35 @@ def test_every_seeded_charter_lives_directly_in_the_bundled_directory():
 
         resolved = (CHARTER_DIR / f"{key}.md").resolve()
         assert resolved.parent == CHARTER_DIR.resolve(), f"{key!r} resolves outside {CHARTER_DIR}"
-        assert resolved.is_file(), f"manifest key {key!r} has no file; it would seed an empty charter"
+        assert (
+            resolved.is_file()
+        ), f"manifest key {key!r} has no file; it would seed an empty charter"
+
+
+def test_the_manifest_and_the_charter_directory_agree_in_both_directions():
+    """A key with no file seeds an empty charter; a file with no key seeds nothing at all.
+
+    The second direction is the one that hides: an orphaned file is still scanned by
+    `test_agent_facing_text.py`, so it keeps passing the honesty checks while reaching
+    no project, and reads as shipped when it is not.
+    """
+    charters = json.loads((CHARTER_DIR / "charters.json").read_text(encoding="utf-8"))["charters"]
+
+    keyed = set(charters)
+    on_disk = {path.stem for path in CHARTER_DIR.glob("*.md")}
+
+    assert keyed - on_disk == set(), f"manifest keys with no file: {sorted(keyed - on_disk)}"
+    assert (
+        on_disk - keyed == set()
+    ), f"charter files with no manifest key: {sorted(on_disk - keyed)}"
+
+
+def test_display_names_are_unique():
+    """Charters are seeded and bound by name, so two entries sharing one would collide."""
+    charters = json.loads((CHARTER_DIR / "charters.json").read_text(encoding="utf-8"))["charters"]
+
+    names = [metadata["name"] for metadata in charters.values()]
+    assert len(names) == len(set(names)), f"duplicate charter display names in {sorted(names)}"
 
 
 @pytest.mark.asyncio

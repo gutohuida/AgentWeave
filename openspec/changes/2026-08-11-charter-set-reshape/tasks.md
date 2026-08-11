@@ -18,64 +18,64 @@
 Each of 2.1–2.6: remove every escalation to a title, every absent file and command, and every
 restatement of a coded rule. Escalation resolves to the operator via `ask_user`.
 
-- [ ] 2.1 `tech_lead.md` — absorbs `architect`. Accountable for the technical call: architecture,
+- [x] 2.1 `tech_lead.md` — absorbs `architect`. Accountable for the technical call: architecture,
       tech-stack choices, and the decision when two approaches conflict. Remove the
       `.agentweave/shared/plan-[task-id].md` session-plan duty (absent file) and the task-assignment
       duties (the transition service's).
-- [ ] 2.2 `code_reviewer.md` — keep the zero-trust review sequence, which is genuine judgment and
+- [x] 2.2 `code_reviewer.md` — keep the zero-trust review sequence, which is genuine judgment and
       cites nothing absent. Remove the "Architect or Tech Lead decides" deferral.
-- [ ] 2.3 `verifier.md` — absorbs `qa_engineer`. Accountable for independent verification: that the
+- [x] 2.3 `verifier.md` — absorbs `qa_engineer`. Accountable for independent verification: that the
       thing does what was asked, tested against the requirement rather than against the
       implementation.
-- [ ] 2.4 `guardian.md` — accountable for the standards that outlive one change.
-- [ ] 2.5 `security_engineer.md` — accountable for the security review boundary.
-- [ ] 2.6 `spec.md` — the largest rewrite. Keep the judgment listed in design D7. Cut the six
+- [x] 2.4 `guardian.md` — accountable for the standards that outlive one change.
+- [x] 2.5 `security_engineer.md` — accountable for the security review boundary.
+- [x] 2.6 `spec.md` — the largest rewrite. Keep the judgment listed in design D7. Cut the six
       `aw-spec-*` citations, the `spec/` path inventory, the `spec/index.json` duties, the false
       "the Hub discovers every safe `spec/**/*.html`" claim, and the self-enforced approval gate.
 
 ## 3. Author the three new charters
 
-- [ ] 3.1 `developer.md` — replaces the six variants. Accountable for the code working: implemented
+- [x] 3.1 `developer.md` — replaces the six variants. Accountable for the code working: implemented
       from the agreed requirement, tested, and honest about what is not covered. Carries an explicit
       **Scope** line the operator fills in, and no "you are not responsible for" list that assumes a
       sibling agent exists to pick the work up.
-- [ ] 3.2 `underwriter.md` — assesses and prices the risk, states the basis, and refers anything above
+- [x] 3.2 `underwriter.md` — assesses and prices the risk, states the basis, and refers anything above
       its authority. States plainly that it may not accept the risk itself.
-- [ ] 3.3 `underwriting_approver.md` — accepts or declines on the institution's behalf above the
+- [x] 3.3 `underwriting_approver.md` — accepts or declines on the institution's behalf above the
       referral threshold. States plainly that it does not perform the assessment it is judging, and
       that a referral it wrote itself is not one it may approve.
-- [ ] 3.4 Confirm 3.2 and 3.3 read as a pair: each names the other's step as the one it may not
+- [x] 3.4 Confirm 3.2 and 3.3 read as a pair: each names the other's step as the one it may not
       perform, without naming the other as a party to *contact* — the separation is a constraint on
       itself, not an escalation route.
 
 ## 4. Re-key the manifest and delete the removed seeds
 
-- [ ] 4.1 Rewrite `hub/hub/data/charters/charters.json` to the nine entries with display names.
-- [ ] 4.2 Delete the 15 removed `.md` seeds (`architect`, `backend_dev`, `frontend_dev`,
+- [x] 4.1 Rewrite `hub/hub/data/charters/charters.json` to the nine entries with display names.
+- [x] 4.2 Delete the 15 removed `.md` seeds (`architect`, `backend_dev`, `frontend_dev`,
       `fullstack_dev`, `devops_engineer`, `data_engineer`, `ml_engineer`, `qa_engineer`,
       `technical_writer`, `project_manager`, `coordinator`, `model_router`, `explorer`,
       `implementer`, `context_keeper`).
-- [ ] 4.3 Verify manifest and directory agree in both directions — every key has a file, every file
+- [x] 4.3 Verify manifest and directory agree in both directions — every key has a file, every file
       has a key. A key with no file seeds an empty charter; a file with no key seeds nothing while
       still being scanned by `test_agent_facing_text.py`.
 
 ## 5. Close the test gap that let this through
 
-- [ ] 5.1 `hub/tests/test_agent_facing_text.py` — add the absent-participant assertion, per design D6:
+- [x] 5.1 `hub/tests/test_agent_facing_text.py` — add the absent-participant assertion, per design D6:
       no seeded charter instructs the agent to contact, escalate to, hand off to, report to, or ask
       another charter's title. Assert on the directive shape, not on a list of titles (D6 records why
       a title list would pass on today's bug).
-- [ ] 5.2 Same file — add an assertion that no seeded charter names an `aw-*` skill, since nothing
+- [x] 5.2 Same file — add an assertion that no seeded charter names an `aw-*` skill, since nothing
       installs them. This is the specific needle that started B0.
-- [ ] 5.3 Same file — extend `REMOVED_SUBSYSTEMS` with the shared-file convention actually found in
+- [x] 5.3 Same file — extend `REMOVED_SUBSYSTEMS` with the shared-file convention actually found in
       the tree: `shared/design-`, `shared/plan-`. The list currently has only `shared/context.md`,
       which is why four charters kept citing siblings of it.
-- [ ] 5.4 Prove each new assertion fails on the pre-change charter text before keeping it. An
+- [x] 5.4 Prove each new assertion fails on the pre-change charter text before keeping it. An
       assertion that passes on the defect it was written for is worse than none.
-- [ ] 5.5 `hub/tests/test_agents_self_registered.py:91` — replace the `"Backend Developer"` lookup.
+- [x] 5.5 `hub/tests/test_agents_self_registered.py:91` — replace the `"Backend Developer"` lookup.
       Pick from the manifest rather than hardcoding another name, so the next set change does not
       break it again.
-- [ ] 5.6 Add a test that the starter set contains a non-software pair, per the new requirement —
+- [x] 5.6 Add a test that the starter set contains a non-software pair, per the new requirement —
       keyed to the manifest, so deleting the pair fails rather than silently narrowing the product's
       claim.
 
