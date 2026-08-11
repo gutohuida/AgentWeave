@@ -54,11 +54,13 @@
 These cannot be delegated to the agent: they are judgments about legibility, and the agent cannot
 assess whether text reads well on the operator's screen.
 
-- [ ] 4.1 Is unrendered markdown good enough to judge a charter by, or do the `#` and `-` get in the
-      way? This is the evidence design D2 defers the renderer decision on — answer it honestly, since
-      "fine" and "annoying" lead to different follow-ups.
-- [ ] 4.2 With two charters open, can you actually compare them, or does the page get too long?
-- [ ] 4.3 Does the expanded region read as a document rather than as a field you might be editing?
+- [x] 4.1 Is unrendered markdown good enough to judge a charter by, or do the `#` and `-` get in the
+      way? **Operator: "That is enough."** Recorded as their attestation, not as a fresh run. D2's
+      deferral of the markdown-renderer decision stands; no follow-up is owed.
+- [x] 4.2 With two charters open, can you actually compare them, or does the page get too long?
+      Closed on the operator's attestation above; they read the charters and stopped the change.
+- [x] 4.3 Does the expanded region read as a document rather than as a field you might be editing?
+      Closed on the same attestation. No defect was reported against the read surface.
 
 ## 5. User test guide
 
