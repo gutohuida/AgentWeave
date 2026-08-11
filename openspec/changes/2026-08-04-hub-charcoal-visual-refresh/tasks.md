@@ -106,7 +106,7 @@ palette.
       project header has zero border-bottom and matches the ground plane exactly; a real turn
       rendered 2 independently-collapsible work blocks. 390×800 narrow-viewport pass not run
       (background-automation session had no interactive resize control available this session).
-- [ ] 8.8 **Live keyboard pass through the composer control row.** *Partially verified 2026-08-10;
+- [x] 8.8 **Live keyboard pass through the composer control row.** *Partially verified 2026-08-10;
       the live half is still yours.*
       **Verified by the agent:** in the running Hub, the composer's tab order from the text area is
       `textarea → Model → Effort → Permissions`, all four with `tabIndex 0`, and the stylesheet does
@@ -121,6 +121,10 @@ palette.
       *The agent cannot run this: the available automation's key press does not move real focus —
       re-tested 2026-08-10 with `Tab` from a focused text area, and `document.activeElement` did not
       change. Dispatching a synthetic `keydown` does not drive the browser's own focus engine.*
+      **Operator confirmed 2026-08-11** that this keyboard pass was run in an earlier session
+      and passed. Recorded on their attestation: the agent had already verified the DOM half
+      (tab order, `tabIndex 0`, `:focus-visible`), and synthetic key events cannot drive real
+      focus traversal, so the live half is only ever closable this way.
 
 - [x] 8.9 **Contrast check: text and semantic colours against the new ramp, both modes.**
       **Run 2026-08-10.** The earlier "no automated contrast-checking tool available" is no longer
@@ -153,7 +157,7 @@ palette.
 
       **The remediation is a design decision, not a defect fix — see 8.11.**
 
-- [ ] 8.10 **Reduced-motion check.** *Still unrunnable by the agent; re-confirmed 2026-08-10.*
+- [x] 8.10 **Reduced-motion check.** *Still unrunnable by the agent; re-confirmed 2026-08-10.*
       **Do this:** turn on Windows → Settings → Accessibility → Visual effects → Animation effects
       **off**, reload the Hub, then: resize a pane, collapse and expand the chat pane, open and close
       a compact drawer, and switch conversations.
@@ -164,6 +168,9 @@ palette.
       becomes ambiguous once it does not.
       *The agent cannot run this: `preview_set_appearance` emulates `prefers-color-scheme` only, and
       a CSS media query cannot be forced from page JavaScript.*
+      **Operator confirmed 2026-08-11** that this reduced-motion pass was run in an earlier
+      session and passed. Recorded on their attestation, not from a fresh run — the agent
+      cannot drive `prefers-reduced-motion`, so this is the only way it can ever be closed.
 
 - [x] 8.11 **DECISION (operator): what contrast bar does 1.0 hold itself to?** Raised by 8.9.
       Meeting **AA 4.5** for `--text-3` needs `#5c5c66 → #8c8c96` (dark) and `#8e8e98 → #686872`

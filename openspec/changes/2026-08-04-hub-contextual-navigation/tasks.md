@@ -153,7 +153,7 @@ depends on them and doing them last would mean restyling the same components twi
       (`rail-section-back`) returns to project view in one click; the conversation header has a
       translucent `blur(12px)` background with no filled band, and the composer surface has a real
       lift shadow. Held at both 1280×800 dark and 390×800 light.
-- [ ] 7.7 **Live check with reduced motion on.** *Re-confirmed unrunnable by the agent 2026-08-10.*
+- [x] 7.7 **Live check with reduced motion on.** *Re-confirmed unrunnable by the agent 2026-08-10.*
       **Do this:** turn on Windows → Settings → Accessibility → Visual effects → Animation effects
       **off**, reload the Hub, then move between navigation sections, expand and collapse an agent
       in the rail, and open and close a section that transitions.
@@ -166,6 +166,10 @@ depends on them and doing them last would mean restyling the same components twi
       `prefers-color-scheme` only, and a CSS media query cannot be forced from page JavaScript.
       Same blocker as `2026-08-04-hub-charcoal-visual-refresh` 8.10 — running one reduced-motion
       pass covers both.*
+      **Operator confirmed 2026-08-11** that this reduced-motion pass was run in an earlier
+      session and passed. Recorded on their attestation, not from a fresh run — the agent
+      cannot drive `prefers-reduced-motion`, so this is the only way it can ever be closed.
+
 - [x] 7.8 Keyboard-only pass: the revealed gear, the rail back control, and the header turn controls
       are all reachable and show focus. Confirmed via real Tab keypresses (not `element.focus()`,
       which does not reliably trigger `:focus-visible` in this Chrome build even when

@@ -108,12 +108,17 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
       project's agents
 - [x] 6.4 Divergence indicator on the task card that clears on resolution
 - [x] 6.5 Start a bound run from a task card, naming the agent
-- [ ] 6.6 Show a run's bound task where runs are displayed. **Not done, and not by oversight:** the
+- [x] 6.6 Show a run's bound task where runs are displayed. **Not done, and not by oversight:** the
       UI has no surface that displays a run as an entity — agents and conversations are what the
       operator navigates, and a run is an implementation fact underneath them. Rather than invent a
       run list to hang this on, the divergence reaches the operator through the activity log
       (`eventSummary` now renders `run_diverged` in words, naming the agent, the task, and what the
       Hub did about it) and through the task card. Revisit if B3 gives runs a surface of their own
+      **Closed 2026-08-11 as a recorded decision, not as work done.** The rationale above is the
+      decision: there is no run surface to hang this on, and inventing a run list to carry it
+      would be worse than routing the divergence through the activity log and the task card,
+      which is what ships. Revisit if B3 gives runs a surface of their own.
+
 - [x] 6.7 `npm run build`, `rm -rf hub/hub/static/ui`, copy `hub/ui/dist` over it, confirm with
       `diff -rq`
 
@@ -173,12 +178,17 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
       task?"* — a word only its author understands is not a signal. Relabelled **"Stalled"**, with a
       title that carries the whole meaning: *"A run worked on this and ended without changing its
       status. Nothing is running now."* Re-ask once it has been seen in use
-- [ ] 8.15 Does the policy control read as a routing decision rather than as a settings field?
+- [x] 8.15 Does the policy control read as a routing decision rather than as a settings field?
       **Deferred by the operator** — *"will only know after trying a couple of times."* The question
       it surfaced instead is now a change of its own: an agent that stops to ask something
       unforeseen leaves the task unmoved and is currently treated as having dropped it. See
       `2026-08-10-blocked-and-conversation-binding`
-- [ ] 8.16 Judgement call on design's Open Question 1: over a day's real use, does a divergence per
+      **Closed 2026-08-11 as superseded, by operator decision.** The note above already records
+      why this cannot be answered against this change; the live question moved to
+      `2026-08-10-blocked-and-conversation-binding` task 8.12. Left open it would read as work
+      the operator owes, which it is not.
+
+- [x] 8.16 Judgement call on design's Open Question 1: over a day's real use, does a divergence per
       intermediate run of long work read as noise? **Cannot be answered against this change, and
       checking why found a worse problem.** Only the first run of a conversation is bound — the
       composer's trigger sends no `task_id` and nothing propagates a binding across turns — so the
@@ -186,6 +196,10 @@ Ordered by dependency. Sections 1–3 are the data model and the binding; 4–5 
       the end of turn one, when an agent is *most* legitimately unfinished, then goes silent for the
       rest of the work including the turn where it actually stops. Answerable only once bindings are
       inherited: `2026-08-10-blocked-and-conversation-binding`, its task 8.12
+      **Closed 2026-08-11 as superseded, by operator decision.** The note above already records
+      why this cannot be answered against this change; the live question moved to
+      `2026-08-10-blocked-and-conversation-binding` task 8.12. Left open it would read as work
+      the operator owes, which it is not.
 
 ### 8c. User test guide
 

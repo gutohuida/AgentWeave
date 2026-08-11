@@ -105,7 +105,7 @@
 > Each item: **do this → expect this → it failed if this.** Report the outcome; an unrun item is
 > reported as unrun, never as passed.
 
-- [ ] 7.1 **The document is comfortable to read.** Open a real specification document beside a
+- [x] 7.1 **The document is comfortable to read.** Open a real specification document beside a
       conversation on your normal window size, and read a few sections.
       *Expect:* line length is comfortable without horizontal scrolling, headings and body keep their
       hierarchy, and you do not want to close the conversation to read it.
@@ -113,22 +113,31 @@
       that you would rather open the document somewhere else.
       *The agent can measure that nothing overflows; it cannot tell whether a column is pleasant to
       read.*
+      **Operator confirmed 2026-08-11** that this was checked in an earlier session and passed.
+      A judgement of feel, recorded on their attestation — the agent can measure that nothing
+      overflows, but not whether it is pleasant to use.
 
-- [ ] 7.2 **The proportions feel right, and the divider tracks.** Drag the boundary between the
+- [x] 7.2 **The proportions feel right, and the divider tracks.** Drag the boundary between the
       conversation and the document across its whole range, and reload.
       *Expect:* the drag tracks the pointer with no lag or snap-back, both panes stay usable at every
       position, and the width survives reload.
       *Failed if:* either pane becomes unusable before its stop, the document reflows jarringly
       mid-drag, or the width resets.
+      **Operator confirmed 2026-08-11** that this was checked in an earlier session and passed.
+      A judgement of feel, recorded on their attestation — the agent can measure that nothing
+      overflows, but not whether it is pleasant to use.
 
-- [ ] 7.3 **The collapsed rail is actually usable.** Collapse the rail and work for a few minutes —
+- [x] 7.3 **The collapsed rail is actually usable.** Collapse the rail and work for a few minutes —
       switch agents, open a conversation, come back to a project.
       *Expect:* you can do all of it from the icons, each has a tooltip naming it, and the active one
       is obvious.
       *Failed if:* you expand the rail because you cannot tell what an icon is, or cannot reach
       something you need.
+      **Operator confirmed 2026-08-11** that this was checked in an earlier session and passed.
+      A judgement of feel, recorded on their attestation — the agent can measure that nothing
+      overflows, but not whether it is pleasant to use.
 
-- [ ] 7.4 **Keyboard traversal.** Click the document panel, then Tab through to the composer and its
+- [x] 7.4 **Keyboard traversal.** Click the document panel, then Tab through to the composer and its
       control row, then Shift+Tab back.
       *Expect:* focus reaches the panel's close and breadcrumb controls, the divider, the composer,
       and every pill; each shows a visible ring; the order reverses; focus never enters the document
@@ -136,13 +145,20 @@
       *Failed if:* anything is unreachable, shows no ring, or traps focus.
       *Agent cannot run this — a synthetic Tab does not drive the browser's focus engine; re-tested
       2026-08-10.*
+      **Operator confirmed 2026-08-11** that this keyboard pass was run in an earlier session
+      and passed. Recorded on their attestation: the agent had already verified the DOM half
+      (tab order, `tabIndex 0`, `:focus-visible`), and synthetic key events cannot drive real
+      focus traversal, so the live half is only ever closable this way.
 
-- [ ] 7.5 **Reduced motion.** With Windows animation effects off, open and close the panel, collapse
+- [x] 7.5 **Reduced motion.** With Windows animation effects off, open and close the panel, collapse
       and expand the rail, and resize.
       *Expect:* states change instantly, and each remains distinguishable without the motion.
       *Failed if:* anything still animates, or a state is only legible because it moved.
       *Agent cannot run this — `prefers-reduced-motion` cannot be forced from page JavaScript. This
       is the same pass as charcoal 8.10 and contextual-navigation 7.7; one sitting covers all three.*
+      **Operator confirmed 2026-08-11** that this reduced-motion pass was run in an earlier
+      session and passed. Recorded on their attestation, not from a fresh run — the agent
+      cannot drive `prefers-reduced-motion`, so this is the only way it can ever be closed.
 
 ## 8. Closeout
 

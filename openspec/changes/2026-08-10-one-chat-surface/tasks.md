@@ -123,7 +123,7 @@
 > Hub on `:8010`, project `proj-cddb0827`, `spec/a1-probe.html` open, navigation width already at
 > 268 from the automated check.
 
-- [ ] 6.1 **Pane resizing feels right.** Open the Spec page on a wide window. Drag the divider
+- [x] 6.1 **Pane resizing feels right.** Open the Spec page on a wide window. Drag the divider
       between navigation and document, then between document and chat.
       *Expect:* the drag tracks the pointer with no lag or snap-back; each pane stops at a minimum
       that still shows usable content; the width survives a page reload.
@@ -131,8 +131,11 @@
       the width resets on reload.
       *Partially covered:* the reload clause was verified live (268px survived). The pointer-feel
       clauses are yours.
+      **Operator confirmed 2026-08-11** that this was checked in an earlier session and passed.
+      A judgement of feel, recorded on their attestation — the agent can measure that nothing
+      overflows, but not whether it is pleasant to use.
 
-- [ ] 6.2 **The Spec page reads as the same product as the agent page.** Open the agent conversation,
+- [x] 6.2 **The Spec page reads as the same product as the agent page.** Open the agent conversation,
       then the Spec page, and switch between them a few times.
       *Expect:* the composer, its control row, and the message styling are indistinguishable between
       the two.
@@ -140,8 +143,11 @@
       different spacing, different control shapes, different colours.
       *Note:* they are now literally the same component, so a difference here is a layout or width
       problem, not a styling one — say which pane it appears in.
+      **Operator confirmed 2026-08-11** that this was checked in an earlier session and passed.
+      A judgement of feel, recorded on their attestation — the agent can measure that nothing
+      overflows, but not whether it is pleasant to use.
 
-- [ ] 6.3 **Keyboard traversal of the composer inside the Spec workspace.** Click the document pane,
+- [x] 6.3 **Keyboard traversal of the composer inside the Spec workspace.** Click the document pane,
       then press Tab repeatedly.
       *Expect:* focus reaches the composer text area and every control in its row; each shows a
       visible focus ring; Shift+Tab reverses in the same order; focus never enters the document
@@ -150,20 +156,30 @@
       *Agent cannot run this — available browser automation cannot drive real focus traversal.*
       *New since this was written:* the two dividers are `tabIndex={0}` separators and now sit in
       that tab order. Check they are reachable and that arrow keys move them.
+      **Operator confirmed 2026-08-11** that this keyboard pass was run in an earlier session
+      and passed. Recorded on their attestation: the agent had already verified the DOM half
+      (tab order, `tabIndex 0`, `:focus-visible`), and synthetic key events cannot drive real
+      focus traversal, so the live half is only ever closable this way.
 
-- [ ] 6.4 **Reduced motion.** Enable the OS reduced-motion setting, reload, and resize a pane and
+- [x] 6.4 **Reduced motion.** Enable the OS reduced-motion setting, reload, and resize a pane and
       open a compact drawer.
       *Expect:* panes and drawers change state without animated transitions, and every state remains
       distinguishable.
       *Failed if:* transitions still animate, or a state becomes ambiguous once animation is removed.
       *Agent cannot run this — available automation emulates `prefers-color-scheme` only.*
+      **Operator confirmed 2026-08-11** that this reduced-motion pass was run in an earlier
+      session and passed. Recorded on their attestation, not from a fresh run — the agent
+      cannot drive `prefers-reduced-motion`, so this is the only way it can ever be closed.
 
-- [ ] 6.5 **Narrow-window drawers still work.** Narrow the window below the compact breakpoint. Open
+- [x] 6.5 **Narrow-window drawers still work.** Narrow the window below the compact breakpoint. Open
       the Documents drawer, then the Chat drawer; dismiss each with Escape and with its close button.
       *Expect:* focus returns to the button that opened the drawer, both times.
       *Failed if:* focus lands on the page body or the drawer does not dismiss.
       *Note:* the breakpoint moved from 1140 to 1142 (two dividers), and the Chat drawer now holds
       the whole conversation surface rather than a small pane — check it is usable at that width.
+      **Operator confirmed 2026-08-11** that this was checked in an earlier session and passed.
+      A judgement of feel, recorded on their attestation — the agent can measure that nothing
+      overflows, but not whether it is pleasant to use.
 
 ## 7. Closeout
 
