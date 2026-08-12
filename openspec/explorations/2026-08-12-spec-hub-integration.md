@@ -42,6 +42,20 @@ directory-backed project identity are live. The Hub can read and write a registe
 directly. The stated blocker is gone, and with it the entire push/snapshot/drift-reconciliation
 apparatus that existed only because the Hub was blind to the filesystem.
 
+**Second pass, later the same day — the apparatus is not merely unnecessary, it is already
+unreachable.** Verified in code:
+
+- `POST /project/specs/sync` and `POST /project/specs/reconcile` (`hub/hub/api/v1/spec.py`) are the
+  only writers of `project_specs`. Their only callers are `HttpTransport.push_spec` and
+  `reconcile_specs` (`src/agentweave/transport/http.py:555,576`), and **those two methods have no
+  callers at all**. Their docstrings say "called at watchdog startup… plus manually via
+  `agentweave spec push`" — the watchdog is deleted and that command is among the 51 removed.
+- The live database holds 3 stale `project_specs` rows and **0** `project_spec_snapshots`.
+- `ACTIVE_SOURCE_TTL_SECONDS` is documented against "normal watchdog polling."
+
+So the specification surface reads from a cache that nothing in the shipped product can fill. This
+is the concrete reason a user cannot author a spec today.
+
 ---
 
 ## 1. Operator decisions
@@ -135,6 +149,41 @@ The agent emits structured JSON; the Hub renders the HTML. See §2.6.
 An abandoned exploration is an **idea backlog entry**, not litter. Implies the spec tree must
 distinguish dormant explorations from the active working set — a filter, not a problem.
 
+### 1.11 The new phase is the frame, and it settles the cache question
+
+*"We have to take into consideration the whole new phase that agentweave is in. We removed the
+watchdog and the hub doesn't operate as a separate docker entity. This might help us resolve some of
+this questions."*
+
+Then, on the resulting proposal to delete the push apparatus and read from the working directory:
+*"Yes, this is good."*
+
+Three independent reasons now support it, any one sufficient:
+
+1. The cache's stated purpose — "so the UI can display them without filesystem access" — is void in
+   **both** deployment modes. Native leaves `AW_WORKSPACE_ROOT` unset and imposes no containment
+   restriction (`project_workspace.py:89`); Docker mounts a real root. Either way
+   `ProjectWorkspace.resolve_relative` (`project_workspace.py:62-71`) already provides
+   containment-checked, traversal-free reads. **There is no mode in which the Hub is blind.**
+2. `project_spec_snapshots` exists for "possibly multiple machines syncing the same project." One
+   local Hub, and a project bound to one canonical directory by `canonical_path_key` plus the
+   `.agentweave/project.json` marker — the multi-source premise is gone by construction, not by
+   preference.
+3. The write path is dead and unreachable (see §0).
+
+### 1.12 The skills' knowledge is preserved; technical exploration is dropped
+
+*"There is a lot of knowledge on those skills. How do we preserve them? Their behavior is very
+good… Maybe some tweaks and remove the technical explore but I want the same knowledge imputed."*
+
+And, on the apply/archive/reindex skills: *"Read them just to be sure but I believe then can be all
+automated."*
+
+Two obligations, and they are not the same one. The knowledge must **land somewhere that reaches an
+agent of either runner** — deleting the files is fine, losing what they encode is not. And the
+disposition must be **auditable**, so that "did we drop something?" is answerable by reading a table
+rather than by diffing a deleted directory. See §6.
+
 ---
 
 ## 2. Proposed and agreed
@@ -159,8 +208,30 @@ A skill file is three things wearing one filename, and each belongs somewhere di
 | **Format contract** — what a valid document is | **schema validation** (code) | 541 lines of "please emit this shape" becomes a boundary that fails loudly |
 | **Judgment** — how to interview, what makes a requirement testable | the **charter** (optional, per §1.8) | runner-agnostic, operator-editable, already shipped |
 
-The runner-agnostic delivery channel already exists: `agent_trigger.py:333-360` writes
-`.agentweave/context/<agent>.md` every turn and hands it to both runners.
+The runner-agnostic delivery channel already exists: `agent_trigger.py:376-405` calls
+`_render_hub_agent_context` and writes `.agentweave/context/<agent>.md` into the run's effective work
+directory every turn, for both runners. It already carries a `### Open specification document`
+section (`agents.py:1015`), so document awareness per turn shipped with `spec-chat-session`.
+
+**Correction to the table above — the split as first written violates §1.8.** "How to interview" is
+two different things, and only one of them is judgment:
+
+| | belongs to | optional? |
+|---|---|---|
+| **The obligation to interview** — you may not reach `propose` with unresolved clarifications | the phase machine (code) | **no** — it is an exit condition |
+| **Skill at interviewing** — what to probe, when a requirement is too vague to be testable | the charter | yes — degrades quality, not validity |
+
+As the table originally read, the obligation landed in the optional charter, which is exactly what
+§1.8 forbids. The phase block therefore needs a **minimum procedural floor** that holds against a
+blank charter — roughly five code-owned lines: *you are exploring; ask before assuming; use
+`ask_user` for anything that changes scope; ground claims in the codebase; you cannot propose until
+the operator marks explore complete.* Not 216 lines of skill.
+
+This reconciles with §1.8 in practice because charters are **seeded by default** — skipping one is
+opt-out, not opt-in. The floor keeps a blank-charter run *valid*; the seeded charter makes it *good*.
+One decision follows from this and should be made explicitly: a spec-phase run binds the spec charter
+by default unless the operator overrides, so that "optional" means "you may remove it" rather than
+"you must remember to add it."
 
 ### 2.2 Task status is derived, not written back
 
@@ -301,14 +372,56 @@ that everything is uniform.
 The same primitive that detects an external edit also detects that a requirement's *meaning* moved
 out from under evidence accepted against the old wording.
 
+### 2.9 The document lives on disk; the cache is deleted
+
+Following §1.11. The Hub reads and writes documents through `ProjectWorkspace.resolve_relative`.
+
+**Deleted:** `POST /project/specs/sync`, `POST /project/specs/reconcile`, the `project_specs` and
+`project_spec_snapshots` tables, the drift/TTL machinery, and `HttpTransport.push_spec` /
+`reconcile_specs`. Cost: one guarded migration, both head assertions bumped, and spec deltas.
+
+**Kept:** manifest parsing and `validate_spec_path`. Reading from disk still needs path validation,
+and the manifest is still the document index — it changes owner, not purpose.
+
+### 2.10 The format contract travels as the tool's input schema
+
+The question §1.9 leaves open is *how a model learns the format when no skill file installs*. The
+answer falls out of the choice itself: `submit_spec_document`'s JSON Schema **is** the contract. MCP
+delivers tool schemas to Claude and Codex alike, by protocol, every turn, with no skills directory
+and no runner-specific path.
+
+This replaces 713 lines of `html-spec-conventions.md` with a boundary the model cannot cross without
+a field-level validation error. The model does not need to be *taught* the format; it needs to be
+*shown the tool*.
+
+### 2.11 The skills' self-checks become blocking validators
+
+The highest-value content in the entire skill set is the step-7b self-check
+(`aw-spec-propose.md:230-259`), and it is currently a polite request:
+
+> *"Every requirement is referenced by at least one acceptance criterion **and** one task; every task
+> references at least one requirement. Report both directions — an orphan in either direction is a
+> real gap, not a formatting nit."*
+
+That is an orphan-detection algorithm, and today we ask the model to run it on itself and report the
+result — precisely the `unverifiable_claim` failure mode of §3.2. Every check in that block is
+mechanical: anchors resolve, no duplicate IDs, non-goals non-empty, modal verb present, no unresolved
+clarification markers. Moved into Hub validators they stop being advisory.
+
+The general rule, and it is what makes §6 a promotion rather than a salvage operation: **knowledge
+does not need preserving as text when it can be preserved as a constraint.**
+
 ---
 
 ## 3. Open — nobody has decided these
 
-1. **What the reconciliation rules actually are.** §1.3 fixes the *policy* — surface both, operator
-   decides. The mechanics are unspecified: per-file or per-requirement, what "keep mine" does to
-   evidence already accepted against the Hub's version, and what happens to edits made while the
-   operator is deciding.
+1. **What the reconciliation rules actually are — now a smaller question.** §1.3 fixes the *policy*
+   — surface both, operator decides. §1.11 **deleted half the problem**: it was "N machines pushing,
+   whose copy wins," and it is now one case — the Hub wrote the file, someone edited it in an editor,
+   two versions, one operator. Still unspecified: per-file or per-requirement, what "keep mine" does
+   to evidence already accepted against the Hub's version, and what happens to edits made while the
+   operator is deciding. **Not a prerequisite** — store the digest from day one and defer the
+   resolution UI.
 2. **The rejection category vocabulary.** Sketched, unratified: `requirement_not_met`, `defect`,
    `evidence_insufficient`, `regression`, `scope_creep`, `convention_violation`,
    `unverifiable_claim`. The last is the one worth counting on its own — a model that reports success
@@ -322,12 +435,44 @@ out from under evidence accepted against the old wording.
    transitions are mostly "someone decided" while phase transitions have **computed** entry
    conditions. They must talk regardless, since `apply`'s exit condition is a statement about task
    statuses. **This is an implementation-structure question, not a product one — it blocks nothing.**
-5. **Carried, still binding:** the format contract **must not be frozen** until traceability and
-   gates have stated their requirements on it. Otherwise the schema ships unable to express what the
-   gates need, and every existing document has to be migrated.
+5. **Carried, still binding — but cheaper than it was:** the format contract **must not be frozen**
+   until traceability and gates have stated their requirements on it. Otherwise the schema ships
+   unable to express what the gates need, and every existing document has to be migrated.
+
+   §1.11 lowers the cost of being wrong. With no pusher, no portability goal (§1.1) and no external
+   consumer, the Hub is the **only** reader and the **only** writer of the format — and a format with
+   one reader is migratable by that reader. A wrong schema costs a Hub-side migration, not
+   coordination across machines and CLI versions.
+
+   **Proposed resolution, not yet ratified:** version the payload (`schema_version`) and freeze only
+   the part that must be permanent — **requirement ID stability across schema versions**. Traceability
+   and gates then extend the payload later without migrating documents. This satisfies item 5
+   literally rather than deferring the first slice, which would otherwise be blocked by it, since the
+   named first slice *is* the format contract.
 6. **Carried:** the binding/advisory classification of the remaining AI judgment points — is an
    exploration complete enough to propose from; is this requirement testable as written; is an edit
    editorial or substantive.
+
+   On the first of those, a **proposed** resolution: make the explore exit an explicit operator
+   action in v1 — the operator says "done exploring." No model sits in the path, and it holds against
+   a blank charter per §1.8. Ratification still needed.
+7. **What happens to the two superseded capabilities.** `spec-manifest-sync` (9 requirements) is
+   built on the push model, and one of them — "Spec synchronization remains backward compatible" — is
+   compatibility with a client that no longer exists. `aw-spec-workflow` (10 requirements) describes
+   authoring through the `aw-spec-*` skills, which §2.1 established a Codex agent can never invoke.
+   `spec-chat-session` (5 requirements) **survives** — the composer, the conversation reuse, and the
+   document-beside-chat layout are what the new design builds on.
+
+   So the proposal is not "add spec↔Hub integration"; it is **replace two capabilities and extend a
+   third**, which changes the shape of the change document and makes most deltas removals.
+
+   **Open specifically: removed as superseded, or rewritten in place?** The agent recommends removal,
+   since almost nothing survives rewording. **The operator has not answered this** — it was asked,
+   and the conversation moved to the skills question before it was returned to. Do not read
+   §1.11's *"Yes, this is good"* as covering it.
+8. **Where the disposition table in §6 is enforced.** The table records intent. Nothing yet checks
+   that a destination was actually built — e.g. that the orphan validator of §2.11 exists. A test
+   asserting each `V` row has a validator would make the harvest verifiable rather than asserted.
 
 ---
 
@@ -363,3 +508,121 @@ Most of these links already exist and are simply not connected to a requirement.
 
 The chain **requirement → task → run → conversation → cost** is the valuable one, and four of its
 five links already exist. Only the first is missing.
+
+---
+
+## 6. Disposition of the skill set
+
+§1.12 requires that the skills' knowledge survive their files, and that the survival be auditable.
+This table is that audit. Every section of every skill has a destination, including `X` with a stated
+reason. "Did we drop something?" is answered by reading this table, not by diffing a deleted
+directory. The files remain in git history regardless.
+
+**Destinations:** **S** = `submit_spec_document` JSON schema · **V** = Hub validator · **P** = phase
+block in the per-turn context (code-owned, non-optional) · **C** = charter `spec.md` (judgment,
+optional per §1.8) · **R** = Hub renderer · **X** = deleted, superseded
+
+**Scope: 1,802 lines.** Six skills (1,306) plus two references (796), less
+`aw-spec-technical-explore.md` (300), removed entire per §1.12.
+
+### `aw-spec-explore.md` (216 lines)
+
+| content | → |
+|---|---|
+| Spec-Driven Mindset (18-31), The Stance (34-44), What To Explore (48-80), Visualizing (111-130), Guardrails (209-216) | **C** — ~120 lines, near-verbatim. This is the interviewing craft, and the reason §1.12 exists |
+| "Explore mode is for thinking, not implementing" (10, 211) | **P** — and stronger than today: an `exploring` run can be permission-restricted, so it is enforced rather than requested |
+| The `idea.md` template (144-184) | **S** — this *is* the explore-phase payload: `problem`, `users_workflows`, `goals`, `non_goals`, `emerging_requirements[]`, `codebase_context[]`, `evidence_limits`, `options[]`, `open_questions[]`, `risks[]`, `slice_boundary` |
+| `find spec/changes` context probing (95-107) | **X** — the Hub knows its own documents |
+| Routing to technical exploration (14, 89-91, 202) | **X** — removed per §1.12 |
+
+### `aw-spec-propose.md` (321 lines)
+
+| content | → |
+|---|---|
+| Principles 2,3,4,5,7,8,9,10,11,12 — testable + modal verbs, Given/When/Then, numbered algorithms, non-goals, producer/consumer split, task→requirement trace, non-normative labelling, clarification markers, evidence & limits, lifecycle | **S** — each becomes a required field or enum. A required non-empty `non_goals` array enforces principle 5 better than a sentence requesting it |
+| Principles 1, 6, 13 — separate WHAT from HOW; justify non-obvious rules; decompose an epic into vertical slices | **C** — irreducible judgment |
+| Step 7b structural checks (236-244) — anchors resolve, no duplicate IDs, offline, head metadata, task attributes, theme layers | **R** — the Hub emits the HTML, so most cannot fail by construction |
+| Step 7b content checks (245-257) — orphans in both directions, modal verb present, algorithms not prose, non-goals non-empty, no unresolved clarifications | **V** — blocking, per §2.11 |
+| Step 7b "rewrite anything unfalsifiable" (249-251) | **C** — a word list is a hint, not a gate |
+| Step 8 approval gate (261-279), "never flip to approved without an explicit decision" | **P** + phase machine — the agent cannot flip status at all |
+| Step 7a manifest update (219-228) | **X** — the Hub owns the index |
+| Step 3 roles/quality config (118-137), reviewer warnings (208-217), team summary (296-298) | **X** — deleted subsystem. Intent survives as the roster plus §2.5's independence check, which is code |
+| Step 7 HTML skeleton, inline style, section order (172-207) | **R** |
+| Step 1b roadmap rows (81-95) — stable ID, intent, in/deferred boundary, dependencies, child link | **S** (`kind: "roadmap"`) + **C** (when one is warranted) |
+| Step 3b "do not convert an implementation detail into a requirement without recording the rationale" (150-151) | **C** — the sharpest line in the set |
+| Step 5 resolve ambiguity (158-162) | **P** + the existing `ask_user` |
+
+### `aw-spec-apply.md` (189 lines)
+
+| content | → |
+|---|---|
+| Step 2 approval gate by grep (33-51) | **X/P** — the agent currently greps its own permission slip. §4's "the approval gate is real" |
+| Step 6.6 mark task done inside the HTML (126-129) | **X** — §2.2, status is derived |
+| Step 3 cross-artifact consistency, mechanical half (67, 70) | **V** |
+| Step 3 "an approved spec that disagrees with the system map is a re-approval, not a judgement call you make mid-implementation" (72-73) | **P** — a phase rule, not prose |
+| Step 6.2 "derive requirement tests from the acceptance criteria and label them as proposed coverage rather than observed behavior" (113-116) | **C** + an evidence field. Serves `unverifiable_claim` directly |
+| Step 6.5 "do not treat a green unit test as proof" (123-125) | **C** — already present in the seeded charter |
+| Step 3 quality config (78-80), step 5 principal-owned tasks (100-106), step 7 delegation (140-152) | **X** — deleted subsystems and a deleted command |
+| Step 4 progress display (82-96) | **R** — rendered from the task ledger |
+| Pause conditions (133-138) | **P** + `ask_user` |
+
+### `aw-spec-archive.md` (142 lines)
+
+| content | → |
+|---|---|
+| Step 2 verify approved and every task done (30-58) | **V** + phase machine — §4's archive entry condition |
+| "Tasks under review are not done" (60-66) | **V** — *stronger* than the original: the Hub owns the ledger, so this is computed, not grepped |
+| Roadmap row completion rule (73-77) | **V** — precise and mechanical as written |
+| Step 4 manifest path update (79-88), step 5 dated move (97-103), collision suffix (142) | **X** → Hub code, atomic per §4 |
+| Evidence preservation, "do not represent the archive as a complete reconstruction guarantee" (68-71) | **C** — already present in the seeded charter |
+
+### `aw-spec-reindex.md` (138 lines) — ~100% X, and the reason matters
+
+The skill exists because the manifest could drift from the filesystem. Under §1.11 the Hub owns the
+index and writes the documents, so a hand-move is the §1.3 reconciliation case, not routine repair.
+Its own closing line instructs the agent to run `agentweave spec push` — a command that no longer
+exists. The file is built entirely on the deleted architecture.
+
+| content | → |
+|---|---|
+| Step 7 manifest validation (96-103) — unique safe paths, home resolves, acyclic parents, kind/status compatibility | **V** — transfers straight across |
+| Step 4 "never silently discard a manifest entry you can't explain" (63-73) | already §1.3's policy |
+| Everything else | **X** |
+
+### References (796 lines)
+
+| content | → |
+|---|---|
+| `html-spec-conventions.md` (713) | **R** — the single largest deletion, and pure win. §2.10 |
+| `spec-manifest-conventions.md` (83) | **S** + **V** |
+
+### Accounting
+
+| destination | ~lines |
+|---|---|
+| **R** renderer | ~750 |
+| **X** deleted with the architecture they served | ~640 |
+| **C** charter | ~180 |
+| **S** schema | ~120 |
+| **V** validators | ~90 |
+| **P** procedure floor | ~25 |
+
+Roughly 180 of 1,802 lines survive as prose. Everything else becomes code, or dies with the
+subsystem it addressed.
+
+### Status: the charter harvest has shipped
+
+Commit `2909137` — `hub/hub/data/charters/spec.md`, 88 → 157 lines, done ahead of the change per the
+operator's *"2 - ok"*. The pre-existing charter already carried more than expected (vertical slicing,
+what a passing suite proves, non-goals, testability), so the harvest was targeted: the interview
+stance and ground, sketch guidance, non-obvious rules carrying their reason, producer/consumer
+separation, the epic-versus-slice decision, the reverse-engineered-requirement warning, the
+re-approval rule, and the proposed-versus-observed coverage label.
+
+Verified against the four seeded-charter guards in `hub/tests/test_agent_facing_text.py` (43 passed):
+names no uninstalled `aw-*` skill, cites no removed subsystem, addresses no roster title, defers to
+no principal. Charter API/context/instructions/registration suites: 58 passed.
+
+**Note for whoever implements the rest:** charters are copied into the database per project at seed
+time, so this reaches **new projects only**. The three existing projects keep their own editable
+copies — correct behaviour, but it means verifying the harvest requires a fresh project.
