@@ -4,6 +4,7 @@ import { useCreateProject, useOpenProject, type ProjectSummary } from '@/api/pro
 import { useNativeDialogAvailability, useOpenNativeDialog } from '@/api/nativeDialog'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { Button } from '@/components/ui/button'
+import { joinProjectPath, projectNameProblem } from '@/lib/projectTarget'
 import { DirectoryPicker } from './DirectoryPicker'
 
 export type ProjectManagerMode = 'open' | 'create'
@@ -19,6 +20,8 @@ export function ProjectManagerModal({
 }) {
   const [path, setPath] = useState('')
   const [name, setName] = useState('')
+  // Create mode only: the new folder's name, which is also the project's name.
+  const [projectName, setProjectName] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [nativeDialogNotice, setNativeDialogNotice] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -32,6 +35,7 @@ export function ProjectManagerModal({
     if (mode) {
       setPath('')
       setName('')
+      setProjectName('')
       setPickerOpen(false)
       setNativeDialogNotice(null)
       openProject.reset()
@@ -66,14 +70,38 @@ export function ProjectManagerModal({
 
   useDialogFocus(!!mode, panelRef, onClose)
 
-  const preview = useMemo(() => path.trim() || 'Enter an absolute local directory path', [path])
+  const isCreate = mode === 'create'
+
+  // In create mode the submitted path is composed here, and the preview below is derived
+  // from this same value — never assembled alongside it. A preview that can disagree with
+  // the payload is worse than no preview, because it is trusted.
+  const target = useMemo(
+    () => (isCreate ? joinProjectPath(path, projectName) : path.trim()),
+    [isCreate, path, projectName],
+  )
+  const nameProblem = useMemo(
+    () => (isCreate && projectName.trim() ? projectNameProblem(projectName) : null),
+    [isCreate, projectName],
+  )
+  const preview = useMemo(() => {
+    if (target) return target
+    return isCreate
+      ? 'Choose a folder to create the project in, then name it'
+      : 'Enter an absolute local directory path'
+  }, [target, isCreate])
+
+  const canSubmit = isCreate
+    ? Boolean(path.trim()) && projectNameProblem(projectName) === null
+    : Boolean(path.trim())
+
   if (!mode) return null
 
   const submit = () => {
-    const target = path.trim()
-    if (!target) return
+    if (!canSubmit || !target) return
     mutation.mutate(
-      { path: target, ...(name.trim() ? { name: name.trim() } : {}) },
+      // Create sends no name: the backend already takes the project's name from the folder
+      // it creates, which is exactly the behaviour being made visible here.
+      isCreate ? { path: target } : { path: target, ...(name.trim() ? { name: name.trim() } : {}) },
       { onSuccess: onComplete },
     )
   }
@@ -84,11 +112,11 @@ export function ProjectManagerModal({
       <div ref={panelRef} className="lifted-surface w-[min(520px,calc(100vw-32px))] p-5" style={{ background: 'var(--surface)' }}>
         <h2 id="project-manager-title" className="text-sm font-semibold">{mode === 'create' ? 'Create new project' : 'Open existing project'}</h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-          {mode === 'create' ? 'The target must not already contain project files.' : 'The directory must already exist.'}
+          {isCreate ? 'A new folder is created for the project, so the name must not already be taken.' : 'The directory must already exist.'}
           {' '}The path must be visible to the Hub process — when the Hub runs in Docker, it must lie beneath the configured mounted workspace root.
         </p>
         <label className="mt-4 block text-xs">
-          Directory path
+          {isCreate ? 'Create it in' : 'Directory path'}
           <div className="relative mt-1 flex gap-1.5">
             <input autoFocus value={path} onChange={(event) => setPath(event.target.value)} className="block w-full min-w-0 rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
             {nativeAvailability?.available ? (
@@ -137,11 +165,35 @@ export function ProjectManagerModal({
             {nativeDialogNotice}
           </p>
         )}
+        {isCreate && (
+          <label className="mt-3 block text-xs">
+            Project name
+            <input
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              aria-label="Project name"
+              aria-invalid={nameProblem ? true : undefined}
+              placeholder="my-project"
+              className="mt-1 block w-full rounded px-3 py-2"
+              style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}
+            />
+            <span className="mt-1 block text-[11px]" style={{ color: 'var(--text-3)' }}>
+              This names the new folder and the project.
+            </span>
+          </label>
+        )}
+        {nameProblem && (
+          <p role="alert" className="mt-1 text-[11px]" style={{ color: 'var(--red)' }}>
+            {nameProblem}
+          </p>
+        )}
         <div data-testid="project-path-preview" className="mt-2 truncate rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-2)', color: 'var(--text-3)' }}>{preview}</div>
-        <label className="mt-3 block text-xs">
-          Display name <span style={{ color: 'var(--text-3)' }}>(optional)</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 block w-full rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
-        </label>
+        {!isCreate && (
+          <label className="mt-3 block text-xs">
+            Display name <span style={{ color: 'var(--text-3)' }}>(optional)</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Display name" className="mt-1 block w-full rounded px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }} />
+          </label>
+        )}
         {error && (
           <div role="alert" className="mt-3 rounded px-3 py-2 text-xs" style={{ background: 'var(--error-cont)', color: 'var(--red)' }}>
             {error instanceof ApiError ? error.message : 'The project could not be registered.'}
@@ -149,7 +201,7 @@ export function ProjectManagerModal({
         )}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose}>Cancel</button>
-          <button type="button" onClick={submit} disabled={!path.trim() || mutation.isPending} data-testid="confirm-project-action">
+          <button type="button" onClick={submit} disabled={!canSubmit || mutation.isPending} data-testid="confirm-project-action">
             {mutation.isPending ? 'Workingâ€¦' : mode === 'create' ? 'Create project' : 'Open project'}
           </button>
         </div>
