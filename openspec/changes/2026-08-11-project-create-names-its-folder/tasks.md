@@ -69,8 +69,10 @@ The agent cannot open a host folder dialog or judge whether a form reads as obvi
 
 - [ ] 5.1 Does Browse now give you something you can use without editing it?
 - [ ] 5.2 Is it obvious, before you confirm, where the project will be created?
-- [ ] 5.3 Does removing the separate display name in create mode feel like a loss, or like one fewer
+- [x] 5.3 Does removing the separate display name in create mode feel like a loss, or like one fewer
       thing to answer?
+      **Operator, 2026-08-12: "No i don't. That's okay."** — not a loss. Design D2 holds, and the
+      rename affordance stays a non-goal rather than an owed follow-up.
 
 ## 6. User test guide
 
