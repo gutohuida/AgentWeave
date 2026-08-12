@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -1400,4 +1401,100 @@ class WorkerInvocation(Base):
         ),
         Index("ix_worker_invocations_project_created", "project_id", "created_at"),
         Index("ix_worker_invocations_project_kind", "project_id", "kind"),
+    )
+
+
+# Phase is the document's state, and it is the Hub's to change. It is stored here rather than in
+# the document because the document is a file the operator can edit, and a gate whose value lives
+# where the gated party can write it is not a gate. `aw-spec-status` in the rendered markup is a
+# copy for a human reading the file, never the authority.
+SPEC_PHASES = ("exploring", "proposed", "approved")
+
+SPEC_EVENT_ACTORS = ("operator", "agent", "system")
+SPEC_EVENT_ORIGINS = ("control", "submission", "lifecycle")
+
+
+class SpecDocument(Base):
+    """One specification document's Hub-owned state.
+
+    The file on disk is the document; this row is what cannot live in a file —
+    the phase, the digests that detect an edit made outside the Hub, and the
+    identifier bookkeeping that must survive rewording.
+    """
+
+    __tablename__ = "spec_documents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    path: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, default="change-spec")
+    phase: Mapped[str] = mapped_column(String(32), nullable=False, default="exploring")
+    # The digest of the file as the Hub last wrote it. A file whose digest no longer matches was
+    # edited by someone else, which the Hub reports and never resolves on the operator's behalf.
+    content_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Per-requirement text digests, keyed by minted identifier. Nothing in this change reads them;
+    # they exist so a later change can tell that a requirement's *meaning* moved out from under
+    # evidence accepted against the old wording. Kept in the database rather than the file for the
+    # same reason as `phase`.
+    requirement_digests: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # When the operator declared exploration finished. Null while exploring.
+    explore_closed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "path", name="uq_spec_documents_project_path"),
+        CheckConstraint(
+            "phase IN ('" + "', '".join(SPEC_PHASES) + "')",
+            name="ck_spec_documents_phase",
+        ),
+    )
+
+
+class SpecDocumentEvent(Base):
+    """Append-only history of everything that happened to a document.
+
+    Nothing in this change reads it. It ships now because it **cannot be
+    backfilled**: a telemetry query written later would report on the fraction
+    of work that happened after the query existed, which is worse than no
+    telemetry because it looks complete.
+    """
+
+    __tablename__ = "spec_document_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # What changed: "created", "content", or "phase".
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The agent's name, or how the operator identified themselves. Never accepted from a request
+    # body — it comes from the credential the run was minted with.
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    detail: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "actor_kind IN ('" + "', '".join(SPEC_EVENT_ACTORS) + "')",
+            name="ck_spec_document_events_actor_kind",
+        ),
+        CheckConstraint(
+            "origin IN ('" + "', '".join(SPEC_EVENT_ORIGINS) + "')",
+            name="ck_spec_document_events_origin",
+        ),
+        Index("ix_spec_document_events_document", "document_id", "created_at"),
     )

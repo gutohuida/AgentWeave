@@ -146,45 +146,48 @@ subjects. Establish that, rather than inheriting it from a proposal.
 
 ## 8. Events — forward commitment, nothing here consumes it (D8)
 
-- [ ] 8.1 Append-only event record for every content or phase change: actor, origin (operator control
+- [x] 8.1 Append-only event record for every content or phase change: actor, origin (operator control
       or agent submission), run identifier where one exists, and what changed.
-- [ ] 8.2 Refuse modification or deletion of a recorded event.
-- [ ] 8.3 **Do not build a UI for this.** Changes 4 and 5 read it. It ships now because history
+- [x] 8.2 Refuse modification or deletion of a recorded event.
+- [x] 8.3 **Do not build a UI for this.** Changes 4 and 5 read it. It ships now because history
       cannot be backfilled.
 
 ## 9. Digests — forward commitment, nothing here consumes it (D8)
 
-- [ ] 9.1 Store a content digest on every document write.
-- [ ] 9.2 Store a per-requirement text digest, so change 3 can detect that a requirement's meaning
+- [x] 9.1 Store a content digest on every document write.
+- [x] 9.2 Store a per-requirement text digest, so change 3 can detect that a requirement's meaning
       moved out from under evidence accepted against the old wording.
-- [ ] 9.3 Report divergence between the file and its stored digest. **Do not resolve it** — no
+- [x] 9.3 Report divergence between the file and its stored digest. **Do not resolve it** — no
       overwrite, no merge, no choice made for the operator. §1.3 forbids the Hub silently winning,
       and the resolution interface is change 5.
 
 ## 10. The phase machine (D6, D7, D10)
 
-- [ ] 10.1 Phase field on the document: `exploring`, `proposed`, `approved`.
-- [ ] 10.2 Transitions evaluated Hub-side against entry conditions. A phase stated in a payload
+- [x] 10.1 Phase field on the document: `exploring`, `proposed`, `approved`.
+- [x] 10.2 Transitions evaluated Hub-side against entry conditions. A phase stated in a payload
       changes nothing.
-- [ ] 10.3 `exploring → proposed` requires the payload to validate **and** an operator action
+- [x] 10.3 `exploring → proposed` requires the payload to validate **and** an operator action
       declaring exploration complete (D10 — reopenable; §3.6 does not settle whether "complete
       enough" is mechanically checkable).
-- [ ] 10.4 `proposed → approved` is recorded **only** from an operator action, with actor and time.
-- [ ] 10.5 Transitions are append-only and attributed (feeds section 8).
+- [x] 10.4 `proposed → approved` is recorded **only** from an operator action, with actor and time.
+- [x] 10.5 Transitions are append-only and attributed (feeds section 8).
 - [ ] 10.6 **Assert the negative:** there is no tool argument, payload field, or document content by
       which an agent can approve. This is the property §4 says no skill could have.
 
 ## 11. Blocking validation (D7)
 
-- [ ] 11.1 Refuse `proposed` when a requirement is referenced by no acceptance criterion.
-- [ ] 11.2 Refuse when a requirement is referenced by no task, or a task references no requirement.
+- [x] 11.1 Refuse `proposed` when a requirement is referenced by no acceptance criterion.
+- [x] 11.2 Refuse when a requirement is referenced by no task, or a task references no requirement.
       **Report both directions** — an orphan either way is a real gap.
-- [ ] 11.3 Refuse when a requirement states no modal obligation.
-- [ ] 11.4 Refuse when non-goals are empty.
-- [ ] 11.5 Refuse when an unresolved clarification marker remains.
+- [x] 11.3 Refuse when a requirement states no modal obligation.
+      **Moved to schema validation**, where it is stronger: a missing or unknown modal is now a
+      shape error at every save rather than a completeness finding at the transition, so a
+      requirement without an obligation cannot be stored at all.
+- [x] 11.4 Refuse when non-goals are empty.
+- [x] 11.5 Refuse when an unresolved clarification marker remains.
 - [ ] 11.6 Carry the manifest checks across as validation: unique safe paths, a home that resolves,
       acyclic parents, kind and status compatible.
-- [ ] 11.7 Each refusal names what failed and where. A refusal the author cannot act on produces a
+- [x] 11.7 Each refusal names what failed and where. A refusal the author cannot act on produces a
       retry loop.
 
 ## 12. Context, charter, and the skills (D9)
