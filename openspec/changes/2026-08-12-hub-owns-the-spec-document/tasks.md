@@ -9,20 +9,42 @@ possible** and nothing in this change consumes them. Do not drop them as unused.
 This change's whole diagnosis is that three subsystems were removed by changes that had other
 subjects. Establish that, rather than inheriting it from a proposal.
 
-- [ ] 1.1 Confirm `HttpTransport.push_spec` and `reconcile_specs` still have no callers anywhere in
+- [x] 1.1 Confirm `HttpTransport.push_spec` and `reconcile_specs` still have no callers anywhere in
       `src/`, `hub/`, or the packaged templates. If either is called, deleting the endpoints breaks a
       live path and section 2 is wrong.
-- [ ] 1.2 Confirm `POST /project/specs/sync` is the only writer of `ProjectSpec` rows, and that
+      **Confirmed:** no production caller. The only references outside the definitions are in
+      `tests/test_http_transport.py:607-706` — two test classes covering the two methods, which are
+      deleted with them in 2.2.
+- [x] 1.2 Confirm `POST /project/specs/sync` is the only writer of `ProjectSpec` rows, and that
       nothing else writes `ProjectSpecSnapshot`.
-- [ ] 1.3 Confirm no code writes `.claude/skills/`. The only expected reference is
+      **Confirmed:** `hub/hub/api/v1/spec.py:123` and `:216` are the only construction sites of
+      either model.
+- [x] 1.3 Confirm no code writes `.claude/skills/`. The only expected reference is
       `hub/hub/workspace_paths.py` filtering the composer's `@path` autocomplete client-side, which
       reads a directory the operator populates and installs nothing.
-- [ ] 1.4 Confirm `ProjectWorkspace.resolve_relative` refuses absolute paths, traversal, control
+      **Confirmed:** that comment is the only occurrence in `src/` or `hub/hub/`. Nothing installs a
+      skill.
+- [x] 1.4 Confirm `ProjectWorkspace.resolve_relative` refuses absolute paths, traversal, control
       characters and symlink escapes, and that a configured workspace root still confines a project.
       This is the boundary that replaces the cache's path re-validation (D1).
-- [ ] 1.5 Record the live `project_specs` row count before the migration. Rows exist (3 at the time
+      **Confirmed:** `project_workspace.py:62-71` rejects control characters, absolute paths and
+      `..` parts, then resolves (following symlinks) and checks `_is_within`. Covered by
+      `test_project_workspace.py:135,152,162` and `test_project_scoped_runtime.py:286`.
+      `_require_workspace_containment` (`:104-112`) still confines the Docker path.
+- [x] 1.5 Record the live `project_specs` row count before the migration. Rows exist (3 at the time
       of writing) and the migration destroys them; confirm with the operator that they are the stale
       residue of the deleted watchdog and not content anyone wants.
+      **Finding — the premise was half wrong, and this is why the task existed.** The three rows all
+      belong to `proj-cddb0827` (Testbed) and date from 2026-08-10: `spec/a1-probe.html` (248 B),
+      `spec/changes/queued-message-delivery/spec.html` (**17,941 B**) and
+      `spec/roadmaps/collaboration.html` (9,120 B). Their origin is the deleted watchdog, as
+      expected — **but none of them exists on disk.** That project's working directory
+      (`C:\Users\huida\Documents\agentweave-testbed`) contains only `README.md` and has no `spec/`
+      directory at all, so the cache holds the **only** copy of a substantive spec and a roadmap.
+      All three were exported to `testbed/scratch/rescued-project-specs/` (gitignored) before any
+      further work, so the migration cannot destroy them regardless of what is decided.
+      **Open for the operator:** restore them into the testbed project, keep them as a scratch
+      archive, or discard. See the migration note on 2.3.
 
 ## 2. Delete the push apparatus (D1)
 
@@ -33,6 +55,13 @@ subjects. Establish that, rather than inheriting it from a proposal.
 - [ ] 2.3 Migration dropping `project_specs` and `project_spec_snapshots`. **Guard for a missing
       table**, as `0033`/`0034` do — an upgrade starting from an early revision reaches it with only
       that revision's tables.
+      **Decided against rescuing content inside the migration** (see 1.5). An alembic migration
+      writing files to a path read out of a database row fails badly exactly where it matters — in
+      the container deployment the working directory may not be mounted at upgrade time. The
+      defensible reading is that `project_specs` was always a *cache* of files on disk: in the normal
+      case the disk copy exists and dropping loses nothing, and where it does not, the operator
+      removed the source directory. **This must be stated in the upgrade notes** rather than left for
+      someone to discover: cached content with no file on disk is discarded by this migration.
 - [ ] 2.4 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py`. Check the diff afterwards: a blind replace of the old
       revision string also hits assertion *message* text.
