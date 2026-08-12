@@ -89,16 +89,18 @@ subjects. Establish that, rather than inheriting it from a proposal.
 
 ## 4. The payload contract (D2, D3, D4)
 
-- [ ] 4.1 Define the payload schema. Required at minimum: `schema_version`, document kind, title,
+- [x] 4.1 Define the payload schema. Required at minimum: `schema_version`, document kind, title,
       summary, problem, scope, non-goals, requirements (text plus modal obligation), acceptance
       criteria (given/when/then, each naming its requirement), tasks (each naming at least one
       requirement), algorithms as ordered steps, evidence and coverage limits, open questions.
-- [ ] 4.2 **Do not declare the contract final** (§3.5). Version it, and preserve unrecognised fields
+- [x] 4.2 **Do not declare the contract final** (§3.5). Version it, and preserve unrecognised fields
       across a read/write round trip so a later change can extend it without migrating documents.
-- [ ] 4.3 Refuse a payload with no `schema_version`, naming the missing version rather than a
+- [x] 4.3 Refuse a payload with no `schema_version`, naming the missing version rather than a
       downstream field.
-- [ ] 4.4 Validation refuses with a field path, and writes nothing on failure — no partial document.
-- [ ] 4.5 Derive the schema's field descriptions from the disposition table in §6 of the exploration,
+- [x] 4.4 Validation refuses with a field path. **The write half belongs to section 6** — nothing is
+      written in this section because nothing renders yet; `validate_payload` raises before any
+      caller reaches a write.
+- [x] 4.5 Derive the schema's field descriptions from the disposition table in §6 of the exploration,
       so the guidance a model gets is the guidance the skills carried.
 
 ## 5. The tool (D2, D3)
@@ -126,6 +128,9 @@ subjects. Establish that, rather than inheriting it from a proposal.
 ## 7. Identifiers (D5)
 
 - [ ] 7.1 Mint requirement identifiers Hub-side. Ignore any identifier present in a payload.
+      **Correlation is by `key`, not by position (D5a).** The delta spec originally said position;
+      that was corrected during section 4, because inserting a requirement would renumber every
+      requirement below it and identifiers are what tasks and evidence point at.
 - [ ] 7.2 Preserve an identifier across rewording of its requirement.
 - [ ] 7.3 Never reassign an identifier, including after its requirement is removed. Persist the
       high-water mark rather than deriving the next identifier from the current document.

@@ -69,6 +69,30 @@ so instability here is not a cosmetic problem: it silently re-targets a task or 
 identifier, every historical reference to `FR-4` now points at something else, and the transition log
 that recorded them becomes misleading rather than merely stale.
 
+### D5a — Correlation is by key, and a key is not an identifier
+
+**Corrected during implementation.** This decision originally correlated requirements across
+submissions **by position**, and the delta spec said so. Writing the schema made the defect obvious:
+inserting a requirement at the top renumbers every requirement below it, and identifiers are exactly
+what tasks and evidence point at — so a renumber does not merely look untidy, it silently re-targets
+every link in changes 2 and 3.
+
+**The payload therefore carries a `key` per requirement**: a handle, unique within the document,
+chosen by the agent. The Hub maps key → minted identifier. Rewording keeps the key and so keeps the
+identifier; reordering does too; a new key mints the next never-used identifier.
+
+The obvious objection is that this hands identity back to the agent, which D5 exists to prevent. It
+does not, and the distinction is worth stating precisely: the agent controls **correlation**, the Hub
+controls **identity**. A key is scoped to one document and never appears in a link. An agent cannot
+choose which identifier it gets, cannot reuse a retired one, and cannot make two requirements share
+one.
+
+The residual risk is an agent that reworded a requirement *and* changed its key, which reads as a
+deletion plus an addition. This change retires the old identifier and mints a new one — the
+conservative reading, since treating it as a rename would silently move accepted evidence onto text
+it was never accepted against. Reporting a probable rename for the operator to confirm is change 5's
+territory, alongside the other reconciliation mechanics.
+
 ## D6 — The phase machine owns transitions, and the agent cannot approve
 
 **Decision:** `exploring → proposed → approved` with entry conditions checked by code. Approval is
@@ -168,6 +192,28 @@ unspecify shipped behaviour.
 **The removal ships in this change, not ahead of it.** Removing 19 requirements before their
 replacement exists leaves a window where behaviour is specified nowhere. This is the one place the
 "small verifiable commit first" pattern used for the charter harvest does not apply.
+
+## D12 — The payload travels inside the document it rendered
+
+**Decision:** the rendered document carries its own payload in a
+`<script type="application/agentweave-spec+json" id="aw-spec-payload">` block. Reading a document
+back means parsing that block.
+
+D4 requires unknown fields to survive a round trip, which requires the payload to be *stored* rather
+than merely consumed. The two candidates were a sidecar file next to the document, and the document
+carrying it.
+
+**A sidecar can drift.** Two files, one authority, and a rename or a partial copy separates them —
+which then needs a reconciliation rule for the case where the document and its payload disagree,
+exactly the class of problem D1 removed by deleting the cache.
+
+The block is safe in the sandboxed frame for two independent reasons: the type is not a script type
+any browser executes, and `<` is escaped in the encoded JSON so no content — a title containing
+`</script>`, say — can close the element early and spill the remainder into the document body. Both
+are tested.
+
+**A document with no payload block returns nothing rather than a guess.** It was hand-written, or
+written by a version predating the block. What that means is the caller's decision, not the parser's.
 
 ## Alternatives considered and rejected
 

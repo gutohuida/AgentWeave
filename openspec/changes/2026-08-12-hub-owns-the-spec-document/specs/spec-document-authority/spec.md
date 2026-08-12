@@ -85,20 +85,34 @@ requirements on it.
 The Hub SHALL assign every requirement its identifier. An identifier supplied by an agent MUST NOT be
 used.
 
-An identifier SHALL remain attached to its requirement when the requirement's text is reworded and
-when the document is re-rendered under a different schema version. An identifier that has been used
-MUST NOT be reassigned to a different requirement, including after the original requirement is
-removed.
+A submission SHALL carry a **key** for each requirement: a handle, unique within the document, by
+which the Hub correlates a requirement across submissions. A key MUST NOT be used as an identifier
+and MUST NOT appear in any link.
+
+An identifier SHALL remain attached to the requirement whose key it was minted for, regardless of
+changes to that requirement's text, its position in the document, or the schema version the document
+is rendered under. An identifier that has been used MUST NOT be reassigned to a different
+requirement, including after the requirement it belonged to is removed.
+
+Correlating by position would make inserting a requirement renumber every requirement after it, and
+identifiers are what tasks and evidence point at — a renumber silently re-targets them.
 
 #### Scenario: Rewording a requirement preserves its identifier
 
-- **WHEN** an agent resubmits a document in which one requirement's text has changed and its position
-  is the same
+- **WHEN** an agent resubmits a document in which one requirement's text has changed and its key has
+  not
 - **THEN** that requirement keeps the identifier it already had
+
+#### Scenario: Reordering requirements preserves their identifiers
+
+- **WHEN** an agent resubmits a document with the same keys in a different order, or inserts a new
+  requirement before an existing one
+- **THEN** every previously known key keeps the identifier it already had
+- **AND** only the new key receives a newly minted one
 
 #### Scenario: An agent-supplied identifier is not honoured
 
-- **WHEN** a submitted payload contains an identifier for a new requirement
+- **WHEN** a submitted payload contains an identifier for a requirement
 - **THEN** the Hub assigns its own identifier
 - **AND** the submitted value does not appear as that requirement's identity
 
