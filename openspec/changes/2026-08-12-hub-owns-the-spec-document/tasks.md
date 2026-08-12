@@ -268,6 +268,27 @@ subjects. Establish that, rather than inheriting it from a proposal.
       collection. `npx vitest run` and `npx tsc --noEmit` from `hub/ui`.
 - [x] 16.16 `ruff check hub/ src/`, `black` on every file touched.
 
+## 16b. Found by driving the running Hub
+
+Recorded rather than fixed, because it is a shape question and the operator may want the other
+answer.
+
+- **`propose` returns two different shapes.** An incomplete document comes back `200` with
+  `blocking`; a complete one whose exploration is not closed comes back `409 explore_not_closed`.
+  The cause is ordering: `spec_service.propose` evaluates completeness first and returns before
+  reaching the transition, so the explore-closed gate is only seen once the document is otherwise
+  ready. Arguably right — telling the operator what is missing beats telling them to close a phase
+  they will have to reopen — but a caller has to handle both shapes. The UI does.
+
+**Observed against the live Hub** (`proj-44e9adba`, PID 12992, fresh database at `0065`):
+creating an exploration returns the document in `exploring` with its blocking list; approving
+straight from `exploring` is refused `409 illegal_transition`; a blocked proposal leaves the phase
+at `exploring`; the rendered file carries `<title>`, `aw-spec-status="exploring"` and its
+`aw-spec-payload` block; and the document appears in the tree listing.
+
+**Not observed live:** an agent submission, which needs a real run credential. It is covered by 17
+tests in `test_spec_documents_api.py`, including the three that establish an agent cannot approve.
+
 ## 17. Verification — human-only (the operator runs these)
 
 Nothing below can be closed by an agent. Each needs a person looking at a running app.
