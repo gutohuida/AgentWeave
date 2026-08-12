@@ -197,10 +197,15 @@ describe('declaring an exploration before the first message', () => {
   beforeEach(() => {
     cleanup()
     fetchMock.mockReset()
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ status: 'started', conversation_id: 'conv-fresh' }), {
-        status: 200,
-      }),
+    // A fresh Response per call, not one shared instance: a body can only be read once, and
+    // these tests make two requests. `mockResolvedValue` hands the same Response to both, so the
+    // second `.json()` throws on an already-consumed body.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ status: 'started', conversation_id: 'conv-fresh' }), {
+          status: 200,
+        }),
+      ),
     )
     useConfigStore.setState({
       apiKey: 'aw_live_TESTKEY',
@@ -245,13 +250,22 @@ describe('declaring an exploration before the first message', () => {
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled())
 
-    const documentCall = fetchMock.mock.calls.find(([url]) =>
-      String(url).includes('/project/documents'),
-    )
-    expect(documentCall, 'the document must be created before navigating').toBeTruthy()
-    expect(JSON.parse(String((documentCall![1] as RequestInit).body)).path).toBe(
-      'spec/changes/i-want-to-build-a-budget-app/spec.html',
-    )
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    const documentIndex = urls.findIndex((url) => url.includes('/project/documents'))
+    const triggerIndex = urls.findIndex((url) => url.includes('/agent/trigger'))
+
+    expect(documentIndex, 'the document must be created').toBeGreaterThanOrEqual(0)
+    // Order is the whole point. Creating it after the turn left the FIRST message — the one that
+    // decides how the agent frames the exploration — with no document attached, so the context
+    // carried no phase and no `submit_spec_document`, and the agent invented a workflow.
+    expect(documentIndex, 'the document must exist before the turn').toBeLessThan(triggerIndex)
+    expect(
+      JSON.parse(String((fetchMock.mock.calls[documentIndex][1] as RequestInit).body)).path,
+    ).toBe('spec/changes/i-want-to-build-a-budget-app/spec.html')
+    expect(
+      JSON.parse(String((fetchMock.mock.calls[triggerIndex][1] as RequestInit).body)).spec_document,
+      'the first turn must carry the document',
+    ).toBe('spec/changes/i-want-to-build-a-budget-app/spec.html')
     expect(onStarted).toHaveBeenCalledWith(
       'claude',
       'conv-fresh',

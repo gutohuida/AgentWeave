@@ -64,12 +64,38 @@ export function NewConversationSurface({
   const handleSubmit = async (message: string): Promise<void> => {
     if (!agent) return
     setError(null)
+
+    /* The document is created BEFORE the turn, not after it. Creating it afterwards left the
+     * first message — the one that decides how the agent frames the whole exploration — with no
+     * document attached, so the turn context carried no phase and no `submit_spec_document`, and
+     * the agent reached for a workflow of its own. That was the entire symptom this control was
+     * added to fix, and doing the two in the wrong order reproduced it exactly. */
+    let specDocument: string | null = null
+    if (exploring) {
+      const path = documentPathFor(message)
+      if (path) {
+        try {
+          await postJson(`/api/v1/projects/${projectId}/project/documents`, {
+            path,
+            title: message.trim().slice(0, 120),
+          })
+          specDocument = path
+        } catch {
+          // Already there — an exploration resuming under the same name — or refused. Attach it
+          // either way: a document that exists is still the subject of this turn, and losing the
+          // operator's first message to a failed write would be the worse failure.
+          specDocument = path
+        }
+      }
+    }
+
     const response = await fetch(`/api/v1/projects/${projectId}/agent/trigger`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         agent,
         message,
+        spec_document: specDocument ?? undefined,
         overrides: Object.keys(pendingOverrides).length > 0 ? pendingOverrides : undefined,
       }),
     })
@@ -78,30 +104,9 @@ export function NewConversationSurface({
       throw new Error(`Trigger failed with status ${response.status}`)
     }
     const result = (await response.json()) as { conversation_id: string }
-
-    if (!exploring) {
-      onStarted(agent, result.conversation_id)
-      return
-    }
-
-    // The first message is what the Hub titles the conversation from, so it is also what names
-    // the document. A failure here must not swallow the conversation that was just started —
-    // the operator would have lost their message to a document that could not be created.
-    const path = documentPathFor(message)
-    if (!path) {
-      onStarted(agent, result.conversation_id)
-      return
-    }
-    try {
-      await postJson(`/api/v1/projects/${projectId}/project/documents`, {
-        path,
-        title: message.trim().slice(0, 120),
-      })
-    } catch {
-      // Already there, or refused. Open it anyway: an exploration resuming under the same name
-      // is the common case, and the conversation exists either way.
-    }
-    onStarted(agent, result.conversation_id, path)
+    // Two arguments when there is no document, not a third that happens to be undefined.
+    if (specDocument) onStarted(agent, result.conversation_id, specDocument)
+    else onStarted(agent, result.conversation_id)
   }
 
   return (
