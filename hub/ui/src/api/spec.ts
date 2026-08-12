@@ -6,15 +6,17 @@ import { useSSE } from '@/hooks/useSSE'
 export interface SpecEntry {
   path: string
   updated_at?: string
-  // Additive — present only for documents covered by the active valid
-  // manifest ("filed"); absent for "unindexed" (never reconciled),
-  // "unfiled" (reconciled but no manifest entry), or "stale" documents.
+  // Additive — present only for documents the index covers ("filed"); absent
+  // for "unindexed" (no usable index to be filed against) and "unfiled" (the
+  // index is valid and does not list this document). There is no "stale":
+  // that state meant a cached row no active sync source claimed, and neither
+  // the cache nor the sources exist.
   title?: string
   kind?: 'baseline' | 'system-map' | 'roadmap' | 'change-spec'
   status?: string
   parent?: string | null
   order?: number
-  state?: 'filed' | 'unindexed' | 'unfiled' | 'stale'
+  state?: 'filed' | 'unindexed' | 'unfiled'
 }
 
 export interface SpecDocument {
@@ -23,11 +25,12 @@ export interface SpecDocument {
   updated_at?: string
 }
 
+// `source_id` and `updated_at` are gone with the push model: a source was a
+// machine syncing this project's documents, and there are no longer any. The
+// index is a file the Hub reads, so its state is the only thing to report.
 export interface SpecManifestSummary {
   state: 'valid' | 'absent' | 'unreadable' | 'invalid'
   version: number | null
-  source_id: string
-  updated_at: string
 }
 
 export interface SpecDiagnostic {

@@ -5,27 +5,8 @@ from pathlib import Path
 from typing import Optional
 
 from ..constants import TRANSPORT_CONFIG_FILE
-from ..utils import generate_id, load_json, save_json
+from ..utils import load_json
 from .base import BaseTransport
-
-
-def _ensure_spec_source_id(config: dict, path: Path) -> str:
-    """Return this workspace's stable, non-secret spec-sync source ID.
-
-    Generated once (at `transport setup --type http` or lazily on first use
-    by an existing config) and persisted at `path`, the exact transport.json
-    this config was loaded from — which may be in a parent directory when
-    called from a nested CWD. Contains no credential or machine-identifying
-    path, just a random token the Hub uses to tell apart snapshots from
-    different checkouts of the same project.
-    """
-    source_id = config.get("spec_source_id")
-    if isinstance(source_id, str) and source_id:
-        return source_id
-    source_id = generate_id("spec-src", uuid_length=16)
-    config["spec_source_id"] = source_id
-    save_json(path, config)
-    return source_id
 
 
 def _find_transport_config() -> Optional[tuple]:
@@ -121,7 +102,6 @@ def get_transport() -> BaseTransport:
         url=config.get("url", ""),
         api_key=config.get("api_key", ""),
         project_id=config.get("project_id", ""),
-        source_id=_ensure_spec_source_id(config, config_path),
     )
     # Sync local jobs to Hub on connect
     import contextlib

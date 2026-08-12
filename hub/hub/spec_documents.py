@@ -1,0 +1,334 @@
+"""The specification document tree, read from the project working directory.
+
+This module replaces the ``project_specs`` content cache and the
+``project_spec_snapshots`` reconciliation record. Both existed for one stated
+reason — the Hub could not see a project's files — and that reason is gone:
+``ProjectWorkspace`` resolves a registered project's directory in both
+deployment modes, so the file on disk is the document and there is no second
+copy to reconcile with.
+
+Every path is resolved through ``ProjectWorkspace.resolve_relative``, which
+refuses absolute paths, traversal, control characters and symlink escapes, and
+then validated against ``validate_spec_path``'s repo-relative contract. A path
+that fails either is **excluded and reported** — never silently skipped, because
+a document missing from a list looks identical to a document that was never
+written.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from .project_workspace import ProjectPathError, ProjectWorkspace
+from .spec_manifest import (
+    HTML_HEAD_MAX_BYTES,
+    MANIFEST_MAX_BYTES,
+    Manifest,
+    SpecPathError,
+    compute_intrinsic_conflicts,
+    load_manifest,
+    validate_spec_path,
+)
+
+SPEC_DIR = "spec"
+INDEX_RELATIVE = "spec/index.json"
+
+# A tree far past this is a sign of something other than a specification tree —
+# a vendored directory, a build output. Discovery stops and says so rather than
+# walking an unbounded filesystem on every request.
+MAX_DISCOVERED_DOCUMENTS = 1000
+
+
+@dataclass
+class DocumentTreeState:
+    """What the Hub can say about a project's specification tree right now."""
+
+    specs: List[Dict[str, Any]] = field(default_factory=list)
+    home: Optional[str] = None
+    index: Optional[Dict[str, Any]] = None
+    missing: List[Dict[str, Any]] = field(default_factory=list)
+    diagnostics: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def _diag(code: str, **kwargs: Any) -> Dict[str, Any]:
+    base: Dict[str, Any] = {
+        "code": code,
+        "path": None,
+        "field": None,
+        "expected": None,
+        "actual": None,
+        "source_ids": None,
+    }
+    base.update(kwargs)
+    return base
+
+
+def _mtime_iso(path: Path) -> str:
+    try:
+        stamp = path.stat().st_mtime
+    except OSError:
+        return datetime.now(timezone.utc).isoformat()
+    return datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat()
+
+
+def discover(workspace: ProjectWorkspace) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """Every safe document beneath ``spec/``, plus a diagnostic for each excluded one.
+
+    Nested archives, roadmaps and system maps are documents; discovery is not
+    limited to ``spec/changes/*/spec.html``.
+    """
+    diagnostics: List[Dict[str, Any]] = []
+    try:
+        root = workspace.resolve_relative(SPEC_DIR)
+    except ProjectPathError as exc:  # pragma: no cover - SPEC_DIR is a constant
+        return [], [_diag("unsafe_document_path", path=SPEC_DIR, actual=str(exc))]
+
+    if not root.is_dir():
+        return [], diagnostics
+
+    found: List[str] = []
+    truncated = False
+    for dirpath, dirnames, filenames in os.walk(root):
+        # A hidden directory is not part of the specification tree, and walking
+        # one invites `.git` on a large repository.
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for filename in sorted(filenames):
+            if not filename.lower().endswith(".html"):
+                continue
+            if len(found) >= MAX_DISCOVERED_DOCUMENTS:
+                truncated = True
+                break
+            absolute = Path(dirpath) / filename
+            try:
+                relative = absolute.relative_to(workspace.root).as_posix()
+            except ValueError:  # pragma: no cover - walk stays under root
+                continue
+            try:
+                validate_spec_path(relative)
+                workspace.resolve_relative(relative)
+            except (SpecPathError, ProjectPathError) as exc:
+                diagnostics.append(_diag("unsafe_document_path", path=relative, actual=str(exc)))
+                continue
+            found.append(relative)
+        if truncated:
+            break
+
+    if truncated:
+        diagnostics.append(
+            _diag(
+                "discovery_truncated",
+                expected=MAX_DISCOVERED_DOCUMENTS,
+                actual=f"more than {MAX_DISCOVERED_DOCUMENTS} documents beneath {SPEC_DIR}/",
+            )
+        )
+    return sorted(found), diagnostics
+
+
+def read_document(workspace: ProjectWorkspace, path: str) -> Optional[str]:
+    """A document's content, or ``None`` when there is no such file."""
+    validate_spec_path(path)
+    resolved = workspace.resolve_relative(path)
+    if not resolved.is_file():
+        return None
+    return resolved.read_text(encoding="utf-8")
+
+
+def document_updated_at(workspace: ProjectWorkspace, path: str) -> str:
+    """When the document was last written, as an ISO timestamp."""
+    validate_spec_path(path)
+    return _mtime_iso(workspace.resolve_relative(path))
+
+
+def document_exists(workspace: ProjectWorkspace, path: str) -> bool:
+    try:
+        validate_spec_path(path)
+        return workspace.resolve_relative(path).is_file()
+    except (SpecPathError, ProjectPathError):
+        return False
+
+
+def write_document(workspace: ProjectWorkspace, path: str, content: str) -> Path:
+    """Write a rendered document, creating its parent directories."""
+    validate_spec_path(path)
+    resolved = workspace.resolve_relative(path)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(content, encoding="utf-8")
+    return resolved
+
+
+def read_index(
+    workspace: ProjectWorkspace,
+) -> Tuple[Optional[Manifest], str, List[Dict[str, Any]]]:
+    """The document index, its state, and the diagnostics from parsing it.
+
+    State is one of ``valid``, ``absent``, ``unreadable`` or ``invalid``. An
+    index that cannot be parsed never silences the documents around it — the
+    caller still lists what discovery found.
+    """
+    try:
+        resolved = workspace.resolve_relative(INDEX_RELATIVE)
+    except ProjectPathError as exc:  # pragma: no cover - INDEX_RELATIVE is a constant
+        return None, "unreadable", [_diag("index_unreadable", actual=str(exc))]
+
+    if not resolved.is_file():
+        return None, "absent", []
+
+    try:
+        if resolved.stat().st_size > MANIFEST_MAX_BYTES:
+            return (
+                None,
+                "unreadable",
+                [
+                    _diag(
+                        "index_unreadable",
+                        expected=MANIFEST_MAX_BYTES,
+                        actual="index exceeds the maximum size",
+                    )
+                ],
+            )
+        raw = resolved.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, "unreadable", [_diag("index_unreadable", actual=str(exc))]
+
+    manifest, parse_diagnostics = load_manifest(raw)
+    if manifest is None:
+        return None, "invalid", [d.to_dict() for d in parse_diagnostics]
+    return manifest, "valid", [d.to_dict() for d in parse_diagnostics]
+
+
+def _read_head(workspace: ProjectWorkspace, path: str) -> Optional[str]:
+    try:
+        resolved = workspace.resolve_relative(path)
+    except ProjectPathError:  # pragma: no cover - path already validated
+        return None
+    if not resolved.is_file():
+        return None
+    try:
+        with resolved.open("r", encoding="utf-8", errors="replace") as handle:
+            return handle.read(HTML_HEAD_MAX_BYTES)
+    except OSError:
+        return None
+
+
+def _select_home(
+    manifest: Optional[Manifest], on_disk: List[str]
+) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    """Preserve an explicit home; ask rather than choose when it is ambiguous.
+
+    The previous implementation fell back to ``spec/spec.html`` and then to the
+    first document alphabetically. That is a choice made on the operator's
+    behalf, and it is indistinguishable from a home they set. The shell still
+    resolves a document to display; what it must not do is call the result an
+    editorial decision.
+    """
+    available = set(on_disk)
+
+    if manifest is not None:
+        if manifest.home in available:
+            return manifest.home, []
+        # The index names a home that is not on disk. Substituting another
+        # document would make a broken index look like an editorial decision,
+        # which is the failure this requirement exists to prevent.
+        return None, [_diag("home_missing", path=manifest.home)]
+
+    # No usable index, so `home` was never recorded. A single document is the
+    # only candidate there is; more than one is a choice, and the choice is the
+    # operator's. The shell still resolves something to display — what it must
+    # not do is report that resolution as a home the operator set.
+    if not available:
+        return None, []
+    if len(available) == 1:
+        return on_disk[0], []
+    return None, [_diag("home_ambiguous", actual=", ".join(sorted(available)))]
+
+
+def compute_state(workspace: ProjectWorkspace) -> DocumentTreeState:
+    """The tree as it is on disk, with the index's own state reported alongside."""
+    on_disk, diagnostics = discover(workspace)
+    manifest, index_state, index_diagnostics = read_index(workspace)
+    diagnostics = list(diagnostics) + list(index_diagnostics)
+
+    by_path = manifest.by_path() if manifest is not None else {}
+
+    specs: List[Dict[str, Any]] = []
+    for relative in on_disk:
+        resolved = workspace.resolve_relative(relative)
+        entry: Dict[str, Any] = {"path": relative, "updated_at": _mtime_iso(resolved)}
+        document = by_path.get(relative)
+        if document is not None:
+            entry.update(
+                title=document.title,
+                kind=document.kind,
+                status=document.status,
+                parent=document.parent,
+                order=document.order,
+                state="filed",
+            )
+        elif manifest is None:
+            # There is no usable index to be unfiled from. The document is
+            # available; saying it has drifted would be reporting the index's
+            # absence twice.
+            entry["state"] = "unindexed"
+        else:
+            entry["state"] = "unfiled"
+            diagnostics.append(_diag("unfiled_document", path=relative))
+        specs.append(entry)
+
+    missing: List[Dict[str, Any]] = []
+    if manifest is not None:
+        available = set(on_disk)
+        for document in manifest.documents:
+            if document.path in available:
+                continue
+            # Retained, never discarded: an entry with no file could be a
+            # deliberate deletion, a rename the index missed, or a document
+            # that was never written. The Hub cannot tell them apart, so it
+            # reports rather than decides.
+            missing.append(
+                {
+                    "path": document.path,
+                    "title": document.title,
+                    "kind": document.kind,
+                    "status": document.status,
+                    "parent": document.parent,
+                    "order": document.order,
+                }
+            )
+            diagnostics.append(_diag("missing_document", path=document.path))
+
+        heads: Dict[str, str] = {}
+        for document in manifest.documents:
+            if document.path not in available:
+                continue
+            head = _read_head(workspace, document.path)
+            if head is not None:
+                heads[document.path] = head
+        for conflict in compute_intrinsic_conflicts(manifest, heads):
+            diagnostics.append(conflict.to_dict())
+
+    home, home_diagnostics = _select_home(manifest, on_disk)
+    diagnostics.extend(home_diagnostics)
+
+    def _sort_key(entry: Dict[str, Any]) -> Tuple[int, Any, str]:
+        if entry.get("state") == "filed":
+            return (0, entry["order"], entry["path"])
+        return (1, entry["path"] != "spec/spec.html", entry["path"])
+
+    specs.sort(key=_sort_key)
+
+    index_summary: Dict[str, Any] = {
+        "state": index_state,
+        "version": manifest.version if manifest is not None else None,
+    }
+
+    return DocumentTreeState(
+        specs=specs,
+        home=home,
+        index=index_summary,
+        missing=missing,
+        diagnostics=diagnostics,
+    )

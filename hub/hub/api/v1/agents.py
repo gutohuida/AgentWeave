@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import bound_address, project_workspace, worktrees
+from ... import bound_address, project_workspace, spec_documents, worktrees
 from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
@@ -33,7 +33,6 @@ from ...db.models import (
     Project,
     ProjectInstructions,
     ProjectSession,
-    ProjectSpec,
     Run,
     Runner,
     Task,
@@ -999,21 +998,21 @@ async def _render_hub_agent_context(
     # that?" from the specification workspace means the open document, and without this line the
     # agent has no way to know which one.
     if spec_document:
-        open_spec = (
-            (
-                await db.execute(
-                    select(ProjectSpec).where(
-                        ProjectSpec.project_id == project_id,
-                        ProjectSpec.path == spec_document,
-                    )
-                )
-            )
-            .scalars()
-            .first()
-        )
-        if open_spec is not None:
+        # The document is the file on disk, so its existence is a filesystem question. A project
+        # whose directory is unavailable simply contributes no line here — an unavailable workspace
+        # is reported where the run is triggered, and failing context assembly over it would turn a
+        # missing document into a failed turn.
+        open_spec_path: Optional[str] = None
+        try:
+            workspace = await project_workspace.resolve_project_workspace(db, project_id)
+            if spec_documents.document_exists(workspace, spec_document):
+                open_spec_path = spec_document
+        except (project_workspace.ProjectWorkspaceError, OSError):
+            open_spec_path = None
+
+        if open_spec_path is not None:
             lines.append("### Open specification document")
-            lines.append(f"- The operator is viewing `{open_spec.path}` in the Hub's Spec view.")
+            lines.append(f"- The operator is viewing `{open_spec_path}` in the Hub's Spec view.")
             lines.append(
                 "- This is where they are looking right now. Treat it as context for what they "
                 "ask, not as an instruction to act on it."

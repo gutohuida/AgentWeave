@@ -48,11 +48,11 @@ subjects. Establish that, rather than inheriting it from a proposal.
 
 ## 2. Delete the push apparatus (D1)
 
-- [ ] 2.1 Remove `POST /project/specs/sync` and `POST /project/specs/reconcile` from
+- [x] 2.1 Remove `POST /project/specs/sync` and `POST /project/specs/reconcile` from
       `hub/hub/api/v1/spec.py`, with the drift computation, the source TTL, and the snapshot
       handling.
-- [ ] 2.2 Delete `HttpTransport.push_spec` and `HttpTransport.reconcile_specs`.
-- [ ] 2.3 Migration dropping `project_specs` and `project_spec_snapshots`. **Guard for a missing
+- [x] 2.2 Delete `HttpTransport.push_spec` and `HttpTransport.reconcile_specs`.
+- [x] 2.3 Migration dropping `project_specs` and `project_spec_snapshots`. **Guard for a missing
       table**, as `0033`/`0034` do — an upgrade starting from an early revision reaches it with only
       that revision's tables.
       **Decided against rescuing content inside the migration** (see 1.5). An alembic migration
@@ -62,23 +62,23 @@ subjects. Establish that, rather than inheriting it from a proposal.
       case the disk copy exists and dropping loses nothing, and where it does not, the operator
       removed the source directory. **This must be stated in the upgrade notes** rather than left for
       someone to discover: cached content with no file on disk is discarded by this migration.
-- [ ] 2.4 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
+- [x] 2.4 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py`. Check the diff afterwards: a blind replace of the old
       revision string also hits assertion *message* text.
-- [ ] 2.5 Keep `validate_spec_path` and manifest parsing in both `spec_manifest` modules; remove only
+- [x] 2.5 Keep `validate_spec_path` and manifest parsing in both `spec_manifest` modules; remove only
       the snapshot and drift half. Reading from disk still needs path validation.
 
 ## 3. The document store (D1)
 
-- [ ] 3.1 A store that reads and writes documents beneath the project working directory, resolving
+- [x] 3.1 A store that reads and writes documents beneath the project working directory, resolving
       every path through `ProjectWorkspace.resolve_relative`.
-- [ ] 3.2 Discovery that walks the specification tree, including nested directories, and reports
+- [x] 3.2 Discovery that walks the specification tree, including nested directories, and reports
       rather than silently skips a path that fails validation.
 - [ ] 3.3 Index read/write owned by the Hub, written in the same operation as the document it
       describes.
-- [ ] 3.4 Index degradation: when the index is absent, unreadable or invalid, still list discovered
+- [x] 3.4 Index degradation: when the index is absent, unreadable or invalid, still list discovered
       documents and report the index's state. Retain an entry that cannot be explained.
-- [ ] 3.5 Home-document selection: preserve an existing choice, record the single candidate when
+- [x] 3.5 Home-document selection: preserve an existing choice, record the single candidate when
       there is exactly one and none is recorded, ask when there are none or several.
 
 ## 4. The payload contract (D2, D3, D4)

@@ -26,13 +26,15 @@ async def _register(app, auth_headers, name):
     assert response.status_code == 200, response.text
 
 
-async def _sync_spec(app, auth_headers, path=SPEC_PATH, content=SPEC_HTML):
-    response = await app.post(
-        "/api/v1/projects/proj-test/project/specs/sync",
-        json={"path": path, "content": content},
-        headers=auth_headers,
-    )
-    assert response.status_code == 200, response.text
+def _write_spec(tmp_path, path=SPEC_PATH, content=SPEC_HTML):
+    """A document is a file. There is no sync endpoint to write one through.
+
+    The autouse `_default_project_workspace` fixture roots every project at the
+    test's own `tmp_path`, so writing there is what the Hub will read.
+    """
+    target = tmp_path / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
 
 
 async def _render(agent_name, spec_document):
@@ -59,9 +61,9 @@ async def _render(agent_name, spec_document):
 
 
 @pytest.mark.asyncio
-async def test_context_names_the_open_document(app, auth_headers):
+async def test_context_names_the_open_document(app, auth_headers, tmp_path):
     await _register(app, auth_headers, "speccer")
-    await _sync_spec(app, auth_headers)
+    _write_spec(tmp_path)
 
     context = await _render("speccer", SPEC_PATH)
 
@@ -73,9 +75,9 @@ async def test_context_names_the_open_document(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_context_names_no_document_when_none_is_open(app, auth_headers):
+async def test_context_names_no_document_when_none_is_open(app, auth_headers, tmp_path):
     await _register(app, auth_headers, "speccer")
-    await _sync_spec(app, auth_headers)
+    _write_spec(tmp_path)
 
     context = await _render("speccer", None)
 
@@ -84,10 +86,10 @@ async def test_context_names_no_document_when_none_is_open(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_context_omits_a_document_this_project_does_not_have(app, auth_headers):
+async def test_context_omits_a_document_this_project_does_not_have(app, auth_headers, tmp_path):
     """A stale client path is not a document the operator can be looking at."""
     await _register(app, auth_headers, "speccer")
-    await _sync_spec(app, auth_headers)
+    _write_spec(tmp_path)
 
     context = await _render("speccer", "spec/deleted-yesterday.html")
 
@@ -96,7 +98,7 @@ async def test_context_omits_a_document_this_project_does_not_have(app, auth_hea
 
 
 @pytest.mark.asyncio
-async def test_both_runners_are_told_the_same_thing(app, auth_headers, bind_runner):
+async def test_both_runners_are_told_the_same_thing(app, auth_headers, bind_runner, tmp_path):
     """The document reaches the agent through the canonical context file, which both
     runners consume — so there is nothing runner-specific to get right, and this asserts
     that rather than assuming it."""
@@ -104,7 +106,7 @@ async def test_both_runners_are_told_the_same_thing(app, auth_headers, bind_runn
     await _register(app, auth_headers, "codex-side")
     await bind_runner("claude-side", cli="claude")
     await bind_runner("codex-side", cli="codex")
-    await _sync_spec(app, auth_headers)
+    _write_spec(tmp_path)
 
     claude_context = await _render("claude-side", SPEC_PATH)
     codex_context = await _render("codex-side", SPEC_PATH)
@@ -121,13 +123,13 @@ async def test_both_runners_are_told_the_same_thing(app, auth_headers, bind_runn
 
 @pytest.mark.asyncio
 async def test_trigger_stores_the_document_on_the_queued_entry_not_in_the_message(
-    app, auth_headers, bind_runner
+    app, auth_headers, bind_runner, tmp_path
 ):
     """The message is the durable record of what the operator said. Re-reading the
     conversation must not show them saying something they did not."""
     await _register(app, auth_headers, "speccer")
     await bind_runner("speccer", cli="claude")
-    await _sync_spec(app, auth_headers)
+    _write_spec(tmp_path)
 
     response = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",

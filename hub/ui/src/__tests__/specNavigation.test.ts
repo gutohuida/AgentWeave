@@ -82,26 +82,24 @@ describe('spec navigation — current library projection (FR-1)', () => {
     ])
   })
 
-  it('keeps unindexed, unfiled, and stale documents visible under Needs attention', () => {
+  it('keeps unindexed and unfiled documents visible under Needs attention', () => {
     const inv = buildInventory(
       response({
         specs: [
           filed('spec/agentweave-spec.html', { title: 'Baseline', kind: 'baseline' }),
           { path: 'spec/scratch.html', state: 'unindexed' as const },
           { path: 'spec/orphan.html', state: 'unfiled' as const },
-          { path: 'spec/old.html', state: 'stale' as const },
         ],
       })
     )
 
     expect(inv.library.map((n) => n.node.path)).toEqual(['spec/agentweave-spec.html'])
     expect(inv.needsAttention.map((n) => n.path).sort()).toEqual([
-      'spec/old.html',
       'spec/orphan.html',
       'spec/scratch.html',
     ])
     // visible, not dropped
-    expect(inv.nodes).toHaveLength(4)
+    expect(inv.nodes).toHaveLength(3)
   })
 
   it('treats a filed node whose parent is absent as parent-orphaned, not a root', () => {

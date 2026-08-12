@@ -106,17 +106,12 @@ class HttpTransport(BaseTransport):
         project_id: str,
         max_attempts: int = HUB_MAX_ATTEMPTS,
         initial_backoff: float = HUB_INITIAL_BACKOFF,
-        source_id: Optional[str] = None,
     ):
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.project_id = project_id
         self.max_attempts = max_attempts
         self.initial_backoff = initial_backoff
-        # Stable, non-secret identifier for this workspace's spec sync source.
-        # Used by reconcile_specs to let the Hub tell apart snapshots from
-        # different machines/checkouts of the same project.
-        self.source_id = source_id
 
     # ------------------------------------------------------------------
     # Internal helper
@@ -551,61 +546,6 @@ class HttpTransport(BaseTransport):
                 },
             )
             return False
-
-    def push_spec(self, path: str, content: str) -> bool:
-        """POST /api/v1/project/specs/sync — push a spec HTML file to the Hub.
-
-        Called at watchdog startup and whenever a spec file changes, plus
-        manually via `agentweave spec push`. `path` is the repo-relative
-        path (e.g. "spec/spec.html") the Hub uses to upsert the spec.
-        """
-        try:
-            self._request("POST", "/project/specs/sync", {"path": path, "content": content})
-            return True
-        except RuntimeError as exc:
-            logger.warning(
-                "push_spec failed: %s",
-                str(exc),
-                extra={
-                    "event": "transport_error",
-                    "data": _transport_error_data("push_spec", exc),
-                },
-            )
-            return False
-
-    def reconcile_specs(
-        self,
-        manifest_text: Optional[str],
-        manifest_state: str,
-        discovered_paths: List[str],
-        prune: bool = False,
-    ) -> Optional[Dict[str, Any]]:
-        """POST /api/v1/project/specs/reconcile — submit a complete source snapshot.
-
-        `manifest_state` is one of "valid", "absent", "unreadable", "invalid".
-        Returns the Hub's diagnostics payload, or None on failure (the caller
-        must not treat that as "no drift" — it means the snapshot was not
-        recorded and reconciliation should be retried).
-        """
-        try:
-            body: Dict[str, Any] = {
-                "source_id": self.source_id,
-                "manifest_state": manifest_state,
-                "discovered_paths": discovered_paths,
-                "prune": prune,
-            }
-            if manifest_text is not None:
-                body["manifest_text"] = manifest_text
-            return self._request("POST", "/project/specs/reconcile", body)
-        except RuntimeError as exc:
-            logger.warning(
-                "transport_error",
-                extra={
-                    "event": "transport_error",
-                    "data": _transport_error_data("reconcile_specs", exc),
-                },
-            )
-            return None
 
     def is_agent_registered(self, agent: str) -> bool:
         """Check whether an agent exists in the Hub (configured or self-registered)."""
