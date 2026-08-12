@@ -1444,6 +1444,43 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Ready to propose, and
 > independent of the conversation slice. Do not implement from this list.
 
+> **Update (2026-08-12) — reconciliation pass, PARTIAL. This phase is NOT fully closed.** Unlike
+> phases 9–12, this one had no closure note, so each item was checked against the tree rather than
+> assumed from the successors' names. Three items are genuinely unbuilt and one is half-built; they
+> would have been buried by a wholesale "closed by successor" note.
+>
+> **Verified shipped** — `runner-agent-charter-separation` and `single-runtime`, plus
+> `2026-08-11-charter-set-reshape` (archived today):
+> - 13.1 — `Runner` exists (`hub/hub/db/models.py:231`), project-scoped and reusable.
+> - 13.3 *(partly)* — `Charter` exists (`models.py:264`) as an editable markdown contract.
+> - 13.8 — the live roster is injected at turn start (`hub/hub/api/v1/agents.py:1023`, `### Team`).
+> - 13.10 — `request_agent` exists (`hub/hub/mcp_server.py:481`) with `Project.agent_budget`.
+> - 13.12 — `roles.py`, `templates/roles/` and `VALID_ROLE_IDS` are gone; the 21 guides became
+>   charters and were then re-shaped to 9 by today's B0.
+> - 13.13 — stronger than asked: `init` does not exist at all. `cli.py` has five commands
+>   (`status`, `doctor`, `stop`, `hub_start`, `reset`), so there is no ceremony left to fix.
+>
+> **Verified NOT done — these are real, and stay open:**
+> - **13.2's uniqueness half.** `Index("ix_agents_project_name", "project_id", "name")`
+>   (`models.py:223`) and migration `0004` both omit `unique=True`; `PRAGMA index_list('agents')` on
+>   the live database reports `unique=0`. The identity half of 13.2 shipped; the constraint did not.
+> - **13.4 scope enforcement.** No agent or charter scope field exists; every `scope` hit in the Hub
+>   is the unrelated "project-scoped" phrasing. Nothing reports work as out-of-scope, so nothing
+>   enforces it. A charter *saying* an agent should stay in scope is not the runtime enforcing it —
+>   which is the same distinction B0 was about.
+> - **13.9 single-agent omission.** `agents.py:1023-1039` always emits a `### Team` block, falling
+>   back to "No other agents are registered in this project yet." The requirement is to omit the
+>   roster and all collaboration instruction *entirely* in a single-agent project. Emitting a Team
+>   section that says the team is empty is the opposite of that.
+> - **13.3's remainder.** The shipped `Charter` is name + content; the "scope, default skills" and
+>   "empty charter means full project scope" structure was not built.
+> - **13.11 inspectable effective composition.** No composition-inspection surface exists; the
+>   `effective_*` symbols in `agents.py` are heartbeat status, unrelated to behaviour resolution.
+>
+> **Not assessed** — 13.5 (skills invocable by any agent), 13.6 (add-agent journey), 13.7 (templates
+> and instantiation), 13.14 (verify against `agent-identity-and-skills`). Recorded as unknown rather
+> than assumed either way.
+
 - [ ] 13.1 Introduce the runner record — CLI, model, environment — reusable across projects and
       independent of agent identity.
 - [ ] 13.2 Reduce the agent record to identity: name, runner reference, working directory, colour,
@@ -1526,6 +1563,25 @@ being built twice.*
 > `openspec/changes/2026-08-02-agent-conversation-workspace/design.md`. Do not implement from this
 > list.
 
+> **Update (2026-08-12) — reconciliation pass. Still open, and worth saying why it only looks
+> closed.** A conversation-embedded approval surface *does* now exist and is verified:
+> `PermissionRequestCard.tsx`, `AgentQuestionCard.tsx` and `UnaskedQuestionCard.tsx`, closed by
+> `archive/2026-08-06-agent-permissions-tool-schemas-and-base-knowledge` and
+> `archive/2026-08-11-permission-request-expiry`. It is easy to read that as closing this phase. It
+> does not.
+>
+> Those cards gate **tool calls and questions** — "may I run this command", "answer this". 15.1's
+> subject is **task-lifecycle and specification-gate decisions**, which is a different set of
+> decisions reaching the operator through the same kind of surface. Task transitions today live on
+> `TasksBoard.tsx`, not inline in the composer.
+>
+> - 15.1 — **open.** The pattern exists; these decisions are not routed through it.
+> - 15.2 — **half-blocked.** Its task-lifecycle half is now possible, since
+>   `archive/2026-08-10-task-transition-machine` shipped the transitions and
+>   `task-lifecycle-governance` is a spec. Its "requirement evidence acceptance" half depends on
+>   phase 14, which is unbuilt, so 15.2 cannot fully close before 14 is decided.
+> - 15.3 — open; `spec-traceability` does not exist as a spec.
+
 - [ ] 15.1 Surface pending task-lifecycle and specification-gate decisions as an inline approval
       panel in the composer, actionable without leaving the conversation.
 - [ ] 15.2 Connect approval actions to the existing task lifecycle transitions and to requirement
@@ -1566,6 +1622,31 @@ being built twice.*
 > authoritative `charter-management` spec. It also removed the legacy fixed-role runtime while
 > preserving the starter documents as editable charters. Other unsynced umbrella deltas remain,
 > so umbrella task 16.2 remains open.
+
+> **Update (2026-08-12) — reconciliation pass. 16.2 is the concrete blocker to archiving this
+> umbrella, and it is a mapping exercise, not a copy.** Checked each of the ten delta specs under
+> this change's `specs/` against `openspec/specs/` by name:
+>
+> - **Present under the same name (2):** `agent-composer`, `agent-tool-surface`.
+> - **Absent under that name (8):** `agent-conversation-timeline`, `agent-identity-and-skills`,
+>   `agent-inbound-queue`, `hub-interface-feel`, `hub-native-runtime`, `hub-visual-language`,
+>   `spec-authoring`, `spec-traceability`.
+>
+> **Absence by name is not evidence of being unsynced, and must not be treated as such.** The
+> successors renamed capabilities as they re-cut them — `openspec/specs/` now holds
+> `agent-conversation-workspace`, `hub-workspace-shell`, `hub-interaction-feedback`, `trace-timeline`,
+> `app-lifecycle`, `conversation-lifecycle`, `agent-charter`, `runner-registry` and others that did
+> not exist when these deltas were written. Several of the eight have plausibly landed under those
+> names in whole or in part.
+>
+> So closing 16.2 requires deciding, per delta spec and per requirement, whether its content lives
+> somewhere in the current 31 — not re-running a sync. Two of the eight are known-unbuilt rather than
+> renamed: `spec-authoring` and `spec-traceability` are phase 14, which has never been implemented.
+>
+> **Recommended order before this umbrella can be archived:** settle phase 14's open design question
+> (one home for requirement identifiers, evidence, and proposals — the note on phase 14 states it),
+> then do the 16.2 requirement-level mapping, then 16.1. Phase 13's four verified gaps and phase 15
+> are independent of that and can be picked up separately.
 
 - [ ] 16.1 Confirm every scenario in the ten delta specs is exercised.
 - [ ] 16.2 Sync delta specs into `openspec/specs/`; reconcile `agent-stream-events`,
