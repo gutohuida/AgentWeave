@@ -43,8 +43,14 @@ subjects. Establish that, rather than inheriting it from a proposal.
       directory at all, so the cache holds the **only** copy of a substantive spec and a roadmap.
       All three were exported to `testbed/scratch/rescued-project-specs/` (gitignored) before any
       further work, so the migration cannot destroy them regardless of what is decided.
-      **Open for the operator:** restore them into the testbed project, keep them as a scratch
-      archive, or discard. See the migration note on 2.3.
+      **Resolved by the operator:** *"you can drop the testbed project and reset everything. Create
+      new test project. you can delete the folder where the testbed also existed in"* — discarded.
+      The rescued copies were left in place under `testbed/scratch/` at no cost; nothing depends on
+      them. The database was renamed to `hub/data/agentweave.db.old-20260812-172717` rather than
+      deleted, so the decision stays reversible.
+      **Consequence for 2.3:** the live database is now a *fresh* one created at head `0064`, so the
+      `0063 → 0064` upgrade path is exercised only by `test_migrations.py`, never against real data.
+      That is the normal state for a migration, but worth knowing it was not observed here.
 
 ## 2. Delete the push apparatus (D1)
 
@@ -233,6 +239,17 @@ subjects. Establish that, rather than inheriting it from a proposal.
 ## 17. Verification — human-only (the operator runs these)
 
 Nothing below can be closed by an agent. Each needs a person looking at a running app.
+
+**Environment as of 2026-08-12:** the old `Testbed` project and its directory were deleted and the
+database reset. The live project is **`proj-44e9adba` / `aw-testbed`** at
+`C:\Users\huida\Documents\aw-testbed`, on a fresh database at head `0064` with the 9-charter seed —
+so its `Spec Author` charter is the harvested one from `2909137` (8,203 bytes), which is what 17.3
+needs.
+
+**Already observed against the running Hub** (sections 2 and 3 only): documents on disk are listed
+and read; an edit made outside the Hub is visible on the next read with no cache to invalidate; a
+traversal path is refused with 400 and a message naming the rule; `POST /project/specs/sync` is gone
+(405). None of this covers the questions below, which are about how the flow *feels*.
 
 - [ ] 17.1 **Does the authoring flow feel like authoring?** Create a document, be interviewed, watch
       it appear. This is the question the whole change exists to answer and no test covers it.
