@@ -137,6 +137,33 @@ async def get_queue_status(
             reason = "token budget exhausted"
         else:
             config = await get_agent_config(project_id, agent, session)
+            # The bound Runner record is the sole source of which CLI to launch, exactly as
+            # in `agent_trigger` and the agent roster. Probing without it fell through to
+            # `RUNNER_CLI["native"] is None`, whose fallback is the **agent's own name** —
+            # so an agent called `codex-spec` bound to the `codex` runner was reported as
+            # "Runner CLI 'codex-spec' was not found in PATH". The agent was launchable; the
+            # status said otherwise, and the message masked the real reason a turn had not
+            # started.
+            from ...db.models import Agent, Runner
+
+            agent_row = (
+                (
+                    await session.execute(
+                        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            runner_row = (
+                await session.get(Runner, agent_row.runner_id)
+                if agent_row is not None and agent_row.runner_id
+                else None
+            )
+            if runner_row is not None:
+                config["runner"] = runner_row.cli
+                config["model"] = runner_row.model
+
             probe = probe_agent(agent, config)
             if not probe["runnable"]:
                 reason = probe["reason"] or "agent is not launchable"

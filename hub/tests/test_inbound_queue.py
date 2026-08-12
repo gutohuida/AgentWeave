@@ -388,3 +388,38 @@ async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers,
     assert run_ids[0] == run_ids[1]
     assert run_ids[2] != run_ids[1]
     assert spawn.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_queue_status_probes_the_bound_runner_not_the_agent_name(
+    app, auth_headers, bind_runner
+):
+    """The reported reason must come from the runner the agent is bound to.
+
+    Probing without the Runner overlay falls through to `RUNNER_CLI["native"] is
+    None`, whose fallback is the agent's own name — so an agent called
+    `codex-spec` bound to the `codex` runner was reported as
+    "Runner CLI 'codex-spec' was not found in PATH". It was launchable. The
+    false reason masked the real one, which was that its project had no git
+    repository for an isolated worktree.
+    """
+    # The agent row must exist before a runner can be bound to it.
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"codex-spec": {}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("codex-spec", cli="codex")
+
+    await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": "codex-spec", "message": "hello"},
+        headers=auth_headers,
+    )
+
+    status = await app.get(
+        "/api/v1/projects/proj-test/queue/codex-spec/status", headers=auth_headers
+    )
+
+    assert status.status_code == 200
+    assert "codex-spec' was not found" not in (status.json().get("waiting_reason") or "")
