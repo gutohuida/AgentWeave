@@ -184,6 +184,40 @@ agent of either runner** — deleting the files is fine, losing what they encode
 disposition must be **auditable**, so that "did we drop something?" is answerable by reading a table
 rather than by diffing a deleted directory. See §6.
 
+### 1.13 The two superseded capabilities are removed, not rewritten
+
+*"I feel like remove."*
+
+`aw-spec-workflow` (10 requirements) and `spec-manifest-sync` (9) are removed from
+`openspec/specs/`; `spec-chat-session` (5) survives and is extended.
+
+The reasoning, agreed in conversation: a capability spec describes current behaviour, and after this
+change no code implements those 19 requirements — a spec still named `aw-spec-workflow` but
+describing a phase machine would be a document whose name misstates its own subject. Rewriting in
+place would also read as evolution when this is replacement. The paper-trail argument for rewriting
+was withdrawn: `changes/archive/` and git preserve the trail either way.
+
+The decisive evidence is behavioural. `aw-spec-workflow`'s spec-role requirement was rewritten in the
+**previous session**, during the charter reshape, to stop routing agents to mechanisms a project
+lacks. That is a capability being patched to survive a product that moved out from under it.
+
+**Removal is not forgetting.** Four of `spec-manifest-sync`'s requirements describe a *document tree*
+rather than syncing, and any owner needs them. They carry forward into the new capability as
+requirements:
+
+- spec discovery covers every safe document
+- home-document selection is explicit and resilient
+- an invalid or absent index degrades visibly rather than silently
+- state changes refresh subscribers (the SSE broadcast survives outright)
+
+`aw-spec-workflow` is a clean kill — its subject is a delivery mechanism that cannot reach a Codex
+agent, and two of its ten requirements describe technical exploration, dropped under §1.12.
+
+**Sequencing constraint:** the removal lands in the **same change** as the new capability, never
+ahead of it. Otherwise there is a window in which shipped behaviour is specified nowhere. This is the
+one place where the "small verifiable commit first" pattern used for the charter harvest does not
+apply.
+
 ---
 
 ## 2. Proposed and agreed
@@ -466,10 +500,10 @@ does not need preserving as text when it can be preserved as a constraint.**
    So the proposal is not "add spec↔Hub integration"; it is **replace two capabilities and extend a
    third**, which changes the shape of the change document and makes most deltas removals.
 
-   **Open specifically: removed as superseded, or rewritten in place?** The agent recommends removal,
-   since almost nothing survives rewording. **The operator has not answered this** — it was asked,
-   and the conversation moved to the skills question before it was returned to. Do not read
-   §1.11's *"Yes, this is good"* as covering it.
+   **RESOLVED — see §1.13.** Removed, not rewritten, with four of `spec-manifest-sync`'s
+   requirements carried forward into the new capability. Recorded here rather than deleted so that
+   the question, and the fact that it was answered separately from §1.11's *"Yes, this is good"*,
+   both stay visible.
 8. **Where the disposition table in §6 is enforced.** The table records intent. Nothing yet checks
    that a destination was actually built — e.g. that the orphan validator of §2.11 exists. A test
    asserting each `V` row has a validator would make the harvest verifiable rather than asserted.
@@ -626,3 +660,51 @@ no principal. Charter API/context/instructions/registration suites: 58 passed.
 **Note for whoever implements the rest:** charters are copied into the database per project at seed
 time, so this reaches **new projects only**. The three existing projects keep their own editable
 copies — correct behaviour, but it means verifying the harvest requires a fresh project.
+
+---
+
+## 7. The program, and what change 1 must not foreclose
+
+This design is four or five changes, not one. The order is a dependency order, not a ranking:
+evidence links, task links, and gates all point *at requirement IDs*, and those do not exist until
+the Hub mints them.
+
+### The sequence
+
+| # | one demonstrable outcome | in | deferred to | depends on |
+|---|---|---|---|---|
+| **1** | **You can author and approve a specification document in the Hub** | documents on disk; JSON in, HTML out; Hub-minted requirement IDs; `exploring → proposed → approved` enforced in code; the procedure floor; two capabilities removed, one added | everything below | — |
+| **2** | **An approved specification becomes tasks on the board** | §1.4; the requirement→task link — the one missing row in §5 | assignment policy beyond an operator control | 1 |
+| **3** | **Work links to requirements, and the gate is arithmetic** | §2.3 relevance-at-the-link; §2.4 rigor levels; §2.5 independence as a code check; evidence records | rejection vocabulary | 1, 2 |
+| **4** | **You can see why work was rejected and how reviewers perform** | §1.6; §3.2 categories; §3.3 overturn rate and cost | — | 3 |
+| **5** | **A hand-edit asks you which version to keep** | §1.3 mechanics; §3.1 | — | 1 (the digest) |
+
+Each row is a vertical capability with an outcome the operator could watch working — not a layer.
+That is the slicing rule this document's own §6 carries into the charter, applied to itself.
+
+**Why 3–5 are not written now.** Their requirements depend on what using change 1 teaches: what the
+rejection categories actually need to be, whether relevance-at-the-link is workable in practice, what
+a hand-edit conflict looks like when it happens to a real document. Writing them today means
+guessing, and a guess written in the voice of a requirement is indistinguishable from a decision —
+the exact failure this document was restructured to prevent.
+
+### The five forward commitments — requirements *in change 1*
+
+The risk of a sequenced program is not forgetting the design; it is **foreclosing** it. These five are
+load-bearing for later changes, cannot be reconstructed retroactively, and must therefore ship in
+change 1 even though nothing in change 1 consumes them:
+
+1. **Requirement IDs are stable** across schema versions and across rewording of the requirement
+   text. Changes 2 and 3 both point at them; this is what umbrella task 14.1 exists for.
+2. **The payload is versioned, and unknown fields survive a read/write round trip.** This is what
+   lets change 3 add gate fields to documents authored before gates existed, and it is how §3.5's
+   "do not freeze the contract" is satisfied without deferring change 1.
+3. **The document digest is stored from the first write**, though nothing consumes it until change 5.
+   §2.8.
+4. **Every edit is recorded as an event** — actor, origin, run ID where one exists, and what changed.
+   Changes 4 and 5 both read this history and **it cannot be backfilled**. §1.3.
+5. **State transitions are append-only with actor attribution.** Change 4's telemetry has no other
+   source.
+
+A later change that finds one of these missing does not merely cost more work — it costs a migration
+of every document already authored.
