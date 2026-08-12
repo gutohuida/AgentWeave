@@ -98,11 +98,17 @@ restatement of a coded rule. Escalation resolves to the operator via `ask_user`.
 
 ## 7. Verification — human-only (the operator runs these)
 
-- [ ] 7.1 Does nine charters read as a set you would pick from, or as a set with something missing?
-- [ ] 7.2 Does `developer` with an empty scope line read as incomplete, or as inviting?
-- [ ] 7.3 Do the two underwriting charters make the point they are there to make, or read as noise in
+Closed on the operator's attestation of 2026-08-12, after they created a fresh project, read the
+nine charters through the read view shipped by `2026-08-11-charter-read-view`, and answered:
+**"No. That's enough."** — 7.4 answered No, nothing they used is among the fifteen removed.
+Recorded as their attestation, not as a fresh run: the agent cannot judge whether a set reads as
+one worth picking from, and did not.
+
+- [x] 7.1 Does nine charters read as a set you would pick from, or as a set with something missing?
+- [x] 7.2 Does `developer` with an empty scope line read as incomplete, or as inviting?
+- [x] 7.3 Do the two underwriting charters make the point they are there to make, or read as noise in
       a software tool?
-- [ ] 7.4 Is anything you actually used among the fifteen removed?
+- [x] 7.4 Is anything you actually used among the fifteen removed?
 
 ## 8. User test guide
 
