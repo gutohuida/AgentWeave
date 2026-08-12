@@ -208,10 +208,16 @@ subjects. Establish that, rather than inheriting it from a proposal.
       assuming; use `ask_user` for anything that changes scope; ground claims in the codebase; you
       cannot propose until the operator says exploration is complete.
 - [ ] 12.3 A spec-phase run binds the spec charter by default unless the operator overrides.
-      **Not done.** Binding is an operator action on the roster today, and auto-binding a charter
-      to a run touches agent configuration rather than the spec surface. The procedure floor in
-      12.2 is what makes this optional rather than required, so nothing is blocked — but the
-      seeded charter still has to be bound by hand for the interviewing craft to load.
+      **Deliberately not done, and D9 should be amended rather than implemented as written.**
+      The obvious implementation — when a document is open and the agent has no charter bound, use
+      the project's `Spec Author` charter — makes "no charter" unreachable during spec work. The
+      only way to opt out would be to bind a *different* charter, which contradicts the operator
+      decision this rests on: *"Not necessarily I want to use the charter for spec. Is good practice
+      but I can skip it."* Auto-binding would turn skipping into something you cannot do.
+      The procedure floor in 12.2 already carries everything load-bearing, so nothing is blocked by
+      leaving this alone. What the operator gives up by not binding is the interviewing craft, which
+      is exactly the trade §1.8 describes. If a default is wanted later it should be a binding the
+      operator can see and remove in the roster, not an implicit substitution at run time.
 - [x] 12.4 Verify a **blank charter** still produces a valid document (§1.8).
 - [x] 12.5 Delete `src/agentweave/templates/skills/aw-spec-*.md` and
       `templates/skills/references/`, checking each section against the disposition table in §6.
