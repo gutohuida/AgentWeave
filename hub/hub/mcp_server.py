@@ -774,3 +774,109 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# Specification documents
+# ---------------------------------------------------------------------------
+
+# Restated, not imported — see the note at the top of this file. `test_mcp_tool_schemas.py`
+# asserts these agree with `hub.spec_payload`, so drift fails in CI rather than at an agent's
+# first call.
+SpecKind = Literal["baseline", "system-map", "roadmap", "change-spec"]
+SPEC_SCHEMA_VERSION = 1
+
+
+@mcp.tool()
+def submit_spec_document(
+    path: str,
+    title: str,
+    kind: SpecKind,
+    schema_version: int = SPEC_SCHEMA_VERSION,
+    summary: str = "",
+    problem: str = "",
+    design: str = "",
+    lifecycle: str = "",
+    scope: Optional[Dict[str, Any]] = None,
+    requirements: Optional[List[Dict[str, Any]]] = None,
+    acceptance_criteria: Optional[List[Dict[str, Any]]] = None,
+    tasks: Optional[List[Dict[str, Any]]] = None,
+    algorithms: Optional[List[Dict[str, Any]]] = None,
+    evidence: Optional[Dict[str, Any]] = None,
+    open_questions: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Write a specification document. You supply structure; the Hub renders the document.
+
+    Never write specification HTML yourself — it will not be treated as a document. Submit the
+    structure here and the Hub produces the markup, the anchors, and the identifiers.
+
+    The document must already exist: the operator starts an exploration, and you fill it in.
+    Submitting repeatedly is normal and expected — a document under discussion is incomplete, and
+    saving an incomplete one is not an error. The response lists what still blocks it from being
+    proposed.
+
+    You cannot approve a document, propose it, or set its phase. There is no argument here that
+    does so. Approval is the operator's decision and is taken elsewhere.
+
+    `requirements` — objects with:
+      `key`      stable handle, lowercase and hyphenated, unique in this document. Keep it across
+                 rewordings: it is how the requirement's permanent identifier survives an edit.
+                 It is not the identifier and never appears in a link. The Hub assigns identifiers.
+      `statement` what the system does, observable from outside, specific enough to be wrong.
+                 "a search returns within 200ms for a corpus under 10k documents", not "it is fast".
+      `modal`    MUST, SHOULD, MAY or SHALL. A requirement with no obligation cannot be satisfied
+                 or violated, and is refused.
+      `rationale` optional: why the rule exists, when that is not obvious. A rule with a stated
+                 reason survives an edge case nobody listed.
+      `party`    optional: "producer" (what a sender may emit) or "consumer" (what a receiver must
+                 do with it). Collapsing them hides which side of a boundary a defect is on.
+
+    `acceptance_criteria` — objects with `key`, `requirement` (a requirement's key), and
+      `given`/`when`/`then`. One per behaviour, binary pass or fail.
+
+    `tasks` — objects with `key`, `description` (one concrete unit of work, not "build the whole
+      thing"), and `requirements` (keys this task satisfies; at least one, or it is work nobody
+      asked for).
+
+    `algorithms` — objects with `name` and `steps`. Ordered or conditional behaviour goes here
+      rather than in a paragraph, where the order has to be guessed at.
+
+    `scope` — `{"in_scope": [...], "non_goals": [...]}`. Non-goals are required before a document
+      can be proposed: omission is silence, not a non-goal.
+
+    `evidence` — `{"checked": [...], "limits": [...]}`. What you inspected and what it validates,
+      and what remains untested or inferred. A green suite says the code satisfies the tests that
+      exist, not that the tests correspond to the requirements.
+
+    `open_questions` — objects with `question` and `resolved`. An unresolved one blocks the
+      document: a guess written in the voice of a requirement is built on as though it were a
+      decision.
+
+    Returns the path, the phase, the identifier assigned to each requirement key, and `blocking` —
+    what would refuse a proposal right now.
+    """
+    document: Dict[str, Any] = {
+        "schema_version": schema_version,
+        "kind": kind,
+        "title": title,
+        "summary": summary,
+        "problem": problem,
+        "design": design,
+        "lifecycle": lifecycle,
+    }
+    # Only send what was supplied. A key present with a null value is not the same as an absent
+    # one to a validator, and `send_message`'s conversation_id outage came from exactly that.
+    optional = {
+        "scope": scope,
+        "requirements": requirements,
+        "acceptance_criteria": acceptance_criteria,
+        "tasks": tasks,
+        "algorithms": algorithms,
+        "evidence": evidence,
+        "open_questions": open_questions,
+    }
+    for name, value in optional.items():
+        if value is not None:
+            document[name] = value
+
+    return _hub_request("POST", "/spec/documents", {"path": path, "document": document})

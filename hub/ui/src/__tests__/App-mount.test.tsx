@@ -68,7 +68,11 @@ vi.mock('@/components/tasks/TasksBoard', () => ({
 // There is no Spec page and no Spec tab any more — a specification is opened from the composer's
 // Spec pill, in the conversation the operator is already in. Mocked so the conversation view's
 // inventory query never reaches the network.
-vi.mock('@/api/spec', () => ({
+// Partial mock: `importOriginal` keeps every export this file does not override real, so
+// adding one to `@/api/spec` does not break a test that never used it. The whole-module form
+// this replaced failed the moment the module grew `useSpecDocuments`.
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
   useSpecList: () => ({
     data: { specs: [{ path: 'spec/spec.html' }], home: 'spec/spec.html', diagnostics: [], missing: [] },
     isLoading: false,

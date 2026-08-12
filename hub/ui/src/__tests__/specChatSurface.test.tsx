@@ -37,7 +37,14 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
-vi.mock('@/api/spec', () => ({
+// Partial mock: `importOriginal` keeps every export this file does not override real, so
+// adding one to `@/api/spec` does not break a test that never used it. The whole-module form
+// this replaced failed the moment the module grew `useSpecDocuments`.
+vi.mock('@/api/spec', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/spec')>()),
+  // Stubbed so the phase bar issues no request of its own: this file asserts on the *order*
+  // of fetch calls, and a live document query would take index 0 from the trigger.
+  useSpecDocuments: () => ({ data: { documents: [] } }),
   useSpecList: () => ({
     data: {
       specs: [{ path: 'spec/a1-probe.html', title: 'A1 probe', state: 'filed', parent: null, order: 0 }],

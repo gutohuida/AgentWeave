@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { SpecPhaseBar } from './SpecPhaseBar'
 import { Button } from '@/components/ui/button'
 import { useSpec, type SpecDiagnostic, type SpecListResponse } from '@/api/spec'
 import { useConfigStore } from '@/store/configStore'
@@ -195,6 +196,11 @@ export function SpecDocumentPanel({
           </Button>
         )}
       </div>
+
+      {/* Phase and the operator's decisions. Above the document, because what an operator may
+          do next is part of reading it — and because none of these controls exists on the
+          agent's side, which is what makes the approval gate real. */}
+      <SpecPhaseBar path={path} />
 
       {/* Drift summary — only rendered when the Hub reports manifest drift. */}
       {driftCount > 0 && (

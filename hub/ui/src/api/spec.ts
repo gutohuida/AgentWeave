@@ -1,5 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 
@@ -89,9 +89,100 @@ export function useSpecEvents() {
     const d = event.data as { path?: string; project_id?: string }
     if (event.type === 'spec_updated' && d.project_id === projectId) {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
       if (d?.path) {
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }
     }
   })
+}
+
+// ---------------------------------------------------------------------------
+// Documents — phase, and the operator decisions that move it
+// ---------------------------------------------------------------------------
+
+export interface SpecDocumentRecord {
+  id: string
+  path: string
+  title: string
+  kind: string
+  /** The authority on where the document stands. The `aw-spec-status` metadata
+   *  inside the file is a copy for whoever reads it, never the source. */
+  phase: 'exploring' | 'proposed' | 'approved'
+  explore_closed: boolean
+  updated_at: string
+}
+
+/** One reason a document cannot be proposed yet, and where to look. */
+export interface SpecBlockingFinding {
+  code: string
+  where: string
+  message: string
+}
+
+export function useSpecDocuments() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ documents: SpecDocumentRecord[] }>({
+    queryKey: ['project', projectId, 'specDocuments'],
+    queryFn: () =>
+      getJson<{ documents: SpecDocumentRecord[] }>(
+        `/api/v1/projects/${projectId}/project/documents`,
+      ),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+function useSpecMutation<TArgs, TResult>(
+  call: (projectId: string, args: TArgs) => Promise<TResult>,
+) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (args: TArgs) => call(projectId ?? '', args),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+    },
+  })
+}
+
+/** Start an exploration. The document exists from this moment, which is what
+ *  gives "propose" and "approve" something to refer to. */
+export function useCreateSpecDocument() {
+  return useSpecMutation<{ path: string; title?: string; kind?: string }, SpecDocumentRecord>(
+    (projectId, body) => postJson(`/api/v1/projects/${projectId}/project/documents`, body),
+  )
+}
+
+/** The operator declaring exploration finished. Not a computation — whether an
+ *  exploration is complete enough to propose from is a judgement, and putting a
+ *  model in that path would make the gate theatre. */
+export function useCloseExploration() {
+  return useSpecMutation<{ path: string }, SpecDocumentRecord>((projectId, { path }) =>
+    postJson(
+      `/api/v1/projects/${projectId}/project/documents/close-exploration?path=${encodeURIComponent(path)}`,
+    ),
+  )
+}
+
+export function useProposeSpecDocument() {
+  return useSpecMutation<
+    { path: string },
+    SpecDocumentRecord & { blocking: SpecBlockingFinding[] }
+  >((projectId, { path }) =>
+    postJson(
+      `/api/v1/projects/${projectId}/project/documents/propose?path=${encodeURIComponent(path)}`,
+    ),
+  )
+}
+
+/** Approving, or reopening. There is no agent-facing equivalent of this call. */
+export function useSetSpecPhase() {
+  return useSpecMutation<{ path: string; to: string; reason?: string }, SpecDocumentRecord>(
+    (projectId, { path, to, reason }) =>
+      postJson(
+        `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
+        { reason: reason ?? '' },
+      ),
+  )
 }

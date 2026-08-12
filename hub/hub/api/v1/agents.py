@@ -1,6 +1,7 @@
 """Agent monitor endpoints."""
 
 import asyncio
+import contextlib
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -11,7 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import bound_address, project_workspace, spec_documents, worktrees
+from ... import bound_address, project_workspace, spec_documents, spec_lifecycle, worktrees
 from ...agent_colors import next_color_index
 from ...agent_lifecycle import archivable as agent_archivable
 from ...agent_lifecycle import archive as archive_agent_row
@@ -890,6 +891,27 @@ def _tool_surface_lines() -> List[str]:
     ]
 
 
+# What the agent owes the operator in each phase. Five lines, code-owned, and deliberately not in
+# the charter: §1.8 of the spec-Hub exploration makes the charter optional, so anything load-bearing
+# placed there would be load-bearing only when someone remembered to bind it. The charter carries
+# the *skill* at interviewing; this carries the *obligation* to do it.
+SPEC_PHASE_DUTIES = {
+    "exploring": (
+        "- Interview before writing. Ask about the problem, who it affects, what is out of scope, "
+        "and the cases nobody has raised. Ground what you claim in the codebase rather than "
+        "guessing, and use `ask_user` for anything that changes scope. Do not implement anything."
+    ),
+    "proposed": (
+        "- This document is proposed and awaiting the operator's decision. Do not implement it, "
+        "and do not treat it as approved."
+    ),
+    "approved": (
+        "- This document is approved. Implement against it; a material change to what was approved "
+        "needs the operator to reopen it, not a rewrite."
+    ),
+}
+
+
 async def _render_hub_agent_context(
     *,
     agent: str,
@@ -1011,12 +1033,31 @@ async def _render_hub_agent_context(
             open_spec_path = None
 
         if open_spec_path is not None:
+            phase = None
+            with contextlib.suppress(Exception):
+                row = await spec_lifecycle.get_document(db, project_id, open_spec_path)
+                phase = row.phase if row is not None else None
+
             lines.append("### Open specification document")
             lines.append(f"- The operator is viewing `{open_spec_path}` in the Hub's Spec view.")
             lines.append(
                 "- This is where they are looking right now. Treat it as context for what they "
                 "ask, not as an instruction to act on it."
             )
+            # The procedure floor. Code-owned and unconditional, because a project may have no
+            # charter bound and the obligation to interview is an exit condition, not advice —
+            # a charter makes the work better and must never be what makes it valid.
+            if phase:
+                lines.append(f"- Phase: **{phase}**.")
+                lines.append(SPEC_PHASE_DUTIES.get(phase, ""))
+                lines.append(
+                    "- Write the document with `submit_spec_document`. Never write specification "
+                    "HTML yourself; the Hub renders it and assigns requirement identifiers."
+                )
+                lines.append(
+                    "- You cannot propose or approve. Those are the operator's, and there is no "
+                    "argument that does either."
+                )
             lines.append("")
 
     lines.append("### Team")

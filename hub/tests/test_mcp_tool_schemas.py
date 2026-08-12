@@ -7,6 +7,7 @@ to omit the parameter and so never hit it. The fix is the schema, not documentat
 """
 
 import asyncio
+import json
 import typing
 
 import pytest
@@ -135,3 +136,59 @@ class TestReadableDetail:
         assert mcp_server._readable_detail("Unknown recipient 'nobody'") == (
             "Unknown recipient 'nobody'"
         )
+
+
+# ---------------------------------------------------------------------------
+# submit_spec_document
+# ---------------------------------------------------------------------------
+
+
+def test_spec_kind_agrees_with_the_payload_validator():
+    """`mcp_server` restates these because it is spawned standalone and may import
+    only stdlib and fastmcp. Restating is the rule; drifting is the risk this closes."""
+    from hub.spec_payload import KINDS
+
+    assert set(typing.get_args(mcp_server.SpecKind)) == set(KINDS)
+
+
+def test_the_declared_schema_version_agrees_with_the_hub():
+    from hub.spec_payload import SCHEMA_VERSION
+
+    assert mcp_server.SPEC_SCHEMA_VERSION == SCHEMA_VERSION
+
+
+def test_submit_spec_document_advertises_the_document_kinds():
+    schema = _schemas()["submit_spec_document"]
+    assert schema["properties"]["kind"]["enum"]
+
+
+def test_submit_spec_document_offers_no_way_to_set_a_phase_or_approve():
+    """The gate is only real if the surface has no lever on it. Keyed to the
+    parameter names rather than to a list of forbidden values, so a later
+    `phase` argument added for any reason fails here."""
+    schema = _schemas()["submit_spec_document"]
+    offered = set(schema["properties"])
+
+    assert not offered & {"phase", "status", "approve", "approved", "approved_by", "state"}
+
+
+def test_submit_spec_document_does_not_take_an_agent_identity():
+    """Identity comes from the run credential. A caller that could name itself
+    could name somebody else."""
+    schema = _schemas()["submit_spec_document"]
+    offered = set(schema["properties"])
+
+    assert not offered & {"agent", "actor", "author", "run_id", "project_id"}
+
+
+def test_structured_parameters_do_not_use_a_closed_object_type():
+    """Deliberate, and the reason is not laziness: pydantic validates a TypedDict
+    by *dropping* keys it does not declare. Typing `requirements` as a list of
+    TypedDict would silently discard the fields a later schema version adds, so
+    the forward compatibility the payload guarantees would be lost at the tool
+    boundary rather than at the Hub. The shape lives in the description instead."""
+    schema = _schemas()["submit_spec_document"]
+    items = schema["properties"]["requirements"]
+
+    text = json.dumps(items)
+    assert "additionalProperties" not in text or '"additionalProperties": false' not in text

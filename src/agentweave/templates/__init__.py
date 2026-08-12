@@ -34,7 +34,6 @@ def list_templates() -> List[str]:
 
 
 SKILLS_DIR = TEMPLATES_DIR / "skills"
-SKILL_REFERENCES_DIR = SKILLS_DIR / "references"
 
 
 def get_skill_template(name: str) -> str:
@@ -63,31 +62,11 @@ def list_skill_templates() -> List[str]:
     return [f.stem for f in SKILLS_DIR.glob("*.md")]
 
 
-def get_skill_reference(filename: str) -> str:
-    """Get the content of a bundled skill reference document.
-
-    Reference documents live in ``templates/skills/references/`` and are NOT
-    skills themselves (``list_skill_templates`` only globs the top level).
-    They are copied alongside the skills that link to them at generation time.
-
-    Args:
-        filename: Reference file name (e.g., 'html-spec-conventions.md')
-
-    Returns:
-        Reference document content as string
-    """
-    ref_file = SKILL_REFERENCES_DIR / filename
-    if ref_file.exists():
-        return ref_file.read_text(encoding="utf-8")
-    raise FileNotFoundError(f"Skill reference not found: {filename}")
-
-
 __all__ = [
     "get_template",
     "list_templates",
     "get_skill_template",
     "list_skill_templates",
-    "get_skill_reference",
     "TEMPLATES_DIR",
     "SKILLS_DIR",
     "SKILL_REFERENCES_DIR",
