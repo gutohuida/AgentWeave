@@ -136,11 +136,13 @@ subjects. Establish that, rather than inheriting it from a proposal.
       divergent implementation of something that is applied to every document anyway. The task was
       written from the old conventions, where the *agent* had to include it. A test asserts the
       rendered document carries no navigation script of its own.
-- [ ] 6.4 Verify the rendered document displays in `SpecFrame` under the existing sandbox —
+- [x] 6.4 Verify the rendered document displays in `SpecFrame` under the existing sandbox —
       `allow-scripts` with **no** `allow-same-origin`. Do not add `allow-same-origin`; the approved
       spec prohibits it, and a document with same-origin access could reach the Hub.
-      **Not yet done — needs the app, not a test.** Deferred until section 13 makes a document
-      reachable in the UI.
+      **Done in the running app.** The frame reports `sandbox="allow-scripts"` with no
+      `allow-same-origin`, and an 8,337-character rendered document displays: title, kind and phase
+      chips, Scope with both headings, the requirement with its minted identifier and modal, and the
+      acceptance-criteria table — legible in dark mode, so the theme layers apply inside the frame.
 
 ## 7. Identifiers (D5)
 
@@ -295,6 +297,46 @@ at `exploring`; the rendered file carries `<title>`, `aw-spec-status="exploring"
 **Not observed live:** an agent submission, which needs a real run credential. It is covered by 17
 tests in `test_spec_documents_api.py`, including the three that establish an agent cannot approve.
 
+## 16c. Driven against the running Hub with a real run credential
+
+A temporary `Run` row was inserted to obtain a run credential, exercised, and deleted. The project
+is `proj-44e9adba`, the document `spec/changes/live-check/spec.html`.
+
+**The write path.** An agent submission with two requirements, two criteria and two tasks was
+accepted and rendered; `blocking` came back empty for a complete document and named both orphan
+classes for an incomplete one.
+
+**17.5, from every route an agent has** — all five attempts failed to approve:
+
+| attempt | outcome |
+|---|---|
+| `phase` smuggled beside the payload | `422` — the body forbids extra fields |
+| `phase`/`status` inside the payload | accepted, and the phase stayed `exploring` |
+| operator phase route with a run credential | `401` |
+| close-exploration with a run credential | `401` |
+| propose with a run credential | `401` |
+
+**Identifier behaviour, which is the correction this change made to its own spec.** Wiping the
+requirements retired `FR-1`/`FR-2`; resubmitting the same keys minted `FR-3`/`FR-4` rather than
+reusing them. Then inserting a new requirement **at the top** and rewording another gave the new key
+`FR-5` while both existing keys kept `FR-3`/`FR-4`. Position-based correlation would have renumbered
+every one of them.
+
+**Refusals name their field:** `requirements[0].modal`, `schema_version`,
+`tasks[0].requirements[0]` — and the file's hash was unchanged after a rejected submission, so
+nothing partial was written.
+
+**17.7, an edit made outside the Hub.** Appending a comment to the file by hand: the Hub returned
+the edited content on the next read, and the following submission reported the divergence with both
+digests. Nothing was overwritten or merged.
+
+**The lifecycle:** close exploration → propose (`proposed`, no blocking) → approve (`approved`, and
+the file's `aw-spec-status` followed) → a further agent submission refused `422 document_approved` →
+reopen, which cleared `explore_closed`.
+
+**The history** holds 12 attributed events: agent submissions carry the agent name, `submission`
+origin and the run id; operator actions carry `control` and no run.
+
 ## 17. Verification — human-only (the operator runs these)
 
 Nothing below can be closed by an agent. Each needs a person looking at a running app.
@@ -317,10 +359,13 @@ traversal path is refused with 400 and a message naming the rule; `POST /project
 - [ ] 17.3 Does the interview feel like the old skill's interview? The craft was harvested into the
       charter in `2909137`; this is whether the harvest worked.
 - [ ] 17.4 Is a validation refusal actionable, or does it produce a retry loop?
-- [ ] 17.5 Try to get an agent to approve its own document. Ask it to. It should be unable to.
+- [x] 17.5 Try to get an agent to approve its own document. Ask it to. It should be unable to.
+      **Done — see 16c.** Five routes attempted, all refused or ineffective. What remains for you
+      is asking a *live agent* to try, which may find a route an API probe did not think of.
 - [ ] 17.6 Run the flow with a **Codex** agent as well as a Claude one. Runner-agnostic delivery is
       the reason the skills were removed.
-- [ ] 17.7 Edit a document in an external editor. Confirm the Hub reports it and changes nothing.
+- [x] 17.7 Edit a document in an external editor. Confirm the Hub reports it and changes nothing.
+      **Done — see 16c.** Divergence reported with both digests; the file was not overwritten.
 - [ ] 17.8 Confirm nothing of value was lost with the skills — read §6's table against what the flow
       now does.
 
