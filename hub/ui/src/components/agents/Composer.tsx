@@ -58,6 +58,9 @@ export interface ComposerProps {
   /** Opens the specification document picker. Omitted on surfaces that have no document panel
    *  to open one into (the new-conversation surface), where the control renders nothing. */
   onOpenSpecPicker?: () => void
+  onStartExploration?: () => void
+  onStopExploring?: () => void
+  specBusy?: boolean
   /** The open document's display name, for the Spec pill. `null` means none is open. */
   specDocumentLabel?: string | null
 }
@@ -84,6 +87,9 @@ export function Composer({
   onPendingOverridesChange = () => undefined,
   disabledReason,
   onOpenSpecPicker,
+  onStartExploration,
+  onStopExploring,
+  specBusy = false,
   specDocumentLabel = null,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
@@ -284,10 +290,13 @@ export function Composer({
               onPendingOverridesChange({ ...pendingOverrides, [controlId]: value })
             }
           />
-          {onOpenSpecPicker && (
+          {onOpenSpecPicker && onStartExploration && onStopExploring && (
             <ComposerSpecControl
               documentLabel={specDocumentLabel}
               onOpenPicker={onOpenSpecPicker}
+              onStartExploration={onStartExploration}
+              onStopExploring={onStopExploring}
+              busy={specBusy}
             />
           )}
         </div>

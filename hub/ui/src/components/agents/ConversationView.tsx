@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSummary } from '@/api/agents'
+import { useAgentConversations } from '@/api/agentChat'
 import { useCreateSpecDocument, useSpecEvents, useSpecList } from '@/api/spec'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
@@ -69,6 +70,12 @@ export function ConversationView({
   const measuredWidth = useWorkspaceWidth(containerRef)
   const { data: specList, isLoading: listLoading, refetch: refetchList } = useSpecList()
   const createDocument = useCreateSpecDocument()
+  /* What to call the document. The Hub titles a conversation from its first message, so by the
+   * time an operator wants to explore there is already a name that means something to them —
+   * which is why starting one asks for nothing (task 13.2). */
+  const { data: conversations } = useAgentConversations(agent.name)
+  const conversationTitle =
+    conversations?.find((entry) => entry.id === conversationId)?.title ?? null
   useSpecEvents()
   const inventory = useMemo(() => buildInventory(specList), [specList])
 
@@ -150,6 +157,29 @@ export function ConversationView({
     />
   ) : null
 
+  /* One press starts an exploration. The conversation already carries a title — the Hub sets it
+   * from the first message — so there is nothing to ask for, which is what makes this a toggle
+   * rather than a form. §2.7 allows the entry point to look like a pill provided pressing it
+   * *creates the document*; a pill holding a mode with no document behind it would leave
+   * "propose" and "approve" with no subject. */
+  const startExploration = useCallback(
+    (title?: string) => {
+      const chosen = (title ?? conversationTitle ?? '').trim() || 'exploration'
+      const path = documentPathFor(chosen)
+      if (!path) return
+      createDocument.mutate(
+        { path, title: chosen },
+        {
+          onSuccess: () => onOpenDocument(path),
+          // Already there — the conversation is resuming an exploration it started
+          // earlier, so open it rather than reporting a collision.
+          onError: () => onOpenDocument(path),
+        },
+      )
+    },
+    [conversationTitle, createDocument, onOpenDocument],
+  )
+
   const conversation = (
     <AgentOutputPanel
       agent={agent}
@@ -160,6 +190,11 @@ export function ConversationView({
       specDocumentPath={document}
       specDocumentLabel={document ? documentNode?.title ?? document : null}
       onOpenSpecPicker={openPicker}
+      onStartExploration={() => startExploration()}
+      /* Detach, never delete. An exploration leaves an artifact; a toggle that discarded it on
+       * the way back would be a trap dressed as a switch. */
+      onStopExploring={() => onOpenDocument(null)}
+      specBusy={createDocument.isPending}
     />
   )
 
@@ -263,15 +298,7 @@ export function ConversationView({
         /* Starting an exploration opens the document it just created: the point of creating
          * it here is that the conversation now has a subject, and leaving the operator to go
          * find it would put the step back that this removes. */
-        onCreate={(title) => {
-          const chosen = title || 'exploration'
-          const path = documentPathFor(chosen)
-          if (!path) return
-          createDocument.mutate(
-            { path, title: chosen },
-            { onSuccess: () => onOpenDocument(path) },
-          )
-        }}
+        onCreate={(title) => startExploration(title)}
       />
     </div>
   )

@@ -65,6 +65,9 @@ interface AgentOutputPanelProps {
    *  conversation view, which owns the picker; omitted, the composer renders no Spec pill. */
   specDocumentLabel?: string | null
   onOpenSpecPicker?: () => void
+  onStartExploration?: () => void
+  onStopExploring?: () => void
+  specBusy?: boolean
 }
 
 /* Both prompts that used to live here are gone, and nothing replaces them.
@@ -110,6 +113,9 @@ export function AgentOutputPanel({
   specDocumentPath = null,
   specDocumentLabel = null,
   onOpenSpecPicker,
+  onStartExploration,
+  onStopExploring,
+  specBusy = false,
 }: AgentOutputPanelProps) {
   // `lines` is no longer read here. Its only consumer was the effect that watched the output
   // stream for a completed run in order to call a handoff "ready" — the exact inference this
@@ -927,6 +933,9 @@ export function AgentOutputPanel({
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}
               onOpenSpecPicker={onOpenSpecPicker}
+              onStartExploration={onStartExploration}
+              onStopExploring={onStopExploring}
+              specBusy={specBusy}
               specDocumentLabel={specDocumentLabel}
             />
           </div>

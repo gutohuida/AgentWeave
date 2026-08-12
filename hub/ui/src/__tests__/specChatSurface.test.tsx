@@ -378,18 +378,28 @@ describe('the specification is reached from the composer', () => {
     expect(await screen.findByRole('dialog')).toHaveAccessibleName('Search documents')
   })
 
-  it('is present with no document open, which is how the first one is opened', () => {
+  it('offers to start an exploration when no document is open', () => {
+    // Previously this showed "Spec: None" and opened the picker, which asked the operator to
+    // name a document before they had one — and an agent with no document open was never told
+    // the Hub has a specification flow at all, so it reached for a workflow of its own. One
+    // press now creates the document this conversation needs.
     renderChat(null)
-    const pill = screen.getByTestId('composer-spec-control')
-    expect(pill).toHaveTextContent('None')
-    expect(pill).toHaveAccessibleName('Open a specification document')
+    const toggle = screen.getByTestId('composer-start-exploration')
+    expect(toggle).toHaveTextContent('Explore')
+    expect(toggle).toHaveAccessibleName('Start an exploration')
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByTestId('composer-spec-control')).not.toBeInTheDocument()
   })
 
-  it('does not double as the close control', () => {
-    // Closing is the panel's own control. A pill whose press means "open" sometimes and "close"
-    // other times is two controls wearing one hat.
+  it('separates changing the document from closing it', () => {
+    // The original concern still holds: a pill whose press means "open" sometimes and "close"
+    // other times is two controls wearing one hat. The toggle keeps them as distinct targets
+    // with distinct labels rather than overloading one press.
     renderChat('spec/a1-probe.html')
+    expect(screen.getByTestId('composer-spec-control')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('composer-stop-exploring')).toHaveAccessibleName(
+      'Close the document',
+    )
     expect(screen.getByTestId('spec-document-close')).toBeInTheDocument()
-    expect(screen.getByTestId('composer-spec-control')).not.toHaveAttribute('aria-pressed')
   })
 })
