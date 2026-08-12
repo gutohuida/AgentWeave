@@ -115,26 +115,34 @@ subjects. Establish that, rather than inheriting it from a proposal.
 
 ## 6. The renderer (D2)
 
-- [ ] 6.1 Render a validated payload to a self-contained document: inline styles only, no external
+- [x] 6.1 Render a validated payload to a self-contained document: inline styles only, no external
       CSS, JS, font or image reference.
-- [ ] 6.2 The Hub owns anchors and identifiers, so dead anchors and duplicate identifiers cannot
+- [x] 6.2 The Hub owns anchors and identifiers, so dead anchors and duplicate identifiers cannot
       occur by construction. Assert this rather than checking for it at author time.
-- [ ] 6.3 Preserve the existing theme layers and the same-document anchor interception the current
+- [x] 6.3 Preserve the existing theme layers and the same-document anchor interception the current
       documents rely on, so a rendered document behaves in the frame as today's do.
+      **Half of this task was wrong.** The three theme layers are the renderer's (done). The anchor
+      interception is **not**: `specBridge.withSpecBridge` injects the bridge into the frame before
+      `srcdoc` is set, so the shell already owns it. A copy in the renderer would be a second,
+      divergent implementation of something that is applied to every document anyway. The task was
+      written from the old conventions, where the *agent* had to include it. A test asserts the
+      rendered document carries no navigation script of its own.
 - [ ] 6.4 Verify the rendered document displays in `SpecFrame` under the existing sandbox —
       `allow-scripts` with **no** `allow-same-origin`. Do not add `allow-same-origin`; the approved
       spec prohibits it, and a document with same-origin access could reach the Hub.
+      **Not yet done — needs the app, not a test.** Deferred until section 13 makes a document
+      reachable in the UI.
 
 ## 7. Identifiers (D5)
 
-- [ ] 7.1 Mint requirement identifiers Hub-side. Ignore any identifier present in a payload.
+- [x] 7.1 Mint requirement identifiers Hub-side. Ignore any identifier present in a payload.
       **Correlation is by `key`, not by position (D5a).** The delta spec originally said position;
       that was corrected during section 4, because inserting a requirement would renumber every
       requirement below it and identifiers are what tasks and evidence point at.
-- [ ] 7.2 Preserve an identifier across rewording of its requirement.
-- [ ] 7.3 Never reassign an identifier, including after its requirement is removed. Persist the
+- [x] 7.2 Preserve an identifier across rewording of its requirement.
+- [x] 7.3 Never reassign an identifier, including after its requirement is removed. Persist the
       high-water mark rather than deriving the next identifier from the current document.
-- [ ] 7.4 Preserve identifiers across a schema version change.
+- [x] 7.4 Preserve identifiers across a schema version change.
 
 ## 8. Events — forward commitment, nothing here consumes it (D8)
 
