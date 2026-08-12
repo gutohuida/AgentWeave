@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useMemo, useState } from 'react'
+import { Icon } from '@/components/common/Icon'
 import { searchDocuments, type SpecInventory, type SpecNode } from './specNavigation'
 import { SpecTree } from './SpecTree'
 
@@ -16,6 +17,12 @@ interface SpecDocumentPickerProps {
   restoreFocusTo?: () => HTMLElement | null
   /** The document already open, marked in the tree so the operator can see where they are. */
   currentPath?: string | null
+  /**
+   * Start an exploration with this title. Optional: the specification page's own
+   * picker is for finding documents, and only the conversation surface is a place
+   * where "there isn't one yet" is the answer.
+   */
+  onCreate?: (title: string) => void
 }
 
 const rowStyle: React.CSSProperties = {
@@ -61,6 +68,7 @@ export function SpecDocumentPicker({
   onSelect,
   restoreFocusTo,
   currentPath = null,
+  onCreate,
 }: SpecDocumentPickerProps) {
   const [query, setQuery] = useState('')
 
@@ -83,6 +91,18 @@ export function SpecDocumentPicker({
     onSelect(node)
     onOpenChange(false)
   }
+
+  /* Explore is the one phase that would otherwise precede its own document, which is why
+   * starting one creates the document rather than setting a mode: without it, "propose" and
+   * "approve" have no subject. It lives here because this is where an operator arrives having
+   * discovered there is no document to open. */
+  const typed = query.trim()
+  const startExploration = onCreate
+    ? () => {
+        onCreate(typed)
+        onOpenChange(false)
+      }
+    : null
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -140,6 +160,20 @@ export function SpecDocumentPicker({
             }}
           />
           <div className="overflow-y-auto p-1.5" data-testid="spec-picker-results">
+            {startExploration && (browsing || empty) && (
+              <button
+                type="button"
+                style={{ ...rowStyle, color: 'var(--text)' }}
+                data-testid="spec-picker-start-exploration"
+                onClick={startExploration}
+                disabled={!browsing && !typed}
+              >
+                <Icon name="add" size={13} />
+                <span className="truncate">
+                  {typed ? `Start an exploration: ${typed}` : 'Start an exploration…'}
+                </span>
+              </button>
+            )}
             {browsing ? (
               <SpecTree inventory={inventory} currentPath={currentPath} onSelect={choose} />
             ) : (

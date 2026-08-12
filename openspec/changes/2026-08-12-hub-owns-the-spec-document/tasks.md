@@ -230,6 +230,16 @@ subjects. Establish that, rather than inheriting it from a proposal.
 
 - [x] 13.1 An operator control that creates an empty document in `exploring` and opens it beside the
       conversation.
+      **Marked done before it existed, and caught by the operator's first live test.** The API hook
+      shipped with no call site, so there was no way to start an exploration from the UI. The
+      consequence was not a missing button: with no document open, the phase block in 12.1/12.2
+      never fires, so the turn context never names `submit_spec_document` or the Hub's flow at all.
+      The agent had the Spec Author charter — judgement, no mechanism — and reached for the
+      workflow it already knew, announcing *"I'm using the OpenSpec explore workflow"* and shelling
+      around the project. Exactly the §1.8 failure inverted: the optional half loaded, the
+      load-bearing half did not.
+      **Now:** the document picker offers *Start an exploration*, typing a title creates
+      `spec/changes/<slug>/spec.html` and opens it beside the conversation.
 - [x] 13.2 Creation asks for nothing beyond what identifies the document.
 - [x] 13.3 No content-based inference that a conversation is an exploration — it is declared (§2.7).
 - [x] 13.4 Use the `Icon` component. Do not introduce a second icon system.

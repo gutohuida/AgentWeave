@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSummary } from '@/api/agents'
-import { useSpecEvents, useSpecList } from '@/api/spec'
+import { useCreateSpecDocument, useSpecEvents, useSpecList } from '@/api/spec'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Drawer } from '@/components/layout/Drawer'
@@ -9,6 +9,7 @@ import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { buildInventory } from '@/components/spec/specNavigation'
+import { documentPathFor } from '@/lib/specDocumentName'
 import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
@@ -67,6 +68,7 @@ export function ConversationView({
   const containerRef = useRef<HTMLDivElement>(null)
   const measuredWidth = useWorkspaceWidth(containerRef)
   const { data: specList, isLoading: listLoading, refetch: refetchList } = useSpecList()
+  const createDocument = useCreateSpecDocument()
   useSpecEvents()
   const inventory = useMemo(() => buildInventory(specList), [specList])
 
@@ -258,6 +260,18 @@ export function ConversationView({
         restoreFocusTo={() => searchOriginRef.current}
         currentPath={document}
         onSelect={(node) => onOpenDocument(node.path)}
+        /* Starting an exploration opens the document it just created: the point of creating
+         * it here is that the conversation now has a subject, and leaving the operator to go
+         * find it would put the step back that this removes. */
+        onCreate={(title) => {
+          const chosen = title || 'exploration'
+          const path = documentPathFor(chosen)
+          if (!path) return
+          createDocument.mutate(
+            { path, title: chosen },
+            { onSuccess: () => onOpenDocument(path) },
+          )
+        }}
       />
     </div>
   )
