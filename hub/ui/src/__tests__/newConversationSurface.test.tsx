@@ -190,3 +190,106 @@ describe('starting a conversation', () => {
     expect(screen.getByRole('textbox')).toHaveValue('Half-written thought')
   })
 })
+
+describe('declaring an exploration before the first message', () => {
+  // Its own reset: this block sits outside the first describe, so that one's beforeEach does not
+  // reach it and `fetchMock.mock.calls` would otherwise accumulate across these tests.
+  beforeEach(() => {
+    cleanup()
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'started', conversation_id: 'conv-fresh' }), {
+        status: 200,
+      }),
+    )
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-a',
+      isConfigured: true,
+      bootstrapState: 'ready',
+      mode: 'light',
+    })
+  })
+
+  it('offers the toggle, which the surface used to omit entirely', () => {
+    // It was omitted deliberately when the control only *opened* an existing document: there is
+    // no panel here to open one into. Under a toggle that is backwards — this is the surface
+    // where an operator most needs to say "I want to explore an idea", before they have typed
+    // anything. Omitting it meant the agent was never told the Hub has a specification flow,
+    // and it reached for one of its own.
+    renderSurface('claude')
+    const toggle = screen.getByTestId('composer-start-exploration')
+    expect(toggle).toHaveTextContent('Explore')
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('shows the declaration as pressed, and lets it be taken back', () => {
+    renderSurface('claude')
+    const toggle = screen.getByTestId('composer-start-exploration')
+
+    fireEvent.click(toggle)
+    expect(screen.getByTestId('composer-start-exploration')).toHaveTextContent('Exploring')
+    expect(screen.getByTestId('composer-start-exploration')).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    expect(screen.getByTestId('composer-start-exploration')).toHaveTextContent('Explore')
+  })
+
+  it('creates the document from the first message and opens it with the conversation', async () => {
+    const { onStarted } = renderSurface('claude')
+
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'I want to build a budget app' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+
+    const documentCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/project/documents'),
+    )
+    expect(documentCall, 'the document must be created before navigating').toBeTruthy()
+    expect(JSON.parse(String((documentCall![1] as RequestInit).body)).path).toBe(
+      'spec/changes/i-want-to-build-a-budget-app/spec.html',
+    )
+    expect(onStarted).toHaveBeenCalledWith(
+      'claude',
+      'conv-fresh',
+      'spec/changes/i-want-to-build-a-budget-app/spec.html',
+    )
+  })
+
+  it('still starts the conversation when the document cannot be created', async () => {
+    // Losing the operator's first message to a document that could not be written would be a
+    // worse failure than not having the document.
+    const { onStarted } = renderSurface('claude')
+    fetchMock.mockImplementation((url: string) =>
+      String(url).includes('/project/documents')
+        ? Promise.resolve(new Response('{"detail":"nope"}', { status: 409 }))
+        : Promise.resolve(
+            new Response(JSON.stringify({ status: 'started', conversation_id: 'conv-fresh' }), {
+              status: 200,
+            }),
+          ),
+    )
+
+    fireEvent.click(screen.getByTestId('composer-start-exploration'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Budget app' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh', 'spec/changes/budget-app/spec.html')
+  })
+
+  it('creates no document when exploration was not declared', async () => {
+    const { onStarted } = renderSurface('claude')
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Just a question' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(onStarted).toHaveBeenCalled())
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/project/documents')),
+    ).toBe(false)
+    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh')
+  })
+})

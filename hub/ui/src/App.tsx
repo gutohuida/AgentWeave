@@ -264,8 +264,15 @@ export default function App() {
             replace: true,
           })
         }
-        onStarted={(agent, conversationId) =>
-          navigateTo(agentDestination(destination.projectId, agent, conversationId, openDocument))
+        onStarted={(agent, conversationId, document) =>
+          navigateTo(
+            agentDestination(
+              destination.projectId,
+              agent,
+              conversationId,
+              document ?? openDocument,
+            ),
+          )
         }
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
       />

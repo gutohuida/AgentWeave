@@ -4,7 +4,9 @@ import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
+import { postJson } from '@/api/client'
 import { agentColorVars } from '@/lib/agentColors'
+import { documentPathFor } from '@/lib/specDocumentName'
 import { useConfigStore } from '@/store/configStore'
 import { Composer } from './Composer'
 
@@ -19,7 +21,8 @@ interface NewConversationSurfaceProps {
    *  with none (operator, 2026-08-08). */
   onChooseAgent: (agent: string) => void
   /** Called once the first message has created the conversation. */
-  onStarted: (agent: string, conversationId: string) => void
+  /** `document` is set when the operator declared an exploration before writing. */
+  onStarted: (agent: string, conversationId: string, document?: string) => void
   onBackToProject?: () => void
 }
 
@@ -52,6 +55,12 @@ export function NewConversationSurface({
   const agentRow = roster.find((candidate) => candidate.name === agent)
   const runnerRow = runners.find((runner) => runner.id === agentRow?.runner_id)
 
+  /* Declaring an exploration before the first message is the one case where the intent
+   * genuinely precedes the document: there is no conversation to attach one to and no title to
+   * name it from. The document is created from that first message, so the armed state lasts
+   * exactly as long as it takes to write one. */
+  const [exploring, setExploring] = useState(false)
+
   const handleSubmit = async (message: string): Promise<void> => {
     if (!agent) return
     setError(null)
@@ -69,7 +78,30 @@ export function NewConversationSurface({
       throw new Error(`Trigger failed with status ${response.status}`)
     }
     const result = (await response.json()) as { conversation_id: string }
-    onStarted(agent, result.conversation_id)
+
+    if (!exploring) {
+      onStarted(agent, result.conversation_id)
+      return
+    }
+
+    // The first message is what the Hub titles the conversation from, so it is also what names
+    // the document. A failure here must not swallow the conversation that was just started —
+    // the operator would have lost their message to a document that could not be created.
+    const path = documentPathFor(message)
+    if (!path) {
+      onStarted(agent, result.conversation_id)
+      return
+    }
+    try {
+      await postJson(`/api/v1/projects/${projectId}/project/documents`, {
+        path,
+        title: message.trim().slice(0, 120),
+      })
+    } catch {
+      // Already there, or refused. Open it anyway: an exploration resuming under the same name
+      // is the common case, and the conversation exists either way.
+    }
+    onStarted(agent, result.conversation_id, path)
   }
 
   return (
@@ -147,6 +179,11 @@ export function NewConversationSurface({
               effectiveModel={runnerRow?.model ?? null}
               pendingOverrides={pendingOverrides}
               onPendingOverridesChange={setPendingOverrides}
+              specDocumentLabel={null}
+              specArmed={exploring}
+              onOpenSpecPicker={() => setExploring(true)}
+              onStartExploration={() => setExploring(true)}
+              onStopExploring={() => setExploring(false)}
             />
           </div>
         </div>

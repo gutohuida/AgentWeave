@@ -12,6 +12,15 @@ interface ComposerSpecControlProps {
   onStartExploration: () => void
   /** Detach the open document from this conversation. Never deletes it. */
   onStopExploring: () => void
+  /**
+   * Declared, but the document does not exist yet — the new-conversation surface, where there is
+   * no conversation to attach one to and no title to name it from until the first message. The
+   * document is created on send, so this state lasts exactly as long as it takes to write one
+   * message. §2.7's objection to a mode pill was that "propose what?" has no answer; that applies
+   * to a conversation that *stays* in a mode, not to an intent declared seconds before the
+   * document appears.
+   */
+  armed?: boolean
   busy?: boolean
 }
 
@@ -46,6 +55,7 @@ export function ComposerSpecControl({
   onOpenPicker,
   onStartExploration,
   onStopExploring,
+  armed = false,
   busy = false,
 }: ComposerSpecControlProps) {
   if (!documentLabel) {
@@ -55,15 +65,22 @@ export function ComposerSpecControl({
         variant="ghost"
         size="pill"
         data-testid="composer-start-exploration"
-        onClick={onStartExploration}
+        onClick={armed ? onStopExploring : onStartExploration}
         disabled={busy}
+        data-active={armed ? 'true' : 'false'}
         className={`${composerControlClassName} min-w-0 max-w-full`}
-        title="Start an exploration — creates a specification document for this conversation"
-        aria-label="Start an exploration"
-        aria-pressed={false}
+        title={
+          armed
+            ? 'Exploring — the document is created with your first message'
+            : 'Start an exploration — creates a specification document for this conversation'
+        }
+        aria-label={armed ? 'Stop exploring' : 'Start an exploration'}
+        aria-pressed={armed}
       >
         <Icon name="article" size={13} />
-        <span className="min-w-0 truncate">{busy ? 'Starting…' : 'Explore'}</span>
+        <span className="min-w-0 truncate">
+          {busy ? 'Starting…' : armed ? 'Exploring' : 'Explore'}
+        </span>
       </Button>
     )
   }
