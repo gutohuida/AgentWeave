@@ -423,3 +423,48 @@ async def test_queue_status_probes_the_bound_runner_not_the_agent_name(
 
     assert status.status_code == 200
     assert "codex-spec' was not found" not in (status.json().get("waiting_reason") or "")
+
+
+@pytest.mark.asyncio
+async def test_queue_status_names_a_missing_git_repository(app, auth_headers, bind_runner):
+    """Launchable is not the same as startable.
+
+    Isolation is the default, so a writing agent in a project that is not a git
+    repository fails at worktree provisioning — inside the trigger, where the
+    reason was raised and then discarded. The operator saw "1 waiting" with no
+    explanation and reasonably guessed at something else entirely.
+
+    The entry is queued directly rather than through the trigger, because the
+    suite stubs worktree provisioning away: a triggered turn starts, and then
+    there is nothing waiting to explain.
+    """
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"needs-a-repo": {}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("needs-a-repo", cli="claude")
+
+    async with async_session_factory() as session:
+        session.add(
+            InboundQueueEntry(
+                id="entry-needs-a-repo",
+                project_id="proj-test",
+                agent="needs-a-repo",
+                origin_type="operator",
+                content="hello",
+                hop_depth=0,
+                state="queued",
+            )
+        )
+        await session.commit()
+
+    status = await app.get(
+        "/api/v1/projects/proj-test/queue/needs-a-repo/status", headers=auth_headers
+    )
+
+    assert status.status_code == 200
+    reason = status.json()["waiting_reason"] or ""
+    # The project root under the autouse workspace fixture is a bare tmp_path, not a repo.
+    assert "not a git repository" in reason, reason
+    assert "git init" in reason, "the reason must say what to do about it"
