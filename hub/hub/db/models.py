@@ -220,7 +220,11 @@ class Agent(Base):
     project: Mapped["Project"] = relationship(back_populates="agents")
 
     __table_args__ = (
-        Index("ix_agents_project_name", "project_id", "name"),
+        # Unique: every lookup in the Hub addresses an agent as (project_id, name), so two
+        # matching rows make `scalar()` return whichever the database hands back first.
+        # Registration already refuses a duplicate with 409, but it SELECTs then INSERTs, and
+        # two concurrent registrations interleave through that gap. See migration 0063.
+        Index("ix_agents_project_name", "project_id", "name", unique=True),
         CheckConstraint("lifecycle IN ('open', 'archived')", name="ck_agents_lifecycle"),
     )
 

@@ -144,7 +144,7 @@ def test_alembic_upgrade_head_fresh_file_db(tmp_path) -> None:
             return row[0]
 
     version = _run(_check_version())
-    assert version == "0062", f"expected alembic_version=0062, got {version}"
+    assert version == "0063", f"expected alembic_version=0063, got {version}"
 
     columns = {column["name"]: column for column in _inspect_columns(db_url, "agent_outputs")}
     assert {"kind", "payload", "run_id", "sequence"} <= columns.keys()
@@ -192,7 +192,7 @@ def test_migration_0025_drops_legacy_project_roles_config(tmp_path) -> None:
         }
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
     assert "project_roles_config" not in tables
-    assert version == "0062"
+    assert version == "0063"
 
 
 def test_migration_0027_adds_conversation_runtime_overrides(tmp_path) -> None:
@@ -295,7 +295,7 @@ def test_migration_0035_recreates_conversations_preserving_shape(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0062"
+        assert version == "0063"
 
         # The existing row survives, unnamed and attributed to the operator.
         row = conn.execute(
@@ -512,7 +512,7 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
             return row[0] if row else None
 
     version = await _check()
-    assert version == "0062", f"expected alembic_version=0062, got {version}"
+    assert version == "0063", f"expected alembic_version=0063, got {version}"
 
 
 @pytest.mark.asyncio
@@ -1232,7 +1232,7 @@ def test_migration_0052_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0062"
+        assert version == "0063"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1401,7 +1401,7 @@ def test_migration_0057_is_guarded_when_tasks_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0062"
+        assert version == "0063"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1466,7 +1466,7 @@ def test_migration_0059_is_guarded_when_the_tables_do_not_exist(tmp_path) -> Non
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0062"
+        assert version == "0063"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1524,7 +1524,7 @@ def test_migration_0060_is_guarded_when_conversations_does_not_exist(tmp_path) -
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0062"
+        assert version == "0063"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
@@ -1586,8 +1586,141 @@ def test_migration_0061_is_guarded_when_questions_does_not_exist(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         version = conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-        assert version == "0062"
+        assert version == "0063"
         tables = {
             row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "questions" not in tables
+
+
+# ---------------------------------------------------------------------------
+# 0063 — the agent name is unique within a project
+# ---------------------------------------------------------------------------
+
+
+def _insert_agent(conn, agent_id: str, project_id: str, name: str) -> None:
+    """Insert an agent, filling whatever NOT NULL columns the schema has at this revision.
+
+    Written against the schema rather than a fixed column list so a later migration adding a
+    required column does not turn these tests into a puzzle about `agents`, which is not what
+    they are checking.
+    """
+    columns = list(conn.execute("PRAGMA table_info('agents')"))
+    values = {"id": agent_id, "project_id": project_id, "name": name}
+    for _cid, col_name, col_type, not_null, default, _pk in columns:
+        if col_name in values or not not_null or default is not None:
+            continue
+        upper = (col_type or "").upper()
+        if "INT" in upper:
+            values[col_name] = 0
+        elif "CHAR" in upper or "TEXT" in upper or "CLOB" in upper:
+            values[col_name] = "2026-08-12T00:00:00" if "_at" in col_name else "x"
+        else:
+            values[col_name] = "2026-08-12T00:00:00"
+    placeholders = ", ".join("?" for _ in values)
+    conn.execute(
+        f"INSERT INTO agents ({', '.join(values)}) VALUES ({placeholders})",
+        tuple(values.values()),
+    )
+
+
+def _agents_index_is_unique(db_file) -> bool:
+    with sqlite3.connect(db_file) as conn:
+        for _seq, name, unique, *_rest in conn.execute("PRAGMA index_list('agents')"):
+            if name == "ix_agents_project_name":
+                return bool(unique)
+    raise AssertionError("ix_agents_project_name is missing")
+
+
+def _upgrade_to(db_url: str, revision: str) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.upgrade(cfg, revision)
+
+
+def test_migration_0063_makes_the_agent_name_unique_per_project(tmp_path) -> None:
+    """Closes umbrella task 13.2. The index existed since 0004 but was never unique."""
+    db_file = tmp_path / "unique.db"
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    assert _agents_index_is_unique(db_file)
+
+
+def test_migration_0063_rejects_a_second_agent_with_the_same_name(tmp_path) -> None:
+    """The point of the index: registration SELECTs then INSERTs, and two concurrent
+    registrations interleave through that gap. The database now refuses the second."""
+    db_file = tmp_path / "reject.db"
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        _insert_agent(conn, "a1", "proj-x", "nova")
+        with pytest.raises(sqlite3.IntegrityError):
+            _insert_agent(conn, "a2", "proj-x", "nova")
+
+
+def test_migration_0063_allows_the_same_name_in_a_different_project(tmp_path) -> None:
+    """Uniqueness is per project, not global — two projects may each have a `nova`."""
+    db_file = tmp_path / "scoped.db"
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+
+    with sqlite3.connect(db_file) as conn:
+        _insert_agent(conn, "a1", "proj-a", "nova")
+        _insert_agent(conn, "a2", "proj-b", "nova")
+        count = conn.execute("SELECT COUNT(*) FROM agents WHERE name = 'nova'").fetchone()[0]
+
+    assert count == 2
+
+
+def test_migration_0063_renames_pre_existing_duplicates_without_losing_rows(tmp_path) -> None:
+    """A database that already holds duplicates cannot take a unique index, so the migration
+    has to decide something. It renames rather than deleting: an agent owns conversations,
+    runs, tasks and messages by `id`, and dropping a row to satisfy an index would destroy
+    real history. Every row survives; only the later names move."""
+    db_file = tmp_path / "dupes.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    _upgrade_to(db_url, "0062")
+    with sqlite3.connect(db_file) as conn:
+        for agent_id in ("a1", "a2", "a3"):
+            _insert_agent(conn, agent_id, "proj-x", "nova")
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        rows = dict(
+            conn.execute("SELECT id, name FROM agents WHERE project_id = 'proj-x'").fetchall()
+        )
+
+    assert len(rows) == 3, "no row may be deleted to satisfy the index"
+    assert rows["a1"] == "nova", "the oldest row keeps the name"
+    assert sorted(rows.values()) == ["nova", "nova-2", "nova-3"]
+    assert _agents_index_is_unique(db_file)
+
+
+def test_migration_0063_dedupe_respects_the_agent_name_length_limit(tmp_path) -> None:
+    """AGENT_NAME_RE caps a name at 32 characters, so the suffix truncates rather than
+    producing a name the application itself would reject."""
+    db_file = tmp_path / "long.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    long_name = "a" * 32
+
+    _upgrade_to(db_url, "0062")
+    with sqlite3.connect(db_file) as conn:
+        for agent_id in ("a1", "a2"):
+            _insert_agent(conn, agent_id, "proj-x", long_name)
+        conn.commit()
+
+    _upgrade_to(db_url, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        names = sorted(
+            row[0] for row in conn.execute("SELECT name FROM agents WHERE project_id = 'proj-x'")
+        )
+
+    assert all(len(name) <= 32 for name in names), names
+    assert names == sorted([long_name, f"{'a' * 30}-2"])

@@ -1460,10 +1460,19 @@ projects API and no UI. `hub-visual-language` depends on this.*
 > - 13.13 — stronger than asked: `init` does not exist at all. `cli.py` has five commands
 >   (`status`, `doctor`, `stop`, `hub_start`, `reset`), so there is no ceremony left to fix.
 >
+> **13.2 — CLOSED (2026-08-12), real implementation.** Migration `0063` makes
+> `ix_agents_project_name` unique, and `models.py` matches. What it fixes is a **race**, not a
+> missing check: registration already refuses a duplicate with 409 (`api/v1/agents.py:627`,
+> `:1152`), but both sites SELECT then INSERT, and two concurrent registrations interleave through
+> that gap — after which every `(project_id, name)` lookup in the Hub returns whichever row the
+> database hands back first. Pre-existing duplicates are **renamed**, not deleted: an agent owns
+> conversations, runs, tasks and messages by `id`, so dropping a row to satisfy an index would
+> destroy history, and failing the upgrade would leave the operator with no UI to repair it. The
+> oldest row keeps the name; later ones become `<name>-2`, truncated to stay inside
+> `AGENT_NAME_RE`. Five tests in `hub/tests/test_migrations.py`, including the rename and the
+> length-limit path. Hub suite 1517.
+>
 > **Verified NOT done — these are real, and stay open:**
-> - **13.2's uniqueness half.** `Index("ix_agents_project_name", "project_id", "name")`
->   (`models.py:223`) and migration `0004` both omit `unique=True`; `PRAGMA index_list('agents')` on
->   the live database reports `unique=0`. The identity half of 13.2 shipped; the constraint did not.
 > - **13.4 scope enforcement.** No agent or charter scope field exists; every `scope` hit in the Hub
 >   is the unrelated "project-scoped" phrasing. Nothing reports work as out-of-scope, so nothing
 >   enforces it. A charter *saying* an agent should stay in scope is not the runtime enforcing it —
