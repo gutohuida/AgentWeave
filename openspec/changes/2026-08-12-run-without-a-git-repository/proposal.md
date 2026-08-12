@@ -75,6 +75,10 @@ until it is one" wording in `api/v1/worktrees.py:137-140`.
 **No migration.** Isolation has no column; it is `Agent.config["read_only"]`, and this change adds
 no field.
 
+**One unrelated defect fixed because this change exposed it** — `ProjectWorkspace.resolve_relative`
+accepted a project-relative path beginning with `~`. It was unreachable while every writing agent's
+`work_dir` was refused earlier; making `work_dir` reachable made it reachable. See design.md D6.
+
 ## Non-Goals
 
 - **Not making projects git repositories.** `local-project-workspace` is explicit that registration

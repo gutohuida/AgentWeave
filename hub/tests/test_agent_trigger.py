@@ -441,7 +441,7 @@ async def test_writing_agent_cannot_bypass_isolation_with_work_dir(
 
 
 @pytest.mark.asyncio
-async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
+async def test_writing_agent_runs_in_place_when_the_project_is_not_a_repository(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
     plain = tmp_path / "not-a-repo"
@@ -464,8 +464,68 @@ async def test_writing_agent_is_not_spawned_when_isolation_cannot_be_prepared(
         )
 
     assert response.status_code == 200
+    body = response.json()
+    assert body["status"] != "queued", body.get("waiting_reason")
+    assert not (plain / ".git").exists()
+
+
+@pytest.mark.asyncio
+async def test_writing_agent_is_not_spawned_when_a_real_repository_cannot_be_prepared(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """The half of fail-closed that survives: the project has isolation and cannot get it."""
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+
+    def fail(*args, **kwargs):
+        raise worktrees.IsolationUnavailableError("worktree registered to the wrong ref")
+
+    monkeypatch.setattr(worktrees, "ensure_worktree", fail)
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("writer", cli="claude")
+
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        response = await app.post(
+            "/api/v1/projects/proj-test/agent/trigger",
+            json={"agent": "writer", "message": "write"},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
     assert response.json()["status"] == "queued"
-    assert "isolated worktree" in response.json()["waiting_reason"].lower()
+    assert "wrong ref" in response.json()["waiting_reason"]
+
+
+@pytest.mark.asyncio
+async def test_work_dir_is_accepted_for_a_writer_when_there_is_no_isolation_to_override(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    plain = tmp_path / "not-a-repo"
+    (plain / "sub").mkdir(parents=True)
+    await bind_project_workspace(plain)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("writer", cli="claude")
+
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        response = await app.post(
+            "/api/v1/projects/proj-test/agent/trigger",
+            json={"agent": "writer", "message": "write", "work_dir": "sub"},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

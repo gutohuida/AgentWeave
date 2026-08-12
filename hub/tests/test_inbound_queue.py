@@ -400,8 +400,9 @@ async def test_queue_status_probes_the_bound_runner_not_the_agent_name(
     None`, whose fallback is the agent's own name — so an agent called
     `codex-spec` bound to the `codex` runner was reported as
     "Runner CLI 'codex-spec' was not found in PATH". It was launchable. The
-    false reason masked the real one, which was that its project had no git
-    repository for an isolated worktree.
+    false reason masked the real one, which at the time was that its project
+    had no git repository for an isolated worktree — no longer a blocker, but
+    the masking is the defect this test pins.
     """
     # The agent row must exist before a runner can be bound to it.
     await app.post(
@@ -426,13 +427,15 @@ async def test_queue_status_probes_the_bound_runner_not_the_agent_name(
 
 
 @pytest.mark.asyncio
-async def test_queue_status_names_a_missing_git_repository(app, auth_headers, bind_runner):
-    """Launchable is not the same as startable.
+async def test_queue_status_does_not_report_a_missing_repository_as_a_blocker(
+    app, auth_headers, bind_runner
+):
+    """A project with no git repository stops nothing, so nothing may say it does.
 
-    Isolation is the default, so a writing agent in a project that is not a git
-    repository fails at worktree provisioning — inside the trigger, where the
-    reason was raised and then discarded. The operator saw "1 waiting" with no
-    explanation and reasonably guessed at something else entirely.
+    This reason existed while a writing agent was refused in a non-repository
+    project. It runs in the project directory now, so naming the repository
+    would describe a state that blocks no turn — and send the operator to fix
+    something that is not broken.
 
     The entry is queued directly rather than through the trigger, because the
     suite stubs worktree provisioning away: a triggered turn starts, and then
@@ -464,7 +467,7 @@ async def test_queue_status_names_a_missing_git_repository(app, auth_headers, bi
     )
 
     assert status.status_code == 200
-    reason = status.json()["waiting_reason"] or ""
     # The project root under the autouse workspace fixture is a bare tmp_path, not a repo.
-    assert "not a git repository" in reason, reason
-    assert "git init" in reason, "the reason must say what to do about it"
+    reason = status.json()["waiting_reason"] or ""
+    assert "git" not in reason.lower(), reason
+    assert "repository" not in reason.lower(), reason

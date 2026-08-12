@@ -127,16 +127,21 @@ async def get_agent_workspace(
         )
 
     if not worktrees.is_git_repo(repo_root):
-        # The same condition `resolve_agent_workspace` fails a spawn on. Reported here so the
-        # operator reads it before a turn refuses, rather than as a run failure afterwards.
+        # This agent shares the project directory, like a read-only one — but for a different
+        # reason, and the difference is the only thing that tells the operator `git init` would
+        # change it. So `isolated` is False (it will not get a branch, and reporting True would
+        # promise one) and `provisioned` is True (nothing is missing), with the reason carrying
+        # the distinction. Not a failure: the turn runs.
         return AgentWorkspaceInfo(
             agent=agent,
             repo_root=str(repo_root),
             working_dir=str(repo_root),
-            isolated=True,
+            isolated=False,
+            provisioned=True,
             unavailable_reason=(
-                f"{repo_root} is not a git repository, so this agent cannot be given an "
-                "isolated checkout. Its turns will be refused until it is one."
+                f"{repo_root} is not a git repository, so there is no isolated checkout to "
+                "give this agent. It works in the project directory, sharing it with any "
+                "other agent here."
             ),
         )
 

@@ -110,15 +110,24 @@ describe('where an agent works on disk', () => {
     expect(worktree).not.toHaveTextContent('agentweave/')
   })
 
-  it('surfaces an isolation failure before a turn refuses over it', () => {
+  it('reports an absent repository as a note, not as an alert', () => {
+    // This field once meant "your turns will be refused until you fix this". A writing agent in
+    // a project with no repository now runs in the project directory, so nothing is failing and
+    // nothing should be announced as failing — but it is still said, because it is the one thing
+    // telling the operator `git init` would change something.
     renderWorkspace(
       info({
-        provisioned: false,
+        isolated: false,
+        provisioned: true,
         branch: null,
-        unavailable_reason: '/repo is not a git repository, so this agent cannot be given an isolated checkout.',
+        working_dir: '/repo',
+        unavailable_reason:
+          '/repo is not a git repository, so there is no isolated checkout to give this agent.',
       }),
     )
-    expect(screen.getByRole('alert')).toHaveTextContent(/not a git repository/)
+    expect(screen.getByText(/not a git repository/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agent-worktree')).toHaveTextContent('Shares the project checkout')
   })
 
   it('offers no control over isolation', () => {

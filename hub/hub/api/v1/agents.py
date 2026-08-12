@@ -921,6 +921,7 @@ async def _render_hub_agent_context(
     agent_row: Optional[Agent],
     work_dir: Optional[str] = None,
     isolated: bool = False,
+    isolation_unavailable: bool = False,
     spec_document: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
@@ -1007,6 +1008,20 @@ async def _render_hub_agent_context(
             lines.append(
                 "- Other agents work in separate worktrees on their own branches. You cannot see "
                 "their changes, and they cannot see yours until branches are merged."
+            )
+        elif isolation_unavailable:
+            # Said rather than left to be discovered. The sentence above is true for a read-only
+            # agent too, and stopping there leaves an agent to find out there is no repository by
+            # running git and reading the failure as a broken machine.
+            lines.append(
+                "- This directory is not a git repository, so there is no isolated worktree and "
+                "no branch of your own. Do not expect git to work here, and do not offer to "
+                "commit or branch."
+            )
+            lines.append(
+                "- Any other agent in this project works in this same directory. Your edits and "
+                "theirs can overwrite each other with no conflict to resolve, so prefer small, "
+                "complete changes over long-running edits across many files."
             )
         else:
             lines.append("- This is the project's shared checkout, not an isolated worktree.")

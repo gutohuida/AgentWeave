@@ -8,6 +8,16 @@ resolvable conflict. Each writing agent gets its own worktree on its own branch
 declared ``read_only`` in its config (new key, task 5.2) never gets one and shares the
 primary checkout directly instead.
 
+That conversion needs a repository, so it is available rather than unconditional. A
+project directory that is not a git repository has no isolation to offer and gets none:
+its writing agents run in the project directory itself rather than being refused
+(``resolve_agent_workspace``, and see ``2026-08-12-run-without-a-git-repository``). Two
+of them can then lose each other's updates — accepted deliberately, because the only
+mechanism for converting that into a conflict is the repository that is absent, and the
+alternatives are refusing the operator's project or serialising it. The posture is
+stated to the agent in its turn context and to the operator in its workspace report;
+what is *not* done is creating a repository to satisfy an invariant nobody asked for.
+
 Every git call here is plumbing or a narrowly-scoped porcelain command run against an
 explicit ``cwd`` — never the Hub process's own working directory implicitly, and never
 anything that touches the *primary* checkout's index or HEAD (matching the convention
@@ -213,16 +223,24 @@ def resolve_agent_workspace(repo_root: Path, agent: str, config: Dict[str, Any])
     """Return the directory a spawned *agent* process should use as its cwd.
 
     Writing agents get an isolated worktree, provisioned here if needed. Read-only
-    agents share *repo_root*. Writing agents fail closed when isolation cannot be
-    prepared: spawning one in the primary checkout would reintroduce silent lost updates.
+    agents share *repo_root*.
+
+    **Absence of a repository is a degradation; failing to provision one is an error**
+    (design.md Decision 1). The two look alike and are not. Where *repo_root* is not a
+    git repository there is no isolation on offer — no branch exists, no primary checkout
+    is at risk, and running in place is the only thing the Hub could do, so it does that.
+    Where the project *is* a repository and `ensure_worktree` fails, it still raises:
+    falling back there would put a writing agent on the operator's primary checkout,
+    mutating the working copy their editor and CI read, which is the silent lost update
+    this module exists to prevent.
     """
     if not is_writing_agent(config):
         return repo_root
     if not is_git_repo(repo_root):
-        raise IsolationUnavailableError(
-            f"cannot prepare an isolated worktree for {agent!r}: "
-            f"{repo_root} is not a usable git repository"
-        )
+        # Nothing to isolate from. `is_git_repo` also answers False for a machine with no
+        # `git` at all, which is correct here for the same reason: that machine has no
+        # isolation to offer either, and refusing every turn on it was a total outage.
+        return repo_root
     return ensure_worktree(repo_root, agent)
 
 

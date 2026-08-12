@@ -343,7 +343,11 @@ async def trigger_agent_directly(
     # Task 5.1/5.2: a writing agent gets its own git worktree, isolated from every other
     # agent's (Decision 7). A custom work_dir cannot override that isolation. Read-only
     # agents may retain the existing project-relative work_dir behavior.
-    if work_dir and worktrees.is_writing_agent(config):
+    #
+    # Only where there *is* isolation to override. A project directory that is not a git
+    # repository has none, so refusing there would be a guard with no subject.
+    project_is_repo = worktrees.is_git_repo(repo_root)
+    if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
             status.HTTP_400_BAD_REQUEST,
             "work_dir cannot override workspace isolation for a writing agent",
@@ -388,6 +392,12 @@ async def trigger_agent_directly(
         # write was refused.
         work_dir=effective_work_dir,
         isolated=isolated_workspace is not None,
+        # A writing agent working in the project directory is doing so because there is no
+        # repository to cut a worktree from — the only remaining path through
+        # `resolve_agent_workspace`. Told apart from a read-only agent sharing by choice,
+        # because an agent that does not know there is no repository proposes branches,
+        # offers to commit, and reads a failed `git status` as a broken environment.
+        isolation_unavailable=worktrees.is_writing_agent(config) and not project_is_repo,
         # Which specification document the operator has open, when the message came from the
         # specification workspace. Deliberately here and not prepended to `message`: the message
         # is the durable record of what the operator said, and re-reading the conversation later
@@ -655,7 +665,13 @@ async def trigger_agent(
         project_workspace.raise_workspace_http_error(exc)
 
     config = await get_agent_config(project_id, body.agent, session)
-    if body.work_dir and worktrees.is_writing_agent(config):
+    # Mirrors the same guard in `trigger_agent_directly`, including its repository condition:
+    # there is no isolation to override in a project that is not a git repository.
+    if (
+        body.work_dir
+        and worktrees.is_writing_agent(config)
+        and worktrees.is_git_repo(workspace_root.root)
+    ):
         raise HTTPException(
             status_code=400,
             detail="work_dir cannot override workspace isolation for a writing agent",

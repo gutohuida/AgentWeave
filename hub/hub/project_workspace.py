@@ -65,6 +65,17 @@ class ProjectWorkspace:
         candidate = Path(raw)
         if candidate.is_absolute() or ".." in candidate.parts:
             raise ProjectPathError("project-relative path must be contained and traversal-free")
+        # A leading `~` is contained here and not necessarily contained later. Python does not
+        # expand it, so `~/projects/secret` resolves under the root and passes the check below —
+        # but the resolved path is handed to a spawned process as its cwd and appears in command
+        # arguments, and anything that expands it reaches the operator's home directory instead.
+        # Refused rather than normalised: the caller meant something, and quietly reinterpreting
+        # a path as a literal directory named `~` is its own surprise.
+        #
+        # Only the first component: expansion applies there, and `backup~` is a real directory
+        # name that nothing would expand.
+        if candidate.parts and candidate.parts[0].startswith("~"):
+            raise ProjectPathError("project-relative path must not begin with '~'")
         resolved = (self.root / candidate).resolve(strict=False)
         if not _is_within(resolved, self.root):
             raise ProjectPathError("resolved path escapes the project workspace")

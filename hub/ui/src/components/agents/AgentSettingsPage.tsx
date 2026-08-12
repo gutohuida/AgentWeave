@@ -293,8 +293,13 @@ function WorkspaceLocation({ agent }: { agent: string }) {
           >
             {data.working_dir}
           </code>
+          {/* A note, not an alert. This field once meant "your turns will be refused until you
+            * fix this"; it now means "here is why you have no branch", and the turn runs either
+            * way. Amber and `role="alert"` would announce a problem to a screen reader that the
+            * operator does not have. The only reason it is said at all is that it is the one
+            * thing telling them `git init` would change something. */}
           {data.unavailable_reason && (
-            <p role="alert" className="mt-2 text-[11px]" style={{ color: 'var(--amber)' }}>
+            <p className="mt-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
               {data.unavailable_reason}
             </p>
           )}

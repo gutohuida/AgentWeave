@@ -102,14 +102,34 @@ def test_resolve_agent_workspace_shares_checkout_for_read_only_agent(repo):
     assert not worktrees.worktree_path(repo, "reader").exists()
 
 
-def test_resolve_agent_workspace_refuses_writer_when_not_a_git_repo(tmp_path):
+def test_resolve_agent_workspace_runs_writer_in_place_when_not_a_git_repo(tmp_path):
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
-    with pytest.raises(worktrees.IsolationUnavailableError, match="git repository"):
-        resolve_agent_workspace(plain, "dave", {})
+
+    assert resolve_agent_workspace(plain, "dave", {}) == plain
+
+
+def test_running_in_place_creates_no_repository_and_no_worktree(tmp_path):
+    """The Hub does not make the project a repository in order to have an invariant hold."""
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+
+    resolve_agent_workspace(plain, "dave", {})
+
+    assert not (plain / ".git").exists()
+    assert not worktrees.worktree_root(plain).exists()
+    assert not worktrees.worktree_path(plain, "dave").exists()
+    assert sorted(p.name for p in plain.iterdir()) == []
 
 
 def test_resolve_agent_workspace_does_not_fall_back_after_git_failure(repo, monkeypatch):
+    """The distinction the change rests on: no repository degrades, a broken one does not.
+
+    A project that *has* isolation must not silently lose it — falling back here would put a
+    writing agent on the operator's primary checkout. If this test ever needs editing, the
+    change that made it fail is wrong.
+    """
+
     def fail(*args, **kwargs):
         raise worktrees.GitCommandError(["worktree", "add"], 1, "boom")
 
@@ -344,11 +364,15 @@ async def test_a_read_only_agent_shares_the_project_checkout(
 
 
 @pytest.mark.asyncio
-async def test_a_workspace_that_cannot_isolate_says_so_before_a_turn_refuses(
+async def test_a_writer_with_no_repository_shares_the_project_directory(
     app, auth_headers, tmp_path, bind_project_workspace
 ):
-    """The same condition `resolve_agent_workspace` fails a spawn on, reported where the operator
-    can read it first rather than afterwards as a run failure."""
+    """Sharing, but not for the reason a read-only agent shares — and the difference is the only
+    thing that tells the operator `git init` would change something.
+
+    Nothing is failing, so nothing is reported as pending: `provisioned` is true because there is
+    nothing left to provision, and `isolated` is false because no branch is coming.
+    """
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
     await bind_project_workspace(plain)
@@ -356,9 +380,32 @@ async def test_a_workspace_that_cannot_isolate_says_so_before_a_turn_refuses(
     resp = await app.get("/api/v1/projects/proj-test/worktrees/xan", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["isolated"] is True
-    assert body["provisioned"] is False
+    assert body["isolated"] is False
+    assert body["branch"] is None
+    assert body["provisioned"] is True
+    assert body["working_dir"] == str(plain)
     assert "not a git repository" in body["unavailable_reason"]
+
+
+@pytest.mark.asyncio
+async def test_the_two_ways_of_sharing_the_project_directory_are_distinguishable(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """A read-only agent in a repository and a writer with no repository both report
+    `isolated: false` with the project directory. Only the second carries a reason, and without
+    it the operator could not tell a configured choice from an absent repository."""
+    await bind_project_workspace(repo)
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "yuki", "contact_mode": "poll", "config": {"read_only": True}},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/yuki", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["isolated"] is False
+    assert resp.json()["unavailable_reason"] is None
 
 
 @pytest.mark.asyncio

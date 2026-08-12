@@ -249,7 +249,13 @@ async def test_files_changed_is_the_union_over_the_covered_turns(app, tmp_path):
 @pytest.mark.asyncio
 async def test_turns_predating_the_snapshot_column_report_no_files_rather_than_a_guess(app):
     """Migration 0043 does not backfill: those SHAs were never captured and cannot be
-    recovered. The same rule 0041 followed for peer bindings."""
+    recovered. The same rule 0041 followed for peer bindings.
+
+    This is also the shape of every run in a project that is not a git repository
+    (`2026-08-12-run-without-a-git-repository`): no worktree, so no auto-snapshot, so no SHA.
+    Those checkpoints carry no changed-file list for the same reason — there are no commits to
+    read one from — and they degrade to `[]` here rather than raising.
+    """
     async with async_session_factory() as db:
         conversation = await _conversation(db)
         await _run(db, "run-old", sha=None)

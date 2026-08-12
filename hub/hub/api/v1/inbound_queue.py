@@ -168,28 +168,20 @@ async def get_queue_status(
             if not probe["runnable"]:
                 reason = probe["reason"] or "agent is not launchable"
             else:
-                # Launchable is not the same as startable. Isolation is the default, so a writing
-                # agent in a project that is not a git repository fails at worktree provisioning —
-                # inside the trigger, where the reason was raised and then discarded. The operator
-                # saw "1 waiting" with no explanation and reasonably guessed at something else
-                # entirely. Checked read-only here; provisioning stays the trigger's to do.
-                from ... import project_workspace, worktrees
+                # Launchable is not the same as startable: a turn can be refused inside the
+                # trigger, where the reason was raised and then discarded, leaving the operator
+                # with "1 waiting" and no explanation to reason from. Anything checked here is
+                # read-only; provisioning stays the trigger's to do.
+                #
+                # A project that is not a git repository used to be reported here. It no longer
+                # blocks anything — a writing agent runs in the project directory instead — so
+                # naming it would describe a state that stops nothing.
+                from ... import project_workspace
 
                 try:
-                    workspace = await project_workspace.resolve_project_workspace(
-                        session, project_id
-                    )
+                    await project_workspace.resolve_project_workspace(session, project_id)
                 except project_workspace.ProjectWorkspaceError as exc:
                     reason = f"project workspace is unavailable: {exc}"
-                else:
-                    if worktrees.is_writing_agent(config) and not worktrees.is_git_repo(
-                        workspace.root
-                    ):
-                        reason = (
-                            f"{workspace.root} is not a git repository, so an isolated worktree "
-                            "cannot be prepared. Run `git init` there, or make this agent "
-                            "read-only."
-                        )
     return QueueStatus(
         agent=agent, waiting_count=len(entries), running=running, waiting_reason=reason
     )

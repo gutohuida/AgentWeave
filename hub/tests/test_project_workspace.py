@@ -118,7 +118,24 @@ def test_nested_agentweave_worktree_is_rejected(tmp_path) -> None:
         canonicalize_project_directory(nested)
 
 
-@pytest.mark.parametrize("relative", ["../escape", "a/../../escape", "/absolute", "bad\x00name"])
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "../escape",
+        "a/../../escape",
+        "/absolute",
+        "bad\x00name",
+        # A leading `~` is contained *here* — Python does not expand it, so it resolves to a
+        # literal directory under the root and every containment check passes. It stops being
+        # contained wherever it is expanded, and the resolved path becomes a spawned process's
+        # cwd. `hub/tests/test_agents.py` has asserted the refusal since before the containment
+        # check existed, but it was reaching a different guard: writing agents were refused a
+        # `work_dir` outright, so no tilde ever reached this function. Pinned here so the rule
+        # holds on its own rather than as a side effect of an unrelated one.
+        "~/projects/secret",
+        "~root/projects/secret",
+    ],
+)
 def test_relative_resolution_rejects_escape_absolute_and_control_input(
     tmp_path, relative: str
 ) -> None:

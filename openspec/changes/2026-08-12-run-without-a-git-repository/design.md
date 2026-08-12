@@ -94,6 +94,18 @@ refusal has no subject. The guard gains the repository condition, in both places
 Kept deliberately: the refusal for a writing agent in a real repository. Nothing in this change makes
 that safer.
 
+**This uncovered a live gap.** `ProjectWorkspace.resolve_relative` accepted a leading `~`: Python
+does not expand it, so `~/projects/secret` resolved to a literal directory under the project root
+and passed every containment check. It had never mattered because a writing agent's `work_dir` was
+refused before reaching the validator — so the test asserting the refusal
+(`test_agents.py::test_agent_trigger_rejects_work_dir_with_tilde`) had been passing on a different
+guard than the one it names. Relaxing this refusal made the path reachable and the test fail, which
+is the test doing its job late rather than a regression this change introduced.
+
+Fixed at `resolve_relative` rather than in the `work_dir` guard: it is the single containment
+chokepoint every caller passes through, and a rule that lives in one caller is a rule the next
+caller does not get.
+
 ### D7 — Concurrent writers in a non-repository project are permitted and stated, not prevented
 
 Two writing agents sharing one directory can produce a lost update. Worktrees do not remove that
