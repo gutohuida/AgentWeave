@@ -57,6 +57,19 @@ The operator SHALL be able to open an existing directory or explicitly create an
 directory. Opening MUST NOT create the target directory. Creating MUST create exactly the requested
 new directory and MUST refuse an existing non-empty target.
 
+Creation SHALL be expressed as an existing parent directory plus a name for the new project. The
+created directory SHALL be that name within that parent, and the project SHALL take that same name.
+The operator SHALL NOT be required to compose a filesystem path in order to create a project.
+
+The parent directory MUST already exist. Creation SHALL NOT create intermediate directories.
+
+A project name offered at creation MUST be a single path segment. A name that is empty, that contains
+a path separator, that is a traversal segment, or that the host filesystem rejects SHALL be refused
+with a message naming the problem, and MUST NOT be silently rewritten into an acceptable one.
+
+Before the operator confirms, the interface SHALL show the absolute path that will be created,
+derived from the same values that are submitted.
+
 Registration SHALL atomically create the project, seed its default runners and starter charters,
 and write its identity marker. It SHALL NOT initialize git, start an agent, create a specification,
 or otherwise modify project source.
@@ -67,10 +80,22 @@ or otherwise modify project source.
 - **THEN** it is registered without changing its source content beyond AgentWeave runtime metadata
 - **AND** it becomes the selected project
 
-#### Scenario: A new directory is created
+#### Scenario: A new directory is created from a parent and a name
 
-- **WHEN** the operator explicitly chooses Create and confirms a valid nonexistent target
-- **THEN** exactly that directory is created and registered
+- **WHEN** the operator chooses Create, supplies an existing parent directory and the name `my-app`
+- **THEN** exactly `my-app` is created within that parent and registered
+- **AND** the project is named `my-app`
+
+#### Scenario: The target is shown before it is created
+
+- **WHEN** the operator has supplied a parent and a name
+- **THEN** the absolute path that will be created is displayed before confirmation
+
+#### Scenario: A name that is not a directory name is refused
+
+- **WHEN** the operator supplies a project name containing a path separator or a traversal segment
+- **THEN** creation is refused with a message naming the problem
+- **AND** no directory is created, and the name is not rewritten into an acceptable one
 
 #### Scenario: Marker creation fails
 
@@ -246,67 +271,23 @@ mount diagnostic. The system MUST NOT mount the Docker socket or guess host/cont
 
 ### Requirement: The operator can browse for a project directory
 
-The project dialog SHALL let the operator locate a directory by browsing, in addition to typing or
-pasting a path. Browsing SHALL be served by the Hub process, because a browser does not disclose an
-absolute filesystem path to a web page.
+The Hub UI SHALL let the operator browse the filesystem visible to the Hub process to choose a
+project directory, rather than requiring an absolute path to be typed from memory.
 
-Browsing SHALL list directories only. It MUST NOT return file names or file contents.
+What browsing returns SHALL be directly usable in the mode it was invoked from, without the operator
+editing it. Because browsing yields a directory that exists, in create mode it SHALL supply the
+parent directory rather than the project directory itself.
 
-Browsing SHALL let the operator reach any Hub-visible directory without knowing its path in advance:
-the available filesystem roots SHALL be reachable without typing, and the current location SHALL be
-shown as navigable structure, with any ancestor reachable directly rather than only the immediate
-parent.
+#### Scenario: Browsing supplies a usable value in create mode
 
-Choosing the directory currently being viewed MUST NOT depend on an interaction the interface does
-not indicate. Where navigating into a directory and choosing it are distinct actions, each SHALL have
-its own visible affordance — moving into a directory MUST NOT also choose it.
+- **WHEN** the operator browses for a directory while creating a project
+- **THEN** the chosen directory becomes the parent, and the operator supplies only a name
+- **AND** the operator is not required to edit the chosen path
 
-Browsing SHALL be operable from the keyboard alone: moving between entries, entering a directory,
-returning to its parent, and choosing a directory.
+#### Scenario: Browsing supplies a usable value in open mode
 
-#### Scenario: A directory is chosen by browsing
-
-- **WHEN** the operator browses to a directory and chooses it
-- **THEN** that directory's absolute path becomes the dialog's path value
-
-#### Scenario: Only directories are listed
-
-- **WHEN** a directory containing both files and subdirectories is listed
-- **THEN** only its subdirectories are returned
-
-#### Scenario: Typing a path remains available
-
-- **WHEN** the operator knows the path already
-- **THEN** it can be typed or pasted without browsing
-
-#### Scenario: An unreadable directory does not end browsing
-
-- **WHEN** a directory cannot be read
-- **THEN** the operator is told why
-- **AND** browsing continues from where it was
-
-#### Scenario: Roots are reachable without typing
-
-- **WHEN** the operator opens the directory browser
-- **THEN** the available filesystem roots can be reached without typing a path
-
-#### Scenario: The current location is navigable structure
-
-- **WHEN** the operator is browsing a directory
-- **THEN** the current location is shown as navigable structure
-- **AND** an ancestor can be returned to directly
-
-#### Scenario: Choosing has its own affordance
-
-- **WHEN** the operator wants to choose the directory they are viewing
-- **THEN** a visible control chooses it
-- **AND** no undisclosed interaction (such as a double-click) is required
-
-#### Scenario: Browsing works from the keyboard
-
-- **WHEN** the operator uses only the keyboard
-- **THEN** they can move between entries, enter a directory, return to its parent, and choose a
-  directory
+- **WHEN** the operator browses for a directory while opening a project
+- **THEN** the chosen directory is the project directory, and no further editing is required
 
 ### Requirement: Directory listing is authenticated and bounded
 

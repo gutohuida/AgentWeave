@@ -67,8 +67,12 @@
 
 The agent cannot open a host folder dialog or judge whether a form reads as obvious.
 
-- [ ] 5.1 Does Browse now give you something you can use without editing it?
-- [ ] 5.2 Is it obvious, before you confirm, where the project will be created?
+- [x] 5.1 Does Browse now give you something you can use without editing it?
+      **Operator, 2026-08-12: "You can close those two. They're working."** Browse returns a
+      directly usable parent — the defect this change exists to fix is gone in the running app.
+- [x] 5.2 Is it obvious, before you confirm, where the project will be created?
+      Closed on the same attestation. Recorded as the operator's report, not as a fresh run:
+      the agent cannot open a host folder dialog or judge whether a form reads as obvious.
 - [x] 5.3 Does removing the separate display name in create mode feel like a loss, or like one fewer
       thing to answer?
       **Operator, 2026-08-12: "No i don't. That's okay."** — not a loss. Design D2 holds, and the
