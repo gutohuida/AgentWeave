@@ -80,6 +80,56 @@ export function useSpec(path: string | null) {
   })
 }
 
+/** One requirement's coverage. `integration` is never optional: a state shown without it
+ *  would be true of a branch and false of the product. */
+export interface CoverageEntry {
+  identifier: string
+  requirement_id: string
+  document_id: string
+  state:
+    | 'drifting'
+    | 'stale'
+    | 'evidence_awaiting_review'
+    | 'verified'
+    | 'in_progress'
+    | 'not_started'
+    | 'unserved'
+  integration: 'integrated' | 'not_integrated' | 'unknown' | 'not_applicable'
+  evidence_count: number
+  accepted_count: number
+  linked_task_ids: string[]
+}
+
+/** A requirement that could not be given a state at all — broken, not unserved. */
+export interface CoverageDiagnostic {
+  requirement_id: string
+  identifier: string
+  document_id: string
+  problem: string
+}
+
+export interface CoverageResponse {
+  requirements: CoverageEntry[]
+  diagnostics: CoverageDiagnostic[]
+  totals: Record<string, number>
+  integration: Record<string, number>
+  unserved: string[]
+}
+
+export function useSpecCoverage(path: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<CoverageResponse>({
+    queryKey: ['project', projectId, 'specCoverage', path],
+    queryFn: () =>
+      getJson<CoverageResponse>(
+        `/api/v1/projects/${projectId}/project/spec/coverage${
+          path ? `?document=${encodeURIComponent(path)}` : ''
+        }`,
+      ),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
 export function useSpecEvents() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
@@ -90,6 +140,9 @@ export function useSpecEvents() {
     if (event.type === 'spec_updated' && d.project_id === projectId) {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      // Coverage moves on a save (a rewording makes evidence stale) and on evidence arriving,
+      // and both arrive as `spec_updated`.
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specCoverage'] })
       if (d?.path) {
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }

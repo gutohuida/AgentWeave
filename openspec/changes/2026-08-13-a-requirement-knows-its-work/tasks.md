@@ -114,8 +114,10 @@ Unblocked. **Both footprint paths ship together.**
 
 - [x] 6.1 Requirement → linked tasks and evidence (`GET .../spec/requirements/{identifier}`).
 - [x] 6.2 Task → requirements served, on every task response, with the document each belongs to.
-- [ ] 6.3 Coverage on the Spec view. **Not** the task board's traceability surfaces — that is
-      Program A's, per the roadmap's split of Program C.
+- [x] 6.3 Coverage on the Spec view — `SpecCoverageBar`, under the phase bar. Counts by state with
+      the reason each state means what it does, and the verified-but-unmerged set surfaced without
+      opening the detail: it is the one result that reads as good news and is not. **Not** the task
+      board's traceability surfaces — that is Program A's, per the roadmap's split of Program C.
 
 ## 7. Tests — agent-verifiable
 
