@@ -1073,6 +1073,30 @@ async def _render_hub_agent_context(
                     "- You cannot propose or approve. Those are the operator's, and there is no "
                     "argument that does either."
                 )
+                # Precedence, not just procedure. Saying *how* to author a document does not settle
+                # *which authority governs it*, and until this was stated an agent read the block,
+                # understood it, and still opened with "I'm going to use the OpenSpec proposal
+                # workflow" — because a skill whose description matched the operator's own opening
+                # sentence had already answered the question by the time this paragraph was weighed.
+                #
+                # Deliberately names no product (D5): a blocklist dates the moment a different tool
+                # is installed and implies the unnamed ones are fine. And deliberately says what to
+                # *do* with the thing it found (D2) — an agent told only "don't" is holding a fact
+                # with nowhere to put it, and the tool belongs to the operator anyway.
+                lines.append(
+                    "- This procedure is the one that governs this document. No other "
+                    "specification workflow, skill, command or tool applies to it — including one "
+                    "installed on this machine and one you have used before."
+                )
+                lines.append(
+                    "- If you find another specification workflow here, say so to the operator and "
+                    "let them decide about it. Do not follow it, and do not adopt its format or "
+                    "its file layout for this document."
+                )
+                lines.append(
+                    "- Reading such a workflow's files as context about the project is fine. What "
+                    "is not is authoring this document through anything but `submit_spec_document`."
+                )
             lines.append("")
 
     lines.append("### Team")
