@@ -19,10 +19,13 @@ from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
     project_workspace,
+    requirement_coverage,
+    requirement_evidence,
     requirement_links,
     spec_documents,
     spec_index,
@@ -32,6 +35,13 @@ from ... import (
 )
 from ...auth import get_project
 from ...db.engine import get_session
+from ...db.models import (
+    EVIDENCE_RETENTION_POLICIES,
+    Project,
+    RequirementDrift,
+    RequirementEvidence,
+    SpecRequirement,
+)
 from ...spec_manifest import SpecPathError, validate_spec_path
 from ...spec_payload import SCHEMA_VERSION
 from ...sse import sse_manager
@@ -196,6 +206,383 @@ async def list_documents(
     project_id, _ = project
     documents = await spec_lifecycle.list_documents(session, project_id)
     return {"documents": [_document_view(document) for document in documents]}
+
+
+class EvidenceRecord(BaseModel):
+    """What the operator records to demonstrate a requirement."""
+
+    identifier: str = Field(max_length=32)
+    kind: str = Field(default="manual_observation", max_length=32)
+    locator: str = Field(default="", max_length=4096)
+    summary: str = Field(default="", max_length=10000)
+    document: Optional[str] = Field(default=None, max_length=255)
+    task_id: Optional[str] = Field(default=None, max_length=64)
+
+
+class EvidenceDecision(BaseModel):
+    decision: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=10000)
+
+
+class DriftResolution(BaseModel):
+    resolution: str = Field(max_length=32)
+
+
+class RetentionSetting(BaseModel):
+    policy: str = Field(max_length=16)
+
+
+async def _requirement(session: AsyncSession, project_id: str, identifier: str, document: str):
+    document_row = None
+    if document:
+        document_row = await spec_lifecycle.get_document(session, project_id, document)
+        if document_row is None:
+            raise HTTPException(status_code=404, detail=f"no specification document at {document}")
+    row, why = await spec_index.resolve(
+        session,
+        project_id,
+        identifier,
+        document_id=document_row.id if document_row else None,
+    )
+    if why == "ambiguous":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{identifier} is declared by more than one document in this project; "
+                "name the document it belongs to"
+            ),
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"this project has no requirement {identifier}")
+    return row
+
+
+@router.get("/spec/coverage")
+async def coverage(
+    document: Optional[str] = Query(None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Coverage for a document, or for the whole project.
+
+    Both come from `requirement_coverage`. A second implementation for the
+    project total is exactly the thing this change exists to prevent.
+    """
+    project_id, _ = project
+    document_id = None
+    if document:
+        row = await spec_lifecycle.get_document(session, project_id, document)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"no specification document at {document}")
+        document_id = row.id
+    report = await requirement_coverage.requirement_coverage(
+        session, project_id, document_id=document_id
+    )
+    unserved = await requirement_links.unserved(session, project_id, document_id=document_id)
+    return {
+        **report.to_dict(),
+        "unserved": [row.identifier for row in unserved],
+    }
+
+
+@router.get("/spec/requirements")
+async def list_requirements(
+    document: Optional[str] = Query(None),
+    include_retired: bool = Query(True),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The project's requirements, with their state and where they sit."""
+    project_id, _ = project
+    document_id = None
+    if document:
+        row = await spec_lifecycle.get_document(session, project_id, document)
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"no specification document at {document}")
+        document_id = row.id
+
+    query = select(SpecRequirement).where(SpecRequirement.project_id == project_id)
+    if document_id is not None:
+        query = query.where(SpecRequirement.document_id == document_id)
+    if not include_retired:
+        query = query.where(SpecRequirement.state == spec_index.ACTIVE)
+    rows = list((await session.execute(query.order_by(SpecRequirement.identifier))).scalars().all())
+    return {
+        "requirements": [
+            {
+                "id": row.id,
+                "identifier": row.identifier,
+                "key": row.key,
+                "document_id": row.document_id,
+                "state": row.state,
+                "digest": row.digest,
+                "anchor": row.anchor,
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.get("/spec/requirements/{identifier}")
+async def requirement_detail(
+    identifier: str,
+    document: Optional[str] = Query(None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """One requirement, and everything pointing at it.
+
+    The other half of a navigation that only went one way: a task already showed
+    the requirements it serves, and nothing showed a requirement its work.
+    """
+    project_id, _ = project
+    requirement = await _requirement(session, project_id, identifier, document or "")
+    tasks = await requirement_links.tasks_for_requirement(session, requirement.id)
+    evidence = await requirement_evidence.for_requirement(session, requirement.id)
+    report = await requirement_coverage.requirement_coverage(
+        session, project_id, document_id=requirement.document_id, include_retired=True
+    )
+    coverage = next(
+        (entry for entry in report.requirements if entry.requirement_id == requirement.id), None
+    )
+    return {
+        "requirement": {
+            "id": requirement.id,
+            "identifier": requirement.identifier,
+            "key": requirement.key,
+            "document_id": requirement.document_id,
+            "state": requirement.state,
+            "digest": requirement.digest,
+            "anchor": requirement.anchor,
+        },
+        "tasks": [
+            {"id": task.id, "title": task.title, "status": task.status, "assignee": task.assignee}
+            for task in tasks
+        ],
+        "evidence": [_evidence_view(row) for row in evidence],
+        # Never omitted, and never without its integration answer.
+        "coverage": coverage.to_dict() if coverage else None,
+    }
+
+
+@router.post("/spec/evidence", status_code=status.HTTP_201_CREATED)
+async def record_evidence(
+    body: EvidenceRecord,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator recording an observation. Accepted on arrival — there is nobody else to await."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    requirement = await _requirement(session, project_id, body.identifier, body.document or "")
+    try:
+        evidence = await requirement_evidence.record(
+            session,
+            requirement,
+            kind=body.kind,
+            locator=body.locator,
+            summary=body.summary,
+            task_id=body.task_id,
+            workspace=workspace,
+            actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+        )
+    except requirement_evidence.EvidenceRefusedError as exc:
+        raise HTTPException(
+            status_code=409, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await session.commit()
+    return _evidence_view(evidence)
+
+
+@router.get("/spec/evidence")
+async def list_evidence(
+    identifier: Optional[str] = Query(None),
+    document: Optional[str] = Query(None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    if identifier:
+        requirement = await _requirement(session, project_id, identifier, document or "")
+        rows = await requirement_evidence.for_requirement(session, requirement.id)
+    else:
+        rows = list(
+            (
+                await session.execute(
+                    select(RequirementEvidence)
+                    .where(RequirementEvidence.project_id == project_id)
+                    .order_by(RequirementEvidence.produced_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return {"evidence": [_evidence_view(row) for row in rows]}
+
+
+@router.post("/spec/evidence/{evidence_id}/decision")
+async def decide_evidence(
+    evidence_id: str,
+    body: EvidenceDecision,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator accepting or rejecting. An agent uses its own plane, and cannot reach this."""
+    project_id, _ = project
+    evidence = await session.get(RequirementEvidence, evidence_id)
+    if evidence is None or evidence.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    try:
+        await requirement_evidence.decide(
+            session,
+            evidence,
+            decision=body.decision,
+            reason=body.reason,
+            actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+        )
+    except requirement_evidence.EvidenceRefusedError as exc:
+        raise HTTPException(
+            status_code=403, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await session.commit()
+    return _evidence_view(evidence)
+
+
+@router.get("/spec/evidence/{evidence_id}/reviews")
+async def evidence_reviews(
+    evidence_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    evidence = await session.get(RequirementEvidence, evidence_id)
+    if evidence is None or evidence.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    reviews = await requirement_evidence.reviews_for(session, evidence_id)
+    return {
+        "reviews": [
+            {
+                "id": review.id,
+                "decision": review.decision,
+                "actor_kind": review.actor_kind,
+                "actor": review.actor,
+                "run_id": review.run_id,
+                "reason": review.reason,
+                "created_at": review.created_at.isoformat(),
+            }
+            for review in reviews
+        ]
+    }
+
+
+@router.post("/spec/drift/detect")
+async def detect_drift(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    raised = await requirement_evidence.detect_drift(session, project_id, workspace)
+    await session.commit()
+    return {"raised": [candidate.id for candidate in raised]}
+
+
+@router.get("/spec/drift")
+async def list_drift(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    rows = list(
+        (
+            await session.execute(
+                select(RequirementDrift)
+                .where(RequirementDrift.project_id == project_id)
+                .order_by(RequirementDrift.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        "drift": [
+            {
+                "id": row.id,
+                "requirement_id": row.requirement_id,
+                "evidence_id": row.evidence_id,
+                "state": row.state,
+                "observed": row.observed,
+                "resolution": row.resolution,
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.post("/spec/drift/{drift_id}/resolve")
+async def resolve_drift(
+    drift_id: str,
+    body: DriftResolution,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    candidate = await session.get(RequirementDrift, drift_id)
+    if candidate is None or candidate.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Drift candidate not found")
+    try:
+        await requirement_evidence.resolve_drift(
+            session,
+            candidate,
+            resolution=body.resolution,
+            actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+        )
+    except requirement_evidence.EvidenceRefusedError as exc:
+        raise HTTPException(
+            status_code=422, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await session.commit()
+    return {"id": candidate.id, "state": candidate.state, "resolution": candidate.resolution}
+
+
+@router.put("/spec/evidence-retention")
+async def set_retention(
+    body: RetentionSetting,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """How long artifacts are kept. `never` is a first-class choice, not a loophole."""
+    project_id, _ = project
+    if not requirement_evidence.retention_is_valid(body.policy):
+        raise HTTPException(
+            status_code=422,
+            detail=f"policy must be one of {list(EVIDENCE_RETENTION_POLICIES)}",
+        )
+    row = await session.get(Project, project_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    row.evidence_retention = body.policy
+    await session.commit()
+    return {"policy": row.evidence_retention}
+
+
+def _evidence_view(evidence) -> dict:
+    return {
+        "id": evidence.id,
+        "requirement_id": evidence.requirement_id,
+        "digest": evidence.digest,
+        "kind": evidence.kind,
+        "locator": evidence.locator,
+        "summary": evidence.summary,
+        "actor_kind": evidence.actor_kind,
+        "actor": evidence.actor,
+        "run_id": evidence.run_id,
+        "task_id": evidence.task_id,
+        "review_state": evidence.review_state,
+        # A record whose artifact is gone reports that state rather than disappearing.
+        "artifact_removed": evidence.artifact_removed_at is not None,
+        "produced_at": evidence.produced_at.isoformat(),
+    }
 
 
 @router.post("/spec/reindex")

@@ -674,6 +674,152 @@ async def expire_permission_request(
     return {"id": row.id, "status": row.status}
 
 
+class EvidenceRecord(BaseModel):
+    """Evidence an agent produced, for the requirement it demonstrates.
+
+    There is no actor field, and there will not be one: identity comes from the
+    run credential this request carried. The same rule `submit_spec_document`
+    follows, for the same reason.
+    """
+
+    identifier: str = Field(max_length=32)
+    kind: str = Field(default="test_result", max_length=32)
+    locator: str = Field(default="", max_length=4096)
+    summary: str = Field(default="", max_length=10000)
+    document: Optional[str] = Field(default=None, max_length=255)
+    task_id: Optional[str] = Field(default=None, max_length=64)
+
+    model_config = {"extra": "forbid"}
+
+
+class EvidenceDecision(BaseModel):
+    decision: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=10000)
+
+    model_config = {"extra": "forbid"}
+
+
+async def _resolve_requirement(session, project_id: str, identifier: str, document: str):
+    from ... import spec_index, spec_lifecycle
+
+    document_row = None
+    if document:
+        document_row = await spec_lifecycle.get_document(session, project_id, document)
+        if document_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no specification document at {document}.",
+            )
+    row, why = await spec_index.resolve(
+        session, project_id, identifier, document_id=document_row.id if document_row else None
+    )
+    if why == "ambiguous":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"{identifier} is declared by more than one document in this project. "
+                "Name the document it belongs to."
+            ),
+        )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"this project has no requirement {identifier}.",
+        )
+    return row
+
+
+@router.post("/spec/evidence", status_code=status.HTTP_201_CREATED)
+async def record_evidence(
+    body: EvidenceRecord,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Record evidence for a requirement. It enters `awaiting`, never `accepted`.
+
+    A run reporting that it verified something produces a record awaiting review.
+    A careful agent and a careless one report success in the same words with the
+    same authority, and the record has to be able to tell them apart.
+    """
+    from ... import project_workspace, requirement_evidence, spec_lifecycle
+
+    requirement = await _resolve_requirement(
+        session, actor.project_id, body.identifier, body.document or ""
+    )
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
+    except project_workspace.ProjectWorkspaceError:
+        workspace = None
+
+    try:
+        evidence = await requirement_evidence.record(
+            session,
+            requirement,
+            kind=body.kind,
+            locator=body.locator,
+            summary=body.summary,
+            task_id=body.task_id,
+            workspace=workspace,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except requirement_evidence.EvidenceRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id,
+        "spec_updated",
+        {"evidence": evidence.id, "requirement": requirement.identifier},
+    )
+    return {
+        "id": evidence.id,
+        "identifier": requirement.identifier,
+        "review_state": evidence.review_state,
+        "digest": evidence.digest,
+    }
+
+
+@router.post("/spec/evidence/{evidence_id}/decision")
+async def decide_evidence(
+    evidence_id: str,
+    body: EvidenceDecision,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Accept or reject evidence, if the operator granted this agent that capability.
+
+    Refused twice over for an agent deciding about its own work: the check is on
+    agent identity rather than run identity, because every turn is a new run and
+    a run-based check is satisfied by an agent simply continuing.
+    """
+    from ... import requirement_evidence, spec_lifecycle
+    from ...db.models import RequirementEvidence
+
+    evidence = await session.get(RequirementEvidence, evidence_id)
+    if evidence is None or evidence.project_id != actor.project_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidence not found")
+
+    try:
+        await requirement_evidence.decide(
+            session,
+            evidence,
+            decision=body.decision,
+            reason=body.reason,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except requirement_evidence.EvidenceRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+
+    await session.commit()
+    return {"id": evidence.id, "review_state": evidence.review_state}
+
+
 class SpecDocumentRename(BaseModel):
     """The document, and what it turned out to be about.
 

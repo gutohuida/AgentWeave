@@ -59,55 +59,61 @@ both head assertions get bumped (`test_migrations.py` **and** `test_project_pers
 
 ## 3. Coverage, as one computation
 
-- [ ] 3.1 `requirement_coverage(...)` — the single definition. Precedence per design D5.
-- [ ] 3.2 Invalid/unidentified requirements are diagnostics *outside* coverage, not a state.
-- [ ] 3.3 Document-level and project-level rollups, both calling 3.1.
-- [ ] 3.4 A test that asserts there is exactly one implementation — a second one is the failure mode
-      this phase exists to prevent.
+- [x] 3.1 `requirement_coverage(...)` — the single definition. Precedence per design D5, read from
+      the `PRECEDENCE` tuple rather than restated as a chain whose order could drift from it.
+- [x] 3.2 Invalid/unidentified requirements are diagnostics *outside* coverage, not a state.
+- [x] 3.3 Document-level and project-level rollups, both calling 3.1 and computing nothing.
+- [x] 3.4 A test that asserts there is exactly one implementation — it reads the rollups' source and
+      refuses either of them reaching the precedence directly.
 
 ## 4. Evidence and review
 
 Unblocked — all four questions answered at review (see `proposal.md`).
 
-- [ ] 4.1 `requirement_evidence` model + migration — requirement, **digest produced against**, kind,
-      artifact locator, actor, run, produced time, review state.
-- [ ] 4.2 Kinds open to addition: `test_result`, `screenshot`, `artifact_diff`, `review_record`,
-      `manual_observation`, `external_reference`.
-- [ ] 4.3 **Artifacts live in a project folder tree**, not the database; the row holds the location.
-- [ ] 4.4 **Retention as a project policy** — on acceptance, daily, monthly, manual, `never`.
+- [x] 4.1 `requirement_evidence` model + migration `0068` — requirement, **digest produced
+      against**, kind, artifact locator, actor, run, produced time, review state.
+- [x] 4.2 Kinds open to addition: `test_result`, `screenshot`, `artifact_diff`, `review_record`,
+      `manual_observation`, `external_reference`. Values outside the list are accepted; the list is
+      what the surfaces know how to label.
+- [x] 4.3 **Artifacts live in a project folder tree**, not the database; the row holds the location.
+- [x] 4.4 **Retention as a project policy** — `Project.evidence_retention`, defaulting to `never`.
       Removing an artifact never removes its record; the record reports the artifact as gone.
-- [ ] 4.5 `evidence_reviews` — append-only, attributed to whoever decided, no update, no delete.
-- [ ] 4.6 Agent-recorded evidence enters `awaiting`, never `accepted`.
-- [ ] 4.7 `Agent.can_accept_evidence` + migration, alongside `can_recall` / `can_read_checkpoints`.
+- [x] 4.5 `evidence_reviews` — append-only, attributed to whoever decided, no update, no delete.
+- [x] 4.6 Agent-recorded evidence enters `awaiting`, never `accepted`. An operator's own observation
+      is accepted on arrival: there is nobody else for it to await.
+- [x] 4.7 `Agent.can_accept_evidence` + migration, alongside `can_recall` / `can_read_checkpoints`.
       Operator-granted only; never conferred by a charter.
-- [ ] 4.8 Acceptance route: the operator, or a granted agent. **Refuse an agent accepting evidence
-      it produced** — distinctness on agent identity, not run identity, per
-      `task-lifecycle-governance`.
-- [ ] 4.9 A project with no granted agent falls to the operator, as a supported path rather than an
-      error.
-- [ ] 4.10 Agent route to record evidence; identity from the run credential only.
-- [ ] 4.11 Coverage reports `stale` where every piece of evidence names a superseded digest.
+- [x] 4.8 Acceptance route: the operator, or a granted agent. **An agent accepting evidence it
+      produced is refused** — distinctness on agent identity, not run identity.
+- [x] 4.9 A project with no granted agent falls to the operator, as a supported path.
+- [x] 4.10 Agent route to record evidence; identity from the run credential only, with no actor
+      field on the schema to supply.
+- [x] 4.11 Coverage reports `stale` where every piece of evidence names a superseded digest.
 
 ## 5. Drift and integration
 
 Unblocked. **Both footprint paths ship together.**
 
-- [ ] 5.1 Capture the implementation footprint when evidence is recorded: git commit + changed blob
+- [x] 5.1 Capture the implementation footprint when evidence is recorded: git commit + changed blob
       ids where the project is a repository; changed paths + content hashes where it is not.
-- [ ] 5.2 `requirement_drift` — candidate/resolved/superseded, baseline and current fingerprints,
+- [x] 5.2 `requirement_drift` — candidate/resolved/superseded, baseline and current fingerprints,
       attributed resolution.
-- [ ] 5.3 Detection on footprint change with no new requirement revision.
-- [ ] 5.4 Operator resolution: specification updated / implementation corrected / no change required;
-      records the current digest and fingerprint so it does not re-fire.
-- [ ] 5.5 A test that drift **never** writes to a specification document.
-- [ ] 5.6 **Integration reporting** — is the footprint reachable from the project's main line of
-      work? Returned with every coverage answer; `verified, not integrated` is a real result.
-- [ ] 5.7 A test that no surface can report a coverage state without its integration answer.
+- [x] 5.3 Detection on footprint change with no new requirement revision. A reworded requirement is
+      deliberately *not* also drift: it is already reported as stale evidence, and raising both
+      would ask the operator the same question twice in two vocabularies.
+- [x] 5.4 Operator resolution: specification updated / implementation corrected / no change
+      required; records the current digest and fingerprint so it does not re-fire.
+- [x] 5.5 A test that drift **never** writes to a specification document.
+- [x] 5.6 **Integration reporting** — reachability from the project's main line of work, returned
+      with every coverage answer. `verified, not integrated` is a real result. A project with no
+      main branch reports `unknown` rather than `not_integrated`: the second would be an accusation
+      about a choice.
+- [x] 5.7 A test that no surface can report a coverage state without its integration answer.
 
 ## 6. Navigation
 
-- [ ] 6.1 Requirement → linked tasks and evidence.
-- [ ] 6.2 Task → requirements served, with their current statements.
+- [x] 6.1 Requirement → linked tasks and evidence (`GET .../spec/requirements/{identifier}`).
+- [x] 6.2 Task → requirements served, on every task response, with the document each belongs to.
 - [ ] 6.3 Coverage on the Spec view. **Not** the task board's traceability surfaces — that is
       Program A's, per the roadmap's split of Program C.
 

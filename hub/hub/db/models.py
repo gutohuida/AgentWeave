@@ -79,6 +79,17 @@ class Project(Base):
     # loop would make the two tables unsortable for DDL. Validated where it is set instead.
     conversation_title_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
+    # --- Evidence retention ---
+    # How long an evidence artifact is kept: "on_acceptance", "daily", "monthly", "manual", or
+    # "never". `never` means never delete, and it is a first-class choice rather than a loophole —
+    # an operator who wants to manage the tree themselves should not have to fight a cleaner.
+    #
+    # Whatever the policy, removing an artifact never removes its evidence record: that something
+    # was verified, by whom, and against which digest is the record; the artifact is its attachment.
+    evidence_retention: Mapped[str] = mapped_column(
+        String(16), default="never", server_default="never", nullable=False
+    )
+
     # --- Checkpointing ---
     # "off" | "offered" | "automatic". Off by default: a project should not start spending tokens
     # on generation, or cutting conversations over, because it was upgraded.
@@ -197,6 +208,17 @@ class Agent(Base):
         Boolean, default=False, server_default="0", nullable=False
     )
     can_recall: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Whether this agent may *accept* evidence for a requirement. Producing evidence is open to
+    # anyone; accepting it is the controlled act, because the artifact is a fact and the claim about
+    # what it proves is not.
+    #
+    # Deliberately not a role — the role subsystem was deleted and must not return — and
+    # deliberately not conferred by a charter, for the reason above these two flags: a charter says
+    # how an agent behaves, and behaviour is not authority. A "Verifier" charter may well describe
+    # such an agent; it grants it nothing.
+    can_accept_evidence: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
     # An agent is archived, never deleted — its conversations, runs and messages keep their
@@ -1682,3 +1704,208 @@ class TaskRequirementReference(Base):
     )
 
     __table_args__ = (Index("ix_task_requirement_references_task", "task_id"),)
+
+
+# Open at the edges on purpose. Evidence is whatever demonstrates the work, and constraining it to
+# what was imaginable at design time is how a record stops describing what was actually done. Values
+# outside this list are accepted; the list is what the surfaces know how to label.
+EVIDENCE_KINDS = (
+    "test_result",
+    "screenshot",
+    "artifact_diff",
+    "review_record",
+    "manual_observation",
+    "external_reference",
+)
+
+EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected")
+EVIDENCE_DECISIONS = ("accepted", "rejected")
+
+# How long an artifact is kept. `never` means never delete it.
+EVIDENCE_RETENTION_POLICIES = ("on_acceptance", "daily", "monthly", "manual", "never")
+
+DRIFT_STATES = ("candidate", "resolved", "superseded")
+DRIFT_RESOLUTIONS = ("specification_updated", "implementation_corrected", "no_change_required")
+
+
+class RequirementEvidence(Base):
+    """Something produced to demonstrate a requirement, and what it was produced against.
+
+    **Pinned to the digest, not the requirement.** Evidence accepted against one wording says
+    nothing about a different wording, and without the pin that difference is unobservable after the
+    fact. It is the whole mechanism behind staleness.
+
+    The artifact lives in the project directory; this row records where. That division is the one
+    the product already uses for specification documents, and it means an operator can open, diff,
+    move and archive evidence with ordinary tools. A row whose artifact is gone reports that state
+    rather than disappearing.
+    """
+
+    __tablename__ = "requirement_evidence"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    requirement_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_requirements.id"), nullable=False
+    )
+    # The requirement digest current when this was produced. Never recomputed.
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    digest_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Where the artifact is, relative to the project directory. Empty for a kind that has none.
+    locator: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Never accepted from a request body — it comes from the credential the run was minted with.
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    task_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("tasks.id"), nullable=True
+    )
+    # The current decision, materialised from the append-only reviews so a coverage query is one
+    # join rather than a correlated subquery. `evidence_reviews` is what governs.
+    review_state: Mapped[str] = mapped_column(
+        String(16), default="awaiting", server_default="awaiting", nullable=False
+    )
+    # Set when retention removed the artifact. The record stays; this is how it says the attachment
+    # is gone rather than pretending it is still there.
+    artifact_removed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    produced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "review_state IN ('" + "', '".join(EVIDENCE_REVIEW_STATES) + "')",
+            name="ck_requirement_evidence_review_state",
+        ),
+        CheckConstraint(
+            "actor_kind IN ('" + "', '".join(SPEC_EVENT_ACTORS) + "')",
+            name="ck_requirement_evidence_actor_kind",
+        ),
+        Index("ix_requirement_evidence_requirement", "requirement_id", "produced_at"),
+        Index("ix_requirement_evidence_project", "project_id"),
+    )
+
+
+class EvidenceReview(Base):
+    """One decision about one piece of evidence. Never updated, never deleted.
+
+    The same shape as `TaskTransition`, for the same reason: who decided, and on what basis, is the
+    record. An update would let the last writer rewrite the history the review exists to create.
+    """
+
+    __tablename__ = "evidence_reviews"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("requirement_evidence.id"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('" + "', '".join(EVIDENCE_DECISIONS) + "')",
+            name="ck_evidence_reviews_decision",
+        ),
+        CheckConstraint(
+            "actor_kind IN ('" + "', '".join(SPEC_EVENT_ACTORS) + "')",
+            name="ck_evidence_reviews_actor_kind",
+        ),
+        Index("ix_evidence_reviews_evidence", "evidence_id", "created_at"),
+    )
+
+
+class EvidenceFootprint(Base):
+    """What the implementation looked like when evidence was produced.
+
+    Two shapes, both first-class. In a git repository: the commit, and the blob ids of the changed
+    paths. Without one: the changed paths and a content hash of each. A git-only first cut would
+    leave every non-repository project permanently unverifiable, and those are a supported case.
+
+    `reachable_from_main` is what stops `verified` describing code that never ships. Approved work in
+    this product currently stays on a per-agent branch that nothing merges, so a footprint routinely
+    names a commit the product does not contain.
+    """
+
+    __tablename__ = "evidence_footprints"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("requirement_evidence.id"), nullable=False
+    )
+    # "git" or "paths".
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    commit_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # {path: blob id or content hash}. The fingerprint a later change is compared against.
+    entries: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Whether this footprint is reachable from the project's main line of work, as last observed.
+    # Null means not yet determined — distinct from False, which is an answer.
+    reachable_from_main: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("evidence_id", name="uq_evidence_footprints_evidence"),
+        Index("ix_evidence_footprints_project", "project_id"),
+    )
+
+
+class RequirementDrift(Base):
+    """The implementation moved and the requirement did not — as a question, never an edit.
+
+    That an implementation changed is observable. That a requirement *should* change is a judgement,
+    and a system inferring it would rewrite an approved specification on the strength of a file diff.
+    So this is raised, shown, and resolved by a person.
+    """
+
+    __tablename__ = "requirement_drift"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    requirement_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_requirements.id"), nullable=False
+    )
+    evidence_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("requirement_evidence.id"), nullable=False
+    )
+    state: Mapped[str] = mapped_column(
+        String(16), default="candidate", server_default="candidate", nullable=False
+    )
+    # The fingerprint the evidence was produced against, and what was found later.
+    baseline: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    observed: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # The requirement digest at the moment this was raised, so a rewording supersedes it rather than
+    # leaving a candidate about a question that has moved on.
+    digest: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    resolution: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    resolved_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The digest and fingerprint current when it was resolved, so the same change does not re-fire.
+    resolved_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    resolved_fingerprint: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('" + "', '".join(DRIFT_STATES) + "')",
+            name="ck_requirement_drift_state",
+        ),
+        Index("ix_requirement_drift_requirement", "requirement_id", "state"),
+        Index("ix_requirement_drift_project_state", "project_id", "state"),
+    )
