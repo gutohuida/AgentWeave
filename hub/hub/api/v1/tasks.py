@@ -11,13 +11,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import AgentHeartbeat, RunDivergence, Task
+from ...db.models import (
+    AgentHeartbeat,
+    RunDivergence,
+    SpecRequirement,
+    Task,
+    TaskRequirementLink,
+    TaskRequirementReference,
+)
+from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
     release_conversations_bound_to,
     release_reason,
 )
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
+from ...spec_lifecycle import Actor as SpecActor
 from ...sse import sse_manager
 from ...task_transition_service import apply_transition, guard_entry_status
 from ...task_transitions import (
@@ -45,6 +54,52 @@ def _task_response(
     response.assignee_last_seen = heartbeat.timestamp if heartbeat else None
     response.has_open_divergence = has_open_divergence
     return response
+
+
+async def _attach_requirements(
+    session: AsyncSession, responses: List[TaskResponse]
+) -> List[TaskResponse]:
+    """Fill in what each task serves, and what it named that resolved to nothing.
+
+    Batched across the whole page rather than queried per task: a board with a
+    hundred cards would otherwise take two hundred round trips to answer a
+    question that is two joins.
+    """
+    task_ids = [response.id for response in responses]
+    if not task_ids:
+        return responses
+
+    links = await session.execute(
+        select(TaskRequirementLink.task_id, SpecRequirement)
+        .join(SpecRequirement, SpecRequirement.id == TaskRequirementLink.requirement_id)
+        .where(TaskRequirementLink.task_id.in_(task_ids))
+        .order_by(SpecRequirement.identifier)
+    )
+    by_task: dict[str, list] = {}
+    for task_id, requirement in links:
+        by_task.setdefault(task_id, []).append(
+            {
+                "identifier": requirement.identifier,
+                "requirement_id": requirement.id,
+                "document_id": requirement.document_id,
+                "state": requirement.state,
+                "anchor": requirement.anchor,
+            }
+        )
+
+    references = await session.execute(
+        select(TaskRequirementReference).where(TaskRequirementReference.task_id.in_(task_ids))
+    )
+    unresolved: dict[str, list] = {}
+    for reference in references.scalars().all():
+        unresolved.setdefault(reference.task_id, []).append(
+            {"reference": reference.reference, "reason": reference.reason}
+        )
+
+    for response in responses:
+        response.requirement_links = by_task.get(response.id, [])
+        response.unresolved_requirements = unresolved.get(response.id, [])
+    return responses
 
 
 async def _tasks_with_open_divergence(
@@ -105,6 +160,20 @@ async def create_task_for_actor(
     # transitions can reach it. This is the single `Task(` construction site, so one guard covers
     # both the operator route and the agent plane.
     guard_entry_status(body.status)
+
+    # Resolved before the task exists. A create that stored the task and then refused its
+    # requirements would leave work on the board whose author believes it is linked.
+    try:
+        named = (
+            await resolve_identifiers(
+                session, project_id, body.requirement_ids, document_path=body.spec_document
+            )
+            if body.requirement_ids
+            else []
+        )
+    except LinkRefusedError as refusal:
+        raise HTTPException(status_code=422, detail=str(refusal)) from refusal
+
     task_id = body.id or f"task-{short_id()}"
     task = Task(
         id=task_id,
@@ -133,6 +202,19 @@ async def create_task_for_actor(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Task id '{task_id}' already exists",
         ) from e
+    link_actor = SpecActor(
+        kind="agent" if created_by_run_id else "operator",
+        name=assigner or "",
+        run_id=created_by_run_id,
+    )
+    await link(session, task, named, actor=link_actor)
+    # The free-text list is converted too, so an agent still filling `requirements` with
+    # `"FR-8 — initialize-members"` gets real links instead of a string that resolves to nothing.
+    # Never a refusal: a free-text field that starts rejecting values breaks every caller that was
+    # using it as prose.
+    await absorb_free_text(session, task, body.requirements, actor=link_actor)
+    await session.commit()
+
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
     await persist_event(
         session,
@@ -147,7 +229,10 @@ async def create_task_for_actor(
         project_id,
         {task.assignee} if task.assignee else set(),
     )
-    return _task_response(task, heartbeats.get(task.assignee) if task.assignee else None)
+    responses = await _attach_requirements(
+        session, [_task_response(task, heartbeats.get(task.assignee) if task.assignee else None)]
+    )
+    return responses[0]
 
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
@@ -190,14 +275,17 @@ async def list_tasks(
         {task.assignee for task in tasks if task.assignee},
     )
     diverged = await _tasks_with_open_divergence(session, project_id, {task.id for task in tasks})
-    return [
-        _task_response(
-            task,
-            heartbeats.get(task.assignee) if task.assignee else None,
-            has_open_divergence=task.id in diverged,
-        )
-        for task in tasks
-    ]
+    return await _attach_requirements(
+        session,
+        [
+            _task_response(
+                task,
+                heartbeats.get(task.assignee) if task.assignee else None,
+                has_open_divergence=task.id in diverged,
+            )
+            for task in tasks
+        ],
+    )
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
@@ -216,11 +304,17 @@ async def get_task(
         {task.assignee} if task.assignee else set(),
     )
     diverged = await _tasks_with_open_divergence(session, project_id, {task.id})
-    return _task_response(
-        task,
-        heartbeats.get(task.assignee) if task.assignee else None,
-        has_open_divergence=task.id in diverged,
+    responses = await _attach_requirements(
+        session,
+        [
+            _task_response(
+                task,
+                heartbeats.get(task.assignee) if task.assignee else None,
+                has_open_divergence=task.id in diverged,
+            )
+        ],
     )
+    return responses[0]
 
 
 async def update_task_for_actor(
@@ -294,6 +388,23 @@ async def update_task_for_actor(
             task.divergence_policy = body.divergence_policy
         if "escalation_agent" in body.model_fields_set:
             task.escalation_agent = body.escalation_agent
+    if body.requirement_ids:
+        try:
+            named = await resolve_identifiers(
+                session, project_id, body.requirement_ids, document_path=body.spec_document
+            )
+        except LinkRefusedError as refusal:
+            raise HTTPException(status_code=422, detail=str(refusal)) from refusal
+        await link(
+            session,
+            task,
+            named,
+            actor=SpecActor(
+                kind="operator" if actor.is_operator else "agent",
+                name=actor.agent or "",
+                run_id=actor.run_id,
+            ),
+        )
     task.updated = datetime.now(timezone.utc)
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
@@ -315,11 +426,17 @@ async def update_task_for_actor(
         {task.assignee} if task.assignee else set(),
     )
     diverged = await _tasks_with_open_divergence(session, project_id, {task.id})
-    return _task_response(
-        task,
-        heartbeats.get(task.assignee) if task.assignee else None,
-        has_open_divergence=task.id in diverged,
+    responses = await _attach_requirements(
+        session,
+        [
+            _task_response(
+                task,
+                heartbeats.get(task.assignee) if task.assignee else None,
+                has_open_divergence=task.id in diverged,
+            )
+        ],
     )
+    return responses[0]
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)

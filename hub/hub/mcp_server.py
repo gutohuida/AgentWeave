@@ -215,6 +215,8 @@ def create_task(
     assignee: Optional[str] = None,
     priority: TaskPriority = "medium",
     requirements: Optional[List[str]] = None,
+    requirement_ids: Optional[List[str]] = None,
+    spec_document: Optional[str] = None,
     acceptance_criteria: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Create a task attributed to the bound agent.
@@ -224,7 +226,13 @@ def create_task(
         description: What the task involves.
         assignee: Exact name of a registered agent, or unset to leave it unassigned.
         priority: One of "low", "medium", "high", "critical".
-        requirements: Optional list of requirements.
+        requirements: Free text describing what the task must satisfy. Not a reference — use
+            requirement_ids to say which specification requirements this task serves.
+        requirement_ids: Identifiers of the specification requirements this task serves, like
+            ["FR-3", "FR-7"]. Checked: an identifier the project does not have is refused, naming
+            it. This is what makes "which requirements have no work?" answerable.
+        spec_document: The document path whose identifiers to resolve against. Only needed when
+            more than one document in the project declares the same identifier.
         acceptance_criteria: Optional list of acceptance criteria.
     """
     return _hub_request(
@@ -236,6 +244,8 @@ def create_task(
             "assignee": assignee,
             "priority": priority,
             "requirements": requirements or [],
+            "requirement_ids": requirement_ids or [],
+            "spec_document": spec_document,
             "acceptance_criteria": acceptance_criteria or [],
         },
     )

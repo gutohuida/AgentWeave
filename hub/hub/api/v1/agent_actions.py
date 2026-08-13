@@ -72,6 +72,11 @@ class AgentTaskCreate(BaseModel):
     priority: str = Field(default="medium", max_length=64)
     assignee: Optional[str] = Field(default=None, max_length=64)
     requirements: Optional[List[Any]] = None
+    # The requirements this task serves, by identifier. Checked: an identifier the project does not
+    # have is refused with the identifier named. Present here as well as on the operator's schema
+    # because `agent-capability-plane` forbids the two surfaces from differing in what they accept.
+    requirement_ids: Optional[List[str]] = None
+    spec_document: Optional[str] = Field(default=None, max_length=255)
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None

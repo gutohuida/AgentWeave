@@ -43,6 +43,13 @@ class TaskCreate(BaseModel):
     assignee: Optional[str] = Field(default=None, max_length=64)
     assigner: Optional[str] = Field(default=None, max_length=64)
     requirements: Optional[List[Any]] = None
+    # The requirements this task serves, by identifier. Checked, unlike `requirements`: an
+    # identifier the project does not have is refused with the identifier named, rather than stored
+    # as text that looks like a reference and resolves to nothing.
+    requirement_ids: Optional[List[str]] = None
+    # Which document's identifiers to resolve against. Identifiers are minted per document, so a
+    # bare `FR-8` is ambiguous where two documents declare one; this is how a caller says which.
+    spec_document: Optional[str] = Field(default=None, max_length=255)
     acceptance_criteria: Optional[List[Any]] = None
     deliverables: Optional[List[Any]] = None
     notes: Optional[Any] = None
@@ -103,6 +110,11 @@ class TaskUpdate(BaseModel):
     assignee: Optional[str] = Field(default=None, max_length=64)
     description: Optional[str] = Field(default=None, max_length=10000)
     notes: Optional[Any] = None
+    # Requirements this task serves, added to whatever it already serves. Links are never removed
+    # here: what work served a requirement is asked mostly about finished work, so the record has to
+    # outlive the editing of the task.
+    requirement_ids: Optional[List[str]] = None
+    spec_document: Optional[str] = Field(default=None, max_length=255)
     divergence_policy: Optional[str] = Field(default=None, max_length=16)
     # Deliberately not `Optional[str] = None means leave alone` for this one: clearing an escalation
     # agent is a thing the operator must be able to do, and `""` is how they say it. Normalised to
@@ -184,7 +196,15 @@ class TaskResponse(BaseModel):
     assigner: Optional[str] = Field(default=None, max_length=64)
     created_at: datetime
     updated: datetime
+    # What the caller submitted, kept verbatim. Answers about traceability come from
+    # `requirement_links`, never from here — this is the original, so a mis-parse is re-derivable.
     requirements: Optional[Any] = None
+    # The requirements this task actually serves: identifier, statement, and state.
+    requirement_links: List[Any] = Field(default_factory=list)
+    # References that named no requirement this project has, with their original text. Visible
+    # rather than dropped, because a task that quietly lost a reference it used to have is the
+    # failure the migration exists to prevent.
+    unresolved_requirements: List[Any] = Field(default_factory=list)
     acceptance_criteria: Optional[Any] = None
     deliverables: Optional[Any] = None
     notes: Optional[Any] = None

@@ -1618,3 +1618,67 @@ class SpecRequirementRevision(Base):
         ),
         Index("ix_spec_requirement_revisions_requirement", "requirement_id", "created_at"),
     )
+
+
+class TaskRequirementLink(Base):
+    """The work a requirement has, as a row rather than a string.
+
+    `Task.requirements` held `"FR-8 — initialize-members"`: something that looks like a reference
+    and resolves to nothing. It cannot be joined, cannot be checked, and does not notice when FR-8
+    is reworded or retired. Every question this change exists to answer is a join away with rows and
+    unanswerable without them.
+
+    **Not removed when a task reaches a terminal state.** "What work served this requirement?" is
+    asked mostly about finished work, so deleting on completion would erase the answer exactly when
+    it becomes interesting.
+    """
+
+    __tablename__ = "task_requirement_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    requirement_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_requirements.id"), nullable=False
+    )
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="system")
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "requirement_id", name="uq_task_requirement_links_pair"),
+        CheckConstraint(
+            "actor_kind IN ('" + "', '".join(SPEC_EVENT_ACTORS) + "')",
+            name="ck_task_requirement_links_actor_kind",
+        ),
+        Index("ix_task_requirement_links_requirement", "requirement_id"),
+        Index("ix_task_requirement_links_task", "task_id"),
+    )
+
+
+class TaskRequirementReference(Base):
+    """A reference naming no requirement this project has, kept verbatim.
+
+    The migration from free text must never discard a value it cannot interpret and must never
+    invent a requirement to match one. What is left over lands here with its original string, so a
+    mis-parse is re-derivable rather than reconstructed from a backup — and so an operator can see
+    that a task used to name something.
+    """
+
+    __tablename__ = "task_requirement_references"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    # Exactly what the task carried. Not normalized, not trimmed to the part that parsed.
+    reference: Mapped[str] = mapped_column(Text, nullable=False)
+    # Why it did not resolve: "unknown", "ambiguous", or "unparsed".
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (Index("ix_task_requirement_references_task", "task_id"),)

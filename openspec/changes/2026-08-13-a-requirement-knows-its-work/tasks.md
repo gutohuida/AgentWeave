@@ -33,18 +33,29 @@ both head assertions get bumped (`test_migrations.py` **and** `test_project_pers
 
 ## 2. Links replace the JSON
 
-- [ ] 2.1 `task_requirement_links` model + migration — project, task, requirement, creating actor,
-      creating run, created time. Real foreign keys, project-scoped.
-- [ ] 2.2 Task create/update accept requirement **identifiers**, resolve them, and refuse an
-      identifier the project does not have — stated, not silently dropped.
-- [ ] 2.3 Links are not removed on a terminal task status.
-- [ ] 2.4 Migration of `Task.requirements`: parse a leading `FR-\d+`; link where it resolves in the
-      same project; otherwise write an `unresolved_reference` preserving the original string.
-      **Never discard, never invent a requirement.**
-- [ ] 2.5 `Task.requirements` stays as a nullable column, read by nothing, so a mis-parse can be
-      re-derived. Removal is a later change, once the unresolved set is empty.
-- [ ] 2.6 `unserved` query: requirements in a document with no link. **This is the first thing that
-      pays for the phase.**
+- [x] 2.1 `task_requirement_links` model + migration `0067` — project, task, requirement, creating
+      actor, creating run, created time. Real foreign keys, project-scoped.
+- [x] 2.2 Task create/update accept requirement **identifiers** (`requirement_ids`, with an
+      optional `spec_document` to disambiguate), resolve them, and refuse an identifier the project
+      does not have — stated, not silently dropped. A partly-unknown set links nothing: a task that
+      silently serves two of the three it named is a task whose author believes it serves three.
+      On both the operator route and the agent plane, which `agent-capability-plane` requires to
+      accept the same things.
+- [x] 2.3 Links are not removed on a terminal task status.
+- [x] 2.4 Migration of `Task.requirements`: parse a leading `FR-\d+`; link where it resolves in the
+      same project; otherwise write a `task_requirement_references` row preserving the original
+      string. **Never discard, never invent a requirement.** The same conversion runs on every
+      create, so an agent still using the free-text field gets real links — leniently there, since a
+      free-text field that starts refusing values breaks every caller using it as prose.
+- [x] 2.5 `Task.requirements` stays as a nullable column, written verbatim and read by nothing that
+      answers a traceability question, so a mis-parse can be re-derived. Removal is a later change,
+      once the unresolved set is empty.
+- [x] 2.6 `unserved` query: active requirements with no link, per project or per document. **This is
+      the first thing that pays for the phase.**
+- [x] 2.7 `POST .../project/spec/reindex` — operator-only: rebuild the index from the files, then
+      retry the unresolved references. Needed because a project whose documents predate the index
+      resolves nothing at migration time; this converts what becomes resolvable without ever having
+      guessed in between.
 
 ## 3. Coverage, as one computation
 

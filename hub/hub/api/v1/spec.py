@@ -21,7 +21,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, spec_documents, spec_lifecycle, spec_naming, spec_service
+from ... import (
+    project_workspace,
+    requirement_links,
+    spec_documents,
+    spec_index,
+    spec_lifecycle,
+    spec_naming,
+    spec_service,
+)
 from ...auth import get_project
 from ...db.engine import get_session
 from ...spec_manifest import SpecPathError, validate_spec_path
@@ -188,6 +196,42 @@ async def list_documents(
     project_id, _ = project
     documents = await spec_lifecycle.list_documents(session, project_id)
     return {"documents": [_document_view(document) for document in documents]}
+
+
+@router.post("/spec/reindex")
+async def reindex(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Rebuild the requirement index from the files, then retry unresolved references.
+
+    The operator's, not an agent's. Two things need it: a project whose documents
+    predate the index, and a document edited outside the Hub. Both are cases where
+    the index is behind the files, and neither can be detected without reading
+    them — so this is offered rather than guessed at on a timer.
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    results = await spec_index.reindex_project(session, workspace, project_id)
+    backfilled = await requirement_links.backfill_project(session, project_id)
+    await session.commit()
+    return {
+        "documents": {
+            path: (
+                None
+                if result is None
+                else {
+                    "created": result.created,
+                    "reworded": result.reworded,
+                    "retired": result.retired,
+                    "restored": result.restored,
+                    "unchanged": result.unchanged,
+                }
+            )
+            for path, result in results.items()
+        },
+        "references": backfilled,
+    }
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED)
