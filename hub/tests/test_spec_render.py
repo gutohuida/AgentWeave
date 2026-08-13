@@ -202,3 +202,72 @@ def test_the_document_carries_no_navigation_script_of_its_own():
     html = _render(_payload())
     assert "postMessage" not in html
     assert "addEventListener" not in html
+
+
+# ---------------------------------------------------------------------------
+# Reading the document, rather than parsing it
+#
+# Both of the following were found by reading the first agent-authored document
+# end to end. Nothing in the suite could have caught either: the output was
+# well-formed, every anchor resolved, and it was simply harder to read than it
+# needed to be.
+# ---------------------------------------------------------------------------
+
+
+def _criterion(key, requirement, then="t"):
+    return {"key": key, "requirement": requirement, "given": "g", "when": "w", "then": then}
+
+
+def _requirement_column(html):
+    table = html.split('id="acceptance"', 1)[1]
+    return re.findall(r'<td><a href="#(FR-\d+)">', table)
+
+
+def test_acceptance_criteria_are_grouped_by_requirement_order():
+    """The live document ran FR-8, FR-8, FR-7 — submission order, not
+    requirement order — and a reader scanning the column lost their place."""
+    payload = _payload(
+        requirements=[_requirement("alpha"), _requirement("beta"), _requirement("gamma")],
+        acceptance_criteria=[
+            _criterion("c3", "gamma"),
+            _criterion("c1", "alpha"),
+            _criterion("c2", "beta"),
+        ],
+    )
+    identifiers, _ = mint(["alpha", "beta", "gamma"])
+
+    assert _requirement_column(_render(payload, identifiers)) == ["FR-1", "FR-2", "FR-3"]
+
+
+def test_criteria_for_one_requirement_keep_the_order_they_were_written_in():
+    """Within a requirement the author's order carries their emphasis, so the
+    sort has to be stable rather than merely correct."""
+    payload = _payload(
+        requirements=[_requirement("alpha"), _requirement("beta")],
+        acceptance_criteria=[
+            _criterion("c1", "beta", then="beta first"),
+            _criterion("c2", "alpha", then="alpha first"),
+            _criterion("c3", "beta", then="beta second"),
+            _criterion("c4", "alpha", then="alpha second"),
+        ],
+    )
+    identifiers, _ = mint(["alpha", "beta"])
+
+    html = _render(payload, identifiers)
+    assert _requirement_column(html) == ["FR-1", "FR-1", "FR-2", "FR-2"]
+    assert html.index("alpha first") < html.index("alpha second")
+    assert html.index("beta first") < html.index("beta second")
+
+
+def test_no_outstanding_questions_is_stated_rather_than_left_blank():
+    """An absent section cannot be told apart from questions never asked."""
+    html = _render(_payload(open_questions=[]))
+    assert "Open questions" in html
+    assert "None outstanding" in html
+
+
+def test_outstanding_questions_are_still_listed():
+    payload = _payload(open_questions=[{"key": "q1", "question": "Which one?"}])
+    html = _render(payload)
+    assert "Which one?" in html
+    assert "None outstanding" not in html

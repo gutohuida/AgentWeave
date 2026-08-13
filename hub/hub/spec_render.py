@@ -127,11 +127,22 @@ def _link(identifier: str) -> str:
 def _acceptance(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     if not payload.acceptance_criteria:
         return ""
+    # Grouped by the requirement each criterion belongs to, in requirement
+    # order. Submission order is the author's and is not this order: the first
+    # agent-authored document listed FR-8, FR-8, FR-7, and a reader scanning the
+    # table by requirement lost their place. The sort is stable, so criteria for
+    # one requirement keep the order they were written in — that order carries
+    # the author's emphasis and is theirs to choose.
+    position = {requirement.key: index for index, requirement in enumerate(payload.requirements)}
+    ordered = sorted(
+        payload.acceptance_criteria,
+        key=lambda criterion: position.get(criterion.requirement, len(position)),
+    )
     rows = [
         "<table><thead><tr><th>Requirement</th><th>Given</th><th>When</th><th>Then</th>"
         "</tr></thead><tbody>"
     ]
-    for criterion in payload.acceptance_criteria:
+    for criterion in ordered:
         identifier = identifiers.get(criterion.requirement, criterion.requirement)
         rows.append(
             f"<tr><td>{_link(identifier)}</td><td>{_e(criterion.given)}</td>"
@@ -163,8 +174,12 @@ def _algorithms(payload: SpecPayload) -> str:
 
 
 def _open_questions(payload: SpecPayload) -> str:
+    # An absent section left a reader unable to tell a document whose questions
+    # were asked and answered from one where none were ever asked — which is the
+    # difference between a document that has been through an interview and one
+    # that has not. Saying so costs a line.
     if not payload.open_questions:
-        return ""
+        return '<p class="aw-empty">None outstanding.</p>'
     items = []
     for question in payload.open_questions:
         state = "resolved" if question.resolved else "open"
