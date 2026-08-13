@@ -888,9 +888,12 @@ def _tool_surface_lines() -> List[str]:
         "- `list_tasks(agent=None)` — read the shared task ledger.",
         "- `get_task(task_id)` — read one ledger entry.",
         f"- `update_task(task_id, status)` — status is required, one of {values(TaskStatus)}.",
-        "- `ask_user(questions)` — ask the operator and **wait** for the answers, which are "
-        "returned to you. Ask whenever a choice is genuinely the operator's to make and guessing "
-        "wrong would waste real work; do not ask what the repository or the task already answers.",
+        "- `ask_user(questions)` — put a **decision** to the operator and **wait** for it. This is "
+        "for a genuine fork: real alternatives, and you cannot sensibly continue until you know "
+        "which. It blocks your turn, and every question needs options, so it is a decision tool "
+        "rather than the way you ask things generally — an open question, or one whose answer you "
+        "cannot enumerate, belongs in your reply, where the operator can tell you something you "
+        "did not think to ask about. Do not ask what the repository or the task already answers.",
         "  `questions` is a list of 1 to 4. Ask everything you need in one call: the operator "
         "steps through them in a single sitting, which interrupts them once instead of once per "
         "question. Each entry needs `question`, `header`, `options` and `multi_select`, all "
@@ -898,8 +901,10 @@ def _tool_surface_lines() -> List[str]:
         'is 2 to 8 entries of `{"label", "description"}` — the label comes back to you, and '
         "the description is what lets the operator choose without already knowing the trade-off, "
         "so write what picking it actually means rather than restating the label. There is no "
-        "way to ask without options: if the decision feels open, offer the answers you consider "
-        "most likely. `multi_select` is true when several can be chosen together, and that answer "
+        "way to ask without options — which is the signal that a question with no real alternatives "
+        "is not one for this tool. Manufacturing plausible-looking options for an open question is "
+        "how an interview turns into a quiz; ask it in your reply instead. `multi_select` is true "
+        "when several can be chosen together, and that answer "
         "then arrives as a list. The operator can always reply in their own words instead, so "
         "handle an answer that is none of yours.",
         "- `get_answer(question_id)` — only needed for a question you asked with "
@@ -930,7 +935,18 @@ SPEC_PHASE_DUTIES = {
     "exploring": (
         "- Interview before writing. Ask about the problem, who it affects, what is out of scope, "
         "and the cases nobody has raised. Ground what you claim in the codebase rather than "
-        "guessing, and use `ask_user` for anything that changes scope. Do not implement anything."
+        "guessing. Do not implement anything.\n"
+        "- **Interview in your reply, not through a tool.** Write your questions out, lay the "
+        "plausible directions side by side with what each makes easier and harder, and say what "
+        "reading the code established. Then end your turn and let the operator answer in the "
+        "composer. That is where they volunteer the constraint nobody asked about, which is most "
+        "of what an exploration is for — a list of questions with fixed answers can only collect "
+        "what you already thought to ask.\n"
+        "- Use `ask_user` only for a genuine fork: real alternatives, and you cannot sensibly "
+        "continue until you know. It blocks your turn, so spend it on a decision rather than on "
+        "a question you could have asked in a sentence.\n"
+        "- Sketch when it makes something easier to see than a paragraph — a workflow, a boundary, "
+        "a before and after. A few lines of plain text beat a wall of prose."
     ),
     "proposed": (
         "- This document is proposed and awaiting the operator's decision. Do not implement it, "
