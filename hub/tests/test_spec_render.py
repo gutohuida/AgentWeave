@@ -8,7 +8,14 @@ the link from the same minted value, so the failure has nowhere to occur.
 
 import re
 
-from hub.spec_identity import identity_block, mint, read_identity, retained
+from hub.spec_identity import (
+    IDENTITY_FIELD,
+    identity_block,
+    mint,
+    read_identity,
+    read_retired,
+    retained,
+)
 from hub.spec_payload import SCHEMA_VERSION, extract_payload, payload_to_dict, validate_payload
 from hub.spec_render import render_document
 
@@ -271,3 +278,47 @@ def test_outstanding_questions_are_still_listed():
     html = _render(payload)
     assert "Which one?" in html
     assert "None outstanding" not in html
+
+
+# ---------------------------------------------------------------------------
+# Retirement, across more than one save
+# ---------------------------------------------------------------------------
+
+
+def test_a_retirement_survives_a_later_unrelated_save():
+    """Found by running the loop: a v1 document retired FR-5 and FR-7, and the
+    next save — which only *added* a requirement — reported `retired: {}`.
+
+    `previous` is the live map alone, so computing retirement from it describes
+    one submission and forgets everything older."""
+    first = retained({"alpha": "FR-1", "beta": "FR-2"}, ["alpha"])
+    assert first == {"beta": "FR-2"}
+
+    # The next save adds a requirement and touches nothing else.
+    second = retained({"alpha": "FR-1"}, ["alpha", "gamma"], first)
+    assert second == {"beta": "FR-2"}, "the retirement was forgotten one save later"
+
+
+def test_retirements_accumulate_across_saves():
+    first = retained({"alpha": "FR-1", "beta": "FR-2"}, ["alpha"])
+    second = retained({"alpha": "FR-1", "delta": "FR-3"}, ["alpha"], first)
+    assert second == {"beta": "FR-2", "delta": "FR-3"}
+
+
+def test_a_key_that_comes_back_is_no_longer_retired():
+    """A key in both maps under two identifiers would say two different things
+    about one requirement."""
+    first = retained({"alpha": "FR-1", "beta": "FR-2"}, ["alpha"])
+    second = retained({"alpha": "FR-1"}, ["alpha", "beta"], first)
+    assert "beta" not in second
+
+
+def test_retirement_is_read_back_from_a_stored_document():
+    stored = {IDENTITY_FIELD: {"requirements": {"alpha": "FR-1"}, "retired": {"beta": "FR-2"}}}
+    assert read_retired(stored) == {"beta": "FR-2"}
+
+
+def test_a_document_with_no_identity_block_has_no_retirements():
+    assert read_retired(None) == {}
+    assert read_retired({}) == {}
+    assert read_retired({IDENTITY_FIELD: {"requirements": {}}}) == {}

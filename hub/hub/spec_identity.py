@@ -82,15 +82,56 @@ def mint(
     return mapping, mark
 
 
-def retained(previous: Dict[str, str], current_keys: List[str]) -> Dict[str, str]:
-    """Identifiers whose keys are gone from the document.
+def read_retired(stored: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """The retirements a stored payload already carries.
+
+    Read separately from `read_identity` so that function's shape — and every
+    caller of it — stays as it was. What this exists for is the accumulation in
+    `retained`: without reading the previous block back, a retirement survived
+    exactly one further save.
+    """
+    if not isinstance(stored, dict):
+        return {}
+    block = stored.get(IDENTITY_FIELD)
+    if not isinstance(block, dict):
+        return {}
+    raw = block.get("retired")
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value for key, value in raw.items() if isinstance(key, str) and isinstance(value, str)
+    }
+
+
+def retained(
+    previous: Dict[str, str],
+    current_keys: List[str],
+    already_retired: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
+    """Identifiers whose keys are gone from the document, accumulated.
 
     Kept so the high-water mark is not the only thing standing between a removed
     identifier and its reuse, and so a later change can offer "was this a
     rename?" instead of guessing at one now.
+
+    **Cumulative, and that is the point.** `previous` is only the *live* map from
+    the last save, so computing retirement from it alone describes one
+    submission: a requirement dropped in save N was recorded in save N, and then
+    forgotten by save N+1, which had never seen it. The record has to carry
+    forward or it answers the rename question for one save only.
+
+    A key that comes back is no longer retired — it holds whatever identifier the
+    live map now gives it, and a key in both maps under two identifiers would say
+    two different things about the same requirement.
     """
     live = set(current_keys)
-    return {key: value for key, value in previous.items() if key not in live}
+    retired = dict(already_retired or {})
+    for key, value in previous.items():
+        if key not in live:
+            retired[key] = value
+    for key in live:
+        retired.pop(key, None)
+    return retired
 
 
 def identity_block(

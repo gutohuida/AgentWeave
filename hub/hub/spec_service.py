@@ -81,7 +81,7 @@ async def save_document(
 
     keys = [requirement.key for requirement in payload.requirements]
     identifiers, mark = spec_identity.mint(keys, previous_map, high_water)
-    retired = spec_identity.retained(previous_map, keys)
+    retired = spec_identity.retained(previous_map, keys, spec_identity.read_retired(stored_before))
 
     stored = payload_to_dict(payload)
     # Hub-owned, and overwritten unconditionally. An agent that submits an
