@@ -132,9 +132,42 @@ spawned process's working directory.
       parametrize in `test_project_workspace.py`, so the rule holds on its own rather than as a
       side effect of an unrelated guard.
 
+## 4c. Driven against the running Hub
+
+A temporary project was opened on `C:\Users\huida\Documents\aw-norepo-check` — a real directory
+with a `README.md` and **no** `.git` — an agent registered and bound to the seeded Claude runner,
+one turn triggered, and the project's rows and directory removed afterwards. The Hub was restarted
+onto this commit first; the old process was serving the pre-change code.
+
+**The original symptom is gone.** `POST /agent/trigger` returned `status: "running"` with
+`waiting_reason: null` and run `run-32b962f8`. Before this change the same call returned
+`status: "queued"` with *"… is not a git repository, so an isolated worktree cannot be prepared."*
+
+**It ran where it stands.** After the turn, the project directory contained `README.md`,
+`.agentweave/project.json` and `.agentweave/context/probe.md` — the context file is written into
+the run's own working directory, so its presence there is the cwd. `\.git` absent,
+`.agentweave/worktrees` absent: the Hub created no repository and no worktree to satisfy an
+invariant.
+
+**The agent was told.** The `### Your workspace` block it received, read back off disk:
+
+> - This directory is not a git repository, so there is no isolated worktree and no branch of your
+>   own. Do not expect git to work here, and do not offer to commit or branch.
+> - Any other agent in this project works in this same directory. Your edits and theirs can
+>   overwrite each other with no conflict to resolve …
+
+**The workspace report** (`GET /worktrees/probe`): `isolated: false`, `provisioned: true`,
+`branch: null`, `working_dir` the project directory, and the reason naming the absent repository.
+
+**The queue** (`GET /queue/probe/status`): `waiting_reason: null`.
+
+**The run record:** `completed`, exit code `0`, `snapshot_commit_sha` NULL — the snapshot-free run
+D7 and 4.8 describe, reached in practice rather than only in a test.
+
 ## 5. Verification — human-only (the operator runs these)
 
-Nothing below can be closed by an agent. Each needs a person looking at a running app.
+Nothing below can be closed by an agent. Each needs a person looking at a running app. 5.1 was
+observed via the API in 4c, but not with a person driving the UI, which is what it asks for.
 
 - [ ] 5.1 **The original symptom is gone.** Create a project on a directory that is not a repository,
       create an agent, send a message. The turn should start, not queue.
