@@ -45,6 +45,12 @@ canonical turn context SHALL say that it is working in the project's shared dire
 isolated checkout is available, and the agent's workspace report SHALL distinguish an agent sharing
 the project directory because no repository exists from one sharing it by configuration.
 
+Concurrent writing agents in such a project SHALL be permitted. The Hub SHALL NOT serialize them,
+lock the directory, or refuse a second writer. Because their edits can overwrite one another with no
+conflict to resolve, and no mechanism for producing a conflict exists without a repository, the Hub
+SHALL tell each agent that it shares the directory. That statement is the whole of the mitigation
+and SHALL NOT be removed while the permission stands.
+
 The Hub SHALL NOT create, initialize, or modify a Git repository in the project directory in order to
 satisfy this requirement.
 
@@ -64,6 +70,14 @@ satisfy this requirement.
 - **WHEN** a turn's canonical context is built for an agent running in a project with no repository
 - **THEN** the context states that the working directory is the project's shared directory and that
   no isolated checkout is available
+- **AND** it states that another agent in the project works in that same directory and that their
+  edits can overwrite each other
+
+#### Scenario: A second writing agent is not refused or serialized
+
+- **WHEN** two writing agents are triggered in the same project with no repository
+- **THEN** both run, in that project's directory
+- **AND** neither is refused, queued, or delayed on account of the other
 
 #### Scenario: The workspace report distinguishes the two ways of sharing
 

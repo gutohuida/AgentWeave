@@ -122,6 +122,22 @@ def test_running_in_place_creates_no_repository_and_no_worktree(tmp_path):
     assert sorted(p.name for p in plain.iterdir()) == []
 
 
+def test_two_writers_with_no_repository_both_get_the_project_directory(tmp_path):
+    """The accepted arrangement of design.md Decision 7, settled by the operator: *"It's
+    acceptable. The user has to deal with this."*
+
+    Neither is refused and neither is given somewhere else to work — there is nowhere else. The
+    Hub's whole obligation is telling them, which `test_workspace_posture_context.py` covers.
+    Asserted here so that a later attempt to serialize, lock, or refuse the second writer has to
+    delete a test that says why it should not.
+    """
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+
+    assert resolve_agent_workspace(plain, "one", {}) == plain
+    assert resolve_agent_workspace(plain, "two", {}) == plain
+
+
 def test_resolve_agent_workspace_does_not_fall_back_after_git_failure(repo, monkeypatch):
     """The distinction the change rests on: no repository degrades, a broken one does not.
 

@@ -90,7 +90,9 @@ accepted a project-relative path beginning with `~`. It was unreachable while ev
 - **Not protecting concurrent writers in a non-repository project.** Two writing agents in one
   directory can lose each other's updates. That is the risk worktrees exist to convert into a visible
   conflict, and without a repository there is no mechanism to convert it. The Hub says so; it does
-  not serialize, lock, or refuse.
+  not serialize, lock, or refuse. **Accepted by the operator** — *"It's acceptable. The user has to
+  deal with this."* — which makes the saying-so the requirement rather than a mitigation that could
+  be tidied away later.
 - **Not giving a non-repository project checkpoints with file lists.** A checkpoint's changed-file
   list is read from per-run snapshot commits (`checkpoints.py:128-137`); with no repository there are
   no commits and the list is empty. `checkpoints.py:125` already guards this.

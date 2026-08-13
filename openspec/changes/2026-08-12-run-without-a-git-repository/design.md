@@ -117,6 +117,19 @@ refusing the second agent is the refusal this change exists to remove.
 So it is permitted, and D3's sentence tells the agent it is sharing. This is the operator's call to
 make, and making it requires them to know — which they now do.
 
+**Resolved by the operator, so this is settled rather than provisional:** *"It's acceptable. The
+user has to deal with this."*
+
+That closes it as a decision and fixes what the code owes: the Hub's obligation is to **say so**,
+not to prevent it. The sentence in the turn context is therefore load-bearing rather than a
+courtesy, and removing it later as noise would quietly withdraw the only thing making the accepted
+risk visible to the party running into it. So it is pinned in two places rather than left to
+judgement: the delta's *"The agent is told which posture it has"* scenario, and
+`test_workspace_posture_context.py::test_an_agent_with_no_repository_is_told_it_shares_the_directory`.
+
+What this does **not** license is widening the trade quietly. Serialising, locking, or refusing a
+second writer are all still out; so is dropping the warning because it reads as alarming.
+
 ## Risks / Trade-offs
 
 - **A project that loses its repository silently changes posture.** If `.git` is deleted or the

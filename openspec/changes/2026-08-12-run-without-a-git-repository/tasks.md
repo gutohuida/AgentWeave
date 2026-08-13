@@ -176,8 +176,15 @@ observed via the API in 4c, but not with a person driving the UI, which is what 
       This is what D3's sentence is for and no test can answer it.
 - [ ] 5.3 Is the workspace panel's no-repository note legible as information rather than as a
       problem? It was an amber alert; confirm it no longer reads as one.
-- [ ] 5.4 Run two writing agents in the same non-repository project and see whether the shared
+- [x] 5.4 Run two writing agents in the same non-repository project and see whether the shared
       directory is tolerable in practice, or whether D7's accepted risk needs revisiting.
+      **Closed by operator decision, not by observation** — *"It's acceptable. The user has to deal
+      with this."* The question this task asked was whether to accept the trade, and it is
+      answered; nobody has yet watched two agents collide in practice, and this task no longer asks
+      anyone to. If that observation is wanted later it is a new question, not this one reopened.
+      Consequence: the Hub's whole obligation here is to **say so**. The sharing sentence in the
+      turn context is load-bearing and is now pinned by a spec scenario as well as a test, so it
+      cannot be dropped later as noise while the permission stands.
 - [ ] 5.5 Confirm an existing repository-backed project is unchanged — its agents still get worktrees
       on their own branches.
 
@@ -199,8 +206,9 @@ was made a repository during this session's resume — use a fresh directory, or
 6. **Now open the repository-backed project.** Its agent should still get its own worktree on
    `agentweave/<agent>`, exactly as before.
 7. **Optionally, run two agents at once in the non-repository project.** They share one directory,
-   so they can overwrite each other. The Hub tells each of them so and does not stop them — check
-   whether that is the trade you want.
+   so they can overwrite each other. The Hub tells each of them so and does not stop them. This is
+   the accepted arrangement, not an open question — it is worth doing only if you want to see what
+   a collision looks like before you meet one.
 
 **What is deliberately absent:** the Hub never runs `git init` for you; there is still no UI control
 for isolation; and a non-repository project's checkpoints carry no changed-file list, because there
