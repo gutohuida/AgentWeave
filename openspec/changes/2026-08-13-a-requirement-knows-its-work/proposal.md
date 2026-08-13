@@ -61,15 +61,33 @@ document costs ~1,500 and does.
   work served a requirement is the point.
 - **A migration that does not lie.** Recognizable legacy values are preserved as **unresolved
   references** until explicitly mapped; opaque values are kept, never silently dropped.
-- **Evidence, with an actor.** `requirement_evidence` records kind, a bounded locator or payload,
-  the producing actor and run, and the digest it was produced against. `evidence_reviews` is
-  append-only acceptance/rejection with operator attribution. **An agent assertion is never
-  evidence** — that rule is the reason this table exists rather than a boolean on the task.
+- **Evidence is files; the database holds the pointer.** Evidence is whatever demonstrates the work
+  — a test run, a screenshot, a diff, a path. It is gathered into a folder tree inside the project,
+  and `requirement_evidence` records the kind, the locator, the producing actor and run, and the
+  digest it was produced against. **Retention is a project policy** — on acceptance, daily, monthly,
+  manual, or never — so an operator who wants to manage the tree themselves simply chooses never.
+  This is the same shape the product already uses for specification documents: the file is the
+  thing, the row is derived.
+- **A tester agent accepts evidence; without one, the operator does.** An operator grants
+  `can_accept_evidence` to an agent, the way `can_recall` and `can_read_checkpoints` are already
+  granted. That agent may not accept evidence it produced itself — the same author/reviewer rule
+  `task-lifecycle-governance` already enforces for approval, applied one level down. A project with
+  no such agent defers every acceptance to the operator, which is a supported way to work rather
+  than a degraded one.
+- **An agent assertion is still never evidence.** A stored artifact is a fact; a run's claim about
+  what it proves is not. That is why acceptance is a separate, attributed act on a separate record.
 - **Deterministic coverage state**, one query, one precedence, so a requirement badge and a project
   total cannot disagree: `drifting` → `stale` → `evidence_awaiting_review` → `verified` →
   `in_progress` → `not_started` → `unserved`.
+- **Coverage also reports whether the evidence is integrated**, and no surface may show the state
+  without it. Approved work in this product does not leave `agentweave/<agent>` today, so evidence
+  can name a commit that never reaches the main branch. Reporting `verified` alone would be true of
+  code that does not ship; **`verified, not integrated`** is the honest answer and makes the missing
+  integration step visible in the product rather than only to someone driving the loop by hand.
 - **Drift as a diagnostic, never an edit.** When evidence is recorded, capture the implementation
-  footprint. A later change to a linked footprint without a new requirement revision raises a
+  footprint — commit and changed blob ids in a git project, **and file paths with content hashes
+  where there is no repository**, because non-git projects are a supported first-class case and
+  shipping without that path would leave a whole class of project unverifiable. A later change to a linked footprint without a new requirement revision raises a
   *candidate* the operator resolves as *specification updated*, *implementation corrected*, or *no
   change required*. **"Implementation changed" is detectable; "the requirement should have changed"
   is not** — so nothing here ever edits a document.
@@ -111,19 +129,40 @@ it was implemented (F5). Neither is delivered here; both become possible.
   decision, 2026-08-10). Every table here is derived or a workflow record, and reindexing must be
   able to reconstruct current document state.
 
-## Open questions for review
+## Decisions taken at review
 
-Carried from the design source, plus one this run added. Each needs a decision before the phase that
-consumes it.
+All four questions the design source left open are answered. None remains blocking.
 
-1. **Bounded evidence formats and retention** — locator versus payload, and limits, "without turning
-   the database into an artifact store."
-2. **Non-git implementation footprints** — required here, or after the git-backed path, with an
-   explicit `unavailable` state?
-3. **Does a footprint on an unmerged agent branch count as evidence?** New. The design assumes work
-   lands somewhere a commit can be named; today it does not. Answering "no" makes evidence
-   unobtainable until F4 is solved; answering "yes" means evidence can name a commit that never
-   reaches the product.
-4. **Evidence policy per document, or accepted-evidence-by-default for contracts?** Gates
-   necessarily require accepted evidence. This one mostly belongs to B4 and is listed so it is not
-   lost.
+1. **Evidence is anything that demonstrates the work**, gathered as files in a project folder tree,
+   with the database holding kind, locator and attribution. **Retention is a project policy** — on
+   acceptance, daily, monthly, manual, or never. This avoids the design's stated fear of "turning
+   the database into an artifact store" by not making it one: the filesystem stores, the row points.
+2. **Both footprint paths ship together.** Git projects record commit and changed blob ids; projects
+   without a repository record file paths and content hashes. Non-git projects are a supported
+   first-class case (`2026-08-12-run-without-a-git-repository`), and a git-only first cut would leave
+   them permanently unverifiable.
+3. **Evidence may name a commit on an agent branch, and coverage reports separately whether that
+   commit is integrated.** Refusing unintegrated footprints would make nothing verifiable until an
+   integration step exists; accepting them silently would let `verified` describe code that never
+   ships. Reporting both is the only answer that is neither blocking nor untrue, and it surfaces the
+   missing integration step in the product.
+4. **A tester agent accepts evidence; a project without one defers to the operator.** Acceptance is
+   an operator-granted per-agent capability, not a role and not something a charter confers — a
+   charter describes how an agent behaves, and authority must come from the operator. An agent may
+   not accept evidence it produced, which is the rule `task-lifecycle-governance` already applies to
+   task approval. Working with no tester agent at all is a supported choice; the operator becomes
+   the acceptor and knowingly takes the bottleneck.
+
+**Deferred to B4, deliberately:** whether a `contract`-rigor document requires accepted evidence or
+merely recorded evidence. `gate` necessarily requires acceptance, or the gate certifies itself.
+
+## Later, and out of scope here
+
+**Narrowing what a command may do** — the workspace posture checks literal absolute paths and is a
+boundary rather than a sandbox, so a command naming no absolute path is allowed, including network
+access and package installation. The operator's direction is that this is hook-shaped work, and
+hooks are not implemented. `openspec/explorations/2026-08-10-enforcing-the-development-cycle.md`
+already sets the rule that should govern it when they are: **no capability may exist only in a
+hook** — a hook may make an independently-enforced rule fire sooner or more pleasantly, and removing
+it must leave the same rule firing at the boundary. Making hooks easy to create from the Hub is
+noted as wanted and low priority.

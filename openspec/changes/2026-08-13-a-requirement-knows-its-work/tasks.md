@@ -45,24 +45,36 @@ both head assertions get bumped (`test_migrations.py` **and** `test_project_pers
 
 ## 4. Evidence and review
 
-**Blocked on open questions 1 and 3** (evidence formats/retention; whether a footprint on an
-unmerged agent branch counts). Do not start until both are answered.
+Unblocked — all four questions answered at review (see `proposal.md`).
 
 - [ ] 4.1 `requirement_evidence` model + migration — requirement, **digest produced against**, kind,
-      bounded locator/payload, actor, run, produced time, review state.
-- [ ] 4.2 Kinds: `test_result`, `review_record`, `artifact_diff`, `manual_observation`,
-      `external_reference`.
-- [ ] 4.3 `evidence_reviews` — append-only, operator-attributed, no update and no delete.
-- [ ] 4.4 Agent-recorded evidence enters `awaiting`, never `accepted`.
-- [ ] 4.5 Agent route to record evidence; identity from the run credential only. **No agent route
-      accepts or rejects.**
-- [ ] 4.6 Coverage reports `stale` where every piece of evidence names a superseded digest.
+      artifact locator, actor, run, produced time, review state.
+- [ ] 4.2 Kinds open to addition: `test_result`, `screenshot`, `artifact_diff`, `review_record`,
+      `manual_observation`, `external_reference`.
+- [ ] 4.3 **Artifacts live in a project folder tree**, not the database; the row holds the location.
+- [ ] 4.4 **Retention as a project policy** — on acceptance, daily, monthly, manual, `never`.
+      Removing an artifact never removes its record; the record reports the artifact as gone.
+- [ ] 4.5 `evidence_reviews` — append-only, attributed to whoever decided, no update, no delete.
+- [ ] 4.6 Agent-recorded evidence enters `awaiting`, never `accepted`.
+- [ ] 4.7 `Agent.can_accept_evidence` + migration, alongside `can_recall` / `can_read_checkpoints`.
+      Operator-granted only; never conferred by a charter.
+- [ ] 4.8 Acceptance route: the operator, or a granted agent. **Refuse an agent accepting evidence
+      it produced** — distinctness on agent identity, not run identity, per
+      `task-lifecycle-governance`.
+- [ ] 4.9 A project with no granted agent falls to the operator, as a supported path rather than an
+      error.
+- [ ] 4.10 Agent route to record evidence; identity from the run credential only.
+- [ ] 4.11 Coverage reports `stale` where every piece of evidence names a superseded digest.
 
-## 5. Drift
+## 5. Drift and integration
 
-**Blocked on open question 2** (non-git footprints here or later).
+Unblocked. **Both footprint paths ship together.**
 
-- [ ] 5.1 Capture the implementation footprint when evidence is recorded.
+- [ ] 5.1 Capture the implementation footprint when evidence is recorded: git commit + changed blob
+      ids where the project is a repository; changed paths + content hashes where it is not.
+- [ ] 5.6 **Integration reporting** — is the footprint reachable from the project's main line of
+      work? Returned with every coverage answer; `verified, not integrated` is a real result.
+- [ ] 5.7 A test that no surface can report a coverage state without its integration answer.
 - [ ] 5.2 `requirement_drift` — candidate/resolved/superseded, baseline and current fingerprints,
       attributed resolution.
 - [ ] 5.3 Detection on footprint change with no new requirement revision.
@@ -89,7 +101,11 @@ unmerged agent branch counts). Do not start until both are answered.
 - [ ] 7.4 Coverage: every state in the precedence, including two adjacent states resolving in the
       stated order; `unserved` for a requirement with no link; invalid requirements excluded.
 - [ ] 7.5 Evidence: pinned to the digest; goes stale on rewording; agent evidence lands `awaiting`;
-      an agent accepting is refused; reviews append and never update.
+      a granted agent may accept another agent's evidence; **an agent accepting its own is refused**;
+      an ungranted agent is refused; with no granted agent the operator can still accept; reviews
+      append and never update; a deleted artifact leaves its record reporting the artifact gone.
+- [ ] 7.10 Footprints: both the git and the non-git path; integration reported for each; a
+      requirement with accepted evidence on an unmerged branch reports `verified, not integrated`.
 - [ ] 7.6 Drift: a changed footprint raises a candidate; resolution stops it re-firing; **no
       document is written**.
 - [ ] 7.7 `test_migrations.py` and `test_project_persistence.py` head assertions bumped.
@@ -105,7 +121,10 @@ unmerged agent branch counts). Do not start until both are answered.
       the resulting candidate, and judge the wording.
 - [ ] 8.3 **Was the migration right on real data?** Inspect the links and unresolved references it
       produced for an existing project — this is the one step where being wrong is silent.
-- [ ] 8.4 **Answer the three open questions** in `proposal.md`. Phases 4 and 5 are blocked on them.
+- [ ] 8.4 **Choose the project's retention policy** and confirm the evidence tree is somewhere you
+      would actually keep artifacts.
+- [ ] 8.5 **Decide which agent, if any, holds `can_accept_evidence`** — and confirm that working
+      without one still feels workable rather than obstructive.
 
 ## 9. User test guide
 

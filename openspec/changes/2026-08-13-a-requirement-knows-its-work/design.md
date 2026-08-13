@@ -61,26 +61,59 @@ a guarantee, so the migration:
 mis-parse can be re-derived rather than reconstructed from a backup. Its removal belongs to a later
 change once the unresolved set is empty.
 
-## D4. Evidence has an actor, and an agent's word is not evidence
+## D4. Evidence is a file; the row points at it
 
-`requirement_evidence`: requirement, **the digest it was produced against**, kind, bounded locator
-or payload, producing actor, producing run where applicable, produced time, review state.
+`requirement_evidence`: requirement, **the digest it was produced against**, kind, locator, producing
+actor, producing run where applicable, produced time, review state.
 
-Kinds: `test_result`, `review_record`, `artifact_diff`, `manual_observation`, `external_reference`.
+Kinds: `test_result`, `screenshot`, `artifact_diff`, `review_record`, `manual_observation`,
+`external_reference`. The list is open at the edges on purpose — evidence is whatever demonstrates
+the work, and constraining it to what was imaginable today is how a format becomes a cage.
 
-**Pinning to the digest, not the requirement, is the whole mechanism.** Evidence accepted against
-one wording says nothing about a different wording, and the difference is exactly what
+**The artifact lives in the project, not the database.** Evidence is gathered under a folder tree in
+the project directory; the row records where. The design source worried about "turning the database
+into an artifact store", and the answer is simply not to: this is the same division the product
+already uses for specification documents, where the file is authoritative and the row is derived.
+It also means an operator can open, diff, move and archive evidence with ordinary tools.
+
+**Retention is a project policy**, not a hard-coded rule: on acceptance, daily, monthly, manual, or
+never. `never` is a first-class choice — an operator who wants to manage the tree themselves should
+not have to fight a cleaner. Whatever the policy, deleting an artifact SHALL NOT delete the
+`requirement_evidence` row: that a thing was verified, by whom, and against which digest is the
+record; the artifact is the attachment. A row whose artifact is gone reports as such rather than
+vanishing.
+
+**Pinning to the digest, not the requirement, is the whole mechanism.** Evidence accepted against one
+wording says nothing about a different wording, and that difference is exactly what
 `requirement_digests` was recorded to expose and what nothing has ever read.
 
-**An agent assertion is never evidence.** A run reporting "tests pass" produces a `test_result`
-whose locator names the artifact, and it enters `review_state = awaiting`. This is not distrust of
-models specifically — the end-to-end run produced an honest agent that said *"this should be treated
-as unverified-by-execution"*, and a less careful one would have said "tests pass" with the same
-authority. The record must be able to tell those apart, and only an authenticated actor plus an
-artifact can.
+## D4a. Who accepts evidence
 
-`evidence_reviews` is append-only: decision, operator attribution, time, reason. No update, no
-delete — the same shape as `TaskTransition`, and for the same reason.
+**An agent the operator has granted `can_accept_evidence`, or the operator.**
+
+An agent's assertion is still not evidence. But that rule was aimed at the wrong half: a stored test
+artifact is a *fact*, and it is the claim about what it proves that needs judging. So the artifact
+may be produced by anyone; the **acceptance** is the controlled act.
+
+`can_accept_evidence` is an operator-granted per-agent capability, alongside `can_recall` and
+`can_read_checkpoints` which already work this way. Deliberately **not** a role (the role subsystem
+was deleted and must not return) and deliberately **not** conferred by a charter — a charter says how
+an agent behaves, and behaviour is not authority. The "Verifier" charter may well describe such an
+agent; it does not grant it anything.
+
+**An agent may not accept evidence it produced.** `task-lifecycle-governance` already refuses a
+transition to `approved` requested by the agent that recorded the completion, on agent identity
+rather than run identity, because "a different run" is satisfied by an agent continuing its own work.
+The same rule and the same reasoning apply here.
+
+**A project with no such agent defers every acceptance to the operator**, and that is a supported way
+to work rather than a degraded one — the operator knowingly takes the bottleneck. Exactly as
+`task-lifecycle-governance` permits the operator to approve regardless of who produced the work,
+"a single-operator project would otherwise be unable to approve anything."
+
+`evidence_reviews` is append-only: decision, actor (operator or the accepting agent), run where an
+agent acted, time, reason. No update, no delete — the same shape as `TaskTransition`, for the same
+reason.
 
 ## D5. One query, one precedence
 
@@ -98,6 +131,13 @@ Precedence, highest first — taken from the design source unchanged:
 6. `not_started` — linked work exists, not started
 7. `unserved` — no work linked
 
+**Coverage is a state *and* an integration answer, and no surface may show one without the other.**
+Reachability of the evidence's footprint from the project's main branch is reported alongside the
+state, so `verified` never appears alone for work sitting on an agent branch. It is not an eighth
+precedence level: the precedence ranks *evidence quality*, and integration is an orthogonal fact
+about the same evidence. Ranking them together would force a choice between "stale but merged" and
+"verified but not merged" that has no correct answer.
+
 `unserved` is the state the end-to-end run needed and could not express: nine requirements, six
 tasks, and no way to ask whether every requirement had somewhere to be built.
 
@@ -106,9 +146,16 @@ coverage state. They are not "unserved"; they are broken, and a gate must refuse
 
 ## D6. Drift is a candidate, never an edit
 
-When evidence is recorded, capture an implementation footprint: git commit plus changed path/blob
-ids where the workspace is a repository; bounded paths and content hashes otherwise; test
-identifiers where applicable.
+When evidence is recorded, capture an implementation footprint. **Both paths ship together:**
+
+| workspace | footprint |
+|---|---|
+| a git repository | commit sha, plus the blob ids of the changed paths |
+| no repository | the changed paths, plus a content hash of each at that moment |
+
+Non-git projects are a supported first-class case (`2026-08-12-run-without-a-git-repository`), and a
+git-only first cut would leave every one of them permanently unverifiable. Test identifiers are
+recorded where applicable in both.
 
 A later change to a linked footprint, with no new requirement revision and no explicit resolution,
 raises a **drift candidate**. The operator resolves it as *specification updated*, *implementation
@@ -119,12 +166,17 @@ fingerprint so the same change is not reported twice.
 should have changed" is a judgement, and a system that inferred it would rewrite an approved
 specification on the strength of a file diff.
 
-**Open, and load-bearing:** the end-to-end run found that approved work never leaves
-`agentweave/<agent>` — commits are `Auto-snapshot: builder's turn` and `master` keeps only a README.
-So a git footprint today names a commit on a branch nothing merges. Either evidence may name it
-(and "verified" can describe code that never ships), or it may not (and nothing is verifiable until
-integration exists). **This is question 3 in the proposal and needs an answer before the evidence
-phase, not before the link phase** — which is why the tasks are ordered as they are.
+**Resolved: evidence may name a commit on an agent branch, and coverage says whether it is
+integrated.** The end-to-end run found that approved work never leaves `agentweave/<agent>` —
+commits are `Auto-snapshot: builder's turn` and `master` keeps only a README. So a git footprint
+today names a commit on a branch nothing merges.
+
+Refusing such a footprint would make nothing verifiable at all until an integration step exists, and
+B3 would ship a coverage system permanently answering "not verified". Accepting it silently would
+let `verified` describe code that never ships. So: record it, and report **reachability from the
+project's main branch as a separate attribute of coverage** that no surface may omit (D5). The
+honest state is `verified, not integrated`, and it makes the missing integration step visible in the
+product instead of only to someone driving the loop by hand.
 
 ## D7. Agent actions are run-bound
 

@@ -86,24 +86,47 @@ requirement to match one.
 
 ### Requirement: Evidence names what produced it and what it was produced against
 
-Evidence for a requirement SHALL record its kind, a bounded locator or payload, the actor that
+Evidence for a requirement SHALL record its kind, the location of its artifact, the actor that
 produced it, the run where an agent produced it, and **the requirement digest it was produced
 against**.
+
+Evidence SHALL be whatever demonstrates the work — a test run, a screenshot, a diff, a path. The set
+of kinds SHALL be open to additions, because constraining evidence to what was imaginable at design
+time is how the record stops describing what was actually done.
 
 Pinning evidence to a digest rather than to a requirement is what makes staleness detectable:
 evidence accepted against one wording says nothing about a different wording, and without the pin
 the difference is unobservable after the fact.
 
+Evidence SHALL be stored as an artifact in the project's own directory, with the record holding its
+location rather than its content. An operator SHALL be able to read, move and archive evidence with
+ordinary tools, and the database SHALL NOT become an artifact store.
+
+Retention SHALL be a project policy with `never` among its choices. Removing an artifact SHALL NOT
+remove its evidence record: that something was verified, by whom, and against which digest is the
+record, and the artifact is its attachment. A record whose artifact is gone SHALL report that state
+rather than disappear.
+
 **An agent's assertion SHALL NOT by itself constitute evidence.** A run reporting that it verified
 something produces a record awaiting review, not a verified requirement. A live run produced an
 agent that correctly reported its work as unverified-by-execution; a less careful one would have
 reported success in the same words with the same authority, and the record must be able to tell them
-apart.
+apart. What distinguishes them is that the artifact is a fact and the claim about what it proves is
+not — so producing evidence is open, and **accepting** it is the controlled act.
 
-Acceptance and rejection of evidence SHALL be recorded append-only, attributed to the operator, with
+Acceptance and rejection SHALL be recorded append-only, attributed to the actor that decided, with
 no update and no delete.
 
-An agent SHALL have no route by which it accepts or rejects evidence.
+Evidence MAY be accepted by an agent the operator has granted that capability, and by the operator.
+The capability SHALL be granted per agent by the operator; it SHALL NOT be conferred by a charter or
+by anything an agent can assert about itself, because a charter describes behaviour and behaviour is
+not authority.
+
+**An agent SHALL NOT accept evidence it produced.** Distinctness is on agent identity, not run
+identity — the same rule, for the same reason, that already governs task approval.
+
+Where a project has granted no agent that capability, acceptance SHALL fall to the operator. That is
+a supported way to work, not a degraded one.
 
 #### Scenario: Evidence carries its actor and digest
 
@@ -115,15 +138,36 @@ An agent SHALL have no route by which it accepts or rejects evidence.
 - **WHEN** an agent records evidence for a requirement
 - **THEN** that evidence is awaiting review rather than accepted
 
-#### Scenario: Acceptance is the operator's and is kept
+#### Scenario: A decision is attributed and kept
 
 - **WHEN** evidence is accepted or rejected
-- **THEN** the decision is appended with the operator's attribution and never overwritten
+- **THEN** the decision is appended with its actor's attribution and never overwritten
 
-#### Scenario: An agent cannot accept evidence
+#### Scenario: A granted agent may accept evidence another agent produced
 
-- **WHEN** an agent attempts to accept evidence
+- **WHEN** an agent the operator granted the capability accepts evidence produced by a different
+  agent
+- **THEN** the acceptance is recorded with that agent as the actor
+
+#### Scenario: An agent cannot accept its own evidence
+
+- **WHEN** an agent attempts to accept evidence it produced
 - **THEN** it is refused
+
+#### Scenario: An ungranted agent cannot accept evidence
+
+- **WHEN** an agent without the capability attempts to accept evidence
+- **THEN** it is refused
+
+#### Scenario: With no granted agent the operator decides
+
+- **WHEN** a project has granted no agent the capability
+- **THEN** evidence can still be accepted by the operator
+
+#### Scenario: A removed artifact does not remove the record
+
+- **WHEN** an evidence artifact is deleted under the project's retention policy
+- **THEN** the evidence record remains and reports that its artifact is gone
 
 ### Requirement: Coverage is one computation with one precedence
 
@@ -143,6 +187,17 @@ diagnostic outside coverage rather than assigned a coverage state. It is not uns
 
 A project SHALL be able to report, for a document, which of its requirements have no linked work.
 
+Coverage SHALL also report whether the evidence's implementation footprint is reachable from the
+project's main line of work, and **no surface reporting a coverage state may omit it**. Approved work
+in this product currently remains on a per-agent branch that nothing merges, so a requirement can
+hold accepted evidence for code that is not in the product. Reporting `verified` alone would be true
+of the branch and false of the product; reporting both makes the gap visible where the work is, not
+only to someone inspecting branches by hand.
+
+Integration SHALL NOT be a coverage state. The precedence ranks how good the evidence is;
+integration is an independent fact about the same evidence, and ranking them together would force a
+choice between "stale but merged" and "verified but unmerged" that has no correct answer.
+
 #### Scenario: A requirement nothing serves is reported as such
 
 - **WHEN** a document has a requirement with no linked task
@@ -158,10 +213,24 @@ A project SHALL be able to report, for a document, which of its requirements hav
 - **WHEN** a requirement's coverage is shown on its document and counted in a project total
 - **THEN** both derive from the same computation
 
+#### Scenario: Verified work that has not landed says so
+
+- **WHEN** a requirement has accepted evidence whose footprint is not reachable from the project's
+  main line of work
+- **THEN** its coverage reports both that it is verified and that it is not integrated
+
+#### Scenario: A coverage state is never shown without its integration answer
+
+- **WHEN** any surface reports a coverage state
+- **THEN** it also reports whether that evidence is integrated
+
 ### Requirement: A changed implementation raises a candidate, never an edit
 
 Where evidence is recorded, the Hub SHALL capture the implementation footprint it was produced
-against.
+against: in a git repository, the commit and the changed blob identifiers; where the project is not
+a repository, the changed paths and a content hash of each. Both SHALL be supported, because a
+project without a repository is a supported first-class case and would otherwise be permanently
+unverifiable.
 
 A later change to a linked footprint, with no new requirement revision and no explicit resolution,
 SHALL raise a drift candidate.
@@ -180,6 +249,12 @@ Overlap between a footprint and a later change is a candidate signal, not proof 
 
 - **WHEN** a file named in a requirement's evidence footprint changes and the requirement does not
 - **THEN** a drift candidate exists for that requirement
+
+#### Scenario: A project without a repository still records a footprint
+
+- **WHEN** evidence is recorded in a project that is not a git repository
+- **THEN** the footprint names the changed paths and a content hash of each
+- **AND** a later change to one of them raises a drift candidate
 
 #### Scenario: Drift never rewrites the document
 
