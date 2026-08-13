@@ -41,6 +41,48 @@ def title_from_message(text: str, *, limit: int = CONVERSATION_TITLE_MAX_LENGTH)
     return cut[:boundary].rstrip()
 
 
+#: The one posture that is never carried into a conversation the operator did not open. Removing
+#: every check is a deliberate choice for a thread being watched; reaching runs started by a peer
+#: or a job, by a route the operator cannot see, is not what choosing it meant.
+UNINHERITED_PERMISSION_MODE = "bypassPermissions"
+
+
+async def inherit_runtime_overrides(session: AsyncSession, conversation: Conversation) -> None:
+    """Carry the agent's most recent runtime overrides into a conversation that states none.
+
+    Overrides are held per conversation, and a trigger naming no conversation opens a new one. The
+    operator's interface always names one; a job and a peer message do not. Without this, an
+    operator sets a posture, an agent hands work to another agent, that agent replies — and the run
+    which follows has a posture nobody chose, silently, in the middle of configured work.
+
+    This gives a starting point, not a shared setting: the values are copied, so changing one
+    conversation's overrides later leaves the other's alone. `checkpoint_cutover` already does the
+    same thing at the handoff boundary, for the same stated reason.
+    """
+    if conversation.runtime_overrides:
+        return
+    result = await session.execute(
+        select(Conversation.runtime_overrides)
+        .where(
+            Conversation.project_id == conversation.project_id,
+            Conversation.agent == conversation.agent,
+            Conversation.id != conversation.id,
+            Conversation.runtime_overrides.is_not(None),
+        )
+        .order_by(Conversation.created_at.desc())
+        .limit(1)
+    )
+    previous = result.scalars().first()
+    if not previous:
+        return
+    inherited = {
+        key: value
+        for key, value in previous.items()
+        if not (key == "permission_mode" and value == UNINHERITED_PERMISSION_MODE)
+    }
+    conversation.runtime_overrides = inherited or None
+
+
 def new_conversation(*, project_id: str, agent: str, origin: str) -> Conversation:
     """Build an unsaved conversation.
 

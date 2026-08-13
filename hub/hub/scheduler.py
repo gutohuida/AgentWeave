@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .conversations import (
     conversation_for_provider_session,
+    inherit_runtime_overrides,
     name_conversation,
     new_conversation,
 )
@@ -295,6 +296,9 @@ class JobScheduler:
                 if resume_session_id:
                     conversation.provider_session_id = resume_session_id
                 session.add(conversation)
+                # A job names no conversation either, and fires unattended — the case where a
+                # silently changed posture is least likely to be noticed.
+                await inherit_runtime_overrides(session, conversation)
             # Named from the job, not its message: a schedule fires the same message repeatedly,
             # and the job's name is what the operator recognises the thread by.
             name_conversation(conversation, job.name)

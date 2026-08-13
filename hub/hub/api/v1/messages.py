@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
 from ...auth import get_project
-from ...conversations import name_conversation, new_conversation, peer_bound_conversation
+from ...conversations import (
+    inherit_runtime_overrides,
+    name_conversation,
+    new_conversation,
+    peer_bound_conversation,
+)
 from ...db.engine import get_session
 from ...db.models import Agent, Conversation, Message, Run
 from ...inbound_queue import new_entry, project_limits
@@ -193,6 +198,9 @@ async def create_message_for_actor(
             recipient_conversation.bound_sender_conversation_id = source_conversation_id
             recipient_conversation.bound_sender_agent = None if source_conversation_id else sender
             session.add(recipient_conversation)
+            # A peer message names no conversation, so this is where the operator's chosen
+            # posture would otherwise be lost between one agent and the next.
+            await inherit_runtime_overrides(session, recipient_conversation)
 
     entry = new_entry(
         project_id=project_id,

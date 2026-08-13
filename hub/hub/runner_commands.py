@@ -19,10 +19,13 @@ and why an agent on it is reported as unable to collaborate unless yolo is set.
 Claude permission posture is always stated explicitly, so it comes from the Hub rather than from
 whatever `~/.claude/settings.json` says on the machine the Hub runs on (openspec change
 `2026-08-06-claude-non-yolo-permission-mode`). Yolo runs receive `--dangerously-skip-permissions`;
-non-yolo runs receive `--permission-mode DEFAULT_CLAUDE_PERMISSION_MODE`. That default was `manual`
-until 2026-08-06, when operator testing showed it refuses every write — headless execution has no
-terminal at which an operator could answer the prompt `manual` raises, and no approval surface
-exists yet (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`).
+non-yolo runs receive `--permission-mode DEFAULT_CLAUDE_PERMISSION_MODE`. That default has moved
+twice. It was `manual` until 2026-08-06, when operator testing showed it refuses every write —
+headless execution has no terminal at which an operator could answer the prompt `manual` raises. It
+was `acceptEdits` until 2026-08-13, which fixed writing and left executing broken for the same
+reason: `acceptEdits` still prompts for `Bash`, so an agent could write code and never run it. It is
+now the workspace posture, which the *Hub* answers, and which therefore needs no terminal at all —
+falling back to `acceptEdits` only where no Hub tool server is configured to do the answering.
 
 Either default is suppressed when the operator has chosen a posture through the `permission_mode`
 control, whose rendered flag arrives in `control_args`. The agent's own
@@ -43,14 +46,26 @@ from .model_catalog import WORKSPACE_PERMISSION_MODE, render_control_args
 
 SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
 
-# The posture a non-yolo Claude run gets when the operator has chosen none. `manual` was used
-# until 2026-08-06 and is unusable headlessly: it defers each decision to an operator prompt that
-# nothing can answer, so every write was refused with "Claude requested permissions to write to
-# ..., but you haven't granted it yet". `acceptEdits` keeps the Hub — not the host machine's
-# settings — in control of posture while producing a run that can do work. Isolation is still
-# carried by the agent's own git worktree, which this does not widen. `manual` remains selectable
-# through the `permission_mode` control for a deliberately inert run.
-DEFAULT_CLAUDE_PERMISSION_MODE = "acceptEdits"
+# The posture a non-yolo Claude run gets when the operator has chosen none.
+#
+# `manual` was used until 2026-08-06 and is unusable headlessly: it defers each decision to an
+# operator prompt that nothing can answer, so every write was refused. `acceptEdits` replaced it,
+# and produced a run that could *edit* — but it still prompts for `Bash`, and headless there is
+# nothing to answer that prompt either. An agent could write code and never run it (found by
+# driving the loop end to end, 2026-08-13: the same agent under `workspace` ran 14/14 tests).
+#
+# `workspace` is the answer because the Hub answers it: each request is checked against the run's
+# own workspace by `_decide`. That is *narrower* than `acceptEdits`, which accepted every edit with
+# no path check at all, and it permits the execution an agent needs to produce evidence about its
+# own work. Isolation is still carried by the agent's git worktree, which this does not widen.
+DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE
+
+# The default for a run with no Hub tool server configured. `workspace` *is* `manual` plus an
+# answerer, and that answerer is the Hub's own MCP server — so without it, defaulting to
+# `workspace` would name an approver that is not there and refuse everything, which is precisely
+# the failure `acceptEdits` was introduced to end. A run that cannot be answered gets the posture
+# that needs no answering.
+DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"
 
 # The tool `--permission-prompt-tool` names for the "Workspace only" posture. `mcp__<server>__<tool>`
 # is Claude's addressing for an MCP tool; the server half must match the name `_build_claude_command`
@@ -173,6 +188,19 @@ def _build_claude_command(
     # whenever the override supplied one, or the composer's Permissions pill would appear to work
     # and change nothing — the worst available failure mode.
     operator_set_permission_mode = "--permission-mode" in (control_args or [])
+    # The posture this run falls back to, decided before the flags are assembled because two
+    # places need it: the approver flag below, and the mode flag at the end. `workspace` only
+    # works where the Hub's server is there to answer it.
+    default_posture = (
+        DEFAULT_CLAUDE_PERMISSION_MODE
+        if mcp_command
+        else DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER
+    )
+    defaults_to_approver = (
+        not operator_set_permission_mode
+        and not yolo
+        and default_posture in (APPROVER_PERMISSION_MODES)
+    )
     if context_file is not None and context_file.exists():
         cmd += ["--append-system-prompt-file", str(context_file)]
     if mcp_command:
@@ -197,13 +225,17 @@ def _build_claude_command(
         if (
             operator_set_permission_mode
             and (control_overrides or {}).get("permission_mode") in APPROVER_PERMISSION_MODES
-        ):
+        ) or defaults_to_approver:
             cmd += ["--permission-prompt-tool", CLAUDE_PERMISSION_PROMPT_TOOL]
     if not operator_set_permission_mode:
         if yolo:
             cmd += ["--dangerously-skip-permissions"]
         else:
-            cmd += ["--permission-mode", DEFAULT_CLAUDE_PERMISSION_MODE]
+            # `workspace` is this repo's name for the posture, not Claude's. Claude is told
+            # `manual`; what makes it "workspace" rather than "ask the operator" is the approver
+            # flag emitted above, and the two must be decided together or one outlives the other.
+            spelling = "manual" if default_posture == WORKSPACE_PERMISSION_MODE else default_posture
+            cmd += ["--permission-mode", spelling]
     if session_id:
         cmd += ["--resume", session_id]
     if extra_flags:

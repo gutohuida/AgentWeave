@@ -22,6 +22,7 @@ from hub.model_catalog import WORKSPACE_PERMISSION_MODE, get_provider, render_co
 from hub.runner_commands import (
     CLAUDE_PERMISSION_PROMPT_TOOL,
     DEFAULT_CLAUDE_PERMISSION_MODE,
+    DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER,
     build_command,
 )
 
@@ -253,9 +254,27 @@ def test_postures_that_decide_nothing_emit_no_approver_flag(posture):
     assert argv[argv.index("--permission-mode") + 1] == posture
 
 
-def test_the_default_posture_is_unchanged_and_names_no_approver():
+def test_the_default_posture_is_the_workspace_one_and_names_its_approver():
+    """Changed 2026-08-13. The previous default accepted edits and still prompted for `Bash`,
+    which headless nothing answers — an agent could write code and never run it. `workspace` is
+    answered by the Hub against the run's own directory, so it is narrower for writes and permits
+    the execution an agent needs to produce evidence about its own work."""
     argv = _claude_argv()
-    assert argv[argv.index("--permission-mode") + 1] == DEFAULT_CLAUDE_PERMISSION_MODE
+    assert DEFAULT_CLAUDE_PERMISSION_MODE == WORKSPACE_PERMISSION_MODE
+    # `workspace` is this repo's name for it; Claude is told `manual` plus an approver.
+    assert argv[argv.index("--permission-mode") + 1] == "manual"
+    assert argv.count("--permission-prompt-tool") == 1
+    assert argv[argv.index("--permission-prompt-tool") + 1] == CLAUDE_PERMISSION_PROMPT_TOOL
+
+
+def test_the_default_falls_back_when_nothing_can_answer_it():
+    """`workspace` without the Hub's server names an approver that is not there, and every call
+    fails — exactly the failure the old default was introduced to end. A run that cannot be
+    answered gets the posture that needs no answering."""
+    argv = build_command(runner="claude", cli="claude", prompt="hi")
+    assert argv[argv.index("--permission-mode") + 1] == (
+        DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER
+    )
     assert "--permission-prompt-tool" not in argv
 
 

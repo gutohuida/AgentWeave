@@ -737,6 +737,10 @@ async def trigger_agent(
     else:
         # This route queues its entry as `origin_type="operator"` below; the conversation it
         # opens is the same act.
+        # No inheritance here, deliberately. `agent-conversation-workspace` requires that a
+        # conversation the *operator* starts begins clean — they are looking at the composer and
+        # can choose. What this change fixes is the conversation a peer or a job opens, where
+        # nobody was asked.
         conversation = new_conversation(project_id=project_id, agent=body.agent, origin="operator")
         session.add(conversation)
 

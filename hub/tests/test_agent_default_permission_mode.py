@@ -170,7 +170,9 @@ async def test_a_conversations_own_choice_beats_the_agents_default(app, auth_hea
             await _await_background_run()
 
     command = fake_spawn.call_args.args[0]
+    # Stated on the conversation, so it wins over both the agent's default and the Hub's.
     assert command[command.index("--permission-mode") + 1] == "acceptEdits"
+    assert "--permission-prompt-tool" not in command
     assert command.count("--permission-mode") == 1
 
 
@@ -199,4 +201,7 @@ async def test_an_agent_with_no_default_is_unchanged(app, auth_headers, bind_run
             await _await_background_run()
 
     command = fake_spawn.call_args.args[0]
-    assert command[command.index("--permission-mode") + 1] == "acceptEdits"
+    # The Hub's default, which since 2026-08-13 is the workspace posture — `manual` plus an
+    # approver — so an agent given no configuration can still run what it wrote.
+    assert command[command.index("--permission-mode") + 1] == "manual"
+    assert "--permission-prompt-tool" in command
