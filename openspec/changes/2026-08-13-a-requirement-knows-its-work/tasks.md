@@ -72,15 +72,15 @@ Unblocked. **Both footprint paths ship together.**
 
 - [ ] 5.1 Capture the implementation footprint when evidence is recorded: git commit + changed blob
       ids where the project is a repository; changed paths + content hashes where it is not.
-- [ ] 5.6 **Integration reporting** — is the footprint reachable from the project's main line of
-      work? Returned with every coverage answer; `verified, not integrated` is a real result.
-- [ ] 5.7 A test that no surface can report a coverage state without its integration answer.
 - [ ] 5.2 `requirement_drift` — candidate/resolved/superseded, baseline and current fingerprints,
       attributed resolution.
 - [ ] 5.3 Detection on footprint change with no new requirement revision.
 - [ ] 5.4 Operator resolution: specification updated / implementation corrected / no change required;
       records the current digest and fingerprint so it does not re-fire.
 - [ ] 5.5 A test that drift **never** writes to a specification document.
+- [ ] 5.6 **Integration reporting** — is the footprint reachable from the project's main line of
+      work? Returned with every coverage answer; `verified, not integrated` is a real result.
+- [ ] 5.7 A test that no surface can report a coverage state without its integration answer.
 
 ## 6. Navigation
 
@@ -104,14 +104,14 @@ Unblocked. **Both footprint paths ship together.**
       a granted agent may accept another agent's evidence; **an agent accepting its own is refused**;
       an ungranted agent is refused; with no granted agent the operator can still accept; reviews
       append and never update; a deleted artifact leaves its record reporting the artifact gone.
-- [ ] 7.10 Footprints: both the git and the non-git path; integration reported for each; a
-      requirement with accepted evidence on an unmerged branch reports `verified, not integrated`.
 - [ ] 7.6 Drift: a changed footprint raises a candidate; resolution stops it re-firing; **no
       document is written**.
 - [ ] 7.7 `test_migrations.py` and `test_project_persistence.py` head assertions bumped.
 - [ ] 7.8 `pytest hub/tests/ -q` and `pytest tests/ -q` separately; `ruff`; `black`;
       `npx openspec validate --changes --strict`.
 - [ ] 7.9 `hub/hub/static/ui` refreshed and confirmed with `diff -rq` if any UI ships.
+- [ ] 7.10 Footprints: both the git and the non-git path; integration reported for each; a
+      requirement with accepted evidence on an unmerged branch reports `verified, not integrated`.
 
 ## 8. Human-only verification
 
