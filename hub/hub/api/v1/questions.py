@@ -45,6 +45,118 @@ async def _asking_run_has_ended(session: AsyncSession, question: Question) -> bo
     return run is not None and run.status != "running"
 
 
+async def _completed_batch(session: AsyncSession, question: Question) -> Optional[List[Question]]:
+    """The batch *question* belongs to, in ask order, once every one of them is resolved.
+
+    `None` while any question in the batch is still outstanding — the operator is mid-decision, and
+    delivering what they have said so far is the defect this exists to prevent
+    (`2026-08-13-answers-arrive-together`, D1/D2).
+
+    A question with no `batch_id` is a batch of one and is returned immediately. That is not a
+    special case for convenience: `POST /questions` and the agent's single-question route both leave
+    `batch_id` NULL, so a null id is what "asked on its own" looks like in the database, and it must
+    keep behaving exactly as it did before batching existed (D7).
+
+    Resolved means answered **or declined**. A decline is the operator handing the decision back
+    (`2026-08-11-declining-a-question`, D2), not an absence — so a batch whose remainder is declined
+    is finished, and the answers already given are released rather than stranded.
+    """
+    if not question.batch_id:
+        return [question]
+
+    # The caller has mutated `question` but not committed. Flush so this query sees the answer or
+    # decline that prompted it; otherwise the batch is never complete and nothing is ever delivered.
+    await session.flush()
+
+    result = await session.execute(
+        select(Question)
+        .where(Question.project_id == question.project_id)
+        .where(Question.batch_id == question.batch_id)
+        .order_by(Question.batch_index)
+    )
+    rows = list(result.scalars().all())
+    if any(not (row.answered or row.declined) for row in rows):
+        return None
+    return rows
+
+
+async def _deliver_batch_if_complete(
+    session: AsyncSession, question: Question, project_id: str
+) -> Optional[Tuple[object, object]]:
+    """Queue the batch's answers if this resolution finished it. Returns `(entry, conversation)`.
+
+    **Called after the answer or decline is committed, deliberately.** Two operators resolving the
+    last two questions at once would otherwise each look at the batch from inside their own
+    uncommitted transaction, each see the other's question still outstanding, and each decline to
+    deliver — leaving a complete batch that reaches nobody. Checking against committed state makes
+    the concurrent failure a *duplicate* delivery rather than a lost one, and losing what the
+    operator decided is much the worse of the two.
+
+    That duplicate is the residual risk and it is not closed here: collapsing it needs a delivery
+    marker the schema has nowhere to put, and the panel answers strictly one question at a time, so
+    two simultaneous resolutions of the same batch are not a thing the product can currently
+    produce.
+    """
+    batch = await _completed_batch(session, question)
+    content = _batch_delivery_text(batch) if batch is not None else None
+    if content is None:
+        return None
+
+    from_agent = question.from_agent
+    conversation = await latest_open_conversation(session, project_id=project_id, agent=from_agent)
+    if conversation is None:
+        # The operator answering is what opens this thread.
+        conversation = new_conversation(project_id=project_id, agent=from_agent, origin="operator")
+        session.add(conversation)
+
+    entry = new_entry(
+        project_id=project_id,
+        agent=from_agent,
+        origin_type="operator",
+        origin_agent=None,
+        content=content,
+        hop_depth=0,
+        conversation_id=conversation.id,
+    )
+    # Named from the question rather than the entry's text: the entry restates the answer too, and
+    # "Question: … Answer: …" is not what the thread is about. For a batch it is the *first*
+    # question, not whichever one happened to complete it — the thread is about what the agent set
+    # out to ask, and completion order is the operator's rather than the topic.
+    name_conversation(conversation, batch[0].question)
+    session.add(entry)
+    await session.commit()
+    return entry, conversation
+
+
+def _batch_delivery_text(rows: List[Question]) -> Optional[str]:
+    """What the agent reads when a batch reaches it as new input.
+
+    `None` when the batch carries no answers at all: a decline has no content to act on beyond the
+    fact itself, and that is already true of a single declined question, which queues nothing
+    (D6). A turn spent saying "you asked three things and all of them were declined" tells an agent
+    that nothing was decided, at the price of a whole turn.
+
+    A batch of one keeps the exact wording it has always had, so the overwhelmingly common case does
+    not change shape to accommodate the rare one.
+    """
+    if not any(row.answered for row in rows):
+        return None
+    if len(rows) == 1:
+        return f"Question: {rows[0].question}\n\nAnswer: {rows[0].answer}"
+
+    parts = [f"You asked {len(rows)} questions. The operator has now resolved all of them.", ""]
+    for position, row in enumerate(rows, start=1):
+        parts.append(f"{position}. {row.question}")
+        if row.answered:
+            parts.append(f"   Answer: {row.answer}")
+        else:
+            # Named rather than omitted: an agent cannot otherwise tell "the operator saw this and
+            # passed" from "this was never asked", and those call for opposite behaviour (D4).
+            parts.append("   Declined — the operator saw this and chose not to answer it.")
+        parts.append("")
+    return "\n".join(parts).rstrip() + "\n"
+
+
 async def ask_question_for_actor(
     body: QuestionCreate,
     *,
@@ -185,7 +297,6 @@ async def answer_question(
         project_workspace.raise_workspace_http_error(exc)
 
     from_agent = question.from_agent
-    q_text = question.question
 
     question.answer = body.answer
     question.answer_labels = list(body.labels or [])
@@ -212,34 +323,21 @@ async def answer_question(
     # that must not vanish.
     asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
 
+    await session.commit()
+    await session.refresh(question)
+
+    # One delivery per *batch*, not per answer. Answering the first of three used to wake the agent
+    # immediately, so it began work on one decision while the operator was still making the other
+    # two — the interruption that asking together exists to prevent.
+    #
+    # After the commit above, so a concurrent resolution cannot leave a complete batch undelivered
+    # (see `_deliver_batch_if_complete`).
     entry = None
     conversation = None
     if not asker_still_waiting:
-        conversation = await latest_open_conversation(
-            session, project_id=project_id, agent=from_agent
-        )
-        if conversation is None:
-            # The operator answering is what opens this thread.
-            conversation = new_conversation(
-                project_id=project_id, agent=from_agent, origin="operator"
-            )
-            session.add(conversation)
-
-        entry = new_entry(
-            project_id=project_id,
-            agent=from_agent,
-            origin_type="operator",
-            origin_agent=None,
-            content=f"Question: {q_text}\n\nAnswer: {body.answer}",
-            hop_depth=0,
-            conversation_id=conversation.id,
-        )
-        # Named from the question rather than the entry's text: the entry restates the answer
-        # too, and "Question: … Answer: …" is not what the thread is about.
-        name_conversation(conversation, q_text)
-        session.add(entry)
-    await session.commit()
-    await session.refresh(question)
+        delivered = await _deliver_batch_if_complete(session, question, project_id)
+        if delivered is not None:
+            entry, conversation = delivered
 
     await sse_manager.broadcast(
         project_id, "question_answered", {"id": question_id, "answer": body.answer}
@@ -297,8 +395,14 @@ async def decline_question(
 
     A blocking asker that is still waiting learns this on its next poll and stops waiting, rather
     than spending its whole question timeout on an answer that has been decided against
-    (`2026-08-11-declining-a-question`, D2). Nothing is queued to it — unlike an answer, a decline
-    carries no content for the agent to act on beyond the fact itself.
+    (`2026-08-11-declining-a-question`, D2). Nothing is queued *for the decline itself* — unlike an
+    answer, a decline carries no content for the agent to act on beyond the fact itself.
+
+    A decline can still **complete a batch**, and then the answers already given are delivered
+    (`2026-08-13-answers-arrive-together`, D2). That is how the operator sends what they have
+    decided without answering the rest, and it is what stops a part-answered batch stranding real
+    answers. A batch resolved entirely by declines still delivers nothing, because there is nothing
+    in it to deliver.
     """
     project_id, _ = project
     question = await session.get(Question, question_id)
@@ -323,8 +427,21 @@ async def decline_question(
     # a task held waiting on this question is no longer waiting on anyone.
     released = await release_block_for_question(session, question)
 
+    from_agent = question.from_agent
+    asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
+
     await session.commit()
     await session.refresh(question)
+
+    # A decline can complete a batch, and then the answers already given are delivered — how the
+    # operator sends what they have decided without answering the rest. The decline itself is still
+    # not content: a batch resolved entirely by declines delivers nothing.
+    entry = None
+    conversation = None
+    if not asker_still_waiting:
+        delivered = await _deliver_batch_if_complete(session, question, project_id)
+        if delivered is not None:
+            entry, conversation = delivered
 
     payload = {"id": question_id, "agent": question.from_agent}
     await persist_event(
@@ -342,5 +459,26 @@ async def decline_question(
             session, project_id, "task_unblocked", unblocked, agent=question.from_agent
         )
         await sse_manager.broadcast(project_id, "task_unblocked", unblocked)
+
+    # A decline that completed a batch delivers the answers already given. The decline itself is
+    # still not the content — what reaches the agent is the batch — so this only fires when there
+    # was something to send, which `_batch_delivery_text` decided.
+    if entry is not None:
+        queue_payload = {
+            "entry_id": entry.id,
+            "agent": from_agent,
+            "origin_type": "operator",
+            "hop_depth": 0,
+            "question_id": question_id,
+            "conversation_id": conversation.id,
+        }
+        await persist_event(
+            session, project_id, "queue_entry_queued", queue_payload, agent=from_agent
+        )
+        await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
+
+        from ...turn_scheduler import schedule_agent
+
+        await schedule_agent(project_id, from_agent)
 
     return question

@@ -291,4 +291,32 @@ describe('closing a question without answering it', () => {
 
     expect(screen.queryByTestId('agent-question-stale')).toBeNull()
   })
+
+  it('says a held batch travels together, so a part-answered batch is not read as discarded', () => {
+    /**
+     * Nothing reaches the agent until the batch finishes. Without saying so, the operator answers
+     * two of three, sees nothing happen, and has no way to tell whether the agent is waiting on the
+     * third or ignoring them — an invisible problem traded for a visible one.
+     */
+    renderCard(question({ asker_waiting: false, batch_id: 'qbatch-1', batch_index: 1, batch_size: 3 }))
+
+    const held = screen.getByTestId('agent-question-held-batch')
+    expect(held.textContent).toMatch(/together/)
+    expect(held.textContent).toMatch(/all 3/)
+  })
+
+  it('does not say it for a question asked on its own', () => {
+    // A batch of one delivers on its only answer, so there is nothing being held to explain.
+    renderCard(question({ asker_waiting: false }))
+
+    expect(screen.queryByTestId('agent-question-held-batch')).toBeNull()
+  })
+
+  it('does not say it while the asker is still waiting for the batch', () => {
+    // A live asker receives the batch through its own tool call; nothing is queued and nothing is
+    // being held back from it.
+    renderCard(question({ asker_waiting: true, batch_id: 'qbatch-1', batch_index: 0, batch_size: 3 }))
+
+    expect(screen.queryByTestId('agent-question-held-batch')).toBeNull()
+  })
 })

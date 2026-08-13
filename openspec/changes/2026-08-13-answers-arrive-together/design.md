@@ -117,8 +117,19 @@ consequence rather than a branch.
 - **A batch is delivered later than its first answer was given.** Deliberate: the agent should act on
   the operator's decisions once, having seen all of them, rather than starting on the first while the
   rest are still being made.
-- **Two answers completing concurrently could both see the batch as complete** and queue twice. The
-  completion check and the entry creation happen in one transaction; the test for it is 4.6.
+- **Concurrent resolution of the last two questions.** This was originally written as "the
+  completion check and the entry creation happen in one transaction", which is both wrong and wrong
+  in the dangerous direction. Two requests each mutating their own question inside their own
+  uncommitted transaction would each look at the batch, each see the other's question still
+  outstanding, and each decline to deliver — leaving a **complete batch that reaches nobody**. The
+  answer is committed first and the completeness check runs against committed state, which makes the
+  concurrent failure a duplicate delivery instead. Losing what the operator decided is much the worse
+  of the two.
+
+  The duplicate is not closed. Collapsing it needs a delivery marker, and neither `questions` nor
+  `inbound_queue_entries` has anywhere to put one without a migration. It is left open because the
+  panel answers strictly one question at a time, so the product cannot currently produce two
+  simultaneous resolutions of one batch — if that changes, this needs the marker before it ships.
 
 ## Migration Plan
 

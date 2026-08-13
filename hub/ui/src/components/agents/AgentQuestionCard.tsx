@@ -151,6 +151,19 @@ export function AgentQuestionCard({
             answer they cannot take back is worth knowing about before they give it. */}
         {step < total ? ` Then ${total - step} more.` : ''}
       </p>
+
+      {/* Nothing reaches the agent until the batch is finished, so say so. Without it the operator
+          answers two of three, sees nothing happen, and cannot tell whether the agent is waiting on
+          the third or ignoring them — trading a visible annoyance for an invisible one. Distinct
+          from the counter above, which is about position rather than about what has been sent. */}
+      {nobodyWaiting && total > 1 && (
+        <p
+          data-testid="agent-question-held-batch"
+          style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}
+        >
+          {`Your answers reach ${agent} together once you have finished all ${total}. Dismiss the rest to send what you have.`}
+        </p>
+      )}
     </div>
   )
 }
