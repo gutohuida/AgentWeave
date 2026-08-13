@@ -60,6 +60,21 @@ class InvalidEntryStatusError(TransitionRefusedError):
     http_status = 409
 
 
+class GateUnsatisfiedError(TransitionRefusedError):
+    """The task serves a requirement an enforcing document has, and it is not verified.
+
+    409 rather than 403: the request is well-formed and the asker is entitled to make it — the
+    *state* of the work is what forbids it. Carries the structured refusal so a surface can render
+    each blocking requirement rather than parse a sentence.
+    """
+
+    http_status = 409
+
+    def __init__(self, refusal) -> None:
+        super().__init__(refusal.detail())
+        self.refusal = refusal
+
+
 #: Reaching `approved`, `rejected` or `revision_needed` is a judgement on work someone else did.
 #: These are the moves author/reviewer separation guards.
 _REVIEW_OUTCOMES = frozenset({"approved", "rejected", "revision_needed"})
@@ -183,6 +198,20 @@ async def apply_transition(
 
     await _guard_author_is_not_reviewer(session, task, to_status, actor)
 
+    # The gate, on this one edge. Inside the service and before the history row, so it cannot be
+    # bypassed by a caller reaching the row a different way — which is also why every surface
+    # (operator route, agent HTTP, the tool surface, jobs) gets it without knowing it exists.
+    #
+    # Imported locally: `requirement_gate` reads coverage, which reads the models, and this module
+    # is the one every status write already passes through.
+    policy = ""
+    if to_status == "approved":
+        from .requirement_gate import evaluate
+
+        refusal, policy = await evaluate(session, task)
+        if refusal.refuses:
+            raise GateUnsatisfiedError(refusal)
+
     task.status = to_status
     transition = TaskTransition(
         id=f"ttr-{short_id()}",
@@ -194,6 +223,9 @@ async def apply_transition(
         run_id=actor.run_id,
         actor_agent=actor.agent,
         origin=origin,
+        # What governed this move. Null where no policy did — a fact about the transition rather
+        # than a gap in it.
+        policy_digest=policy or None,
     )
     session.add(transition)
 

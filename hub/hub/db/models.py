@@ -681,6 +681,14 @@ class TaskTransition(Base):
     origin: Mapped[str] = mapped_column(
         String(16), default="actor", server_default="actor", nullable=False
     )
+    # A digest of the policy that governed this move: the rigor of each document whose requirements
+    # the task serves, and the coverage each of those requirements held.
+    #
+    # Rigor is operator-editable, which is exactly what makes this necessary rather than
+    # theoretical. Without it, a gate that passed last month cannot be explained today — the
+    # document now says something else, and nothing records what it said then. Null on a transition
+    # that no policy governed.
+    policy_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )
@@ -1435,6 +1443,16 @@ SPEC_PHASES = ("exploring", "proposed", "approved")
 SPEC_EVENT_ACTORS = ("operator", "agent", "system")
 SPEC_EVENT_ORIGINS = ("control", "submission", "lifecycle")
 
+# What happens to work that ignores this document. **Not phase.** Phase asks "has the operator
+# agreed to this?"; rigor asks "what does the system do about work that does not satisfy it?" A
+# `gate` document can still be exploring, and an approved document can still be a sketch — treating
+# every approved document as enforcing is the barrier-heavy product the direction rules out.
+#
+# `sketch` is the default and blocks nothing. `contract` reports and blocks nothing — it is a
+# statement of intent. `gate` refuses a task's approval while a requirement it serves is unverified.
+SPEC_RIGORS = ("sketch", "contract", "gate")
+DEFAULT_SPEC_RIGOR = "sketch"
+
 
 class SpecDocument(Base):
     """One specification document's Hub-owned state.
@@ -1460,6 +1478,12 @@ class SpecDocument(Base):
     # evidence accepted against the old wording. Kept in the database rather than the file for the
     # same reason as `phase`.
     requirement_digests: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # What happens to work that ignores this document. Stated in the file as `aw-spec-rigor` for
+    # anyone reading it, and held here because it is a gate and a gate whose value lives where the
+    # gated party can write it is not a gate — the same reasoning as `phase`.
+    rigor: Mapped[str] = mapped_column(
+        String(16), default="sketch", server_default="sketch", nullable=False
+    )
     # When the operator declared exploration finished. Null while exploring.
     explore_closed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -1477,6 +1501,49 @@ class SpecDocument(Base):
             "phase IN ('" + "', '".join(SPEC_PHASES) + "')",
             name="ck_spec_documents_phase",
         ),
+        # No CHECK on `rigor`, deliberately, for the reason recorded on `TaskTransition.origin`: a
+        # table-level CHECK naming a column makes that column undroppable in SQLite, which would
+        # make 0069 irreversible. The values are declared once in `SPEC_RIGORS` and refused on the
+        # way in by `spec_rigor.set_rigor`, which is the only writer.
+    )
+
+
+class SpecRigorEvent(Base):
+    """Every change of a document's rigor, and who made it. Never updated, never deleted.
+
+    The operator's escape hatch from a gate is to demote the document — which is a legitimate
+    decision precisely because it leaves this row. A hidden override would be the same act without
+    the record, and the record is the whole difference.
+
+    The digest current at the moment is stored so a change cannot be explained away later: a policy
+    that is operator-editable is exactly the kind whose history stops being reconstructible.
+    """
+
+    __tablename__ = "spec_rigor_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    from_rigor: Mapped[str] = mapped_column(String(16), nullable=False)
+    to_rigor: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # The document's content digest when the change was made. A rigor change is compare-and-swap
+    # against this, so it cannot silently land on a document edited underneath it.
+    digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "actor_kind IN ('" + "', '".join(SPEC_EVENT_ACTORS) + "')",
+            name="ck_spec_rigor_events_actor_kind",
+        ),
+        Index("ix_spec_rigor_events_document", "document_id", "created_at"),
     )
 
 

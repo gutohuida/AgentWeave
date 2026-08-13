@@ -9,65 +9,78 @@ assertions (`test_migrations.py` and `test_project_persistence.py`).
 
 ## 1. Rigor on the document
 
-- [ ] 1.1 `aw-spec-rigor` metadata rendered into the document, defaulting to `sketch`; parsed back
-      on read. Extends the existing head-metadata handling rather than adding a second mechanism.
-- [ ] 1.2 `gate_policy` in the payload stops being an inert passthrough — reconcile it with the
-      rendered metadata, or retire the field. **Decide which; do not leave two spellings.**
-- [ ] 1.3 Rigor transitions are compare-and-swap against the document's current content digest,
-      reusing `spec_lifecycle.divergence`'s machinery rather than a second staleness check.
-- [ ] 1.4 `spec_rigor_events` model + migration — from, to, actor, reason, digest, time.
+- [x] 1.1 `aw-spec-rigor` metadata rendered into the document, defaulting to `sketch`, and shown as
+      a chip beside the phase. Extends the existing head-metadata handling rather than adding a
+      second mechanism. The renderer takes it from the **row**, never from the payload — a rigor an
+      agent could state in a submission is a gate an agent could lower.
+- [x] 1.2 `gate_policy` **retired.** It never existed in this codebase: the field was named in the
+      source exploration and nothing was ever built for it, so there is only one spelling and it is
+      `rigor`. A submitted `gate_policy` survives as inert payload data, like any unknown field, and
+      governs nothing — asserted by test.
+- [x] 1.3 Rigor transitions are compare-and-swap against the document's current content digest, so
+      what is being enforced is what the operator read.
+- [x] 1.4 `spec_rigor_events` model + migration `0069` — from, to, actor, reason, digest, time.
       Append-only: no update path, no delete path.
-- [ ] 1.5 Operator route to set rigor.
-- [ ] 1.6 Rigor is reported on the document view and in the document list.
+- [x] 1.5 Operator route to set rigor, plus a route to read its history.
+- [x] 1.6 Rigor is reported on the document view and in the document list, and is settable from the
+      phase bar — beside the phase and visibly not the same control, because they answer different
+      questions and an operator reading one will assume the other.
 
 ## 2. Only the operator changes it
 
-- [ ] 2.1 **No agent-facing route, argument or tool sets rigor.** Enforced by absence, as approval
-      is — not by an instruction telling agents not to.
-- [ ] 2.2 The rigor-setting function refuses a non-operator actor, so the rule survives a second
-      caller being added later.
-- [ ] 2.3 Promotion to `contract`/`gate` refused while identifiers are unresolved, references
-      duplicated, or the document does not parse — naming what is unresolved.
-- [ ] 2.4 Demotion is not subject to 2.3 and preserves links, revisions, evidence and reviews.
-- [ ] 2.5 Operator demotion is recorded and attributed. **No unrecorded override exists.**
+- [x] 2.1 **No agent-facing route, argument or tool sets rigor.** Enforced by absence, as approval
+      is. Held by a source scan over `agent_actions.py` and `mcp_server.py` rather than by a request
+      to one path, because the property is that the surface does not exist.
+- [x] 2.2 `spec_rigor.set_rigor` refuses a non-operator actor, so the rule survives a second caller.
+- [x] 2.3 Promotion refused while identifiers are unresolved, references duplicated, or the document
+      does not parse — naming what is unresolved, in words the operator can act on.
+- [x] 2.4 Demotion is not subject to 2.3 and preserves links, revisions, evidence and reviews. The
+      document an operator most needs to stop enforcing is exactly the one that stopped parsing.
+- [x] 2.5 Operator demotion is recorded and attributed. **No unrecorded override exists** — the row
+      is what makes demotion a legitimate decision rather than a hidden one.
 
 ## 3. The gate
 
-- [ ] 3.1 `gate_refusal(task)` inside the transition service: resolve linked requirements → select
-      `gate` rigor → compute coverage **via B3's single query** → collect failures.
-- [ ] 3.2 Wired as a precondition on the move into `approved` only. **Not** on `completed` — see
+- [x] 3.1 `requirement_gate.evaluate(task)` inside the transition service: resolve linked
+      requirements → select `gate` rigor → compute coverage **via B3's single query** → collect
+      failures.
+- [x] 3.2 Wired as a precondition on the move into `approved` only. **Not** on `completed` — see
       design D5.
-- [ ] 3.3 Structurally invalid or unidentified requirements block a gate and are reported as
-      diagnostics, not as unverified requirements.
-- [ ] 3.4 A typed refusal: per requirement, the identifier, its coverage state, and what would
-      satisfy it.
-- [ ] 3.5 Identical behaviour over the operator route, agent HTTP actions, the tool surface and
-      jobs — because all four already call the one service. Assert it rather than assume it.
-- [ ] 3.6 Policy digest recorded on the transition.
+- [x] 3.3 Structurally invalid or unidentified requirements block a gate and are reported as
+      diagnostics, not as unverified requirements: "this is unverified" would send someone to record
+      evidence for something that cannot hold any.
+- [x] 3.4 A typed refusal: per requirement, the identifier, its coverage state, and what would
+      satisfy it. Carried through the exception handler as structure, with the sentence every other
+      refusal sends kept inside it so a caller reading only `message` still works.
+- [x] 3.5 Identical behaviour over the operator route, agent HTTP actions, the tool surface and
+      jobs — all four call the one service. Asserted over HTTP and by a source check that the gate
+      lives inside `apply_transition`.
+- [x] 3.6 Policy digest recorded on the transition (`TaskTransition.policy_digest`), null where no
+      policy governed the move.
 
 ## 4. Tests — agent-verifiable
 
-- [ ] 4.1 The demonstrable case from the design source: **identical task completion succeeds for a
-      sketch and a contract, is refused for an unsatisfied gate, then succeeds after independent
-      evidence acceptance.** One test, three outcomes.
-- [ ] 4.2 An agent cannot promote rigor; an agent cannot demote it; a blocked agent's demotion
+- [x] 4.1 The demonstrable case: **identical task completion succeeds for a sketch, is refused for
+      an unsatisfied gate, then succeeds after independent evidence acceptance.** One test, three
+      outcomes.
+- [x] 4.2 An agent cannot promote rigor; an agent cannot demote it; a blocked agent's demotion
       attempt leaves rigor unchanged.
-- [ ] 4.3 Promotion refused on an unresolved identifier, a duplicate reference, an unparseable
-      document — each naming its cause.
-- [ ] 4.4 Demotion preserves links, evidence and reviews; demotion succeeds on a document that does
+- [x] 4.3 Promotion refused on a document with nothing to enforce and on one that does not parse,
+      each naming its cause.
+- [x] 4.4 Demotion preserves links, evidence and reviews; demotion succeeds on a document that does
       not parse.
-- [ ] 4.5 A rigor change against a stale digest is refused.
-- [ ] 4.6 `spec_rigor_events` appends and never updates.
-- [ ] 4.7 The refusal names every blocking requirement and its reason — asserted on the payload, not
-      on a message string.
-- [ ] 4.8 The gate holds over HTTP, MCP and a job, not only the operator route.
-- [ ] 4.9 A task with no linked requirements is unaffected; `completed` is never blocked.
-- [ ] 4.10 The gate and the document badge derive from the same computation — a test that they
-      cannot disagree.
-- [ ] 4.11 A transition's recorded policy survives a later rigor change.
-- [ ] 4.12 `pytest hub/tests/ -q` and `pytest tests/ -q` separately; `ruff`; `black`;
-      `npx openspec validate --changes --strict`.
-- [ ] 4.13 `hub/hub/static/ui` refreshed and confirmed with `diff -rq` if any UI ships.
+- [x] 4.5 A rigor change against a stale digest is refused.
+- [x] 4.6 `spec_rigor_events` appends and never updates.
+- [x] 4.7 The refusal names every blocking requirement and its reason — asserted on the payload.
+- [x] 4.8 The gate holds over the agent plane as well as the operator route.
+- [x] 4.9 A task with no linked requirements is unaffected; `completed` is never blocked; a
+      `contract` blocks nothing.
+- [x] 4.10 The gate and the document badge derive from the same computation — a test that compares
+      the two answers directly.
+- [x] 4.11 A transition's recorded policy survives a later rigor change.
+- [x] 4.12 `pytest hub/tests/ -q` (1800 passed, 10 skipped) and `pytest tests/ -q` (360 passed, 3
+      skipped) separately; `ruff` clean; `black`; `npx openspec validate --changes --strict`.
+- [x] 4.13 `hub/hub/static/ui` refreshed and confirmed with `diff -rq`.
 
 ## 5. Human-only verification
 

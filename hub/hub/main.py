@@ -196,9 +196,14 @@ def create_app() -> FastAPI:
     # the MCP adapter surfaces it verbatim, so this shape is an agent's only feedback on a refusal.
     @app.exception_handler(TransitionRefusedError)
     async def _transition_refused(request: Request, exc: TransitionRefusedError):
+        # A gate refusal carries structure as well as a sentence: a surface has to be able to render
+        # each blocked requirement and what would satisfy it without parsing prose. The `message`
+        # inside it is the same text every other refusal sends, so a caller reading only that keeps
+        # working.
+        refusal = getattr(exc, "refusal", None)
         return UTF8JSONResponse(
             status_code=exc.http_status,
-            content={"detail": exc.detail},
+            content={"detail": refusal.to_dict() if refusal is not None else exc.detail},
         )
 
     @app.exception_handler(TaskBindingError)

@@ -120,6 +120,11 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     return "".join(parts)
 
 
+# The one spelling of the rigor metadata name. Stated once so the renderer and anything reading a
+# document back cannot drift apart on it.
+RIGOR_META = "aw-spec-rigor"
+
+
 def requirement_anchor(identifier: str) -> str:
     """Where a requirement sits in the rendered document.
 
@@ -216,12 +221,19 @@ def render_document(
     *,
     phase: str,
     stored_payload: Dict[str, Any],
+    rigor: str = "sketch",
 ) -> str:
     """A self-contained document: inline style only, no external resource.
 
     `stored_payload` is embedded verbatim so a read of this file recovers
     everything that was submitted, including fields this schema version does not
     define.
+
+    `rigor` is stated in the head and shown beside the phase, so anyone opening
+    the file can see what happens to work that ignores it. Like the phase, the
+    copy in the file is for whoever reads it and the database row is the
+    authority — a gate whose value lives where the gated party can write it is
+    not a gate.
     """
     scope_body = ""
     if payload.scope.in_scope:
@@ -257,12 +269,14 @@ def render_document(
         f"<title>{_e(payload.title)}</title>\n"
         f'<meta name="aw-spec-kind" content="{_e(payload.kind)}">\n'
         f'<meta name="aw-spec-status" content="{_e(phase)}">\n'
+        f'<meta name="{RIGOR_META}" content="{_e(rigor)}">\n'
         f'<meta name="aw-spec-schema-version" content="{_e(payload.schema_version)}">\n'
         f"<style>\n{_STYLE}\n</style>\n"
         "</head>\n<body>\n"
         f"<h1>{_e(payload.title)}</h1>\n"
         f'<p class="aw-meta"><span class="aw-chip">{_e(payload.kind)}</span>'
-        f'<span class="aw-chip">{_e(phase)}</span></p>\n'
+        f'<span class="aw-chip">{_e(phase)}</span>'
+        f'<span class="aw-chip">{_e(rigor)}</span></p>\n'
         f"{sections}\n"
         f"{embed_payload(stored_payload)}\n"
         "</body>\n</html>\n"

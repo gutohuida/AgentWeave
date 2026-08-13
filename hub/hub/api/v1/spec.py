@@ -31,6 +31,7 @@ from ... import (
     spec_index,
     spec_lifecycle,
     spec_naming,
+    spec_rigor,
     spec_service,
 )
 from ...auth import get_project
@@ -156,6 +157,10 @@ def _document_view(document) -> dict:
         "title": document.title,
         "kind": document.kind,
         "phase": document.phase,
+        # What happens to work that ignores this document. Reported everywhere the phase is, because
+        # they answer different questions and an operator reading one will assume the other.
+        "rigor": document.rigor or spec_rigor.SKETCH,
+        "content_digest": document.content_digest,
         "explore_closed": document.explore_closed_at is not None,
         "updated_at": document.updated_at.isoformat(),
     }
@@ -255,6 +260,92 @@ async def _requirement(session: AsyncSession, project_id: str, identifier: str, 
     if row is None:
         raise HTTPException(status_code=404, detail=f"this project has no requirement {identifier}")
     return row
+
+
+class RigorRequest(BaseModel):
+    """The operator setting how strictly a document is enforced.
+
+    `expected_digest` is compare-and-swap: a rigor change must not land on a
+    document somebody edited underneath it, or what was promoted is not what was
+    read. Optional so a caller that has not read the document can still act, and
+    supplied by every UI path that has.
+    """
+
+    rigor: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=2000)
+    expected_digest: Optional[str] = Field(default=None, max_length=64)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/documents/{path:path}/rigor")
+async def set_document_rigor(
+    path: str,
+    body: RigorRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Raise or lower a document's rigor.
+
+    There is deliberately no agent equivalent of this route, and adding one would
+    undo the change: an agent blocked by a gate that can lower the document has
+    not been gated, it has been inconvenienced.
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+    content = spec_documents.read_document(workspace, document.path)
+
+    try:
+        await spec_rigor.set_rigor(
+            session,
+            document,
+            body.rigor,
+            actor=_operator(),
+            reason=body.reason,
+            expected_digest=body.expected_digest,
+            content=content,
+        )
+    except spec_rigor.RigorRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": str(exc), "code": exc.code, "blocking": exc.blocking},
+        ) from exc
+
+    # The file states the rigor for whoever opens it, so it is rewritten to agree with the row.
+    # If this fails the row is still what governs — the copy in the document was never the gate.
+    await spec_service.rerender_phase(session, workspace, document)
+    await session.commit()
+    await sse_manager.broadcast(
+        project_id, "spec_updated", {"path": document.path, "rigor": document.rigor}
+    )
+    return _document_view(document)
+
+
+@router.get("/documents/{path:path}/rigor-history")
+async def rigor_history(
+    path: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every rigor change, with who made it. Demotion is legitimate *because* this exists."""
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    events = await spec_rigor.history_for(session, document.id)
+    return {
+        "events": [
+            {
+                "id": event.id,
+                "from": event.from_rigor,
+                "to": event.to_rigor,
+                "actor_kind": event.actor_kind,
+                "actor": event.actor,
+                "reason": event.reason,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in events
+        ]
+    }
 
 
 @router.get("/spec/coverage")

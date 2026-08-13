@@ -111,6 +111,9 @@ async def save_document(
         identifiers,
         phase=document.phase,
         stored_payload=stored,
+        # From the row, never from the submission. An agent that could state a rigor in a payload
+        # could lower a gate that is blocking it, which is the one thing this must not permit.
+        rigor=document.rigor,
     )
 
     divergence = spec_lifecycle.divergence(document, existing_content)
@@ -295,6 +298,8 @@ async def rerender_phase(
     except PayloadError:
         return
     identifiers, _ = spec_identity.read_identity(stored)
-    rewritten = render_document(payload, identifiers, phase=document.phase, stored_payload=stored)
+    rewritten = render_document(
+        payload, identifiers, phase=document.phase, stored_payload=stored, rigor=document.rigor
+    )
     spec_documents.write_document(workspace, document.path, rewritten)
     document.content_digest = spec_lifecycle.digest(rewritten)

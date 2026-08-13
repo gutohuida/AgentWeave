@@ -189,6 +189,13 @@ export interface SpecDocumentRecord {
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */
   phase: 'exploring' | 'proposed' | 'approved'
+  /** What happens to work that ignores this document. **Not phase.** Phase asks whether the
+   *  operator agreed to it; rigor asks what the system does about work that does not satisfy it.
+   *  A `gate` document can still be exploring, and an approved one can still be a sketch. */
+  rigor: 'sketch' | 'contract' | 'gate'
+  /** The document as the Hub last wrote it. Sent back on a rigor change so it cannot land on a
+   *  document edited underneath the operator who read it. */
+  content_digest: string | null
   explore_closed: boolean
   updated_at: string
 }
@@ -262,6 +269,23 @@ export function useProposeSpecDocument() {
 }
 
 /** Approving, or reopening. There is no agent-facing equivalent of this call. */
+/** Raise or lower how strictly a document is enforced.
+ *
+ *  There is deliberately no agent-facing equivalent anywhere in this codebase. An agent blocked by
+ *  a gate that could lower the document has not been gated. */
+export function useSetSpecRigor() {
+  return useSpecMutation<
+    { path: string; rigor: string; reason?: string; expectedDigest?: string | null },
+    SpecDocumentRecord
+  >((projectId, { path, rigor, reason, expectedDigest }) =>
+    postJson(`/api/v1/projects/${projectId}/project/documents/${path}/rigor`, {
+      rigor,
+      reason: reason ?? '',
+      expected_digest: expectedDigest ?? null,
+    }),
+  )
+}
+
 export function useSetSpecPhase() {
   return useSpecMutation<{ path: string; to: string; reason?: string }, SpecDocumentRecord>(
     (projectId, { path, to, reason }) =>
