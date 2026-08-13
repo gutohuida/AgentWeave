@@ -325,6 +325,9 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         # asked for. Off must not mean "type a message to get it moving", which was the friction
         # this setting exists to remove.
         "checkpoint_auto_continue": False,
+        # Null, and null is what stops approval merging anywhere. A branch inferred here would be a
+        # branch nobody chose, written to on the first approval after an upgrade.
+        "main_branch": None,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers

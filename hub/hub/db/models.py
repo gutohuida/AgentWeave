@@ -79,6 +79,16 @@ class Project(Base):
     # loop would make the two tables unsortable for DDL. Validated where it is set instead.
     conversation_title_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
+    # --- Integration ---
+    # The branch approval merges into. Null means "not chosen", which is not an error: nothing
+    # merges, approval is unaffected, and coverage keeps reporting exactly what it reported before.
+    #
+    # Deliberately not defaulted from `MAIN_BRANCH_NAMES`. Guessing is safe for a read-only report,
+    # where a wrong guess costs an `unknown`; it is not safe for an operation that writes commits,
+    # where a wrong guess puts work in a branch the operator never chose. The guess survives as a
+    # suggestion offered at setup, and takes effect only once someone accepts it.
+    main_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
     # --- Evidence retention ---
     # How long an evidence artifact is kept: "on_acceptance", "daily", "monthly", "manual", or
     # "never". `never` means never delete, and it is a first-class choice rather than a loophole —
@@ -1975,4 +1985,58 @@ class RequirementDrift(Base):
         ),
         Index("ix_requirement_drift_requirement", "requirement_id", "state"),
         Index("ix_requirement_drift_project_state", "project_id", "state"),
+    )
+
+
+#: What an integration attempt did. `skipped` is a first-class outcome, not a failure: a project
+#: that has not chosen a main branch, or an operator mid-edit, is a reason not to merge rather than
+#: something going wrong.
+INTEGRATION_OUTCOMES = ("merged", "skipped", "failed")
+
+#: How the merge was performed. Only one mechanism exists today; the column exists so that a later
+#: mode integrating by a different route is distinguishable in the history rather than conflated
+#: with this one after the fact.
+INTEGRATION_MECHANISMS = ("local",)
+
+
+class TaskIntegration(Base):
+    """What approving a task did to the repository.
+
+    Append-only, with no update path and no delete path. This is the account of a write the system
+    performed on the operator's own history; the thing that wrote it does not get to edit the record
+    of what it wrote.
+
+    A row exists for every approval that reached the integration step, including the ones that
+    merged nothing. "Nothing happened, and here is why" is the answer an operator needs when work
+    they approved is not where they expected it.
+    """
+
+    __tablename__ = "task_integrations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    # The commit that was merged, and the branch it came from. Null where nothing was merged.
+    commit_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # The project's configured main branch at the time. Null where none was configured, which is
+    # itself one of the reasons a merge is skipped.
+    target_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Why it did not merge, in words an operator can act on. Empty for a successful merge.
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "outcome IN ('" + "', '".join(INTEGRATION_OUTCOMES) + "')",
+            name="ck_task_integrations_outcome",
+        ),
+        Index("ix_task_integrations_task", "task_id", "created_at"),
+        Index("ix_task_integrations_project", "project_id", "created_at"),
     )

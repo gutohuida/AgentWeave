@@ -81,6 +81,14 @@ export function readableApiError(error: unknown, fallback: string): string {
   }
   const detail = (parsed as { detail?: unknown })?.detail
   if (typeof detail === 'string') return detail
+  // A structured refusal — the gate's, and anything else that carries machine-readable fields
+  // alongside the sentence a person should read. Without this the sentence is discarded and the
+  // caller shows its fallback, which is how a gate that names exactly what to do about it ends up
+  // reading as "the Hub refused this change".
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const message = (detail as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
   if (Array.isArray(detail)) {
     const messages = detail
       .map((item) => {

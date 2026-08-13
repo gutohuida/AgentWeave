@@ -288,6 +288,44 @@ async def list_tasks(
     )
 
 
+@router.get("/{task_id}/integrations")
+async def task_integrations(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What approving this task did to the repository, including the times it did nothing.
+
+    "My approved work is not on main" needs an answer, and a skipped merge with a stated reason is
+    that answer. Read-only: the record is append-only and there is deliberately no route here that
+    edits or removes one.
+    """
+    from ... import task_integration
+
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project[0]:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    rows = await task_integration.history_for(session, task_id)
+    return {
+        "integrations": [
+            {
+                "id": row.id,
+                "commit_sha": row.commit_sha,
+                "source_branch": row.source_branch,
+                "target_branch": row.target_branch,
+                "outcome": row.outcome,
+                "reason": row.reason,
+                "mechanism": row.mechanism,
+                "actor_kind": row.actor_kind,
+                "actor": row.actor,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+    }
+
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: str,

@@ -14,6 +14,7 @@ import {
 import { useAgents } from '@/api/agents'
 import { StatusBadge } from '@/components/common/Badge'
 import { RowMenu } from '@/components/layout/RowMenu'
+import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { agentColorVars } from '@/lib/agentColors'
 
 interface TaskCardProps {
@@ -426,6 +427,9 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
             {refusal}
           </p>
         )}
+
+        {/* Approval merges, so an approved card owes an answer about where the work went. */}
+        <TaskIntegrationNote taskId={task.id} status={task.status} />
 
         {/* Expand hint */}
         {!expanded && (

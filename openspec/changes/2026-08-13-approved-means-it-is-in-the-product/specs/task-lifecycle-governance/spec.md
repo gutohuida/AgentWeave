@@ -85,7 +85,12 @@ enforcement point.
 The transition into `approved` SHALL still succeed where integration cannot be attempted, and the
 integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted
 when the project has no configured main branch, when the project is not a repository, when the
-primary checkout has uncommitted changes, or when the primary checkout is not on the main branch.
+primary checkout has uncommitted changes to tracked files, or when the primary checkout is not on
+the main branch.
+
+Untracked files SHALL NOT prevent integration. The system writes specification documents into the
+project directory, so untracked content is the ordinary state of a working project rather than a
+signal that a merge is unsafe.
 
 Where integration is attempted and fails, the transition SHALL NOT be rolled back. The approval is a
 judgement that the work is good; a repository failure SHALL NOT reverse it. Coverage SHALL then
@@ -102,8 +107,13 @@ A project that is not a repository SHALL be no less approvable than before this 
 
 #### Scenario: A dirty primary checkout skips rather than merges
 
-- **WHEN** a task is approved while the primary checkout has uncommitted changes
+- **WHEN** a task is approved while the primary checkout has uncommitted changes to tracked files
 - **THEN** the approval succeeds, no merge is attempted, and the reason is recorded
+
+#### Scenario: Untracked files do not prevent a merge
+
+- **WHEN** a task is approved while the project directory holds untracked files
+- **THEN** the work is integrated
 
 #### Scenario: A failed merge leaves the approval standing
 

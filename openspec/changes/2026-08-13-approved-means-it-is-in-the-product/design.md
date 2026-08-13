@@ -76,8 +76,16 @@ dangerous one.
 **Preconditions, each producing a stated refusal rather than a silent skip:**
 
 1. `Project.main_branch` is set.
-2. The primary checkout is **clean** — no uncommitted changes, no staged changes.
+2. The primary checkout has no uncommitted changes **to tracked files**.
 3. The primary checkout is **on** the main branch.
+
+**Precondition 2 counts tracked files only, and that is not a detail.** The Hub writes specification
+documents into the project directory, so any project that has ever had a document carries untracked
+content essentially permanently. The first implementation counted it, and skipped nearly every
+merge — while telling the operator to clear a condition they could only clear by committing files
+the Hub itself had put there. Untracked files are also not the hazard: `git merge` refuses only over
+one it would overwrite, and that refusal is caught and recorded as a failure rather than corrupting
+anything. Modified *tracked* files are the real risk, and they are what is checked.
 
 Fail any one and approval still succeeds, the merge does not happen, and a `task_integrations` row
 records `skipped` with which precondition failed. The operator can read why and fix it.

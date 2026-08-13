@@ -42,6 +42,37 @@ export const DIVERGENCE_POLICY_LABELS: Record<DivergencePolicy, string> = {
   escalate: 'Hand to another agent',
 }
 
+/**
+ * What approving a task did to the repository — including the times it did nothing.
+ *
+ * A skipped merge with a stated reason is the answer to "my approved work is not on main", so the
+ * skips matter as much as the merges and are not filtered out here.
+ */
+export interface TaskIntegration {
+  id: string
+  commit_sha: string | null
+  source_branch: string | null
+  target_branch: string | null
+  outcome: 'merged' | 'skipped' | 'failed'
+  reason: string
+  mechanism: string
+  actor_kind: string
+  actor: string
+  created_at: string
+}
+
+export function useTaskIntegrations(taskId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ integrations: TaskIntegration[] }>({
+    queryKey: ['project', projectId, 'task', taskId, 'integrations'],
+    queryFn: () =>
+      getJson<{ integrations: TaskIntegration[] }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/integrations`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
 export function useTasks() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Task[]>({

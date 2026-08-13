@@ -99,6 +99,12 @@ class ProjectSettings(BaseModel):
     # explicit Continue button, not "type a message to get it moving".
     checkpoint_auto_continue: bool = False
 
+    # --- Integration ---
+    # The branch approval merges into. Null means "not chosen", and nothing merges. Deliberately
+    # not defaulted from a detected name: guessing is safe for a report and unsafe for a write, so
+    # a detected branch is offered as a suggestion and takes effect only once it is submitted here.
+    main_branch: Optional[str] = Field(default=None, max_length=255)
+
     model_config = {"extra": "forbid"}
 
     @field_validator("name")
@@ -314,6 +320,32 @@ async def get_project_settings(
     return ProjectSettings.model_validate(project, from_attributes=True)
 
 
+@router.get("/{project_id}/main-branch-suggestion")
+async def suggest_main_branch(
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """A branch the operator might mean, and the one they have chosen.
+
+    A suggestion, never an assignment. `chosen` being null is what stops anything merging, and this
+    route exists so that state is a decision the operator makes once rather than a guess the system
+    makes on their behalf every time.
+    """
+    from ... import project_workspace, task_integration
+
+    project = await _operator_project_row(project_identity[0], session)
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project.id)
+    except project_workspace.ProjectWorkspaceError:
+        return {"suggestion": None, "chosen": project.main_branch, "is_repository": False}
+
+    return {
+        "suggestion": task_integration.detect_main_branch(workspace.root),
+        "chosen": project.main_branch,
+        "is_repository": task_integration.is_repository(workspace.root),
+    }
+
+
 @router.put("/{project_id}/settings", response_model=ProjectSettings)
 async def update_project_settings(
     body: ProjectSettings,
@@ -358,6 +390,29 @@ async def update_project_settings(
                     f"Unknown runner '{runner_id}': no runner by that id belongs to this project"
                 ),
             )
+    # A merge target that does not exist would fail silently at approval time, recorded as a skip
+    # nobody expected. Refused here instead, where the operator is looking at the field.
+    if merged.main_branch and merged.main_branch != project.main_branch:
+        from ... import project_workspace, task_integration
+
+        try:
+            workspace = await project_workspace.resolve_project_workspace(
+                session, resolved_project_id
+            )
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Project workspace is unavailable, so a branch cannot be checked: {exc}",
+            ) from exc
+        if not task_integration.branch_exists(workspace.root, merged.main_branch):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"This project has no branch named '{merged.main_branch}'. "
+                    "Approval merges into it, so it has to exist first."
+                ),
+            )
+
     for field, value in merged.model_dump().items():
         setattr(project, field, value)
     await session.commit()

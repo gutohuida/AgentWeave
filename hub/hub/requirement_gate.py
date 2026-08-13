@@ -65,12 +65,18 @@ class GateRefusal:
 
     blocking: List[Dict[str, str]] = field(default_factory=list)
     diagnostics: List[Dict[str, str]] = field(default_factory=list)
+    # Work that cannot land where approval says it lands. Separate from `blocking` because it is a
+    # different kind of claim: not "this is unproven" but "this cannot go in". An operator told the
+    # requirement is unverified would go and record evidence, which would not help at all here.
+    unmergeable: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def refuses(self) -> bool:
-        return bool(self.blocking or self.diagnostics)
+        return bool(self.blocking or self.diagnostics or self.unmergeable)
 
     def detail(self) -> str:
+        if self.unmergeable and not (self.blocking or self.diagnostics):
+            return self._merge_detail()
         parts: List[str] = []
         for entry in self.blocking:
             parts.append(f"{entry['identifier']} is {entry['state']}: {entry['remedy']}")
@@ -79,10 +85,26 @@ class GateRefusal:
                 f"{entry['identifier'] or 'a requirement'} cannot be checked at all: "
                 f"{entry['problem']}"
             )
-        return (
+        sentence = (
             "This task serves requirements a gate is enforcing, and they are not verified: "
             + "; ".join(parts)
             + ". Satisfy them, or lower the document's rigor — which is recorded."
+        )
+        if self.unmergeable:
+            sentence += " " + self._merge_detail()
+        return sentence
+
+    def _merge_detail(self) -> str:
+        paths: List[str] = []
+        target = ""
+        for entry in self.unmergeable:
+            target = target or str(entry.get("target_branch") or "")
+            paths.extend(str(path) for path in entry.get("paths", []))
+        listed = ", ".join(sorted(set(paths))[:10])
+        return (
+            f"This task's work does not merge cleanly into {target or 'the main branch'}: "
+            f"{listed}. Resolve the conflict on the branch, then approve — approving is what "
+            "merges it."
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -90,6 +112,7 @@ class GateRefusal:
             "code": "gate_unsatisfied",
             "blocking": list(self.blocking),
             "diagnostics": list(self.diagnostics),
+            "unmergeable": list(self.unmergeable),
             "message": self.detail(),
         }
 
@@ -115,6 +138,49 @@ async def _gated_requirements(
     return gated, rigors
 
 
+async def _check_mergeable(session: AsyncSession, task: Task, refusal: GateRefusal) -> None:
+    """Add a refusal where the task's work would not merge into the project's main branch.
+
+    Deliberately **not** conditional on rigor. Rigor is a claim about how well the work must be
+    proven; this is a claim about whether it can go where approval puts it. A conflicting branch
+    approved at `sketch` would record an approval that silently integrates nothing.
+
+    Every "cannot check" path here is silent, not a refusal: no configured main branch, no
+    repository, no accepted commit, an unavailable workspace. Approval must never be blocked by the
+    *absence* of an integration, only by one that would fail.
+    """
+    from . import project_workspace, task_integration
+    from .db.models import Project
+
+    project = await session.get(Project, task.project_id)
+    if project is None or not project.main_branch:
+        return
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
+    except Exception:
+        # An unreachable workspace is a reason to not know, never a reason to refuse.
+        return
+
+    root = workspace.root
+    if not task_integration.is_repository(root):
+        return
+    if not task_integration.branch_exists(root, project.main_branch):
+        return
+
+    for target in await task_integration.integration_targets(session, task):
+        paths = task_integration.would_conflict(root, target.commit_sha, project.main_branch)
+        if paths:
+            refusal.unmergeable.append(
+                {
+                    "commit_sha": target.commit_sha,
+                    "source_branch": target.branch,
+                    "target_branch": project.main_branch,
+                    "paths": paths,
+                }
+            )
+
+
 async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]:
     """`(refusal, policy_digest)` for moving this task to `approved`.
 
@@ -123,6 +189,8 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
     arrive as a barrier nobody asked for.
     """
     refusal = GateRefusal()
+    await _check_mergeable(session, task, refusal)
+
     gated, rigors = await _gated_requirements(session, task)
     if not gated:
         return refusal, ""

@@ -241,7 +241,83 @@ async def apply_transition(
 
         await resolve_divergences_for_task(session, task.id)
 
+    if to_status == "approved":
+        await _integrate(session, task, actor)
+
     return transition
+
+
+async def _integrate(session: AsyncSession, task: Task, actor: Actor) -> None:
+    """Put the approved work in the product, and record what happened either way.
+
+    **After** the transition row, and never able to undo it. Approval is a judgement that the work
+    is good; a git failure is not a reason to reverse a judgement. Where the merge does not happen,
+    coverage already has the words for it — `verified, not integrated` — so the product's account
+    stays true without anything new being invented.
+
+    Mergeability was tested before the transition (`requirement_gate`), so a failure here means the
+    world moved in between. That is rare, recorded, and not fatal.
+    """
+    from . import project_workspace, task_integration
+    from .db.models import Project
+
+    project = await session.get(Project, task.project_id)
+    if project is None:
+        return
+
+    def _record(result: task_integration.IntegrationResult) -> None:
+        task_integration.record(
+            session,
+            task,
+            result,
+            actor_kind=actor.kind,
+            actor=actor.agent or "",
+        )
+
+    if not project.main_branch:
+        _record(
+            task_integration.IntegrationResult(
+                outcome=task_integration.SKIPPED, reason=task_integration.NO_MAIN_BRANCH
+            )
+        )
+        return
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
+    except Exception as exc:  # noqa: BLE001 - any workspace failure is a skip, never a rollback
+        _record(
+            task_integration.IntegrationResult(
+                outcome=task_integration.SKIPPED,
+                reason=f"the project's workspace is unavailable: {exc}",
+                target_branch=project.main_branch,
+            )
+        )
+        return
+
+    root = workspace.root
+    if not task_integration.is_repository(root):
+        _record(
+            task_integration.IntegrationResult(
+                outcome=task_integration.SKIPPED,
+                reason=task_integration.NOT_A_REPOSITORY,
+                target_branch=project.main_branch,
+            )
+        )
+        return
+
+    targets = await task_integration.integration_targets(session, task)
+    if not targets:
+        _record(
+            task_integration.IntegrationResult(
+                outcome=task_integration.SKIPPED,
+                reason=task_integration.NOTHING_TO_MERGE,
+                target_branch=project.main_branch,
+            )
+        )
+        return
+
+    for target in targets:
+        _record(task_integration.integrate(root, target, project.main_branch))
 
 
 async def history_for(session: AsyncSession, task_id: str) -> list[TaskTransition]:
