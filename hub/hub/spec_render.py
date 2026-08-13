@@ -120,8 +120,18 @@ def _requirements(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     return "".join(parts)
 
 
+def requirement_anchor(identifier: str) -> str:
+    """Where a requirement sits in the rendered document.
+
+    One definition, called by the renderer and by the requirement index, so an
+    anchor recorded in the index cannot come to name a fragment the document
+    does not contain.
+    """
+    return f"#{identifier}" if identifier else ""
+
+
 def _link(identifier: str) -> str:
-    return f'<a href="#{_e(identifier)}">{_e(identifier)}</a>'
+    return f'<a href="{_e(requirement_anchor(identifier))}">{_e(identifier)}</a>'
 
 
 def _acceptance(payload: SpecPayload, identifiers: Dict[str, str]) -> str:

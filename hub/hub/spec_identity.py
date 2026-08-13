@@ -134,11 +134,57 @@ def retained(
     return retired
 
 
+def read_digests(stored: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """The per-identifier semantic digests a stored payload carries.
+
+    These are in the file, not only in the database, because the requirement
+    index must be reconstructible from the files alone — and a **retired**
+    requirement's digest is not recoverable any other way. Its wording is gone
+    from the document by definition, so an index rebuilt from a file that did
+    not carry the digest would describe the retired requirement differently than
+    the index it replaced.
+    """
+    if not isinstance(stored, dict):
+        return {}
+    block = stored.get(IDENTITY_FIELD)
+    if not isinstance(block, dict):
+        return {}
+    raw = block.get("digests")
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value for key, value in raw.items() if isinstance(key, str) and isinstance(value, str)
+    }
+
+
+def carried_digests(
+    live: Dict[str, str],
+    previous: Dict[str, str],
+    retired: Dict[str, str],
+) -> Dict[str, str]:
+    """Digests for the live requirements, plus the last known one per retirement.
+
+    `live` is keyed by identifier and is authoritative for anything still in the
+    document. A retired identifier keeps whatever digest it last held: it is a
+    record of what that requirement meant when it was removed, and there is
+    nothing left to recompute it from.
+    """
+    digests = dict(live)
+    for identifier in retired.values():
+        if identifier not in digests and identifier in previous:
+            digests[identifier] = previous[identifier]
+    return digests
+
+
 def identity_block(
-    mapping: Dict[str, str], high_water: int, retired: Dict[str, str]
+    mapping: Dict[str, str],
+    high_water: int,
+    retired: Dict[str, str],
+    digests: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     return {
         "requirements": dict(mapping),
         "high_water": high_water,
         "retired": dict(retired),
+        "digests": dict(digests or {}),
     }

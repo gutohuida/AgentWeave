@@ -1498,3 +1498,123 @@ class SpecDocumentEvent(Base):
         ),
         Index("ix_spec_document_events_document", "document_id", "created_at"),
     )
+
+
+# A requirement removed from its document keeps its row: what it once demanded, and what was built
+# for it, is a question that outlives the requirement.
+SPEC_REQUIREMENT_STATES = ("active", "retired")
+
+# Where a digest change was observed. `hub` is a submission the Hub itself wrote; `external` is a
+# change found by reindexing a file somebody edited directly. Telling them apart is the difference
+# between "an agent reworded this" and "the file moved under us".
+SPEC_REVISION_SOURCES = ("hub", "external")
+
+# What happened to the requirement, not what it means. Whether a rewording was editorial or
+# substantive is a judgement an operator makes later; recording it as a fact here would decide it.
+SPEC_REVISION_CLASSIFICATIONS = ("created", "reworded", "retired", "restored")
+
+
+class SpecRequirement(Base):
+    """One requirement, addressable from outside the document that declares it.
+
+    Derived, never authoritative: rebuilt from the document on every save, and reconstructible from
+    the files alone. It holds no wording — only the digest of it — so this row cannot come to
+    disagree with the document about what a requirement says.
+
+    `identifier` is minted per document (`spec_identity` reads its high-water mark from the
+    document's own file), so `FR-1` exists in every document and the uniqueness that can hold is
+    per document. Everything that points at a requirement points at `id`, which is unambiguous
+    regardless.
+    """
+
+    __tablename__ = "spec_requirements"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    # The minted public handle, `FR-n`. Stable across rewordings and never reissued after removal.
+    identifier: Mapped[str] = mapped_column(String(32), nullable=False)
+    # The agent's document-scoped handle. Kept because it is what re-resolves a requirement after a
+    # rewording — the identifier survives precisely by being mapped from this.
+    key: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    # The semantic digest, from `spec_digest.semantic_digest`. Evidence pins against this value.
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Which canonicalization produced `digest`. A digest taken under an older rule is then
+    # recognisable as such rather than reading as a rewording.
+    digest_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Where it sits in the rendered document, as a fragment reference.
+    anchor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    # When the index last agreed with the file.
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "document_id",
+            "identifier",
+            name="uq_spec_requirements_document_identifier",
+        ),
+        CheckConstraint(
+            "state IN ('" + "', '".join(SPEC_REQUIREMENT_STATES) + "')",
+            name="ck_spec_requirements_state",
+        ),
+        Index("ix_spec_requirements_document", "document_id", "identifier"),
+        Index("ix_spec_requirements_project_state", "project_id", "state"),
+    )
+
+
+class SpecRequirementRevision(Base):
+    """Append-only: every time a requirement's meaning moved, and who moved it.
+
+    This is what makes "the meaning changed under this evidence" a fact rather than an inference.
+    It cannot be backfilled — a digest that was never recorded cannot be recovered from the current
+    file — so it is written from the first indexed requirement, before anything reads it.
+    """
+
+    __tablename__ = "spec_requirement_revisions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    requirement_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_requirements.id"), nullable=False
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("spec_documents.id"), nullable=False
+    )
+    # Null on the first revision: a requirement that did not exist has no previous meaning.
+    previous_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    digest_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    classification: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Never accepted from a request body — it comes from the credential the run was minted with.
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('" + "', '".join(SPEC_REVISION_SOURCES) + "')",
+            name="ck_spec_requirement_revisions_source",
+        ),
+        CheckConstraint(
+            "classification IN ('" + "', '".join(SPEC_REVISION_CLASSIFICATIONS) + "')",
+            name="ck_spec_requirement_revisions_classification",
+        ),
+        CheckConstraint(
+            "actor_kind IN ('" + "', '".join(SPEC_EVENT_ACTORS) + "')",
+            name="ck_spec_requirement_revisions_actor_kind",
+        ),
+        Index("ix_spec_requirement_revisions_requirement", "requirement_id", "created_at"),
+    )

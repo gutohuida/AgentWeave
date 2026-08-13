@@ -71,17 +71,6 @@ def digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def requirement_digests(statements: Dict[str, str]) -> Dict[str, str]:
-    """A digest per requirement, keyed by minted identifier.
-
-    Nothing here consumes these. They are recorded so a later change can tell
-    that a requirement's *meaning* moved out from under evidence accepted
-    against the old wording — which is undetectable after the fact if the
-    digests were never taken.
-    """
-    return {identifier: digest(text) for identifier, text in statements.items()}
-
-
 async def record_event(
     session: AsyncSession,
     document: SpecDocument,
@@ -159,21 +148,27 @@ async def record_content(
     *,
     actor: Actor,
     content: str,
-    statements: Dict[str, str],
+    digests: Dict[str, str],
     title: str,
     kind: str,
 ) -> SpecDocumentEvent:
-    """Note that the document's content was rewritten, and by whom."""
+    """Note that the document's content was rewritten, and by whom.
+
+    `digests` comes from `spec_digest.payload_digests` — the same values the
+    requirement index stores, computed once by the caller. Recomputing them here
+    from a different input is how the row and the index would come to disagree
+    about whether a requirement changed.
+    """
     document.title = title
     document.kind = kind
     document.content_digest = digest(content)
-    document.requirement_digests = requirement_digests(statements)
+    document.requirement_digests = dict(digests)
     return await record_event(
         session,
         document,
         kind="content",
         actor=actor,
-        detail={"requirements": sorted(statements)},
+        detail={"requirements": sorted(digests)},
     )
 
 

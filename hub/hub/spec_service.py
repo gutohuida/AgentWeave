@@ -14,7 +14,15 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import spec_completeness, spec_documents, spec_identity, spec_lifecycle, spec_naming
+from . import (
+    spec_completeness,
+    spec_digest,
+    spec_documents,
+    spec_identity,
+    spec_index,
+    spec_lifecycle,
+    spec_naming,
+)
 from .db.models import InboundQueueEntry, SpecDocument
 from .project_workspace import ProjectWorkspace
 from .spec_payload import PayloadError, extract_payload, payload_to_dict, validate_payload
@@ -83,10 +91,20 @@ async def save_document(
     identifiers, mark = spec_identity.mint(keys, previous_map, high_water)
     retired = spec_identity.retained(previous_map, keys, spec_identity.read_retired(stored_before))
 
+    # One computation of what a requirement means, shared by the document row and
+    # the index. Two would disagree eventually, and the disagreement would show
+    # as one surface calling evidence stale while another called it current.
+    digests = spec_digest.payload_digests(payload, identifiers)
+    carried = spec_identity.carried_digests(
+        digests, spec_identity.read_digests(stored_before), retired
+    )
+
     stored = payload_to_dict(payload)
     # Hub-owned, and overwritten unconditionally. An agent that submits an
     # identity block does not get to keep it.
-    stored[spec_identity.IDENTITY_FIELD] = spec_identity.identity_block(identifiers, mark, retired)
+    stored[spec_identity.IDENTITY_FIELD] = spec_identity.identity_block(
+        identifiers, mark, retired, carried
+    )
 
     content = render_document(
         payload,
@@ -99,19 +117,25 @@ async def save_document(
 
     spec_documents.write_document(workspace, document.path, content)
 
-    statements = {
-        identifiers[requirement.key]: requirement.statement
-        for requirement in payload.requirements
-        if requirement.key in identifiers
-    }
     await spec_lifecycle.record_content(
         session,
         document,
         actor=actor,
         content=content,
-        statements=statements,
+        digests=digests,
         title=payload.title,
         kind=payload.kind,
+    )
+
+    # Reindexed in the same transaction that recorded the write. An index that
+    # could be a save behind would answer "what serves this requirement?" about a
+    # document that no longer exists in that form.
+    await spec_index.reindex_document(
+        session,
+        document,
+        spec_index.requirements_from_payload(stored) or [],
+        actor=actor,
+        source=spec_index.SOURCE_HUB,
     )
 
     return SaveResult(
