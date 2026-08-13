@@ -834,6 +834,22 @@ def _runner_summary(agent_meta: dict) -> str:
     return "; ".join(parts)
 
 
+# Tools the server serves that `_tool_surface_lines` deliberately does not describe, each with the
+# reason. An entry here is a decision someone recorded; anything served and absent from both is a
+# line nobody wrote, and `test_tool_surface_matches_server.py` refuses it.
+UNDESCRIBED_TOOLS = {
+    "approve_tool_call": (
+        "A runtime endpoint the harness invokes on the agent's behalf, not a capability the agent "
+        "has. Calling it accomplishes nothing and grants nothing, and listing it would misrepresent "
+        "what the agent is for."
+    ),
+    "submit_checkpoint_notes": (
+        "Named in the checkpoint prompt itself, at the moment it applies. Describing it on every "
+        "turn would invite it on turns that are not checkpoints."
+    ),
+}
+
+
 def _tool_surface_lines() -> List[str]:
     """Describe every tool an agent can call, with the values its constrained parameters take.
 
@@ -846,6 +862,14 @@ def _tool_surface_lines() -> List[str]:
     on the same server for convenience but is a runtime endpoint the harness invokes, not a
     capability the agent has: calling it accomplishes nothing and grants nothing. This section
     exists to tell an agent what it can deliberately use.
+
+    Every other served tool must appear here or in `UNDESCRIBED_TOOLS` below, and
+    `test_tool_surface_matches_server.py` fails the build otherwise. That test exists because this
+    list has now fallen behind the server twice. The second time cost a completed interview: an
+    agent was instructed by the phase block to call `submit_spec_document`, found no such tool in
+    this section, concluded *"the required `submit_spec_document` capability was not exposed in this
+    session"*, and stopped without writing the document it had just spent three rounds designing.
+    A silently incomplete inventory is worse than none, because the agent believes it.
     """
     from ...mcp_server import JobSessionMode, MessageType, TaskPriority, TaskStatus
 
@@ -880,6 +904,13 @@ def _tool_surface_lines() -> List[str]:
         "handle an answer that is none of yours.",
         "- `get_answer(question_id)` — only needed for a question you asked with "
         "`blocking=False`; a normal `ask_user` has already returned the answer.",
+        "- `submit_spec_document(path, document)` — write the specification document the operator "
+        "has open. `document` is the structured payload; the Hub validates it, mints requirement "
+        "identifiers and renders the file, so never write specification HTML yourself. Submitting "
+        "an incomplete document is expected while exploring: what is missing comes back to you as "
+        "`blocking`, and is a list of what to ask about next rather than an error. There is no "
+        "argument that sets a phase or approves — those are the operator's.",
+        "- `recall(observation_id)` — read back one observation by its identifier.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
         f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",

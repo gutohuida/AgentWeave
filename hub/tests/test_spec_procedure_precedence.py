@@ -150,6 +150,33 @@ async def test_a_turn_with_no_document_says_nothing_about_procedure(app, auth_he
 
 
 @pytest.mark.asyncio
+async def test_the_instruction_and_the_tool_list_agree_in_one_rendered_context(
+    app, auth_headers, tmp_path
+):
+    """The failure was a contradiction inside a single context file.
+
+    The phase block said *"Write the document with `submit_spec_document`"*; `## Your tools`
+    enumerated a surface without it. The agent resolved it against the enumeration — the more
+    specific claim, and the one that reads as an inventory — reported the capability as unavailable,
+    and stopped after a complete interview.
+
+    `test_tool_surface_matches_server.py` checks the surface against the server. This checks the two
+    halves of what one agent actually reads, which is where they disagreed.
+    """
+    await _register(app, auth_headers, "speccer")
+    await _create_document(app, auth_headers)
+
+    context = await _render("speccer", PATH)
+
+    assert "Write the document with `submit_spec_document`" in context
+    tools = context.split("## Your tools", 1)[1].split("\n## ", 1)[0]
+    assert "`submit_spec_document(" in tools, (
+        "the phase block instructs a tool the tool list omits; "
+        "an agent reading both concludes it does not have it"
+    )
+
+
+@pytest.mark.asyncio
 async def test_both_runners_are_told_the_same_thing(app, auth_headers, bind_runner, tmp_path):
     """Runner-agnostic delivery is the premise the skills' deletion rested on, and the live failure
     was on Codex. The context file is what both runners consume, so this asserts rather than assumes

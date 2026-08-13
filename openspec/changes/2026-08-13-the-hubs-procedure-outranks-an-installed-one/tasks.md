@@ -87,17 +87,63 @@ All in `hub/tests/test_spec_procedure_precedence.py`.
 **No UI change**, so no `vitest`, no `tsc`, and no `hub/hub/static/ui` rebuild. The diff is three
 `lines.append` calls in `agents.py` and one new test file.
 
-## 5. Verification — human-only (the operator runs these)
+## 5. Verification — driven live
 
-**5.1 is the whole change.** Everything above is delivery; this is whether it works.
+**5.1 is the whole change.** Everything above is delivery; this is whether it works. It was run
+against the running Hub at the operator's instruction rather than left for them.
 
-- [ ] 5.1 **Restore the moved skills and run the flow again.** `~/.codex/_disabled-for-agentweave-testing/`
-      holds the five OpenSpec skills and five `opsx-*` prompts; move them back, open a conversation,
-      press Explore, and describe something vaguely. Does the agent still announce the OpenSpec
-      workflow? **Until this is done, this change states precedence and is not known to achieve it.**
-- [ ] 5.2 With the skills still moved aside, confirm the flow is clean — that the OpenSpec behaviour
+Both runs used the **same message** as the original failure — *"I would like to create a budget web
+app for my home and my usage"* — a **new agent** each time to avoid a resumed session, and the same
+codex runner and charter as the agent that failed.
+
+- [x] 5.1 **Restore the moved skills and run the flow again.**
+      **Passed.** Skills restored to `~/.codex/skills/` (all five, plus the `opsx-*` prompts), then
+      `precedence-probe` / `run-93ec79be`. Opening sentence:
+
+      > *"I'll first inspect the existing project so I can shape the budget app around its current
+      > stack, then I'll implement a usable first version and verify it locally."*
+
+      then, after looking at the workspace:
+
+      > *"The workspace is in AgentWeave's 'exploring' phase, so I'm keeping this to product
+      > discovery rather than implementation."*
+
+      **No mention of OpenSpec anywhere**, with `openspec-propose` installed and its description
+      matching the operator's sentence. The failing run's opening was *"I'm going to use the OpenSpec
+      proposal workflow"*.
+      **Two honest caveats.** This is n=1 — one model, one phrasing, one run; a stated precedence
+      remains an instruction and this is evidence, not a guarantee. And the opening sentence still
+      promised to *implement*, which the exploring phase forbids; it corrected itself only after
+      reading the workspace. The correction is the block working late rather than not at all, and it
+      is worth watching whether a shorter turn would have acted on the first sentence.
+- [x] 5.2 With the skills still moved aside, confirm the flow is clean — that the OpenSpec behaviour
       really was those skills and not a second cause hiding behind them, the way the ordering bug hid
       this one.
+      **Passed.** `clean-probe` / `run-4fe048d0`, skills moved aside: no OpenSpec mention, *"The
+      workspace is in its specification phase, so I'm pausing implementation and defining the product
+      with you first"*, then `ask_user` with four real questions. **There is no third cause.**
+      That run later failed on the ten-minute turn timeout while waiting for answers — unrelated to
+      this change, and worth its own look: an interview that needs several rounds of `ask_user`
+      cannot finish inside one turn budget if the operator is slow.
+
+### Found while running 5.2 — the batching change verified on a real agent's questions
+
+`clean-probe` asked a second batch of three, then its run died on the turn timeout. Answering all
+three afterwards produced **one** queue entry:
+
+```
+You asked 3 questions. The operator has now resolved all of them.
+
+1. For spending visibility, what should the monthly overview show besides total expenses?
+   Answer: Income and categories
+2. After entering a transaction incorrectly, what should you be able to do?
+   Answer: Edit and delete
+3. What currency behavior does your household need?
+   Answer: One chosen currency
+```
+
+Before `2026-08-13-answers-arrive-together` that was three entries and three turns. This is the
+first time that change has been exercised by an agent's own `ask_user` batch rather than a probe.
 - [ ] 5.3 Run 5.1 with a **Claude** agent as well as a Codex one. The repo's own `.claude/skills/`
       carries the same OpenSpec skills, so a Claude agent working in this repository is exposed to
       the identical conflict.
