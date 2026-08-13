@@ -108,6 +108,41 @@ All in `hub/tests/test_question_batch_delivery.py` unless stated.
 - [x] 4.12 Rebuild `hub/ui/dist`, copy over `hub/hub/static/ui`, confirm with `diff -rq`.
 - [x] 4.13 `npx openspec validate --changes --strict` and `--specs --strict`.
 
+## 4d. Driven against the running Hub
+
+A temporary project with an agent bound to **no runner**, so the delivered turn would queue rather
+than spawn, and the queue entry could be inspected without a real run. A `Run` row was inserted to
+obtain a credential, the batch asked through the agent's own route, the run then marked completed —
+the exact state this change is about — and the project's rows and directory removed afterwards.
+The Hub was restarted onto this commit first.
+
+```
+asked: 3   batch_id: qbatch-0618120f
+asking run ended
+
+after answer 1 (alpha): 0 queue entrie(s)
+after answer 2 (beta):  0 queue entrie(s)
+after answer 3 (gamma): 1 queue entrie(s)
+```
+
+The single delivery, read back from `inbound_queue_entries`:
+
+```
+You asked 3 questions. The operator has now resolved all of them.
+
+1. First?
+   Answer: alpha
+
+2. Second?
+   Answer: beta
+
+3. Third?
+   Answer: gamma
+```
+
+Before this change each of those three answers produced its own entry, and so its own turn — the
+first of them starting the agent while the operator was still on the second.
+
 ## 5. Verification — human-only (the operator runs these)
 
 Nothing below can be closed by an agent. Each needs a person looking at a running app.
