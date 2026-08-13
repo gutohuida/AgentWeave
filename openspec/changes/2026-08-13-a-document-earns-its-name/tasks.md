@@ -108,6 +108,25 @@ Everything here is asserted by the suite; none of it requires a human.
 - [x] 8.12 `hub/hub/static/ui` refreshed from `hub/ui/dist` after `npm run build`, `diff -rq`
       reports no difference.
 
+## 8b. Driven against the running Hub
+
+Hub restarted onto the implementing commit, health `ok`, project `aw-loop-4`. Not a test — the real
+HTTP surface, the real database, real files.
+
+- Created with **no path**: `spec/changes/russet-thunderbird/spec.html`, phase `exploring`, file on
+  disk, `<title>` carrying the operator's sentence and the path carrying none of it.
+- Created a **second document with the identical title**: `spec/changes/indigo-salamander/spec.html`.
+  Two distinct names where the old client-side fallback produced `exploration` twice and refused the
+  second as `document_exists`.
+- Renamed over the agent route with the subject `Personal reading tracker` →
+  `spec/changes/personal-reading-tracker/spec.html`, `previous_path` returned, **file moved and the
+  `russet-thunderbird` directory gone**.
+- Refusals, live: `???` → `subject_unusable`; a name another document holds → `document_exists`.
+- **`../../../etc/passwd` as the subject** → `spec/changes/etc-passwd/spec.html`. An ordinary
+  hyphenated name inside the exploration root, which is the point of taking a subject rather than a
+  path.
+- Artefacts created for this check were removed afterwards; `amber-griffin` is untouched.
+
 ## 9. Human-only verification
 
 These cannot be asserted by a test and need the operator in front of the running app.
