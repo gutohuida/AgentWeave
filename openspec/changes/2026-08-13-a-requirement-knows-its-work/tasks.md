@@ -9,16 +9,27 @@ both head assertions get bumped (`test_migrations.py` **and** `test_project_pers
 
 ## 1. The requirement index
 
-- [ ] 1.1 `spec_requirements` model + migration `0066` — project, document, identifier, key, state
-      (`active`/`retired`), digest, anchor, `observed_at`. Unique on `(project_id, identifier)`.
-- [ ] 1.2 `spec_requirement_revisions` model + migration — append-only old/new digest, source
+- [x] 1.1 `spec_requirements` model + migration `0066` — project, document, identifier, key, state
+      (`active`/`retired`), digest, `digest_version`, anchor, `observed_at`. Unique on
+      **`(project_id, document_id, identifier)`**: identifiers are minted per document, so `FR-1`
+      exists in every document and a project-wide constraint cannot hold. Everything that points at
+      a requirement points at the row, which is unambiguous regardless; resolution *by name* refuses
+      an identifier two documents declare rather than choosing.
+- [x] 1.2 `spec_requirement_revisions` model + migration — append-only old/new digest, source
       (`hub`/`external`), classification, actor, time.
-- [ ] 1.3 Reindex from a saved payload inside `spec_service.save_document`, in the same transaction
+- [x] 1.3 Reindex from a saved payload inside `spec_service.save_document`, in the same transaction
       that writes the file. The index must never be newer or older than the document it describes.
-- [ ] 1.4 A removed requirement becomes `retired`; it is not deleted, and its identifier is not
-      reissued (`aw_identity`'s high-water mark already guarantees the second half).
-- [ ] 1.5 `reindex_project(project_id)` — rebuild from files alone, and a test that a discarded
-      index rebuilds identically.
+- [x] 1.4 A removed requirement becomes `retired`; it is not deleted, and its identifier is not
+      reissued (`aw_identity`'s high-water mark already guarantees the second half). Retirement is
+      permanent: a key that returns is minted a **new** identifier, so `restored` exists only for a
+      file edited outside the Hub.
+- [x] 1.5 `reindex_project(project_id)` — rebuild from files alone, and a test that a discarded
+      index rebuilds identically. Needed the identity block to start carrying per-identifier
+      digests: a retired requirement's wording is gone from the document, so nothing else could
+      reconstruct what it meant.
+- [x] 1.6 One semantic digest, in `spec_digest`, called by both the index and the document row.
+      Covers modal, statement, party and acceptance criteria; excludes rationale. Carries a
+      canonicalization version so a later change to the rule is visible rather than silent.
 
 ## 2. Links replace the JSON
 

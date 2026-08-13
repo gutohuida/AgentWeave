@@ -14,6 +14,20 @@ reconstructible from the files alone, and it SHALL NOT hold wording that is not 
 Each indexed requirement SHALL carry its stable identifier, the document declaring it, whether it is
 active or retired, its current semantic digest, and where it sits in the rendered document.
 
+An identifier SHALL be unique within the document that declares it. Identifiers are minted per
+document, so the same identifier names a different requirement in a different document; a record
+pointing at a requirement SHALL therefore point at the indexed requirement itself rather than at its
+identifier as text. Where an identifier is supplied by name and more than one document in the project
+declares it, resolution SHALL be refused as ambiguous rather than resolved to either — choosing one
+would link work to a requirement nobody named, and being wrong would be invisible until someone read
+both documents.
+
+The semantic digest SHALL be computed from one definition used by every surface, and SHALL cover what
+a reader must satisfy: the obligation, the statement, the side of the boundary it binds, and the
+criteria demonstrating it. It SHALL NOT cover explanatory prose. The canonicalization producing it
+SHALL be recorded with each digest, so a digest taken under an earlier rule is distinguishable from a
+rewording.
+
 A requirement that is removed from its document SHALL become retired rather than disappear. Work and
 evidence already pointing at it remain pointed at it — what a retired requirement once demanded, and
 what was built for it, is a question that outlives the requirement.
@@ -41,6 +55,21 @@ the digest after, whether the change arrived through the Hub or from an external
 
 - **WHEN** a requirement's statement changes so its semantic digest changes
 - **THEN** the previous and current digests are recorded with the actor who caused the change
+
+#### Scenario: A changed obligation is a changed requirement
+
+- **WHEN** a requirement's modal changes and its statement does not
+- **THEN** its semantic digest changes
+
+#### Scenario: A reworded rationale is not a changed requirement
+
+- **WHEN** only a requirement's rationale changes
+- **THEN** its semantic digest is unchanged
+
+#### Scenario: An identifier naming two documents is refused
+
+- **WHEN** work names an identifier that more than one of the project's documents declares
+- **THEN** resolution is refused as ambiguous rather than resolved to one of them
 
 ### Requirement: Work is linked to the requirements it serves
 
