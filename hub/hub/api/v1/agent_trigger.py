@@ -58,6 +58,7 @@ from ...launchability import (
     probe_agent,
     resolve_access_path,
     resolve_agent_env,
+    spec_turn_notice,
 )
 from ...model_catalog import (
     PERMISSION_MODE_CONTROL,
@@ -219,6 +220,24 @@ class TriggerAgentError(Exception):
         self.workspace_unavailable = workspace_unavailable
         self.directory_state = directory_state
         super().__init__(detail)
+
+
+async def _spec_phase_for(session, project_id: str, spec_document: Optional[str]) -> Optional[str]:
+    """The open document's phase, or None when there is no document or no row for it.
+
+    Failure is silent by design: a turn must not be refused because the phase could not be read.
+    The canonical context carries the same statement, so losing the prompt notice degrades to the
+    behaviour that existed before it.
+    """
+    if not spec_document:
+        return None
+    try:
+        from ... import spec_lifecycle
+
+        row = await spec_lifecycle.get_document(session, project_id, spec_document)
+        return row.phase if row is not None else None
+    except Exception:  # noqa: BLE001 - a missing phase must never cost the turn
+        return None
 
 
 async def trigger_agent_directly(
@@ -417,7 +436,17 @@ async def trigger_agent_directly(
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
     # one that isn't actually available in this environment.
     access_path = resolve_access_path(runner, probe["cli"] or agent, config.get("hub_client"))
-    prompt = f"{access_path_notice(access_path)}\n\n{message}"
+    notices = [access_path_notice(access_path)]
+    # A specification turn says so beside the operator's message, not only in the system context.
+    # Three live runs had the phase block, the precedence statement and the tool list all correctly
+    # delivered, and reached for a different workflow anyway: what an agent weighs against the
+    # request is what arrives with the request. Prepended rather than merged into `message`, which
+    # stays the durable record of what the operator actually said — the same division
+    # `access_path_notice` has always used.
+    spec_notice = spec_turn_notice(await _spec_phase_for(session, project_id, spec_document))
+    if spec_notice:
+        notices.append(spec_notice)
+    prompt = "\n\n".join([*notices, message])
     mcp_command = None
     if access_path == "mcp":
         canonical_server = Path(__file__).resolve().parents[2] / "mcp_server.py"

@@ -767,15 +767,6 @@ def approve_tool_call(
     return json.dumps({"behavior": "deny", "message": f"Denied: {decision['reason']}."})
 
 
-def main() -> None:
-    """Run the canonical Hub-owned surface over stdio."""
-    mcp.run(transport="stdio", show_banner=False)
-
-
-if __name__ == "__main__":
-    main()
-
-
 # ---------------------------------------------------------------------------
 # Specification documents
 # ---------------------------------------------------------------------------
@@ -880,3 +871,21 @@ def submit_spec_document(
             document[name] = value
 
     return _hub_request("POST", "/spec/documents", {"path": path, "document": document})
+
+
+def main() -> None:
+    """Run the canonical Hub-owned surface over stdio."""
+    mcp.run(transport="stdio", show_banner=False)
+
+
+# MUST stay the last thing in this file. `mcp.run()` does not return, so anything defined below
+# this guard is never reached when the server is spawned as a script — which is exactly how the
+# Hub spawns it. `submit_spec_document` was added after this block and was therefore invisible to
+# every agent while being perfectly visible to every test, because tests import the module and an
+# import runs the whole file. An agent spent three rounds interviewing an operator, settled the
+# scope, and reported the tool "not available in this session".
+#
+# `test_mcp_server_stdio_surface.py` spawns this file the way the Hub does and lists the tools over
+# the wire, which is the only check that can see this class of mistake.
+if __name__ == "__main__":
+    main()

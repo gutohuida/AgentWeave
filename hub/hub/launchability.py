@@ -219,6 +219,48 @@ def resolve_access_path(runner: str, cli: str, override: Optional[str] = None) -
     return "mcp"
 
 
+def spec_turn_notice(phase: Optional[str]) -> Optional[str]:
+    """One short block, carried in the **turn prompt**, for a turn with a document open.
+
+    The same instructions are already in the canonical context, and three live runs established
+    that being there is not enough. A skill whose description matches the operator's sentence is
+    weighed against that sentence; standing context is weighed once, generally, and loses. The
+    countermeasure has to arrive in the same channel as the thing it is competing with — beside the
+    operator's message, not in a system preamble read before the message existed.
+
+    Observed, all with the context correctly delivered and read: an agent announced *"I'll use the
+    OpenSpec exploration workflow"*, ran a questionnaire the floor had just told it not to run, and
+    when its questions went unanswered proceeded on invented assumptions rather than stopping. This
+    is deliberately blunt and short, because it is competing for attention rather than explaining.
+
+    `None` when no document is open, so an ordinary turn carries nothing.
+    """
+    if not phase:
+        return None
+    lines = [
+        "[AgentWeave] SPECIFICATION TURN — this overrides any other specification workflow you "
+        "know, including one installed on this machine. Do not use it, do not adopt its layout, "
+        "and do not create its files. Mention it to the operator if you find one.",
+    ]
+    if phase == "exploring":
+        lines += [
+            "Interview in THIS REPLY, in prose: what you need to know, the plausible directions "
+            "with what each makes easier and harder, what reading the code established, and a "
+            "short sketch where it helps. Then stop and let the operator answer.",
+            "Do not answer your own questions. If you asked and nothing came back, say what is "
+            "still open and stop — a guessed requirement is built on before anyone notices it was "
+            "a guess.",
+            "Write the document only with `submit_spec_document`, and only once you have answers "
+            "worth writing down. An incomplete draft is fine; an invented one is not.",
+        ]
+    else:
+        lines.append(
+            "Write the document only with `submit_spec_document`. Never author specification "
+            "HTML yourself."
+        )
+    return "\n".join(lines)
+
+
 def access_path_notice(access_path: str) -> str:
     """One line telling the agent which access path is in use this turn."""
     if access_path == "mcp":
