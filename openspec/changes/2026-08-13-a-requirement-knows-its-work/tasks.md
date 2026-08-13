@@ -121,26 +121,31 @@ Unblocked. **Both footprint paths ship together.**
 
 ## 7. Tests — agent-verifiable
 
-- [ ] 7.1 Index: populated on save; rebuilt identically from files; removal retires rather than
-      deletes; a reworded requirement records a revision with both digests.
-- [ ] 7.2 Links: created from identifiers; refused for an unknown identifier; survive a terminal
-      status; carry their creating actor and run.
-- [ ] 7.3 Migration: the live legacy shape `"FR-8 — initialize-members"` becomes a link; an
-      unresolvable value is preserved verbatim; nothing is dropped; no requirement is invented.
-      Use the real strings from the 2026-08-13 run as fixtures.
-- [ ] 7.4 Coverage: every state in the precedence, including two adjacent states resolving in the
-      stated order; `unserved` for a requirement with no link; invalid requirements excluded.
-- [ ] 7.5 Evidence: pinned to the digest; goes stale on rewording; agent evidence lands `awaiting`;
-      a granted agent may accept another agent's evidence; **an agent accepting its own is refused**;
-      an ungranted agent is refused; with no granted agent the operator can still accept; reviews
-      append and never update; a deleted artifact leaves its record reporting the artifact gone.
-- [ ] 7.6 Drift: a changed footprint raises a candidate; resolution stops it re-firing; **no
-      document is written**.
-- [ ] 7.7 `test_migrations.py` and `test_project_persistence.py` head assertions bumped.
-- [ ] 7.8 `pytest hub/tests/ -q` and `pytest tests/ -q` separately; `ruff`; `black`;
+- [x] 7.1 Index (`test_spec_index.py`): populated on save; rebuilt identically from files; removal
+      retires rather than deletes; a reworded requirement records a revision with both digests; a
+      changed obligation is a rewording and a changed rationale is not.
+- [x] 7.2 Links (`test_requirement_links.py`): created from identifiers; refused for an unknown,
+      malformed or ambiguous identifier; survive a terminal status; carry their creating actor
+      and run.
+- [x] 7.3 Migration (`test_migrations.py`): the live legacy shape `"FR-8 — initialize-members"`
+      becomes a link; an unresolvable value is preserved verbatim; nothing is dropped; no
+      requirement is invented. Uses the real strings from the 2026-08-13 run, plus the
+      empty-index case, which is what an existing project actually hits.
+- [x] 7.4 Coverage (`test_requirement_coverage.py`): every state in the precedence, including two
+      adjacent states resolving in the stated order; `unserved` for a requirement with no link;
+      invalid requirements excluded as diagnostics.
+- [x] 7.5 Evidence (`test_requirement_evidence.py`): pinned to the digest; goes stale on rewording;
+      agent evidence lands `awaiting`; a granted agent may accept another agent's evidence; **an
+      agent accepting its own is refused**; an ungranted agent is refused; with no granted agent the
+      operator can still accept; reviews append and never update; a deleted artifact leaves its
+      record reporting the artifact gone.
+- [x] 7.6 Drift (`test_requirement_drift.py`): a changed footprint raises a candidate; resolution
+      stops it re-firing; **no document is written**.
+- [x] 7.7 `test_migrations.py` and `test_project_persistence.py` head assertions bumped to `0068`.
+- [x] 7.8 `pytest hub/tests/ -q` and `pytest tests/ -q` separately; `ruff`; `black`;
       `npx openspec validate --changes --strict`.
-- [ ] 7.9 `hub/hub/static/ui` refreshed and confirmed with `diff -rq` if any UI ships.
-- [ ] 7.10 Footprints: both the git and the non-git path; integration reported for each; a
+- [x] 7.9 `hub/hub/static/ui` refreshed and confirmed with `diff -rq`.
+- [x] 7.10 Footprints: both the git and the non-git path; integration reported for each; a
       requirement with accepted evidence on an unmerged branch reports `verified, not integrated`.
 
 ## 8. Human-only verification

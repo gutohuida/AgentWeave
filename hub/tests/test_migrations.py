@@ -1724,3 +1724,131 @@ def test_migration_0063_dedupe_respects_the_agent_name_length_limit(tmp_path) ->
 
     assert all(len(name) <= 32 for name in names), names
     assert names == sorted([long_name, f"{'a' * 30}-2"])
+
+
+# The strings a real agent wrote, unprompted, during the 2026-08-13 end-to-end run. They are the
+# fixtures because the convention they follow — identifier, em-dash, key — is a convention one model
+# happened to adopt, not a guarantee, and a migration tuned to invented examples would be tuned to
+# the wrong shape.
+LIVE_LEGACY_REFERENCES = [
+    "FR-8 — initialize-members",
+    "FR-1 — local-single-ledger",
+    "Settlement must balance to the cent",
+    "FR-404 — a requirement nobody wrote",
+]
+
+
+def _stamp(db_file, revision: str) -> None:
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DELETE FROM alembic_version")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES (?)", (revision,))
+        conn.commit()
+
+
+def test_migration_0067_converts_the_live_legacy_references(tmp_path) -> None:
+    """Convert what resolves, keep what does not, and never invent a requirement.
+
+    The failure mode this guards is silent: a task that loses a reference it used to have looks
+    exactly like a task that never had one.
+    """
+    import json
+
+    db_file = tmp_path / "legacy_refs.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DELETE FROM task_requirement_links")
+        conn.execute("DELETE FROM task_requirement_references")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p1', 'demo', '2026-08-13')"
+        )
+        conn.execute(
+            "INSERT INTO spec_documents (id, project_id, path, title, kind, phase, created_at,"
+            " updated_at) VALUES ('d1', 'p1', 'spec/changes/x/spec.html', 'X', 'change-spec',"
+            " 'approved', '2026-08-13', '2026-08-13')"
+        )
+        for identifier, requirement_id in (("FR-8", "r8"), ("FR-1", "r1")):
+            conn.execute(
+                "INSERT INTO spec_requirements (id, project_id, document_id, identifier, key,"
+                " state, digest, digest_version, anchor, observed_at, created_at)"
+                " VALUES (?, 'p1', 'd1', ?, 'k', 'active', 'abc', 1, ?, '2026-08-13','2026-08-13')",
+                (requirement_id, identifier, f"#{identifier}"),
+            )
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, description, status, priority, created_at,"
+            " updated, requirements, divergence_policy) VALUES ('t1', 'p1', 'Build it', '',"
+            " 'pending', 'medium', '2026-08-13', '2026-08-13', ?, 'surface')",
+            (json.dumps(LIVE_LEGACY_REFERENCES),),
+        )
+        conn.commit()
+
+    _stamp(db_file, "0066")
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        linked = {
+            row[0]
+            for row in conn.execute(
+                "SELECT r.identifier FROM task_requirement_links l"
+                " JOIN spec_requirements r ON r.id = l.requirement_id WHERE l.task_id = 't1'"
+            )
+        }
+        kept = {
+            row[0]: row[1]
+            for row in conn.execute(
+                "SELECT reference, reason FROM task_requirement_references WHERE task_id = 't1'"
+            )
+        }
+        requirement_count = conn.execute("SELECT COUNT(*) FROM spec_requirements").fetchone()[0]
+        original = conn.execute("SELECT requirements FROM tasks WHERE id='t1'").fetchone()[0]
+
+    assert linked == {"FR-8", "FR-1"}
+    # Nothing is dropped: every value is either a link or a preserved reference.
+    assert set(kept) == {
+        "Settlement must balance to the cent",
+        "FR-404 — a requirement nobody wrote",
+    }
+    assert kept["FR-404 — a requirement nobody wrote"] == "unknown"
+    assert kept["Settlement must balance to the cent"] == "unknown"
+    # And no requirement was created to make a value resolve.
+    assert requirement_count == 2
+    # The original stays, so a mis-parse can be re-derived rather than reconstructed from a backup.
+    assert json.loads(original) == LIVE_LEGACY_REFERENCES
+
+
+def test_migration_0067_links_nothing_when_the_index_is_empty(tmp_path) -> None:
+    """A project whose documents predate the index resolves nothing here — and that is the honest
+    outcome. Guessing would be the alternative."""
+    import json
+
+    db_file = tmp_path / "legacy_no_index.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DELETE FROM task_requirement_links")
+        conn.execute("DELETE FROM task_requirement_references")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p2', 'demo', '2026-08-13')"
+        )
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, description, status, priority, created_at,"
+            " updated, requirements, divergence_policy) VALUES ('t2', 'p2', 'Build it', '',"
+            " 'pending', 'medium', '2026-08-13', '2026-08-13', ?, 'surface')",
+            (json.dumps(["FR-8 — initialize-members"]),),
+        )
+        conn.commit()
+
+    _stamp(db_file, "0066")
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM task_requirement_links").fetchone()[0] == 0
+        kept = conn.execute(
+            "SELECT reference FROM task_requirement_references WHERE task_id='t2'"
+        ).fetchall()
+
+    assert [row[0] for row in kept] == ["FR-8 — initialize-members"]
