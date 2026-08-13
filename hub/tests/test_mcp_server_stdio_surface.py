@@ -113,3 +113,10 @@ def test_the_spawned_server_advertises_the_spec_tools_arguments():
     properties = tool["inputSchema"]["properties"]
     for required in ("path", "title", "kind", "requirements", "acceptance_criteria", "tasks"):
         assert required in properties, f"{required} missing from the served schema"
+
+
+def test_the_rename_tool_is_served_too():
+    """Added after the guard was moved to the end of the file. If a later edit
+    ever puts a definition back below it, this is what says so."""
+    names = {tool["name"] for tool in _tools_over_stdio()}
+    assert "rename_spec_document" in names

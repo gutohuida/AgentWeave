@@ -6,7 +6,6 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { postJson } from '@/api/client'
 import { agentColorVars } from '@/lib/agentColors'
-import { documentPathFor } from '@/lib/specDocumentName'
 import { useConfigStore } from '@/store/configStore'
 import { Composer } from './Composer'
 
@@ -69,23 +68,25 @@ export function NewConversationSurface({
      * first message — the one that decides how the agent frames the whole exploration — with no
      * document attached, so the turn context carried no phase and no `submit_spec_document`, and
      * the agent reached for a workflow of its own. That was the entire symptom this control was
-     * added to fix, and doing the two in the wrong order reproduced it exactly. */
+     * added to fix, and doing the two in the wrong order reproduced it exactly.
+     *
+     * No path is sent. The Hub mints a placeholder — a colour and an animal — because this is the
+     * one moment at which nobody knows what the document is about, and the name this used to
+     * derive from the operator's opening sentence outlived the guess that produced it. The agent
+     * renames it once the interview settles the subject. */
     let specDocument: string | null = null
     if (exploring) {
-      const path = documentPathFor(message)
-      if (path) {
-        try {
-          await postJson(`/api/v1/projects/${projectId}/project/documents`, {
-            path,
-            title: message.trim().slice(0, 120),
-          })
-          specDocument = path
-        } catch {
-          // Already there — an exploration resuming under the same name — or refused. Attach it
-          // either way: a document that exists is still the subject of this turn, and losing the
-          // operator's first message to a failed write would be the worse failure.
-          specDocument = path
-        }
+      try {
+        const created = await postJson<{ path: string }>(
+          `/api/v1/projects/${projectId}/project/documents`,
+          { title: message.trim().slice(0, 120) },
+        )
+        specDocument = created.path
+      } catch {
+        // A minted name cannot collide, so this is a real failure rather than the document
+        // already being there. Send the turn anyway: losing the operator's first message —
+        // the one that decides how the agent frames the whole exploration — is the worse loss.
+        specDocument = null
       }
     }
 

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AgentSummary } from '@/api/agents'
 import { useAgentConversations } from '@/api/agentChat'
-import { useCreateSpecDocument, useSpecEvents, useSpecList } from '@/api/spec'
+import {
+  useCreateSpecDocument,
+  useSpecDocumentRename,
+  useSpecEvents,
+  useSpecList,
+} from '@/api/spec'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Drawer } from '@/components/layout/Drawer'
@@ -10,7 +15,6 @@ import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
 import { SpecDocumentPanel } from '@/components/spec/SpecDocumentPanel'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { buildInventory } from '@/components/spec/specNavigation'
-import { documentPathFor } from '@/lib/specDocumentName'
 import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
@@ -77,6 +81,9 @@ export function ConversationView({
   const conversationTitle =
     conversations?.find((entry) => entry.id === conversationId)?.title ?? null
   useSpecEvents()
+  /* The agent renames the document it is exploring, usually in the turn the operator is watching,
+   * so the path in the destination can move out from under this panel. */
+  useSpecDocumentRename(document, onOpenDocument)
   const inventory = useMemo(() => buildInventory(specList), [specList])
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -164,17 +171,13 @@ export function ConversationView({
    * "propose" and "approve" with no subject. */
   const startExploration = useCallback(
     (title?: string) => {
-      const chosen = (title ?? conversationTitle ?? '').trim() || 'exploration'
-      const path = documentPathFor(chosen)
-      if (!path) return
+      /* The path is the Hub's to mint, not this component's to derive. The conversation title is
+       * still worth sending — it is the best interim description available — but it is a title,
+       * and the two used to be the same string. The agent renames the document once it knows. */
+      const chosen = (title ?? conversationTitle ?? '').trim()
       createDocument.mutate(
-        { path, title: chosen },
-        {
-          onSuccess: () => onOpenDocument(path),
-          // Already there — the conversation is resuming an exploration it started
-          // earlier, so open it rather than reporting a collision.
-          onError: () => onOpenDocument(path),
-        },
+        { title: chosen || undefined },
+        { onSuccess: (created) => onOpenDocument(created.path) },
       )
     },
     [conversationTitle, createDocument, onOpenDocument],

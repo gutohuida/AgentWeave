@@ -252,6 +252,9 @@ def spec_turn_notice(phase: Optional[str]) -> Optional[str]:
             "a guess.",
             "Write the document only with `submit_spec_document`, and only once you have answers "
             "worth writing down. An incomplete draft is fine; an invented one is not.",
+            "The document's name is a placeholder — a colour and an animal, meaning nothing. Call "
+            "`rename_spec_document(path, subject)` as soon as this reply establishes what the "
+            "document is about, and use the path it returns from then on.",
         ]
     else:
         lines.append(

@@ -2,104 +2,111 @@
 
 ## 1. Minting a placeholder
 
-- [ ] 1.1 New `hub/hub/spec_naming.py`: colour and mythic-animal word lists, lowercase ASCII single
+- [x] 1.1 New `hub/hub/spec_naming.py`: colour and mythic-animal word lists, lowercase ASCII single
       words so the path contract holds by construction.
-- [ ] 1.2 `mint_placeholder_path(taken)` — random pair, bounded retry against a `taken` predicate,
+- [x] 1.2 `mint_placeholder_path(taken)` — random pair, bounded retry against a `taken` predicate,
       short random suffix as the bounded fallback. Never an unbounded search.
-- [ ] 1.3 `slugify(subject)` — the Python port of `hub/ui/src/lib/specDocumentName.ts`: NFKD, strip
+- [x] 1.3 `slugify(subject)` — the Python port of `hub/ui/src/lib/specDocumentName.ts`: NFKD, strip
       combining marks, lowercase, collapse to `-`, trim. Truncate against the *whole path* budget
       (`SPEC_PATH_MAX_LENGTH` less the `spec/changes/` prefix and `/spec.html` suffix), not a bare
       slug length.
-- [ ] 1.4 `document_path_for(subject)` — slug to full path, `None` when the slug is empty.
+- [x] 1.4 `document_path_for(subject)` — slug to full path, `None` when the slug is empty.
 
 ## 2. Creation mints when not told
 
-- [ ] 2.1 `DocumentCreate.path` becomes `Optional[str]`.
-- [ ] 2.2 `POST /project/documents` mints when `path` is absent, checking both the database and the
+- [x] 2.1 `DocumentCreate.path` becomes `Optional[str]`.
+- [x] 2.2 `POST /project/documents` mints when `path` is absent, checking both the database and the
       filesystem for a free name.
-- [ ] 2.3 The title fallback stops using the last path segment — a placeholder must never become a
-      title. Absent title stays empty; the agent mints the real one on submit.
-- [ ] 2.4 The response carries the path (already in `_document_view`); confirm and keep.
+- [x] 2.3 The title fallback stops using the last path segment — a placeholder must never become a
+      title. A payload's title may not be empty, so an absent one becomes the literal `Untitled
+      exploration`; the agent mints the real one when it submits.
+- [x] 2.4 The response carries the path (already in `_document_view`); confirm and keep.
 
 ## 3. Rename
 
-- [ ] 3.1 `spec_lifecycle.rename_document(session, workspace, document, subject, *, actor)`.
-- [ ] 3.2 Refusals, all before anything moves: approved document; empty slug; target occupied by
+- [x] 3.1 `spec_service.rename_document(session, workspace, document, subject, *, actor)` — in
+      `spec_service` rather than `spec_lifecycle` as first planned, because it needs the workspace as
+      well as the session, which is exactly the split those two modules already keep.
+- [x] 3.2 Refusals, all before anything moves: approved document; empty slug; target occupied by
       another document row or by an existing file; resulting path fails `validate_spec_path`. Each
       states which condition applied.
-- [ ] 3.3 Order per design D5: validate → check free → update column and pending queue entries in
+- [x] 3.3 Order per design D5: validate → check free → update column and pending queue entries in
       the transaction → move the file → record the event.
-- [ ] 3.4 Move with `Path.replace` onto the resolved new path, parents created first. Remove the now
+- [x] 3.4 Move with `Path.replace` onto the resolved new path, parents created first. Remove the now
       empty old directory only when it is empty.
-- [ ] 3.5 Update `InboundQueueEntry.spec_document` where it names the old path **and the entry is not
+- [x] 3.5 Update `InboundQueueEntry.spec_document` where it names the old path **and the entry is not
       yet delivered**. Delivered entries are history and stay.
-- [ ] 3.6 Record a `renamed` event carrying both paths. No CHECK constraint on
+- [x] 3.6 Record a `renamed` event carrying both paths. No CHECK constraint on
       `spec_document_events.kind`, so no migration.
-- [ ] 3.7 Agent route `POST /spec/documents/rename` in `hub/hub/api/v1/agent_actions.py`, taking
+- [x] 3.7 Agent route `POST /spec/documents/rename` in `hub/hub/api/v1/agent_actions.py`, taking
       `{path, subject}` with `extra="forbid"`, returning `{path, previous_path}`.
-- [ ] 3.8 Emit `spec_updated` carrying both paths.
+- [x] 3.8 Emit `spec_updated` carrying both paths.
 
 ## 4. The tool
 
-- [ ] 4.1 `rename_spec_document(path, subject)` in `hub/hub/mcp_server.py` — **above the `__main__`
+- [x] 4.1 `rename_spec_document(path, subject)` in `hub/hub/mcp_server.py` — **above the `__main__`
       guard**, which stays last.
-- [ ] 4.2 Docstring states that the subject is prose, that the Hub derives the path, and that the
+- [x] 4.2 Docstring states that the subject is prose, that the Hub derives the path, and that the
       return names the path to use for the rest of the turn.
-- [ ] 4.3 Add it to `_tool_surface_lines` in `hub/hub/api/v1/agents.py` so the described surface
+- [x] 4.3 Add it to `_tool_surface_lines` in `hub/hub/api/v1/agents.py` so the described surface
       matches the served one — `test_tool_surface_matches_server.py` fails the build otherwise.
 
 ## 5. The turn notice
 
-- [ ] 5.1 `spec_turn_notice(EXPLORING)` gains the rename instruction: rename as soon as the interview
+- [x] 5.1 `spec_turn_notice(EXPLORING)` gains the rename instruction: rename as soon as the interview
       establishes the subject.
-- [ ] 5.2 Later phases do not get it — a proposed or approved document has already been named.
+- [x] 5.2 Later phases do not get it — a proposed or approved document has already been named.
 
 ## 6. The UI stops guessing
 
-- [ ] 6.1 `NewConversationSurface.tsx:75` and `ConversationView.tsx:165` stop calling
+- [x] 6.1 `NewConversationSurface.tsx:75` and `ConversationView.tsx:165` stop calling
       `documentPathFor`; they create without a path and read the minted one from the response.
-- [ ] 6.2 Delete `documentPathFor` from `hub/ui/src/lib/specDocumentName.ts`, and the module itself
+- [x] 6.2 Delete `documentPathFor` from `hub/ui/src/lib/specDocumentName.ts`, and the module itself
       if `slugify` has no other caller. Update `specDocumentName.test.ts` accordingly.
-- [ ] 6.3 The open-document reference follows a rename: on `spec_updated` carrying `previous_path`,
+- [x] 6.3 The open-document reference follows a rename: on `spec_updated` carrying `previous_path`,
       swap `SpecDocumentPanel`'s path, update router state, invalidate the old query key.
 
 ## 7. The renderer (folded in from `the-spec-tool-reaches-the-agent` task 6.1)
 
-- [ ] 7.1 `_acceptance` in `hub/hub/spec_render.py` sorts criteria by their requirement's position in
+- [x] 7.1 `_acceptance` in `hub/hub/spec_render.py` sorts criteria by their requirement's position in
       `payload.requirements`, **stably**.
-- [ ] 7.2 Open questions render "None outstanding" when the list is empty.
+- [x] 7.2 Open questions render "None outstanding" when the list is empty.
 
 ## 8. Tests — agent-verifiable
 
 Everything here is asserted by the suite; none of it requires a human.
 
-- [ ] 8.1 `hub/tests/test_spec_naming.py` — minted path matches `spec/changes/<word>-<word>/spec.html`
+- [x] 8.1 `hub/tests/test_spec_naming.py` — minted path matches `spec/changes/<word>-<word>/spec.html`
       and passes `validate_spec_path`; two mints differ across a sample; a `taken` predicate that
       refuses the first N candidates still yields a free path; a predicate refusing everything
       terminates rather than hanging; slugify cases including accents, punctuation-only input
       (`None`), and a subject long enough to exercise the whole-path budget.
-- [ ] 8.2 `hub/tests/test_spec_documents_api.py` — create with no path returns a minted one; create
+- [x] 8.2 `hub/tests/test_spec_documents_api.py` — create with no path returns a minted one; create
       with a path is unchanged; the minted path shares no word with the title; the title is not the
       placeholder.
-- [ ] 8.3 `hub/tests/test_spec_rename.py` — new. Subject becomes path; file moved and old path gone;
+- [x] 8.3 `hub/tests/test_spec_rename.py` — new. Subject becomes path; file moved and old path gone;
       identifier, content, requirement identifiers and events unchanged; pending queue entry follows;
       delivered queue entry does not; refusals for approved, empty slug, occupied path; nothing moved
       on refusal.
-- [ ] 8.4 `hub/tests/test_mcp_tool_schemas.py` — the rename tool's schema takes `subject` and **no**
+- [x] 8.4 `hub/tests/test_mcp_tool_schemas.py` — the rename tool's schema takes `subject` and **no**
       destination path.
-- [ ] 8.5 `hub/tests/test_mcp_server_stdio_surface.py` — the tool is in the spawned surface.
-- [ ] 8.6 `hub/tests/test_spec_turn_notice.py` — exploring carries the rename instruction; later
+- [x] 8.5 `hub/tests/test_mcp_server_stdio_surface.py` — the tool is in the spawned surface.
+- [x] 8.6 `hub/tests/test_spec_turn_notice.py` — exploring carries the rename instruction; later
       phases do not.
-- [ ] 8.7 `hub/tests/test_spec_render.py` — criteria grouped by requirement order; stable within a
+- [x] 8.7 `hub/tests/test_spec_render.py` — criteria grouped by requirement order; stable within a
       requirement; "None outstanding" on an empty list.
-- [ ] 8.8 UI: `specDocumentName.test.ts` updated; a test that creating sends no path and adopts the
-      returned one; a test that `spec_updated` with `previous_path` moves the open panel.
-- [ ] 8.9 `pytest hub/tests/ -q` and `pytest tests/ -q`, run separately with the Python311
-      interpreter. `npx vitest run` and `npx tsc --noEmit` from `hub/ui`.
-- [ ] 8.10 `ruff check hub/ src/`, `black` on every file touched.
-- [ ] 8.11 `npx openspec validate --changes --strict` and `--specs --strict`.
-- [ ] 8.12 `hub/hub/static/ui` refreshed from `hub/ui/dist` after `npm run build`, confirmed with
-      `diff -rq`.
+- [x] 8.8 UI: `specDocumentName.test.ts` deleted with the module it covered; `newConversationSurface`
+      asserts creation sends no path and adopts the minted one; new `specDocumentRename.test.tsx`
+      asserts `spec_updated` carrying `previous_path` moves the open document and leaves every other
+      case alone.
+- [x] 8.9 `pytest hub/tests/ -q` — **1688 passed, 10 skipped**. `pytest tests/ -q` — **360 passed,
+      3 skipped**. `npx tsc --noEmit` clean. `npx vitest run` — 828 passed; two unrelated files
+      (`chartersUi`, `runnersUi`) hit the 5s per-test timeout under full-suite load and pass in
+      isolation, which they also do at `HEAD`.
+- [x] 8.10 `ruff check hub/ src/` — clean. `black` — clean on every file touched.
+- [x] 8.11 `npx openspec validate --changes --strict` — 11 passed. `--specs --strict` — 30 passed.
+- [x] 8.12 `hub/hub/static/ui` refreshed from `hub/ui/dist` after `npm run build`, `diff -rq`
+      reports no difference.
 
 ## 9. Human-only verification
 

@@ -58,3 +58,17 @@ def test_a_later_phase_does_not_ask_for_an_interview():
     notice = spec_turn_notice("approved")
     assert "THIS REPLY" not in notice
     assert "submit_spec_document" in notice
+
+
+def test_exploring_is_told_to_name_the_document():
+    """The rename is an action taken on information acquired during a
+    particular turn, which is why it is stated with the turn."""
+    notice = spec_turn_notice("exploring")
+    assert "rename_spec_document" in notice
+    assert "placeholder" in notice.lower()
+
+
+def test_a_later_phase_is_not_told_to_name_the_document():
+    """A proposed or approved document has already been named."""
+    for phase in ("proposed", "approved"):
+        assert "rename_spec_document" not in spec_turn_notice(phase)

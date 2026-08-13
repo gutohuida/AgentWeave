@@ -241,7 +241,17 @@ describe('declaring an exploration before the first message', () => {
     expect(screen.getByTestId('composer-start-exploration')).toHaveTextContent('Explore')
   })
 
-  it('creates the document from the first message and opens it with the conversation', async () => {
+  it('creates the document from the first message and opens the one the Hub minted', async () => {
+    const minted = 'spec/changes/amber-griffin/spec.html'
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).includes('/project/documents')
+          ? new Response(JSON.stringify({ id: 'spdoc-1', path: minted }), { status: 201 })
+          : new Response(JSON.stringify({ status: 'started', conversation_id: 'conv-fresh' }), {
+              status: 200,
+            }),
+      ),
+    )
     const { onStarted } = renderSurface('claude')
 
     fireEvent.click(screen.getByTestId('composer-start-exploration'))
@@ -259,18 +269,18 @@ describe('declaring an exploration before the first message', () => {
     // decides how the agent frames the exploration — with no document attached, so the context
     // carried no phase and no `submit_spec_document`, and the agent invented a workflow.
     expect(documentIndex, 'the document must exist before the turn').toBeLessThan(triggerIndex)
-    expect(
-      JSON.parse(String((fetchMock.mock.calls[documentIndex][1] as RequestInit).body)).path,
-    ).toBe('spec/changes/i-want-to-build-a-budget-app/spec.html')
+
+    // No path is sent. Deriving one here is what produced a permanent name from the operator's
+    // opening guess, at the one moment nobody knows what the document is about.
+    const created = JSON.parse(String((fetchMock.mock.calls[documentIndex][1] as RequestInit).body))
+    expect(created.path).toBeUndefined()
+    expect(created.title).toBe('I want to build a budget app')
+
     expect(
       JSON.parse(String((fetchMock.mock.calls[triggerIndex][1] as RequestInit).body)).spec_document,
-      'the first turn must carry the document',
-    ).toBe('spec/changes/i-want-to-build-a-budget-app/spec.html')
-    expect(onStarted).toHaveBeenCalledWith(
-      'claude',
-      'conv-fresh',
-      'spec/changes/i-want-to-build-a-budget-app/spec.html',
-    )
+      'the first turn must carry the document the Hub minted',
+    ).toBe(minted)
+    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh', minted)
   })
 
   it('still starts the conversation when the document cannot be created', async () => {
@@ -292,7 +302,9 @@ describe('declaring an exploration before the first message', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     await waitFor(() => expect(onStarted).toHaveBeenCalled())
-    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh', 'spec/changes/budget-app/spec.html')
+    // No document to attach: a minted name cannot collide, so a failure here is a real one and
+    // there is no path to fall back to. The message still goes.
+    expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh')
   })
 
   it('creates no document when exploration was not declared', async () => {

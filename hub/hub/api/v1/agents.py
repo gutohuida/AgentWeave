@@ -915,6 +915,10 @@ def _tool_surface_lines() -> List[str]:
         "an incomplete document is expected while exploring: what is missing comes back to you as "
         "`blocking`, and is a list of what to ask about next rather than an error. There is no "
         "argument that sets a phase or approves — those are the operator's.",
+        "- `rename_spec_document(path, subject)` — a document is created before anyone knows what "
+        "it is about, so it starts with a meaningless placeholder name. `subject` is plain words "
+        "describing what it turned out to cover; the Hub derives the path. Returns the new path, "
+        "which is the one to use for the rest of the turn.",
         "- `recall(observation_id)` — read back one observation by its identifier.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "

@@ -15,13 +15,13 @@ contract, rather than trusting a caller's classification.
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import project_workspace, spec_documents, spec_lifecycle, spec_service
+from ... import project_workspace, spec_documents, spec_lifecycle, spec_naming, spec_service
 from ...auth import get_project
 from ...db.engine import get_session
 from ...spec_manifest import SpecPathError, validate_spec_path
@@ -29,6 +29,11 @@ from ...spec_payload import SCHEMA_VERSION
 from ...sse import sse_manager
 
 router = APIRouter(prefix="/project", tags=["spec"])
+
+#: What a document is called before it has been written into. Not the path, and
+#: not the placeholder — a reader looking at the title is looking for the
+#: subject, and the honest answer at this moment is that there isn't one yet.
+UNTITLED = "Untitled exploration"
 
 
 async def _workspace(session: AsyncSession, project_id: str):
@@ -105,9 +110,15 @@ class DocumentCreate(BaseModel):
     Only what identifies the document. Explore is the one phase that would
     otherwise precede its own document, and asking for requirements up front is
     exactly the structure the operator has not worked out yet.
+
+    `path` is optional, and omitting it is the ordinary case: a document created
+    at the start of an exploration is created before anyone knows what it is
+    about, so the Hub mints a name that says nothing rather than deriving one
+    from the operator's opening sentence. An explicit path is still honoured —
+    it remains the only way to create a document at a chosen location.
     """
 
-    path: str = Field(max_length=255)
+    path: Optional[str] = Field(default=None, max_length=255)
     title: str = Field(default="", max_length=512)
     kind: str = Field(default="change-spec", max_length=32)
 
@@ -139,6 +150,22 @@ def _operator() -> spec_lifecycle.Actor:
     an actor a caller can invent.
     """
     return spec_lifecycle.Actor(kind="operator", name="operator")
+
+
+async def _mint_document_path(session: AsyncSession, project_id: str, workspace) -> str:
+    """A free placeholder path, free against both the records and the disk.
+
+    A name is only available if nothing at all occupies it: a document the
+    project has recorded, or a file somebody put there by hand.
+    """
+    recorded = {
+        document.path for document in await spec_lifecycle.list_documents(session, project_id)
+    }
+
+    def is_taken(candidate: str) -> bool:
+        return candidate in recorded or spec_documents.document_exists(workspace, candidate)
+
+    return spec_naming.mint_placeholder_path(is_taken)
 
 
 async def _require_document(session: AsyncSession, project_id: str, path: str):
@@ -173,10 +200,19 @@ async def create_document(
     project_id, _ = project
     workspace = await _workspace(session, project_id)
 
-    try:
-        path = validate_spec_path(body.path)
-    except SpecPathError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if body.path is None:
+        try:
+            path = await _mint_document_path(session, project_id, workspace)
+        except spec_naming.NamingExhaustedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"message": str(exc), "code": "naming_exhausted"},
+            ) from exc
+    else:
+        try:
+            path = validate_spec_path(body.path)
+        except SpecPathError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
         document = await spec_lifecycle.create_document(
@@ -189,9 +225,14 @@ async def create_document(
         ) from exc
 
     payload = {
+        # A payload's title may not be empty, and the document has no real one
+        # yet — the agent mints that when it submits. What this must not do is
+        # fall back to the path, which used to yield the literal "spec" and
+        # would now yield a placeholder, putting a name that means nothing where
+        # a reader looks for the subject.
         "schema_version": SCHEMA_VERSION,
         "kind": document.kind,
-        "title": body.title or path.rsplit("/", 1)[-1].removesuffix(".html"),
+        "title": body.title or UNTITLED,
     }
     result = await spec_service.save_document(
         session, workspace, document, payload, actor=_operator()

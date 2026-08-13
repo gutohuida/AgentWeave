@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { useSpecEvents, useSpecList } from '@/api/spec'
+import { useSpecDocumentRename, useSpecEvents, useSpecList } from '@/api/spec'
 import { SpecDocumentPanel } from './SpecDocumentPanel'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
 import { buildInventory, resolveSelection } from './specNavigation'
@@ -29,6 +29,8 @@ interface SpecPageProps {
 export function SpecPage({ document: openDocument, onOpenDocument }: SpecPageProps) {
   const { data: specList, isLoading, refetch } = useSpecList()
   useSpecEvents()
+  /* The agent renames the document it is exploring, so the open path can move under this screen. */
+  useSpecDocumentRename(openDocument, onOpenDocument)
   const inventory = useMemo(() => buildInventory(specList), [specList])
 
   /* Arriving with no document named opens the manifest home, then `spec/spec.html`, then the first

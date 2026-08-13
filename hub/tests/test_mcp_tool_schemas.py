@@ -192,3 +192,34 @@ def test_structured_parameters_do_not_use_a_closed_object_type():
 
     text = json.dumps(items)
     assert "additionalProperties" not in text or '"additionalProperties": false' not in text
+
+
+# ---------------------------------------------------------------------------
+# rename_spec_document
+# ---------------------------------------------------------------------------
+
+
+def test_rename_spec_document_takes_a_subject_and_not_a_destination():
+    """Path validation is the only control keeping a document from being written
+    to an arbitrary location beneath `spec/`. A rename that accepted a
+    destination would put the least trusted caller in the system behind that one
+    guard; a subject makes the shape unexpressible instead of merely rejected."""
+    schema = _schemas()["rename_spec_document"]
+    offered = set(schema["properties"])
+
+    assert offered == {"path", "subject"}
+    assert not offered & {"to", "new_path", "destination", "target", "slug", "name"}
+
+
+def test_rename_spec_document_does_not_take_an_agent_identity():
+    schema = _schemas()["rename_spec_document"]
+    offered = set(schema["properties"])
+
+    assert not offered & {"agent", "actor", "author", "run_id", "project_id"}
+
+
+def test_rename_spec_document_offers_no_lever_on_the_phase():
+    schema = _schemas()["rename_spec_document"]
+    offered = set(schema["properties"])
+
+    assert not offered & {"phase", "status", "approve", "approved", "state"}

@@ -669,6 +669,76 @@ async def expire_permission_request(
     return {"id": row.id, "status": row.status}
 
 
+class SpecDocumentRename(BaseModel):
+    """The document, and what it turned out to be about.
+
+    `subject` is prose and the Hub derives the path from it. There is
+    deliberately no destination field: path validation is the only control
+    keeping a document from being written to an arbitrary location beneath
+    `spec/`, and a rename accepting a path would put the least trusted caller in
+    the system behind that one guard.
+    """
+
+    path: str = Field(max_length=255)
+    subject: str = Field(max_length=512)
+
+    model_config = {"extra": "forbid"}
+
+
+@router.post("/spec/documents/rename")
+async def rename_spec_document(
+    body: SpecDocumentRename,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Rename a document once the interview has established what it is about."""
+    from ... import project_workspace, spec_lifecycle, spec_service
+    from ...spec_manifest import SpecPathError, validate_spec_path
+
+    try:
+        path = validate_spec_path(body.path)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    document = await spec_lifecycle.get_document(session, actor.project_id, path)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no specification document at {path}.",
+        )
+
+    try:
+        result = await spec_service.rename_document(
+            session,
+            workspace,
+            document,
+            body.subject,
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
+        ) from exc
+
+    await session.commit()
+    await sse_manager.broadcast(
+        actor.project_id,
+        "spec_updated",
+        {
+            "path": result.path,
+            "previous_path": result.previous_path,
+            "phase": document.phase,
+        },
+    )
+    return {"path": result.path, "previous_path": result.previous_path}
+
+
 class SpecDocumentSubmission(BaseModel):
     """A payload plus the document it belongs to.
 

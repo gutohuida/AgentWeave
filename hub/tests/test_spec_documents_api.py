@@ -395,3 +395,73 @@ async def test_an_illegal_transition_is_refused(app, auth_headers, tmp_path):
     )
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "illegal_transition"
+
+
+# ---------------------------------------------------------------------------
+# Naming a document nobody understands yet
+#
+# The path used to be derived in the browser from the operator's opening
+# sentence — a permanent identifier minted from the guess that preceded the
+# interview, at the one moment nobody knows what the document is about.
+# ---------------------------------------------------------------------------
+
+
+import re  # noqa: E402 - kept beside the tests that need it
+
+PLACEHOLDER_RE = re.compile(r"^spec/changes/[a-z]+-[a-z]+(-[0-9a-f]+)?/spec\.html$")
+
+
+@pytest.mark.asyncio
+async def test_a_document_created_with_no_path_is_given_a_meaningless_one(
+    app, auth_headers, tmp_path
+):
+    response = await app.post(f"{BASE}/documents", json={}, headers=auth_headers)
+
+    assert response.status_code == 201, response.text
+    path = response.json()["path"]
+    assert PLACEHOLDER_RE.match(path), path
+    assert (tmp_path / path).is_file()
+
+
+@pytest.mark.asyncio
+async def test_the_minted_name_says_nothing_about_the_subject(app, auth_headers, tmp_path):
+    title = "Personal houseplant watering tracker"
+    response = await app.post(f"{BASE}/documents", json={"title": title}, headers=auth_headers)
+
+    path = response.json()["path"]
+    for word in ["personal", "houseplant", "watering", "tracker"]:
+        assert word not in path, f"the placeholder leaked {word!r} from the title"
+
+
+@pytest.mark.asyncio
+async def test_two_documents_created_the_same_way_do_not_collide(app, auth_headers, tmp_path):
+    """The old client-side fallback was the literal `exploration`, so a second
+    exploration started the same way was refused as `document_exists`."""
+    first = await app.post(f"{BASE}/documents", json={"title": "Same"}, headers=auth_headers)
+    second = await app.post(f"{BASE}/documents", json={"title": "Same"}, headers=auth_headers)
+
+    assert first.status_code == 201
+    assert second.status_code == 201, second.text
+    assert first.json()["path"] != second.json()["path"]
+
+
+@pytest.mark.asyncio
+async def test_the_placeholder_never_becomes_the_title(app, auth_headers, tmp_path):
+    """A reader looking at the title is looking for the subject. The old
+    fallback took the last path segment and produced the literal "spec"."""
+    response = await app.post(f"{BASE}/documents", json={}, headers=auth_headers)
+
+    created = response.json()
+    placeholder = created["path"].split("/")[2]
+    content = (tmp_path / created["path"]).read_text(encoding="utf-8")
+
+    assert created["title"] == "Untitled exploration"
+    assert "<title>Untitled exploration</title>" in content
+    for word in placeholder.split("-"):
+        assert word not in created["title"].lower()
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_path_is_still_honoured(app, auth_headers, tmp_path):
+    created = await _create(app, auth_headers)
+    assert created["path"] == PATH

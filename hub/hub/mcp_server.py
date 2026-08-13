@@ -873,6 +873,29 @@ def submit_spec_document(
     return _hub_request("POST", "/spec/documents", {"path": path, "document": document})
 
 
+@mcp.tool()
+def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
+    """Rename the specification document once you know what it is about.
+
+    A document is created before anyone knows its subject, so it starts with a deliberately
+    meaningless name — a colour and a mythic animal. As soon as the interview establishes what
+    the document actually covers, call this.
+
+    Args:
+        path: The document's current path, as given in your turn context.
+        subject: What the document is about, in plain words — "Personal houseplant watering
+            tracker". Not a path and not a slug: the Hub derives the path from this.
+
+    Returns the new `path` and the `previous_path`. **Use the new path for anything else you do
+    with this document in this turn**, including `submit_spec_document` — the old one no longer
+    resolves.
+
+    Refused when the document is approved, when the subject contains no usable words, or when
+    another document already occupies the name.
+    """
+    return _hub_request("POST", "/spec/documents/rename", {"path": path, "subject": subject})
+
+
 def main() -> None:
     """Run the canonical Hub-owned surface over stdio."""
     mcp.run(transport="stdio", show_banner=False)

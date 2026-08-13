@@ -11,10 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import spec_completeness, spec_documents, spec_identity, spec_lifecycle
-from .db.models import SpecDocument
+from . import spec_completeness, spec_documents, spec_identity, spec_lifecycle, spec_naming
+from .db.models import InboundQueueEntry, SpecDocument
 from .project_workspace import ProjectWorkspace
 from .spec_payload import PayloadError, extract_payload, payload_to_dict, validate_payload
 from .spec_render import render_document
@@ -27,6 +28,12 @@ class SaveResult:
     identifiers: Dict[str, str] = field(default_factory=dict)
     blocking: List[Dict[str, Any]] = field(default_factory=list)
     divergence: Optional[Dict[str, str]] = None
+
+
+@dataclass
+class RenameResult:
+    path: str
+    previous_path: str
 
 
 class SaveRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
@@ -113,6 +120,96 @@ async def save_document(
         identifiers=identifiers,
         blocking=[finding.to_dict() for finding in spec_completeness.check(payload)],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
+    )
+
+
+async def rename_document(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    subject: str,
+    *,
+    actor: spec_lifecycle.Actor,
+) -> RenameResult:
+    """Give a document the name its subject earned.
+
+    The caller supplies prose and the Hub derives the path. It is not an
+    oversight that there is no way to pass a path: `validate_spec_path` is the
+    single control keeping a document from being written to an arbitrary
+    location beneath `spec/`, and a rename that accepted a destination would
+    expose that control to the least trusted caller in the system as its only
+    guard. Deriving a slug makes a traversal, a hidden segment or a different
+    filename unexpressible rather than merely rejected.
+
+    Everything that can be refused is refused before anything moves. The
+    filesystem move goes last because a transaction rolls back and a file move
+    does not.
+    """
+    if document.phase == spec_lifecycle.APPROVED:
+        raise SaveRefusedError(
+            "this document is approved; its path is part of what was approved",
+            code="document_approved",
+        )
+
+    new_path = spec_naming.document_path_for(subject)
+    if new_path is None:
+        raise SaveRefusedError(
+            "that subject yields no usable name; say in words what the document is about",
+            code="subject_unusable",
+            field_path="subject",
+        )
+
+    previous_path = document.path
+    if new_path == previous_path:
+        return RenameResult(path=previous_path, previous_path=previous_path)
+
+    occupant = await spec_lifecycle.get_document(session, document.project_id, new_path)
+    if occupant is not None:
+        raise SaveRefusedError(
+            f"another document already occupies {new_path}",
+            code="document_exists",
+        )
+    if spec_documents.document_exists(workspace, new_path):
+        raise SaveRefusedError(
+            f"a file already exists at {new_path}",
+            code="path_occupied",
+        )
+
+    document.path = new_path
+    await _repoint_pending_input(session, document.project_id, previous_path, new_path)
+    spec_documents.move_document(workspace, previous_path, new_path)
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind="renamed",
+        actor=actor,
+        detail={"from": previous_path, "to": new_path, "subject": subject},
+    )
+    return RenameResult(path=new_path, previous_path=previous_path)
+
+
+async def _repoint_pending_input(
+    session: AsyncSession, project_id: str, previous_path: str, new_path: str
+) -> None:
+    """Point queued turns at the document's new path.
+
+    A queue entry carries the path that was open when it was queued, because a
+    busy agent's turn starts from a later scheduler call than the one that
+    queued it. A rename in between would otherwise hand the agent a path that no
+    longer resolves.
+
+    Only undelivered entries. A delivered entry records what was open when its
+    turn ran, and rewriting history to keep it tidy is how a record stops being
+    one.
+    """
+    await session.execute(
+        update(InboundQueueEntry)
+        .where(
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.spec_document == previous_path,
+            InboundQueueEntry.delivered_at.is_(None),
+        )
+        .values(spec_document=new_path)
     )
 
 

@@ -86,14 +86,41 @@ export function useSpecEvents() {
 
   // Invalidate spec queries when the Hub broadcasts a spec_updated SSE event
   useSSE((event) => {
-    const d = event.data as { path?: string; project_id?: string }
+    const d = event.data as { path?: string; previous_path?: string; project_id?: string }
     if (event.type === 'spec_updated' && d.project_id === projectId) {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
       if (d?.path) {
         queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', d.path] })
       }
+      // A rename leaves a cache entry under a path that no longer resolves. Dropping it matters
+      // more than the usual invalidation: nothing will ever refetch that key again.
+      if (d?.previous_path && d.previous_path !== d.path) {
+        queryClient.removeQueries({ queryKey: ['project', projectId, 'spec', d.previous_path] })
+      }
     }
+  })
+}
+
+/** Follow the open document when the agent renames it.
+ *
+ *  A document's identity in this frontend is its path — the query key, the URL
+ *  and the panel's prop all hold it — so the one operation that changes a path
+ *  has to be told to the screen showing it, or the operator is left looking at
+ *  a document that no longer exists. `onMoved` is the screen's own navigation,
+ *  because whether this is a push or a replace is the screen's business. */
+export function useSpecDocumentRename(
+  openPath: string | null,
+  onMoved: (path: string) => void,
+): void {
+  const { selectedProjectId: projectId } = useConfigStore()
+
+  useSSE((event) => {
+    const d = event.data as { path?: string; previous_path?: string; project_id?: string }
+    if (event.type !== 'spec_updated' || d.project_id !== projectId) return
+    if (!d.path || !d.previous_path || d.previous_path === d.path) return
+    if (openPath !== d.previous_path) return
+    onMoved(d.path)
   })
 }
 
@@ -147,9 +174,14 @@ function useSpecMutation<TArgs, TResult>(
 }
 
 /** Start an exploration. The document exists from this moment, which is what
- *  gives "propose" and "approve" something to refer to. */
+ *  gives "propose" and "approve" something to refer to.
+ *
+ *  `path` is optional and normally omitted: the Hub mints a placeholder, because
+ *  a document is created before anyone knows what it is about and a path derived
+ *  from the operator's opening sentence records the guess that preceded the
+ *  interview. Read the created path off the record rather than predicting it. */
 export function useCreateSpecDocument() {
-  return useSpecMutation<{ path: string; title?: string; kind?: string }, SpecDocumentRecord>(
+  return useSpecMutation<{ path?: string; title?: string; kind?: string }, SpecDocumentRecord>(
     (projectId, body) => postJson(`/api/v1/projects/${projectId}/project/documents`, body),
   )
 }

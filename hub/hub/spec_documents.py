@@ -160,6 +160,45 @@ def write_document(workspace: ProjectWorkspace, path: str, content: str) -> Path
     return resolved
 
 
+def move_document(workspace: ProjectWorkspace, old_path: str, new_path: str) -> Path:
+    """Move a document's file, creating the destination's parents.
+
+    A document whose file has not been written yet is not an error: the row is
+    what is being renamed, and there is simply nothing on disk to carry with it.
+
+    The old directory is pruned when the move empties it, because a document
+    lives alone in its directory and leaving the husk behind would put a name
+    the document no longer has back into discovery.
+    """
+    validate_spec_path(old_path)
+    validate_spec_path(new_path)
+    source = workspace.resolve_relative(old_path)
+    destination = workspace.resolve_relative(new_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_file():
+        source.replace(destination)
+    _prune_if_empty(workspace, source.parent)
+    return destination
+
+
+def _prune_if_empty(workspace: ProjectWorkspace, directory: Path) -> None:
+    """Remove a directory the move emptied, and never anything else.
+
+    Deliberately not recursive and deliberately bounded to inside `spec/`: this
+    deletes, so the conditions under which it deletes are the whole of what it
+    does. A failure to prune is not worth failing a rename over.
+    """
+    spec_root = workspace.resolve_relative(SPEC_DIR)
+    try:
+        if directory == spec_root or spec_root not in directory.parents:
+            return
+        if any(directory.iterdir()):
+            return
+        directory.rmdir()
+    except OSError:
+        return
+
+
 def read_index(
     workspace: ProjectWorkspace,
 ) -> Tuple[Optional[Manifest], str, List[Dict[str, Any]]]:
