@@ -23,13 +23,17 @@ class _FakeSession:
     `notifications` is consumed in order by `next_notification()`.
     """
 
-    def __init__(self, responses, notifications):
+    def __init__(self, responses, notifications, *, returncode=None, stderr_tail=""):
         self._responses = dict(responses)
         self._notifications = list(notifications)
         self.sent_requests = []
         self.sent_responses = []
         self._running = True
         self.closed_with_force = None
+        # The real session exposes both, and `run_turn` reports them when a process dies. A fake
+        # that omits them would let a regression in that reporting pass unnoticed here.
+        self.returncode = returncode
+        self._stderr_tail = stderr_tail
 
     async def request(self, method, params, timeout=30.0):
         self.sent_requests.append((method, params))
@@ -49,6 +53,17 @@ class _FakeSession:
 
     def is_running(self):
         return self._running
+
+    def stderr_tail(self, limit=2000):
+        return self._stderr_tail
+
+    def process_ended_error(self, message, method=None):
+        return codex_appserver.AppServerError(
+            message,
+            exit_code=self.returncode,
+            method=method,
+            stderr_tail=self._stderr_tail,
+        )
 
     async def close(self, force=False):
         self._running = False

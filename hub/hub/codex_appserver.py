@@ -32,8 +32,9 @@ import contextlib
 import json
 import logging
 import os
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional
 
 from .model_catalog import WORKSPACE_PERMISSION_MODE
 from .pty_runner import resolve_executable
@@ -489,8 +490,45 @@ DEFAULT_TURN_TIMEOUT_SECONDS = 600.0
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 
 
+#: How much of the child's error stream is kept for a failure report. Bounded twice — by lines,
+#: so a crash loop cannot grow the buffer without limit, and by characters when rendered, so one
+#: enormous line cannot fill an event payload.
+STDERR_TAIL_LINES = 200
+STDERR_TAIL_CHARS = 2000
+
+
 class AppServerError(RuntimeError):
-    """Transport-level app-server failure: spawn, protocol violation, or timeout."""
+    """Transport-level app-server failure: spawn, protocol violation, or timeout.
+
+    Carries the exit status, the request in flight, and what the child last complained about.
+    "The process ended" is true of every one of these failures and distinguishes none of them: a
+    crash, a missing binary, a rejected credential and an unresumable thread all read identically,
+    so diagnosing one meant inferring the cause from which other agents still worked.
+
+    The facts are composed into the message rather than only attached, so that every existing
+    reader of `str(exc)` — `Run.error`, the `run_failed` payload, an abandoned queue entry's
+    reason — reports them without being changed.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        exit_code: Optional[int] = None,
+        method: Optional[str] = None,
+        stderr_tail: str = "",
+    ) -> None:
+        self.exit_code = exit_code
+        self.method = method
+        self.stderr_tail = stderr_tail
+        detail = message
+        if exit_code is not None:
+            detail += f" (exit {exit_code})"
+        if method:
+            detail += f" during {method}"
+        if stderr_tail:
+            detail += f": {stderr_tail}"
+        super().__init__(detail)
 
 
 def mcp_server_config(mcp_command: List[str], *, env_vars: List[str]) -> Dict[str, Any]:
@@ -504,6 +542,14 @@ def mcp_server_config(mcp_command: List[str], *, env_vars: List[str]) -> Dict[st
     never embedded in this config object.
     """
     return {"command": mcp_command[0], "args": mcp_command[1:], "env_vars": env_vars}
+
+
+@dataclass
+class _Pending:
+    """One in-flight client->server request: what was asked, and where the answer goes."""
+
+    method: str
+    future: "asyncio.Future[Dict[str, Any]]"
 
 
 class AppServerProcess:
@@ -525,9 +571,14 @@ class AppServerProcess:
     def __init__(self, proc: "asyncio.subprocess.Process") -> None:
         self._proc = proc
         self._next_id = 0
-        self._pending: Dict[int, "asyncio.Future[Dict[str, Any]]"] = {}
+        # Method and future together, so the request in flight when the process dies is still
+        # knowable. Holding only the future discarded the one fact that distinguishes an
+        # unresumable thread from a failed spawn.
+        self._pending: Dict[int, _Pending] = {}
         self._notifications: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
         self._reader_task: Optional[asyncio.Task] = None
+        self._stderr_task: Optional[asyncio.Task] = None
+        self._stderr: Deque[str] = deque(maxlen=STDERR_TAIL_LINES)
         self._closed = False
 
     @classmethod
@@ -547,8 +598,53 @@ class AppServerProcess:
             stderr=asyncio.subprocess.PIPE,
         )
         session = cls(proc)
-        session._reader_task = asyncio.get_running_loop().create_task(session._read_loop())
+        loop = asyncio.get_running_loop()
+        session._reader_task = loop.create_task(session._read_loop())
+        # `stderr` has been piped since this class was written and read by nothing. That is not
+        # merely a lost diagnostic: an undrained pipe fills, and the child then blocks writing to
+        # it — so the process being diagnosed can be hung by the diagnosis going uncollected.
+        session._stderr_task = loop.create_task(session._drain_stderr())
         return session
+
+    async def _drain_stderr(self) -> None:
+        """Keep the child's error stream moving, retaining a bounded tail of it."""
+        stream = self._proc.stderr
+        if stream is None:
+            return
+        try:
+            while True:
+                try:
+                    raw = await stream.readline()
+                except (ValueError, asyncio.LimitOverrunError):
+                    # One pathological line longer than the stream limit. Take what is there and
+                    # keep draining rather than abandoning the pipe and re-creating the block.
+                    raw = await stream.read(65536)
+                if not raw:
+                    break
+                self._stderr.append(raw.decode("utf-8", errors="replace").rstrip())
+        except asyncio.CancelledError:
+            pass
+        except Exception:  # noqa: BLE001 - draining diagnostics must never raise into a turn
+            logger.debug("codex app-server stderr drain ended early", exc_info=True)
+
+    def stderr_tail(self, *, limit: int = STDERR_TAIL_CHARS) -> str:
+        """The end of what the child wrote to its error stream, bounded for an event payload."""
+        joined = " | ".join(line for line in self._stderr if line)
+        if len(joined) <= limit:
+            return joined
+        return "…" + joined[-limit:]
+
+    @property
+    def returncode(self) -> Optional[int]:
+        return self._proc.returncode
+
+    def process_ended_error(self, message: str, method: Optional[str] = None) -> AppServerError:
+        return AppServerError(
+            message,
+            exit_code=self._proc.returncode,
+            method=method,
+            stderr_tail=self.stderr_tail(),
+        )
 
     async def _read_loop(self) -> None:
         assert self._proc.stdout is not None
@@ -569,19 +665,27 @@ class AppServerProcess:
                     continue
                 msg_id = msg.get("id")
                 if msg_id is not None and ("result" in msg or "error" in msg):
-                    future = self._pending.pop(msg_id, None)
-                    if future is not None and not future.done():
-                        future.set_result(msg)
+                    pending = self._pending.pop(msg_id, None)
+                    if pending is not None and not pending.future.done():
+                        pending.future.set_result(msg)
                 else:
                     await self._notifications.put(msg)
         except asyncio.CancelledError:
             pass
         finally:
+            # Reap before reporting. Losing stdout means the process is going, but `returncode` is
+            # only populated once it has been waited on — so without this the exit status is
+            # racily `None` exactly when it is most wanted. Bounded, and suppressed wholesale
+            # because this runs on the cancellation path too, where awaiting re-raises.
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(asyncio.shield(self._proc.wait()), timeout=1)
             # Unblock any still-pending request rather than hanging it forever — the process
             # is gone, so no response is ever coming (task 2.7: process death mid-turn).
-            for future in self._pending.values():
-                if not future.done():
-                    future.set_exception(AppServerError("app-server process ended"))
+            for pending in self._pending.values():
+                if not pending.future.done():
+                    pending.future.set_exception(
+                        self.process_ended_error("app-server process ended", pending.method)
+                    )
             self._pending.clear()
 
     async def _write(self, message: Dict[str, Any]) -> None:
@@ -602,7 +706,7 @@ class AppServerProcess:
         self._next_id += 1
         msg_id = self._next_id
         future: "asyncio.Future[Dict[str, Any]]" = asyncio.get_running_loop().create_future()
-        self._pending[msg_id] = future
+        self._pending[msg_id] = _Pending(method=method, future=future)
         try:
             await self._write({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params})
             return await asyncio.wait_for(future, timeout=timeout)
@@ -643,6 +747,8 @@ class AppServerProcess:
         self._closed = True
         if self._reader_task is not None:
             self._reader_task.cancel()
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
         if self._proc.stdin is not None:
             with contextlib.suppress(Exception):
                 self._proc.stdin.close()
@@ -666,6 +772,9 @@ class TurnOutcome:
     thread_id: Optional[str]
     status: str  # "completed" | "failed" | "interrupted"
     error: Optional[str] = None
+    #: The app-server's own exit status where it ended. Reported alongside the failure rather than
+    #: written to `Run.exit_code`, whose synthetic 0/1 the output panel reads to detect a handoff.
+    exit_code: Optional[int] = None
 
 
 async def run_turn(
@@ -781,7 +890,14 @@ async def run_turn(
                 status, error = "failed", "turn timed out with no turn/completed notification"
                 break
             if not session.is_running():
-                status, error = "failed", "app-server process ended before the turn completed"
+                # The common path, and the one whose bare string used to reach `Run.error` and the
+                # operator's timeline. Composed through the same error so it names the exit status
+                # and what the child complained about on its way out.
+                status, error = "failed", str(
+                    session.process_ended_error(
+                        "app-server process ended before the turn completed"
+                    )
+                )
                 break
 
             try:
@@ -863,6 +979,8 @@ async def run_turn(
             # account/rateLimits/updated, item/agentMessage/delta, remoteControl/status/changed,
             # serverRequest/resolved) carries no timeline-relevant content for this pass.
 
-        return TurnOutcome(thread_id=thread_id, status=status, error=error)
+        return TurnOutcome(
+            thread_id=thread_id, status=status, error=error, exit_code=session.returncode
+        )
     finally:
         await session.close(force=interrupted)

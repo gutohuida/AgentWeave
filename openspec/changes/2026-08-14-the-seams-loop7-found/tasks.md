@@ -76,26 +76,26 @@ assertions move with it.
 **Cannot be split** — the error fields, the stderr drain and the method tracking are one change, or
 the error has fields nothing fills.
 
-- [ ] 3.1 `AppServerError` gains `exit_code`, `method`, `stderr_tail`, composed into the message so
+- [x] 3.1 `AppServerError` gains `exit_code`, `method`, `stderr_tail`, composed into the message so
       `str(exc)` alone carries all three (D9).
-- [ ] 3.2 `self._pending: Dict[int, _Pending]` (method + future) replaces the bare future dict at
+- [x] 3.2 `self._pending: Dict[int, _Pending]` (method + future) replaces the bare future dict at
       :605, so the in-flight method cannot drift from its future.
-- [ ] 3.3 `_drain_stderr` task started in `spawn` beside `_reader_task`, cancelled in `close`,
+- [x] 3.3 `_drain_stderr` task started in `spawn` beside `_reader_task`, cancelled in `close`,
       appending to a bounded `deque`. Handle `ValueError`/`LimitOverrunError` on a pathological line.
       **This also fixes a live bug** — `stderr` is piped at :547 and read nowhere, so it can fill and
       block the child.
-- [ ] 3.4 Use the enriched error at **both** raise sites — the reader-loop `finally` (:579-585) and
+- [x] 3.4 Use the enriched error at **both** raise sites — the reader-loop `finally` (:579-585) and
       the loop-exit check (~:784), which is the common path.
-- [ ] 3.5 `TurnOutcome` gains `exit_code`. Do **not** feed it into `Run.exit_code` — the synthetic
+- [x] 3.5 `TurnOutcome` gains `exit_code`. Do **not** feed it into `Run.exit_code` — the synthetic
       `0`/`1` is load-bearing for `AgentOutputPanel`'s handoff detection.
-- [ ] 3.6 `run_failed` at `agent_trigger.py:1708-1710` gains `exit_code`, `method`,
+- [x] 3.6 `run_failed` at `agent_trigger.py:1708-1710` gains `exit_code`, `method`,
       `conversation_id`, via `getattr` (the same `except` catches `FileNotFoundError`/`OSError` too).
-- [ ] 3.7 **`hub/tests/test_codex_appserver.py`'s purity assertions must not be edited.**
+- [x] 3.7 **`hub/tests/test_codex_appserver.py`'s purity assertions must not be edited.**
       `decide_approval` stays pure; all new state is on `AppServerProcess` and in `run_turn`.
-- [ ] 3.8 New `hub/tests/test_codex_appserver_process.py`: names the exit code and pending method;
+- [x] 3.8 New `hub/tests/test_codex_appserver_process.py`: names the exit code and pending method;
       the tail is bounded; stderr is drained so a chatty child cannot block; the error reads as one
       sentence for existing handlers.
-- [ ] 3.9 `test_codex_appserver_run_turn.py` and `test_agent_trigger.py` cases for the enriched
+- [x] 3.9 `test_codex_appserver_run_turn.py` and `test_agent_trigger.py` cases for the enriched
       failure.
 
 ## 4. A failed run cannot wedge its agent

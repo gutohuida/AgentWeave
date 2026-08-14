@@ -972,6 +972,22 @@ async def _restamp_evidence_footprints(
         logger.warning("Could not re-stamp evidence footprints for run %s", run_id, exc_info=True)
 
 
+def _transport_failure_fields(exc: BaseException, conversation_id: Optional[str]) -> dict:
+    """What a run that never got going can say about why.
+
+    The normal-completion broadcast carries `exit_code`/`conversation_id`; this path carried only
+    a string, so the two shapes disagreed exactly where diagnosis is hardest. `getattr` because
+    this `except` also catches `FileNotFoundError`/`OSError`/`TimeoutError`, which carry none of
+    these — an absent fact is reported as absent rather than invented.
+    """
+    return {
+        "error": str(exc),
+        "exit_code": getattr(exc, "exit_code", None),
+        "method": getattr(exc, "method", None),
+        "conversation_id": conversation_id,
+    }
+
+
 _RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")
 
 
@@ -1193,7 +1209,12 @@ async def _execute_run(
             returned = await return_run_entries(db, run_id)
             await db.commit()
             await _broadcast_run_lifecycle(
-                db, project_id, "run_failed", agent=agent, run_id=run_id, error=str(exc)
+                db,
+                project_id,
+                "run_failed",
+                agent=agent,
+                run_id=run_id,
+                **_transport_failure_fields(exc, conversation_id),
             )
             for entry_id in returned:
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
@@ -1755,7 +1776,12 @@ async def _execute_codex_appserver_run(
                 returned = await return_run_entries(db, run_id)
                 await db.commit()
                 await _broadcast_run_lifecycle(
-                    db, project_id, "run_failed", agent=agent, run_id=run_id, error=str(exc)
+                    db,
+                    project_id,
+                    "run_failed",
+                    agent=agent,
+                    run_id=run_id,
+                    **_transport_failure_fields(exc, conversation_id),
                 )
                 for entry_id in returned:
                     payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
