@@ -293,3 +293,55 @@ async def test_a_failure_never_blocks_the_approval(app, auth_headers, author, mo
     assert response.status_code == 200
     assert response.json()["phase"] == "approved"
     assert response.json()["tasks_created"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_declared_title_is_what_the_board_shows(app, auth_headers, author):
+    """The decomposition approval produces was already good; the names were not.
+
+    A description is a sentence written to be read in the document. Where the author says what to
+    call the work, that is what a board should show — see `test_spec_declared_task_titles.py` for
+    the derivation that covers a document which does not.
+    """
+    declared = [
+        {
+            "key": "verify-policy",
+            "title": "Verify the fee policy",
+            "description": (
+                "Add automated examples covering the public API, strict input types, exception "
+                "split, on-time and early return, Sunday exclusion, grace boundaries, charging, "
+                "the cap with an uncapped day count, and invalid input."
+            ),
+            "requirements": ["alpha"],
+        },
+    ]
+    await make_document(app, auth_headers, author, tasks=declared)
+    await approve(app, auth_headers)
+
+    tasks = await board(app, auth_headers)
+    assert len(tasks) == 1
+    assert tasks[0]["title"] == "Verify the fee policy"
+    # The sentence is not lost — it is what the description is for.
+    assert tasks[0]["description"].startswith("Add automated examples covering")
+
+
+@pytest.mark.asyncio
+async def test_a_task_declaring_no_title_gets_a_readable_one(app, auth_headers, author):
+    declared = [
+        {
+            "key": "implement",
+            "description": (
+                "Implement the fixed Sunday exclusion together with the grace period, the daily "
+                "rate, the monetary cap, the uncapped day count, and cent precision throughout."
+            ),
+            "requirements": ["alpha"],
+        },
+    ]
+    await make_document(app, auth_headers, author, tasks=declared)
+    await approve(app, auth_headers)
+
+    title = (await board(app, auth_headers))[0]["title"]
+    assert len(title) <= 81, title
+    assert title.endswith("…")
+    # And the word it stops on is whole.
+    assert "Implement the fixed Sunday exclusion".startswith(title[:36])

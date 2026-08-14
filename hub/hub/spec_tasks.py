@@ -40,18 +40,50 @@ logger = logging.getLogger(__name__)
 #: work exists, and who performs it is a roster decision a specification has no business making.
 ENTRY_STATUS = "pending"
 
-#: A declared description is one sentence of intent, not a title. Titles are what a board shows, so
-#: the first sentence becomes the title and the whole thing stays as the description.
-MAX_TITLE = 200
+#: A declared description is a sentence of intent, written to be read in the document. A board shows
+#: names. Where the author states a title, that is what the board gets; this is the fallback for a
+#: document that states only the description.
+#:
+#: Sized to be read as a name rather than as prose. At 200 the fallback returned whole descriptions —
+#: observed at 170, 112 and a 200-character title clipped mid-word to "…explici", which reads as a
+#: defect in the board rather than as an abbreviation.
+MAX_TITLE = 80
+
+#: Marks a title as shortened. Only ever appended when something was actually dropped, so a
+#: description already short enough to be a name comes through byte-for-byte.
+ELLIPSIS = "…"
 
 
 def _title_from(description: str) -> str:
+    """Derive a board-sized name from a declared description.
+
+    First sentence, then a word boundary. Never mid-word: these descriptions are routinely a single
+    long sentence, so the sentence split alone does nothing for exactly the inputs that need it.
+    """
     text = (description or "").strip()
     if not text:
         return "Untitled task"
     head, separator, _ = text.partition(". ")
-    candidate = head if separator else text
-    return candidate[:MAX_TITLE].rstrip().rstrip(".") or "Untitled task"
+    candidate = (head if separator else text).strip()
+    if len(candidate) <= MAX_TITLE:
+        return candidate.rstrip().rstrip(".") or "Untitled task"
+
+    # Cut at the last whitespace that fits, so the title ends on a whole word.
+    clipped = candidate[:MAX_TITLE].rsplit(" ", 1)[0].rstrip()
+    clipped = clipped.rstrip(",;:.-—([{").rstrip()
+    if not clipped:
+        # A single word longer than the limit. There is no boundary to find, so this is the one
+        # place a hard cut is the only honest answer.
+        clipped = candidate[:MAX_TITLE].rstrip()
+    return f"{clipped}{ELLIPSIS}"
+
+
+def _title_for(entry: Dict[str, Any]) -> str:
+    """The title the board shows: what the document declared, or what we can derive."""
+    declared = entry.get("title")
+    if isinstance(declared, str) and declared.strip():
+        return declared.strip()[:MAX_TITLE].rstrip()
+    return _title_from(entry.get("description") or "")
 
 
 async def materialise(
@@ -113,7 +145,7 @@ async def materialise(
         task = Task(
             id=f"task-{short_id()}",
             project_id=document.project_id,
-            title=_title_from(description),
+            title=_title_for(entry),
             description=description,
             status=ENTRY_STATUS,
             priority="medium",

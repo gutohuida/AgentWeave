@@ -836,8 +836,10 @@ def submit_spec_document(
       `given`/`when`/`then`. One per behaviour, binary pass or fail.
 
     `tasks` — objects with `key`, `description` (one concrete unit of work, not "build the whole
-      thing"), and `requirements` (keys this task satisfies; at least one, or it is work nobody
-      asked for).
+      thing"), `requirements` (keys this task satisfies; at least one, or it is work nobody
+      asked for), and optionally `title`. Approving the document creates these as real tasks, and
+      `title` is the name the board shows — a few words, not the sentence. Without one a name is
+      derived from the description, which reads as prose because that is what it is.
 
     `algorithms` — objects with `name` and `steps`. Ordered or conditional behaviour goes here
       rather than in a paragraph, where the order has to be guessed at.

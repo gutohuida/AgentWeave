@@ -97,6 +97,11 @@ class AcceptanceCriterion(_Part):
 
 class Task(_Part):
     key: str = Field(description="Stable handle for this task, unique within the document.")
+    title: str = Field(
+        default="",
+        max_length=200,
+        description="What a task board should call this, in a few words. Optional: without it a name is derived from the description, which reads as prose rather than as a name.",
+    )
     description: str = Field(description="One concrete unit of work, not 'build the whole thing'.")
     requirements: List[str] = Field(
         description="Keys of the requirements this task satisfies. At least one: a task tracing to nothing is work nobody asked for."

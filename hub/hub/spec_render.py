@@ -174,7 +174,13 @@ def _tasks(payload: SpecPayload, identifiers: Dict[str, str]) -> str:
     for task in payload.tasks:
         refs = ", ".join(_link(identifiers.get(key, key)) for key in task.requirements)
         satisfies = f'<span class="aw-refs"> — satisfies {refs}</span>' if refs else ""
-        items.append(f"<li>{_e(task.description)}{satisfies}</li>")
+        # The title is what a board will show, so a reader of the document should see the same name
+        # they will later see on the board. Without one the description carries the item, as before.
+        if task.title.strip():
+            body = f"<strong>{_e(task.title.strip())}</strong> — {_e(task.description)}"
+        else:
+            body = _e(task.description)
+        items.append(f"<li>{body}{satisfies}</li>")
     return "<ul>" + "".join(items) + "</ul>"
 
 
