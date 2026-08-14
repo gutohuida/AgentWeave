@@ -433,3 +433,57 @@ async def test_a_failing_restamp_does_not_worsen_the_run(app, bind_project_works
                 snapshot_sha="deadbeef",
             )
     boom.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_integration_targets_the_snapshot_commit_after_a_restamp(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The point of the whole phase: what gets merged is the commit that holds the work.
+
+    Without the re-stamp, `integration_targets` names the pre-turn commit — which on this shape is
+    the project's own `master` tip, so integration would report the work already in and merge
+    nothing, exactly as loop 5 did.
+    """
+    from hub import task_integration
+    from hub.db.models import Task
+
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    before = head_of(worktree)
+
+    await make_document(app, auth_headers, builder)
+    dirty(worktree, "feature.py", "print('hi')\n")
+
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+    created = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        json={"title": "Build it", "requirement_ids": ["FR-1"]},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    async def targets():
+        async with async_session_factory() as session:
+            task = await session.get(Task, task_id)
+            return await task_integration.integration_targets(session, task)
+
+    # The defect: accepted evidence names the commit that does not contain the work.
+    assert [t.commit_sha for t in await targets()] == [before]
+
+    snapshot = worktrees.snapshot_worktree(worktree, "builder")
+    await restamp(repo, commit_sha=snapshot)
+
+    assert [t.commit_sha for t in await targets()] == [snapshot]

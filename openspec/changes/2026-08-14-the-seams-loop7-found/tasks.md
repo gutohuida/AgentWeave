@@ -8,31 +8,32 @@ assertions move with it.
 
 ## 1. Evidence is footprinted against the commit that contains it
 
-- [ ] 1.1 Extract `_apply_footprint(session, evidence, taken, existing=None)` in
+- [x] 1.1 Extract `_apply_footprint(session, evidence, taken, existing=None)` in
       `hub/hub/requirement_evidence.py`; refactor `capture_footprint` (:164-185) to call it, so one
       place maps a `Footprint` onto a row (D5).
-- [ ] 1.2 New `restamp_run_footprints(session, *, project_id, run_id, root, commit_sha=None,
+- [x] 1.2 New `restamp_run_footprints(session, *, project_id, run_id, root, commit_sha=None,
       main_branch=None) -> int`. Outer-join `RequirementEvidence → EvidenceFootprint` on
       `project_id`, `run_id`, `actor_kind == "agent"`. **Outer**, so it creates the footprint that
       `resolve_project_workspace` failing at record time left absent (D5).
-- [ ] 1.3 Compute the `Footprint` **once per run**, not per row. Reuse `tree_entries` (:205),
+- [x] 1.3 Compute the `Footprint` **once per run**, not per row. Reuse `tree_entries` (:205),
       `is_reachable_from` (:256), `is_reachable_from_main` (:283).
-- [ ] 1.4 Fall back to the worktree's `HEAD` when `commit_sha` is `None` — a `None` snapshot is not a
+- [x] 1.4 Fall back to the worktree's `HEAD` when `commit_sha` is `None` — a `None` snapshot is not a
       skip (D3).
-- [ ] 1.5 Idempotence guard: skip a row already `kind == "git"` at that `commit_sha`.
-- [ ] 1.6 **Write a fresh `reachable_from_main`, including `False`.** Do *not* reuse
+- [x] 1.5 Idempotence guard: skip a row already `kind == "git"` at that `commit_sha`.
+- [x] 1.6 **Write a fresh `reachable_from_main`, including `False`.** Do *not* reuse
       `refresh_reachability`'s upgrade-only rule (D4) — this is a different commit.
-- [ ] 1.7 Re-stamp regardless of review state (D2); do not touch `EvidenceReview`.
-- [ ] 1.8 Call it from `hub/hub/api/v1/agent_trigger.py` at both snapshot sites — after
+- [x] 1.7 Re-stamp regardless of review state (D2); do not touch `EvidenceReview`.
+- [x] 1.8 Call it from `hub/hub/api/v1/agent_trigger.py` at both snapshot sites — after
       `run.snapshot_commit_sha = snapshot_sha` (~:1333 exec, ~:1759 app-server), inside the existing
       session block, covered by its `await db.commit()`.
-- [ ] 1.9 New `hub/tests/test_evidence_restamp.py`: names the snapshot commit not its parent;
+- [x] 1.9 New `hub/tests/test_evidence_restamp.py`: names the snapshot commit not its parent;
       recomputes `entries` and reachability; creates the footprint recording could not; falls back to
       `HEAD`; no-op when unchanged; leaves another run's rows alone; corrects an accepted row and
       leaves its review untouched.
-- [ ] 1.10 `hub/tests/test_task_integration.py`:
-      `test_integration_targets_the_snapshot_commit_after_a_restamp`.
-- [ ] 1.11 **`hub/tests/test_evidence_footprint_root.py` must pass unchanged** — every test there
+- [x] 1.10 `test_integration_targets_the_snapshot_commit_after_a_restamp` — landed in
+      `test_evidence_restamp.py`, not `test_task_integration.py`: it needs a real worktree with dirty
+      work, and that suite deliberately uses branch-switching in one directory instead.
+- [x] 1.11 **`hub/tests/test_evidence_footprint_root.py` must pass unchanged** — every test there
       pre-commits the agent's work, which is why none of them caught this. Change the code, not them.
 
 ## 2. A skipped integration can be retried
