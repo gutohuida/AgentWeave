@@ -130,6 +130,59 @@ async def test_the_list_route_carries_them_too(app, auth_headers, builder):
     assert listed.json()[0]["requirement_ids"] == ["FR-1"]
 
 
+async def make_numbered_document(app, auth_headers, run_headers, count):
+    """A document with *count* requirements, so identifiers run past `FR-9` into two digits."""
+    path = "spec/changes/requirement-order/spec.html"
+    created = await app.post(
+        f"{BASE}/documents", json={"path": path, "title": "Ordering"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    saved = await app.post(
+        SUBMIT,
+        json={
+            "path": path,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Ordering",
+                "requirements": [
+                    {"key": f"r{n}", "statement": f"It does thing {n}", "modal": "MUST"}
+                    for n in range(1, count + 1)
+                ],
+            },
+        },
+        headers=run_headers,
+    )
+    assert saved.status_code == 200, saved.text
+
+
+@pytest.mark.asyncio
+async def test_identifiers_are_ordered_by_number_not_as_text(app, auth_headers, builder):
+    """`FR-11` used to land between `FR-1` and `FR-2`.
+
+    The query orders by `SpecRequirement.identifier`, a plain string sort, so a task card read
+    `FR-1, FR-11, FR-2, FR-3`. The data was right and the order read as a defect, which costs a
+    diagnosis every time someone checks what a task is tied to. Submitted here in reverse, so a
+    pass cannot come from the input order surviving.
+    """
+    await make_numbered_document(app, auth_headers, builder, 12)
+    identifiers = [f"FR-{n}" for n in range(1, 13)]
+
+    created = await app.post(
+        TASKS,
+        json={"title": "Serves twelve", "requirement_ids": list(reversed(identifiers))},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["requirement_ids"] == identifiers
+
+    fetched = await app.get(f"{TASKS}/{created.json()['id']}", headers=auth_headers)
+    assert fetched.json()["requirement_ids"] == identifiers
+    # `requirement_links` is what the card renders; the ids are derived from it, so both must be
+    # ordered or the two surfaces disagree.
+    assert [link["identifier"] for link in fetched.json()["requirement_links"]] == identifiers
+
+
 @pytest.mark.asyncio
 async def test_the_agent_plane_task_response_carries_requirement_ids(app, auth_headers, builder):
     """The plane an agent diagnoses a stuck merge from is the one that most needed this."""

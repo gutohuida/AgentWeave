@@ -8,44 +8,48 @@ its comment at `:53-60` is the reason phase 2 exists.
 
 ## 1. A failed run hands its input back — both transports
 
-- [ ] 1.1 In `hub/hub/api/v1/agent_trigger.py`, exec path (~`:1415-1451`): inside the session block,
+- [x] 1.1 In `hub/hub/api/v1/agent_trigger.py`, exec path (~`:1415-1451`): inside the session block,
       **outside** the `if run:` guard and before the block's `await db.commit()`, add
       `returned = await return_run_entries(db, run_id) if final_status == "failed" else []`.
       Outside the guard because a run row that has vanished still has entries to hand back — the
       pre-spawn branch at `:1239` already reads this way.
-- [ ] 1.2 Same site, after the commit: `await _report_abandoned_entries(db, project_id, agent, run_id)`.
+- [x] 1.2 Same site, after the commit: `await _report_abandoned_entries(db, project_id, agent, run_id)`.
       The existing helper, unchanged.
-- [ ] 1.3 Same site: persist + broadcast `queue_entry_queued` per returned id, copying the loop at
+- [x] 1.3 Same site: persist + broadcast `queue_entry_queued` per returned id, copying the loop at
       `:1250-1253` exactly — same payload keys, same order.
-- [ ] 1.4 Codex app-server path (~`:1855-1890`): 1.1–1.3 again, structurally identical. `final_status`
+- [x] 1.4 Codex app-server path (~`:1855-1890`): 1.1–1.3 again, structurally identical. `final_status`
       comes from `outcome.status` at `:1842-1849`; `stopped` arrives as `"interrupted"` and must not
       requeue.
-- [ ] 1.5 Confirm both paths still reach `schedule_agent(project_id, agent)` at their end (`:1504`,
+- [x] 1.5 Confirm both paths still reach `schedule_agent(project_id, agent)` at their end (`:1504`,
       `:1934`) — the retry is driven by that call and it must run after the commit (D3).
+- [x] 1.6 **Exclude a binding conflict** at both sites: `and binding_conflict is None` (D2a). Not
+      planned — found by two existing test files. The turn already ran, so its input was processed
+      rather than lost; and retrying would clear the binding at `RESUME_RETRY_LIMIT` and let the
+      refused session bind on the third attempt, defeating the check that raised the failure.
 
 ## 2. Divergence is not evaluated for a run whose work is being re-handed
 
-- [ ] 2.1 Guard `await evaluate_run_end(run_id)` at `:1451` and `:1890` with `if not returned:`,
+- [x] 2.1 Guard `await evaluate_run_end(run_id)` at `:1451` and `:1890` with `if not returned:`,
       matching `run_reconciliation.py:59` and citing its comment (D4).
-- [ ] 2.2 Confirm the condition is on the **returned** set, not on `final_status`: a failed run whose
+- [x] 2.2 Confirm the condition is on the **returned** set, not on `final_status`: a failed run whose
       entries were all abandoned this attempt has genuinely dropped its work and must still be
       evaluated (D4).
 
 ## 3. The re-delivered turn says the earlier attempt was cut off
 
-- [ ] 3.1 `format_turn_prompt` (`hub/hub/inbound_queue.py:94-104`): where `entry.delivery_attempts`
+- [x] 3.1 `format_turn_prompt` (`hub/hub/inbound_queue.py:94-104`): where `entry.delivery_attempts`
       is truthy, extend that entry's block head with one clause naming the attempt number and saying
       the earlier attempt did not finish (D5).
-- [ ] 3.2 Say nothing about what to do about it — no instruction to inspect the checkout or to redo
+- [x] 3.2 Say nothing about what to do about it — no instruction to inspect the checkout or to redo
       work (D5).
-- [ ] 3.3 A first delivery (`delivery_attempts` 0 or `None`) renders exactly as it does today.
+- [x] 3.3 A first delivery (`delivery_attempts` 0 or `None`) renders exactly as it does today.
 
 ## 4. A pre-spawn failure schedules the agent
 
-- [ ] 4.1 Exec pre-spawn branch (`:1221-1254`): add `schedule_agent(project_id, agent)` after the
+- [x] 4.1 Exec pre-spawn branch (`:1221-1254`): add `schedule_agent(project_id, agent)` after the
       entries are committed back and the events broadcast, before the `return` (D6).
-- [ ] 4.2 Codex pre-spawn branch (`:1787-1822`): the same.
-- [ ] 4.3 Import `schedule_agent` the way the normal paths do — a function-local
+- [x] 4.2 Codex pre-spawn branch (`:1787-1822`): the same.
+- [x] 4.3 Import `schedule_agent` the way the normal paths do — a function-local
       `from ...turn_scheduler import schedule_agent`, to keep the existing import cycle intact.
 
 ## 5. Tests
@@ -53,32 +57,65 @@ its comment at `:53-60` is the reason phase 2 exists.
 New file `hub/tests/test_failed_run_returns_input.py`, shaped after
 `hub/tests/test_run_reconciliation.py`.
 
-- [ ] 5.1 A failed run on the **exec** path returns its delivered entries and increments
+- [x] 5.1 A failed run on the **exec** path returns its delivered entries and increments
       `delivery_attempts`.
-- [ ] 5.2 A failed run on the **app-server** path does the same.
-- [ ] 5.3 A **completed** run returns nothing; a **stopped** run returns nothing.
-- [ ] 5.4 Three consecutive failures abandon the entry with a reason, and `queue_entry_abandoned` is
+- [x] 5.2 A failed run on the **app-server** path does the same.
+- [x] 5.3 A **completed** run returns nothing; a **stopped** run returns nothing; a run failed by
+      **binding conflict** returns nothing and leaves the conversation's binding untouched
+      (`test_a_binding_conflict_does_not_return_its_input`). Mutation-checked: dropping
+      `and binding_conflict is None` fails that test **and**
+      `test_conversation_contract.py::test_provider_binding_conflict_leaves_conversation_untouched_and_fails_run`.
+- [x] 5.4 Three consecutive failures abandon the entry with a reason, and `queue_entry_abandoned` is
       persisted and broadcast.
-- [ ] 5.5 Divergence is **not** evaluated when entries were returned, and **is** when they were not.
-- [ ] 5.6 A re-delivered entry's prompt names the earlier attempt; a first delivery's does not; a
+- [x] 5.5 Divergence is **not** evaluated when entries were returned, and **is** when they were not.
+- [x] 5.6 A re-delivered entry's prompt names the earlier attempt; a first delivery's does not; a
       mixed turn annotates only the retried entry.
-- [ ] 5.7 Both pre-spawn branches call `schedule_agent`.
-- [ ] 5.8 **Mutation checks.** Deleting the `return_run_entries` call from **either** site must fail a
+- [x] 5.7 Both pre-spawn branches call `schedule_agent`.
+- [x] 5.8 **Mutation checks.** Deleting the `return_run_entries` call from **either** site must fail a
       named test; so must deleting **either** new `schedule_agent` call; so must removing the
       `if not returned:` guard.
+      **All five run and all five caught**, in that order:
+      `test_a_failed_exec_run_returns_its_input_and_counts_the_attempt`,
+      `test_a_failed_app_server_run_returns_its_input_and_counts_the_attempt`,
+      `test_a_pre_spawn_failure_schedules_the_agent`,
+      `test_a_pre_spawn_app_server_failure_schedules_the_agent`, and — after being strengthened —
+      `test_divergence_is_not_evaluated_when_the_input_went_back`.
+- [x] 5.9 **Two vacuous tests were caught by that pass and fixed.** Both patched
+      `hub.turn_scheduler.schedule_agent` with a bare `AsyncMock`, which also stubs the call
+      `POST /agent/trigger` starts its run with (`agent_trigger.py:819-821`) — so no run ever
+      happened and the assertions held over nothing. `_schedule_after_the_first` now lets the first
+      call through to the real function. The divergence test additionally asserts the entry came
+      back before asserting the check did not fire, so "it did not fire" cannot be satisfied by a
+      run that never started.
+- [x] 5.10 A third: three tests patched `hub.codex_appserver.run_turn`, but `agent_trigger` imports
+      it at module level as `codex_run_turn` (`:50`) — so the patch bound nothing and the app-server
+      tests were driving a real spawn. Retargeted to `hub.api.v1.agent_trigger.codex_run_turn`,
+      which is what `test_agent_trigger.py` uses.
 
 ## 6. Verification — agent-verifiable
 
-- [ ] 6.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**, with
+- [x] 6.1 **hub 2028 passed / 11 skipped** (run in three file chunks, 425s total — the 600s Bash
+      cap, not a suite property); **cli 360 passed / 3 skipped**. Separately, with
       `C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe`. Running them together
       fails collection.
-- [ ] 6.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched.
-- [ ] 6.3 `npx tsc --noEmit` and `npx vitest run` from `hub/ui`. No UI source change is expected here;
+- [x] 6.2 `ruff check hub/ src/` clean; `black`; `black --target-version py311` on every file touched.
+- [x] 6.3 `npx tsc --noEmit` clean; `npx vitest run` **864 passed**. No UI source changed. From `hub/ui`. No UI source change is expected here;
       if any lands, `python scripts/refresh_ui_bundle.py` and commit `hub/hub/static/ui` with it.
-- [ ] 6.4 `npx openspec validate --changes --strict`.
-- [ ] 6.5 State which existing tests needed updating and why, rather than discovering it silently.
-      Candidates: anything asserting `evaluate_run_end` is called unconditionally, and any test
-      pinning `format_turn_prompt`'s exact output.
+- [x] 6.4 `npx openspec validate --changes --strict` — **20 passed, 0 failed**.
+- [x] 6.5 State which existing tests needed updating and why, rather than discovering it silently.
+      **What actually needed it:**
+      - `test_agent_trigger.py` — four tests. Three now see one `run_failed` per attempt instead of
+        one, because a failing mock fails identically every time and the cap is what ends it; the
+        fourth's entry no longer rests in `queued` but is retried to the cap and abandoned with a
+        reason. Each is annotated in place.
+      - **Three fixture helpers reused a single mock session** (`test_agent_trigger.py`,
+        `test_conversation_contract.py`, and `test_inbound_queue.py`'s inline `side_effect` list).
+        Once a failed run retries, the second spawn finds an exhausted `read.side_effect`, and the
+        `StopIteration` that raises inside the executor **hangs the run loop rather than failing** —
+        it stalled two full-suite runs before being diagnosed. Two were changed to hand back a fresh
+        session per call; the third stopped hanging once binding conflicts were excluded (1.6).
+      - Nothing asserted `evaluate_run_end` unconditionally, and nothing pinned
+        `format_turn_prompt`'s exact output.
 
 ## 7. Verification — human-only
 

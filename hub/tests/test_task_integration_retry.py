@@ -53,6 +53,7 @@ async def builder():
         await session.commit()
     return {"Authorization": "Bearer aw_run_retry-secret"}
 
+
 RETRY = TASKS + "/{}/integrations/retry"
 AGENT_RETRY = "/api/v1/agent-actions/tasks/{}/integrations/retry"
 AGENT_INTEGRATIONS = "/api/v1/agent-actions/tasks/{}/integrations"

@@ -93,7 +93,13 @@ def test_a_stamp_naming_other_source_still_warns(checkout):
     warning = _compute_ui_staleness_warning(dist, src)
     assert warning is not None
     assert "the source has changed since" in warning
-    assert "make ui" in warning
+    # `make` is on PATH in neither Git Bash nor PowerShell on some supported installations, and
+    # `CLAUDE.md` records that — so naming only `make ui` made the warning contradict the
+    # project's own documentation, and an instruction that cannot be followed is one the operator
+    # learns to ignore. The script is named first because the first command gets pasted; the
+    # shorthand is kept for installations that have it.
+    assert "python scripts/refresh_ui_bundle.py" in warning
+    assert warning.index("refresh_ui_bundle.py") < warning.index("make ui")
 
 
 def test_a_types_only_change_clears_after_restamping_with_no_bundle_change(checkout):

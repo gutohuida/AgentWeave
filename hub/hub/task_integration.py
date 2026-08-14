@@ -51,13 +51,18 @@ FAILED = "failed"
 NO_MAIN_BRANCH = "this project has no main branch set — choose one in the project's settings"
 NOT_A_REPOSITORY = "this project is not a git repository, so there is nothing to merge"
 NOTHING_TO_MERGE = "no accepted evidence names a commit, so there is nothing to merge"
+# Both of these used to end "and the next approval will merge". By the time the operator reads one
+# the task is already `approved`, and restating a status is deliberately a no-op — so following the
+# instruction provably did nothing: the request succeeded, no attempt was recorded, and the main
+# branch did not move. Measured on 2026-08-14. They name the retry instead, which is on screen
+# already: `TaskIntegrationNote.tsx` renders "Try again" for both.
 CHECKOUT_DIRTY = (
-    "the project's checkout has uncommitted changes to tracked files — commit or stash them "
-    "and the next approval will merge"
+    "the project's checkout has uncommitted changes to tracked files — commit or stash them, "
+    "then retry the integration"
 )
 CHECKOUT_ELSEWHERE = (
-    "the project's checkout is on {current}, not {target} — switch to {target} and the next "
-    "approval will merge"
+    "the project's checkout is on {current}, not {target} — switch to {target}, then retry the "
+    "integration"
 )
 # Not a failure, and emphatically not a merge. `git merge <ancestor>` prints "Already up to date",
 # exits 0 and creates nothing, so without this guard a no-op was recorded as work reaching the

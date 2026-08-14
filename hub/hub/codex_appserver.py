@@ -497,6 +497,23 @@ STDERR_TAIL_LINES = 200
 STDERR_TAIL_CHARS = 2000
 
 
+def readable_exit_code(exit_code: Optional[int]) -> Optional[int]:
+    """The exit status as a person would act on it.
+
+    Windows reports a forced termination as `0xFFFFFFFF`, which arrives here unsigned:
+    `4294967295`. That reads as corruption, and an operator seeing it has no reason to connect it
+    to the process they just killed — measured on 2026-08-14, where a run's error said
+    `exit 4294967295` and nobody could tell what had happened. `-1` says "something killed this".
+
+    Only what is *displayed* changes. `AppServerError.exit_code` and `TurnOutcome.exit_code` keep
+    the platform's own value: a diagnostic that quietly rewrites its input is a worse diagnostic,
+    and the raw number is what a bug report should carry.
+    """
+    if exit_code is None or exit_code < 2**31:
+        return exit_code
+    return exit_code - 2**32
+
+
 class AppServerError(RuntimeError):
     """Transport-level app-server failure: spawn, protocol violation, or timeout.
 
@@ -523,7 +540,7 @@ class AppServerError(RuntimeError):
         self.stderr_tail = stderr_tail
         detail = message
         if exit_code is not None:
-            detail += f" (exit {exit_code})"
+            detail += f" (exit {readable_exit_code(exit_code)})"
         if method:
             detail += f" during {method}"
         if stderr_tail:
@@ -775,6 +792,11 @@ class TurnOutcome:
     #: The app-server's own exit status where it ended. Reported alongside the failure rather than
     #: written to `Run.exit_code`, whose synthetic 0/1 the output panel reads to detect a handoff.
     exit_code: Optional[int] = None
+    #: What the app-server last wrote to its error stream. A turn that fails without raising —
+    #: `turn/failed`, or a process that died and was noticed by the read loop — carries no
+    #: `AppServerError`, so this is the only route by which the child's own complaint reaches the
+    #: operator. It was empty on all four real failures of 2026-08-14 for exactly that reason.
+    stderr_tail: Optional[str] = None
 
 
 async def run_turn(
@@ -980,7 +1002,13 @@ async def run_turn(
             # serverRequest/resolved) carries no timeline-relevant content for this pass.
 
         return TurnOutcome(
-            thread_id=thread_id, status=status, error=error, exit_code=session.returncode
+            thread_id=thread_id,
+            status=status,
+            error=error,
+            exit_code=session.returncode,
+            # Empty where the child said nothing, which is the ordinary case; `None` rather than
+            # `""` so an absent fact reads as absent in the payload.
+            stderr_tail=session.stderr_tail() or None,
         )
     finally:
         await session.close(force=interrupted)

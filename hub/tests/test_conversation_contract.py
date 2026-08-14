@@ -46,11 +46,22 @@ async def _wait_for_active_pty(run_id, timeout=2.0):
 
 
 def _fake_pty(lines, exit_code=0, pid=4242):
-    session = MagicMock()
-    session.pid = pid
-    session.read.side_effect = [*lines, ""]
-    session.wait.return_value = exit_code
-    return MagicMock(return_value=session)
+    """A **fresh** session per call, as in `test_agent_trigger.py`.
+
+    A run that ends `failed` — including one failed by binding-conflict detection, which is what
+    this module is about — hands its input back and schedules the retry itself. A single reused
+    mock has an exhausted `read.side_effect` by then, and the `StopIteration` that raises inside
+    the executor hangs the run loop rather than failing a test.
+    """
+
+    def _spawn(*args, **kwargs):
+        session = MagicMock()
+        session.pid = pid
+        session.read.side_effect = [*lines, ""]
+        session.wait.return_value = exit_code
+        return session
+
+    return MagicMock(side_effect=_spawn)
 
 
 def _stoppable_pty(pid=5150, exit_code=15):

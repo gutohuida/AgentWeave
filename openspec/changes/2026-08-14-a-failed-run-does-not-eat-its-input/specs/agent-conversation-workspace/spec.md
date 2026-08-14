@@ -15,6 +15,14 @@ retried, never given up on, and never reported — indistinguishable from never 
 A run the operator deliberately stopped SHALL NOT return its input. The operator stopped the turn
 knowing what it was carrying.
 
+A run failed because the runtime reported a different provider session than the one the conversation
+is bound to SHALL NOT return its input either. That failure is raised after the turn has run: the
+work was done and its output delivered, so the input was processed rather than lost, and handing it
+back would make the agent repeat a completed turn. Returning it would also defeat the check that
+raised it — repeated failure gives up the conversation's provider session, so a later attempt would
+adopt the very session the check refused, and a runtime that reports the wrong session would
+overwrite the binding by being retried.
+
 A returned input keeps its place in the queue and its binding to the conversation it arrived on, and
 the queue is served in arrival order — so an input whose delivery kills the runtime is served again
 immediately, and every later input, including a request to start a fresh conversation, waits behind
@@ -66,6 +74,12 @@ failed attempts.
 
 - **WHEN** the operator stops a run
 - **THEN** its input is not returned to the queue
+
+#### Scenario: A run failed over its provider session keeps its input
+
+- **WHEN** a run fails because the runtime reported a different provider session than the one bound
+- **THEN** its input is not returned to the queue
+- **AND** the conversation's binding is unchanged
 
 #### Scenario: A conversation that cannot be resumed is started afresh
 

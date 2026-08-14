@@ -1014,8 +1014,33 @@ def _transport_failure_fields(exc: BaseException, conversation_id: Optional[str]
         "error": str(exc),
         "exit_code": getattr(exc, "exit_code", None),
         "method": getattr(exc, "method", None),
+        # Absent until 2026-08-14, so the tail could only surface by having been composed into
+        # `str(exc)`. Of the three facts this dict was written to report — exit code, method,
+        # stderr tail — only the first two were ever in it.
+        "stderr_tail": getattr(exc, "stderr_tail", None) or None,
         "conversation_id": conversation_id,
     }
+
+
+def _runtime_failure_fields(outcome, lifecycle_event: str) -> dict:
+    """What the app-server itself did, for a turn that failed without raising.
+
+    The pre-spawn path reports this through `_transport_failure_fields`, off an `AppServerError`.
+    A turn that fails once it is under way has no exception at all — `run_turn` returns a failed
+    `TurnOutcome` — so these facts have to be lifted off the outcome instead. Until they were, a
+    killed app-server produced a `run_failed` carrying only the synthetic exit code.
+
+    Only on a failure, and only for facts that exist: a completed run has nothing to explain, and
+    a key that is present but null invites a reader to render "exit: null".
+    """
+    if lifecycle_event != "run_failed":
+        return {}
+    fields = {}
+    if getattr(outcome, "exit_code", None) is not None:
+        fields["runtime_exit_code"] = outcome.exit_code
+    if getattr(outcome, "stderr_tail", None):
+        fields["stderr_tail"] = outcome.stderr_tail
+    return fields
 
 
 _RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")
@@ -1251,6 +1276,15 @@ async def _execute_run(
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                 await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
                 await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+        # This branch `return`s before the `schedule_agent` the normal path runs at its end, so
+        # without this an entry handed back here waits for something else to drain it. Nothing
+        # does on a timer: `redrain_queued_agents` is reachable only from project open, settings
+        # save and relocate. Measured — an entry sat `queued` at one attempt until an unrelated
+        # settings save drove the second, which is a limit protecting nobody.
+        if returned:
+            from ...turn_scheduler import schedule_agent
+
+            await schedule_agent(project_id, agent)
         return
 
     _active_ptys[run_id] = pty
@@ -1444,11 +1478,40 @@ async def _execute_run(
                     runner=runner,
                     sample=accounting_sample,
                 )
-                await db.commit()
+            # Outside the `if run` guard, and before the commit that closes this block. A run that
+            # ended abnormally is carrying input nobody else will hand back, and the spawn-failure
+            # branch above already reads this way — a run row that has vanished still has entries.
+            # Until this existed, `return_run_entries` was reachable only from the two *pre-spawn*
+            # `except` blocks, so a runtime that died once the turn was under way came back as a
+            # failed status here and its entries stayed `delivered` at zero attempts: never
+            # retried, never abandoned, never reported. A deliberate stop is `stopped`, not
+            # `failed`, so it keeps its input.
+            #
+            # A binding conflict is excluded, and it is the one failure that has to be. It is
+            # raised *after* the turn ran — the agent did the work and streamed its output — so the
+            # input was processed rather than lost, and re-delivering it makes the agent redo a
+            # completed turn. Worse, the retry would defeat the check it comes from: at
+            # `RESUME_RETRY_LIMIT` the conversation gives up its provider session, so the third
+            # attempt binds the very session id the conflict refused, and a misbehaving CLI
+            # overwrites the binding this check exists to protect.
+            returned = (
+                await return_run_entries(db, run_id)
+                if final_status == "failed" and binding_conflict is None
+                else []
+            )
+            await db.commit()
             # The run boundary. After the commit, so the check reads the run's final state, and
             # outside the `if run` block for the same reason — a missing run row is not a
             # divergence, and `evaluate_run_end` says so itself.
-            await evaluate_run_end(run_id)
+            #
+            # Skipped when this run's input went back to the queue, exactly as
+            # `run_reconciliation.py:59` skips it: the work is about to be handed to a new run that
+            # will bind to the same task, so nothing has been dropped. The condition is on the
+            # returned set rather than on `final_status` — a failed run whose entries were all
+            # abandoned on this attempt has genuinely dropped its work and must still be evaluated.
+            if not returned:
+                await evaluate_run_end(run_id)
+            await _report_abandoned_entries(db, project_id, agent, run_id)
             await _broadcast_run_lifecycle(
                 db,
                 project_id,
@@ -1459,6 +1522,10 @@ async def _execute_run(
                 session_id=session_id,
                 exit_code=exit_code,
             )
+            for entry_id in returned:
+                payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
             # Kept alongside the typed lifecycle event above rather than replaced by it:
             # the "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning
             # for this exact kind="status"/phase="completed" line in the output stream
@@ -1819,6 +1886,12 @@ async def _execute_codex_appserver_run(
                     payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                     await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
                     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+            # See `_execute_run`'s spawn-failure branch: this one `return`s too, so the entries it
+            # hands back need the same push.
+            if returned:
+                from ...turn_scheduler import schedule_agent
+
+                await schedule_agent(project_id, agent)
             return
 
         snapshot_sha: Optional[str] = None
@@ -1884,10 +1957,27 @@ async def _execute_codex_appserver_run(
                     runner="codex",
                     sample=accounting_sample,
                 )
-                await db.commit()
+            # See `_execute_run`. This is the path a killed app-server actually takes: `run_turn`
+            # returns a failed `TurnOutcome` rather than raising, so the pre-spawn `except` above
+            # never sees it. A stop arrives as `outcome.status == "interrupted"` → `stopped`, and
+            # keeps its input. A binding conflict is excluded for the reason given there.
+            returned = (
+                await return_run_entries(db, run_id)
+                if final_status == "failed" and binding_conflict is None
+                else []
+            )
+            await db.commit()
             # The run boundary, as in `_execute_run`. Both runners reach it, because the check sits
-            # at a boundary AgentWeave owns rather than inside either agent.
-            await evaluate_run_end(run_id)
+            # at a boundary AgentWeave owns rather than inside either agent. Skipped when the input
+            # went back to the queue, for the reason given there.
+            if not returned:
+                await evaluate_run_end(run_id)
+            await _report_abandoned_entries(db, project_id, agent, run_id)
+            # `exit_code` above is the synthetic 0/1 this transport has to invent, because there is
+            # no per-turn process status; `AgentOutputPanel.tsx` reads it to detect a handoff and
+            # the status line derives from it, so its meaning is fixed. The runtime's own status
+            # travels beside it under its own name — one death used to report two numbers with
+            # nothing to say which was which. Omitted, not nulled, where there is nothing to say.
             await _broadcast_run_lifecycle(
                 db,
                 project_id,
@@ -1897,7 +1987,12 @@ async def _execute_codex_appserver_run(
                 conversation_id=conversation_id,
                 session_id=session_id,
                 exit_code=exit_code,
+                **_runtime_failure_fields(outcome, lifecycle_event),
             )
+            for entry_id in returned:
+                payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
             # Kept for the same reason as `_execute_run`'s identical broadcast: the
             # "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning for
             # this exact kind="status"/phase="completed" line, not via a separate listener.

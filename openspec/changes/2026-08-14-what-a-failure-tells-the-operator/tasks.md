@@ -9,93 +9,106 @@ than rebasing a control-flow one.
 
 ## 1. The dirty-checkout skip stops promising something that cannot happen
 
-- [ ] 1.1 `hub/hub/task_integration.py:54-61`: reword `CHECKOUT_DIRTY` and `CHECKOUT_ELSEWHERE` to
+- [x] 1.1 `hub/hub/task_integration.py:54-61`: reword `CHECKOUT_DIRTY` and `CHECKOUT_ELSEWHERE` to
       point at retrying the integration, dropping *"and the next approval will merge"* (D1).
-- [ ] 1.2 Leave `NO_MAIN_BRANCH` alone — its instruction is true and is discharged automatically when
+- [x] 1.2 Leave `NO_MAIN_BRANCH` alone — its instruction is true and is discharged automatically when
       followed (D1).
-- [ ] 1.3 Confirm no UI change is needed: `TaskIntegrationNote.tsx` already renders "Try again" for
+- [x] 1.3 Confirm no UI change is needed: `TaskIntegrationNote.tsx` already renders "Try again" for
       both reasons and special-cases only `NO_MAIN_BRANCH` (`:4`, `:43`).
 
 ## 2. One death, one exit code
 
-- [ ] 2.1 Add `stderr_tail: Optional[str] = None` to `TurnOutcome`
+- [x] 2.1 Add `stderr_tail: Optional[str] = None` to `TurnOutcome`
       (`hub/hub/codex_appserver.py:767-777`), documented as the app-server's own tail rather than the
       turn's.
-- [ ] 2.2 Fill it from `session.stderr_tail()` at `:982-984`, where `exit_code` is already filled.
-- [ ] 2.3 `hub/hub/api/v1/agent_trigger.py:1891-1900` (app-server normal path): add
+- [x] 2.2 Fill it from `session.stderr_tail()` at `:982-984`, where `exit_code` is already filled.
+- [x] 2.3 `hub/hub/api/v1/agent_trigger.py:1891-1900` (app-server normal path): add
       `runtime_exit_code=outcome.exit_code` and `stderr_tail=outcome.stderr_tail` to the
       `run_failed` broadcast. **Do not change `exit_code`** — `AgentOutputPanel.tsx` reads the
       synthetic 0/1 for handoff detection (D2).
-- [ ] 2.4 Omit both keys where there is nothing to report, rather than sending nulls, so an absent
+- [x] 2.4 Omit both keys where there is nothing to report, rather than sending nulls, so an absent
       fact reads as absent — the rule `_transport_failure_fields` already documents.
-- [ ] 2.5 The exec path's broadcast (`:1452-1461`) is left alone: its `exit_code` **is** the process's
+- [x] 2.5 The exec path's broadcast (`:1452-1461`) is left alone: its `exit_code` **is** the process's
       own, so there is no second number to report.
 
 ## 3. Render an exit code a person can read
 
-- [ ] 3.1 Add a module-level renderer in `hub/hub/codex_appserver.py` normalising a value at or above
+- [x] 3.1 Add a module-level renderer in `hub/hub/codex_appserver.py` normalising a value at or above
       `2**31` to its signed 32-bit form; everything else passes through; `None` stays `None`.
-- [ ] 3.2 Use it in `AppServerError.__init__` (`:524-526`) when composing the `(exit {code})` clause.
-- [ ] 3.3 **Do not** normalise `self.exit_code` or `TurnOutcome.exit_code` — what is recorded stays
+- [x] 3.2 Use it in `AppServerError.__init__` (`:524-526`) when composing the `(exit {code})` clause.
+- [x] 3.3 **Do not** normalise `self.exit_code` or `TurnOutcome.exit_code` — what is recorded stays
       what the platform reported (D3).
 
 ## 4. Deliver the stderr tail
 
-- [ ] 4.1 `_transport_failure_fields` (`hub/hub/api/v1/agent_trigger.py:1005-1018`): add
+- [x] 4.1 `_transport_failure_fields` (`hub/hub/api/v1/agent_trigger.py:1005-1018`): add
       `stderr_tail=getattr(exc, "stderr_tail", None)`, matching the `getattr` shape of the keys
       beside it — this `except` also catches `FileNotFoundError`/`OSError`/`TimeoutError`.
-- [ ] 4.2 Confirm `stderr_tail()` remains bounded by `STDERR_TAIL_CHARS` (`:630-635`) and that
+- [x] 4.2 Confirm `stderr_tail()` remains bounded by `STDERR_TAIL_CHARS` (`:630-635`) and that
       nothing new is retained.
 
 ## 5. `ui_stale` names a command that exists
 
-- [ ] 5.1 `hub/hub/main.py:167`: name `python scripts/refresh_ui_bundle.py` first and keep `make ui`
+- [x] 5.1 `hub/hub/main.py:167`: name `python scripts/refresh_ui_bundle.py` first and keep `make ui`
       as the shorthand (D5).
-- [ ] 5.2 Leave the unstamped fallback at `:176-179` unchanged.
+- [x] 5.2 Leave the unstamped fallback at `:176-179` unchanged.
 
 ## 6. Requirement identifiers sort naturally
 
-- [ ] 6.1 Add a natural-sort key splitting digit runs from non-digit runs and comparing digit runs
+- [x] 6.1 Add a natural-sort key splitting digit runs from non-digit runs and comparing digit runs
       numerically (D6).
-- [ ] 6.2 Apply it to each task's list in `hub/hub/api/v1/tasks.py` after the fetch (`:110-126`), so
+- [x] 6.2 Apply it to each task's list in `hub/hub/api/v1/tasks.py` after the fetch (`:110-126`), so
       `requirement_links` and the `requirement_ids` derived at `:143` both come out ordered.
-- [ ] 6.3 Keep the `.order_by(SpecRequirement.identifier)` at `:91` — it makes the fetch
+- [x] 6.3 Keep the `.order_by(SpecRequirement.identifier)` at `:91` — it makes the fetch
       deterministic, which the Python sort's stability relies on.
 
 ## 7. Tests
 
-- [ ] 7.1 The reworded skip reasons asserted **through a real skip**, not by importing the constant:
-      a dirty checkout and a checkout on another branch each produce a reason that does not tell the
-      operator to approve again.
-- [ ] 7.2 `run_failed` carries `runtime_exit_code` and `stderr_tail` on the app-server normal path;
+- [x] 7.1 The reworded skip reasons asserted **through a real skip**, not by importing the constant.
+      Landed as `test_a_dirty_checkout_skip_points_at_the_retry_not_at_approving_again` in
+      `hub/tests/test_task_integration.py`, next to the fixtures that build a real repository.
+      **Only the dirty case is driven end to end;** `CHECKOUT_ELSEWHERE` is reworded identically and
+      its wording is not separately asserted, because that suite has no fixture parking the checkout
+      on a third branch. Named here rather than left to be discovered.
+- [x] 7.2 `run_failed` carries `runtime_exit_code` and `stderr_tail` on the app-server normal path;
       both absent when there is nothing to report.
-- [ ] 7.3 `_transport_failure_fields` carries `stderr_tail` from an `AppServerError`, and `None` from
+- [x] 7.3 `_transport_failure_fields` carries `stderr_tail` from an `AppServerError`, and `None` from
       a `FileNotFoundError`.
-- [ ] 7.4 `4294967295` renders as `-1` in the composed message; an ordinary code is untouched; `None`
+- [x] 7.4 `4294967295` renders as `-1` in the composed message; an ordinary code is untouched; `None`
       stays absent; `AppServerError.exit_code` still holds the raw value.
-- [ ] 7.5 `ui_stale` detail names the script — extend `hub/tests/test_ui_staleness.py`.
-- [ ] 7.6 `FR-2` sorts before `FR-11` on a real task read; a non-numeric identifier still sorts
-      deterministically.
-- [ ] 7.7 A vitest case for the retry note if B1's wording is asserted in
-      `taskIntegrationRetry.test.tsx`.
+- [x] 7.5 `ui_stale` detail names the script. Extended
+      `test_a_stamp_naming_other_source_still_warns` in **`hub/tests/test_ui_build_stamp.py`**, not
+      `test_ui_staleness.py` as planned: the stamped branch is what carries this sentence, and only
+      that file has the git-backed `checkout` fixture a fingerprint needs. A hand-rolled `tmp_path`
+      returns `None` and would have asserted nothing — caught by writing it the wrong way first.
+      The assertion also pins the script *before* `make ui`, since the first command gets pasted.
+- [x] 7.6 `FR-2` sorts before `FR-11` on a real task read, as
+      `test_identifiers_are_ordered_by_number_not_as_text` in
+      `hub/tests/test_task_requirement_ids_readable.py` — twelve requirements submitted in reverse,
+      asserted on both `requirement_ids` and `requirement_links`.
+- [x] 7.7 **Not needed, and this is the finding.** No UI test asserts the skip wording:
+      `taskIntegrationRetry.test.tsx:51` supplies its own fixture string
+      (`'the checkout has uncommitted changes'`) and the component renders `reason` verbatim. Nothing
+      in `hub/ui/src` reads `run_failed`'s `exit_code` either — the only `exit_code` there is
+      `eventSummary.ts:42`'s `watchdog_agent_exit`, an unrelated event.
 
-**Existing tests expected to need updating — state the reason here rather than discovering it in a
-diff:**
+**Existing tests expected to need updating — what actually happened:**
 
-- [ ] 7.8 `hub/tests/test_task_requirement_ids_readable.py` may pin the current lexicographic order;
-      phase 6 changes it.
-- [ ] 7.9 `hub/tests/test_agent_trigger.py` and `hub/tests/test_codex_appserver_process.py` assert
-      `run_failed` payload shape. Added keys should not break a membership assertion; one comparing
-      the whole dict needs widening.
+- [x] 7.8 `hub/tests/test_task_requirement_ids_readable.py` did **not** pin the lexicographic order:
+      every existing case links one or two identifiers, and the two-identifier ones already sort
+      themselves before asserting. No change required.
+- [x] 7.9 `hub/tests/test_agent_trigger.py` and `hub/tests/test_codex_appserver_process.py` assert
+      `run_failed` payload shape by membership, not by whole-dict equality, so the added keys pass
+      through them. Confirmed by the full-suite run in 8.1 rather than by reading.
 
 ## 8. Verification — agent-verifiable
 
-- [ ] 8.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**, with
+- [x] 8.1 **hub 2028 passed / 11 skipped; cli 360 passed / 3 skipped.** Separately, with
       `C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe`.
-- [ ] 8.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched.
-- [ ] 8.3 `npx tsc --noEmit`; `npx vitest run`.
-- [ ] 8.4 `npx openspec validate --changes --strict`.
-- [ ] 8.5 If any UI source changed, `python scripts/refresh_ui_bundle.py` and commit
+- [x] 8.2 `ruff check hub/ src/` clean.; `black --target-version py311` on every file touched.
+- [x] 8.3 `npx tsc --noEmit` clean; `npx vitest run` **864 passed**.
+- [x] 8.4 `npx openspec validate --changes --strict` — **20 passed, 0 failed**.
+- [x] 8.5 No UI source changed, so no bundle rebuild. If any had, `python scripts/refresh_ui_bundle.py` and commit
       `hub/hub/static/ui` with it. (`make` is absent on this machine — that is phase 5's whole
       point.)
 

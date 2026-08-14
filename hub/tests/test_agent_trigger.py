@@ -17,6 +17,7 @@ import pytest
 
 import hub.api.v1.agent_trigger as agent_trigger
 from hub import worktrees
+from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT
 from hub.sse import sse_manager
 
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
@@ -144,12 +145,22 @@ def _fake_run_turn(
 
 
 def _fake_pty(lines, exit_code=0, pid=4242):
-    """Build a mock PtySession.spawn() replacement streaming `lines` then EOF."""
-    session = MagicMock()
-    session.pid = pid
-    session.read.side_effect = [*lines, ""]
-    session.wait.return_value = exit_code
-    return MagicMock(return_value=session)
+    """Build a mock PtySession.spawn() replacement streaming `lines` then EOF.
+
+    A **fresh** session per call. Since a failed run hands its input back and schedules the retry
+    itself, a test whose run exits non-zero spawns again — and a single reused mock has an
+    exhausted `read.side_effect` by then. The `StopIteration` that raises inside the executor does
+    not surface as a failure; it hangs the run loop, which is how this was found.
+    """
+
+    def _spawn(*args, **kwargs):
+        session = MagicMock()
+        session.pid = pid
+        session.read.side_effect = [*lines, ""]
+        session.wait.return_value = exit_code
+        return session
+
+    return MagicMock(side_effect=_spawn)
 
 
 @pytest.mark.asyncio
@@ -878,20 +889,24 @@ async def test_spawn_failure_marks_run_failed(app, auth_headers, bind_runner):
 
         from hub.db.models import InboundQueueEntry
 
-        returned = (
+        # The input goes back rather than being consumed by a run that never started. It no longer
+        # *rests* in `queued`, because a returned entry now schedules its own retry — this spawn
+        # fails identically every time, so the entry is handed back, retried to the cap, and then
+        # abandoned with a stated reason. What must hold either way is that the message is
+        # accounted for rather than silently eaten.
+        entries = (
             (
                 await db.execute(
-                    select(InboundQueueEntry).where(
-                        InboundQueueEntry.delivered_in_run_id.is_(None),
-                        InboundQueueEntry.agent == "missing-claude",
-                        InboundQueueEntry.state == "queued",
-                    )
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "missing-claude")
                 )
             )
             .scalars()
             .all()
         )
-        assert [entry.content for entry in returned] == ["hi"]
+        assert [entry.content for entry in entries] == ["hi"]
+        assert entries[0].delivery_attempts == DELIVERY_ATTEMPT_LIMIT
+        assert entries[0].state == "withdrawn"
+        assert "stopped retrying" in entries[0].abandoned_reason
 
 
 def _drain(queue):
@@ -999,8 +1014,11 @@ async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_he
 
     events = _drain(queue)
     failed = [d for t, d in events if t == "run_failed"]
-    assert len(failed) == 1
-    assert failed[0]["exit_code"] == 1
+    # One per attempt: a failed run hands its input back and schedules the retry, and this spawn
+    # fails identically each time, so the cap is what ends it. The subject of this test is that a
+    # non-zero exit is reported as `run_failed` and never as `run_completed`.
+    assert len(failed) == DELIVERY_ATTEMPT_LIMIT
+    assert {d["exit_code"] for d in failed} == {1}
     assert not [d for t, d in events if t == "run_completed"]
 
 
@@ -1033,8 +1051,10 @@ async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers, bind
 
     events = _drain(queue)
     failed = [d for t, d in events if t == "run_failed"]
-    assert len(failed) == 1
-    assert "not found in PATH" in failed[0]["error"]
+    # One per attempt — the pre-spawn branch now schedules the retry itself rather than leaving the
+    # entry for an unrelated request to drain. Nothing ever spawns, so no run ever starts.
+    assert len(failed) == DELIVERY_ATTEMPT_LIMIT
+    assert all("not found in PATH" in d["error"] for d in failed)
     assert not [d for t, d in events if t == "run_started"]
 
 
@@ -1141,8 +1161,16 @@ async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(
                 select(InboundQueueEntry).where(InboundQueueEntry.id == queued_entry_id)
             )
         ).scalar_one()
-        assert queued_entry.state == "delivered"
+        # What this test is about: the entry waiting behind the stopped run survived the stop and
+        # was picked up by a *different* run. Its final state is not pinned — the successor here
+        # inherits the same already-terminated fake session, so it fails, hands the entry back and
+        # retries to the cap. That is the retry rule working on an artefact of this fixture, not
+        # anything to do with stopping. `delivered_in_run_id` is kept even once abandoned, which is
+        # what keeps the assertion below meaningful.
+        assert queued_entry.delivered_in_run_id is not None
         assert queued_entry.delivered_in_run_id != run_id
+        # The stopped run itself returned nothing: a stop is not a failure.
+        assert delivered[0].delivery_attempts == 0
 
     events = _drain(queue)
     stopped = [d for t, d in events if t == "run_stopped"]

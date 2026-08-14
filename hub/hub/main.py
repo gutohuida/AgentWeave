@@ -164,7 +164,13 @@ def _compute_ui_staleness_warning(ui_dist: Path, ui_src: Path) -> Optional[str]:
         )
         if _has_uncommitted_ui_source(ui_src):
             detail += " hub/ui/src has uncommitted changes."
-        return detail + " Run `make ui` to rebuild and re-record it."
+        # The script first, `make ui` second: `make` is absent from both shells on some supported
+        # installations, and an instruction naming a command the operator does not have is one
+        # they learn to ignore — including on the occasions it is right. The first command in a
+        # sentence is the one that gets pasted.
+        return detail + (
+            " Run `python scripts/refresh_ui_bundle.py` (or `make ui`) to rebuild and re-record it."
+        )
 
     # Tests are not bundled, so a commit touching only them cannot make the artefact stale.
     src_date = _git_last_commit_iso(ui_src, exclude=("__tests__",))

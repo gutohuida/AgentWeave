@@ -526,6 +526,37 @@ async def test_a_dirty_checkout_skips_without_blocking(app, auth_headers, builde
 
 
 @pytest.mark.asyncio
+async def test_a_dirty_checkout_skip_points_at_the_retry_not_at_approving_again(
+    app, auth_headers, builder, tmp_path
+):
+    """The skip used to end "and the next approval will merge".
+
+    By the time the operator reads it the task is already `approved`, and restating a status is
+    deliberately a no-op — so following the instruction provably did nothing. Measured on
+    2026-08-14: committing the dirt and re-approving returned 200 with status `approved`, recorded
+    no new attempt, and left the main branch where it was. Asserted through a real skip rather
+    than by importing the constant, because comparing a string to itself is the one failure mode a
+    wording change has.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+    (tmp_path / "README.md").write_text("edited by the operator\n", encoding="utf-8")
+
+    task = await linked_task(app, auth_headers)
+    assert (await approve(app, auth_headers, task)).status_code == 200
+
+    reason = (await integrations(app, auth_headers, task))[0]["reason"]
+    assert "retry the integration" in reason
+    assert "next approval" not in reason
+    assert "approve" not in reason.lower()
+
+
+@pytest.mark.asyncio
 async def test_untracked_files_do_not_block_the_merge(app, auth_headers, builder, tmp_path):
     """The Hub writes specification documents into the project directory, so any project that has
     ever had one carries untracked content essentially permanently.

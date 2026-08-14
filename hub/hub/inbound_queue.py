@@ -100,7 +100,21 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
             origin = "Scheduled job"
         else:
             origin = f'Agent "{entry.origin_agent}"'
-        blocks.append(f"{origin} (hop {entry.hop_depth}):\n{entry.content}")
+        # Per entry rather than in the preamble, because `delivery_attempts` is per entry: one turn
+        # can carry a retried input alongside one never tried before, and a blanket sentence would
+        # misdescribe the second. An agent handed the same instruction twice has no other way to
+        # tell — it may find its own half-finished work and read it as someone else's.
+        #
+        # The fact and nothing more. What to do about half-finished work depends on what the work
+        # was, so an instruction to inspect or redo would be wrong often enough to cost more than
+        # it saves. Absent at zero attempts, which is every ordinary delivery.
+        retry = ""
+        if entry.delivery_attempts:
+            retry = (
+                f" — delivery attempt {entry.delivery_attempts + 1}; "
+                f"an earlier attempt was cut off before it finished"
+            )
+        blocks.append(f"{origin} (hop {entry.hop_depth}){retry}:\n{entry.content}")
     return "\n\n".join(blocks)
 
 

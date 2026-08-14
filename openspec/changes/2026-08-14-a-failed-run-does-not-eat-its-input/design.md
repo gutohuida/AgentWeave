@@ -33,6 +33,37 @@ Consequence, accepted: a run that fails for a real, permanent reason now re-runs
 abandoned. That is worse than today for that case and better for every other, and the abandonment is
 loud where the current silence is not.
 
+## D2a. One carve-out: a binding conflict
+
+`binding_conflict is not None` is the single failure excluded, and it was found by two existing test
+files independently rather than reasoned out in advance
+(`test_conversation_contract.py::test_provider_binding_conflict_leaves_conversation_untouched_and_fails_run`
+and `test_inbound_queue.py::test_delivery_cap_defers_entries_to_following_turns`).
+
+Two reasons, either of which is sufficient.
+
+**The turn already ran.** Every other failure here means the turn did not complete: the process died,
+the runtime exited non-zero, the spawn never happened. A binding conflict is different in kind — the
+runtime worked, the agent did the work, the output was streamed and recorded, and the Hub then
+refused the session identity it reported. The input was *processed*, not lost. Handing it back makes
+the agent redo a completed turn, which is the one thing returning input is supposed to prevent the
+opposite of.
+
+**Retrying would defeat the check.** `return_run_entries` gives up the conversation's provider
+session at `RESUME_RETRY_LIMIT`, because that is what breaks a resume loop. Applied to a conflict
+that means: attempt 1 refuses session B, attempt 2 refuses it and clears the binding to A, attempt 3
+binds B unopposed. A runtime reporting the wrong session would acquire the binding simply by being
+retried — the precise outcome
+`test_provider_binding_conflict_leaves_conversation_untouched_and_fails_run` exists to forbid.
+
+This is not the narrow "only when the runtime died" rule that was considered and rejected in D2. It
+is one named cause, excluded for what that cause means, and every other failure still returns its
+input.
+
+**Cost, stated:** a conflicted turn's input is not retried. It is not lost either — it was consumed
+by a turn that ran — but nothing re-delivers it, and the operator sees a failed run whose error names
+the conflict. That is the pre-existing behaviour for this case, unchanged by this change.
+
 ## D3. Ordering inside the session block is load-bearing
 
 At each site the order must be:
