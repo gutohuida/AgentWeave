@@ -22,12 +22,12 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, NamedTuple, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import InboundQueueEntry, Question, Run, Task, TaskTransition
+from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
 from .task_transition_service import (
     ORIGIN_ACTOR,
     ORIGIN_RUNTIME,
@@ -132,6 +132,89 @@ async def binding_for_delivery(
         .order_by(InboundQueueEntry.sequence)
     )
     return binding_from_entries(result.scalars().all())
+
+
+class BoundTask(NamedTuple):
+    """What `resolve_bound_task` answers.
+
+    `named` separates "this turn said which task" from "the thread was already about one", which is
+    what decides whether the conversation is rebound. Collapsing them would silently rebind a
+    thread on every follow-up.
+    """
+
+    task: Optional[Task]
+    named: bool
+    delegated_source_run_id: Optional[str]
+
+
+async def resolve_bound_task(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    conversation,
+    queue_entry_ids: Optional[Iterable[str]] = None,
+    task_id: Optional[str] = None,
+) -> BoundTask:
+    """Which task this turn is about, and the run that delegated it. **Reads only.**
+
+    Split out from the staging block in `agent_trigger` so it can be answered *before* the turn
+    context is rendered. The context has to be able to say which specification the work implements,
+    and the binding used to be resolved a hundred lines after the render — so the answer existed,
+    just not yet.
+
+    The staging that follows — rebinding the conversation, binding the run, recording the response
+    run — deliberately stays where it is: it is placed before delivery, which is what commits, so a
+    bound run whose task never moved cannot exist as a partial write.
+
+    Safe to read twice because the mutations never feed back into this: `rebind_conversation` runs
+    only where a task was named, and `binding_for_conversation` only reads where one was not.
+
+    A delegated task takes precedence over an explicitly requested one because it is the more
+    specific statement: an operator draining a queue did not choose what those items are about.
+    """
+    delegated_task_id, delegated_source_run_id = await binding_for_delivery(
+        session, queue_entry_ids
+    )
+
+    bound_task: Optional[Task] = None
+    if delegated_task_id:
+        try:
+            bound_task = await resolve_task_for_project(session, delegated_task_id, project_id)
+        except TaskBindingError:
+            # Validated once already, when the delegation was sent. If the task has since been
+            # deleted the turn still runs, unbound: refusing to start would let removing a row
+            # cancel work the agent was legitimately asked to do.
+            bound_task = None
+    elif task_id:
+        # Asked for explicitly, now, by the operator or by a divergence response. A refusal here is
+        # the right answer — nothing else in the request implies the work.
+        bound_task = await resolve_task_for_project(session, task_id, project_id)
+
+    if bound_task is not None:
+        return BoundTask(bound_task, True, delegated_source_run_id)
+
+    # Nothing named one, so inherit what the thread is already about. This is the whole point of
+    # the conversation binding: without it a follow-up typed into the composer sends no task id,
+    # and every turn after the first went unchecked — including the one where the agent actually
+    # stopped.
+    inherited = await binding_for_conversation(session, conversation, project_id)
+    return BoundTask(inherited, False, delegated_source_run_id)
+
+
+async def spec_document_for_task(session: AsyncSession, task: Optional[Task]) -> Optional[str]:
+    """The path of the document *task* implements, if it names one.
+
+    The link already existed — `Task.spec_document_id` is written when a document's declared tasks
+    are materialised at approval — and reached nothing. An agent handed the task could not get from
+    it to the document, and `read_spec_document` takes a path.
+
+    Returns the path, never the id: the id is a database identifier that names nothing the agent
+    has seen, and it is what the builder tried and was refused on.
+    """
+    if task is None or not getattr(task, "spec_document_id", None):
+        return None
+    document = await session.get(SpecDocument, task.spec_document_id)
+    return document.path if document is not None else None
 
 
 async def bind_run_to_task(

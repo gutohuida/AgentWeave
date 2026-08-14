@@ -207,6 +207,18 @@ async def create_task_for_actor(
     except LinkRefusedError as refusal:
         raise HTTPException(status_code=422, detail=str(refusal)) from refusal
 
+    # Which document this work is against, so an agent given the task can reach it. `spec_document`
+    # only ever disambiguated `requirement_ids` before, and the column was written solely by
+    # `spec_tasks.materialise` — so the turn context could name a document for a task a document
+    # *declared* and for no other, and an agent that decomposed its own work got nothing.
+    #
+    # Falls back to the document the named requirements agree on, because a task tracing to one
+    # document's requirements is against that document whether or not the caller said so. Where
+    # they disagree, nothing is recorded: guessing which one the work is against is worse than
+    # leaving the agent to ask.
+    document_ids = {row.document_id for row in named if row.document_id}
+    spec_document_id = next(iter(document_ids)) if len(document_ids) == 1 else None
+
     task_id = body.id or f"task-{short_id()}"
     task = Task(
         id=task_id,
@@ -222,6 +234,7 @@ async def create_task_for_actor(
         deliverables=body.deliverables,
         notes=body.notes,
         created_by_run_id=created_by_run_id,
+        spec_document_id=spec_document_id,
     )
     session.add(task)
     try:

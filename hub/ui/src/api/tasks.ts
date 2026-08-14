@@ -32,6 +32,10 @@ export interface Task {
    * is most of what tells the operator the card is waiting on *them* rather than merely stalled.
    */
   blocked_reason?: string | null
+  /** The specification document this work is against, and — where a document declared this task —
+   *  the key it was declared under. */
+  spec_document_id?: string | null
+  spec_task_key?: string | null
 }
 
 export type DivergencePolicy = 'surface' | 'retry' | 'escalate'

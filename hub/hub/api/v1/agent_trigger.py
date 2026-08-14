@@ -77,12 +77,11 @@ from ...pty_runner import (
 )
 from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
-    TaskBindingError,
     bind_run_to_task,
-    binding_for_conversation,
-    binding_for_delivery,
     rebind_conversation,
+    resolve_bound_task,
     resolve_task_for_project,
+    spec_document_for_task,
 )
 from ...runner_commands import (
     OPERATOR_POSTURE,
@@ -399,6 +398,24 @@ async def trigger_agent_directly(
     # before command construction; an edited charter is therefore visible on the next run.
     from .agents import _get_session_data, _render_hub_agent_context
 
+    # Which task this turn is about, answered before the context is rendered rather than after.
+    #
+    # A builder triggered on a task could not find the document it was implementing: the read tool
+    # documents its argument as "the path, as given in your turn context", and a task-triggered
+    # context gave no path and no document id. Observed twice in one run, in two conversations —
+    # the second time it blocked recording evidence entirely, and the agents worked around it by
+    # messaging each other for the path.
+    #
+    # Reads only. The staging that acts on this stays where it is, below, before delivery.
+    binding = await resolve_bound_task(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=task_id,
+    )
+    task_document = await spec_document_for_task(session, binding.task)
+
     session_data = await _get_session_data(project_id, session)
     rendered_context = await _render_hub_agent_context(
         agent=agent,
@@ -423,6 +440,11 @@ async def trigger_agent_directly(
         # is the durable record of what the operator said, and re-reading the conversation later
         # must not show them saying something they did not.
         spec_document=spec_document,
+        # The document the bound task implements, which is a different claim from the one above:
+        # that one is where the operator happens to be looking, this one is what the work is
+        # against. Rendered as its own block for exactly that reason.
+        task_spec_document=task_document,
+        task_id=binding.task.id if binding.task is not None else None,
     )
     context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
     try:
@@ -547,11 +569,10 @@ async def trigger_agent_directly(
     # The binding, and the automatic move it causes, are staged here — before delivery, which is
     # what commits — so a bound run whose task never moved cannot exist as a partial write.
     #
-    # A delegated task takes precedence over an explicitly requested one because it is the more
-    # specific statement: an operator draining a queue did not choose what those items are about.
-    delegated_task_id, delegated_source_run_id = await binding_for_delivery(
-        session, queue_entry_ids
-    )
+    # *Which* task it is was resolved further up, before the context was rendered, because the
+    # context has to be able to name the specification the work implements. That resolution reads
+    # only, and nothing below feeds back into it.
+    bound_task, task_was_named, delegated_source_run_id = binding
     if delegated_source_run_id is not None:
         # Carried from the queue entry rather than passed in: the Hub queued this response in an
         # earlier call, and the retry bound cannot see its own source unless the entry brings it.
@@ -559,30 +580,11 @@ async def trigger_agent_directly(
         # The divergence record could not name its response when it was written — the answer was
         # queued, and only becomes a run here, whenever the agent was next free.
         await record_response_run(session, delegated_source_run_id, run.id)
-    bound_task = None
-    if delegated_task_id:
-        try:
-            bound_task = await resolve_task_for_project(session, delegated_task_id, project_id)
-        except TaskBindingError:
-            # Validated once already, when the delegation was sent. If the task has since been
-            # deleted the turn still runs, unbound: refusing to start would let removing a row
-            # cancel work the agent was legitimately asked to do.
-            bound_task = None
-    elif task_id:
-        # Asked for explicitly, now, by the operator or by a divergence response. A refusal here is
-        # the right answer — nothing else in the request implies the work.
-        bound_task = await resolve_task_for_project(session, task_id, project_id)
 
-    if bound_task is not None:
+    if task_was_named and bound_task is not None:
         # This turn named a task, so the thread follows it. The more specific statement wins, and
         # the operator does not have to release an old binding before starting something else here.
         rebind_conversation(conversation, bound_task)
-    else:
-        # Nothing named one, so inherit what the thread is already about. This is the whole point of
-        # the conversation binding: without it a follow-up typed into the composer sends no task id,
-        # and every turn after the first went unchecked — including the one where the agent actually
-        # stopped.
-        bound_task = await binding_for_conversation(session, conversation, project_id)
 
     if bound_task is not None:
         await bind_run_to_task(session, run, bound_task)

@@ -224,5 +224,11 @@ class TaskResponse(BaseModel):
     # in the in_progress column rather than moving to one of its own (R3), this is most of what
     # tells the operator the card is waiting on them.
     blocked_reason: Optional[str] = Field(default=None, max_length=2000)
+    # Which document this work is against, and — for a task the document itself declared — which of
+    # its declared units this is. Written since migration `0071` and exposed nowhere, so nothing
+    # above the database layer could tell a declared task from a hand-made one, or get from a task
+    # to the specification it implements.
+    spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    spec_task_key: Optional[str] = Field(default=None, max_length=128)
 
     model_config = {"from_attributes": True}

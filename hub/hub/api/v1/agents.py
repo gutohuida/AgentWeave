@@ -996,6 +996,8 @@ async def _render_hub_agent_context(
     isolated: bool = False,
     isolation_unavailable: bool = False,
     spec_document: Optional[str] = None,
+    task_spec_document: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -1107,6 +1109,39 @@ async def _render_hub_agent_context(
     # context for what they ask, never as an instruction: the operator sending "why does this say
     # that?" from the specification workspace means the open document, and without this line the
     # agent has no way to know which one.
+    # What the bound task implements. A **different claim** from the block below, and rendered
+    # separately for that reason: that one says where the operator happens to be looking and tells
+    # the agent not to act on it, which is exactly backwards here — this document *is* the
+    # instruction.
+    #
+    # Suppressed when the operator has the same document open, so the stronger framing wins rather
+    # than being restated beside the weaker one.
+    if task_spec_document and task_spec_document != spec_document:
+        task_phase = None
+        with contextlib.suppress(Exception):
+            row = await spec_lifecycle.get_document(db, project_id, task_spec_document)
+            task_phase = row.phase if row is not None else None
+
+        lines.append("### The specification this task implements")
+        if task_id:
+            lines.append(
+                f"- This turn is bound to `{task_id}`, which implements `{task_spec_document}`."
+            )
+        else:
+            lines.append(f"- The task you are working on implements `{task_spec_document}`.")
+        lines.append(
+            f"- Read it with `read_spec_document('{task_spec_document}')`. It is not in your "
+            "working copy, so this is how you see what it actually says — working from a summary, "
+            "or from another agent's description, is how an implementation stops matching what "
+            "was approved."
+        )
+        if task_phase:
+            lines.append(f"- Phase: **{task_phase}**.")
+            duty = SPEC_PHASE_DUTIES.get(task_phase, "")
+            if duty:
+                lines.append(duty)
+        lines.append("")
+
     if spec_document:
         # The document is the file on disk, so its existence is a filesystem question. A project
         # whose directory is unavailable simply contributes no line here — an unavailable workspace
