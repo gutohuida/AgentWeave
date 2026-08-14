@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from hub import requirement_evidence, worktrees
+from hub import repo_hygiene, requirement_evidence, worktrees
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, EvidenceFootprint, Run
@@ -32,6 +32,11 @@ OPERATOR_EVIDENCE = f"{BASE}/spec/evidence"
 PATH = "spec/changes/footprint-demo/spec.html"
 
 ALPHA = {"key": "alpha", "statement": "It records a check-in", "modal": "MUST"}
+
+#: `conftest._no_real_worktree_provision` stubs this out suite-wide so no test shells out to real
+#: `git worktree` against the checkout pytest was invoked from. Captured here at import time, before
+#: the fixture runs, for the one test that needs the genuine article against a `tmp_path` repo.
+_REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -494,6 +499,11 @@ async def test_a_footprint_whose_branch_is_gone_raises_nothing(
 # ---------------------------------------------------------------------------
 
 
+def excludes_of(repo: Path) -> str:
+    target = repo / ".git" / "info" / "exclude"
+    return target.read_text(encoding="utf-8") if target.is_file() else ""
+
+
 @pytest.mark.asyncio
 async def test_registering_seeds_ignore_rules_for_the_hubs_own_files(
     bind_project_workspace, tmp_path
@@ -506,7 +516,7 @@ async def test_registering_seeds_ignore_rules_for_the_hubs_own_files(
     repo = init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
 
-    ignored = (repo / ".gitignore").read_text(encoding="utf-8")
+    ignored = excludes_of(repo)
     assert ".agentweave/worktrees/" in ignored
     assert ".agentweave/logs/" in ignored
 
@@ -517,18 +527,76 @@ async def test_registering_seeds_ignore_rules_for_the_hubs_own_files(
 
 
 @pytest.mark.asyncio
+async def test_the_rules_reach_the_agents_own_checkout(bind_project_workspace, tmp_path):
+    """**This is the test the previous mechanism could not pass.**
+
+    Seeding wrote a marked block into the project's `.gitignore`. That file is uncommitted, and an
+    uncommitted `.gitignore` does not reach a linked worktree — `git status` inside one still reports
+    `?? .agentweave/`. The worktree is exactly where the damage happens: a writing agent runs there
+    and `snapshot_worktree` commits whatever is dirty, so the Hub's own scaffolding rode an agent's
+    branch onto a real project's `master`.
+
+    The old assertion ran `git status` in the *primary checkout*, where the uncommitted file does
+    apply, so it passed while the product was broken.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+
+    # Precisely what the Hub writes into the agent's cwd on every single turn.
+    context = worktree / ".agentweave" / "context"
+    context.mkdir(parents=True, exist_ok=True)
+    (context / "builder.md").write_text("rendered turn context\n", encoding="utf-8")
+
+    assert git(worktree, "status", "--porcelain").stdout.strip() == ""
+
+
+@pytest.mark.asyncio
 async def test_seeding_preserves_what_the_operator_already_ignored(
     bind_project_workspace, tmp_path
 ):
-    """The ignore file is the operator's. Being registered is not a reason to reorder it."""
+    """The exclude file is the operator's. Being registered is not a reason to reorder it."""
     repo = init_repo(tmp_path / "repo")
-    (repo / ".gitignore").write_text("# mine\nbuild/\n*.log\n", encoding="utf-8")
+    target = repo / ".git" / "info" / "exclude"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# mine\nbuild/\n*.log\n", encoding="utf-8")
 
     await bind_project_workspace(repo)
 
-    ignored = (repo / ".gitignore").read_text(encoding="utf-8")
+    ignored = excludes_of(repo)
     assert ignored.startswith("# mine\nbuild/\n*.log\n")
     assert ".agentweave/worktrees/" in ignored
+
+
+@pytest.mark.asyncio
+async def test_a_later_release_can_add_a_pattern_to_an_already_seeded_project(
+    bind_project_workspace, tmp_path
+):
+    """A blind "already seeded, skip" check strands every project on the patterns it first got.
+
+    That is not hypothetical: `.agentweave/context/` was added after the first seeding shipped, and
+    the projects needing it most are the ones seeded by the earlier release. The block is delimited,
+    so it is rewritten in place and everything around it is left alone.
+    """
+    repo = init_repo(tmp_path / "repo")
+    target = repo / ".git" / "info" / "exclude"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "# mine\n"
+        f"{repo_hygiene.EXCLUDE_BEGIN}\n"
+        ".agentweave/worktrees/\n"
+        f"{repo_hygiene.EXCLUDE_END}\n"
+        "# also mine\n",
+        encoding="utf-8",
+    )
+
+    await bind_project_workspace(repo)
+
+    ignored = excludes_of(repo)
+    assert ".agentweave/context/" in ignored
+    assert ignored.startswith("# mine\n")
+    assert ignored.endswith("# also mine\n")
+    assert ignored.count(repo_hygiene.EXCLUDE_BEGIN) == 1
 
 
 @pytest.mark.asyncio
@@ -536,7 +604,7 @@ async def test_a_project_without_a_repository_gets_no_ignore_file(bind_project_w
     plain = tmp_path / "plain"
     plain.mkdir()
     await bind_project_workspace(plain)
-    assert not (plain / ".gitignore").exists()
+    assert not (plain / ".git").exists()
 
 
 @pytest.mark.asyncio
@@ -631,9 +699,32 @@ async def test_an_already_registered_project_is_seeded_too(bind_project_workspac
     """
     repo = init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
-    assert (repo / ".gitignore").is_file()
+    assert (repo / ".git" / "info" / "exclude").is_file()
 
     # Simulate a project registered before this capability existed.
-    (repo / ".gitignore").unlink()
+    (repo / ".git" / "info" / "exclude").unlink()
     await bind_project_workspace(repo)
-    assert ".agentweave/worktrees/" in (repo / ".gitignore").read_text(encoding="utf-8")
+    assert ".agentweave/worktrees/" in excludes_of(repo)
+
+
+@pytest.mark.asyncio
+async def test_a_registered_project_is_seeded_without_ever_registering_again(
+    bind_project_workspace, tmp_path, monkeypatch
+):
+    """Registration is not a path a live project takes twice.
+
+    `open_existing` runs when the operator opens a project; restarting the Hub does not send an
+    already-registered project back through it. So seeding placed only there reaches new projects
+    and nothing else — which is how the real reproduction still showed `?? .agentweave/worktrees/`
+    after the fix had supposedly shipped. Resolving an agent's workspace is the funnel every
+    triggered turn goes through, so the rules land there instead.
+    """
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    (repo / ".git" / "info" / "exclude").unlink()
+
+    workspace = worktrees.resolve_agent_workspace(repo, "builder", {})
+
+    assert ".agentweave/context/" in excludes_of(repo)
+    assert git(workspace, "status", "--porcelain").stdout.strip() == ""

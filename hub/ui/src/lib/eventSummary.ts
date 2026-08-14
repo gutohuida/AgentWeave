@@ -18,7 +18,8 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'msg_detected': return `${data.from} → ${data.to}: "${data.subject ?? ''}"`
     case 'msg_stale': return `${data.msg_id} unread ${data.minutes_unread}m — re-pinging ${data.to}`
     case 'msg_send_failed': return `FAILED ${data.from} → ${data.to}: "${data.subject ?? ''}" (${data.msg_id})`
-    case 'task_created': return `"${data.title}" → ${data.assignee ?? 'unassigned'} [${data.priority}]`
+    // No second `task_created` here. It duplicated the Hub-side case above, so it was unreachable —
+    // esbuild flagged it on every build — and the richer wording it carried never once rendered.
     case 'task_status': return `${data.task_id}: ${data.prev} → ${data.status}`
     case 'task_save_failed': return `FAILED to save task ${data.task_id}: "${data.title}"`
     // A run ended holding work nobody moved. The outcome is what the operator actually needs —

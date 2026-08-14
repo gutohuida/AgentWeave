@@ -40,6 +40,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .repo_hygiene import seed_repo_excludes
+
 logger = logging.getLogger(__name__)
 
 BRANCH_PREFIX = "agentweave/"
@@ -269,7 +271,13 @@ def resolve_agent_workspace(repo_root: Path, agent: str, config: Dict[str, Any])
     falling back there would put a writing agent on the operator's primary checkout,
     mutating the working copy their editor and CI read, which is the silent lost update
     this module exists to prevent.
+
+    Seeding the Hub's ignore rules here rather than only at registration is deliberate: a
+    project registered before a pattern existed never passes through `open_existing` again,
+    and this is the one funnel every triggered agent goes through. It runs before the
+    worktree is provisioned so the rules are in place before there is anything to ignore.
     """
+    seed_repo_excludes(repo_root)
     if not is_writing_agent(config):
         return repo_root
     if not is_git_repo(repo_root):

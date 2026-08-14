@@ -108,10 +108,28 @@ straight after provisioning, so an assertion without it is vacuous).
 
 ## 7. Housekeeping
 
-- [x] 7.1 Seed a `.gitignore` at project registration — additive, idempotent, never reordering the
+- [x] 7.1 Seed ignore rules for what the Hub creates — additive, idempotent, never reordering the
       operator's own rules, never failing registration. Reuse or delete the orphaned
       `AGENTWEAVE_GITIGNORE_PATTERNS` in `src/agentweave/constants.py:43-60` rather than leaving a
       third spelling.
+- [x] 7.1a **Reopened after the fact — the shipped mechanism could not work.** Seeding wrote a
+      marked block into the project's `.gitignore`. That file is uncommitted, and an uncommitted
+      `.gitignore` **does not reach a linked worktree** (verified with raw git, both directions).
+      The worktree is where the damage happens: a writing agent runs there and `snapshot_worktree`
+      commits whatever is dirty. Moved to `$GIT_COMMON_DIR/info/exclude`, which every worktree
+      shares and which is never committed — see the new `hub/hub/repo_hygiene.py` and D11.
+- [x] 7.1b `.agentweave/context/` added to the patterns. It is rewritten from the canonical context
+      on **every** turn, so it is pure regenerated output, and it was found committed onto
+      `aw-loop5`'s `master`. Adding it is why the block is now rewritten in place rather than
+      skipped when present: a blind "already seeded" check strands every existing project on the
+      patterns it first received.
+- [x] 7.1c Seed from `worktrees.resolve_agent_workspace` as well as registration. `open_existing`
+      runs when the operator opens a project; a Hub restart does not send an already-registered
+      project back through it, which is why the real reproduction still showed
+      `?? .agentweave/worktrees/` after the fix had supposedly shipped.
+- [x] 7.6 Remove the unreachable duplicate `task_created` clause in
+      `hub/ui/src/lib/eventSummary.ts`. A `switch` takes the first match, so the second one never
+      rendered; esbuild warned on every build and nothing failed, so nothing was noticed.
 - [x] 7.2 `spec_service.rename_document` promotes `subject` to `document.title`.
 - [x] 7.3 The UI stops presenting free-text prose as an "unresolved requirement". B3's
       preserve-verbatim rule is unchanged; only the wording of the surface changes.

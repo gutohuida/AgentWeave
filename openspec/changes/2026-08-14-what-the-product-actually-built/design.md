@@ -155,3 +155,37 @@ not been decomposed yet, not an error.
   inside this change would hide what this change is for.
 - **Does not touch the interview backstop**, by operator decision.
 - **Does not add a footprint root column, per-task branches, GitHub, or un-merging.**
+
+## D11. Ignore rules go in `info/exclude`, not in the operator's `.gitignore`
+
+Task 7.1 shipped a marked block written into the project's `.gitignore`, reasoning that the operator
+keeps one place to look. It could not have worked, and two experiments against raw git settle it:
+
+| mechanism | `git status` inside the agent's worktree |
+|---|---|
+| uncommitted root `.gitignore` | `?? .agentweave/` |
+| `$GIT_COMMON_DIR/info/exclude` | clean |
+
+The worktree is the only place that matters here. A writing agent runs there, and
+`snapshot_worktree` commits whatever is dirty — which is how the Hub's own scaffolding rode an
+agent's branch onto a real project's `master`. A `.gitignore` that is written but never committed
+does not exist as far as a linked worktree is concerned.
+
+The only way to make `.gitignore` work would be to **commit it** — the Hub creating a commit in the
+operator's repository, unasked, to clean up after itself. That trades a mess the operator can ignore
+for a change to their history they did not authorise. `info/exclude` is repo-local, shared by every
+worktree from one write, and never appears in their diff, which is the correct footprint for a
+tool's own artefacts.
+
+Consequences taken deliberately:
+
+- **The block is rewritten in place, not skipped when present.** Adding `.agentweave/context/`
+  proved the point: a blind "already seeded" check leaves every existing project on the patterns it
+  first received, and those are the projects with the problem.
+- **Seeding also runs from `resolve_agent_workspace`.** Registration is not a path a live project
+  takes twice, so registration-only seeding reaches new projects and nothing else.
+- **`repo_hygiene` imports nothing from the Hub.** `worktrees` is dependency-free by design and has
+  to call this without pulling in the database layer.
+- **Projects seeded by the earlier release keep the stale `.gitignore` block.** Deleting it would
+  mean editing a tracked file the operator may since have edited. The patterns in it are still
+  valid, so it is harmless; left alone on purpose.
