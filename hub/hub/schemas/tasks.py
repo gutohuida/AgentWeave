@@ -199,7 +199,10 @@ class TaskResponse(BaseModel):
     # What the caller submitted, kept verbatim. Answers about traceability come from
     # `requirement_links`, never from here — this is the original, so a mis-parse is re-derivable.
     requirements: Optional[Any] = None
-    # The requirements this task actually serves: identifier, statement, and state.
+    # The requirements this task actually serves: `identifier`, `requirement_id`, `document_id`,
+    # `state`, `anchor`, `key`, and — read from the document rather than stored — `statement` and
+    # `modal`. `statement` is null where the document no longer words the requirement, which is
+    # what a retired one is.
     requirement_links: List[Any] = Field(default_factory=list)
     # References that named no requirement this project has, with their original text. Visible
     # rather than dropped, because a task that quietly lost a reference it used to have is the

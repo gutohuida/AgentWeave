@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import project_workspace, spec_reading
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_project
 from ...db.engine import get_session
@@ -57,13 +58,22 @@ def _task_response(
 
 
 async def _attach_requirements(
-    session: AsyncSession, responses: List[TaskResponse]
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
 ) -> List[TaskResponse]:
-    """Fill in what each task serves, and what it named that resolved to nothing.
+    """Fill in what each task serves, what that requirement says, and what resolved to nothing.
 
     Batched across the whole page rather than queried per task: a board with a
     hundred cards would otherwise take two hundred round trips to answer a
     question that is two joins.
+
+    The **wording** comes from the document, never from the row — `SpecRequirement` holds only a
+    digest, precisely so it cannot come to disagree with the document about what a requirement says.
+    One file read per distinct document, so the cost is a function of how many specifications a
+    board draws on rather than how finely the work was decomposed.
+
+    An identifier alone is only actionable by a reader who can open the document, which for an agent
+    was not true at all until recently. Carrying the statement is what makes a task independently
+    workable.
     """
     task_ids = [response.id for response in responses]
     if not task_ids:
@@ -75,8 +85,26 @@ async def _attach_requirements(
         .where(TaskRequirementLink.task_id.in_(task_ids))
         .order_by(SpecRequirement.identifier)
     )
+    rows = list(links)
+
+    # Degrading is the requirement, not caution: `resolve_project_workspace` raises when a project's
+    # directory has moved, and a task board must not fail because a specification is unreachable.
+    wording: dict[str, dict] = {}
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        payloads = await spec_reading.payloads_for_documents(
+            session, workspace, [requirement.document_id for _, requirement in rows]
+        )
+        wording = {
+            document_id: spec_reading.statements_by_key(payload)
+            for document_id, payload in payloads.items()
+        }
+    except Exception:
+        wording = {}
+
     by_task: dict[str, list] = {}
-    for task_id, requirement in links:
+    for task_id, requirement in rows:
+        stated = wording.get(requirement.document_id, {}).get(requirement.key) or {}
         by_task.setdefault(task_id, []).append(
             {
                 "identifier": requirement.identifier,
@@ -84,6 +112,11 @@ async def _attach_requirements(
                 "document_id": requirement.document_id,
                 "state": requirement.state,
                 "anchor": requirement.anchor,
+                "key": requirement.key,
+                # Null where the document no longer words it — which is what a retired requirement
+                # is, and the honest answer rather than a stale copy.
+                "statement": stated.get("statement"),
+                "modal": stated.get("modal"),
             }
         )
 
@@ -230,7 +263,9 @@ async def create_task_for_actor(
         {task.assignee} if task.assignee else set(),
     )
     responses = await _attach_requirements(
-        session, [_task_response(task, heartbeats.get(task.assignee) if task.assignee else None)]
+        session,
+        [_task_response(task, heartbeats.get(task.assignee) if task.assignee else None)],
+        project_id=project_id,
     )
     return responses[0]
 
@@ -285,6 +320,7 @@ async def list_tasks(
             )
             for task in tasks
         ],
+        project_id=project_id,
     )
 
 
@@ -351,6 +387,7 @@ async def get_task(
                 has_open_divergence=task.id in diverged,
             )
         ],
+        project_id=project_id,
     )
     return responses[0]
 
@@ -473,6 +510,7 @@ async def update_task_for_actor(
                 has_open_divergence=task.id in diverged,
             )
         ],
+        project_id=project_id,
     )
     return responses[0]
 

@@ -227,7 +227,12 @@ def _reference(task: Task, value: str, reason: str) -> TaskRequirementReference:
 
 
 async def for_task(session: AsyncSession, task_id: str) -> List[SpecRequirement]:
-    """The requirements a task serves, with their current statements reachable from the row."""
+    """The requirements a task serves, as index rows.
+
+    These carry identity and a digest and **no wording** — by design, so a row cannot come to
+    disagree with the document about what a requirement says. The wording lives in the document and
+    is read through `spec_reading`; a caller that needs statements wants that, not this.
+    """
     result = await session.execute(
         select(SpecRequirement)
         .join(TaskRequirementLink, TaskRequirementLink.requirement_id == SpecRequirement.id)
