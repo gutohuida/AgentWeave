@@ -154,9 +154,16 @@ behaviourless refactor that would land unverified. Landed clear of phase 6 to ke
 
 ## 9. Verification — human-only
 
-- [ ] 9.1 **Re-run `/e2e-loop` from zero.** Pass condition: an agent-driven project reaches
+- [x] 9.1 **Re-run `/e2e-loop` from zero.** Pass condition: an agent-driven project reaches
       `integration: integrated` with **no operator HTTP calls** — no minted credential, no curl —
       against a task carrying requirement links.
+      **Passed 2026-08-14** on `aw-loop7` (`proj-e6c1de74`): 9/9 requirements `verified /
+      integrated`, `b38e4646 → master` merged, tests green from a clean `master` checkout, every
+      evidence action via the agents' own MCP tools. Three defects found *around* the change cost
+      six extra runs and three operator interventions —
+      `openspec/explorations/2026-08-14-loop7-evidence-drives-but-a-skipped-merge-is-terminal.md`.
+      Not exercised: the grant's refusal paths (`self_acceptance`, `acceptance_not_granted`) were
+      never hit live, and no Codex refusal reached a timeline (test-guide step 7).
 - [ ] 9.2 Does granting an agent evidence acceptance read as safe? It is authority over what ships.
 - [ ] 9.3 Does the task-derived specification block change what a builder actually does, or does it
       read past it the way it read past the missing path?

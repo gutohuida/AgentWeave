@@ -104,6 +104,12 @@ implement one.
 disambiguates `requirement_ids` today. Left alone, D6/D7 reach tasks a document *declared* and no
 others, so an agent that decomposes its own work gets nothing.
 
+It also records the document the task's `requirement_ids` **agree on** when the caller passed no
+`spec_document`, and records nothing when they disagree. This was raised to the operator as a
+judgement call that could be narrowed to explicit `spec_document` only, and **kept** (2026-08-14):
+a task whose links all point at one document should let its builder find the spec without asking,
+and guessing across mixed links is the case worth refusing.
+
 ## D9. `decide_approval` stays pure; the caller reports
 
 Its purity is a stated decision in its docstring and asserted by `test_codex_appserver.py`. The
