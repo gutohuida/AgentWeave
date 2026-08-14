@@ -119,7 +119,11 @@ than rebasing a control-flow one.
       approve again, which does nothing.
 - [ ] 9.2 Look at a failed run's `run_failed` event. *Expect:* one turn status, one runtime exit
       status, told apart, plus whatever the child wrote to stderr.
-- [ ] 9.3 Kill a Codex app-server and read the error. *Expect:* `-1`, not `4294967295`.
+- [x] 9.3 **PASSED for the error string, FAILED for the payload — finding L9-1.** `run.error` reads
+      `app-server process ended before the turn completed (exit -1)`. But the `run_failed` payload
+      carries `runtime_exit_code: 4294967295`, raw. One death, three numbers. The payload is a
+      display surface, so D3's "what is recorded stays raw" does not cover it; the spec's own
+      scenario says what is displayed conveys the termination. Fix pending on `autonomous_work`.
 - [ ] 9.4 Judgement call: do two exit codes on one event read as informative or as noise? If noise,
       the answer is a UI change, not a revert — the facts are different and both are needed.
 - [ ] 9.5 Look at a task card linked to more than nine requirements. *Expect:* `FR-2` before `FR-11`.
