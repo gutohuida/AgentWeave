@@ -135,6 +135,24 @@ def approval_subject(method: str, params: Dict[str, Any]) -> Dict[str, Any]:
     return {"grantRoot": params.get("grantRoot"), "reason": params.get("reason")}
 
 
+#: What a refused request is called where the operator reads it.
+#:
+#: The timeline renders "{agent} refused {tool_name}", so a JSON-RPC method name there reads as
+#: noise in a place the operator is trying to understand why their agent stopped. These are the
+#: names Claude's own refusals already use, so a refusal reads the same whichever runtime decided
+#: it.
+_REFUSAL_LABELS = {
+    COMMAND_APPROVAL_METHOD: "Bash",
+    FILE_CHANGE_APPROVAL_METHOD: "Write",
+    ELICITATION_METHOD: "a prompt from one of its own tools",
+}
+
+
+def approval_label(method: str) -> str:
+    """The refused action, named for a reader rather than for the protocol."""
+    return _REFUSAL_LABELS.get(method, method)
+
+
 def _within(path: Optional[str], workspace: Optional[str]) -> bool:
     """True when *path* is the workspace or beneath it, comparing resolved components.
 
@@ -670,6 +688,7 @@ async def run_turn(
     posture: Optional[str] = None,
     workspace: Optional[str] = None,
     request_approval: "Optional[Callable[[str, Dict[str, Any]], Awaitable[bool]]]" = None,
+    on_refusal: "Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]]" = None,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -788,7 +807,8 @@ async def run_turn(
                     posture=posture,
                     workspace=workspace,
                 )
-                if decision == ASK_OPERATOR:
+                asked_operator = decision == ASK_OPERATOR
+                if asked_operator:
                     # The sentinel is not a protocol reply; it must be resolved into a real one
                     # before it can be sent. With no answerer wired, decline -- every request
                     # still gets an answer (implications.md 2: silence is a deadlock).
@@ -797,6 +817,21 @@ async def run_turn(
                         subject = approval_subject(method, msg.get("params") or {})
                         allowed = await request_approval(method, subject)
                     decision = {"decision": "accept" if allowed else "decline"}
+                # Report a refusal this runtime decided by itself. `decide_approval` stays pure --
+                # its purity is what makes it testable as a table -- so the reporting lives here,
+                # where the decision is final.
+                #
+                # Not when the operator was asked: that path already records the refusal through
+                # the permission request they answered, and telling them twice that one action was
+                # refused is worse than the silence this fixes. Refusals only, for the reason
+                # `record_permission_decision` gives -- an event per allowed action buries them.
+                if (
+                    on_refusal is not None
+                    and not asked_operator
+                    and isinstance(decision, dict)
+                    and decision.get("decision") == "decline"
+                ):
+                    await on_refusal(method, approval_subject(method, msg.get("params") or {}))
                 await session.respond(msg_id, decision)
                 continue
 

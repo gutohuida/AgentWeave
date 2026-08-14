@@ -25,7 +25,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -40,6 +40,7 @@ from ...codex_appserver import (
     TurnOutcome,
     uses_app_server,
 )
+from ...codex_appserver import approval_label as codex_approval_label
 from ...codex_appserver import run_turn as codex_run_turn
 from ...conversation_titles import maybe_generate_title
 from ...conversations import (
@@ -1621,6 +1622,38 @@ async def _execute_codex_appserver_run(
                 accounting if accounting_sample is None else accounting_sample.merged(accounting)
             )
 
+        async def _on_refusal(method: str, subject: Dict[str, Any]) -> None:
+            """Record a refusal this runtime decided by itself.
+
+            Claude's refusals reach the event log through `approve_tool_call`, which is a
+            `--permission-prompt-tool` flag and therefore Claude-only. A Codex agent declined by
+            its own sandbox produced nothing at all: not an event, not an SSE frame, not a line in
+            the timeline. Found live -- a reviewing agent was refused permission to write its own
+            review file and said so in prose, while the Hub's durable record showed a clean run.
+            """
+            reason = subject.get("reason") or ""
+            detail = subject.get("command") or subject.get("grantRoot") or ""
+            async with async_session_factory() as db:
+                await persist_event(
+                    db,
+                    project_id=project_id,
+                    event_type="permission_denied",
+                    agent=agent,
+                    data={
+                        "tool_name": codex_approval_label(method),
+                        "reason": reason or (f"outside {agent}'s workspace" if detail else ""),
+                        "detail": detail if isinstance(detail, str) else " ".join(map(str, detail)),
+                        "run_id": run_id,
+                        "decided_by": "runtime",
+                    },
+                    severity="warn",
+                )
+            await sse_manager.broadcast(
+                project_id,
+                "permission_denied",
+                {"agent": agent, "tool_name": codex_approval_label(method), "run_id": run_id},
+            )
+
         try:
             outcome: TurnOutcome = await codex_run_turn(
                 cli=cli,
@@ -1646,6 +1679,7 @@ async def _execute_codex_appserver_run(
                 on_accounting=_on_accounting,
                 on_thread_started=_bind_session_id,
                 should_interrupt=lambda: run_id in _stop_requested,
+                on_refusal=_on_refusal,
             )
         except (FileNotFoundError, AppServerError, asyncio.TimeoutError, OSError) as exc:
             # Mirrors `_execute_run`'s own early-spawn-failure handling: nothing was ever

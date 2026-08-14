@@ -458,3 +458,163 @@ class TestRunTurnInterrupt:
         assert outcome.status == "interrupted"
         assert "turn/interrupt" in [m for m, _ in fake.sent_requests]
         assert fake.closed_with_force is True
+
+
+class TestRunTurnReportsRefusals:
+    """A refusal this runtime decides by itself has to reach the operator.
+
+    Claude's refusals reach the event log through `approve_tool_call`, which is a
+    `--permission-prompt-tool` flag and therefore Claude-only. A Codex agent declined by its own
+    sandbox produced nothing: no event, no SSE frame, no line in the timeline. Found live, when a
+    reviewing agent was refused permission to write its own review file, said so in prose, and the
+    Hub's durable record showed a clean run.
+
+    `decide_approval` stays pure -- `test_codex_appserver.py` asserts that as a table -- so the
+    reporting is the caller's, and these cover the caller.
+    """
+
+    @staticmethod
+    def _approval(method="item/commandExecution/requestApproval", params=None):
+        return {"id": 0, "method": method, "params": params or {"command": "rm -rf /"}}
+
+    @staticmethod
+    def _session(request):
+        return _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                request,
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}},
+            ],
+        )
+
+    async def _run(self, monkeypatch, request, **kwargs):
+        fake = self._session(request)
+        _patch_spawn(monkeypatch, fake)
+        refusals = []
+
+        async def _on_refusal(method, subject):
+            refusals.append((method, subject))
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_noop,
+            on_refusal=_on_refusal,
+            **kwargs,
+        )
+        return fake, refusals
+
+    @pytest.mark.asyncio
+    async def test_a_decline_is_reported(self, monkeypatch):
+        fake, refusals = await self._run(monkeypatch, self._approval())
+
+        assert fake.sent_responses == [(0, {"decision": "decline"})]
+        assert len(refusals) == 1
+        method, subject = refusals[0]
+        assert method == "item/commandExecution/requestApproval"
+        assert subject["command"] == "rm -rf /"
+
+    @pytest.mark.asyncio
+    async def test_an_outside_workspace_decline_is_reported(self, monkeypatch):
+        """The posture that produced the live finding: `workspace`, refusing a path outside it."""
+        request = self._approval(params={"command": "ls", "cwd": "/somewhere/else"})
+        fake, refusals = await self._run(
+            monkeypatch, request, posture="workspace", workspace="/workspace"
+        )
+
+        assert fake.sent_responses == [(0, {"decision": "decline"})]
+        assert [method for method, _ in refusals] == ["item/commandExecution/requestApproval"]
+
+    @pytest.mark.asyncio
+    async def test_an_accepted_action_is_not_reported(self, monkeypatch):
+        """An event per allowed action buries the refusals among them."""
+        fake, refusals = await self._run(
+            monkeypatch,
+            self._approval(params={"command": "ls", "cwd": "/workspace/sub"}),
+            posture="workspace",
+            workspace="/workspace",
+        )
+
+        assert fake.sent_responses == [(0, {"decision": "accept"})]
+        assert refusals == []
+
+    @pytest.mark.asyncio
+    async def test_an_operator_answered_refusal_is_not_reported_twice(self, monkeypatch):
+        """That path already records the refusal through the request the operator answered.
+
+        Telling them twice that one action was refused is worse than the silence this fixes.
+        """
+        fake = self._session(self._approval())
+        _patch_spawn(monkeypatch, fake)
+        refusals = []
+
+        async def _on_refusal(method, subject):
+            refusals.append((method, subject))
+
+        async def _ask(method, subject):
+            return False  # the operator refuses
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_noop,
+            posture="operator",
+            request_approval=_ask,
+            on_refusal=_on_refusal,
+        )
+
+        assert fake.sent_responses == [(0, {"decision": "decline"})]
+        assert refusals == []
+
+    @pytest.mark.asyncio
+    async def test_an_unrecognised_method_decline_is_reported(self, monkeypatch):
+        _, refusals = await self._run(
+            monkeypatch, self._approval(method="something/new", params={})
+        )
+        assert [method for method, _ in refusals] == ["something/new"]
+
+    @pytest.mark.asyncio
+    async def test_a_turn_without_a_reporter_still_answers_every_request(self, monkeypatch):
+        """`on_refusal` is optional, and silence must never become a deadlock."""
+        fake = self._session(self._approval())
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_noop,
+        )
+
+        assert fake.sent_responses == [(0, {"decision": "decline"})]
+
+
+class TestApprovalLabel:
+    def test_the_refused_action_reads_as_a_thing(self):
+        """The timeline renders "{agent} refused {tool_name}"."""
+        assert codex_appserver.approval_label("item/commandExecution/requestApproval") == "Bash"
+        assert codex_appserver.approval_label("item/fileChange/requestApproval") == "Write"
+
+    def test_an_unknown_method_is_passed_through_rather_than_hidden(self):
+        assert codex_appserver.approval_label("future/method") == "future/method"
