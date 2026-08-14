@@ -200,16 +200,43 @@ the error has fields nothing fills.
 
 ## 9. Verification — human-only
 
-- [ ] 9.1 **Re-run `/e2e-loop` from zero.** Pass condition: a builder records evidence mid-turn and
+**Ran 2026-08-14 as loop 8** (project `aw-loop8`, findings in
+`openspec/explorations/2026-08-14-loop8-a-dead-runtime-eats-the-message.md`).
+
+- [x] 9.1 **Re-run `/e2e-loop` from zero.** Pass condition: a builder records evidence mid-turn and
       the footprint names the **snapshot** commit — **no reject/re-record cycle at all**. That round
       trip is what phase 1 exists to remove, and its absence is the proof.
-- [ ] 9.2 Approve a task with no main branch set, then set one in settings. The merge must happen
+      **PASSED.** All five footprints named `b8b8664`, the builder's own snapshot; blob-verified
+      against the commit, and the parent held only `README.md`. The verifier reviewed that commit and
+      raised no commit-mismatch complaint. It rejected FR-3 on merit (a `Decimal("NaN")` hole),
+      which is the review gate working, not the round trip this phase removes.
+      D3's fallback also observed: a turn that committed its own work re-stamped to `HEAD`.
+- [x] 9.2 Approve a task with no main branch set, then set one in settings. The merge must happen
       **without** walking the task back through `revision_needed`.
+      **PASSED.** `NO_MAIN_BRANCH` skip, then naming `master` in settings merged on save
+      (`fcb0f51`). Transitions: `pending → assigned → in_progress → completed → under_review →
+      approved`, no walk-back.
 - [ ] 9.3 Kill a Codex app-server mid-turn three times. The agent must unwedge on its own and the
       operator must be told, rather than four silent failures.
+      **FAILED — left unchecked deliberately.** The agent does unwedge (`idle` after every failure),
+      but a *mid-turn* death never reaches `return_run_entries`: the entry stays `delivered` with
+      `delivery_attempts = 0`, so it is neither retried nor abandoned and the operator's input is
+      lost silently. Reproduced twice. `RESUME_RETRY_LIMIT`/`DELIVERY_ATTEMPT_LIMIT` are
+      structurally unreachable on this path — see finding 1. On the *pre-spawn* path the machinery
+      works (reset-at-2 recovered a genuinely unresumable session on attempt 3), but nothing drives
+      attempts 2 and 3 on its own — finding 2.
 - [ ] 9.4 Does an abandoned queue entry read as "the Hub gave up" clearly enough to act on?
+      **Not reachable to judge:** no entry was ever abandoned, for the reason in 9.3. Still the
+      operator's call once finding 1 is fixed.
 - [ ] 9.5 Does "Try again" read as safe, given it merges into the main branch?
-- [ ] 9.6 Is `make ui` a workflow you would actually run, or will the stamp rot?
+      Still the operator's call. Data point from outside: the retry route merged correctly from a
+      genuine `CHECKOUT_DIRTY` skip, but the skip's own text says *"commit or stash them and the
+      next approval will merge"*, which provably does nothing — finding 3.
+- [x] 9.6 Is `make ui` a workflow you would actually run, or will the stamp rot?
+      **Answered from outside: it will rot as written.** `make` is absent from both Git Bash and
+      PowerShell on this machine, and the warning names only `make ui` — finding 6. The mechanism
+      itself is sound: an uncommitted types-only edit raised `ui_stale` within the TTL and reverting
+      cleared it, with no Hub restart, and the uncommitted case was called out by name.
 
 ## 10. User test guide
 
