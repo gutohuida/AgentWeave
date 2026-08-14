@@ -919,6 +919,13 @@ def _tool_surface_lines() -> List[str]:
         "it is about, so it starts with a meaningless placeholder name. `subject` is plain words "
         "describing what it turned out to cover; the Hub derives the path. Returns the new path, "
         "which is the one to use for the rest of the turn.",
+        "- `read_spec_document(path)` — read a specification document. **Use this before writing "
+        "code against one.** The document lives in the project directory, not in your working "
+        "copy, so you probably cannot open it as a file; working from someone's summary of it is "
+        "how an implementation stops matching what was approved. Each requirement comes back with "
+        "the `FR-n` identifier the Hub minted, its statement, and its own acceptance criteria — "
+        "quote those identifiers, because tasks, evidence and completion gates all refer to them. "
+        "Readable at any phase, and `phase` tells you how settled it is.",
         "- `recall(observation_id)` — read back one observation by its identifier.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
@@ -1109,6 +1116,14 @@ async def _render_hub_agent_context(
             lines.append(
                 "- This is where they are looking right now. Treat it as context for what they "
                 "ask, not as an instruction to act on it."
+            )
+            # Named here as well as in the tool list, because this is the moment it applies. A tool
+            # that is served and undiscovered at the point of use is the same failure as one that
+            # was never served: an agent concluded it had no way to read the document and worked
+            # from a paraphrase instead.
+            lines.append(
+                f"- Read it with `read_spec_document('{open_spec_path}')`. It is not in your "
+                "working copy, so this is how you see what it actually says."
             )
             # The procedure floor. Code-owned and unconditional, because a project may have no
             # charter bound and the obligation to interview is an exit condition, not advice —

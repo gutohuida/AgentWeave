@@ -906,6 +906,36 @@ def rename_spec_document(path: str, subject: str) -> Dict[str, Any]:
     return _hub_request("POST", "/spec/documents/rename", {"path": path, "subject": subject})
 
 
+@mcp.tool()
+def read_spec_document(
+    path: str, include: Literal["requirements", "full"] = "requirements"
+) -> Dict[str, Any]:
+    """Read the specification document you were told to implement.
+
+    **Use this before writing code against a document.** The document lives in the project
+    directory, not in your working copy, so you almost certainly cannot open it as a file. Working
+    from a summary, or from another agent's description of it, is how an implementation quietly
+    stops matching what was approved.
+
+    Args:
+        path: The document's path, as given in your turn context.
+        include: `requirements` (the default) returns the problem, scope and every requirement.
+            `full` adds the design, declared tasks, algorithms and evidence sections.
+
+    Each requirement carries the `identifier` the Hub minted for it — `FR-1`, `FR-2` — along with
+    its `statement`, its `modal` (MUST/SHOULD/MAY/SHALL) and its own `acceptance_criteria`. **Quote
+    those identifiers**: they are what tasks, evidence and completion gates refer to, so naming them
+    is how your work is traceable to what it satisfies.
+
+    Also returns `phase` and `rigor`, which say how settled this document is. Readable at any phase
+    — an unapproved document is still worth reading, and its phase tells you not to build on it yet.
+
+    A `diagnostics` entry appears where the document and the Hub's index disagree, or where the
+    document carries no structured content at all.
+    """
+    return _hub_request("GET", "/spec/documents", params={"path": path, "include": include})
+
+
 def main() -> None:
     """Run the canonical Hub-owned surface over stdio."""
     mcp.run(transport="stdio", show_banner=False)

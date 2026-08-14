@@ -836,6 +836,92 @@ class SpecDocumentRename(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+@router.get("/spec/documents")
+async def read_spec_document(
+    path: str = Query(..., max_length=255),
+    include: str = Query("requirements", pattern="^(requirements|full)$"),
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Read the specification an agent was told to implement.
+
+    Documents are written into the *project* directory, while a working agent's checkout is an
+    isolated one branched before the document existed. The turn context hands an agent a path and a
+    phase and no content, so until this route existed an implementing agent was told which document
+    governed it and had no way to open it — and implemented from another agent's paraphrase instead,
+    with no way for anyone to detect divergence from what was approved.
+
+    A query parameter rather than a path segment, mirroring the operator's `GET /project/spec`: an
+    agent-supplied path then cannot be reinterpreted as extra routing.
+
+    Readable in **every phase**. Reading is not authoring, and every gate in this area governs
+    writing or approving. A reviewer needs a proposed document and a builder needs an approved one;
+    a refusal that depends on state is one an agent concludes it does not have at all.
+    """
+    from ... import project_workspace, spec_lifecycle, spec_payload, spec_reading
+    from ...db.models import SpecRequirement
+    from ...spec_documents import read_document
+    from ...spec_manifest import SpecPathError, validate_spec_path
+
+    try:
+        resolved = validate_spec_path(path)
+    except SpecPathError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    document = await spec_lifecycle.get_document(session, actor.project_id, resolved)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no specification document at {resolved}.",
+        )
+
+    content = read_document(workspace, document.path)
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"the document at {resolved} is registered but its file is missing.",
+        )
+
+    payload = spec_payload.extract_payload(content)
+    rows = (
+        (
+            await session.execute(
+                select(SpecRequirement).where(SpecRequirement.document_id == document.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    requirements, diagnostics = spec_reading.requirement_view(payload, list(rows))
+
+    view = {
+        "path": document.path,
+        "title": document.title,
+        "kind": document.kind,
+        # Returned rather than enforced, so an agent can judge how settled this is instead of
+        # guessing — or being refused and concluding the capability is absent.
+        "phase": document.phase,
+        "rigor": document.rigor,
+        "explore_closed": document.explore_closed_at is not None,
+        "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+        "summary": (payload or {}).get("summary"),
+        "problem": (payload or {}).get("problem"),
+        "scope": (payload or {}).get("scope"),
+        "requirements": requirements,
+        "open_questions": (payload or {}).get("open_questions"),
+        "diagnostics": diagnostics,
+    }
+    if include == "full":
+        for extra in ("design", "tasks", "algorithms", "evidence", "lifecycle"):
+            view[extra] = (payload or {}).get(extra)
+    return view
+
+
 @router.post("/spec/documents/rename")
 async def rename_spec_document(
     body: SpecDocumentRename,
