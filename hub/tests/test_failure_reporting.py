@@ -103,6 +103,28 @@ def test_the_run_failed_payload_names_the_runtimes_own_exit_code():
     assert fields == {"runtime_exit_code": -1, "stderr_tail": "boom"}
 
 
+def test_the_payload_renders_the_exit_code_rather_than_shipping_it_raw():
+    """Finding L9-1, measured against a live Hub on 2026-08-15.
+
+    The first version of this change normalised only the composed message, so `run.error` said
+    `exit -1` while the `run_failed` payload went out as `runtime_exit_code: 4294967295` — one
+    death described by three numbers, which is the confusion the change set out to remove. A
+    broadcast payload is a display surface; D3's "recorded values stay raw" covers `TurnOutcome`
+    and `AppServerError`, not this.
+    """
+    from hub.api.v1.agent_trigger import _runtime_failure_fields, _transport_failure_fields
+
+    outcome = TurnOutcome(thread_id="t-1", status="failed", exit_code=4294967295)
+    assert _runtime_failure_fields(outcome, "run_failed")["runtime_exit_code"] == -1
+    # The outcome itself is untouched — what the platform reported is still available in memory.
+    assert outcome.exit_code == 4294967295
+
+    fields = _transport_failure_fields(
+        AppServerError("app-server process ended", exit_code=4294967295), None
+    )
+    assert fields["exit_code"] == -1
+
+
 def test_a_completed_run_reports_no_runtime_failure_fields():
     from hub.api.v1.agent_trigger import _runtime_failure_fields
 

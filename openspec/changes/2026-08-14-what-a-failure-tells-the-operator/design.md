@@ -43,10 +43,22 @@ sees. Values at or above `2**31` are reinterpreted as signed 32-bit; everything 
 untouched, so an ordinary `1` or `127` is unchanged and `None` stays absent.
 
 Deliberately not normalised: `self.exit_code`, and `TurnOutcome.exit_code`. Those are what the OS
-reported, and a diagnostic that quietly rewrites its input is a worse diagnostic. Only the rendered
-clause changes. `runtime_exit_code` in the broadcast therefore carries the raw value, and the
-readable form travels in the message — the same split the existing `method` and `stderr_tail` facts
-already use.
+reported, and a diagnostic that quietly rewrites its input is a worse diagnostic.
+
+**Corrected 2026-08-15 after measuring it live (finding L9-1).** This decision originally said the
+broadcast payload would carry the raw value and the readable form would travel in the message. That
+was wrong, and driving it proved it: `run_failed` went out as `runtime_exit_code: 4294967295` while
+`run.error` for the same run said `exit -1`, so one death was described by three numbers — the exact
+confusion this change exists to remove, reintroduced one layer down.
+
+The line is not "message versus payload". It is **surface a person reads versus value held in
+memory**. A broadcast payload is the former. So every reader-facing surface renders: the composed
+clause, `runtime_exit_code`, and `_transport_failure_fields`'s `exit_code`. `TurnOutcome.exit_code`
+and `AppServerError.exit_code` keep the platform's value.
+
+The spec did not need changing — its scenario already said *"what is displayed conveys the
+termination rather than that value"*. The implementation simply did not meet it, and only a live run
+showed that.
 
 ## D4. The tail is delivered on both paths, because both were promised it
 

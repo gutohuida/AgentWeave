@@ -127,3 +127,27 @@ but it is the same class, and it is in code I wrote tonight. Fix planned for the
 
 **Not a defect, checked and cleared:** `stderr_tail` missing from those three payloads is correct —
 `codex` died before writing to stderr, and the key is deliberately omitted when empty.
+
+### 00:39–00:50 — L9-1 fixed, and re-driven rather than re-read
+
+`runtime_exit_code` and `_transport_failure_fields`'s `exit_code` now go through
+`readable_exit_code`. `TurnOutcome.exit_code` and `AppServerError.exit_code` still hold what the
+platform reported — the corrected line is **surface a person reads vs. value held in memory**, not
+"message vs. payload", which is where I had it and why the defect existed.
+
+Re-killed a live app-server on the rebuilt Hub. The two `run_failed` rows now sit consecutively in
+`event_logs`:
+
+```
+run_failed  exit_code=1  runtime_exit_code=-1           <- after
+run_failed  exit_code=1  runtime_exit_code=4294967295   <- before
+```
+
+**The lesson is the one worth keeping.** 75 unit tests passed in *both* states. Only driving it
+showed the difference. That is the third time this session a green suite has agreed with broken
+behaviour — the other two being the vacuous `schedule_agent` stubs and the mis-targeted `run_turn`
+patch. Everything I claim tonight gets driven, not read.
+
+`design.md` D3 amended in place with the correction. The **spec needed no change** — its scenario
+already said *"what is displayed conveys the termination rather than that value"*; the code simply
+did not meet it. Change B task 9.3 now passes.
