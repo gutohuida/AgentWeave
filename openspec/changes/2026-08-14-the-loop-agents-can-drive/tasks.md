@@ -8,115 +8,115 @@ phases 1–3 are cheap, touch nothing phase 4 touches, and are banked first.
 
 ## 1. The Hub stops committing build artefacts
 
-- [ ] 1.1 Add `__pycache__/`, `*.pyc`, `node_modules/`, `.venv/` to `EXCLUDE_PATTERNS` in
+- [x] 1.1 Add `__pycache__/`, `*.pyc`, `node_modules/`, `.venv/` to `EXCLUDE_PATTERNS` in
       `hub/hub/repo_hygiene.py`.
-- [ ] 1.2 **Rewrite the module's own rule in the same commit.** The comment at `:39-41` currently
+- [x] 1.2 **Rewrite the module's own rule in the same commit.** The comment at `:39-41` currently
       reasons that language artefacts are the project's business; that comment *is* the prior
       decision. Restate it as D10: `snapshot_worktree` uses `git add -A`, so the Hub is the writer,
       and the list covers what the Hub's own commit would sweep in.
-- [ ] 1.3 Say in the docstring that this does **not** untrack anything already committed, and why
+- [x] 1.3 Say in the docstring that this does **not** untrack anything already committed, and why
       the Hub does not fix that itself.
-- [ ] 1.4 Note that `requirement_evidence.SKIP_DIRECTORIES` carries nearly the same list, which is
+- [x] 1.4 Note that `requirement_evidence.SKIP_DIRECTORIES` carries nearly the same list, which is
       canonical, and why they cannot share code.
-- [ ] 1.5 New `hub/tests/test_repo_hygiene.py` — none exists. Block written; idempotent; rewritten
+- [x] 1.5 New `hub/tests/test_repo_hygiene.py` — none exists. Block written; idempotent; rewritten
       in place when patterns change; foreign lines outside the markers survive; and
       `git status --porcelain` clean in a real temp repo after creating `__pycache__/x.pyc`.
 
 ## 2. Declared tasks get usable titles
 
-- [ ] 2.1 `title: str = Field(default="", ...)` on `spec_payload.Task`.
-- [ ] 2.2 `spec_tasks.materialise` prefers the declared title; `_title_from` remains the fallback.
-- [ ] 2.3 `_title_from` clips on a **word** boundary at a board-sized `MAX_TITLE`.
-- [ ] 2.4 Name `title` in `submit_spec_document`'s `tasks` docstring, so an author knows to set it.
-- [ ] 2.5 Render it in `spec_render._tasks`, which today prints the description as the list item.
-- [ ] 2.6 Tests: a long single-sentence description yields a short title ending on a word boundary;
+- [x] 2.1 `title: str = Field(default="", ...)` on `spec_payload.Task`.
+- [x] 2.2 `spec_tasks.materialise` prefers the declared title; `_title_from` remains the fallback.
+- [x] 2.3 `_title_from` clips on a **word** boundary at a board-sized `MAX_TITLE`.
+- [x] 2.4 Name `title` in `submit_spec_document`'s `tasks` docstring, so an author knows to set it.
+- [x] 2.5 Render it in `spec_render._tasks`, which today prints the description as the list item.
+- [x] 2.6 Tests: a long single-sentence description yields a short title ending on a word boundary;
       a declared title wins; round-trip and render cases.
-- [ ] 2.7 **`test_spec_declared_tasks.py:116/122/155-159` must pass unchanged** — a short
+- [x] 2.7 **`test_spec_declared_tasks.py:116/122/155-159` must pass unchanged** — a short
       single-sentence description still comes through as-is. Change `_title_from`, not the test.
 
 ## 3. The main branch is choosable
 
-- [ ] 3.1 `main_branch: string | null` on the `ProjectSettings` interface in
+- [x] 3.1 `main_branch: string | null` on the `ProjectSettings` interface in
       `hub/ui/src/api/projects.ts`.
-- [ ] 3.2 A control in `ProjectSettingsPanel.tsx` fed by the existing
+- [x] 3.2 A control in `ProjectSettingsPanel.tsx` fed by the existing
       `GET /projects/{id}/main-branch-suggestion` (`suggestion`, `chosen`, `is_repository`).
       Tolerate `undefined` — the existing fixture omits fields.
-- [ ] 3.3 Correct the stale comment at `hub/ui/src/api/projects.ts:73` ("the endpoint replaces what
+- [x] 3.3 Correct the stale comment at `hub/ui/src/api/projects.ts:73` ("the endpoint replaces what
       it receives"), which no longer matches the handler.
-- [ ] 3.4 UI test: the control renders the suggestion and submits the choice.
+- [x] 3.4 UI test: the control renders the suggestion and submits the choice.
 
 ## 4. Partial project settings updates
 
-- [ ] 4.1 `ProjectSettingsUpdate` with all-optional fields, **derived from `ProjectSettings`** —
+- [x] 4.1 `ProjectSettingsUpdate` with all-optional fields, **derived from `ProjectSettings`** —
       `projects.py:416-417` `setattr`s over `merged.model_dump()`, so a field the response model
       lacks writes nothing, silently. `ProjectSettings` stays the `response_model`.
-- [ ] 4.2 Do **not** copy the cross-field `validate_threshold` onto it; the route already
+- [x] 4.2 Do **not** copy the cross-field `validate_threshold` onto it; the route already
       re-validates the merged object at `:371-376`.
-- [ ] 4.3 Test: `PUT` with only `{"main_branch": "main"}` returns 200 and leaves `hop_budget`
+- [x] 4.3 Test: `PUT` with only `{"main_branch": "main"}` returns 200 and leaves `hop_budget`
       untouched. **This fails today with 422**, which is what proves the diagnosis.
-- [ ] 4.4 Test: only `{"checkpoint_notes_value": N}` on a project that already has a threshold.
+- [x] 4.4 Test: only `{"checkpoint_notes_value": N}` on a project that already has a threshold.
 
 ## 5. A Codex refusal is recorded
 
 **Cannot be split** — the callback parameter, the caller invocation and the emitter land together,
 or the parameter is dead code.
 
-- [ ] 5.1 Optional callback on `run_turn` (`codex_appserver.py:664-672`), beside `on_event` /
+- [x] 5.1 Optional callback on `run_turn` (`codex_appserver.py:664-672`), beside `on_event` /
       `request_approval`. `decide_approval` stays pure (D9).
-- [ ] 5.2 Invoked from the caller loop at `:783-800` once the decision is final; **only** on a
+- [x] 5.2 Invoked from the caller loop at `:783-800` once the decision is final; **only** on a
       decline, and **only** when it did not come from the operator path.
-- [ ] 5.3 Map the JSON-RPC method to a readable label before it becomes `tool_name`.
-- [ ] 5.4 Wire it in `agent_trigger.py:1625-1650`, where `async_session_factory` and `persist_event`
+- [x] 5.3 Map the JSON-RPC method to a readable label before it becomes `tool_name`.
+- [x] 5.4 Wire it in `agent_trigger.py:1625-1650`, where `async_session_factory` and `persist_event`
       are already in scope.
-- [ ] 5.5 Pick one SSE event name — `agent_actions.py:549` broadcasts `permission_denied`,
+- [x] 5.5 Pick one SSE event name — `agent_actions.py:549` broadcasts `permission_denied`,
       `permissions.py:129` broadcasts `permission_decided`. They already disagree.
-- [ ] 5.6 Tests: a declined command approval invokes the callback; an accepted one does not; an
+- [x] 5.6 Tests: a declined command approval invokes the callback; an accepted one does not; an
       operator-resolved decline is not double-emitted; the outside-workspace decline reaches the
       event log.
-- [ ] 5.7 **`test_codex_appserver.py`'s purity assertions must not be edited.** If they need
+- [x] 5.7 **`test_codex_appserver.py`'s purity assertions must not be edited.** If they need
       editing, the seam is in the wrong place.
 
 ## 6. The evidence loop reaches the agents
 
 ### 6a. Grant plumbing and the read route — before any tool
 
-- [ ] 6a.1 `GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence")` in
+- [x] 6a.1 `GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence")` in
       `hub/hub/api/v1/agents.py`, used for `_unrestricted_fields` and the boolean apply loop. Do
       **not** append to `CHECKPOINT_GRANT_FIELDS` (D4).
-- [ ] 6a.2 **`AgentSummary` is built by hand at `agents.py:598`** — edit that construction or a
+- [x] 6a.2 **`AgentSummary` is built by hand at `agents.py:598`** — edit that construction or a
       schema default of `False` silently wins over the row.
-- [ ] 6a.3 Response field on `hub/hub/schemas/agents.py`.
-- [ ] 6a.4 `hub/ui/src/api/agents.ts` — type and the `grant:` union.
-- [ ] 6a.5 A separate `EvidenceGrantSetting` in `AgentSettingsControls.tsx`, not inside
+- [x] 6a.3 Response field on `hub/hub/schemas/agents.py`.
+- [x] 6a.4 `hub/ui/src/api/agents.ts` — type and the `grant:` union.
+- [x] 6a.5 A separate `EvidenceGrantSetting` in `AgentSettingsControls.tsx`, not inside
       `CheckpointGrantsSetting`. Copy states both refusals: no self-acceptance, and that this is
       what opens integration.
-- [ ] 6a.6 `GET /agent-actions/spec/evidence`, mirroring `spec.py:494-518`, scoped to
+- [x] 6a.6 `GET /agent-actions/spec/evidence`, mirroring `spec.py:494-518`, scoped to
       `actor.project_id`, with a `review_state` filter. Reuse `_evidence_view` / `_footprints_for`
       (D3); keep `actor` in the view.
-- [ ] 6a.7 New `hub/tests/test_agent_evidence_plane.py` — record → `awaiting`; list shows `actor`
+- [x] 6a.7 New `hub/tests/test_agent_evidence_plane.py` — record → `awaiting`; list shows `actor`
       and `footprint`; ungranted decide → 403 `acceptance_not_granted`; granted decide **own** → 403
       `self_acceptance`; granted decide another's → `accepted`; cross-project id → 404.
-- [ ] 6a.8 New `hub/tests/test_agent_evidence_grant.py` — PATCH sets it and **GET returns it**
+- [x] 6a.8 New `hub/tests/test_agent_evidence_grant.py` — PATCH sets it and **GET returns it**
       (catches 6a.2).
-- [ ] 6a.9 UI test mirroring `agentCheckpointSettings.test.tsx`.
+- [x] 6a.9 UI test mirroring `agentCheckpointSettings.test.tsx`.
 
 ### 6b. The tools — never before 6a
 
-- [ ] 6b.1 `record_evidence`, `list_evidence`, `decide_evidence` in `hub/hub/mcp_server.py`,
+- [x] 6b.1 `record_evidence`, `list_evidence`, `decide_evidence` in `hub/hub/mcp_server.py`,
       **above the `__main__` guard**, which must remain last in the file.
-- [ ] 6b.2 `kind` stays a bare `str`; only `decision` gets a `Literal` alias matching
+- [x] 6b.2 `kind` stays a bare `str`; only `decision` gets a `Literal` alias matching
       `EVIDENCE_DECISIONS` (D2).
-- [ ] 6b.3 Three bullets in `_tool_surface_lines`, in `` `name(` `` form, or
+- [x] 6b.3 Three bullets in `_tool_surface_lines`, in `` `name(` `` form, or
       `test_tool_surface_matches_server.py` fails.
-- [ ] 6b.4 `record_evidence`'s docstring says evidence is what makes approval merge (D5).
-- [ ] 6b.5 A context line telling a **granted** agent it has the grant (D5).
-- [ ] 6b.6 `hub/tests/test_mcp_body_contract.py` rows for both POSTs — highest value, because both
+- [x] 6b.4 `record_evidence`'s docstring says evidence is what makes approval merge (D5).
+- [x] 6b.5 A context line telling a **granted** agent it has the grant (D5).
+- [x] 6b.6 `hub/tests/test_mcp_body_contract.py` rows for both POSTs — highest value, because both
       request models set `extra: "forbid"`.
-- [ ] 6b.7 `hub/tests/test_mcp_tool_schemas.py` — the `decide_evidence` / `decision` row.
+- [x] 6b.7 `hub/tests/test_mcp_tool_schemas.py` — the `decide_evidence` / `decision` row.
 
 ### 6c. The chain, end to end
 
-- [ ] 6c.1 Test: agent A records against a requirement **linked to the task**, granted agent B
+- [x] 6c.1 Test: agent A records against a requirement **linked to the task**, granted agent B
       accepts, approval merges. **`task_integration.py:145-165` joins through
       `TaskRequirementLink`, not `RequirementEvidence.task_id`** — a task without links still
       reports `NOTHING_TO_MERGE`, and a verification that misses this reads as "the fix failed".
@@ -126,29 +126,29 @@ or the parameter is dead code.
 **Cannot be split** — hoisting the resolver and consuming it are one change; the hoist alone is a
 behaviourless refactor that would land unverified. Landed clear of phase 6 to keep a bisect readable.
 
-- [ ] 7.1 Extract read-only `resolve_bound_task` into `run_task_binding.py`, covering all three
+- [x] 7.1 Extract read-only `resolve_bound_task` into `run_task_binding.py`, covering all three
       branches. Call it once above the context render.
-- [ ] 7.2 The staged mutations do **not** move (D6). `turn_scheduler.py` is **not** changed.
-- [ ] 7.3 `create_task_for_actor` sets `spec_document_id` from `body.spec_document` (D8), or the
+- [x] 7.2 The staged mutations do **not** move (D6). `turn_scheduler.py` is **not** changed.
+- [x] 7.3 `create_task_for_actor` sets `spec_document_id` from `body.spec_document` (D8), or the
       block reaches declared tasks only.
-- [ ] 7.4 Expose `spec_document_id` / `spec_task_key` on `TaskResponse` and `hub/ui/src/api/tasks.ts`.
-- [ ] 7.5 A distinct context block (D7), not the open-document block reworded. When both would name
+- [x] 7.4 Expose `spec_document_id` / `spec_task_key` on `TaskResponse` and `hub/ui/src/api/tasks.ts`.
+- [x] 7.5 A distinct context block (D7), not the open-document block reworded. When both would name
       the same path, only the task framing renders.
-- [ ] 7.6 The task-derived path does **not** go through `spec_turn_notice`.
-- [ ] 7.7 Tests: the block names the document; "the operator is viewing" does not appear in it; both
+- [x] 7.6 The task-derived path does **not** go through `spec_turn_notice`.
+- [x] 7.7 Tests: the block names the document; "the operator is viewing" does not appear in it; both
       blocks present without duplication; the resolver returns the same task in all three branches.
-- [ ] 7.8 `hub/tests/test_spec_turn_notice.py` — a task-derived document produces **no**
+- [x] 7.8 `hub/tests/test_spec_turn_notice.py` — a task-derived document produces **no**
       SPECIFICATION TURN notice. The regression most likely to slip through.
 
 ## 8. Verification — agent-verifiable
 
-- [ ] 8.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**, Python311 interpreter.
-- [ ] 8.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched.
-- [ ] 8.3 `npx tsc --noEmit`; `npx vitest run`.
-- [ ] 8.4 `npx openspec validate --changes --strict`.
-- [ ] 8.5 `npm run build`; `hub/hub/static/ui` replaced and confirmed with `diff -rq`. Required
+- [x] 8.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**, Python311 interpreter.
+- [x] 8.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched.
+- [x] 8.3 `npx tsc --noEmit`; `npx vitest run`.
+- [x] 8.4 `npx openspec validate --changes --strict`.
+- [x] 8.5 `npm run build`; `hub/hub/static/ui` replaced and confirmed with `diff -rq`. Required
       after phases 1–3 and 6, which all touch `hub/ui/src`.
-- [ ] 8.6 Expected to need updating: `test_tool_surface_matches_server.py` (until 6b.3),
+- [x] 8.6 Expected to need updating: `test_tool_surface_matches_server.py` (until 6b.3),
       `test_spec_procedure_precedence.py`, `test_conversation_task_binding.py`,
       `test_agent_trigger.py` (phase 7 ordering).
 
