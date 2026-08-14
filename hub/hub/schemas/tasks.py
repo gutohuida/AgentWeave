@@ -204,6 +204,12 @@ class TaskResponse(BaseModel):
     # `modal`. `statement` is null where the document no longer words the requirement, which is
     # what a retired one is.
     requirement_links: List[Any] = Field(default_factory=list)
+    # The read side of `TaskCreate`/`TaskUpdate.requirement_ids`, which were accepted and reported
+    # nowhere — so a caller could not confirm what was recorded, and anyone diagnosing why work did
+    # not merge saw a task that appeared tied to nothing while the links governing the merge
+    # existed. Identifiers, in the form they are submitted in, so what is read back can be sent
+    # again; derived from `requirement_links` and never stored.
+    requirement_ids: List[str] = Field(default_factory=list)
     # References that named no requirement this project has, with their original text. Visible
     # rather than dropped, because a task that quietly lost a reference it used to have is the
     # failure the migration exists to prevent.

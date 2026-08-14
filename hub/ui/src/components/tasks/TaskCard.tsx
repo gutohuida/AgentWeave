@@ -463,10 +463,50 @@ export function TaskCard({ task, assigneeColorIndex }: TaskCardProps) {
               </div>
             )}
 
-            {/* Requirements */}
+            {/* What this task is checked against. `requirements` below is the caller's prose and
+                can say things no identifier can; these are the links the approval gate enforces,
+                and the board used to show only the prose — so a card could not tell you whether it
+                was tied to the specification at all. */}
+            {task.requirement_links && task.requirement_links.length > 0 && (
+              <div className="mb-3" data-testid={`task-serves-${task.id}`}>
+                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Serves</p>
+                <ul className="text-xs space-y-1" style={{ color: 'var(--text)' }}>
+                  {task.requirement_links.map((link) => (
+                    <li key={link.requirement_id}>
+                      <code className="text-[11px]">{link.identifier}</code>
+                      {link.statement ? ` — ${link.statement}` : null}
+                      {link.state !== 'active' && (
+                        <span className="ml-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
+                          ({link.state})
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* References that named no requirement this project has. Shown rather than dropped:
+                a task that quietly lost a reference is the failure the links exist to prevent. */}
+            {task.unresolved_requirements && task.unresolved_requirements.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>
+                  Unresolved
+                </p>
+                <ul className="text-xs space-y-1" style={{ color: 'var(--text-3)' }}>
+                  {task.unresolved_requirements.map((item) => (
+                    <li key={item.reference}>
+                      {item.reference} — {item.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Requirements, as the caller wrote them */}
             {task.requirements && task.requirements.length > 0 && (
               <div className="mb-3">
-                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Requirements</p>
+                <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--text-3)' }}>Requirements (as written)</p>
                 <ul className="list-disc list-inside text-xs space-y-1" style={{ color: 'var(--text)' }}>
                   {task.requirements.map((req, i) => (
                     <li key={i}>{req}</li>

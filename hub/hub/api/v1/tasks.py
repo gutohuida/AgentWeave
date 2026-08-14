@@ -137,6 +137,10 @@ async def _attach_requirements(
     for response in responses:
         response.requirement_links = by_task.get(response.id, [])
         response.unresolved_requirements = unresolved.get(response.id, [])
+        # Derived from the links already fetched — no extra query. Unresolved references are
+        # deliberately excluded: they round-trip as `unresolved_requirements`, and including them
+        # here would invite a GET→PATCH cycle to resubmit a reference that already failed.
+        response.requirement_ids = [item["identifier"] for item in response.requirement_links]
     return responses
 
 

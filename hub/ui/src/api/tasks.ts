@@ -36,6 +36,29 @@ export interface Task {
    *  the key it was declared under. */
   spec_document_id?: string | null
   spec_task_key?: string | null
+  /**
+   * The requirement identifiers this task serves, in the form they are submitted in.
+   *
+   * `requirements` is the caller's verbatim prose and can say things no identifier can;
+   * these are the checked links the approval gate actually enforces. The board showed only
+   * the prose, so a card could not tell you whether it was tied to the specification at all.
+   */
+  requirement_ids?: string[]
+  requirement_links?: RequirementLink[]
+  unresolved_requirements?: { reference: string; reason: string }[]
+}
+
+/** One checked tie between a task and a requirement. `statement` is null where the document no
+ *  longer words the requirement, which is what a retired one is. */
+export interface RequirementLink {
+  identifier: string
+  requirement_id: string
+  document_id: string
+  state: string
+  anchor?: string | null
+  key?: string | null
+  statement?: string | null
+  modal?: string | null
 }
 
 export type DivergencePolicy = 'surface' | 'retry' | 'escalate'

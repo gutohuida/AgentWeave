@@ -137,18 +137,18 @@ the error has fields nothing fills.
 
 ## 5. `requirement_ids` is readable
 
-- [ ] 5.1 `requirement_ids: List[str] = Field(default_factory=list)` on `TaskResponse`
+- [x] 5.1 `requirement_ids: List[str] = Field(default_factory=list)` on `TaskResponse`
       (`hub/hub/schemas/tasks.py:188-234`).
-- [ ] 5.2 Fill it in `_attach_requirements`'s final loop (`hub/hub/api/v1/tasks.py:132-134`) from
+- [x] 5.2 Fill it in `_attach_requirements`'s final loop (`hub/hub/api/v1/tasks.py:132-134`) from
       `requirement_links` — **zero extra queries**.
-- [ ] 5.3 Identifiers, not row ids (D13). Exclude unresolved references.
-- [ ] 5.4 UI: types in `hub/ui/src/api/tasks.ts`; `TaskCard.tsx:466-471` relabels the existing block
+- [x] 5.3 Identifiers, not row ids (D13). Exclude unresolved references.
+- [x] 5.4 UI: types in `hub/ui/src/api/tasks.ts`; `TaskCard.tsx:466-471` relabels the existing block
       "Requirements (as written)" and adds a "Serves" block above it listing the checked links.
-- [ ] 5.5 Tests in `hub/tests/test_requirement_links.py`: the response returns the identifiers it
+- [x] 5.5 Tests in `hub/tests/test_requirement_links.py`: the response returns the identifiers it
       accepts; they round-trip through create and get; they are identifiers not row ids; unresolved
       references are omitted; the agent plane carries them.
-- [ ] 5.6 Vitest: `TaskCard` renders checked links alongside the free-text requirements.
-- [ ] 5.7 Rebuild `hub/hub/static/ui`, confirm with `diff -rq`.
+- [x] 5.6 Vitest: `TaskCard` renders checked links alongside the free-text requirements.
+- [x] 5.7 Rebuild `hub/hub/static/ui`, confirm with `diff -rq`.
 
 ## 6. The bundle staleness warning can be cleared
 
