@@ -1,9 +1,11 @@
 """FastAPI application factory + lifespan."""
 
-import functools
+import hashlib
+import json
 import logging
 import os
 import subprocess
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +30,15 @@ logger = logging.getLogger(__name__)
 
 UI_DIST = Path(__file__).parent / "static" / "ui"
 UI_SRC = Path(__file__).parent.parent / "ui" / "src"
+
+#: Written by `scripts/refresh_ui_bundle.py`, recording the source state the bundle was built from.
+#: Not dot-prefixed, so a `cp -r dist static/ui` cannot silently miss it.
+UI_BUILD_STAMP = UI_DIST / "ui-build-stamp.json"
+
+#: How long a staleness answer is reused. Two git calls and a small file read is not worth caching
+#: for the life of a process — and caching it for the life of a process is why, before this, a real
+#: rebuild needed a Hub restart before the warning would clear.
+UI_STALENESS_TTL_SECONDS = 30.0
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -68,21 +79,94 @@ def _git_last_commit_iso(path: Path, *, exclude: Sequence[str] = ()) -> Optional
     return result.stdout.strip() or None
 
 
-def _compute_ui_staleness_warning(ui_dist: Path, ui_src: Path) -> Optional[str]:
-    """Compare git history of the built UI against its source to catch a stale bundle.
+def ui_source_fingerprint(
+    ui_src: Path, *, exclude: Sequence[str] = ("__tests__",)
+) -> Optional[str]:
+    """A stable hash of the interface source as it stands, tracked changes and uncommitted ones.
 
-    `hub/hub/static/ui` is a committed build artefact — nothing rebuilds it
-    automatically in a source checkout, so it silently drifts behind `hub/ui/src`
-    if a contributor edits the UI without rebuilding and recopying. `ui_src` only
-    exists in a source checkout (not in an installed package), so this is a no-op
-    for end users.
+    Built from `git ls-files -s`, so it is the index's own blob ids — one subprocess, and it
+    honours .gitignore without reimplementing it. `git status --porcelain` is folded in so that an
+    edit nobody has committed still moves the fingerprint, which a commit-date comparison cannot
+    see at all.
+    """
+    pathspec = [".", *(f":(exclude){p}" for p in exclude)]
+    try:
+        listing = subprocess.run(
+            ["git", "ls-files", "-s", "--", *pathspec],
+            cwd=ui_src,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--", *pathspec],
+            cwd=ui_src,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if listing.returncode != 0 or not listing.stdout.strip():
+        return None
+
+    digest = hashlib.sha256(listing.stdout.encode("utf-8"))
+    if dirty.returncode == 0 and dirty.stdout.strip():
+        digest.update(b"+dirty:")
+        digest.update(hashlib.sha256(dirty.stdout.encode("utf-8")).digest())
+    return digest.hexdigest()
+
+
+def read_ui_build_stamp(ui_dist: Path) -> Optional[dict]:
+    """The recorded assertion that this bundle was built from a particular source state."""
+    stamp = ui_dist / UI_BUILD_STAMP.name
+    try:
+        return json.loads(stamp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _compute_ui_staleness_warning(ui_dist: Path, ui_src: Path) -> Optional[str]:
+    """Whether the built UI can still be believed to match its source.
+
+    `hub/hub/static/ui` is a committed build artefact — nothing rebuilds it automatically in a
+    source checkout, so it silently drifts behind `hub/ui/src` if a contributor edits the UI
+    without rebuilding and recopying. `ui_src` only exists in a source checkout (not in an
+    installed package), so this is a no-op for end users.
+
+    This used to be answered by comparing commit dates, which cannot be cleared by doing what it
+    asks. A change that leaves the built output byte-identical — types, comments, anything erased
+    before the bundle is produced — gives a rebuild nothing to commit, so the artefact's commit
+    date never moves and the warning stands forever. A warning that survives its own remedy
+    teaches the operator to ignore the one signal that catches a genuinely stale bundle.
+
+    So the bundle carries an *assertion* instead: the source state it was built from. Comparing
+    that against the source as it stands answers "was this built from what is here now?", which is
+    the question. It is a promise rather than a proof — only rebuilding proves it — but a dated,
+    committed, attributable promise is a reviewable diff rather than an invisible omission.
+
+    Where no stamp has been recorded this falls back to the old comparison exactly, so an
+    installation carrying no assertion is not thereby declared current.
     """
     if not ui_src.exists() or not ui_dist.exists():
         return None
-    # Tests are not bundled, so a commit touching only them cannot make the artefact stale — and
-    # a rebuild cannot clear the warning either, because an identical build commits nothing and the
-    # artefact's commit date never moves. The warning would then stand permanently, which teaches
-    # an operator to ignore the one signal that catches a genuinely stale bundle.
+
+    stamp = read_ui_build_stamp(ui_dist)
+    if stamp and stamp.get("src_fingerprint"):
+        current = ui_source_fingerprint(ui_src)
+        if current is None:
+            return None
+        if current == stamp["src_fingerprint"]:
+            return None
+        detail = (
+            f"hub/hub/static/ui asserts it was built from hub/ui/src as of "
+            f"{stamp.get('built_at', 'an earlier state')}, but the source has changed since."
+        )
+        if _has_uncommitted_ui_source(ui_src):
+            detail += " hub/ui/src has uncommitted changes."
+        return detail + " Run `make ui` to rebuild and re-record it."
+
+    # Tests are not bundled, so a commit touching only them cannot make the artefact stale.
     src_date = _git_last_commit_iso(ui_src, exclude=("__tests__",))
     dist_date = _git_last_commit_iso(ui_dist)
     if not src_date or not dist_date:
@@ -96,9 +180,39 @@ def _compute_ui_staleness_warning(ui_dist: Path, ui_src: Path) -> Optional[str]:
     )
 
 
-@functools.lru_cache(maxsize=1)
+def _has_uncommitted_ui_source(ui_src: Path) -> bool:
+    try:
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--", ".", ":(exclude)__tests__"],
+            cwd=ui_src,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return dirty.returncode == 0 and bool(dirty.stdout.strip())
+
+
+#: `(expires_at, warning)`. A TTL rather than `lru_cache(maxsize=1)`, so a rebuild clears the
+#: warning within half a minute instead of requiring a Hub restart.
+_ui_staleness_cache: "tuple[float, Optional[str]] | None" = None
+
+
 def _ui_staleness_warning() -> Optional[str]:
-    return _compute_ui_staleness_warning(UI_DIST, UI_SRC)
+    global _ui_staleness_cache
+    now = time.monotonic()
+    if _ui_staleness_cache is not None and _ui_staleness_cache[0] > now:
+        return _ui_staleness_cache[1]
+    warning = _compute_ui_staleness_warning(UI_DIST, UI_SRC)
+    _ui_staleness_cache = (now + UI_STALENESS_TTL_SECONDS, warning)
+    return warning
+
+
+def _reset_ui_staleness_cache() -> None:
+    """Forget the cached answer. A test seam, and the only way to clear it deliberately."""
+    global _ui_staleness_cache
+    _ui_staleness_cache = None
 
 
 class ContentSizeLimitMiddleware:

@@ -147,13 +147,23 @@ No exit code, no stderr tail, no last JSON-RPC method. The Hub log holds nothing
 failures produced four identical strings, so nothing distinguishes a crash from a kill from a
 protocol error. Diagnosing finding 3 required inferring the cause from which agents still worked.
 
-### 5. `requirement_ids` reads `None` on `TaskResponse` while 18 link rows exist
+### 5. `requirement_ids` is write-only
 
-Both tasks returned `requirement_ids: None` from `GET /projects/{id}/tasks`, yet
-`task_requirement_links` held 9 rows each. The links are real — they are what let the merge join
-evidence to a task — but the API says the task has none. Anyone diagnosing a `NOTHING_TO_MERGE`
-from the API response would conclude the links are missing and go fix the wrong thing. This is the
-exact trap `tasks.md` 6c.1 warns about, reachable from the read side.
+**Corrected 2026-08-14, while fixing it.** As first written this finding said `requirement_ids`
+"reads `None` despite 18 link rows existing", implying the API contradicted the database. It does
+not. `requirement_ids` was never a field on `TaskResponse` at all, and the links *are* exposed —
+as `requirement_links`, which the harness did not check. So the data was reachable and the reading
+was mine.
+
+What is real is the asymmetry: `requirement_ids` is accepted on `TaskCreate` and `TaskUpdate` and
+appears on no response, so a caller cannot confirm what was recorded under the name it used. That
+is what made my `.get("requirement_ids")` return nothing and led me to conclude the links were
+missing. Severity drops from "the API contradicts the rows" to "a field you can write and not
+read"; the fix is the same, and it is one line off data already fetched.
+
+Worth keeping for a second reason: the board had the same asymmetry a layer up. `TaskCard`
+rendered the free-text `requirements` and never the checked links, so a card could not show whether
+it was tied to the specification at all.
 
 ### 6. `/health` reports `ui_stale` for a UI commit that could not change the bundle
 

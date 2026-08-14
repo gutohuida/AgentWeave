@@ -318,8 +318,15 @@ pending → assigned → in_progress → completed → under_review → approved
   it needs from the Hub is restated there, with a test asserting the two agree
 - `approve_tool_call` has **no return annotation**. FastMCP would derive `structuredContent` from
   one, which silently defeats an `allow`. Do not add one.
-- `hub/hub/static/ui` is a committed build artefact — after `npm run build`, copy `hub/ui/dist` over
-  it and confirm with `diff -rq`. `test_ui_staleness.py` does **not** check this repo's copy.
+- `hub/hub/static/ui` is a committed build artefact. After `cd hub/ui && npm run build`, run
+  `make ui` (or `python scripts/refresh_ui_bundle.py` directly — `make` is not on PATH in Git Bash
+  on this machine) — it copies `dist/` over it, confirms the copy, and records
+  `hub/hub/static/ui/ui-build-stamp.json`, the fingerprint of the source it was built from. Commit
+  `hub/ui/src` and `hub/hub/static/ui` together; the stamp is what gives a byte-identical rebuild
+  something to commit, so `/health` can stop reporting `ui_stale`. Only the script writes the
+  stamp. `test_ui_staleness.py` still does **not** check this repo's copy;
+  `test_ui_build_stamp.py` checks the stamp parses, and gates the stricter
+  bundle-matches-source assertion behind `AW_CHECK_UI_BUNDLE=1`.
 - Stage paths explicitly; `git add -A` sweeps in scratch
 
 ## Common Tasks

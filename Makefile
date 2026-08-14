@@ -1,4 +1,4 @@
-.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format format-check hub-build hub-up hub-down hub-full-build sync-skills
+.PHONY: install-cli install-hub install-all test-cli test-hub test-all lint format format-check hub-build hub-up hub-down hub-full-build sync-skills ui ui-check
 
 # ── CLI (src/agentweave) ─────────────────────────────────────────────────────
 
@@ -60,3 +60,22 @@ hub-full-build:
 	# Belt-and-braces: also let docker compose build the same image under its
 	# own tag (hub-hub) in case someone prefers `docker compose up --build`.
 	cd hub && docker compose -f docker-compose.yml -f docker-compose.build.yml build
+
+# Copy the built UI into the Hub package and record the source state it was built from.
+#
+# `hub/hub/static/ui` is a committed build artefact, and `/health` reports when it drifts behind
+# `hub/ui/src`. Before the stamp that report could not be cleared by doing what it asked: a change
+# that leaves the bundle byte-identical gives the rebuild nothing to commit, so the artefact's
+# commit date never moved and the warning stood forever. The stamp is what gives an identical
+# rebuild something to commit.
+#
+#   cd hub/ui && npm run build
+#   make ui
+#   git add hub/ui/src hub/hub/static/ui && git commit
+ui:
+	python scripts/refresh_ui_bundle.py
+
+# Verify the committed bundle asserts it was built from the source that is present. Cheap enough
+# for CI; the real proof is a job that rebuilds and diffs.
+ui-check:
+	python scripts/refresh_ui_bundle.py --check

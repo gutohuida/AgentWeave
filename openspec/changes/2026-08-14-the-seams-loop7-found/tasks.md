@@ -152,32 +152,32 @@ the error has fields nothing fills.
 
 ## 6. The bundle staleness warning can be cleared
 
-- [ ] 6.1 `ui_source_fingerprint(ui_src, *, exclude=("__tests__",))` in `hub/hub/main.py` — sha256
+- [x] 6.1 `ui_source_fingerprint(ui_src, *, exclude=("__tests__",))` in `hub/hub/main.py` — sha256
       over `git ls-files -s` with the pathspec already used at :86, plus a `+dirty:` component from
       `git status --porcelain` when non-empty.
-- [ ] 6.2 `read_ui_build_stamp(ui_dist)` reading `hub/hub/static/ui/ui-build-stamp.json`.
-- [ ] 6.3 `_compute_ui_staleness_warning` keeps its signature. **Stamp absent → fall through to
+- [x] 6.2 `read_ui_build_stamp(ui_dist)` reading `hub/hub/static/ui/ui-build-stamp.json`.
+- [x] 6.3 `_compute_ui_staleness_warning` keeps its signature. **Stamp absent → fall through to
       today's date comparison byte for byte** (D14) — this is what keeps the existing tests unedited.
       Matching → silent. Differing → warn, saying so when the source is dirty.
-- [ ] 6.4 Replace `lru_cache(maxsize=1)` (:99-101) with a 30-second TTL plus
+- [x] 6.4 Replace `lru_cache(maxsize=1)` (:99-101) with a 30-second TTL plus
       `_reset_ui_staleness_cache()` for tests, so a rebuild clears without a Hub restart.
-- [ ] 6.5 `scripts/refresh_ui_bundle.py` and a `make ui` target: copy `hub/ui/dist` →
+- [x] 6.5 `scripts/refresh_ui_bundle.py` and a `make ui` target: copy `hub/ui/dist` →
       `hub/hub/static/ui`, `diff -rq` to confirm, then write the stamp **after** the copy so a
       `rm -rf && cp -r` cannot drop it.
-- [ ] 6.6 **The existing five tests in `hub/tests/test_ui_staleness.py` must pass unedited.** Add:
+- [x] 6.6 **The existing five tests in `hub/tests/test_ui_staleness.py` must pass unedited.** Add:
       absent stamp falls back to the date comparison; a matching stamp clears the warning; a stamp
       naming other source still warns; a types-only change clears after re-stamping with no bundle
       change; an uncommitted edit is reported; the warning clears within the TTL without a restart.
-- [ ] 6.7 `test_the_committed_bundle_carries_a_parseable_build_stamp` in
+- [x] 6.7 `test_the_committed_bundle_carries_a_parseable_build_stamp` in
       `hub/tests/test_repo_hygiene.py`, unconditional and cheap.
-- [ ] 6.8 A stricter bundle-matches-source hygiene test **gated behind `AW_CHECK_UI_BUNDLE=1`**, so
+- [x] 6.8 A stricter bundle-matches-source hygiene test **gated behind `AW_CHECK_UI_BUNDLE=1`**, so
       CI can enforce it without blocking a branch mid-edit. This avoids reversing CLAUDE.md's stated
       "`test_ui_staleness.py` does not check this repo's copy".
-- [ ] 6.9 Update `CLAUDE.md`'s bundle-refresh rule to name `make ui`.
+- [x] 6.9 Update `CLAUDE.md`'s bundle-refresh rule to name `make ui`.
 
 ## 7. Corrections to the record
 
-- [ ] 7.1 Correct finding 5 in
+- [x] 7.1 Correct finding 5 in
       `openspec/explorations/2026-08-14-loop7-evidence-drives-but-a-skipped-merge-is-terminal.md`:
       `requirement_ids` was never on `TaskResponse`; the links **are** exposed as `requirement_links`.
       A write-only asymmetry, not missing data. The finding stands; its severity drops.
