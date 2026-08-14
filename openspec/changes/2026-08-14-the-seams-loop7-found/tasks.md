@@ -100,36 +100,36 @@ the error has fields nothing fills.
 
 ## 4. A failed run cannot wedge its agent
 
-- [ ] 4.1 Migration `0072_add_queue_delivery_attempts.py`, `down_revision = "0071"`, **guarded for a
+- [x] 4.1 Migration `0072_add_queue_delivery_attempts.py`, `down_revision = "0071"`, **guarded for a
       missing `inbound_queue_entries`** in the `0071` style. Adds `delivery_attempts INTEGER NOT NULL
       DEFAULT 0` and `abandoned_reason TEXT NULL`.
-- [ ] 4.2 Matching fields on `InboundQueueEntry` (`hub/hub/db/models.py` ~:512).
-- [ ] 4.3 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
+- [x] 4.2 Matching fields on `InboundQueueEntry` (`hub/hub/db/models.py` ~:512).
+- [x] 4.3 Bump the head assertions in **both** `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py`.
-- [ ] 4.4 `RESUME_RETRY_LIMIT = 2`, `DELIVERY_ATTEMPT_LIMIT = 3` in `hub/hub/inbound_queue.py`, with
+- [x] 4.4 `RESUME_RETRY_LIMIT = 2`, `DELIVERY_ATTEMPT_LIMIT = 3` in `hub/hub/inbound_queue.py`, with
       the reasoning from D11 written at the constants.
-- [ ] 4.5 `return_run_entries` counts the attempt, clears `delivered_at`, then requeues or abandons.
+- [x] 4.5 `return_run_entries` counts the attempt, clears `delivered_at`, then requeues or abandons.
       **Keep its `List[str]` return** — that is what keeps `test_interrupted_run_returns_delivered_entries`
       passing unchanged.
-- [ ] 4.6 At `RESUME_RETRY_LIMIT`, clear that conversation's `provider_session_id` so the next
+- [x] 4.6 At `RESUME_RETRY_LIMIT`, clear that conversation's `provider_session_id` so the next
       delivery is a `thread/start` (D10).
-- [ ] 4.7 At `DELIVERY_ATTEMPT_LIMIT`, abandon: `state="withdrawn"`, `withdrawn_at`,
+- [x] 4.7 At `DELIVERY_ATTEMPT_LIMIT`, abandon: `state="withdrawn"`, `withdrawn_at`,
       `abandoned_reason` embedding phase 3's diagnostic text. Reuse `withdrawn`; do **not** add a
       fourth state (D12).
-- [ ] 4.8 Do **not** clear `conversation_id` and do **not** bump `arrived_at` (D12). Abandoned rows
+- [x] 4.8 Do **not** clear `conversation_id` and do **not** bump `arrived_at` (D12). Abandoned rows
       keep `delivered_in_run_id`.
-- [ ] 4.9 New `abandoned_for_run(db, run_id)`.
-- [ ] 4.10 All three requeue sites report abandonment: `agent_trigger.py:1153`,
+- [x] 4.9 New `abandoned_for_run(db, run_id)`.
+- [x] 4.10 All three requeue sites report abandonment: `agent_trigger.py:1153`,
       `agent_trigger.py:1706`, `run_reconciliation.py:51`.
-- [ ] 4.11 New warn events `queue_entry_abandoned` and `conversation_session_reset`; add both to
+- [x] 4.11 New warn events `queue_entry_abandoned` and `conversation_session_reset`; add both to
       `useSSE.ts` and the queue-status invalidations.
-- [ ] 4.12 `delivery_attempts`/`abandoned_reason` on `QueueEntryResponse`, `delivery_attempts` on
+- [x] 4.12 `delivery_attempts`/`abandoned_reason` on `QueueEntryResponse`, `delivery_attempts` on
       `QueueStatus`. Keep `get_queue_status`'s existing reason precedence — a missing CLI explains
       the wait better than a retry count — and synthesise the attempts sentence only when nothing
       else fired.
-- [ ] 4.13 **`hub/tests/test_inbound_queue.py:87` and `:201` must pass unchanged**, as must
+- [x] 4.13 **`hub/tests/test_inbound_queue.py:87` and `:201` must pass unchanged**, as must
       `hub/tests/test_run_reconciliation.py`.
-- [ ] 4.14 New `hub/tests/test_delivery_attempts.py`: counts the attempt; the 2nd failure clears the
+- [x] 4.14 New `hub/tests/test_delivery_attempts.py`: counts the attempt; the 2nd failure clears the
       provider session; the next delivery starts a new thread; the 3rd abandons with a reason; an
       abandoned entry stops controlling the queue so a fresh conversation runs; the run that ate it is
       still named; events persist; queue status reports attempts only when nothing else explains the

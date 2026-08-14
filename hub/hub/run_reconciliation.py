@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from .db.engine import async_session_factory
 from .db.models import Run
-from .inbound_queue import return_run_entries
+from .inbound_queue import abandoned_for_run, return_run_entries
 from .permission_requests import expire_pending_for_run
 from .pty_runner import pid_alive
 from .sse import sse_manager
@@ -59,11 +59,16 @@ async def reconcile_interrupted_runs() -> int:
             if run.task_id and not returned_entry_ids:
                 divergences_to_evaluate.append(run.id)
 
+            # An entry the Hub has given up on is not coming back, so it is named separately
+            # rather than folded into the returned set — those are the ids a later run will pick
+            # up, and these are the ones nothing ever will.
+            abandoned = await abandoned_for_run(db, run.id)
             payload = {
                 "agent": run.agent,
                 "run_id": run.id,
                 "pid": run.pid,
                 "returned_entry_ids": returned_entry_ids,
+                "abandoned_entry_ids": [entry.id for entry in abandoned],
             }
             await persist_event(
                 db,

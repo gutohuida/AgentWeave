@@ -58,7 +58,12 @@ from ...conversations import (
 )
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner
-from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
+from ...inbound_queue import (
+    abandoned_for_run,
+    deliver_entries_with_run,
+    new_entry,
+    return_run_entries,
+)
 from ...launchability import (
     access_path_notice,
     get_agent_config,
@@ -972,6 +977,31 @@ async def _restamp_evidence_footprints(
         logger.warning("Could not re-stamp evidence footprints for run %s", run_id, exc_info=True)
 
 
+async def _report_abandoned_entries(
+    db: AsyncSession, project_id: str, agent: str, run_id: str
+) -> None:
+    """Tell the operator about input the Hub has stopped trying to deliver.
+
+    Retrying without limit is indistinguishable from being stuck, so the Hub eventually gives up —
+    but a message dropped silently is worse than one dropped loudly. Emitted at `warn`, because
+    something the operator or another agent said is not going to be acted on.
+    """
+    abandoned = await abandoned_for_run(db, run_id)
+    for entry in abandoned:
+        payload = {
+            "entry_id": entry.id,
+            "agent": agent,
+            "run_id": run_id,
+            "attempts": entry.delivery_attempts,
+            "reason": entry.abandoned_reason,
+            "conversation_id": entry.conversation_id,
+        }
+        await persist_event(
+            db, project_id, "queue_entry_abandoned", payload, agent=agent, severity="warn"
+        )
+        await sse_manager.broadcast(project_id, "queue_entry_abandoned", payload)
+
+
 def _transport_failure_fields(exc: BaseException, conversation_id: Optional[str]) -> dict:
     """What a run that never got going can say about why.
 
@@ -1208,6 +1238,7 @@ async def _execute_run(
                 )
             returned = await return_run_entries(db, run_id)
             await db.commit()
+            await _report_abandoned_entries(db, project_id, agent, run_id)
             await _broadcast_run_lifecycle(
                 db,
                 project_id,
@@ -1775,6 +1806,7 @@ async def _execute_codex_appserver_run(
                     )
                 returned = await return_run_entries(db, run_id)
                 await db.commit()
+                await _report_abandoned_entries(db, project_id, agent, run_id)
                 await _broadcast_run_lifecycle(
                     db,
                     project_id,

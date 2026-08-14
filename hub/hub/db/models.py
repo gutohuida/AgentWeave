@@ -512,6 +512,17 @@ class InboundQueueEntry(Base):
     delivered_in_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: How many deliveries of this entry have failed. A failed run returns its input to the queue,
+    #: where it keeps its place in arrival order — so an input whose delivery kills the runtime is
+    #: served again immediately, and everything behind it waits on the one doing the killing.
+    #: Without a count, an entry returned five times is indistinguishable from one never tried.
+    delivery_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    #: Why the Hub stopped trying. Set with `state = 'withdrawn'`, which already means "this will
+    #: never be delivered" — deliberately not a fourth state, because the value is CHECK-constrained
+    #: and rewriting that on SQLite means rebuilding a table the scheduler's ordering depends on.
+    abandoned_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     session_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

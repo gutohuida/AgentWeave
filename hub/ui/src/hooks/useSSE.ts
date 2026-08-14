@@ -24,6 +24,7 @@ const SSE_EVENT_TYPES = [
   'task_created',
   'task_updated',
   'task_integration_retried',
+  'queue_entry_abandoned',
   'question_asked',
   'question_answered',
   'agent_heartbeat',
@@ -425,6 +426,14 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
+        case 'queue_entry_abandoned': {
+          // The Hub stopped trying to deliver something. The queue card is where that shows, and
+          // the prefix covers both that agent's entries and its status without naming either.
+          const agent = (event.data as { agent?: string } | null)?.agent
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'queue', agent] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
+          break
+        }
         case 'task_integration_retried':
           // The note reads a per-task key, and a retry appends a row to exactly one of them.
           queryClient.invalidateQueries({

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
-from ...inbound_queue import withdraw_entry
+from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, withdraw_entry
 from ...launchability import get_agent_config, probe_agent
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
@@ -34,6 +34,12 @@ class QueueEntryResponse(BaseModel):
     # "this conversation has work waiting" from "this agent does" — a checkpoint handed to a
     # successor is the first case, and only that conversation should offer to start it.
     conversation_id: Optional[str] = None
+    #: How many deliveries of this entry have failed. Exposed so a queue that is not moving can be
+    #: told from one that is merely waiting — before this they looked identical.
+    delivery_attempts: int = 0
+    #: Set when the Hub stopped trying. Present with `state == "withdrawn"`, which an operator
+    #: withdrawal also produces — the reason is what distinguishes the two.
+    abandoned_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -50,6 +56,8 @@ class QueueStatus(BaseModel):
     waiting_count: int
     running: bool
     waiting_reason: Optional[str]
+    #: The worst failure count among the entries still waiting.
+    delivery_attempts: int = 0
 
 
 @router.get("/settings", response_model=QueueSettings)
@@ -182,8 +190,23 @@ async def get_queue_status(
                     await project_workspace.resolve_project_workspace(session, project_id)
                 except project_workspace.ProjectWorkspaceError as exc:
                     reason = f"project workspace is unavailable: {exc}"
+    attempts = max((entry.delivery_attempts or 0 for entry in entries), default=0)
+    if reason is None and attempts:
+        # Last, deliberately. Every reason above explains the wait better than a retry count does —
+        # a missing CLI is the answer, and "delivery failed twice" would merely describe the
+        # symptom. This fires only when nothing else did, which is exactly the case that used to
+        # show "1 waiting" and no explanation at all.
+        left = max(DELIVERY_ATTEMPT_LIMIT - attempts, 0)
+        reason = (
+            f"delivery failed {attempts} time{'s' if attempts != 1 else ''}; "
+            f"{left} attempt{'s' if left != 1 else ''} left"
+        )
     return QueueStatus(
-        agent=agent, waiting_count=len(entries), running=running, waiting_reason=reason
+        agent=agent,
+        waiting_count=len(entries),
+        running=running,
+        waiting_reason=reason,
+        delivery_attempts=attempts,
     )
 
 
