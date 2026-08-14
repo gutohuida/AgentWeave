@@ -23,6 +23,7 @@ const SSE_EVENT_TYPES = [
   'message_read',
   'task_created',
   'task_updated',
+  'task_integration_retried',
   'question_asked',
   'question_answered',
   'agent_heartbeat',
@@ -423,6 +424,13 @@ export function useSSE(onEvent?: SSEListener) {
         case 'task_updated':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
+          break
+        case 'task_integration_retried':
+          // The note reads a per-task key, and a retry appends a row to exactly one of them.
+          queryClient.invalidateQueries({
+            queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
+          })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           break
         case 'question_asked':
         case 'question_answered':

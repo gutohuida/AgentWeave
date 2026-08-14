@@ -77,6 +77,28 @@ export function useTaskIntegrations(taskId: string, enabled: boolean) {
   })
 }
 
+/**
+ * Attempt the merge again for an approved task whose work is not in the product.
+ *
+ * Approving again cannot re-run it — restating a status is a no-op — so without this the reason
+ * text on the note asks for a remediation that accomplishes nothing.
+ */
+export function useRetryTaskIntegration(taskId: string) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: () =>
+      postJson<{ integrations: TaskIntegration[] }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/integrations/retry`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['project', projectId, 'task', taskId, 'integrations'],
+      })
+    },
+  })
+}
+
 export function useTasks() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Task[]>({

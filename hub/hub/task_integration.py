@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import requirement_evidence, worktrees
@@ -305,6 +305,59 @@ def record(
     )
     session.add(row)
     return row
+
+
+async def tasks_skipped_for_want_of_a_main_branch(
+    session: AsyncSession, project_id: str, *, limit: int = 50
+) -> List[Task]:
+    """Approved tasks whose most recent integration attempt skipped for want of a main branch.
+
+    `NO_MAIN_BRANCH` reads "choose one in the project's settings". Discharging that instruction at
+    the moment the operator follows it is what makes the sentence true — otherwise the system asked
+    for something and then ignored it being done, which is what the loop-7 run hit.
+
+    Deliberately only this reason. Naming a branch says nothing about a checkout with uncommitted
+    changes or one parked elsewhere, and a merge that failed outright wants a person rather than a
+    repetition.
+
+    "Most recent" matters: a task that skipped and was later merged by an explicit retry must not be
+    picked up again on the next settings save.
+    """
+    newest = (
+        select(
+            TaskIntegration.task_id.label("task_id"),
+            func.max(TaskIntegration.created_at).label("at"),
+        )
+        .where(TaskIntegration.project_id == project_id)
+        .group_by(TaskIntegration.task_id)
+        .subquery()
+    )
+    rows = (
+        await session.execute(
+            select(Task)
+            .join(TaskIntegration, TaskIntegration.task_id == Task.id)
+            .join(
+                newest,
+                (newest.c.task_id == TaskIntegration.task_id)
+                & (newest.c.at == TaskIntegration.created_at),
+            )
+            .where(
+                Task.project_id == project_id,
+                Task.status == "approved",
+                TaskIntegration.outcome == SKIPPED,
+                TaskIntegration.reason == NO_MAIN_BRANCH,
+            )
+            .order_by(TaskIntegration.created_at.asc())
+            .limit(limit)
+        )
+    ).scalars()
+    # `.unique()` is not available on a plain scalars() result here, and a task with two integration
+    # rows sharing the newest timestamp would otherwise appear twice and be retried twice.
+    seen: List[Task] = []
+    for task in rows:
+        if task not in seen:
+            seen.append(task)
+    return seen
 
 
 async def history_for(session: AsyncSession, task_id: str) -> List[TaskIntegration]:

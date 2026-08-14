@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import logging
 from datetime import datetime
 from typing import List, Literal, Optional, Tuple
 
@@ -27,6 +28,8 @@ from ...project_workspace import (
     resolve_project_workspace,
 )
 from ...sse import sse_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -435,7 +438,8 @@ async def update_project_settings(
             )
     # A merge target that does not exist would fail silently at approval time, recorded as a skip
     # nobody expected. Refused here instead, where the operator is looking at the field.
-    if merged.main_branch and merged.main_branch != project.main_branch:
+    main_branch_newly_named = bool(merged.main_branch) and merged.main_branch != project.main_branch
+    if main_branch_newly_named:
         from ... import project_workspace, task_integration
 
         try:
@@ -460,6 +464,9 @@ async def update_project_settings(
         setattr(project, field, value)
     await session.commit()
 
+    if main_branch_newly_named:
+        await _integrate_what_was_waiting_for_a_branch(session, resolved_project_id)
+
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(resolved_project_id)
@@ -467,6 +474,41 @@ async def update_project_settings(
         resolved_project_id, "project_settings_updated", merged.model_dump()
     )
     return merged
+
+
+async def _integrate_what_was_waiting_for_a_branch(session: AsyncSession, project_id: str) -> None:
+    """Merge the approved work that skipped because no main branch was named.
+
+    The skip reads "choose one in the project's settings". The operator has just done that, and
+    without this nothing happens — approving again cannot re-run the merge, because restating a
+    status is a no-op. Following the instruction would accomplish nothing, which is the defect.
+
+    Deliberately only that reason (D8): naming a branch says nothing about a dirty checkout or one
+    parked elsewhere, and a merge that failed outright wants a person.
+
+    Wrapped, and after the commit above: the operator changed a setting, and that must stand or
+    fall on its own terms. A git problem here is recorded as a skip like any other, not as a
+    failure to save.
+    """
+    from ... import task_integration
+    from ...task_transition_service import retry_integration
+    from ...task_transitions import operator
+
+    try:
+        waiting = await task_integration.tasks_skipped_for_want_of_a_main_branch(
+            session, project_id
+        )
+        for task in waiting:
+            await retry_integration(session, task, operator())
+        if waiting:
+            await session.commit()
+    except Exception:  # noqa: BLE001 - never let a merge undo the setting that asked for it
+        logger.warning(
+            "Could not re-attempt integration after naming a main branch for %s",
+            project_id,
+            exc_info=True,
+        )
+        await session.rollback()
 
 
 @router.post("/{project_id}/relocate", response_model=ProjectSummary)

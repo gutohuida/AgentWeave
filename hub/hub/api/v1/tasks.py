@@ -29,7 +29,12 @@ from ...run_task_binding import (
 from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
 from ...spec_lifecycle import Actor as SpecActor
 from ...sse import sse_manager
-from ...task_transition_service import apply_transition, guard_entry_status
+from ...task_transition_service import (
+    TransitionRefusedError,
+    apply_transition,
+    guard_entry_status,
+    retry_integration,
+)
 from ...task_transitions import (
     ACTOR_OPERATOR,
     STATUS_BLOCKED,
@@ -346,14 +351,22 @@ async def task_integrations(
     """What approving this task did to the repository, including the times it did nothing.
 
     "My approved work is not on main" needs an answer, and a skipped merge with a stated reason is
-    that answer. Read-only: the record is append-only and there is deliberately no route here that
-    edits or removes one.
+    that answer. Read-only: the record is append-only, and no route edits or removes one. Retrying
+    appends a fresh attempt rather than revising a past one — see `retry_task_integration`.
     """
-    from ... import task_integration
-
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project[0]:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    return await _integration_view(session, task_id)
+
+
+async def _integration_view(session: AsyncSession, task_id: str) -> dict:
+    """The response both the read route and the retry route return.
+
+    One shape, so the UI can render a retry's answer with the component it already has.
+    """
+    from ... import task_integration
 
     rows = await task_integration.history_for(session, task_id)
     return {
@@ -373,6 +386,45 @@ async def task_integrations(
             for row in rows
         ]
     }
+
+
+@router.post("/{task_id}/integrations/retry")
+async def retry_task_integration(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Attempt the merge again for an approved task whose work is not in the product.
+
+    A skipped merge names something the operator then puts right — most often a main branch that was
+    never chosen. Approving again cannot re-run it, because restating a status is a no-op, so
+    without this the reason text asks for a remediation that accomplishes nothing.
+    """
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    try:
+        await retry_integration(session, task, operator())
+    except TransitionRefusedError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.detail) from exc
+    await session.commit()
+
+    view = await _integration_view(session, task_id)
+    # After the commit: `persist_event` commits, so an event emitted before it would publish a
+    # merge that had not been written yet.
+    await persist_event(
+        session,
+        project_id,
+        "task_integration_retried",
+        {
+            "task_id": task_id,
+            "outcomes": [row["outcome"] for row in view["integrations"]][-3:],
+        },
+    )
+    await sse_manager.broadcast(project_id, "task_integration_retried", {"task_id": task_id})
+    return view
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

@@ -38,38 +38,38 @@ assertions move with it.
 
 ## 2. A skipped integration can be retried
 
-- [ ] 2.1 `_integrate` → public `integrate_task(session, task, actor)` in
+- [x] 2.1 `_integrate` → public `integrate_task(session, task, actor)` in
       `hub/hub/task_transition_service.py`, now returning its results.
       `apply_transition:244-245` calls it unchanged.
-- [ ] 2.2 New `retry_integration(session, task, actor)` refusing unless `task.status == "approved"`
+- [x] 2.2 New `retry_integration(session, task, actor)` refusing unless `task.status == "approved"`
       (`IntegrationRetryRefusedError`, 409). The one place that rule lives (D6).
-- [ ] 2.3 No refusal when the newest outcome is already `merged` — `integrate` self-guards with
+- [x] 2.3 No refusal when the newest outcome is already `merged` — `integrate` self-guards with
       `ALREADY_INTEGRATED` (D6).
-- [ ] 2.4 `POST /tasks/{task_id}/integrations/retry` in `hub/hub/api/v1/tasks.py`, returning the same
+- [x] 2.4 `POST /tasks/{task_id}/integrations/retry` in `hub/hub/api/v1/tasks.py`, returning the same
       shape as the `GET` at :340. Emit `task_integration_retried` **after** the commit —
       `persist_event` commits.
-- [ ] 2.5 Agent plane gains **both** `GET /tasks/{task_id}/integrations` and the retry in
+- [x] 2.5 Agent plane gains **both** `GET /tasks/{task_id}/integrations` and the retry in
       `hub/hub/api/v1/agent_actions.py`, scoped to `actor.project_id`. Read included because an agent
       that can retry but not read retries blind.
-- [ ] 2.6 New `task_integration.tasks_skipped_for_want_of_a_main_branch(session, project_id, *,
+- [x] 2.6 New `task_integration.tasks_skipped_for_want_of_a_main_branch(session, project_id, *,
       limit=50)`.
-- [ ] 2.7 Drive it from `projects.py:update_project_settings` **after** `session.commit()` (~:462),
+- [x] 2.7 Drive it from `projects.py:update_project_settings` **after** `session.commit()` (~:462),
       before `redrain_queued_agents`, in its own `try`/`except` so a git failure cannot undo the save
       (D8). Only when `main_branch` is non-empty and changed.
-- [ ] 2.8 UI: `useRetryTaskIntegration()` in `hub/ui/src/api/tasks.ts`;
+- [x] 2.8 UI: `useRetryTaskIntegration()` in `hub/ui/src/api/tasks.ts`;
       `TaskIntegrationNote.tsx` dedupes to the newest row per `(commit_sha, target_branch)` and
       renders "Try again" on a `skipped`/`failed` newest row — except `NO_MAIN_BRANCH`, which links to
       settings, because retrying there would only skip again.
-- [ ] 2.9 `hub/ui/src/hooks/useSSE.ts`: allowlist `task_integration_retried` and invalidate the
+- [x] 2.9 `hub/ui/src/hooks/useSSE.ts`: allowlist `task_integration_retried` and invalidate the
       task's integrations key.
-- [ ] 2.10 Tests in `hub/tests/test_task_integration.py`: retry merges work a skip left behind;
+- [x] 2.10 Tests in `hub/tests/test_task_integration.py`: retry merges work a skip left behind;
       refuses a non-approved task; after a merge records `ALREADY_INTEGRATED` and merges nothing;
       `apply_transition` still integrates through the public function (pins the rename); the agent
       plane can read and retry; refuses another project's task; a settings save retries only the
       tasks that wanted a branch; leaves a dirty-checkout skip alone; a settings save survives a
       failing retry.
-- [ ] 2.11 Cross-phase: `test_retry_merges_the_snapshot_commit_after_a_restamp`.
-- [ ] 2.12 Rebuild `hub/hub/static/ui`, confirm with `diff -rq`.
+- [x] 2.11 Cross-phase: `test_retry_merges_the_snapshot_commit_after_a_restamp`.
+- [x] 2.12 Rebuild `hub/hub/static/ui`, confirm with `diff -rq`.
 
 ## 3. A dead runtime says what happened
 

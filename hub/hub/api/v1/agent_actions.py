@@ -33,7 +33,14 @@ from .agents import AgentRequest, request_agent
 from .jobs import create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
 from .questions import ask_question_for_actor
-from .tasks import create_task_for_actor, get_task, list_tasks, update_task_for_actor
+from .tasks import (
+    create_task_for_actor,
+    get_task,
+    list_tasks,
+    retry_task_integration,
+    task_integrations,
+    update_task_for_actor,
+)
 
 router = APIRouter(prefix="/agent-actions", tags=["agent-actions"])
 
@@ -251,6 +258,42 @@ async def update_shared_task(
         body,
         project_id=actor.project_id,
         actor=run_actor(actor.run_id, actor.agent),
+        session=session,
+    )
+
+
+@router.get("/tasks/{task_id}/integrations")
+async def read_shared_task_integrations(
+    task_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """What approving this task did to the repository, for the agent that has to act on it.
+
+    Offered alongside the retry below rather than after it: an agent that can retry but cannot read
+    the outcome is retrying blind, and would have no way to tell a merge from a fifth skip.
+    """
+    return await task_integrations(
+        task_id,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+    )
+
+
+@router.post("/tasks/{task_id}/integrations/retry")
+async def retry_shared_task_integration(
+    task_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Attempt the merge again for an approved task whose work is not in the product.
+
+    Reachable by an agent because one skip reason — nothing accepted names a commit — is one an
+    agent can genuinely clear, by having a granted peer accept its evidence.
+    """
+    return await retry_task_integration(
+        task_id,
+        project=(actor.project_id, actor.project_id),
         session=session,
     )
 
