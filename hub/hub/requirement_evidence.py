@@ -161,6 +161,35 @@ def footprint_root(workspace: ProjectWorkspace, actor_kind: str, actor: str) -> 
     return worktrees.existing_worktree(workspace.root, actor) or workspace.root
 
 
+def _apply_footprint(
+    session: AsyncSession,
+    evidence: RequirementEvidence,
+    taken: Footprint,
+    existing: Optional[EvidenceFootprint] = None,
+) -> EvidenceFootprint:
+    """Write *taken* onto *evidence*'s footprint, creating the row where there is none.
+
+    One place maps a `Footprint` onto a row, so capture and re-capture cannot come to disagree about
+    what a footprint means. `restamp_run_footprints` needs the create branch as well as the update
+    one: where the workspace could not be resolved at record time the evidence exists with no
+    footprint at all.
+    """
+    row = existing
+    if row is None:
+        row = EvidenceFootprint(
+            id=f"efp-{short_id()}",
+            project_id=evidence.project_id,
+            evidence_id=evidence.id,
+        )
+        session.add(row)
+    row.kind = taken.kind
+    row.commit_sha = taken.commit_sha
+    row.branch = taken.branch
+    row.entries = taken.entries or {}
+    row.reachable_from_main = taken.reachable_from_main
+    return row
+
+
 async def capture_footprint(
     session: AsyncSession, evidence: RequirementEvidence, workspace: ProjectWorkspace
 ) -> EvidenceFootprint:
@@ -169,20 +198,12 @@ async def capture_footprint(
     The root is derived from the evidence row rather than passed in, so the footprint and the
     evidence it hangs off cannot come to disagree about whose work is being described — and any
     later caller (a backfill, a re-capture) gets the right answer without knowing this rule exists.
+
+    Mid-turn this necessarily names the commit the turn *started* from, because the agent's work is
+    still uncommitted — see `restamp_run_footprints`, which corrects it once the commit exists.
     """
     taken = read_footprint(footprint_root(workspace, evidence.actor_kind, evidence.actor))
-    row = EvidenceFootprint(
-        id=f"efp-{short_id()}",
-        project_id=evidence.project_id,
-        evidence_id=evidence.id,
-        kind=taken.kind,
-        commit_sha=taken.commit_sha,
-        branch=taken.branch,
-        entries=taken.entries or {},
-        reachable_from_main=taken.reachable_from_main,
-    )
-    session.add(row)
-    return row
+    return _apply_footprint(session, evidence, taken)
 
 
 def _git(root: Path, *args: str) -> Optional[str]:
@@ -449,6 +470,87 @@ def artifact_exists(workspace: ProjectWorkspace, evidence: RequirementEvidence) 
 # long run of git calls. Distinct commits, not rows — a branch's worth of evidence usually names a
 # handful of commits between them.
 MAX_REACHABILITY_CHECKS = 200
+
+
+async def restamp_run_footprints(
+    session: AsyncSession,
+    *,
+    project_id: str,
+    run_id: str,
+    root: Path,
+    commit_sha: Optional[str] = None,
+    main_branch: Optional[str] = None,
+) -> int:
+    """Re-point a finished run's footprints at the commit that actually contains its work.
+
+    An agent records evidence *during* its turn, while its work is still uncommitted, so
+    `read_footprint` can only ever name the commit the branch pointed at when the turn started. The
+    commit containing the work is made by `worktrees.snapshot_worktree` after the process exits.
+    The window is structural — there is no moment at which recording could observe the right sha —
+    so the record is corrected once the commit exists.
+
+    Left uncorrected this is worse than a wrong label. On a new project the pre-turn commit is
+    usually already on the main line, so the row is written `reachable_from_main=True` and evidence
+    for code that does not exist reads as already shipped. `task_integration.integration_targets`
+    merges on exactly this field.
+
+    Every row of the run is re-pointed, whatever has since been decided about it. The commit is a
+    fact about where the work is, not a judgement about the work; sparing accepted rows would leave
+    approval merging a commit that does not contain the work, and would make correctness depend on
+    how quickly a reviewer clicked. `EvidenceReview` is append-only and is not touched.
+
+    `commit_sha` of `None` is *not* a reason to skip. `snapshot_worktree` returns `None` when nothing
+    was dirty, which happens both when the agent committed its own work mid-turn — where the
+    record-time footprint is still stale, because it predates that commit — and when the agent
+    changed nothing, where it is already right. So fall back to the checkout's current `HEAD` and let
+    the second case fall out through the unchanged-commit guard.
+
+    The footprint is read **once per run**, not once per row: a turn's evidence shares one checkout
+    and one commit, and looping `capture_footprint` would spend three git calls per row.
+    """
+    target = commit_sha or _git(root, "rev-parse", "HEAD")
+    if not target:
+        return 0
+
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, EvidenceFootprint)
+            .outerjoin(
+                EvidenceFootprint,
+                EvidenceFootprint.evidence_id == RequirementEvidence.id,
+            )
+            .where(
+                RequirementEvidence.project_id == project_id,
+                RequirementEvidence.run_id == run_id,
+                RequirementEvidence.actor_kind == "agent",
+            )
+        )
+    ).all()
+    if not rows:
+        return 0
+
+    # Deliberately a *fresh* answer, and free to be `False`. `refresh_reachability` is upgrade-only
+    # because for a fixed commit the answer only travels one way — but this is a different commit,
+    # and carrying over its predecessor's `True` is precisely the poison being removed here.
+    taken = Footprint(
+        kind="git",
+        commit_sha=target,
+        branch=_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "",
+        entries=tree_entries(root, target) or {},
+        reachable_from_main=(
+            is_reachable_from(root, target, main_branch)
+            if main_branch
+            else is_reachable_from_main(root, target)
+        ),
+    )
+
+    updated = 0
+    for evidence, footprint in rows:
+        if footprint is not None and footprint.kind == "git" and footprint.commit_sha == target:
+            continue
+        _apply_footprint(session, evidence, taken, footprint)
+        updated += 1
+    return updated
 
 
 async def refresh_reachability(

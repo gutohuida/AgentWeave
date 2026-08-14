@@ -31,7 +31,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import bound_address, instance_identity, project_workspace, worktrees
+from ... import (
+    bound_address,
+    instance_identity,
+    project_workspace,
+    requirement_evidence,
+    worktrees,
+)
 from ...agent_auth import hash_run_token, mint_run_token
 from ...auth import get_project
 from ...codex_appserver import (
@@ -51,7 +57,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Agent, Conversation, PermissionRequest, Run, Runner
+from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner
 from ...inbound_queue import deliver_entries_with_run, new_entry, return_run_entries
 from ...launchability import (
     access_path_notice,
@@ -932,6 +938,40 @@ async def terminate_all_active_runs() -> int:
     return len(ptys) + len(app_server_run_ids)
 
 
+async def _restamp_evidence_footprints(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    run_id: str,
+    worktree: Optional[Path],
+    snapshot_sha: Optional[str],
+) -> None:
+    """Point this run's evidence at the commit that contains its work.
+
+    Evidence is recorded mid-turn, while the work is still uncommitted, so it can only name the
+    commit the turn started from. `snapshot_worktree` has just made the commit that actually holds
+    the work, and this is the first moment the right answer is knowable.
+
+    Best-effort, and for the same reason the snapshot above it is: a git failure here must not turn
+    a finished run into a failed one. A run that never reaches this point keeps the stale footprint,
+    which is the pre-existing behaviour rather than a new one.
+    """
+    if worktree is None:
+        return
+    try:
+        project = await db.get(Project, project_id)
+        await requirement_evidence.restamp_run_footprints(
+            db,
+            project_id=project_id,
+            run_id=run_id,
+            root=worktree,
+            commit_sha=snapshot_sha,
+            main_branch=project.main_branch if project else None,
+        )
+    except Exception:  # noqa: BLE001 - never worsen a run's outcome over a footprint
+        logger.warning("Could not re-stamp evidence footprints for run %s", run_id, exc_info=True)
+
+
 _RUN_LIFECYCLE_EVENTS = ("run_started", "run_completed", "run_failed", "run_stopped")
 
 
@@ -1331,6 +1371,15 @@ async def _execute_run(
                 # NULL when the turn changed nothing — `snapshot_worktree` commits only a dirty
                 # tree. A checkpoint reads these to say what its conversation changed.
                 run.snapshot_commit_sha = snapshot_sha
+                # Evidence this run recorded named the commit the turn *started* from, because the
+                # work was still uncommitted then. The commit above is the one that holds it.
+                await _restamp_evidence_footprints(
+                    db,
+                    project_id=project_id,
+                    run_id=run_id,
+                    worktree=worktree,
+                    snapshot_sha=snapshot_sha,
+                )
                 # A run that is over has stopped waiting on anything, so nothing it opened may
                 # still read as answerable. In the same transaction as `ended_at`: the two facts
                 # must not be separable by a reader.
@@ -1757,6 +1806,14 @@ async def _execute_codex_appserver_run(
                 run.ended_at = datetime.now(timezone.utc)
                 # NULL when the turn changed nothing — see `_execute_run`.
                 run.snapshot_commit_sha = snapshot_sha
+                # See `_execute_run`.
+                await _restamp_evidence_footprints(
+                    db,
+                    project_id=project_id,
+                    run_id=run_id,
+                    worktree=worktree,
+                    snapshot_sha=snapshot_sha,
+                )
                 # See `_execute_run`. A no-op on the Codex path's own approvals, which expire
                 # themselves at their `asyncio.TimeoutError` — the guard is `status == "pending"`,
                 # so arriving second changes nothing rather than double-writing.
