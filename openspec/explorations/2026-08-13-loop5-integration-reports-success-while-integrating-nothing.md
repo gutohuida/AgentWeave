@@ -270,3 +270,50 @@ check that evidence goes `stale` and links survive, which is B3 machinery no run
 
 Rigor promotion to `gate` was also not exercised on this project; B4's gate has still never fired
 against a real agent's task outside `aw-e2e`.
+
+---
+
+## Resolution — 2026-08-14
+
+Fixed in `openspec/changes/2026-08-14-what-the-product-actually-built`, verified against this same
+project (`aw-loop5`), which was deliberately preserved as the reproduction.
+
+**G1, before and after, from one response:**
+
+```
+ev-0adc23cd  operator  branch=master              reachable=True   ← the false positive
+ev-6590836c  agent     branch=agentweave/builder  reachable=False  ← the truth
+```
+
+Then: approval merged `63ec206278bb` into `master`, `habits.py` and `test_habits.py` arrived on the
+main branch behind a real merge commit, coverage moved to `verified / integrated`, drift raised
+nothing, and a second approval of the same work recorded
+*"already in master; there was nothing to merge"* while leaving `master` untouched.
+
+**G2, G3, G4, G8, G9, G10, G11** are all closed by the same change. **G5** was closed as a non-goal
+by the operator: *"that's okay because this is an AI test. The AI should answer or not deliberately…
+The operator will answer those questions when he's working on it."* **G6** is a defect in what the
+agents built, not in AgentWeave.
+
+### Three further defects, found only by driving the fix
+
+Each of these survived a green unit suite and was exposed by running against a real project.
+
+1. **The merge could not commit.** `git merge` failed with *"Committer identity unknown"* in a
+   repository with no configured `user.email`. `snapshot_worktree` had always supplied
+   `-c user.name/-c user.email` for exactly this reason; the merge did not. So the Hub could create
+   an agent's commits and then be unable to integrate them. Every test repository sets an identity
+   in setup, so no test could reach it.
+2. **The `.gitignore` seeding did nothing for the project it was written for.** `open_existing`
+   returns early for an already-registered project, so seeding only ever reached brand-new ones —
+   and existing projects are precisely the set whose agents have already been committing.
+3. **The UI staleness warning could not be cleared.** It watched all of `hub/ui/src`, including
+   `__tests__`, which is never bundled. Editing a UI test marked the artefact stale permanently: an
+   identical rebuild commits nothing, so the artefact's commit date never moves. A warning that
+   cannot be cleared teaches an operator to ignore the one signal that catches a real stale bundle.
+
+**The pattern worth keeping.** All three, and G1 itself, are cases where the test environment was
+shaped like the thing under test rather than like the product. The integration tests used
+branch-switching in one repository because that was convenient; AgentWeave gives every agent its own
+checkout. The repositories set an identity because that was tidy; real ones often have not. **A
+suite that constructs its own world will confirm that world.**
