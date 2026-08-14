@@ -59,6 +59,10 @@ CHECKOUT_ELSEWHERE = (
     "the project's checkout is on {current}, not {target} — switch to {target} and the next "
     "approval will merge"
 )
+# Not a failure, and emphatically not a merge. `git merge <ancestor>` prints "Already up to date",
+# exits 0 and creates nothing, so without this guard a no-op was recorded as work reaching the
+# product — which is the one thing this record exists to distinguish.
+ALREADY_INTEGRATED = "{commit} is already in {target}; there was nothing to merge"
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -225,6 +229,18 @@ def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult
     if not branch_exists(root, main_branch):
         base.reason = NO_MAIN_BRANCH
         return base
+
+    # Before any question about the working tree. Whether a commit is already in the target is a
+    # fact about the commit and the target alone, so an operator mid-edit deserves the true reason
+    # rather than "commit or stash and the next approval will merge" — which would be false.
+    #
+    # `is True` only: `None` means the ref did not resolve and `False` means it is genuinely not
+    # there. An unknown commit makes `merge-base` exit non-zero, falls through, and lets git fail
+    # with its own message, which is the honest outcome.
+    if requirement_evidence.is_reachable_from(root, target.commit_sha, main_branch) is True:
+        base.reason = ALREADY_INTEGRATED.format(commit=target.commit_sha[:12], target=main_branch)
+        return base
+
     if has_uncommitted_changes(root):
         base.reason = CHECKOUT_DIRTY
         return base

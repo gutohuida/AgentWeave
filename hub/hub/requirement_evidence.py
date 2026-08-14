@@ -214,6 +214,33 @@ def read_footprint(root: Path, locator: str = "") -> Footprint:
 MAIN_BRANCH_NAMES = ("main", "master")
 
 
+def is_reachable_from(root: Path, commit: str, branch: str) -> Optional[bool]:
+    """Whether `commit` is an ancestor of `branch`.
+
+    `None` when `branch` does not resolve in this repository — unknown, which is
+    not the same as `False`.
+
+    Split out from `is_reachable_from_main` so that integration and reporting ask
+    the same question of the same code. Integration targets a *configured*
+    branch; reporting falls back to a guess. Two implementations of "is it
+    already in there?" would eventually answer differently, and the one that
+    mattered would be whichever the merge consulted.
+    """
+    if _git(root, "rev-parse", "--verify", branch) is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit, branch],
+            cwd=str(root),
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.returncode == 0
+
+
 def is_reachable_from_main(root: Path, commit: str) -> Optional[bool]:
     """Whether `commit` is an ancestor of the project's main branch.
 
@@ -222,19 +249,9 @@ def is_reachable_from_main(root: Path, commit: str) -> Optional[bool]:
     does not use a main branch would be an accusation about a choice.
     """
     for name in MAIN_BRANCH_NAMES:
-        if _git(root, "rev-parse", "--verify", name) is None:
-            continue
-        try:
-            result = subprocess.run(
-                ["git", "merge-base", "--is-ancestor", commit, name],
-                cwd=str(root),
-                capture_output=True,
-                timeout=15,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return result.returncode == 0
+        answer = is_reachable_from(root, commit, name)
+        if answer is not None:
+            return answer
     return None
 
 

@@ -386,6 +386,56 @@ async def test_rejected_evidence_merges_nothing(app, auth_headers, builder, tmp_
 
 
 @pytest.mark.asyncio
+async def test_a_commit_already_on_main_is_skipped_not_merged(app, auth_headers, builder, tmp_path):
+    """The regression for the defect the 2026-08-13 end-to-end run found.
+
+    `git merge <ancestor>` prints "Already up to date", exits 0 and creates nothing, so a no-op was
+    recorded as `merged` — making "the work reached the product" indistinguishable from "nothing
+    happened", which is the one distinction this record exists to make.
+
+    The unchanged-sha assertion is the load-bearing half: without it this test passes on the code
+    that shipped the defect.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    # Evidence recorded while the checkout is on main, so the footprint names a commit that is
+    # already there — exactly the shape the live run produced.
+    await accept_evidence(app, auth_headers, builder)
+    before = git(tmp_path, "rev-parse", "main").stdout.strip()
+
+    task = await linked_task(app, auth_headers)
+    assert (await approve(app, auth_headers, task)).status_code == 200
+
+    recorded = await integrations(app, auth_headers, task)
+    assert recorded[0]["outcome"] == "skipped", recorded
+    assert "already in" in recorded[0]["reason"]
+    assert git(tmp_path, "rev-parse", "main").stdout.strip() == before
+
+
+@pytest.mark.asyncio
+async def test_already_integrated_wins_over_a_dirty_checkout(app, auth_headers, builder, tmp_path):
+    """Whether a commit is already in the target is a fact about the commit and the target.
+
+    Telling an operator to commit or stash implies a merge would follow, and none would.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    await accept_evidence(app, auth_headers, builder)
+
+    (tmp_path / "README.md").write_text("edited by the operator\n", encoding="utf-8")
+
+    task = await linked_task(app, auth_headers)
+    assert (await approve(app, auth_headers, task)).status_code == 200
+
+    reason = (await integrations(app, auth_headers, task))[0]["reason"]
+    assert "already in" in reason
+    assert "uncommitted" not in reason
+
+
+@pytest.mark.asyncio
 async def test_a_conflict_refuses_even_at_sketch_rigor(app, auth_headers, builder, tmp_path):
     """D3's accepted consequence. This is not a claim that the work is unproven — it is a claim
     that it cannot go where approval says it goes, and rigor has no opinion about that."""
