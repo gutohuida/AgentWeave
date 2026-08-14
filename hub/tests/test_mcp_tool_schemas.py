@@ -13,6 +13,7 @@ import typing
 import pytest
 
 from hub import mcp_server
+from hub.db.models import EVIDENCE_DECISIONS
 from hub.schemas.messages import _MESSAGE_TYPES
 from hub.schemas.tasks import _PRIORITIES, _TASK_STATUSES
 from hub.task_transitions import STATUS_BLOCKED
@@ -60,6 +61,9 @@ def _enum_for(schema, parameter):
         ("create_task", "priority", _PRIORITIES),
         ("update_task", "status", _AGENT_REQUESTABLE_STATUSES),
         ("create_job", "session_mode", ["new", "resume"]),
+        # `kind` is deliberately absent: `EVIDENCE_KINDS` is open at the edges, so a Literal
+        # here would make the tool narrower than the route it posts to.
+        ("decide_evidence", "decision", list(EVIDENCE_DECISIONS)),
     ],
 )
 def test_constrained_parameter_declares_its_values(tool_name, parameter, expected):
@@ -75,6 +79,7 @@ def test_constrained_parameter_declares_its_values(tool_name, parameter, expecte
         (mcp_server.MessageType, _MESSAGE_TYPES),
         (mcp_server.TaskStatus, _AGENT_REQUESTABLE_STATUSES),
         (mcp_server.TaskPriority, _PRIORITIES),
+        (mcp_server.EvidenceDecision, list(EVIDENCE_DECISIONS)),
     ],
 )
 def test_alias_agrees_with_the_validator_it_mirrors(alias, runtime):

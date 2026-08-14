@@ -143,3 +143,43 @@ describe('per-agent access grants', () => {
     expect(screen.getByLabelText(/Recall the observations behind them for claude-1/)).not.toBeChecked()
   })
 })
+
+/**
+ * Separate from the checkpoint grants above, deliberately.
+ *
+ * Those widen what an agent may read; this decides whether work is allowed to merge. The column
+ * has existed since migration 0068 with no schema, no route and no control, so
+ * `requirement_evidence.may_accept` refused every agent in every project — a capability enforced
+ * everywhere and grantable nowhere.
+ */
+describe('evidence acceptance grant', () => {
+  beforeEach(() => {
+    grantMutate.mockReset()
+    roster = [agent()]
+  })
+
+  it('is closed by default, because it is authority over what ships', () => {
+    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    expect(screen.getByLabelText(/Accept evidence for claude-1/)).not.toBeChecked()
+  })
+
+  it('is granted on its own, without touching the checkpoint grants', () => {
+    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    fireEvent.click(screen.getByLabelText(/Accept evidence for claude-1/))
+    expect(grantMutate).toHaveBeenCalledWith({
+      agent: 'claude-1', grant: 'can_accept_evidence', enabled: true,
+    })
+    expect(grantMutate).toHaveBeenCalledTimes(1)
+  })
+
+  it('reflects a grant that is already open', () => {
+    roster = [agent({ can_accept_evidence: true })]
+    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    expect(screen.getByLabelText(/Accept evidence for claude-1/)).toBeChecked()
+  })
+
+  it('says what it does not confer', () => {
+    render(<AgentSettingsPage agent="claude-1" section="access" />)
+    expect(screen.getByText(/cannot accept its own/)).toBeInTheDocument()
+  })
+})

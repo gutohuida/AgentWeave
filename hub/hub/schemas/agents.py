@@ -84,6 +84,10 @@ class AgentSummary(BaseModel):
     # permission as recalling the raw output behind it.
     can_read_checkpoints: bool = False
     can_recall: bool = False
+    # Authority over what ships, not a widening of what can be read — accepted evidence is what
+    # lets approval merge an agent's work. Closed by default; a project that grants no agent still
+    # has the operator, who can always accept.
+    can_accept_evidence: bool = False
 
     model_config = {"from_attributes": True}
 

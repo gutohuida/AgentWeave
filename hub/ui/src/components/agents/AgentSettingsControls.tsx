@@ -442,3 +442,45 @@ export function CheckpointGrantsSetting({ agent }: { agent: AgentSummary }) {
     </div>
   )
 }
+
+/**
+ * Separate from the checkpoint grants, deliberately.
+ *
+ * Those two widen what an agent may read. This one decides whether work is allowed to merge:
+ * approval integrates nothing until some evidence for the requirement has been accepted. Grouping
+ * them under one heading would tell the operator that authority over what ships is a kind of
+ * reading.
+ */
+export function EvidenceGrantSetting({ agent }: { agent: AgentSummary }) {
+  const update = useUpdateAgentGrant()
+
+  return (
+    <div className="space-y-3">
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={Boolean(agent.can_accept_evidence)}
+          onChange={(event) =>
+            update.mutate({
+              agent: agent.name,
+              grant: 'can_accept_evidence',
+              enabled: event.target.checked,
+            })
+          }
+          aria-label={`Accept evidence for ${agent.name}`}
+          className="mt-0.5"
+        />
+        <span>
+          <span className="text-sm" style={{ color: 'var(--text)' }}>Accept or reject evidence</span>
+          <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>
+            Accepted evidence is what lets approving a task merge the work. This agent still cannot
+            accept its own — another agent, or you, decides that.
+          </span>
+        </span>
+      </label>
+      {update.isError && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>Could not update the grant.</p>
+      )}
+    </div>
+  )
+}

@@ -782,6 +782,67 @@ async def record_evidence(
     }
 
 
+@router.get("/spec/evidence")
+async def list_evidence_for_agent(
+    identifier: Optional[str] = Query(None),
+    document: Optional[str] = Query(None),
+    review_state: Optional[str] = Query(None),
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """The evidence this project holds, so an agent asked to judge it can find it.
+
+    Deciding names a specific piece of evidence. Without a way to discover what exists, an agent
+    granted acceptance has nothing to act on and the grant is decorative — which is why this ships
+    with the tools rather than after them.
+
+    **Who produced each row is part of the answer.** An agent may not decide evidence it produced
+    itself, so one that cannot see the producer learns that rule by being refused once per row.
+    """
+    from ...db.models import RequirementEvidence, SpecRequirement
+    from .spec import _evidence_view, _footprints_for
+
+    if identifier:
+        requirement = await _resolve_requirement(
+            session, actor.project_id, identifier, document or ""
+        )
+        query = select(RequirementEvidence).where(
+            RequirementEvidence.requirement_id == requirement.id
+        )
+    else:
+        query = select(RequirementEvidence).where(
+            RequirementEvidence.project_id == actor.project_id
+        )
+    if review_state:
+        query = query.where(RequirementEvidence.review_state == review_state)
+
+    rows = list(
+        (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
+    )
+    prints = await _footprints_for(session, [row.id for row in rows])
+
+    # The `FR-n` the agent actually reasons in. `_evidence_view` carries `requirement_id`, which is
+    # a database id and names nothing an agent has ever seen.
+    identifiers = dict(
+        (
+            await session.execute(
+                select(SpecRequirement.id, SpecRequirement.identifier).where(
+                    SpecRequirement.id.in_([row.requirement_id for row in rows] or [""])
+                )
+            )
+        ).all()
+    )
+    return {
+        "evidence": [
+            {
+                **_evidence_view(row, prints.get(row.id)),
+                "identifier": identifiers.get(row.requirement_id),
+            }
+            for row in rows
+        ]
+    }
+
+
 @router.post("/spec/evidence/{evidence_id}/decision")
 async def decide_evidence(
     evidence_id: str,

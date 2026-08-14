@@ -134,6 +134,18 @@ def _ask_user(**kwargs: Any) -> None:
     ask_user(**kwargs)
 
 
+def _record_evidence(**kwargs: Any) -> None:
+    from hub.mcp_server import record_evidence
+
+    record_evidence(**kwargs)
+
+
+def _decide_evidence(**kwargs: Any) -> None:
+    from hub.mcp_server import decide_evidence
+
+    decide_evidence(**kwargs)
+
+
 @pytest.mark.parametrize(
     "call, kwargs",
     [
@@ -153,8 +165,35 @@ def _ask_user(**kwargs: Any) -> None:
                 ]
             },
         ),
+        (
+            _record_evidence,
+            {"identifier": "FR-1", "summary": "18 tests pass", "kind": "test_result"},
+        ),
+        # The minimal call, which is the one that matters: `EvidenceRecord` sets
+        # `extra: "forbid"`, so an optional key the tool sends unconditionally would reject every
+        # body -- exactly the `send_message`/`conversation_id` outage this file exists for.
+        (_record_evidence, {"identifier": "FR-1"}),
+        (
+            _record_evidence,
+            {"identifier": "FR-1", "document": "spec/x.html", "task_id": "task-1"},
+        ),
+        (_decide_evidence, {"evidence_id": "ev-1", "decision": "accepted"}),
+        (
+            _decide_evidence,
+            {"evidence_id": "ev-1", "decision": "rejected", "reason": "does not cover FR-1"},
+        ),
     ],
-    ids=["create_task-full", "create_task-minimal", "update_task", "ask_user"],
+    ids=[
+        "create_task-full",
+        "create_task-minimal",
+        "update_task",
+        "ask_user",
+        "record_evidence-full",
+        "record_evidence-minimal",
+        "record_evidence-scoped",
+        "decide_evidence-accept",
+        "decide_evidence-reject",
+    ],
 )
 def test_every_other_tool_body_is_accepted_by_its_route(routes, capture, call, kwargs):
     """The same join for the rest of the surface, so the next drift is caught by this file

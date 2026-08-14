@@ -597,6 +597,10 @@ async def list_agents(
                 checkpoint_notes_value=(agent_row.checkpoint_notes_value if agent_row else None),
                 can_read_checkpoints=bool(agent_row.can_read_checkpoints) if agent_row else False,
                 can_recall=bool(agent_row.can_recall) if agent_row else False,
+                # Built by hand, so a grant added to the schema and not added here reads back as
+                # its default no matter what the row says — and the operator sees a switch they
+                # set turn itself off.
+                can_accept_evidence=bool(agent_row.can_accept_evidence) if agent_row else False,
             )
         )
 
@@ -926,6 +930,17 @@ def _tool_surface_lines() -> List[str]:
         "the `FR-n` identifier the Hub minted, its statement, and its own acceptance criteria — "
         "quote those identifiers, because tasks, evidence and completion gates all refer to them. "
         "Readable at any phase, and `phase` tells you how settled it is.",
+        "- `record_evidence(identifier, summary)` — record what demonstrates that a requirement "
+        "is satisfied, as `FR-1`. **This is what lets approved work merge**: approving a task "
+        "integrates nothing until evidence for its requirements has been accepted, and the "
+        "operator is simply told there is nothing to merge. It enters `awaiting` — what you record "
+        "is a claim until somebody else decides on it.",
+        "- `list_evidence(identifier, review_state)` — the evidence this project holds, with who "
+        "produced each row and which branch and commit it was taken from. `review_state=awaiting` "
+        "is what is waiting on somebody.",
+        "- `decide_evidence(evidence_id, decision, reason)` — accept or reject somebody else's "
+        "evidence; `decision` is `accepted` or `rejected`. Only if the operator has granted you "
+        "this, and never on evidence you produced yourself.",
         "- `recall(observation_id)` — read back one observation by its identifier.",
         "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
         f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
@@ -1196,6 +1211,23 @@ async def _render_hub_agent_context(
         lines.append(f"- dependency_check: `{str(bool(quality.get('dependency_check'))).lower()}`")
         lines.append("")
 
+    # A capability an agent does not know it holds is one it does not use, and one it guesses at is
+    # a 403 in the middle of a turn it has already spent. This is the `submit_spec_document`
+    # failure mode exactly: served, correct, and invisible.
+    if agent_row is not None and getattr(agent_row, "can_accept_evidence", False):
+        lines.append("### You can decide evidence")
+        lines.append(
+            "- The operator has granted you authority to accept or reject requirement evidence. "
+            "Accepted evidence is what allows approving a task to merge the work, so this is a "
+            "judgement about what ships, not a formality."
+        )
+        lines.append(
+            "- `list_evidence(review_state='awaiting')` is what is waiting on somebody; "
+            "`decide_evidence(evidence_id, decision, reason)` answers it. You cannot decide "
+            "evidence you produced yourself."
+        )
+        lines.append("")
+
     if project_instructions:
         lines.append("## Project Instructions")
         lines.append("")
@@ -1459,6 +1491,16 @@ WAITING_SETTING_FIELDS = ("permission_timeout_seconds", "question_timeout_second
 # the other *who may read* one. Both closed by default.
 CHECKPOINT_GRANT_FIELDS = ("can_read_checkpoints", "can_recall")
 
+# Every boolean capability the operator confers, which is what the PATCH loop and the response are
+# built from. `can_accept_evidence` is deliberately **not** folded into the checkpoint pair: those
+# two widen what an agent may read, and this one decides whether work is allowed to merge. Grouping
+# them would tell the operator that authority over what ships is a kind of reading.
+#
+# The column and its migration have existed since `0068`. Nothing could set it — no schema, no
+# route, no control — so `requirement_evidence.may_accept` refused every agent in every project,
+# and a capability enforced everywhere and grantable nowhere is a refusal of everyone.
+GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence")
+
 CHECKPOINT_OVERRIDE_FIELDS = (
     "checkpoint_mode",
     "checkpoint_threshold_mode",
@@ -1644,7 +1686,7 @@ async def patch_agent(
     # because of how it was declared.
     _unrestricted_fields = {
         "runner_id",
-        *CHECKPOINT_GRANT_FIELDS,
+        *GRANT_FIELDS,
         "charter_id",
         "description",
         "default_permission_mode",
@@ -1718,7 +1760,7 @@ async def patch_agent(
 
     _apply_checkpoint_override(agent_row, body)
 
-    for grant in CHECKPOINT_GRANT_FIELDS:
+    for grant in GRANT_FIELDS:
         if grant in body:
             value = body[grant]
             if not isinstance(value, bool):
@@ -1743,7 +1785,7 @@ async def patch_agent(
         "question_timeout_seconds": agent_row.question_timeout_seconds,
         "default_permission_mode": agent_row.default_permission_mode,
         **{field: getattr(agent_row, field) for field in CHECKPOINT_OVERRIDE_FIELDS},
-        **{field: getattr(agent_row, field) for field in CHECKPOINT_GRANT_FIELDS},
+        **{field: getattr(agent_row, field) for field in GRANT_FIELDS},
     }
 
 

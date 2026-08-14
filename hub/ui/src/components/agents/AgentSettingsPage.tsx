@@ -9,6 +9,7 @@ import { tint } from '@/lib/colorTint'
 import {
   CharterPicker,
   CheckpointGrantsSetting,
+  EvidenceGrantSetting,
   CheckpointOverrideSetting,
   DescriptionSetting,
   PermissionDefaultSetting,
@@ -170,13 +171,19 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
       return (
         <SettingsSection
           title="Access"
-          description="What this agent may read of other agents' work."
+          description="What this agent may read of other agents' work, and what it may decide about it."
         >
           <SettingsRow
             label="Grants"
             description="Both closed by default. Reading a summary of a peer's work and reading the raw output behind it are different permissions, so they are granted separately."
           >
             <CheckpointGrantsSetting agent={agent} />
+          </SettingsRow>
+          <SettingsRow
+            label="Evidence"
+            description="Separate from the grants above, because this is not a widening of what can be read — it is authority over whether work is allowed to merge."
+          >
+            <EvidenceGrantSetting agent={agent} />
           </SettingsRow>
         </SettingsSection>
       )

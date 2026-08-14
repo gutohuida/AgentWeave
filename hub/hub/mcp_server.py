@@ -787,6 +787,14 @@ def approve_tool_call(
 SpecKind = Literal["baseline", "system-map", "roadmap", "change-spec"]
 SPEC_SCHEMA_VERSION = 1
 
+# The one closed vocabulary in the evidence surface, restated for the same reason as the rest.
+#
+# `kind` is deliberately **not** constrained here: `db.models.EVIDENCE_KINDS` is open at the edges
+# on purpose — the list is what the surfaces know how to label, not what they accept — and a
+# `Literal` would make this tool narrower than the route it calls, which
+# `agent-capability-plane` forbids in either direction.
+EvidenceDecision = Literal["accepted", "rejected"]
+
 
 @mcp.tool()
 def submit_spec_document(
@@ -936,6 +944,112 @@ def read_spec_document(
     document carries no structured content at all.
     """
     return _hub_request("GET", "/spec/documents", params={"path": path, "include": include})
+
+
+@mcp.tool()
+def record_evidence(
+    identifier: str,
+    summary: str = "",
+    kind: str = "test_result",
+    locator: str = "",
+    document: str = "",
+    task_id: str = "",
+) -> Dict[str, Any]:
+    """Record what demonstrates that a requirement is satisfied.
+
+    **This is what lets approved work merge.** Approving a task integrates nothing until some
+    evidence for its requirements has been accepted — without it the operator is told there is
+    nothing to merge, and you are the one who could have prevented that.
+
+    Evidence enters `awaiting`, never `accepted`. A careful agent and a careless one report success
+    in the same words with the same authority, so what you record is a claim until somebody else
+    decides on it.
+
+    Args:
+        identifier: The requirement this demonstrates, as `FR-1`. Read the document if you are not
+            sure which one your work satisfies.
+        summary: What you did and what it showed, in your own words. Anything that would let
+            somebody else judge whether the requirement is met.
+        kind: What sort of thing this is — `test_result`, `manual_observation`, and so on. Not a
+            closed list; use a word that describes it.
+        locator: Where the artifact lives, if it has one — a path, a command, a run id.
+        document: Only needed when the same identifier exists in more than one document.
+        task_id: The task this came out of, when there is one.
+
+    Returns the evidence `id`, its `identifier` and its `review_state`.
+    """
+    return _hub_request(
+        "POST",
+        "/spec/evidence",
+        {
+            "identifier": identifier,
+            "summary": summary,
+            "kind": kind,
+            "locator": locator,
+            **({"document": document} if document else {}),
+            **({"task_id": task_id} if task_id else {}),
+        },
+    )
+
+
+@mcp.tool()
+def list_evidence(
+    identifier: str = "", document: str = "", review_state: str = ""
+) -> Dict[str, Any]:
+    """Read the evidence this project holds.
+
+    Use this before deciding on anything: a decision names one specific piece of evidence, so this
+    is how you find out what there is. Each row says who produced it, what requirement it is
+    against, and — where the project is a repository — which branch and commit it was taken from,
+    which is how you can tell whether it describes the work you think it does.
+
+    Args:
+        identifier: Narrow to one requirement, as `FR-1`.
+        document: Only needed when the same identifier exists in more than one document.
+        review_state: Narrow to `awaiting`, `accepted` or `rejected`. `awaiting` is what is waiting
+            on somebody.
+
+    Returns `{"evidence": [...]}`.
+    """
+    return _hub_request(
+        "GET",
+        "/spec/evidence",
+        params={
+            "identifier": identifier or None,
+            "document": document or None,
+            "review_state": review_state or None,
+        },
+    )
+
+
+@mcp.tool()
+def decide_evidence(
+    evidence_id: str, decision: EvidenceDecision, reason: str = ""
+) -> Dict[str, Any]:
+    """Accept or reject evidence somebody else recorded.
+
+    Accepting is a judgement that the evidence really demonstrates the requirement — and accepted
+    evidence is what allows approving a task to merge the work. Rejecting says it does not, and is
+    the same operation: use it rather than staying silent about evidence that does not hold up.
+
+    Refused unless the operator has granted you this. It is authority over what ships, not a
+    reading permission, so it is conferred deliberately or not at all.
+
+    **You cannot decide evidence you produced yourself.** Another agent, or the operator, decides
+    on yours.
+
+    Args:
+        evidence_id: From `list_evidence`.
+        decision: `accepted` or `rejected`.
+        reason: Why. This is the durable record of the judgement, so say what you checked.
+
+    Returns the evidence `id` and its new `review_state`.
+    """
+    return _hub_request(
+        "POST",
+        f"/spec/evidence/{evidence_id}/decision",
+        {"decision": decision, "reason": reason},
+    )
 
 
 def main() -> None:

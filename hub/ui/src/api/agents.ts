@@ -38,6 +38,8 @@ export interface AgentSummary {
   /** Two independent grants, both closed by default. Summary access is not transcript access. */
   can_read_checkpoints?: boolean
   can_recall?: boolean
+  /** Authority over what ships: accepted evidence is what lets approval merge an agent's work. */
+  can_accept_evidence?: boolean
 }
 
 export interface AgentLaunchability {
@@ -298,7 +300,7 @@ export function useUpdateAgentGrant() {
   return useMutation({
     mutationFn: ({ agent, grant, enabled }: {
       agent: string
-      grant: 'can_read_checkpoints' | 'can_recall'
+      grant: 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence'
       enabled: boolean
     }) => patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { [grant]: enabled }),
     onSuccess: () => {
