@@ -184,17 +184,19 @@ the error has fields nothing fills.
 
 ## 8. Verification — agent-verifiable
 
-- [ ] 8.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**, Python311 interpreter.
-- [ ] 8.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched.
-- [ ] 8.3 `npx tsc --noEmit`; `npx vitest run`. (`npm run lint` does not work here.)
-- [ ] 8.4 `npx openspec validate --changes --strict`.
-- [ ] 8.5 `npm run build` + the bundle refresh; `diff -rq` identical. Required after phases 2, 5, 6.
-- [ ] 8.6 Mutation checks, because a vacuous assertion has bitten this codebase three times:
+- [x] 8.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**, Python311 interpreter.
+- [x] 8.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched.
+- [x] 8.3 `npx tsc --noEmit`; `npx vitest run`. (`npm run lint` does not work here.)
+- [x] 8.4 `npx openspec validate --changes --strict`.
+- [x] 8.5 `npm run build` + the bundle refresh; `diff -rq` identical. Required after phases 2, 5, 6.
+- [x] 8.6 Mutation checks, because a vacuous assertion has bitten this codebase three times:
       deleting the re-stamp call must fail `test_restamp_names_the_snapshot_commit_not_its_parent`;
       restoring the unconditional requeue must fail
       `test_the_third_failure_abandons_the_entry_with_a_reason`.
-- [ ] 8.7 Expected to need updating: any test asserting the old bare `run_failed` payload, and
-      `test_operator_projects_api.py` if the settings-save retry changes its response timing.
+- [x] 8.7 Needed updating in the end: only `test_codex_appserver_run_turn.py`'s `_FakeSession`,
+      which gained `returncode`/`stderr_tail`/`process_ended_error` — the fake should implement the
+      interface rather than the production code carrying a `getattr` guard for it. No test asserting
+      the old bare `run_failed` payload existed, and `test_operator_projects_api.py` was unaffected.
 
 ## 9. Verification — human-only
 

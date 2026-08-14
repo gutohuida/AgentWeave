@@ -3,9 +3,9 @@
 **Date:** 2026-08-14T17:24+0100 · **Branch:** hub-native-experience · **HEAD:** `4ec3c50`
 **Agent:** Claude Opus 5 (1M context) (Claude Code)
 **Previous handoff:** `.claude/handoffs/handoff-0043-2026-08-14-1326-the-loop-agents-can-drive-implemented.md`
-**Status:** **chunk complete.** 9 commits this session, **0 unpushed**, working tree clean apart
-from one pre-existing stray file. Phases 1–7 of one openspec change done; phases 8–9 partly done —
-see Verification, which distinguishes what ran from what did not.
+**Status:** **chunk complete.** 10 commits this session, **0 unpushed**, working tree clean apart
+from one pre-existing stray file. Phases 1–8 of one openspec change done and green; phase 9 is
+human-only and is the operator's. See Verification, which distinguishes what ran from what did not.
 
 ## Goal
 
@@ -212,8 +212,8 @@ Full diffstat: `git diff --stat 07eb4c7..HEAD` — 44 files, +4085/−219.
 ## Verification
 
 **Ran, with real output:**
-- `pytest hub/tests/ -q` — **1998 passed, 11 skipped** (11m31s). **At `9cec364` (phase 5), NOT at
-  HEAD.** It does not include phase 6.
+- `pytest hub/tests/ -q` — **1998 passed, 11 skipped**, at HEAD (`4ec3c50`), 8m12s, exit 0.
+  Confirmed twice: an earlier run of the same suite gave an identical count, so the two agree.
 - `pytest tests/ -q` — **360 passed, 3 skipped**, at HEAD.
 - `npx vitest run` — **864 passed, 90 files**, after phase 5.
 - `npx tsc --noEmit` — clean. `ruff check hub/ src/ scripts/` — clean.
@@ -233,10 +233,6 @@ Full diffstat: `git diff --stat 07eb4c7..HEAD` — 44 files, +4085/−219.
 - Restoring the unconditional requeue fails **6** of `test_delivery_attempts.py`.
 
 **NOT run, and it matters:**
-- **The full `pytest hub/tests/` has NOT completed at HEAD (`4ec3c50`).** A run was started and
-  stopped without a completion record; another was launched at handoff time (background id
-  `b09vjzdh2`) and its result is unknown as of writing. **Run it before archiving.** The only code
-  it would newly cover is phase 6 (`hub/hub/main.py`), whose own tests pass.
 - **`make ui` itself has never been executed** — `make` is not on PATH here. Only the underlying
   script has run.
 - **Nothing in this change has been exercised by a real agent.** Every assertion is a test. No agent
@@ -244,7 +240,7 @@ Full diffstat: `git diff --stat 07eb4c7..HEAD` — 44 files, +4085/−219.
   and reported an exit code to a real timeline.
 - **The Hub on `:8010` is running code from before all eight implementation commits** (restarted at
   13:38 for the e2e run). Restart before any live verification.
-- **Phase 8 and 9 of `tasks.md` are unchecked**, deliberately.
+- **Phase 9 of `tasks.md` is unchecked** — it is human-only and is the operator's.
 
 ## Git state
 
@@ -265,18 +261,14 @@ either with `python .claude/skills/e2e-loop/e2e.py clean <project-id>`.
 
 ## Next steps
 
-1. **Confirm the full hub suite is green at HEAD.** Run
-   `C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe -m pytest C:\Users\huida\Documents\projects\AgentWeave\hub\tests\ -q`
-   in the background (it takes ~10 min; the output file stays empty until it exits). Expect ≥1998
-   passed. This is the one gap in Verification.
-2. **Restart the Hub onto the new code** before anything live, using the WMI command in Dead ends.
+1. **Restart the Hub onto the new code** before anything live, using the WMI command in Dead ends.
    The running process predates all eight commits.
-3. **Phase 9.1 of the new change** —
+2. **Phase 9.1 of the new change** —
    `openspec/changes/2026-08-14-the-seams-loop7-found/tasks.md` §9. Re-run `/e2e-loop` from zero.
    **Pass condition: a builder records evidence mid-turn and the footprint names the SNAPSHOT commit,
    with no reject/re-record cycle at all.** That round trip is what phase 1 exists to remove, and its
    absence is the proof. §10 is the step-by-step operator guide.
-4. **Archive the four outstanding changes, in this order** — stated in each proposal's
+3. **Archive the four outstanding changes, in this order** — stated in each proposal's
    "Archive ordering": `2026-08-13-approved-means-it-is-in-the-product`, then
    `2026-08-14-what-the-product-actually-built`, then `2026-08-14-the-loop-agents-can-drive`, then
    `2026-08-14-the-seams-loop7-found`. The last **MODIFIES** a `spec-document-authority` requirement
