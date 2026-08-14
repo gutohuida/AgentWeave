@@ -42,6 +42,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
     EVIDENCE_RETENTION_POLICIES,
+    EvidenceFootprint,
     Project,
     RequirementDrift,
     RequirementEvidence,
@@ -440,6 +441,7 @@ async def requirement_detail(
     coverage = next(
         (entry for entry in report.requirements if entry.requirement_id == requirement.id), None
     )
+    prints = await _footprints_for(session, [row.id for row in evidence])
     return {
         "requirement": {
             "id": requirement.id,
@@ -454,7 +456,7 @@ async def requirement_detail(
             {"id": task.id, "title": task.title, "status": task.status, "assignee": task.assignee}
             for task in tasks
         ],
-        "evidence": [_evidence_view(row) for row in evidence],
+        "evidence": [_evidence_view(row, prints.get(row.id)) for row in evidence],
         # Never omitted, and never without its integration answer.
         "coverage": coverage.to_dict() if coverage else None,
     }
@@ -512,7 +514,8 @@ async def list_evidence(
             .scalars()
             .all()
         )
-    return {"evidence": [_evidence_view(row) for row in rows]}
+    prints = await _footprints_for(session, [row.id for row in rows])
+    return {"evidence": [_evidence_view(row, prints.get(row.id)) for row in rows]}
 
 
 @router.post("/spec/evidence/{evidence_id}/decision")
@@ -670,7 +673,7 @@ async def set_retention(
     return {"policy": row.evidence_retention}
 
 
-def _evidence_view(evidence) -> dict:
+def _evidence_view(evidence, footprint=None) -> dict:
     return {
         "id": evidence.id,
         "requirement_id": evidence.requirement_id,
@@ -686,7 +689,38 @@ def _evidence_view(evidence) -> dict:
         # A record whose artifact is gone reports that state rather than disappearing.
         "artifact_removed": evidence.artifact_removed_at is not None,
         "produced_at": evidence.produced_at.isoformat(),
+        # **What this evidence is about**, which is how somebody accepting it can tell whether it
+        # describes the work they think it does. A reviewer who could see `branch: master` on a
+        # builder's evidence would have caught the 2026-08-13 defect by eye, months before any test
+        # was written for it. Null where no footprint was captured.
+        "footprint": (
+            {
+                "kind": footprint.kind,
+                "branch": footprint.branch,
+                "commit_sha": footprint.commit_sha,
+                "reachable_from_main": footprint.reachable_from_main,
+            }
+            if footprint is not None
+            else None
+        ),
     }
+
+
+async def _footprints_for(session: AsyncSession, evidence_ids) -> dict:
+    """`{evidence_id: footprint}` for a page of evidence, in one query."""
+    wanted = [row for row in evidence_ids if row]
+    if not wanted:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(EvidenceFootprint).where(EvidenceFootprint.evidence_id.in_(wanted))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {row.evidence_id: row for row in rows}
 
 
 @router.post("/spec/reindex")

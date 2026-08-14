@@ -222,7 +222,8 @@ The Hub owns three independent project-scoped concepts:
 - agents are addressable roster identities bound to at most one runner and one charter;
 - charters are editable markdown behavior contracts injected into canonical turn context.
 
-Fresh projects seed default runners and 21 starter charters. Operators manage and bind them through
+Fresh projects seed default runners and the starter charters declared in
+`hub/hub/data/charters/charters.json` (9 today). Operators manage and bind them through
 the Hub UI. The former CLI multi-role subsystem, fixed enum, role files, and role-derived API/UI
 fields no longer exist and must not be recreated.
 

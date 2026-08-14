@@ -7,6 +7,15 @@ Nothing writes to a repository until phase 3.
 Migrations: current head is `0069`. The new one guards for a missing table as `0033`/`0034` do, and
 **both** head assertions get bumped (`test_migrations.py` **and** `test_project_persistence.py`).
 
+> **Corrected 2026-08-14 by an end-to-end run.** Several boxes below were checked and were not true.
+> The tests written here used branch-switching inside a single repository with **no worktree**, and
+> the suite's autouse fixture resolves any project to `tmp_path` — a shape AgentWeave never produces,
+> because it gives every agent its own checkout on its own branch. In the arrangement the product
+> actually creates, approval merged `master` into `master` and recorded `outcome: merged` while all
+> the work sat on `agentweave/builder`. Unchecked below, with what was really true; fixed in
+> `2026-08-14-what-the-product-actually-built`. See
+> `openspec/explorations/2026-08-13-loop5-integration-reports-success-while-integrating-nothing.md`.
+
 ## 1. The main branch, named
 
 - [x] 1.1 `Project.main_branch` (nullable) + migration `0070`. Null means "not chosen", which is not
@@ -75,17 +84,23 @@ Migrations: current head is `0069`. The new one guards for a missing table as `0
 - [x] 6.1 Target selection: the newest accepted footprint commit wins; awaiting evidence contributes
       nothing; rejected evidence contributes nothing; a `paths` footprint contributes nothing;
       multiple branches yield multiple targets.
-- [x] 6.2 **The demonstrable case, one test with three outcomes:** a task approves and its commit is
+- [ ] 6.2 **The demonstrable case, one test with three outcomes:** a task approves and its commit is
       on main; the same task with a conflicting commit is refused; the same task approves and merges
       after the conflict is resolved.
+      **Was not true.** The commit reaching `main` was `main`'s own, because the footprint named the
+      project checkout rather than the agent's worktree. The test asserted `merged` and a no-op
+      satisfies it.
 - [x] 6.3 Later commits on the agent's branch are **not** merged (D1) — the test that proves the
       commit-not-branch decision.
 - [x] 6.4 A `sketch` document's task integrates identically to a `gate` document's task (D5).
 - [x] 6.5 A conflict refuses approval at `sketch` rigor (D3's accepted consequence).
 - [x] 6.6 Each skip precondition, separately: no main branch; dirty checkout; checkout on another
       branch. Each records its own reason and each leaves the approval standing.
-- [x] 6.7 A failed merge leaves the task `approved` and coverage reporting
+- [ ] 6.7 A failed merge leaves the task `approved` and coverage reporting
       `verified, not integrated` (D6).
+      **Was not reachable.** With the footprint naming the project checkout, coverage reported
+      `integrated` for work that was nowhere near the main branch, so the state this asserts could
+      not occur.
 - [x] 6.8 A non-repository project approves exactly as it did before this change (D7).
 - [x] 6.9 A project with `main_branch` null reports integration exactly as it did before this change
       (task 1.4).

@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import worktrees
 from .db.models import (
     EVIDENCE_RETENTION_POLICIES,
     Agent,
@@ -46,7 +47,6 @@ from .db.models import (
     RequirementEvidence,
     SpecRequirement,
 )
-from . import worktrees
 from .project_workspace import ProjectWorkspace
 from .spec_lifecycle import Actor
 from .utils import short_id

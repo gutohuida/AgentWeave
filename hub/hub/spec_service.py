@@ -203,6 +203,10 @@ async def rename_document(
         )
 
     document.path = new_path
+    # The subject is why the rename happened, so it is the document's title from here. Leaving the
+    # placeholder in place meant every surface that lists documents showed a name contradicting the
+    # document's own location until some later save happened to correct it.
+    document.title = subject.strip() or document.title
     await _repoint_pending_input(session, document.project_id, previous_path, new_path)
     spec_documents.move_document(workspace, previous_path, new_path)
     await spec_lifecycle.record_event(

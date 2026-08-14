@@ -46,9 +46,19 @@ from .utils import short_id
 LEADING_IDENTIFIER = re.compile(r"^\s*(FR-\d+)\b")
 EXACT_IDENTIFIER = re.compile(r"^\s*(FR-\d+)\s*$")
 
+#: Why a free-text value did not become a link. **None of these is a fault.**
+#:
+#: `requirements` is a free-text field and agents use it as one — for prose constraints and design
+#: notes as well as for identifiers. Reporting "Keep the deliverable to one runnable file" as an
+#: *unresolved requirement* made every task on a real board look like it had three problems when
+#: nothing was wrong. `not_a_reference` says what is true: it is a note, kept because B3 §2.4
+#: forbids discarding anything a caller wrote.
 UNKNOWN = "unknown"
 AMBIGUOUS = "ambiguous"
+#: Names an identifier this project does not have. Worth an operator's attention.
 UNPARSED = "unparsed"
+#: Carries no identifier at all — prose, not a claim to serve anything. Kept, not flagged.
+NOT_A_REFERENCE = "not_a_reference"
 
 
 class LinkRefusedError(ValueError):
@@ -63,7 +73,10 @@ class LinkRefusedError(ValueError):
 @dataclass
 class LinkOutcome:
     linked: List[str] = field(default_factory=list)
+    #: Named an identifier and it did not resolve. Worth an operator's attention.
     unresolved: List[str] = field(default_factory=list)
+    #: Named no identifier at all — prose the caller put in a free-text field. Kept, not a problem.
+    notes: List[str] = field(default_factory=list)
 
 
 async def _requirement_by_identifier(
@@ -201,8 +214,11 @@ async def absorb_free_text(
             continue
         match = LEADING_IDENTIFIER.match(value)
         if match is None:
-            session.add(_reference(task, value, UNPARSED))
-            outcome.unresolved.append(value)
+            # Prose, not a broken reference. Kept verbatim as §2.4 requires, and reported as the
+            # note it is: a value that never claimed to name a requirement is not an unresolved one,
+            # and calling it that made every task on a real board look faulty.
+            session.add(_reference(task, value, NOT_A_REFERENCE))
+            outcome.notes.append(value)
             continue
 
         row, status = await _requirement_by_identifier(session, task.project_id, match.group(1))

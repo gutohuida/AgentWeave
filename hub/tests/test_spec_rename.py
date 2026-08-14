@@ -369,3 +369,28 @@ async def test_a_traversal_in_the_subject_becomes_an_ordinary_name(
     path = response.json()["path"]
     assert path == "spec/changes/etc-passwd/spec.html"
     assert (tmp_path / path).is_file()
+
+
+@pytest.mark.asyncio
+async def test_renaming_carries_the_subject_into_the_title(app, auth_headers, run_headers):
+    """A document is renamed precisely because its subject became clear.
+
+    Leaving the placeholder title in place meant every surface listing documents showed a name
+    contradicting the document's own location, until some later save happened to correct it.
+    """
+    created = await app.post(f"{BASE}/documents", json={"title": ""}, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    minted = created.json()["path"]
+
+    renamed = await app.post(
+        RENAME,
+        json={"path": minted, "subject": "Local command-line habit tracker"},
+        headers=run_headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+
+    listed = await app.get(f"{BASE}/documents", headers=auth_headers)
+    document = next(
+        row for row in listed.json()["documents"] if row["path"] == renamed.json()["path"]
+    )
+    assert document["title"] == "Local command-line habit tracker"

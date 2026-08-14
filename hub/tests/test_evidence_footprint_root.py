@@ -487,3 +487,82 @@ async def test_a_footprint_whose_branch_is_gone_raises_nothing(
     detected = await app.post(f"{BASE}/spec/drift/detect", headers=auth_headers)
     assert detected.status_code == 200, detected.text
     assert detected.json()["raised"] == []
+
+
+# ---------------------------------------------------------------------------
+# What the Hub puts in someone else's repository
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_registering_seeds_ignore_rules_for_the_hubs_own_files(
+    bind_project_workspace, tmp_path
+):
+    """Agents commit what they find.
+
+    Without this the first agent to run commits its own isolated checkout, and the operator inherits
+    an `.agentweave/worktrees/` tree in their history having never chosen it. Observed twice.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    ignored = (repo / ".gitignore").read_text(encoding="utf-8")
+    assert ".agentweave/worktrees/" in ignored
+    assert ".agentweave/logs/" in ignored
+
+    # And git agrees, which is the only claim that matters.
+    worktrees.ensure_worktree(repo, "builder")
+    status = git(repo, "status", "--porcelain").stdout
+    assert "worktrees" not in status
+
+
+@pytest.mark.asyncio
+async def test_seeding_preserves_what_the_operator_already_ignored(
+    bind_project_workspace, tmp_path
+):
+    """The ignore file is the operator's. Being registered is not a reason to reorder it."""
+    repo = init_repo(tmp_path / "repo")
+    (repo / ".gitignore").write_text("# mine\nbuild/\n*.log\n", encoding="utf-8")
+
+    await bind_project_workspace(repo)
+
+    ignored = (repo / ".gitignore").read_text(encoding="utf-8")
+    assert ignored.startswith("# mine\nbuild/\n*.log\n")
+    assert ".agentweave/worktrees/" in ignored
+
+
+@pytest.mark.asyncio
+async def test_a_project_without_a_repository_gets_no_ignore_file(bind_project_workspace, tmp_path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    await bind_project_workspace(plain)
+    assert not (plain / ".gitignore").exists()
+
+
+@pytest.mark.asyncio
+async def test_evidence_reports_the_work_it_describes(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """What a reviewer needs in order to accept evidence responsibly.
+
+    Accepting evidence is a judgement about whether it demonstrates the requirement, and that is
+    unanswerable without knowing which work it was taken against. A reviewer who could see
+    `branch: master` on a builder's evidence would have caught the 2026-08-13 defect by eye.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    agent_commit = commit_in(worktree, "feature.py", "x\n")
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "tests pass"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    listed = await app.get(f"{BASE}/spec/evidence", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    footprint = listed.json()["evidence"][0]["footprint"]
+    assert footprint["branch"] == "agentweave/builder"
+    assert footprint["commit_sha"] == agent_commit
+    assert footprint["reachable_from_main"] is False

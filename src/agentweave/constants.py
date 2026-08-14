@@ -40,24 +40,11 @@ EVENTS_LOG_FILE = LOGS_DIR / "events.jsonl"  # gitignored, machine-local
 
 # Git ignore entries for runtime/local AgentWeave state. Safe-to-commit files such as
 # .agentweave/ai_context.md is omitted because it is safe to commit.
-GITIGNORE_BEGIN_MARKER = "# AgentWeave runtime state"
-GITIGNORE_END_MARKER = "# End AgentWeave runtime state"
-AGENTWEAVE_GITIGNORE_PATTERNS = [
-    ".agentweave/tasks/*/",
-    ".agentweave/messages/*/",
-    ".agentweave/agents/*.json",
-    ".agentweave/session.json",
-    ".agentweave/transport.json",
-    ".agentweave/.git_seen/",
-    ".agentweave/logs/",
-    ".agentweave/watchdog.pid",
-    ".agentweave/watchdog.log",
-    ".agentweave/watchdog.heartbeat",
-    ".agentweave/project_instructions.md",
-    ".env",
-    "kimichanges.md",
-    "kimiwork.md",
-]
+# The ignore patterns and their markers used to live here, naming `watchdog.pid`,
+# `transport.json` and a `.git_seen/` directory — none of which the product still creates. Nothing
+# had consumed them since the callback that wrote them was removed in `2026-07-30-hub-native-
+# experience`, so they were a list describing a Hub that no longer exists. Seeding is the Hub's
+# now, in `hub/hub/project_lifecycle.py`, where the directory being written to is known.
 
 
 # Transport types

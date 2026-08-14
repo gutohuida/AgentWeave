@@ -216,7 +216,16 @@ async def test_an_uninterpretable_reference_is_kept_not_dropped(
     body = response.json()
     assert body["requirement_links"] == []
     kept = {entry["reference"]: entry["reason"] for entry in body["unresolved_requirements"]}
-    assert kept == {"something nobody can resolve": "unparsed", "FR-77 — gone": "unknown"}
+    # Both kept — that is the load-bearing property, and §2.4 forbids discarding either.
+    #
+    # The two reasons differ because the situations do. `FR-77` claimed to name a requirement and
+    # did not resolve, which deserves attention. The prose never claimed to name one, and calling
+    # that "unresolved" made every task on a real board look like it had three problems while
+    # nothing was wrong — the agent had simply used a free-text field as free text.
+    assert kept == {
+        "something nobody can resolve": "not_a_reference",
+        "FR-77 — gone": "unknown",
+    }
 
 
 @pytest.mark.asyncio

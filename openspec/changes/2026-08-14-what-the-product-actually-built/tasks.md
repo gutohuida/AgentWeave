@@ -61,79 +61,79 @@ straight after provisioning, so an assertion without it is vacuous).
 
 ## 4. Statements on task payloads
 
-- [ ] 4.1 New `hub/hub/spec_reading.py` — `payloads_for_documents(session, workspace, document_ids)`,
+- [x] 4.1 New `hub/hub/spec_reading.py` — `payloads_for_documents(session, workspace, document_ids)`,
       one file read per distinct document, never raising; helpers indexing statements and acceptance
       criteria by requirement key.
-- [ ] 4.2 `_attach_requirements(session, responses, *, project_id)` adds `key`, `statement`, `modal`.
+- [x] 4.2 `_attach_requirements(session, responses, *, project_id)` adds `key`, `statement`, `modal`.
       All four call sites updated.
-- [ ] 4.3 Workspace resolution degrades to "no statements" rather than failing a task board (D8).
-- [ ] 4.4 Correct the two docstrings that already claim statements —
+- [x] 4.3 Workspace resolution degrades to "no statements" rather than failing a task board (D8).
+- [x] 4.4 Correct the two docstrings that already claim statements —
       `requirement_links.py:230` and `schemas/tasks.py:202`.
-- [ ] 4.5 Tests: statements present via REST and via the agent plane; a retired requirement yields
+- [x] 4.5 Tests: statements present via REST and via the agent plane; a retired requirement yields
       `statement: null`; an unavailable workspace still returns tasks; one document is read once for
       a board of many tasks.
 
 ## 5. An agent can read a specification
 
-- [ ] 5.1 `GET /spec/documents?path=&include=requirements|full` in `agent_actions.py`, using a query
+- [x] 5.1 `GET /spec/documents?path=&include=requirements|full` in `agent_actions.py`, using a query
       parameter so an agent-supplied path cannot become extra path segments.
-- [ ] 5.2 Response shape per D7: payload, minted identifiers joined on, acceptance criteria nested,
+- [x] 5.2 Response shape per D7: payload, minted identifiers joined on, acceptance criteria nested,
       `phase` and `rigor` present, diagnostics rather than silent drops, `payload_missing` for a
       document carrying none.
-- [ ] 5.3 Any phase (D7).
-- [ ] 5.4 `read_spec_document(path, include)` in `mcp_server.py`, after `rename_spec_document` and
+- [x] 5.3 Any phase (D7).
+- [x] 5.4 `read_spec_document(path, include)` in `mcp_server.py`, after `rename_spec_document` and
       **above** the `__main__` guard, which must remain last in the file.
-- [ ] 5.5 Registered in `_tool_surface_lines` (`api/v1/agents.py`) — enforced by
+- [x] 5.5 Registered in `_tool_surface_lines` (`api/v1/agents.py`) — enforced by
       `test_tool_surface_matches_server.py`.
-- [ ] 5.6 Named in the turn context's open-document block, so it is discoverable at the moment it
+- [x] 5.6 Named in the turn context's open-document block, so it is discoverable at the moment it
       applies.
-- [ ] 5.7 Tests: the route returns identifiers and nested criteria; an unapproved document is
+- [x] 5.7 Tests: the route returns identifiers and nested criteria; an unapproved document is
       readable; a payload-less document reports `payload_missing`; the tool is served over stdio
       (automatic via the existing spawned-equals-imported test).
 
 ## 6. Approval creates the work the document declares
 
-- [ ] 6.1 `Task.spec_document_id` and `Task.spec_task_key` + migration `0071`, unique per
+- [x] 6.1 `Task.spec_document_id` and `Task.spec_task_key` + migration `0071`, unique per
       `(project_id, document_id, spec_task_key)`.
-- [ ] 6.2 On the transition into `approved`, materialise `payload.tasks`, resolving declared
+- [x] 6.2 On the transition into `approved`, materialise `payload.tasks`, resolving declared
       requirement **keys** to identifiers through the identity block and linking through the same
       path `create_task` uses.
-- [ ] 6.3 Idempotent; an existing task is never modified, reassigned or reverted (D9).
-- [ ] 6.4 Created unassigned, in the entry status. No tasks declared creates none, silently.
-- [ ] 6.5 A declared task naming an unresolvable requirement is still created, with the reference
+- [x] 6.3 Idempotent; an existing task is never modified, reassigned or reverted (D9).
+- [x] 6.4 Created unassigned, in the entry status. No tasks declared creates none, silently.
+- [x] 6.5 A declared task naming an unresolvable requirement is still created, with the reference
       preserved.
-- [ ] 6.6 Tests: declared tasks appear with links; re-approval creates no duplicates; a task already
+- [x] 6.6 Tests: declared tasks appear with links; re-approval creates no duplicates; a task already
       moved is untouched; a document with no declared tasks approves and creates nothing; head
       assertions bumped to `0071`.
 
 ## 7. Housekeeping
 
-- [ ] 7.1 Seed a `.gitignore` at project registration — additive, idempotent, never reordering the
+- [x] 7.1 Seed a `.gitignore` at project registration — additive, idempotent, never reordering the
       operator's own rules, never failing registration. Reuse or delete the orphaned
       `AGENTWEAVE_GITIGNORE_PATTERNS` in `src/agentweave/constants.py:43-60` rather than leaving a
       third spelling.
-- [ ] 7.2 `spec_service.rename_document` promotes `subject` to `document.title`.
-- [ ] 7.3 The UI stops presenting free-text prose as an "unresolved requirement". B3's
+- [x] 7.2 `spec_service.rename_document` promotes `subject` to `document.title`.
+- [x] 7.3 The UI stops presenting free-text prose as an "unresolved requirement". B3's
       preserve-verbatim rule is unchanged; only the wording of the surface changes.
-- [ ] 7.4 `CLAUDE.md`: "21 starter charters" → 9.
-- [ ] 7.5 Correct the checkboxes this run disproved in
+- [x] 7.4 `CLAUDE.md`: "21 starter charters" → 9.
+- [x] 7.5 Correct the checkboxes this run disproved in
       `openspec/changes/2026-08-13-approved-means-it-is-in-the-product/tasks.md`, pointing at this
       change.
 
 ## 8. Optional
 
-- [ ] 8.1 `footprint: {branch, commit_sha, reachable_from_main}` on `_evidence_view`. A reviewer who
+- [x] 8.1 `footprint: {branch, commit_sha, reachable_from_main}` on `_evidence_view`. A reviewer who
       could see `branch: master` on a builder's evidence would have caught this by eye. Last, because
       it may break exact-dict assertions.
 
 ## 9. Verification — agent-verifiable
 
-- [ ] 9.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**.
-- [ ] 9.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched (never without
+- [x] 9.1 `pytest hub/tests/ -q` and `pytest tests/ -q` **separately**.
+- [x] 9.2 `ruff check hub/ src/`; `black --target-version py311` on every file touched (never without
       the flag).
-- [ ] 9.3 `npx tsc --noEmit`; `npx vitest run`.
-- [ ] 9.4 `npx openspec validate --changes --strict`.
-- [ ] 9.5 `npm run build`; `hub/hub/static/ui` replaced and confirmed with `diff -rq`.
+- [x] 9.3 `npx tsc --noEmit`; `npx vitest run`.
+- [x] 9.4 `npx openspec validate --changes --strict`.
+- [x] 9.5 `npm run build`; `hub/hub/static/ui` replaced and confirmed with `diff -rq`.
 
 ## 10. Human-only verification
 

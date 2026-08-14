@@ -173,11 +173,20 @@ function renderChat(
   return { ...utils, onOpenDocument }
 }
 
-/** The JSON body of the Nth /agent/trigger call. */
+/**
+ * The JSON body of the Nth /agent/trigger call.
+ *
+ * Selected by path rather than by position in the mock's call list. Indexing assumed the trigger
+ * was the only thing this surface fetched, so the coverage query added alongside the coverage bar
+ * silently took slot zero and these assertions started reading the wrong request. Any future query
+ * on this view would have done the same.
+ */
 function triggerBody(call = 0): Record<string, unknown> {
-  const [path, init] = fetchMock.mock.calls[call] as [string, RequestInit]
-  expect(path).toBe('/api/v1/projects/proj-test/agent/trigger')
-  return JSON.parse(init.body as string)
+  const triggers = fetchMock.mock.calls.filter(([path]) =>
+    String(path).includes('/agent/trigger'),
+  ) as [string, RequestInit][]
+  expect(triggers.length).toBeGreaterThan(call)
+  return JSON.parse(triggers[call][1].body as string)
 }
 
 async function send(text: string) {
@@ -288,8 +297,13 @@ describe('the operator can be involved while a document is open', () => {
     fireEvent.click(screen.getByText('Drop it'))
     await waitFor(() => expect(answerMutation).toHaveBeenCalled())
     expect(answerMutation.mock.calls[0][0]).toMatchObject({ id: 'q-1', labels: ['Drop it'] })
-    // The answer went to the question, not out as a new message.
-    expect(fetchMock).not.toHaveBeenCalled()
+    // The answer went to the question, not out as a new message. Asserted against the trigger
+    // specifically: "fetch was never called" also forbade every unrelated query this view makes,
+    // so the coverage bar's read broke a test about answering a question.
+    const triggers = fetchMock.mock.calls.filter(([path]) =>
+      String(path).includes('/agent/trigger'),
+    )
+    expect(triggers).toHaveLength(0)
   })
 
   it('renders a permission request and resolves it both ways', () => {

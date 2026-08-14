@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,6 +25,21 @@ from .project_workspace import (
     configured_workspace_root,
 )
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
+
+#: The block the Hub owns inside a project's ignore file. Markers rather than a separate file so the
+#: operator keeps one place to look, and so re-registering recognises what it already wrote.
+GITIGNORE_BEGIN = "# AgentWeave — the Hub's own working files"
+GITIGNORE_END = "# End AgentWeave"
+
+#: Only what the Hub creates. Every entry here is a directory or file this product puts in someone
+#: else's repository; nothing about their language, their build, or their editor.
+GITIGNORE_PATTERNS = [
+    ".agentweave/worktrees/",
+    ".agentweave/logs/",
+    ".agentweave/evidence/",
+]
 
 
 class ProjectLifecycleService:
@@ -90,6 +106,7 @@ class ProjectLifecycleService:
 
         _observe(project, canonical)
         await self._write_marker_and_commit(project, canonical.path)
+        self._seed_gitignore(canonical.path)
         return project
 
     async def create_new(self, directory: str | Path, *, name: Optional[str] = None) -> Project:
@@ -206,6 +223,37 @@ class ProjectLifecycleService:
                 )
             )
         project.charters_seeded = True
+
+    def _seed_gitignore(self, root: Path) -> None:
+        """Ignore the working artefacts the Hub itself puts in the operator's directory.
+
+        Agents commit what they find. Without this, the first agent to run commits its own isolated
+        checkout — and the operator inherits an `.agentweave/worktrees/` tree in their history having
+        never chosen it. Observed twice in end-to-end runs.
+
+        Scoped to **what the Hub creates**, deliberately. Language and build artefacts belong to the
+        project; a Rust project does not want `__pycache__` in its ignore file because AgentWeave
+        happened to be written in Python.
+
+        Additive and idempotent, inside a marked block. The ignore file is the operator's — a
+        project being registered is not a reason to reorder or remove anything already in it — and
+        registering twice must not accumulate copies.
+
+        Never fatal. Ignore rules are a convenience; a project that cannot receive them is still a
+        project, and failing registration over one would be a bad trade.
+        """
+        block = "\n".join([GITIGNORE_BEGIN, *GITIGNORE_PATTERNS, GITIGNORE_END, ""])
+        target = root / ".gitignore"
+        try:
+            if not (root / ".git").exists():
+                return
+            existing = target.read_text(encoding="utf-8") if target.is_file() else ""
+            if GITIGNORE_BEGIN in existing:
+                return
+            separator = "" if not existing or existing.endswith("\n") else "\n"
+            target.write_text(f"{existing}{separator}{block}", encoding="utf-8")
+        except OSError:
+            logger.info("Could not seed ignore rules in %s; continuing.", root, exc_info=True)
 
     async def _write_marker_and_commit(self, project: Project, root: Path) -> None:
         marker_path = root / PROJECT_MARKER_PATH
