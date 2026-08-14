@@ -151,3 +151,72 @@ patch. Everything I claim tonight gets driven, not read.
 `design.md` D3 amended in place with the correction. The **spec needed no change** — its scenario
 already said *"what is displayed conveys the termination rather than that value"*; the code simply
 did not meet it. Change B task 9.3 now passes.
+
+### 00:46–01:00 — Loop 9 started: `aw-loop9` (`proj-9eb82406`)
+
+Project at `C:\Users\huida\Documents\aw-loop9`. Agents: `architect` (codex/Spec Author), `builder`
+(claude/Developer), `verifier` (codex/Verifier, `can_accept_evidence=true`). Subject: a fortnightly
+shift-roster library that has to *justify its own fairness* — chosen because it forces real
+arithmetic and real constraint conflicts rather than CRUD.
+
+**Scope limitation, stated up front.** The skill says to establish scope from the operator before
+looking at what was built. The operator is asleep, so I carried forward their standing answers
+("everything, including the UI stamp", "fully unattended") — and, worse, **I am the one who built
+the code under test tonight.** This run is therefore contaminated by the builder's blind spots in
+exactly the way the skill warns about. I compensated by driving the whole spec→merge flow rather
+than only my own fixes, but a finding I *did not* make tonight is weaker evidence than usual.
+
+#### The night's most valuable result: the fix held on a failure I did not stage
+
+Mid-interview, `run-90edbaa2` died on its own — `app-server process ended during thread/resume`.
+Nobody killed anything. What then happened, from the database:
+
+```
+run-90edbaa2  failed   23:53:46   app-server process ended during thread/resume
+run-c8c2a6be  failed   23:53:48   app-server process ended during thread/resume
+run-1dabcd07  running  23:53:50   -> completed, spec submitted
+entry-51914665  state=delivered  delivery_attempts=2
+```
+
+Two seconds between attempts, then two more. Attempt 3 ran on a **fresh provider session**, because
+attempt 2 hit `RESUME_RETRY_LIMIT` and cleared the unresumable one — and it succeeded. The
+operator's message survived two consecutive runtime deaths without anyone touching anything.
+
+This is the loop-7/loop-8 wedge reproducing **unprovoked**, and healing itself. Note it took the
+*pre-spawn* branch (the payload carries `method: thread/resume` from `_transport_failure_fields`,
+not `runtime_exit_code`), where `return_run_entries` already existed. **What did not exist before
+tonight is the `schedule_agent` call in that branch** — change A phase 4, the fix for loop 8's
+finding 2, whose measured symptom was *"`entry-95f08a24` sat queued at attempt 1 until an unrelated
+`PUT /settings` drove attempt 2"*. Tonight attempts 2 and 3 followed in two seconds each,
+unassisted. That is the strongest evidence produced tonight, and it is stronger than my staged kills
+because I did not arrange it.
+
+#### What held: loop 8's finding 8 does not reproduce
+
+Per the method I answered the interview decisively but **deliberately left the inviolable-rules
+question unanswered** — rest periods, consecutive-duty limits. Loop 8's architect, given the same
+treatment, declared *"Open questions: None outstanding"* and invented six non-goals.
+
+This one refused to. It came back and asked again; when I answered everything else and still skipped
+that one, it wrote the specification and then stopped, saying the document *"remains in exploration
+with that single blocking question recorded rather than guessed"*. Verified in the document itself,
+not just the chat:
+
+- FR-5: *"whether additional inter-shift rest rules apply remains unresolved"*
+- *"Mandatory rest periods and maximum consecutive work days or nights remain unconfirmed because
+  the operator did not answer that question."*
+- Lifecycle: *"Implementation must not begin by guessing"*
+- the questions I *did* answer are each marked `resolved`
+
+Once answered it added FR-17 and reported no remaining blockers. 17 requirements, `FR-1`–`FR-17`.
+
+I am **not** concluding finding 8 is fixed — nothing was changed to fix it, so the honest reading is
+that it did not reproduce on this run, with this model, on this subject. It may be prompt-dependent.
+Worth one more probe before anyone closes it.
+
+#### G5 re-observed, for the fourth time
+
+The architect asked all its questions as prose across three turns. `select count(*) from questions
+where project_id='proj-9eb82406'` → **0**. This remains the operator's explicit non-goal
+(*"the AI should answer or not deliberately based on the test"*) and is recorded as an observation
+only, not a defect.
