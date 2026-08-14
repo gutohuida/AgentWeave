@@ -421,3 +421,100 @@ async def test_implicit_legacy_project_routes_are_removed(
     response = await app.get(legacy_path, headers=auth_headers)
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_settings_change_can_name_only_what_it_changes(app, auth_headers) -> None:
+    """The handler has always merged onto what is stored. Nothing could reach that merge.
+
+    `ProjectSettings` has five required fields, so a body naming only the field it wanted to change
+    was refused by request validation before the handler ran — and the comment promising that
+    omission means unchanged described behaviour no client could obtain. Found when the only way to
+    set a project's main branch turned out to be resending every other setting with it.
+    """
+    before = await app.get("/api/v1/projects/proj-test/settings", headers=auth_headers)
+    assert before.status_code == 200, before.text
+    original = before.json()
+
+    changed = await app.put(
+        "/api/v1/projects/proj-test/settings",
+        json={"token_budget": 4242},
+        headers=auth_headers,
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["token_budget"] == 4242
+
+    # Everything the body did not name is exactly as it was.
+    after = changed.json()
+    for field, value in original.items():
+        if field == "token_budget":
+            continue
+        assert after[field] == value, f"{field} changed without being named"
+
+
+@pytest.mark.asyncio
+async def test_half_a_paired_setting_is_accepted_when_the_project_holds_the_other(
+    app, auth_headers
+) -> None:
+    """Cross-field rules are judged against the merged settings, not against the fragment.
+
+    Validating the fragment would refuse a lone notes value for wanting a threshold the project
+    already has — which is why the update model carries per-field constraints and not
+    `validate_threshold`.
+    """
+    settings = (await app.get("/api/v1/projects/proj-test/settings", headers=auth_headers)).json()
+    settings.update(
+        {
+            "checkpoint_mode": "offered",
+            "checkpoint_threshold_mode": "tokens",
+            "checkpoint_threshold_value": 150_000,
+            "checkpoint_notes_value": 120_000,
+        }
+    )
+    seeded = await app.put(
+        "/api/v1/projects/proj-test/settings", json=settings, headers=auth_headers
+    )
+    assert seeded.status_code == 200, seeded.text
+
+    alone = await app.put(
+        "/api/v1/projects/proj-test/settings",
+        json={"checkpoint_notes_value": 100_000},
+        headers=auth_headers,
+    )
+    assert alone.status_code == 200, alone.text
+    assert alone.json()["checkpoint_notes_value"] == 100_000
+    assert alone.json()["checkpoint_threshold_value"] == 150_000
+
+
+@pytest.mark.asyncio
+async def test_a_partial_change_can_still_clear_a_field(app, auth_headers) -> None:
+    """Omission means unchanged, so clearing has to stay separately expressible."""
+    await app.put(
+        "/api/v1/projects/proj-test/settings",
+        json={"token_budget": 4242},
+        headers=auth_headers,
+    )
+    cleared = await app.put(
+        "/api/v1/projects/proj-test/settings",
+        json={"token_budget": None},
+        headers=auth_headers,
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["token_budget"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_partial_change_is_still_validated(app, auth_headers) -> None:
+    refused = await app.put(
+        "/api/v1/projects/proj-test/settings",
+        json={"hop_budget": 0},
+        headers=auth_headers,
+    )
+    assert refused.status_code == 422, refused.text
+
+    unknown = await app.put(
+        "/api/v1/projects/proj-test/settings",
+        json={"not_a_setting": 1},
+        headers=auth_headers,
+    )
+    assert unknown.status_code == 422, unknown.text

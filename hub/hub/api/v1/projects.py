@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 from datetime import datetime
 from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
+from pydantic.fields import FieldInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -143,6 +145,40 @@ class ProjectSettings(BaseModel):
                     "written from the context the checkpoint exists to escape"
                 )
         return self
+
+
+#: The body of a settings change: every field of `ProjectSettings`, all optional.
+#:
+#: The handler has always merged onto what is stored, so that omitting a field means "unchanged".
+#: That merge was unreachable — `ProjectSettings` has five required fields, so a body naming only
+#: what it wanted to change was refused by request validation before the handler ever ran, and the
+#: comment promising otherwise described behaviour nothing could reach.
+#:
+#: **Derived from `ProjectSettings`, not retyped.** The handler writes back with `setattr` over the
+#: merged model's fields, so a field present here and absent there would validate, merge, and
+#: silently write nothing. Deriving makes that impossible rather than merely unlikely.
+#:
+#: Per-field constraints **are** carried over, so that a body with several bad values is answered
+#: with all of them rather than with whichever one request validation reached first. Cross-field
+#: rules are **not**: `validate_threshold` judges a whole settings object, and a lone notes value is
+#: valid when the project already stores the threshold it sits below. Those are re-checked against
+#: the merged object at the point of use, which is the only place they can be judged at all.
+def _as_optional(field: FieldInfo) -> FieldInfo:
+    """The same field, its constraints intact, no longer required."""
+    relaxed = copy.deepcopy(field)
+    relaxed.default = None
+    relaxed.default_factory = None
+    return relaxed
+
+
+ProjectSettingsUpdate = create_model(  # type: ignore[call-overload]
+    "ProjectSettingsUpdate",
+    __config__=ConfigDict(extra="forbid"),
+    **{
+        name: (Optional[field.annotation], _as_optional(field))
+        for name, field in ProjectSettings.model_fields.items()
+    },
+)
 
 
 async def _project_summary(session: AsyncSession, project: Project) -> ProjectSummary:
@@ -348,7 +384,7 @@ async def suggest_main_branch(
 
 @router.put("/{project_id}/settings", response_model=ProjectSettings)
 async def update_project_settings(
-    body: ProjectSettings,
+    body: ProjectSettingsUpdate,  # type: ignore[valid-type]
     project_identity: Tuple[str, str] = Depends(get_operator_project),
     session: AsyncSession = Depends(get_session),
 ) -> ProjectSettings:

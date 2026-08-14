@@ -70,10 +70,13 @@ export function useCreateProject() {
  * The whole settings representation, not a slice of `ProjectSummary`.
  *
  * It used to be `Pick<ProjectSummary, …>` of six fields, and `ProjectSummary` carries neither the
- * conversation-title fields nor the checkpoint ones. Since the endpoint replaces what it receives,
- * saving from the panel silently reset every field it could not see — observed clearing a whole
- * checkpoint configuration with a 200. Holding the entire object is what makes a field added
- * server-side survive a client that has never heard of it.
+ * conversation-title fields nor the checkpoint ones. The panel sends the whole object, so any field
+ * it could not see was silently reset — observed clearing a whole checkpoint configuration with a
+ * 200. Holding the entire object is what makes a field added server-side survive a client that has
+ * never heard of it.
+ *
+ * The server now merges rather than replaces, so a partial body is safe there too; this type stays
+ * whole because the panel's problem was never the verb, it was not knowing the field existed.
  */
 export interface ProjectSettings {
   name: string
@@ -94,6 +97,9 @@ export interface ProjectSettings {
   checkpoint_model: string | null
   /** Whether a successor starts working the moment it is handed its checkpoint. */
   checkpoint_auto_continue: boolean
+  /** The branch approving a task merges into. Null means "not chosen", and nothing merges — which
+   *  is why the integration note tells the operator to come here. */
+  main_branch: string | null
 }
 
 export type ProjectSettingsInput = ProjectSettings
@@ -105,6 +111,28 @@ export function useProjectSettings(projectId: string | null) {
   return useQuery<ProjectSettings>({
     queryKey: ['project', projectId, 'settings'],
     queryFn: () => getJson<ProjectSettings>(`/api/v1/projects/${projectId}/settings`),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+/**
+ * A branch the operator might mean, and the one they have chosen.
+ *
+ * A suggestion, never an assignment: detecting a branch is safe for a report and unsafe for a
+ * write, so nothing merges until the operator submits one.
+ */
+export interface MainBranchSuggestion {
+  suggestion: string | null
+  chosen: string | null
+  is_repository: boolean
+}
+
+export function useMainBranchSuggestion(projectId: string | null) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<MainBranchSuggestion>({
+    queryKey: ['project', projectId, 'main-branch-suggestion'],
+    queryFn: () =>
+      getJson<MainBranchSuggestion>(`/api/v1/projects/${projectId}/main-branch-suggestion`),
     enabled: isConfigured && !!projectId,
   })
 }

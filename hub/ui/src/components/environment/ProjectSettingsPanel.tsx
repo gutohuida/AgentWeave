@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { readableApiError } from '@/api/client'
 import {
+  useMainBranchSuggestion,
   useProjectSettings,
   useProjects,
   useRelocateProject,
@@ -69,6 +70,7 @@ export function ProjectSettingsPanel() {
   // The stored settings, not `ProjectSummary` — which omits every field added since it was
   // written, and so cannot round-trip them.
   const { data: settings } = useProjectSettings(projectId ?? null)
+  const { data: mainBranch } = useMainBranchSuggestion(projectId ?? null)
   const { data: runners = [] } = useRunners()
   const { data: catalog } = useModelCatalog()
   const update = useUpdateProjectSettings(projectId ?? '')
@@ -155,6 +157,40 @@ export function ProjectSettingsPanel() {
       <SettingsRow label="Allow agent jobs" description="Agents may create and run scheduled jobs for this project.">
         <input aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
       </SettingsRow>
+
+      {/* Approving a task merges the agent's work into this branch. Until one is chosen nothing
+          merges, and the note on an unmerged task sends the operator here to choose — so this is
+          the control that message is pointing at. */}
+      <SettingsRow
+        label="Main branch"
+        description={
+          mainBranch && !mainBranch.is_repository
+            ? 'This project is not a git repository, so there is nothing to merge into.'
+            : 'The branch approving a task merges work into. Leave blank and nothing merges.'
+        }
+      >
+        <input
+          aria-label="Main branch"
+          value={form.main_branch ?? ''}
+          disabled={mainBranch ? !mainBranch.is_repository : false}
+          placeholder={mainBranch?.suggestion ?? 'Not chosen'}
+          onChange={(event) => set('main_branch', event.target.value.trim() || null)}
+          className={inputClass}
+          style={fieldStyle}
+        />
+      </SettingsRow>
+      {mainBranch?.suggestion && !form.main_branch && (
+        <SettingsRow label="" description="">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => set('main_branch', mainBranch.suggestion)}
+          >
+            Use “{mainBranch.suggestion}”
+          </Button>
+        </SettingsRow>
+      )}
 
       <SettingsRow label="Automatic checkpointing" description={MODE_DESCRIPTION[form.checkpoint_mode]}>
         <select

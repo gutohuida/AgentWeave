@@ -28,9 +28,16 @@ let settings = {
   checkpoint_model: 'claude-haiku-4-5-20251001',
 }
 
+let suggestion: { suggestion: string | null; chosen: string | null; is_repository: boolean } = {
+  suggestion: 'master',
+  chosen: null,
+  is_repository: true,
+}
+
 vi.mock('@/api/projects', () => ({
   useProjects: () => ({ data: [project] }),
   useProjectSettings: () => ({ data: settings }),
+  useMainBranchSuggestion: () => ({ data: suggestion }),
   useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null }),
   useRelocateProject: () => ({ mutate: relocate, isPending: false, error: null }),
 }))
@@ -54,7 +61,44 @@ describe('phase 5 project settings and locate repair', () => {
   beforeEach(() => {
     update.mockReset()
     relocate.mockReset()
+    suggestion = { suggestion: 'master', chosen: null, is_repository: true }
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
+  })
+
+  /**
+   * An unmerged task tells the operator to "choose one in the project's settings". Until this
+   * control existed that was a closed loop: told what to do, given no way to do it, and the only
+   * way to set the branch was a hand-written PUT.
+   */
+  it('offers the branch approval merges into, where the integration note sends you', () => {
+    render(<ProjectSettingsPanel />)
+    fireEvent.change(screen.getByLabelText('Main branch'), { target: { value: 'trunk' } })
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ main_branch: 'trunk' }))
+  })
+
+  it('offers the detected branch without choosing it', () => {
+    render(<ProjectSettingsPanel />)
+    // A suggestion is safe for a report and unsafe for a write, so it is a placeholder and a
+    // button — not a value already sitting in the field.
+    expect(screen.getByLabelText('Main branch')).toHaveValue('')
+    fireEvent.click(screen.getByText('Use “master”'))
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ main_branch: 'master' }))
+  })
+
+  it('clears the choice back to nothing merging', () => {
+    render(<ProjectSettingsPanel />)
+    fireEvent.change(screen.getByLabelText('Main branch'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ main_branch: null }))
+  })
+
+  it('does not offer a branch for a project that is not a repository', () => {
+    suggestion = { suggestion: null, chosen: null, is_repository: false }
+    render(<ProjectSettingsPanel />)
+    expect(screen.getByLabelText('Main branch')).toBeDisabled()
+    expect(screen.queryByText(/^Use “/)).not.toBeInTheDocument()
   })
 
   it('edits all validated settings as one resource', () => {
