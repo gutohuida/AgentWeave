@@ -358,26 +358,79 @@ async def test_a_broken_requirement_blocks_as_a_diagnostic(app, auth_headers, bu
 # ---------------------------------------------------------------------------
 
 
+def _rigor_mutations(module) -> list:
+    """Every way *module* could change a document's rigor, found in its syntax tree.
+
+    Originally `assert "rigor" not in source`. That forbade the *word*, which conflates reading the
+    value with setting it — and an agent reading `rigor` is how it judges whether a document is
+    settled enough to build on (`read_spec_document`, design D7). The property B4 wanted is that no
+    agent-facing surface can **set** it, so that is what this looks for.
+
+    Stricter than the substring in the direction that counts: `"rigor" in source` would have been
+    satisfied by any spelling that avoided the literal word, while this catches the assignment
+    itself.
+    """
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    found = []
+    for node in ast.walk(tree):
+        # `document.rigor = …`, or `rigor = …` at any level.
+        if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Attribute) and target.attr == "rigor":
+                    found.append(f"assignment to .rigor (line {node.lineno})")
+                if isinstance(target, ast.Name) and target.id == "rigor":
+                    found.append(f"binds a name `rigor` (line {node.lineno})")
+        # A route or tool that accepts rigor as an argument — including a Pydantic body field,
+        # which is an AnnAssign inside a class and is caught above.
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = node.args
+            for argument in [*args.args, *args.posonlyargs, *args.kwonlyargs]:
+                if argument.arg == "rigor":
+                    found.append(f"{node.name}() takes a `rigor` argument (line {node.lineno})")
+        # The only function that can change it, and the module that owns it.
+        if isinstance(node, ast.Name) and node.id in {"set_rigor", "spec_rigor"}:
+            found.append(f"references {node.id} (line {node.lineno})")
+        if isinstance(node, ast.Attribute) and node.attr == "set_rigor":
+            found.append(f"calls set_rigor (line {node.lineno})")
+    return found
+
+
 def test_no_agent_facing_route_sets_rigor():
     """Enforced by absence, as approval is — not by an instruction telling agents not to.
 
     A source scan rather than a request, because the property is that the surface does not exist:
     a test that posted somewhere would only prove that one path is closed."""
-    import inspect
-
     from hub.api.v1 import agent_actions
 
-    source = inspect.getsource(agent_actions)
-    assert "rigor" not in source
-    assert "set_rigor" not in source
+    assert _rigor_mutations(agent_actions) == []
 
 
 def test_the_tool_surface_offers_no_way_to_set_rigor():
-    import inspect
+    from hub import mcp_server
+
+    assert _rigor_mutations(mcp_server) == []
+
+
+def test_no_tool_advertises_a_rigor_argument():
+    """Checked against the schema an agent is actually served, not against the source.
+
+    A tool could take rigor through a differently-named parameter, or a model could grow the field
+    without the word appearing in a signature. The generated schema is what the agent sees, so it is
+    the honest place to assert that the argument is not on offer.
+    """
+    import asyncio
 
     from hub import mcp_server
 
-    assert "rigor" not in inspect.getsource(mcp_server)
+    tools = asyncio.run(mcp_server.mcp.list_tools())
+    offering = [
+        tool.name for tool in tools if "rigor" in (tool.parameters or {}).get("properties", {})
+    ]
+    assert offering == [], f"these tools advertise a rigor argument: {offering}"
 
 
 @pytest.mark.asyncio
