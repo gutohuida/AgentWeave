@@ -487,3 +487,69 @@ async def test_integration_targets_the_snapshot_commit_after_a_restamp(
     await restamp(repo, commit_sha=snapshot)
 
     assert [t.commit_sha for t in await targets()] == [snapshot]
+
+
+@pytest.mark.asyncio
+async def test_retry_merges_the_snapshot_commit_after_a_restamp(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The two fixes composed, which is the only place their interaction is visible.
+
+    Phase 1 corrects what a footprint names; phase 2 is the only surface that lets a corrected
+    footprint reach main for work approved before the correction. Neither phase's own tests show
+    this: the restamp tests never approve, and the retry tests pre-commit their work.
+    """
+    from hub.db.models import Project
+
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+
+    await make_document(app, auth_headers, builder)
+    dirty(worktree, "feature.py", "print('hi')\n")
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    created = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        json={"title": "Build it", "requirement_ids": ["FR-1"]},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    snapshot = worktrees.snapshot_worktree(worktree, "builder")
+    await restamp(repo, commit_sha=snapshot)
+
+    # Approve with no main branch named, exactly as the loop-7 run did.
+    for status in ("assigned", "in_progress", "completed", "under_review", "approved"):
+        moved = await app.patch(
+            f"/api/v1/projects/proj-test/tasks/{task_id}",
+            json={"status": status},
+            headers=auth_headers,
+        )
+        assert moved.status_code == 200, moved.text
+    assert snapshot not in git(repo, "log", "--format=%H", "master").stdout.split()
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        project.main_branch = "master"
+        await session.commit()
+
+    retried = await app.post(
+        f"/api/v1/projects/proj-test/tasks/{task_id}/integrations/retry", headers=auth_headers
+    )
+    assert retried.status_code == 200, retried.text
+
+    merged = [r for r in retried.json()["integrations"] if r["outcome"] == "merged"]
+    assert merged, retried.json()["integrations"]
+    assert merged[0]["commit_sha"] == snapshot, "the merged commit must be the one holding the work"
+    assert snapshot in git(repo, "log", "--format=%H", "master").stdout.split()
