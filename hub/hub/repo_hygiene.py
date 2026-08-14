@@ -36,9 +36,26 @@ logger = logging.getLogger(__name__)
 EXCLUDE_BEGIN = "# AgentWeave — the Hub's own working files"
 EXCLUDE_END = "# End AgentWeave"
 
-#: Only what the Hub creates. Every entry is a directory this product puts in someone else's
-#: repository; nothing about their language, their build, or their editor. A Rust project does not
-#: want `__pycache__` ignored because AgentWeave happened to be written in Python.
+#: What the Hub's own commit would otherwise sweep into the operator's history.
+#:
+#: This list used to be "only what the Hub creates", on the reasoning that a Rust project does not
+#: want `__pycache__` ignored because AgentWeave happened to be written in Python. That reasoning
+#: holds for a `.gitignore` the operator owns. It does not hold here, because
+#: **`worktrees.snapshot_worktree` runs `git add -A`** — the Hub is the writer. An agent that leaves
+#: bytecode or an installed dependency tree in its checkout gets it committed onto its branch by the
+#: Hub, on its behalf, without either of them choosing to; observed reaching a real project's
+#: `master` as two `.pyc` files, and caught by a reviewing agent rather than by us.
+#:
+#: So the test for anything added here is **"would the Hub's own commit sweep it in"**, not "is it an
+#: artefact of the project's ecosystem". That keeps the list short and gives a rule for extending it.
+#:
+#: The second group deliberately matches `requirement_evidence.SKIP_DIRECTORIES`, which is canonical
+#: and already answers the same question for footprint hashing. The two cannot share code — this
+#: module imports nothing from the Hub so that `worktrees` can call it — so they are kept in step by
+#: hand, and a test asserts they agree.
+#:
+#: An operator who genuinely wants one of these tracked can still `git add -f` it once; from then on
+#: it is tracked and these rules no longer apply to it.
 EXCLUDE_PATTERNS = [
     ".agentweave/worktrees/",
     ".agentweave/logs/",
@@ -46,6 +63,12 @@ EXCLUDE_PATTERNS = [
     # Rewritten from the canonical context on every single turn (`agent_trigger`), so it is pure
     # regenerated output. It was found committed onto a real project's main branch.
     ".agentweave/context/",
+    "__pycache__/",
+    "*.pyc",
+    "node_modules/",
+    ".venv/",
+    "dist/",
+    "build/",
 ]
 
 
@@ -58,6 +81,11 @@ def seed_repo_excludes(root: Path) -> None:
 
     Ignore rules are a convenience. A project that cannot receive them is still a project, and
     failing a registration or a turn over one would be a bad trade.
+
+    **This does not untrack anything.** Git ignores untracked paths only, so a file an earlier
+    snapshot already committed stays committed and stays modifiable. Undoing that would mean the Hub
+    rewriting the operator's index over a mess it made — a second unasked-for change on top of the
+    first. A repository the Hub has already dirtied stays that way until its owner says otherwise.
     """
     git_dir = root / ".git"
     if not git_dir.is_dir():
