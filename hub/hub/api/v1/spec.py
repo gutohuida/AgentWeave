@@ -573,6 +573,15 @@ async def detect_drift(
 ):
     project_id, _ = project
     workspace = await _workspace(session, project_id)
+    # The operator's explicit scan is also the moment to re-answer reachability: it is what
+    # eventually notices a merge they performed by hand in a terminal, which nothing else observes.
+    row = await session.get(Project, project_id)
+    await requirement_evidence.refresh_reachability(
+        session,
+        project_id,
+        workspace.root,
+        main_branch=row.main_branch if row else None,
+    )
     raised = await requirement_evidence.detect_drift(session, project_id, workspace)
     await session.commit()
     return {"raised": [candidate.id for candidate in raised]}

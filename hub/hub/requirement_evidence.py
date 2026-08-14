@@ -46,6 +46,7 @@ from .db.models import (
     RequirementEvidence,
     SpecRequirement,
 )
+from . import worktrees
 from .project_workspace import ProjectWorkspace
 from .spec_lifecycle import Actor
 from .utils import short_id
@@ -142,11 +143,34 @@ async def record(
     return evidence
 
 
+def footprint_root(workspace: ProjectWorkspace, actor_kind: str, actor: str) -> Path:
+    """The directory whose HEAD is the work this evidence is about.
+
+    An agent works in its own checkout, on its own branch. Reading the *project* directory instead
+    names whatever the operator happens to be sitting on — which on a fresh project is the main
+    branch, so the footprint claims the work is already in the product and integration then merges a
+    commit into itself. That was observed live on 2026-08-13.
+
+    The operator keeps the project directory, and that is right rather than merely convenient: it is
+    their own checkout, and if they are on a feature branch that is where they observed the thing.
+    It is also safe by construction — git refuses to check out a branch already checked out in a
+    linked worktree, so the project checkout can never *be* an agent's branch.
+    """
+    if actor_kind != "agent" or not actor:
+        return workspace.root
+    return worktrees.existing_worktree(workspace.root, actor) or workspace.root
+
+
 async def capture_footprint(
     session: AsyncSession, evidence: RequirementEvidence, workspace: ProjectWorkspace
 ) -> EvidenceFootprint:
-    """What the implementation looked like when this evidence was produced."""
-    taken = read_footprint(workspace.root, evidence.locator)
+    """What the implementation looked like when this evidence was produced.
+
+    The root is derived from the evidence row rather than passed in, so the footprint and the
+    evidence it hangs off cannot come to disagree about whose work is being described — and any
+    later caller (a backfill, a re-capture) gets the right answer without knowing this rule exists.
+    """
+    taken = read_footprint(footprint_root(workspace, evidence.actor_kind, evidence.actor))
     row = EvidenceFootprint(
         id=f"efp-{short_id()}",
         project_id=evidence.project_id,
@@ -178,30 +202,45 @@ def _git(root: Path, *args: str) -> Optional[str]:
     return result.stdout.strip()
 
 
-def read_footprint(root: Path, locator: str = "") -> Footprint:
+def tree_entries(root: Path, ref: str) -> Optional[Dict[str, str]]:
+    """`{path: blob id}` at *ref*, or `None` when *ref* does not resolve here.
+
+    One parser, two callers: capture reads `HEAD`, drift reads the branch a stored footprint names.
+    Two parses would eventually disagree about what a footprint means.
+    """
+    listing = _git(root, "ls-tree", "-r", ref)
+    if listing is None:
+        return None
+    entries: Dict[str, str] = {}
+    for line in listing.splitlines():
+        # "<mode> blob <sha>\t<path>"
+        head, _, path = line.partition("\t")
+        parts = head.split()
+        if len(parts) == 3 and path:
+            entries[path] = parts[2]
+    return entries
+
+
+def read_footprint(root: Path) -> Footprint:
     """The footprint of a workspace, by whichever of the two shapes applies.
 
     A project without a repository is a supported first-class case
     (`2026-08-12-run-without-a-git-repository`), and a git-only implementation
     would leave every one of them permanently unverifiable — so both ship
     together rather than one now and one later.
+
+    Note `entries` is the *whole* tree, not the changed paths the model documents. That mismatch is
+    real and pre-existing: it means one unrelated commit on the compared ref drifts every requirement
+    at once. Fixing it is a separate change, deliberately, so that it cannot mask this one.
     """
     commit = _git(root, "rev-parse", "HEAD")
     if commit:
         branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""
-        listing = _git(root, "ls-tree", "-r", "HEAD") or ""
-        entries: Dict[str, str] = {}
-        for line in listing.splitlines():
-            # "<mode> blob <sha>\t<path>"
-            head, _, path = line.partition("\t")
-            parts = head.split()
-            if len(parts) == 3 and path:
-                entries[path] = parts[2]
         return Footprint(
             kind="git",
             commit_sha=commit,
             branch=branch,
-            entries=entries,
+            entries=tree_entries(root, "HEAD") or {},
             reachable_from_main=is_reachable_from_main(root, commit),
         )
 
@@ -406,6 +445,69 @@ def artifact_exists(workspace: ProjectWorkspace, evidence: RequirementEvidence) 
         return False
 
 
+# A bound, so that a project with a long evidence history cannot turn one approval into a minutes
+# long run of git calls. Distinct commits, not rows — a branch's worth of evidence usually names a
+# handful of commits between them.
+MAX_REACHABILITY_CHECKS = 200
+
+
+async def refresh_reachability(
+    session: AsyncSession,
+    project_id: str,
+    root: Path,
+    *,
+    main_branch: Optional[str] = None,
+) -> int:
+    """Re-answer "has this reached the main line?" for footprints that did not already say yes.
+
+    `reachable_from_main` is written once, when evidence is recorded — and evidence is recorded
+    *before* the work is integrated, so for agent evidence the answer at that moment is always "not
+    yet". Without this, a requirement would report as unintegrated permanently, including the
+    instant after its work was merged, and the integration fix would read as a regression.
+
+    Only upgrades are interesting, so rows already answering `True` are skipped: work does not leave
+    the main line, and re-asking would spend git calls to confirm what cannot have changed.
+
+    Prefers the *configured* branch over the guessed one. They can disagree — a project integrating
+    into `develop` has a `main` that `MAIN_BRANCH_NAMES` would find first — and the configured one
+    is what integration actually targets.
+    """
+    rows = (
+        (
+            await session.execute(
+                select(EvidenceFootprint).where(
+                    EvidenceFootprint.project_id == project_id,
+                    EvidenceFootprint.kind == "git",
+                    EvidenceFootprint.commit_sha.is_not(None),
+                    EvidenceFootprint.reachable_from_main.is_not(True),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    answers: Dict[str, Optional[bool]] = {}
+    updated = 0
+    for row in rows:
+        commit = row.commit_sha or ""
+        if not commit:
+            continue
+        if commit not in answers:
+            if len(answers) >= MAX_REACHABILITY_CHECKS:
+                break
+            answers[commit] = (
+                is_reachable_from(root, commit, main_branch)
+                if main_branch
+                else is_reachable_from_main(root, commit)
+            )
+        answer = answers[commit]
+        if answer is not None and answer != row.reachable_from_main:
+            row.reachable_from_main = answer
+            updated += 1
+    return updated
+
+
 # ---------------------------------------------------------------------------
 # Drift
 # ---------------------------------------------------------------------------
@@ -432,9 +534,25 @@ async def detect_drift(
     from this function to one. Overlap between a footprint and a later change is
     a signal, not proof — which is why the outcome is a question for a person
     rather than a state the requirement acquires by itself.
+
+    **Each footprint is compared against the line of work it names**, not against one fixed
+    location. Comparing an agent's footprint against the project's main line would report every file
+    that agent added as a change, making every demonstrated requirement a candidate at once. That
+    the work is not on the main line is already reported as an integration answer, and raising it
+    again here would ask the operator the same question in two vocabularies — the thing this
+    function already refuses to do for rewordings.
+
+    Accepted consequence: once the work merges, this keeps watching the agent's branch, so a later
+    change to the same files *on* the main branch is not noticed. Answering that needs the changed
+    paths rather than the whole tree (see `read_footprint`), so it is deferred rather than papered
+    over by switching the basis once the work is reachable — that would make the basis depend on a
+    column `refresh_reachability` mutates, and drift would flip bases underneath an open candidate.
     """
-    current = read_footprint(workspace.root)
-    observed = current.entries or {}
+    # One read per distinct ref, and `hash_tree` at most once. Also fixes a latent bug: a single
+    # observation used to be applied to both footprint kinds, so a `paths` footprint in a project
+    # that later became a repository was compared against git blob ids.
+    trees: Dict[str, Optional[Dict[str, str]]] = {}
+    paths_tree: Optional[Dict[str, str]] = None
 
     rows = (
         await session.execute(
@@ -471,6 +589,24 @@ async def detect_drift(
         # ask the operator the same question twice in two vocabularies.
         if evidence.digest != requirement.digest:
             continue
+
+        if footprint.kind == "git":
+            ref = footprint.branch or ""
+            # A footprint taken on a detached HEAD names no line of work to re-read. Unknown is not
+            # drift, so it raises nothing rather than guessing at a branch.
+            if not ref or ref == "HEAD":
+                continue
+            if ref not in trees:
+                trees[ref] = tree_entries(workspace.root, ref)
+            observed = trees[ref]
+            # The branch is gone — released, deleted, or never pushed anywhere this checkout can
+            # see. Being unable to tell is not evidence that anything moved.
+            if observed is None:
+                continue
+        else:
+            if paths_tree is None:
+                paths_tree = hash_tree(workspace.root)
+            observed = paths_tree
 
         moved = _changed(footprint.entries or {}, observed)
         if not moved:

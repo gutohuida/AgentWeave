@@ -9,33 +9,33 @@ Migrations: current head is `0070`. The new one guards for a missing table as `0
 
 ## 1. The guard that makes it visible
 
-- [ ] 1.1 `requirement_evidence.is_reachable_from(root, commit, branch)` extracted;
+- [x] 1.1 `requirement_evidence.is_reachable_from(root, commit, branch)` extracted;
       `is_reachable_from_main` keeps its behaviour by looping `MAIN_BRANCH_NAMES` and delegating, so
       the existing assertions at `test_task_integration.py:688,691` still hold.
-- [ ] 1.2 `task_integration.ALREADY_INTEGRATED` and a guard in `integrate()`, **after**
+- [x] 1.2 `task_integration.ALREADY_INTEGRATED` and a guard in `integrate()`, **after**
       `branch_exists` and **before** the working-tree preconditions (D6). `is True` only.
-- [ ] 1.3 Test: approving a footprint already on the target records `skipped`, names "already in",
+- [x] 1.3 Test: approving a footprint already on the target records `skipped`, names "already in",
       **and leaves `git rev-parse <target>` unchanged**. The sha assertion is load-bearing — without
       it the test passes on today's code.
-- [ ] 1.4 Test: the already-there reason wins over a dirty checkout.
+- [x] 1.4 Test: the already-there reason wins over a dirty checkout.
 
 ## 2. The footprint names the work
 
-- [ ] 2.1 `worktrees.existing_worktree(repo_root, agent) -> Optional[Path]`, verifying through
+- [x] 2.1 `worktrees.existing_worktree(repo_root, agent) -> Optional[Path]`, verifying through
       `_registered_worktree_branch` that git tracks the path as that agent's checkout. **Not**
       `.exists()` (D2). Provisions nothing. Invalid names and git failures return `None`.
-- [ ] 2.2 `requirement_evidence.footprint_root(workspace, actor_kind, actor)`.
-- [ ] 2.3 `capture_footprint` uses it, reading `evidence.actor_kind` / `evidence.actor`. **No
+- [x] 2.2 `requirement_evidence.footprint_root(workspace, actor_kind, actor)`.
+- [x] 2.3 `capture_footprint` uses it, reading `evidence.actor_kind` / `evidence.actor`. **No
       signature change and no route change** (D1).
-- [ ] 2.4 Remove the dead `locator` parameter from `read_footprint`.
-- [ ] 2.5 `tree_entries(root, ref)` extracted from the inline `ls-tree` parse; `read_footprint` calls
+- [x] 2.4 Remove the dead `locator` parameter from `read_footprint`.
+- [x] 2.5 `tree_entries(root, ref)` extracted from the inline `ls-tree` parse; `read_footprint` calls
       it with `HEAD`.
-- [ ] 2.6 `detect_drift` compares against each footprint's own `branch`, cached per distinct ref;
+- [x] 2.6 `detect_drift` compares against each footprint's own `branch`, cached per distinct ref;
       `hash_tree` computed at most once for `paths` footprints; no branch / detached / vanished ref
       raises nothing (D5).
-- [ ] 2.7 `refresh_reachability(session, project_id, root, *, main_branch=None)` — bounded, one call
+- [x] 2.7 `refresh_reachability(session, project_id, root, *, main_branch=None)` — bounded, one call
       per distinct commit, writes only what changed (D4).
-- [ ] 2.8 Called from `task_transition_service._integrate` after a `MERGED` result, project-wide, and
+- [x] 2.8 Called from `task_transition_service._integrate` after a `MERGED` result, project-wide, and
       from `POST .../spec/drift/detect`.
 
 ## 3. Tests for phase 2 — the arrangement the product actually creates
@@ -44,20 +44,20 @@ New `hub/tests/test_evidence_footprint_root.py`, built with `_init_repo` + **`bi
 + `worktrees.ensure_worktree`, then a **new commit inside the worktree** (the HEADs are identical
 straight after provisioning, so an assertion without it is vacuous).
 
-- [ ] 3.1 Agent evidence is footprinted from the agent's worktree — branch, sha, and
+- [x] 3.1 Agent evidence is footprinted from the agent's worktree — branch, sha, and
       `reachable_from_main is False`. **This test fails on today's code.**
-- [ ] 3.2 Operator evidence is footprinted from the project root (D3).
-- [ ] 3.3 An agent with no worktree falls back to the root **and no worktree is created**.
-- [ ] 3.4 An unregistered directory at the worktree path is not the agent's worktree (D2).
-- [ ] 3.5 A non-repository project still footprints `paths`.
-- [ ] 3.6 `existing_worktree` unit tests in `test_worktrees.py`, including that it creates nothing.
-- [ ] 3.7 End-to-end in `test_task_integration.py`: worktree commit → agent evidence → operator
+- [x] 3.2 Operator evidence is footprinted from the project root (D3).
+- [x] 3.3 An agent with no worktree falls back to the root **and no worktree is created**.
+- [x] 3.4 An unregistered directory at the worktree path is not the agent's worktree (D2).
+- [x] 3.5 A non-repository project still footprints `paths`.
+- [x] 3.6 `existing_worktree` unit tests in `test_worktrees.py`, including that it creates nothing.
+- [x] 3.7 End-to-end in `test_task_integration.py`: worktree commit → agent evidence → operator
       accepts → approve → the commit and its file are on main, `source_branch` is the agent's branch,
       the checkout is still on main and clean.
-- [ ] 3.8 Coverage reports `integrated` after that merge — the test that catches D4.
-- [ ] 3.9 Drift: an unrelated commit on main raises nothing; a commit in the worktree raises exactly
+- [x] 3.8 Coverage reports `integrated` after that merge — the test that catches D4.
+- [x] 3.9 Drift: an unrelated commit on main raises nothing; a commit in the worktree raises exactly
       one candidate. (Agent evidence lands `awaiting`; the operator must accept it first.)
-- [ ] 3.10 Drift: a footprint whose branch is gone raises nothing and does not error.
+- [x] 3.10 Drift: a footprint whose branch is gone raises nothing and does not error.
 
 ## 4. Statements on task payloads
 

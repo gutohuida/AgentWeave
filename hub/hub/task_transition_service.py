@@ -316,8 +316,20 @@ async def _integrate(session: AsyncSession, task: Task, actor: Actor) -> None:
         )
         return
 
-    for target in targets:
-        _record(task_integration.integrate(root, target, project.main_branch))
+    results = [task_integration.integrate(root, target, project.main_branch) for target in targets]
+    for result in results:
+        _record(result)
+
+    # Re-answer "has this reached the main line?" across the project, not only for what just merged.
+    # Bringing in one requirement's commit genuinely brings in every earlier commit on the same
+    # branch, and coverage should say so rather than reporting work as unintegrated because its own
+    # evidence predates the merge that carried it.
+    if any(result.outcome == task_integration.MERGED for result in results):
+        from . import requirement_evidence
+
+        await requirement_evidence.refresh_reachability(
+            session, task.project_id, root, main_branch=project.main_branch
+        )
 
 
 async def history_for(session: AsyncSession, task_id: str) -> list[TaskTransition]:

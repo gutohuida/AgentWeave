@@ -173,6 +173,33 @@ def _registered_worktree_branch(repo_root: Path, path: Path) -> Optional[str]:
     return None
 
 
+def existing_worktree(repo_root: Path, agent: str) -> Optional[Path]:
+    """*agent*'s checkout if git really tracks one there, and `None` otherwise.
+
+    **Provisions nothing.** This answers a question on read paths — "where is this agent's work?" —
+    and a read path that creates a checkout as a side effect of being asked is a read path that
+    changes what it was measuring.
+
+    **The directory existing is not the question, and testing it is a trap.** A git command run with
+    `cwd` set to a directory git does not track walks *up* to the enclosing repository and answers
+    about that instead. So an empty or abandoned `.agentweave/worktrees/<agent>` would yield the
+    project checkout's own HEAD while looking like a checked and passing case — which is exactly the
+    defect this function exists to prevent, reintroduced behind a plausible guard. The registered
+    branch is what settles it.
+    """
+    try:
+        path = worktree_path(repo_root, agent)
+    except ValueError:
+        return None
+    if not path.is_dir() or path.is_symlink():
+        return None
+    try:
+        registered = _registered_worktree_branch(repo_root, path)
+    except (GitCommandError, OSError, subprocess.SubprocessError):
+        return None
+    return path if registered == f"refs/heads/{branch_name(agent)}" else None
+
+
 def ensure_worktree(repo_root: Path, agent: str) -> Path:
     """Provision *agent*'s isolated checkout, creating it if absent. Idempotent.
 
