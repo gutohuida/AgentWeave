@@ -597,6 +597,21 @@ class Task(Base):
     notes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # --- Declared by a specification ---
+    # Which document declared this task, and under which of its declared keys. Both null for a task
+    # somebody created directly, which is most of them.
+    #
+    # This pair is what makes approval idempotent: a document approved again after a revision adds
+    # what is new and recognises what it already created. Without it every re-approval would
+    # duplicate the whole decomposition, and re-approving a revised document is not a rare event.
+    #
+    # Deliberately **not** a ForeignKey. SQLite cannot drop a column named in a foreign-key
+    # definition, so declaring one here makes `0071` irreversible — the same trap already documented
+    # on `TaskTransition.origin` and `SpecDocument.rigor` for CHECK constraints, in a different
+    # spelling. Caught by `test_migration_0052_downgrade_drops_the_history`, which exercises a
+    # downgrade over a schema built from this model. Validated where it is written instead.
+    spec_document_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    spec_task_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # What happens when a run bound to this task ends without the task moving.
     #
     # Per task rather than per project because the operator's stated use — a cheap model doing the
@@ -631,6 +646,19 @@ class Task(Base):
     __table_args__ = (
         Index("ix_tasks_project_status", "project_id", "status"),
         Index("ix_tasks_project_assignee", "project_id", "assignee"),
+        # One task per declared key per document. This is the constraint, not a convention: it is
+        # what makes re-approving a document add what is new instead of duplicating everything.
+        #
+        # No partial clause needed. NULLs compare as distinct for uniqueness in both SQLite and
+        # PostgreSQL, so every task nobody declared — which is most of them — is unconstrained by
+        # this index for free.
+        Index(
+            "uq_tasks_spec_declaration",
+            "project_id",
+            "spec_document_id",
+            "spec_task_key",
+            unique=True,
+        ),
     )
 
 

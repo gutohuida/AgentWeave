@@ -33,6 +33,10 @@ from ... import (
     spec_naming,
     spec_rigor,
     spec_service,
+    spec_tasks,
+)
+from ... import (
+    spec_payload as spec_payload_module,
 )
 from ...auth import get_project
 from ...db.engine import get_session
@@ -859,9 +863,23 @@ async def set_phase(
             detail={"message": str(exc), "code": exc.code},
         ) from exc
 
+    # Approval is what turns a decomposition from a description into work. The payload has always
+    # carried `tasks`, validated on save and read by the completeness check; until now nothing
+    # materialised them, so an operator approving a document got an empty board and re-described
+    # the decomposition by hand.
+    created = []
+    if document.phase == "approved":
+        content = spec_documents.read_document(workspace, document.path)
+        payload = spec_payload_module.extract_payload(content) if content else None
+        created = await spec_tasks.materialise_quietly(
+            session, document, payload, actor=_operator()
+        )
+
     await spec_service.rerender_phase(session, workspace, document)
     await session.commit()
     await sse_manager.broadcast(
         project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    return _document_view(document)
+    if created:
+        await sse_manager.broadcast(project_id, "task_updated", {"created": len(created)})
+    return {**_document_view(document), "tasks_created": [task.id for task in created]}
