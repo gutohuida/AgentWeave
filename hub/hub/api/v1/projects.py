@@ -409,7 +409,14 @@ async def update_project_settings(
         # refuse a lone notes value for wanting a threshold the project already has.
         merged = ProjectSettings.model_validate({**current.model_dump(), **submitted})
     except PydanticValidationError as exc:
-        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+        # `include_context=False` because a `model_validator` failure carries the raised
+        # `ValueError` itself in `ctx`, which cannot be JSON-encoded — FastAPI turns the 422 into a
+        # 500 while serialising the refusal. Latent until a partial body made cross-field rules
+        # reachable here at all; every earlier failure was a field error that request validation
+        # had already caught and rendered.
+        raise HTTPException(
+            status_code=422, detail=exc.errors(include_url=False, include_context=False)
+        ) from exc
 
     # Not ForeignKeys — `runners.project_id` already points at `projects`, and closing the loop
     # would make the two unsortable for DDL. Checked here instead, which is also where a
