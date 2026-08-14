@@ -566,3 +566,74 @@ async def test_evidence_reports_the_work_it_describes(
     assert footprint["branch"] == "agentweave/builder"
     assert footprint["commit_sha"] == agent_commit
     assert footprint["reachable_from_main"] is False
+
+
+@pytest.mark.asyncio
+async def test_merging_works_in_a_repository_with_no_configured_identity(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The Hub supplies its own committer identity, never relying on the project's configuration.
+
+    Found on the first real run of the integration path, not by this suite: every test repository
+    here sets `user.email` in setup, so none of them could see it. A project the operator has not
+    configured an identity in is an ordinary project — git simply refuses to commit there — and the
+    Hub already supplies its own for worktree snapshots. Without the same on the merge, the Hub
+    could create an agent's commits and then fail to integrate them:
+
+        Committer identity unknown … unable to auto-detect email address
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True)
+    git(repo, "init", "-q", "-b", "master")
+    # Deliberately no user.email / user.name. The agent's own commits still work because
+    # `snapshot_worktree` supplies an identity; the merge has to do the same.
+    (repo / "README.md").write_text("base\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "-c", "user.name=T", "-c", "user.email=t@e.com", "commit", "-q", "-m", "base")
+
+    await bind_project_workspace(repo)
+    await _set_main_branch("master")
+    worktree = worktrees.ensure_worktree(repo, "builder")
+
+    (worktree / "feature.py").write_text("x\n", encoding="utf-8")
+    git(worktree, "add", "feature.py")
+    agent_commit = worktrees.snapshot_worktree(worktree, "builder")
+    assert agent_commit, "the Hub must be able to commit in the worktree without configuration"
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "tests pass"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+    await _accept(app, auth_headers, recorded.json()["id"])
+
+    tasks = "/api/v1/projects/proj-test/tasks"
+    created = await app.post(
+        tasks, json={"title": "Build it", "requirement_ids": ["FR-1"]}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["id"]
+    for status in ("assigned", "in_progress", "completed", "under_review", "approved"):
+        moved = await app.patch(f"{tasks}/{task_id}", json={"status": status}, headers=auth_headers)
+        assert moved.status_code == 200, moved.text
+
+    rows = (await app.get(f"{tasks}/{task_id}/integrations", headers=auth_headers)).json()
+    assert rows["integrations"][0]["outcome"] == "merged", rows["integrations"]
+    assert "feature.py" in git(repo, "ls-tree", "-r", "--name-only", "master").stdout
+
+
+@pytest.mark.asyncio
+async def test_an_already_registered_project_is_seeded_too(bind_project_workspace, tmp_path):
+    """Seeding only new projects leaves it doing nothing for every project that already exists.
+
+    Those are precisely the ones with the problem: their agents have already been committing. Found
+    live — the seeding shipped and then silently did nothing for the project it was written for.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    assert (repo / ".gitignore").is_file()
+
+    # Simulate a project registered before this capability existed.
+    (repo / ".gitignore").unlink()
+    await bind_project_workspace(repo)
+    assert ".agentweave/worktrees/" in (repo / ".gitignore").read_text(encoding="utf-8")

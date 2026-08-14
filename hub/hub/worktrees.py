@@ -44,6 +44,15 @@ logger = logging.getLogger(__name__)
 
 BRANCH_PREFIX = "agentweave/"
 
+#: Who the Hub commits as when it creates a commit itself — a worktree snapshot, or the merge that
+#: integrates approved work.
+#:
+#: Supplied explicitly on every such commit, never relied upon from configuration. A project the
+#: operator has not configured an identity in is an ordinary project, and git refuses to commit
+#: there at all; without this the Hub can create an agent's snapshot and then fail to merge it,
+#: which is exactly what happened on the first real run of the integration path.
+COMMIT_IDENTITY = ("AgentWeave", "agentweave@localhost")
+
 # Directories worth symlinking into a fresh worktree rather than reinstalling
 # (task 5.2) — kept small and explicit. Extend only for directories that are both
 # expensive to regenerate and safe to share read-only across concurrent worktrees.
@@ -294,9 +303,9 @@ def snapshot_worktree(worktree: Path, agent: str) -> Optional[str]:
     _run_git(
         worktree,
         "-c",
-        "user.name=AgentWeave",
+        f"user.name={COMMIT_IDENTITY[0]}",
         "-c",
-        "user.email=agentweave@localhost",
+        f"user.email={COMMIT_IDENTITY[1]}",
         "commit",
         "--no-verify",
         "-m",

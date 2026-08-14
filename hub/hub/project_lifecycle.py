@@ -76,6 +76,7 @@ class ProjectLifecycleService:
             _require_marker(canonical.path, existing_by_path.id)
             _observe(existing_by_path, canonical)
             await self.session.commit()
+            self._seed_gitignore(canonical.path)
             return existing_by_path
 
         marker = _read_marker(canonical.path)
@@ -85,6 +86,7 @@ class ProjectLifecycleService:
                 await self._guard_relocation(marked_project, canonical)
                 _observe(marked_project, canonical)
                 await self.session.commit()
+                self._seed_gitignore(canonical.path)
                 return marked_project
             if not register_copy_as_new:
                 raise ProjectIdentityConflict(
@@ -241,6 +243,11 @@ class ProjectLifecycleService:
 
         Never fatal. Ignore rules are a convenience; a project that cannot receive them is still a
         project, and failing registration over one would be a bad trade.
+
+        Called on **every** open, not only on first registration. Seeding new projects alone leaves
+        it doing nothing for every project that already exists — which is precisely the set with the
+        problem, since they are the ones whose agents have already been committing. The marker check
+        makes repeating it free.
         """
         block = "\n".join([GITIGNORE_BEGIN, *GITIGNORE_PATTERNS, GITIGNORE_END, ""])
         target = root / ".gitignore"

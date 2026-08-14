@@ -31,7 +31,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_evidence
+from . import requirement_evidence, worktrees
 from .db.models import (
     EvidenceFootprint,
     RequirementEvidence,
@@ -250,8 +250,17 @@ def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult
         base.reason = CHECKOUT_ELSEWHERE.format(current=on or "a detached HEAD", target=main_branch)
         return base
 
+    # The identity is supplied, never assumed. A project whose repository has no configured
+    # `user.email` is an ordinary project — git simply refuses to commit there — and the Hub
+    # already supplies its own for worktree snapshots. Without the same here, the Hub could create
+    # an agent's commits and then fail to merge them, which is what the first real run of this path
+    # did: "Committer identity unknown … unable to auto-detect email address".
     result = _git(
         root,
+        "-c",
+        f"user.name={worktrees.COMMIT_IDENTITY[0]}",
+        "-c",
+        f"user.email={worktrees.COMMIT_IDENTITY[1]}",
         "merge",
         "--no-ff",
         "-m",

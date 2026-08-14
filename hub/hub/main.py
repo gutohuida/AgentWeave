@@ -7,7 +7,7 @@ import subprocess
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,11 +48,14 @@ class UTF8JSONResponse(JSONResponse):
     media_type = "application/json; charset=utf-8"
 
 
-def _git_last_commit_iso(path: Path) -> Optional[str]:
-    """Return the ISO-8601 commit date of the most recent commit touching `path`."""
+def _git_last_commit_iso(path: Path, *, exclude: Sequence[str] = ()) -> Optional[str]:
+    """Return the ISO-8601 commit date of the most recent commit touching `path`.
+
+    `exclude` takes git pathspecs to leave out, for source that cannot change the built output.
+    """
     try:
         result = subprocess.run(
-            ["git", "log", "-1", "--format=%cI", "--", "."],
+            ["git", "log", "-1", "--format=%cI", "--", ".", *(f":(exclude){p}" for p in exclude)],
             cwd=path,
             capture_output=True,
             text=True,
@@ -76,7 +79,11 @@ def _compute_ui_staleness_warning(ui_dist: Path, ui_src: Path) -> Optional[str]:
     """
     if not ui_src.exists() or not ui_dist.exists():
         return None
-    src_date = _git_last_commit_iso(ui_src)
+    # Tests are not bundled, so a commit touching only them cannot make the artefact stale — and
+    # a rebuild cannot clear the warning either, because an identical build commits nothing and the
+    # artefact's commit date never moves. The warning would then stand permanently, which teaches
+    # an operator to ignore the one signal that catches a genuinely stale bundle.
+    src_date = _git_last_commit_iso(ui_src, exclude=("__tests__",))
     dist_date = _git_last_commit_iso(ui_dist)
     if not src_date or not dist_date:
         return None
