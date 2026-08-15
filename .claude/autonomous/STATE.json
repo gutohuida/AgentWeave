@@ -1,20 +1,16 @@
 {
   "purpose": "Finish the spec integration and make AgentWeave's spec/dev flow strong and working: find the bugs, correct them, and find the frictions. Then QoL improvements, then an honest read on where AgentWeave fits in the market.",
   "operator_intent_verbatim": "I want to finish the integration with the spec. I want the spec/dev flow in agentweave to be strong and working. Find all the bugs, correct them, find improvements, frictions and work on them.",
-
   "branch": "autonomous/2026-08-15-spec-flow-hardening",
   "parent_branch": "hub-native-experience",
   "parent_sha": "a40ac5b",
-  "stop_at": "2026-08-15T14:00:00+01:00",
-  "stop_at_note": "Operator may extend by messaging the live session. If extended, re-run install-driver.ps1 with the new time; the driver's StopAt is baked in at install.",
-  "last_heartbeat": "2026-08-15T11:57:12+01:00",
-
-  "heartbeat_contract": "An interactive session AND the backup driver are both live. run-iteration.ps1 stands down when last_heartbeat is younger than 25 minutes. Whichever process is working MUST refresh last_heartbeat at every commit, or the other one will take over and both will write to this branch.",
-
+  "stop_at": "2026-08-15T22:00:00+01:00",
+  "stop_at_note": "Operator left at ~13:05 and asked for the loop to run until 22:00. The session is NOT being kept open - the Scheduled Task driver is now the primary mechanism, not a backup. Driver reinstalled with StopAt 2026-08-15T22:00:00, firing every 15 minutes.",
+  "last_heartbeat": "2026-08-15T13:06:00+01:00",
+  "heartbeat_contract": "The interactive session has ended. run-iteration.ps1 stands down when last_heartbeat is younger than 25 minutes, so whichever iteration is working MUST refresh last_heartbeat at every commit - otherwise the next firing starts a second writer on the same branch. The outgoing session deliberately set last_heartbeat to a past instant so the first firing takes over immediately rather than waiting out the grace window.",
   "current": "q2-spec-flow-live",
-  "next_action": "Start q2. Create a fresh project aw-loop10 at C:\\Users\\huida\\Documents\\aw-loop10 (outside this repo) against the Hub on :8010, seed agents, and drive the spec flow end to end as a real operator would - create a spec document from the composer, let the agent interview, confirm it calls submit_spec_document rather than summarising and stopping, read the rendered document, watch the rename, propose -> approve, derive tasks that declare their requirements, build, record_evidence, accept it as a can_accept_evidence agent, approve the task, and confirm the work is reachable from main. Record every friction and defect in .claude/autonomous/2026-08-15-spec-flow-findings.md with run id and exact message. Capture q3's judgement artefacts as you go. NOTE: q1 left task 4.5 open pending the full post-change suite, which was running at handover - check .claude/autonomous/2026-08-15-spec-flow-findings.md or re-run it before archiving that change.",
-  "previous_action_result": "q1 done except 4.5. The change was already built but never ticked, and checking the code rather than the boxes found the defect the change exists to prevent still live: submit_spec_document was described as (path, document), a signature it has never had, so an agent following its own tool list would have failed the call. 18 of 19 described tools were correct. Fixed the entry, added two tests comparing described arguments against the real schema, mutation-checked both. 22 done / 4 open, from 6 / 17.",
-
+  "next_action": "Continue q2 from where the interactive session stopped. The spec flow's AUTHORING half is proven: aw-loop10 (proj-ff695d96) exists, document spec/changes/notify-window-graded-notification-urgency-beyond-quiet-hours-boolean/spec.html is written with 8 requirements FR-1..FR-8, phase 'exploring'. Read .claude/autonomous/2026-08-15-spec-flow-findings.md first - it records what was proven and four things that looked like defects and were not. NEXT CONCRETE STEP: take that document through close-exploration -> propose -> approve (POST /api/v1/projects/proj-ff695d96/project/documents/close-exploration then .../propose, then the operator approve route), then derive tasks that declare the requirements they serve, have 'builder' implement one against the notify-window repo, have it record_evidence, have 'verifier' (the only agent with can_accept_evidence) accept it, approve the task, and confirm the work is genuinely reachable from main. That last half has NEVER been exercised anywhere - it is the longest-standing untested claim in the product. Capture judgement artefacts into 2026-08-15-judgement-evidence.md as you go, and update the catch-up file every iteration.",
+  "previous_action_result": "q1 closed except 4.5 (now green: 631+686+714 hub, 360 CLI). q2's authoring half PROVEN for the first time: run-462fb78e called submit_spec_document and wrote a 23KB document with 8 minted requirements - task 5.1 and the Claude half of 17.6, neither ever observed before. Run 1 interviewed in prose and wrote nothing, which is correct per SPEC_PHASE_DUTIES. One real friction found: 15 of 23 event rows are duplicate context_warning measurements. Four suspected defects were all my own query errors and are documented so they are not re-filed.",
   "queue": [
     {
       "id": "q1-tool-list-close",
@@ -24,7 +20,7 @@
     },
     {
       "id": "q2-spec-flow-live",
-      "state": "current",
+      "state": "in progress - authoring half proven, propose->merge half not started",
       "title": "Drive the spec flow end to end in a fresh project, as a real operator",
       "detail": "Create aw-loop10 at C:\\Users\\huida\\Documents\\aw-loop10 (outside this repo) against the Hub on :8010. Seed agents. Then drive the whole loop without shortcuts: create a spec document from the composer, let the agent interview you, confirm it calls submit_spec_document rather than summarising and stopping, read the rendered document, watch the rename, take it propose -> approve, derive tasks that declare the requirements they serve, build, record_evidence, accept the evidence as a can_accept_evidence agent, approve the task, and confirm the work is actually reachable from main. Record every friction and defect in .claude/autonomous/2026-08-15-spec-flow-findings.md with real evidence - run id, exact message, screenshot where the finding is visual. Operator pre-authorised as many aw-loop* projects as needed.",
       "why_first_run_matters": "First-run friction can only be seen once. Do not reuse a project to save time."
@@ -73,9 +69,20 @@
       "state": "pending",
       "title": "Deep search: where AgentWeave fits",
       "detail": "How people are actually working with AI now, how the market is shifting, what new technologies are emerging, what the big players are doing, and honestly where AgentWeave sits in that. Write openspec/explorations/2026-08-15-where-agentweave-fits.md. Operator: 'Be honest about it. My intention is not to drop agentweave but we can always evolve it and pivot it like we did from previous versions to this one.' This is the one item for which the operator has explicitly authorised deep web research."
+    },
+    {
+      "id": "q8-final-catchup-file",
+      "state": "pending",
+      "title": "The catch-up file the operator asked for",
+      "detail": "Operator: 'Don't forget handoffs and resumes and also the final file so I can catchup on everything that happened.' Maintain .claude/autonomous/2026-08-15-overnight-catchup.md as the single thing to read first: what was done per iteration, what was found, what was decided, what broke, what is left, and every entry in decisions_for_user. Update it EVERY iteration rather than writing it at the end - an iteration that dies on quota must still leave the file current. Newest first. This is the deliverable, not a nicety."
+    },
+    {
+      "id": "q9-handoff-discipline",
+      "state": "standing",
+      "title": "Handoffs and resumes, as the operator asked",
+      "detail": "Write a /handoff into .claude/handoffs/ when an openspec change completes, and at the end of the run - and update LATEST.md. Chain it to handoff-0047. Standing rule from memory: handoff cadence is 'only when asked, or when an openspec change is done' - the operator has now asked, so the end-of-run handoff is required regardless. On starting an iteration, read STATE.json first; the handoff is for the human, STATE.json is for the loop."
     }
   ],
-
   "limits": [
     "Standard limits only: work on this dated branch, never push to master.",
     "Never create .agentweave/, agentweave.yml or spec/ at the repository root. Test projects live outside the repo.",
@@ -91,7 +98,6 @@
     "Do not call the Agent tool, and do not use workflows or deep research, unless the user requests it. The user HAS requested deep web research, for q7 only.",
     "Refresh last_heartbeat at every commit - see heartbeat_contract."
   ],
-
   "decisions_for_user": [
     {
       "id": "d1",
@@ -114,7 +120,6 @@
       "blocking": "No"
     }
   ],
-
   "environment": {
     "hub": "http://localhost:8010 - restarted 2026-08-15T11:46:56+01:00 so it runs current code. It had been up since 00:40 and was one real commit stale (1a1f0d1). /health returns {\"status\":\"ok\"} with no ui_stale.",
     "hub_start_command": "Win32_Process.Create, CommandLine 'C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010', CurrentDirectory C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub. Detached, so it outlives the session.",
@@ -123,7 +128,6 @@
     "pytest_note": "pytest hub/tests/ is about 7 minutes and exceeds the 600s cap - run it in three file chunks. pytest hub/tests/ tests/ together fails collection.",
     "existing_projects": "aw-testbed, newtest, test2, aw-loop-4, aw-e2e, aw-loop5, aw-loop6, aw-loop7, aw-loop8, aw-loop9. Keep aw-loop6 through aw-loop9. aw-loop6 holds a hand-minted credential run-ev6 / aw_run_loop6_evidence - delete that row if ever shared."
   },
-
   "dead_ends": [
     "git add on a path that was deleted and already unstaged aborts the whole add and stages nothing.",
     "npx openspec status --change rejects names starting with a digit; npx openspec archive accepts them. Do not conclude archiving is blocked.",
@@ -134,5 +138,7 @@
     "Register-ScheduledTask reports LastTaskResult 267011 before a task has ever run - a stale slot, not an error. 267009 means currently running.",
     "Event rows are in event_logs, payload column data.",
     "hub/agentweave.db is a stray 0-byte file, untracked, named in the last seven handoffs. The live database is hub/data/agentweave.db."
-  ]
+  ],
+  "operator_departure_note": "Operator message at ~13:05, verbatim: 'I'm going to leave. Run the loop until 10PM. Don't need to keep this session open if this is going to be a problem. Still follow what we defined. Don't forget handoffs and resumes and also the final file so I can catchup on everything that happened. With this intensive use you might run into quota limits. If this happens program a restart for the next window. Bye'",
+  "quota_policy": "If an iteration dies on a quota/rate limit: DO NOTHING SPECIAL. The Scheduled Task fires every 15 minutes and never unregisters on a failed iteration - it only unregisters past stop_at or with no STATE.json. So the retry loop IS the restart, and it self-heals when the window reopens. Record the quota failure in the work log with its timestamp so the gap is explicable in the morning, and do not burn the remaining budget re-trying inside one iteration."
 }

@@ -75,10 +75,11 @@ described with a signature it has never had. The name matched, so the test passe
       alongside the phase-block instruction that names it — the two must agree, which is the failure
       that occurred. `test_spec_procedure_precedence.py::test_the_instruction_and_the_tool_list_agree_in_one_rendered_context`
       renders the real context and asserts both halves of it.
-- [ ] 4.5 `pytest hub/tests/ -q` and `pytest tests/ -q` run separately. Full baseline measured green
-      before the change (hub 631+686+712 passed / 11 skipped over three file chunks; CLI 360 passed,
-      3 skipped), and the 173 tests touching the tool surface or spec context pass after it. The
-      full run **after** the change is still outstanding — that is what this box is for.
+- [x] 4.5 `pytest hub/tests/ -q` and `pytest tests/ -q` run separately. Measured **both sides** of
+      the change. Before: hub 631 + 686 + 712 passed, 11 skipped across three file chunks; CLI 360
+      passed, 3 skipped. After: hub 631 + 686 + **714** passed, 11 skipped; CLI 360 passed, 3
+      skipped — the +2 being 4.8 and 4.9. This also converts handoff 0047's outstanding
+      *"the full suite has not been run since `55bfadb`"* into a measurement.
 - [x] 4.6 `ruff check hub/ src/` — all checks passed. `black --check` on both files touched —
       unchanged.
 - [x] 4.7 `npx openspec validate --changes --strict` — 14 passed. `--specs --strict` — 30 passed.
