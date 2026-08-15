@@ -1,0 +1,137 @@
+{
+  "purpose": "Finish the spec integration and make AgentWeave's spec/dev flow strong and working: find the bugs, correct them, and find the frictions. Then QoL improvements, then an honest read on where AgentWeave fits in the market.",
+  "operator_intent_verbatim": "I want to finish the integration with the spec. I want the spec/dev flow in agentweave to be strong and working. Find all the bugs, correct them, find improvements, frictions and work on them.",
+
+  "branch": "autonomous/2026-08-15-spec-flow-hardening",
+  "parent_branch": "hub-native-experience",
+  "parent_sha": "a40ac5b",
+  "stop_at": "2026-08-15T14:00:00+01:00",
+  "stop_at_note": "Operator may extend by messaging the live session. If extended, re-run install-driver.ps1 with the new time; the driver's StopAt is baked in at install.",
+  "last_heartbeat": "2026-08-15T11:52:00+01:00",
+
+  "heartbeat_contract": "An interactive session AND the backup driver are both live. run-iteration.ps1 stands down when last_heartbeat is younger than 25 minutes. Whichever process is working MUST refresh last_heartbeat at every commit, or the other one will take over and both will write to this branch.",
+
+  "current": "q1-tool-list-close",
+  "next_action": "Close openspec/changes/2026-08-13-the-tool-list-matches-the-tools. Its tasks.md reads 6 done / 17 open but prep verified sections 2-4 are ALREADY IMPLEMENTED: hub/hub/api/v1/agents.py:844 defines UNDESCRIBED_TOOLS with a reason per entry (approve_tool_call, submit_checkpoint_notes); _tool_surface_lines() below it describes both submit_spec_document and recall; and hub/tests/test_tool_surface_matches_server.py passes 5/5. Tick 2.1-2.3, 3.1-3.4 and 4.1-4.4 citing that evidence in the task line itself. Then actually run and tick 4.5 (pytest hub/tests/ chunked in three, pytest tests/ separately), 4.6 (ruff check hub/ src/, black on files touched) and 4.7 (npx openspec validate --changes --strict and --specs --strict). Leave section 5 unticked - it is human-only and belongs to q3. Commit, refresh last_heartbeat, push.",
+
+  "queue": [
+    {
+      "id": "q1-tool-list-close",
+      "state": "current",
+      "title": "Close the-tool-list-matches-the-tools (already implemented, tasks.md is stale)",
+      "detail": "See next_action. Small and first because it removes a false '17 open' from the board and the change it closes is the one that fixes why an agent never wrote a spec document."
+    },
+    {
+      "id": "q2-spec-flow-live",
+      "state": "pending",
+      "title": "Drive the spec flow end to end in a fresh project, as a real operator",
+      "detail": "Create aw-loop10 at C:\\Users\\huida\\Documents\\aw-loop10 (outside this repo) against the Hub on :8010. Seed agents. Then drive the whole loop without shortcuts: create a spec document from the composer, let the agent interview you, confirm it calls submit_spec_document rather than summarising and stopping, read the rendered document, watch the rename, take it propose -> approve, derive tasks that declare the requirements they serve, build, record_evidence, accept the evidence as a can_accept_evidence agent, approve the task, and confirm the work is actually reachable from main. Record every friction and defect in .claude/autonomous/2026-08-15-spec-flow-findings.md with real evidence - run id, exact message, screenshot where the finding is visual. Operator pre-authorised as many aw-loop* projects as needed.",
+      "why_first_run_matters": "First-run friction can only be seen once. Do not reuse a project to save time."
+    },
+    {
+      "id": "q3-judgement-evidence",
+      "state": "pending",
+      "title": "Capture the artefact for each human-only judgement task",
+      "detail": "About 40 open tasks across the 14 in-flight changes are operator judgement calls ('Is the placeholder pleasant?', 'Does the rename feel timely?'). A loop cannot tick them, and they are why nothing can be archived. While driving q2, capture what the operator needs to answer each one into .claude/autonomous/2026-08-15-judgement-evidence.md: one section per task id, quoting the task verbatim, with the rendered document, screenshot or measured timing attached. Goal is the operator clearing 40 judgement calls in one sitting instead of re-driving the product 40 times.",
+      "sources": [
+        "2026-08-12-hub-owns-the-spec-document 17.1-17.8",
+        "2026-08-13-a-document-earns-its-name 9.1-9.4",
+        "2026-08-13-a-requirement-knows-its-work 8.1-8.5",
+        "2026-08-13-the-spec-tool-reaches-the-agent 6.1-6.5",
+        "2026-08-13-the-tool-list-matches-the-tools 5.1-5.3",
+        "2026-08-13-the-interview-is-a-conversation 5.1-5.5",
+        "2026-08-13-a-posture-that-survives-the-handoff 4.1-4.4",
+        "2026-08-13-a-gate-that-only-evidence-opens 5.1-5.4",
+        "2026-08-13-answers-arrive-together 5.1-5.5",
+        "2026-08-13-the-hubs-procedure-outranks-an-installed-one 5.3-5.5",
+        "2026-08-10-blocked-and-conversation-binding 8.10-8.13",
+        "2026-08-11-declining-a-question 6.8-6.9",
+        "2026-08-12-run-without-a-git-repository 5.1-5.5"
+      ]
+    },
+    {
+      "id": "q4-fix-found-bugs",
+      "state": "pending",
+      "title": "Fix every defect q2 finds, each with a regression test",
+      "detail": "Operator directive: 'Find all the bugs, correct them.' Each fix needs a test that fails before and passes after - state both observations. Interleave with q2 rather than batching at the end: a defect found and fixed while the flow is live is verified in the same breath."
+    },
+    {
+      "id": "q5-triage-in-flight",
+      "state": "pending",
+      "title": "Triage the 14 in-flight openspec changes",
+      "detail": "For each, decide archive / resume / drop with a one-line reason, into .claude/autonomous/2026-08-15-triage.md. q1 proves at least one tasks.md has fallen behind its implementation, so check the code before believing any count. Give 2026-07-30-hub-native-experience (119 done / 69 open) particular attention: its sections 13 and 14 describe the runner/charter separation and requirement identifiers, evidence and coverage - all of which later, smaller changes appear to have delivered. Archive only what is genuinely complete."
+    },
+    {
+      "id": "q6-qol",
+      "state": "pending",
+      "title": "QoL improvements to AgentWeave overall",
+      "detail": "Only once the spec work is done. Operator: 'No new features just QoL improvements.' Prefer frictions observed first-hand in q2 over invented ones."
+    },
+    {
+      "id": "q7-market-research",
+      "state": "pending",
+      "title": "Deep search: where AgentWeave fits",
+      "detail": "How people are actually working with AI now, how the market is shifting, what new technologies are emerging, what the big players are doing, and honestly where AgentWeave sits in that. Write openspec/explorations/2026-08-15-where-agentweave-fits.md. Operator: 'Be honest about it. My intention is not to drop agentweave but we can always evolve it and pivot it like we did from previous versions to this one.' This is the one item for which the operator has explicitly authorised deep web research."
+    }
+  ],
+
+  "limits": [
+    "Standard limits only: work on this dated branch, never push to master.",
+    "Never create .agentweave/, agentweave.yml or spec/ at the repository root. Test projects live outside the repo.",
+    "Stage paths explicitly. Never suppress stderr on staging commands - a swallowed error is how 1f79918 shipped an empty commit under a message describing three fixes.",
+    "Never mark a task complete on the strength of a plan existing. Only real, verified implementation closes a task.",
+    "Every tasks.md splits agent-verifiable from human-only and emits a user test guide.",
+    "The ci.yml question is settled - 'just push the branch'. Do not raise it again.",
+    "The requeue rule is 'any failed run, capped at 3'. Do not re-propose the narrow variant.",
+    "G5, the interview backstop, is a non-goal.",
+    "Evidence can be anything the model thinks shows its work is good. Only test agents can accept evidence; with no tester agent it all defers to the operator.",
+    "Derive constants, do not tune them to one monitor.",
+    "Use openspec, never the aw-spec skills, and never run AgentWeave against this repo.",
+    "Do not call the Agent tool, and do not use workflows or deep research, unless the user requests it. The user HAS requested deep web research, for q7 only.",
+    "Refresh last_heartbeat at every commit - see heartbeat_contract."
+  ],
+
+  "decisions_for_user": [
+    {
+      "id": "d1",
+      "question": "The ~40 human-only judgement calls themselves. q3 exists to put the artefact in front of you so you can answer them in one sitting; they cannot be answered by the loop.",
+      "blocking": "Not blocking the loop, but blocking the archive of 13 of the 14 in-flight changes."
+    },
+    {
+      "id": "d2",
+      "question": "2026-07-30-hub-native-experience has 69 open tasks and looks partly superseded by the smaller changes that followed it. Drop the superseded sections, split it, or resume it? q5 will propose; the call is yours.",
+      "blocking": "No"
+    },
+    {
+      "id": "d3",
+      "question": "Carried unanswered from handoff 0047: does an abandoned queue entry read as 'the Hub gave up' clearly enough to act on, and do two exit codes on one event read as informative or as noise? Both concern surfaces built this week that nobody has used in anger.",
+      "blocking": "No"
+    },
+    {
+      "id": "d4",
+      "question": "Carried unanswered since handoff 0044: should .claude/handoffs/ stay tracked? It is now 133 files.",
+      "blocking": "No"
+    }
+  ],
+
+  "environment": {
+    "hub": "http://localhost:8010 - restarted 2026-08-15T11:46:56+01:00 so it runs current code. It had been up since 00:40 and was one real commit stale (1a1f0d1). /health returns {\"status\":\"ok\"} with no ui_stale.",
+    "hub_start_command": "Win32_Process.Create, CommandLine 'C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010', CurrentDirectory C:\\Users\\huida\\Documents\\projects\\AgentWeave\\hub. Detached, so it outlives the session.",
+    "python": "C:\\Users\\huida\\AppData\\Local\\Programs\\Python\\Python311\\python.exe. Bare 'python' on PATH lacks pytest_asyncio and fails at conftest import - a wrong interpreter reads as a broken suite.",
+    "suite_baseline": "Measured at prep on a40ac5b: hub chunk 1 631 passed 1 skipped, chunk 2 686 passed 9 skipped, chunk 3 and the CLI suite recorded in the prep report. Anything red beyond this baseline is yours.",
+    "pytest_note": "pytest hub/tests/ is about 7 minutes and exceeds the 600s cap - run it in three file chunks. pytest hub/tests/ tests/ together fails collection.",
+    "existing_projects": "aw-testbed, newtest, test2, aw-loop-4, aw-e2e, aw-loop5, aw-loop6, aw-loop7, aw-loop8, aw-loop9. Keep aw-loop6 through aw-loop9. aw-loop6 holds a hand-minted credential run-ev6 / aw_run_loop6_evidence - delete that row if ever shared."
+  },
+
+  "dead_ends": [
+    "git add on a path that was deleted and already unstaged aborts the whole add and stages nothing.",
+    "npx openspec status --change rejects names starting with a digit; npx openspec archive accepts them. Do not conclude archiving is blocked.",
+    "openspec archive prefixes the archive date, producing 2026-08-15-2026-08-13-... in a repo that already dates change names. Rename after archiving.",
+    "Keep .ps1 files ASCII-only. PS 5.1 reads BOM-less UTF-8 as ANSI and an em dash inside a quoted string breaks parsing several tokens away. Syntax-check with Parser::ParseFile, from the repo root - from hub/ the relative paths resolve to nothing and it reports a spurious FAIL.",
+    "PowerShell 5.1 Add-Content -Encoding utf8 writes a BOM. Use UTF8Encoding($false).",
+    "Editing a file with Python newline='\\n' when git has it as CRLF shows as modified with an empty --numstat. git checkout -- it; it is whitespace-only.",
+    "Register-ScheduledTask reports LastTaskResult 267011 before a task has ever run - a stale slot, not an error. 267009 means currently running.",
+    "Event rows are in event_logs, payload column data.",
+    "hub/agentweave.db is a stray 0-byte file, untracked, named in the last seven handoffs. The live database is hub/data/agentweave.db."
+  ]
+}
