@@ -28,6 +28,45 @@ under `decisions_for_user`.
 
 ---
 
+## 16:39 — driver iteration: q6, third QoL fix (evidence rows carry their own rejection reason)
+
+**Fixed the candidate the 16:02 entry queued**: `GET /project/spec/evidence` (`list_evidence`),
+`requirement_detail`, and the `decide_evidence` response itself now embed the *reason* behind
+`review_state`, not just the state. Before this, a caller who saw `review_state: rejected` had to
+make one more `GET /spec/evidence/{id}/reviews` per row to learn why — the exact silent-signal
+shape the two q4 fixes (merge-outcome, rejected-evidence-count) already closed elsewhere on this
+task response.
+
+`_evidence_view` (`hub/hub/api/v1/spec.py`) now takes an optional `latest_review` and embeds it as
+`latest_review: {decision, reason, actor_kind, actor, created_at}` (or `null` before any review
+exists). A new `_latest_reviews_for` batches `{evidence_id: latest EvidenceReview}` in one query
+per page, same shape as the existing `_footprints_for`. `list_evidence`, `requirement_detail`,
+`decide_evidence`, and the agent-facing `list_evidence_for_agent` (`agent_actions.py`) were all
+updated to pass it through.
+
+Found the tree already dirty on this iteration's very first `git status` — a prior iteration had
+evidently implemented this exact fix (source + a new `test_evidence_latest_review_signal.py`, 5
+tests, plus an added test in `test_agent_evidence_plane.py`) and died before committing, leaving no
+log entry. Verified rather than trusting: read the diff line by line, confirmed
+`requirement_evidence.decide()` already returned the `EvidenceReview` the route now captures, ran
+the new file plus the touched suites (`test_evidence_latest_review_signal.py`,
+`test_agent_evidence_plane.py`, `test_spec.py`, `test_spec_documents_api.py`, `test_spec_rename.py`,
+`test_agent_evidence_grant.py`, `test_evidence_footprint_root.py`, `test_evidence_restamp.py`,
+`test_requirement_evidence.py`, `test_task_rejected_evidence_signal.py` — 140 passed, no
+regressions), and `ruff check` on the four touched files (clean). Then, per the Hub-restart
+discipline filed at 16:02, killed the stale Hub (`PID 20744`, up since 16:01, pre-dating these
+uncommitted changes) and restarted it (`PID 22360`, `/health` ok) before trusting a live check.
+Fetched `aw-loop10`'s evidence list live: the two `task-0d3c8cb5` rejections from the 16:02 entry
+(FR-9 and FR-5) both now carry their verifier's full rejection reason inline, no second request.
+Committed (`1b9233a`).
+
+q6 now has three fixes shipped this session (duplicate context-usage rows, `create`'s refusal
+message, and this one). No further q6 candidate is queued — `next_action` falls back to
+`task-553c2c37` for one more first-hand friction drive, per the standing fallback the 16:02 entry
+already named.
+
+---
+
 ## 16:02 — driver iteration: finding 4 punted, task-0d3c8cb5 driven, and a real environment bug caught along the way
 
 **finding 4 (66-char minted slug), punted to `d6`.** Looked for a principled derivation before
