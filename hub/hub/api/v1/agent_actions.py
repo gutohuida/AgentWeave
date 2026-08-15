@@ -843,7 +843,7 @@ async def list_evidence_for_agent(
     itself, so one that cannot see the producer learns that rule by being refused once per row.
     """
     from ...db.models import RequirementEvidence, SpecRequirement
-    from .spec import _evidence_view, _footprints_for
+    from .spec import _evidence_view, _footprints_for, _latest_reviews_for
 
     if identifier:
         requirement = await _resolve_requirement(
@@ -863,6 +863,7 @@ async def list_evidence_for_agent(
         (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
     )
     prints = await _footprints_for(session, [row.id for row in rows])
+    reviews = await _latest_reviews_for(session, [row.id for row in rows])
 
     # The `FR-n` the agent actually reasons in. `_evidence_view` carries `requirement_id`, which is
     # a database id and names nothing an agent has ever seen.
@@ -878,7 +879,7 @@ async def list_evidence_for_agent(
     return {
         "evidence": [
             {
-                **_evidence_view(row, prints.get(row.id)),
+                **_evidence_view(row, prints.get(row.id), reviews.get(row.id)),
                 "identifier": identifiers.get(row.requirement_id),
             }
             for row in rows

@@ -225,6 +225,29 @@ async def test_rejection_is_available_too(app, auth_headers, builder, reviewer):
 
 
 @pytest.mark.asyncio
+async def test_a_builder_reads_why_its_own_evidence_was_rejected(
+    app, auth_headers, builder, reviewer
+):
+    """The only way a builder learns to fix its evidence, since it cannot decide its own."""
+    await _document(app, auth_headers, builder)
+    recorded = await _record(app, builder)
+    await _grant(app, auth_headers, "reviewer")
+
+    await app.post(
+        f"{EVIDENCE}/{recorded['id']}/decision",
+        json={"decision": "rejected", "reason": "the tests it cites do not cover FR-1"},
+        headers=reviewer,
+    )
+
+    listed = await app.get(EVIDENCE, headers=builder)
+    assert listed.status_code == 200, listed.text
+    [row] = listed.json()["evidence"]
+    assert row["review_state"] == "rejected"
+    assert row["latest_review"]["reason"] == "the tests it cites do not cover FR-1"
+    assert row["latest_review"]["actor"] == "reviewer"
+
+
+@pytest.mark.asyncio
 async def test_a_withdrawn_grant_takes_effect(app, auth_headers, builder, reviewer):
     await _document(app, auth_headers, builder)
     first = await _record(app, builder, identifier="FR-1")

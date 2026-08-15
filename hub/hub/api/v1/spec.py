@@ -43,6 +43,7 @@ from ...db.engine import get_session
 from ...db.models import (
     EVIDENCE_RETENTION_POLICIES,
     EvidenceFootprint,
+    EvidenceReview,
     Project,
     RequirementDrift,
     RequirementEvidence,
@@ -442,6 +443,7 @@ async def requirement_detail(
         (entry for entry in report.requirements if entry.requirement_id == requirement.id), None
     )
     prints = await _footprints_for(session, [row.id for row in evidence])
+    reviews = await _latest_reviews_for(session, [row.id for row in evidence])
     return {
         "requirement": {
             "id": requirement.id,
@@ -456,7 +458,9 @@ async def requirement_detail(
             {"id": task.id, "title": task.title, "status": task.status, "assignee": task.assignee}
             for task in tasks
         ],
-        "evidence": [_evidence_view(row, prints.get(row.id)) for row in evidence],
+        "evidence": [
+            _evidence_view(row, prints.get(row.id), reviews.get(row.id)) for row in evidence
+        ],
         # Never omitted, and never without its integration answer.
         "coverage": coverage.to_dict() if coverage else None,
     }
@@ -515,7 +519,12 @@ async def list_evidence(
             .all()
         )
     prints = await _footprints_for(session, [row.id for row in rows])
-    return {"evidence": [_evidence_view(row, prints.get(row.id)) for row in rows]}
+    reviews = await _latest_reviews_for(session, [row.id for row in rows])
+    return {
+        "evidence": [
+            _evidence_view(row, prints.get(row.id), reviews.get(row.id)) for row in rows
+        ]
+    }
 
 
 @router.post("/spec/evidence/{evidence_id}/decision")
@@ -531,7 +540,7 @@ async def decide_evidence(
     if evidence is None or evidence.project_id != project_id:
         raise HTTPException(status_code=404, detail="Evidence not found")
     try:
-        await requirement_evidence.decide(
+        review = await requirement_evidence.decide(
             session,
             evidence,
             decision=body.decision,
@@ -543,7 +552,7 @@ async def decide_evidence(
             status_code=403, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
-    return _evidence_view(evidence)
+    return _evidence_view(evidence, latest_review=review)
 
 
 @router.get("/spec/evidence/{evidence_id}/reviews")
@@ -673,7 +682,7 @@ async def set_retention(
     return {"policy": row.evidence_retention}
 
 
-def _evidence_view(evidence, footprint=None) -> dict:
+def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:
     return {
         "id": evidence.id,
         "requirement_id": evidence.requirement_id,
@@ -686,6 +695,21 @@ def _evidence_view(evidence, footprint=None) -> dict:
         "run_id": evidence.run_id,
         "task_id": evidence.task_id,
         "review_state": evidence.review_state,
+        # The reason behind that state, inline. Without this, a caller who lists evidence and sees
+        # review_state: rejected must make one more GET per row (/spec/evidence/{id}/reviews) to
+        # learn why - the same silent-signal shape the merge-outcome and rejected-evidence fixes
+        # closed elsewhere on this task response.
+        "latest_review": (
+            {
+                "decision": latest_review.decision,
+                "reason": latest_review.reason,
+                "actor_kind": latest_review.actor_kind,
+                "actor": latest_review.actor,
+                "created_at": latest_review.created_at.isoformat(),
+            }
+            if latest_review is not None
+            else None
+        ),
         # A record whose artifact is gone reports that state rather than disappearing.
         "artifact_removed": evidence.artifact_removed_at is not None,
         "produced_at": evidence.produced_at.isoformat(),
@@ -721,6 +745,32 @@ async def _footprints_for(session: AsyncSession, evidence_ids) -> dict:
         .all()
     )
     return {row.evidence_id: row for row in rows}
+
+
+async def _latest_reviews_for(session: AsyncSession, evidence_ids) -> dict:
+    """`{evidence_id: latest EvidenceReview}` for a page of evidence, in one query.
+
+    Reviews are append-only and ordered ascending, so the last one seen per id is
+    the one `review_state` itself reflects - the same rule `decide()` uses.
+    """
+    wanted = [row for row in evidence_ids if row]
+    if not wanted:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(EvidenceReview)
+                .where(EvidenceReview.evidence_id.in_(wanted))
+                .order_by(EvidenceReview.created_at, EvidenceReview.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    latest = {}
+    for row in rows:
+        latest[row.evidence_id] = row
+    return latest
 
 
 @router.post("/spec/reindex")
