@@ -186,20 +186,50 @@ the opposite shape — no `ask_user`, two open prose questions — and still end
 
 ### 5.3 — "Does `ask_user` still get used where it should — a real fork?"
 
-**Still open, genuinely.** Checked the whole of `proj-ff695d96` (`aw-loop10`), not just this run:
-zero rows in `questions`, and no `agent_outputs` row for any agent (`speccer`, `builder`,
-`verifier`) contains an `ask_user` tool call across the project's entire history. This project's
-notify-window spec never presented a fork sharp enough to trigger one — consistent with the
-standing G5 observation logged elsewhere this session (the operator's own non-goal: "the AI should
-answer or not deliberately based on the test"), but it means this specific task needs a *different*
-run, one that hits a real either/or, to close. Not answerable from data already on disk.
+**ANSWERED, live, 2026-08-15 ~19:55.** Driven fresh: a scratch project (`aw-forkprobe`,
+`proj-cf1c781f`, since cleaned up), an agent (`forkprobe`, Claude runner, **no charter bound** —
+this run also answers 5.4, see below) sent a message engineered to be exactly the case
+`SPEC_PHASE_DUTIES["exploring"]` names for `ask_user` ("Use `ask_user` only for a genuine fork: real
+alternatives, and you cannot sensibly continue until you know"): *"Should notes be stored purely
+locally on this machine... or should they sync to a remote server?... These are genuinely exclusive
+for a v1 - pick one or ask me whatever you need to decide."*
+
+`run-3a9efdfa`'s own tool calls (`agent_outputs`, in order) show it did not skip past `ask_user` out
+of ignorance — it read the empty workspace, read the freshly-minted spec document, then ran
+**`ToolSearch` with a query that explicitly included `mcp__agentweave__ask_user`** (`payload.input`:
+`{"query": "select:<others>,mcp__agentweave__ask_user"}`), i.e. it loaded `ask_user`'s schema as a
+live candidate. It then did not call it. Instead its final `text` output laid the two directions
+side by side with real costs (server/auth/conflict-resolution burden vs. no-cross-device-sync),
+stated a reasoned leaning ("My instinct leans local-only for v1..."), and closed with four
+follow-up prose questions ("How many devices/machines do you actually use day to day?" etc.) before
+ending the turn — no `ask_user` call, no `questions` row created for this project.
+
+So the tool is not lost, broken, or unreachable — it is one `ToolSearch` result away and the agent
+actively considered it — but the model's own judgement, even handed an explicit "pick one or ask"
+framing, read this fork as one it *could* sensibly continue past (by picking a leaning and asking
+in prose instead of blocking). Combined with the `aw-loop10` history (zero `ask_user` calls across
+that project's entire lifetime, all three agents, cited below) this is now two independent real
+drives that produced the same shape. That is consistent with — not contradicted by — the standing
+G5 observation logged elsewhere this session (the operator's explicit non-goal: "the AI should
+answer or not deliberately based on the test"): the guidance text is followed as written, the model
+is exercising exactly the judgement call `SPEC_PHASE_DUTIES` hands it, and a model that never finds
+a fork "genuine" enough to block on is not itself a defect. Worth flagging to the operator as an
+observation, not a bug: in practice, across every real SPEC-exploration drive this session,
+`ask_user` has not fired even once, including on a prompt written specifically to invite it.
 
 ### 5.4 — "With no charter bound, is the interview still recognisable?"
 
-**Still open — this run doesn't test it.** `agents` confirms `speccer` in `proj-ff695d96` has
-`charter_id = 'charter-4495f995'` set — a charter *is* bound, so `run-d3b6f7c5` shows the interview
-with a charter in place, not without one. Needs a project with an agent that has no charter bound at
-all (cheap to set up: create one, run the exploration turn, compare).
+**ANSWERED, live, same run (`run-3a9efdfa`).** `agents` confirmed before the turn was triggered:
+`forkprobe` has `charter_id: None` — no charter row at all, not merely an empty one. The interview
+still reads as conversational off the floor alone: it grounded itself in what it had just read (an
+empty greenfield directory, no framework chosen yet — reasoning the floor's own text asks for:
+*"say what reading the code established"*), laid the two directions out with what each makes easier
+and harder in prose (not a form), stated a genuine opinion rather than a neutral menu, and asked
+open follow-up questions rather than a fixed multiple-choice list. This matches design.md D2's
+claim exactly (*"the floor is what always ships... a project with no charter should not get a wall
+of forms"*) — nothing here required `speccer`'s Spec Author charter from `run-d3b6f7c5`; the
+charter-less run is behaviourally indistinguishable in kind from the charter-bound one, just shaped
+by a different (emptier) codebase to react to.
 
 ### 5.5 — "Compare against `aw-spec-explore` directly if you still have it."
 

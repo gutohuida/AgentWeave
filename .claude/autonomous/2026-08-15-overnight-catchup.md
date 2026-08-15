@@ -28,6 +28,49 @@ under `decisions_for_user`.
 
 ---
 
+## 19:57 — driver iteration: q3's last two narrow items closed — the-interview-is-a-conversation 5.3/5.4
+
+Picked up the two items flagged last iteration as needing a differently-shaped run. Drove both in
+one go, live, in a fresh scratch project (`aw-forkprobe`, `proj-cf1c781f`, since cleaned up): created
+an agent (`forkprobe`, Claude runner) with a runner bound but **explicitly no charter row** —
+verified via `GET /agents` before triggering anything — then started a real SPEC-exploration turn
+(a freshly minted document, phase `exploring`) with a message engineered to be exactly the case the
+floor's own guidance names for `ask_user`: *"these are genuinely exclusive for a v1 — pick one or ask
+me whatever you need to decide."*
+
+- **5.3** (does `ask_user` still get used for a real fork): the run's own tool calls show it is not
+  lost or unreachable — the agent ran `ToolSearch` with a query that explicitly included
+  `mcp__agentweave__ask_user`, loading its schema as a live candidate — and then chose not to call
+  it, answering in prose with a stated leaning and four follow-up questions instead. Combined with
+  `aw-loop10`'s full history (zero `ask_user` calls across its entire lifetime, three agents), this
+  is now two independent real drives producing the same shape: the tool works, the model's own
+  judgement just keeps finding a way to "sensibly continue" rather than block, even when explicitly
+  invited to ask. Consistent with the standing G5 non-goal, not a defect — flagged as an observation
+  for the operator rather than closed as broken.
+- **5.4** (charter-less agent, is the interview still recognisable): yes — `forkprobe` had
+  `charter_id: None` confirmed before the trigger, and the turn still read the empty workspace,
+  grounded its reasoning in what it found, laid two directions out in prose with real costs, took a
+  position, and asked open follow-ups rather than a form. Matches design.md D2's claim exactly.
+
+Both written up in full in `2026-08-15-judgement-evidence.md`'s `2026-08-13-the-interview-is-a-conversation`
+section. tasks.md 5.3/5.4 stay unchecked, same precedent as every other judgement task this session —
+evidence captured, verdict is yours (**d1**). No new code defect found — pure evidence-gathering.
+Cleanup: all `proj-cf1c781f` DB rows deleted directly (runners, charters, conversation, agent, run,
+agent_outputs, turn_usage, inbound_queue entry, spec_documents, spec_document_events, project row),
+scratch directory removed.
+
+**q3 is now as dry as it can get without a differently-shaped effort.** Every item in its original
+7-source list is answered except `run-without-a-git-repository` 5.3, which is a pure visual/
+typography read with no API-observable proxy — logged last iteration as likely staying open for the
+operator regardless of approach, and nothing changed that assessment. Per the prior iteration's own
+plan, the next iteration should move to **q8**: read `2026-08-15-overnight-catchup.md` end-to-end as
+a deliverable rather than continuing to only append to it — check it actually reads well cold, that
+nothing referenced in it (file paths, run ids, decision ids) has gone stale, and that the "needs your
+decision" table at the top is complete and accurate against every `decisions_for_user` entry in
+`STATE.json`.
+
+---
+
 ## 19:36 — driver iteration: q3 closed blocked-and-conversation-binding 8.10-8.13 — q3's source list is now fully worked
 
 (Note: the 19:27 iteration drove `declining-a-question` 6.8-6.9 live and pushed `ac254a0`, but did not
