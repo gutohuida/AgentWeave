@@ -1,17 +1,17 @@
-# Handoff: spec-flow hardening — DRAFT, written early per q9's own guidance
+# Handoff: spec-flow hardening — end of run
 
-**Date:** 2026-08-15T20:36+01:00 (drafted; not the end-of-run handoff yet) · **Branch:**
-`autonomous/2026-08-15-spec-flow-hardening` · **HEAD:** `98c781a`+ (see git state — will move again
-before 22:00)
+**Date:** 2026-08-15T21:21+01:00 (finalized, drafted 20:36) · **Branch:**
+`autonomous/2026-08-15-spec-flow-hardening` · **HEAD:** `f4a0dda`
 **Agent:** Claude Sonnet 5 (Claude Code, unattended driver)
 **Previous handoff:** `.claude/handoffs/handoff-0048-2026-08-15-1225-loop-prep-and-the-spec-flow-proven.md`
-**Status:** **DRAFT.** The loop is still running (`stop_at` is `2026-08-15T22:00:00+01:00`, currently
-~20:36). This file exists so the *actual* end-of-run handoff only has to update facts, not be
-written from scratch under time pressure at 22:00 — the 20:2x iteration's `next_action` recommended
-exactly this as the best use of remaining runway. **Do not treat this as final.** Whatever iteration
-closes the loop should read this file, update "Git state," "Verification," and add a closing
-paragraph to "Status," then either rename it or leave it as-is and note in the true final entry that
-this draft *is* the handoff.
+**Status:** **CLOSED, before `stop_at` (22:00).** This file was drafted at 20:36 per its own iteration's
+`next_action`, on the theory that a session death near the deadline shouldn't cost the summary along
+with the work. The 21:2x iteration finalized it: re-verified the git state, re-checked the "Needs
+your decision" table against `STATE.json.decisions_for_user` (still consistent, all six present), and
+confirmed nothing else in the queue was open. Nothing changed in substance from the draft — every
+queue item below was already `done` or `standing` at draft time, and stayed that way. The tree is
+clean and pushed; `last_heartbeat` will be backdated as the loop's final action so a stray firing
+after 22:00 doesn't wedge, though the driver should stop scheduling past `stop_at` on its own.
 
 ## Goal
 
@@ -158,43 +158,42 @@ timestamps):**
   repeat.
 
 **NOT run, and it matters — carry this forward:**
-- ~~Task 4.5 (`the-tool-list-matches-the-tools`) — the full post-change suite~~ — done at 21:0x-21:11:
-  hub 2046 passed / 11 skipped (3 chunks), CLI 360 passed / 3 skipped, zero failures. No longer open.
 - A third, independently-designed gap-check pass over `judgement-evidence.md` (see "Key decisions"
-  #3) — deliberately deferred, not forgotten.
+  #3) — deliberately deferred, not forgotten. Two passes with an escalating method each found real
+  gaps; the pattern argues a third pass with the same (already-strongest) method is low value, but
+  it was never actually tried, so it is not a proven dead end — just a judgement call.
 - `npx vitest run` / `npx tsc --noEmit` — no UI source changed this session that would need it,
   but not explicitly re-confirmed at close.
 
-## Git state (as of this draft — WILL move before 22:00)
+## Git state (final)
 
-Branch `autonomous/2026-08-15-spec-flow-hardening`, HEAD `98c781a` ("Release the branch to the
+Branch `autonomous/2026-08-15-spec-flow-hardening`, HEAD `f4a0dda` ("Release the branch to the
 driver"), tree clean, pushed and up to date with origin. Parent `hub-native-experience` at `a40ac5b`
-(unchanged since handoff 0048 — this branch has not been rebased or merged). Commit count since
-`af07559`/handoff-0048's starting point: see `git log --oneline af07559..HEAD` for the full list;
-notable ones include `31b5122` (q3 second gap-check pass) and the q1/q4/q6 fix commits named in
-driver.log.
+(unchanged since handoff 0048 — this branch has not been rebased or merged). 56 commits since
+`f31e90e` (the 12:20 baseline measurement, effectively this run's starting point); see
+`git log --oneline f31e90e..HEAD` for the full list. Notable ones: `31b5122` (q3 second gap-check
+pass), `29bc213` (q1's final suite re-run), and the q1/q4/q6 fix commits named in `driver.log`.
 
 **Live environment:** Hub on `:8010`. Restarted 16:39 onto `1b9233a` — **anything committed after
-that needs a fresh restart before it's trustworthy live**, per the dead-end above. `aw-loop10`
-(`proj-ff695d96`) has a real merged commit (`e1ac86c`) on its `master` from the notify-window
-spec-flow proof; do not reset that repo without checking `spec-flow-findings.md` first.
+that needs a fresh restart before it's trustworthy live**, per the dead-end above; nothing in
+`hub/hub/` changed between 16:39 and this close (`29bc213`/`f4a0dda` were suite-verification and
+heartbeat-only commits), so the running Hub is still current. `aw-loop10` (`proj-ff695d96`) has a
+real merged commit (`e1ac86c`) on its `master` from the notify-window spec-flow proof; do not reset
+that repo without checking `spec-flow-findings.md` first.
 
 ## Next steps
 
-For whichever iteration reaches `stop_at` (2026-08-15T22:00:00+01:00):
+Nothing is queued for the next session to pick up mechanically — every `q1`–`q9` item is `done` or
+`standing`, and the six items that remain open (`d1`–`d6`) are the operator's, not the loop's. On
+resume:
 
-1. **Finalize this handoff rather than writing a new one from scratch.** Update "Git state" and
-   "Verification" with the real closing facts (final commit SHA, final suite run if time allows),
-   add a closing line to "Status," and rename the file if the final HEAD/timestamp should be in the
-   filename instead of this draft's.
-2. Do one last pass confirming `2026-08-15-overnight-catchup.md`'s "Needs your decision" table
-   (`d1`–`d6`) matches `STATE.json.decisions_for_user` exactly — it has drifted before.
-3. Leave `STATE.json.last_heartbeat` in the past per the standing protocol so a stray extra firing
-   after `stop_at` (if any) doesn't wedge on a live-session assumption — though the driver script
-   itself should stop scheduling past `stop_at` regardless.
-4. If genuinely no work remains and time is left before 22:00, prefer one targeted, narrowly-scoped
-   check (e.g. actually re-running q1's task 4.5 suite) over idling or over a low-value repeat of
-   work already done twice.
+1. Read `d1`–`d6` in `STATE.json.decisions_for_user` (mirrored in `overnight-catchup.md`'s table).
+   `d1` (the ~40 judgement calls in `judgement-evidence.md`) is the one that unblocks the most —
+   archiving 13 of 14 in-flight `openspec` changes waits on it.
+2. If a new session starts a fresh loop rather than just answering decisions, `loop-prep` is the
+   right entry point — this run's own `STATE.json` is a working example of what it produces.
+3. A third gap-check pass over `judgement-evidence.md` (never run, see "NOT run" above) is a
+   reasonable first task if the loop resumes with no new operator direction.
 
 ## Open questions for the user
 
