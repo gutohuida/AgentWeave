@@ -214,6 +214,70 @@ I am **not** concluding finding 8 is fixed — nothing was changed to fix it, so
 that it did not reproduce on this run, with this model, on this subject. It may be prompt-dependent.
 Worth one more probe before anyone closes it.
 
+#### 01:02 — B6 confirmed live at a scale the tests do not reach
+
+Approving the specification created **seven** tasks from 17 requirements. `task-7872c5d0` reports
+`FR-1, FR-2, FR-3 … FR-16, FR-17` in numeric order. Before B6 that list would have read
+`FR-1, FR-10, FR-11 … FR-17, FR-2, FR-3`. Change B task 9.5 closed. The unit test uses twelve
+requirements; this is seventeen, from a real approval rather than a fixture.
+
+#### 00:00–00:25 — Build and review: the gate works, and finding 9 comes back
+
+`builder` (claude) implemented `task-6de550a5` in its worktree: a `src/` layout package,
+`pyproject.toml`, 59 tests, evidence recorded against FR-1, FR-6, FR-12, task marked complete.
+
+**The review gate did its job, better than loop 8's.** `verifier` checked out the exact recorded
+commit `48ef3548`, confirmed `59 passed` independently, and then **rejected all three pieces of
+evidence on merit**: the public callable raises `NotImplementedError` for every valid request, so
+FR-1's return behaviour, FR-6's preference semantics and FR-12's infeasibility diagnosis are none of
+them actually exercised. Its wording — *"tests validate a hand-built infeasibility object, but no
+infeasibility is diagnosed or returned at runtime"* — is exactly the distinction that matters. Three
+`decide_evidence` calls, all rejections, no operator involvement.
+
+#### Finding L9-2: loop 8's finding 9 reproduces, and asking for it is not enough
+
+Loop 8 found that the merged library could not run its own tests from a clean checkout. **This time
+I put it in the builder's instructions**: *"a pyproject.toml that lets `pytest` run from a clean
+checkout with no PYTHONPATH fiddling"*. Measured on a fresh `git clone` of the builder's worktree:
+
+```
+$ pytest -q                     ->  ModuleNotFoundError: No module named 'roster_fairness'
+$ pip install -e . && pytest -q ->  59 passed
+```
+
+`pyproject.toml` carries `[tool.pytest.ini_options] testpaths` but **no `pythonpath = ["src"]`** —
+the one line loop 8 named. The builder's own claim was *"`pip install -e .` then `pytest` works …
+verified with PYTHONPATH unset"*, which is **literally true**; it read "no PYTHONPATH fiddling" as
+satisfied by an editable install, which is a defensible reading.
+
+So this is not agent negligence, and it is not fixed by asking harder. It is the design gap loop 8
+named: **nothing in the chain asks whether the merged artefact is usable.** The evidence claimed
+tests pass — true. The verifier independently confirmed they pass — also true. It explicitly said
+*"I'll treat packaging separately from test correctness"* and did not report the gap. Every actor
+behaved correctly and the artefact still cannot be cloned and run.
+
+Loop 8 recorded finding 9 as *"probably wants an exploration of its own"* and the operator chose to
+leave it. This run is a second independent reproduction with the operator's instruction actively
+working against it, which strengthens the case considerably.
+
+#### Finding L9-3: one agent's editable install leaks into every other agent
+
+Unplanned, and found by the verifier rather than by me. My clean-checkout probe ran
+`pip install -e /tmp/l9check`, which installed `roster-fairness` into the **shared** Python
+interpreter every agent on this machine uses. The verifier hit it immediately:
+
+> *"the failed editable install left Python importing a pre-existing package from
+> `AppData\Local\Temp\l9check`, so that run is invalid"*
+
+It diagnosed the contamination, isolated its imports explicitly, and got a trustworthy answer
+anyway — which is a genuinely impressive piece of reviewing. But the hazard is real and belongs to
+the product, not to me: **agents are isolated by worktree, not by environment.** A builder that runs
+`pip install -e .` silently changes what every other agent on the machine imports, including the one
+reviewing its work. Worktree isolation implies an isolation that does not exist below the filesystem.
+
+I uninstalled the leaked package and removed the directory; `import roster_fairness` now fails
+cleanly.
+
 #### G5 re-observed, for the fourth time
 
 The architect asked all its questions as prose across three turns. `select count(*) from questions
