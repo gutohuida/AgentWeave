@@ -28,6 +28,30 @@ under `decisions_for_user`.
 
 ---
 
+## 20:36–20:38 — driver iteration: q9's end-of-run handoff drafted early
+
+With q3 exhaustively worked (two escalating-method gap-check passes below, no third planned) and q8
+current, the highest-value use of this iteration was the prior iteration's own recommendation:
+draft the end-of-run handoff **now**, before `stop_at` (22:00), so the iteration that actually
+closes the loop only has to update facts rather than write from scratch under time pressure.
+
+Wrote `.claude/handoffs/handoff-0049-2026-08-15-2036-spec-flow-hardening-draft.md`, chained to
+`handoff-0048` (the true previous handoff — the prior iteration's `next_action` mis-stated the chain
+as "0047", but 0048 already existed at run start). Covers all nine queue items' status as of ~20:36,
+a files-touched table cross-checked against real commit SHAs (`git log --oneline f31e90e..HEAD` —
+an early draft of the table had guessed plausible file paths instead of checking, caught and fixed
+before committing), the two-pass judgement-evidence lesson as a standing key decision, dead ends,
+what's verified vs. not, current git/environment state, and explicit instructions for whoever closes
+the loop: finalize this file, don't rewrite it. Updated `.claude/handoffs/LATEST.md` to point at
+`0049` instead of `0048`, since the draft already carries far more current information.
+
+No code touched, no suite re-run. The one still-open verification gap this draft surfaces — q1 task
+4.5's full post-change suite, not re-run since the tool-surface fix landed — is queued as the next
+iteration's best concrete option if there's runway to spend on it, ahead of a low-value third
+judgement-evidence pass.
+
+---
+
 ## 20:2x–20:4x — driver iteration: q8's own recommended second pass, found three more real gaps
 
 The previous iteration's `next_action` explicitly recommended a second full re-read, given this
