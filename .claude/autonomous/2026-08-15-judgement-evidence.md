@@ -408,12 +408,124 @@ something this drive can observe from the outside.
 
 ---
 
+## `2026-08-13-answers-arrive-together`
+
+### 5.1 — "The reported symptom is gone. Have an agent ask several questions, let its run end, then
+answer them one at a time. The agent must not start work until the last one is given."
+
+**Evidence: this is answered twice over — once by the change's own record in `tasks.md` §4d, once
+freshly this iteration.**
+
+The change's own live drive (`tasks.md` §4d, unchanged since it was written) shows exactly this
+sequence: 3 questions asked, the asking run ended, answered one at a time —
+
+```
+after answer 1 (alpha): 0 queue entrie(s)
+after answer 2 (beta):  0 queue entrie(s)
+after answer 3 (gamma): 1 queue entrie(s)
+```
+
+This iteration reproduced the same shape independently in a fresh scratch project
+(`aw-qbatch-probe`, `proj-df8883a1`, since cleaned up), minting a real run credential
+(`aw_run_...`, same prefix and hashing `hub/hub/agent_auth.py` uses), asking a 3-question batch
+through the real agent route (`POST /agent-actions/questions/batch`), marking that run `completed`,
+then answering the first question through the real operator route (`PATCH
+/projects/{id}/questions/{id}`) and declining the other two. The queue held **zero** entries after
+the lone answer, and read back the single delivered entry (full text under 5.3 below) only once the
+batch was complete. The symptom this change targeted — an agent starting work on a decision before
+the operator finished making it — is gone in both records.
+
+### 5.2 — "Does the held-batch statement read as reassurance or as a warning? It exists so that
+answering two of three does not look like nothing happened."
+
+**Evidence, not a verdict — this is squarely the operator's own read.** The exact live wording, from
+`hub/ui/src/components/agents/AgentQuestionCard.tsx:164`:
+
+> *"Your answers reach `{agent}` together once you have finished all `{total}`. Dismiss the rest to
+> send what you have."*
+
+Rendered at 11px, `var(--text-3)` (the panel's dimmest text tier — same tier as the step counter and
+the "no longer waiting" tag), directly under the multi-select hint, and shown only when
+`nobodyWaiting && total > 1` — i.e. only for a batch whose asker has already ended, never for a live
+one. It states the mechanism ("together, once finished") and immediately names the escape hatch
+("dismiss the rest"), rather than warning that something might be wrong. Whether that reads as
+reassuring or as a warning to *you specifically* is exactly what 5.2 asks — the wording is captured
+verbatim above so you can judge it without re-driving the product.
+
+### 5.3 — "Answer part of a batch and walk away. Confirm the outstanding questions are still visibly
+outstanding, and that declining them delivers what you already answered."
+
+**Evidence: driven live this iteration**, same scratch project as 5.1. After answering question 1 of
+3 and walking away, `GET /projects/{id}/questions` showed the other two exactly as still open:
+
+```
+'Deploy target?': answered=True  declined=False
+'Region?':        answered=False declined=False
+'Rollback plan?': answered=False declined=False
+```
+
+Declining both remaining questions (`POST /questions/{id}/decline`) then delivered exactly one queue
+entry, naming the decline rather than omitting it (D4):
+
+```
+You asked 3 questions. The operator has now resolved all of them.
+
+1. Deploy target?
+   Answer: aws
+
+2. Region?
+   Declined — the operator saw this and chose not to answer it.
+
+3. Rollback plan?
+   Declined — the operator saw this and chose not to answer it.
+```
+
+Both halves of 5.3 hold: the outstanding questions stayed visibly outstanding (not silently
+resolved, not hidden), and declining the rest delivered precisely what had already been answered —
+nothing invented, nothing lost.
+
+### 5.4 — "Confirm a live agent — one still waiting — is unaffected: it should still receive the
+batch through the tool, with no extra turn afterwards."
+
+**Evidence: driven live this iteration, with one honest limitation stated.** A second run was minted
+and left `running` (not ended) for the whole test — the "still waiting" case. `asker_waiting` read
+`True` for all three questions the entire time. Answering all three through the operator route while
+the run stayed `running` produced **zero** new queue entries — confirmed by reading every row in
+`inbound_queue_entries` for the project afterward: both entries present belonged to the 5.1/5.3
+batch, none to this one. This matches the code path exactly (`questions.py:337`,
+`if not asker_still_waiting: ...deliver...` — skipped whenever `question.blocking and run.status ==
+'running'`), and is the same guarantee task 4.7's unit test already pins.
+
+**What this drive could not reach**, and 5.4 genuinely still wants: "receives the batch through the
+tool" describes what happens *inside* a live agent process's `ask_user` call — it is polling the
+Hub, blocked, waiting for its own tool result. No HTTP call from the operator side can produce that;
+it needs an actual spawned agent holding the tool call open while the operator answers underneath
+it, and watching that agent's next turn open with all three answers already in hand rather than as a
+fresh input. That is a real end-to-end run (a bound agent + a real runner), not something this
+API-only drive is shaped to do. What's now confirmed is the Hub-side half of the guarantee: nothing
+is queued and nothing wakes the agent early. The client-side half — the tool call actually
+unblocking with everything at once — rests on 4.7's unit test plus this.
+
+### 5.5 — "Answer a single question, as before. It should behave exactly as it always has."
+
+**Evidence: code-level, not re-driven live — the mechanism itself makes this the one case that
+cannot have changed.** A question asked outside `POST .../questions/batch` gets `batch_id=None`
+(`ask_question_for_actor`'s default, task 1.3's finding). `_completed_batch` returns `[question]`
+immediately for a null `batch_id` — it never reaches the "wait for the rest of the batch" logic at
+all — and `_batch_delivery_text` special-cases `len(rows) == 1` to return the exact pre-change
+wording: `f"Question: {rows[0].question}\n\nAnswer: {rows[0].answer}"`, byte-for-byte what a
+single-question answer produced before this change existed. Task 4.5 asserts this "byte-for-byte
+against the old wording, plus the null-`batch_id` case from 1.3." A live drive would exercise the
+same code path already covered by that test; nothing about answering one question touches the batch
+machinery this change added.
+
+---
+
 ## Still entirely uncaptured
 
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
 disk — not just a write-up of an existing run:
 
-- `answers-arrive-together` 5.1–5.5 (needs a batch of questions and a run that ends mid-batch)
 - `the-hubs-procedure-outranks-an-installed-one` 5.3–5.5
 - `blocked-and-conversation-binding` 8.10–8.13
 - `declining-a-question` 6.8–6.9

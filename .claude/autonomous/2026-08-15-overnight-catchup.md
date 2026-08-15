@@ -28,6 +28,46 @@ under `decisions_for_user`.
 
 ---
 
+## 18:59 — driver iteration: q3 drove answers-arrive-together 5.1-5.5 live
+
+**Done**
+
+- Drove `answers-arrive-together` 5.1-5.5 live in a fresh scratch project (`aw-qbatch-probe`,
+  `proj-df8883a1`, since cleaned up). Checked the live database first per the standing instruction —
+  every existing question batch was either fully resolved or fully untouched, none caught mid-batch,
+  which is exactly the shape 5.3/5.4 need — so this one needed a real drive rather than a write-up.
+- **5.1** (is the reported symptom gone): reproduced the change's own `tasks.md` §4d result
+  independently — 3 questions asked, asking run ended, answered one at a time, zero queue entries
+  until the last answer, then exactly one holding all three in order. Two independent confirmations
+  now exist.
+- **5.2** (does the held-batch statement read as reassurance or a warning): pulled the exact live
+  wording verbatim from `AgentQuestionCard.tsx:164` — *"Your answers reach `{agent}` together once
+  you have finished all `{total}`. Dismiss the rest to send what you have."* — plus its render
+  conditions, into the evidence file. Purely your call; evidence captured rather than guessed.
+- **5.3** (outstanding questions stay visible; declining delivers what's answered): answered 1 of 3
+  live, confirmed the other two stayed `answered=False declined=False` via a live `GET`, then
+  declined both and confirmed the delivered entry named the decline rather than omitting it (D4).
+- **5.4** (a live, still-waiting agent is unaffected): minted a second run and left it genuinely
+  `running` for the whole test. `asker_waiting` read `True` throughout; answering all three produced
+  **zero** new queue entries (confirmed by reading every row in the table afterward). Stated the
+  honest limit: this confirms the Hub-side half only (nothing queued, nothing wakes the agent
+  early) — the client-side half (a live agent's `ask_user` call actually unblocking with all three
+  answers) needs a real spawned agent holding the tool call open, which an API-only drive can't
+  produce; task 4.7's unit test is what covers that half.
+- **5.5** (a single question behaves exactly as before): answered from code, not re-driven — a lone
+  question's `batch_id` is `None`, which short-circuits straight to the pre-change wording, and
+  task 4.5 already pins it byte-for-byte.
+- Cleaned up all 12 question rows, 5 run rows, 2 queue entries, and the project row/directory
+  afterward, same convention as prior iterations.
+
+**Found**: nothing new for the fix queue.
+
+**Next**: q3's remaining sources — `the-hubs-procedure-outranks-an-installed-one` 5.3-5.5,
+`blocked-and-conversation-binding` 8.10-8.13, `declining-a-question` 6.8-6.9. Full detail in
+`STATE.json`.
+
+---
+
 ## 18:46 — driver iteration: q3 drove a-gate-that-only-evidence-opens 5.1-5.4 live
 
 **Done**
