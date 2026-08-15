@@ -27,6 +27,57 @@ under `decisions_for_user`.
 
 ---
 
+## 15:42 — driver iteration: q6, second QoL fix (`create`'s refusal names the alternative)
+
+**Fixed**: `POST /projects/create` against a directory that already exists refused with
+`"create requires a target that does not exist"` and stopped there — findings.md finding 2 flagged
+that the operator's next move is always `/projects/open`, and the message never said so.
+`hub/hub/project_lifecycle.py::create_new` now appends `"; use open for a directory that already
+exists"`. The UI passes this text through verbatim (`readableApiError` surfaces `detail.message`
+with no client-side translation — checked `hub/ui/src/lib/projectTarget.ts` and
+`hub/ui/src/api/client.ts` first, confirmed the UI does **not** already have a friendlier message,
+so the fix belongs in the API text as the finding guessed). Verified fails-before/passes-after: reverted
+just the source file (`git stash push`), ran `test_create_new_creates_exactly_one_directory_and_registers_it`
+— failed with the old message. Restored the fix, same test passed. Then ran the full
+`test_project_lifecycle.py` (10 passed) plus `test_operator_projects_api.py` and
+`test_project_persistence.py` for anything else pinned to the old string (none was) — 48 passed
+total. Committed on its own.
+
+**Investigated and closed as non-issues, not code changes** (the other two candidates named in the
+prior `next_action`):
+
+- **(a) operator credential bootstrap.** findings.md's "minor" finding said minting an operator API
+  key requires reading the database directly. It doesn't: `GET /api/v1/setup/token` already exists,
+  is documented (`docs/reference/hub-api.md` line 161), is used internally by `agentweave hub_start`
+  and `agentweave status` (`src/agentweave/cli.py::_fetch_setup_token`), and is localhost/Docker-
+  internal-only by design. Verified live: `curl http://localhost:8010/api/v1/setup/token` returned
+  the exact key already on file in `STATE.json`'s `environment.existing_projects`
+  (`aw_live_58ab7d84...`). The finding was simply wrong — the bootstrap already existed and nobody
+  had tried it before reaching for the DB. Not filing a fix; recording here so nobody re-investigates
+  it.
+- **(b) main_branch inline UI config.** Already implemented — `hub/ui/src/components/environment/
+  ProjectSettingsPanel.tsx` has a full "Main branch" row: a text input, a description that changes
+  based on whether the directory is a git repo, and a "Use '<suggestion>'" button sourced from
+  `GET /main-branch-suggestion` when nothing is set yet. No DB edit is or was required through the
+  UI; findings.md's own wording ("choose one in the project's settings") already pointed here
+  correctly. Nothing to fix.
+
+q6 stays in flight — two fixes done this iteration's session (duplicate context-usage rows earlier at
+15:23, this one now); rest of `2026-08-15-spec-flow-findings.md`'s frictions are either fixed (q4's
+three), closed as non-issues (a and b above, this entry), or genuinely cosmetic/do-not-touch (finding
+3, the `/project/` route prefix). One item remains open and not yet acted on: **finding 4, the 66-char
+minted directory name** — investigated the mechanism (`hub/hub/spec_naming.py`'s `MAX_SLUG_LENGTH` is
+derived from the 255-char storage path contract, not from any Windows-`MAX_PATH`-aware bound; the
+module's own comment says a previous UI-side bound of 64 existed and was replaced by this derivation
+without carrying the practical reasoning forward). Left open rather than fixed this iteration: any
+smaller cap would be a judgement call on the tradeoff between a descriptive slug and Windows path
+headroom, and the `limits` in `STATE.json` say "derive constants, do not tune them to one monitor" —
+there is no principled Windows-specific number in this codebase to derive it from yet. Next iteration
+picking up q6 should either find a principled derivation (e.g. reserve headroom for a typical project
+directory depth) or explicitly punt it to `decisions_for_user`.
+
+---
+
 ## 15:23 — driver iteration: q6, first QoL fix (duplicate context-usage rows)
 
 Picked up the branch and found a dirty tree: `hub/hub/api/v1/agents.py`,
