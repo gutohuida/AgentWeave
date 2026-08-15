@@ -27,6 +27,39 @@ under `decisions_for_user`.
 
 ---
 
+## 15:23 — driver iteration: q6, first QoL fix (duplicate context-usage rows)
+
+Picked up the branch and found a dirty tree: `hub/hub/api/v1/agents.py`,
+`hub/hub/output_recording.py`, and `hub/tests/test_context_usage.py` had uncommitted changes with
+no matching log entry or `STATE.json` note. Reconciling here rather than guessing: some earlier
+iteration started a `q6` QoL fix and died (most likely a quota cutoff, per `quota_policy`) before
+committing or logging. The change was complete and self-consistent, not a half-edit, so I verified
+it properly rather than discarding it.
+
+**The fix:** `record_context_usage` (`hub/hub/output_recording.py`) persisted and broadcast a new
+`context_warning` row every time an agent posted a context-usage reading with a newer
+`observed_at`, even when the measurement itself (tokens, percent, model, etc.) was identical to the
+latest persisted row. The docstring/comment attached to the fix cites a real activity log that was
+65% duplicate rows of an unchanged number this way — a genuine QoL friction (a noisy, padded
+activity feed), consistent with `q6`'s instruction to prefer frictions actually observed over
+invented ones. Fix: compare the new payload to the latest persisted one field-by-field (excluding
+`observed_at`); if identical, still update freshness (so the checkpoint trigger still sees it) but
+skip the persist+broadcast, and return `"unchanged"` (surfaced via the API as
+`{"status": "ignored", "reason": "unchanged"}`, distinct from the existing `"reason": "stale"`).
+
+**Verified, not just read:** confirmed the new regression test
+(`test_repeated_unchanged_reading_does_not_duplicate_the_activity_log`) fails against the
+pre-fix source (copied `HEAD`'s `output_recording.py`/`agents.py` back in, reran — `AssertionError:
+'ok' != 'ignored'`) and passes against the fix. Ran the full `test_context_usage.py` (8 passed),
+plus `test_context_usage_measurement.py`, `test_checkpoint_cutover.py`,
+`test_agent_trigger_overrides.py`, `test_bola.py` (60 passed total) to catch anything downstream of
+`record_context_usage` or the context-usage endpoint. All green.
+
+Committed as its own commit. `q6` stays in flight — one fix per iteration per `next_action`'s
+instruction; more frictions remain queued in `2026-08-15-spec-flow-findings.md`.
+
+---
+
 ## 14:54 — driver iteration: q5, the 14-change triage
 
 `q4` is fully closed (three defects, three regression tests) and the branch turned to `q5`:

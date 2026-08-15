@@ -1990,6 +1990,8 @@ async def post_context_usage(
     result = await record_context_usage(session, project_id, name, payload)
     if result == "ignored":
         return {"status": "ignored", "agent": name, "reason": "stale"}
+    if result == "unchanged":
+        return {"status": "ignored", "agent": name, "reason": "unchanged"}
     return {"status": "ok", "agent": name}
 
 

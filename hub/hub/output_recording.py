@@ -149,7 +149,8 @@ async def record_context_usage(
 ) -> str:
     """Persist a context-usage snapshot and broadcast it, mirroring `POST .../context-usage`.
 
-    Returns "ok" or "ignored" (a strictly-older observation for the same agent).
+    Returns "ok", "ignored" (a strictly-older observation for the same agent), or "unchanged"
+    (a newer observation whose measurement is identical to the latest persisted one).
     """
     payload = resolve_usage_limit({**sample_payload, "agent": agent})
 
@@ -189,6 +190,7 @@ async def record_context_usage(
         .limit(1)
     )
     latest = latest_result.scalars().first()
+    unchanged = False
     if latest and isinstance(latest.data, dict):
         latest_observed = latest.data.get("observed_at")
         observed_at = payload.get("observed_at")
@@ -198,8 +200,20 @@ async def record_context_usage(
             and observed_at <= latest_observed
         ):
             return "ignored"
-    await persist_event(db, project_id, "context_warning", payload, agent=agent, severity="info")
-    await sse_manager.broadcast(project_id, "context_warning", payload)
+        # Several readings can land within the same turn with the same measurement and only
+        # a newer `observed_at` distinguishing them (e.g. context usage sampled more than once
+        # before it changes) — a real activity log ended up 65% duplicate rows of an unchanged
+        # number this way. Same measurement, newer timestamp: keep the row's freshness (still
+        # feeds the checkpoint trigger below) but do not persist or broadcast a second row.
+        # Compared field-by-field rather than just `context_tokens`/`percent` — those can
+        # coincide across turns that differ in `model` (a conversation whose model changed
+        # turn to turn, at identical token counts, is not the same reading) or other fields.
+        latest_signal = {k: v for k, v in latest.data.items() if k != "observed_at"}
+        current_signal = {k: v for k, v in payload.items() if k != "observed_at"}
+        unchanged = latest_signal == current_signal
+    if not unchanged:
+        await persist_event(db, project_id, "context_warning", payload, agent=agent, severity="info")
+        await sse_manager.broadcast(project_id, "context_warning", payload)
 
     # A reading is the moment context pressure first becomes knowable, so it is where the
     # checkpoint policy is evaluated. Dispatched, never awaited: generation is a blocking CLI
@@ -212,4 +226,4 @@ async def record_context_usage(
     # `sample_payload` is the runner parser's dict, which never carries one — reading it from
     # there passed None every time and the trigger dropped every reading at its first guard.
     consider_from_reading(project_id, agent, payload.get("conversation_id"), payload)
-    return "ok"
+    return "unchanged" if unchanged else "ok"

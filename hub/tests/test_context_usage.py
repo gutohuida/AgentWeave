@@ -152,6 +152,58 @@ async def test_stale_or_old_session_context_cannot_replace_latest(app, auth_head
 
 
 @pytest.mark.asyncio
+async def test_repeated_unchanged_reading_does_not_duplicate_the_activity_log(app, auth_headers):
+    """A real session logged 15 `context_warning` rows for 4 distinct values — several identical
+
+    readings landed seconds apart, each with a newer `observed_at` than the last so the staleness
+    guard let every one through. Same value, newer timestamp must update freshness (still worth
+    driving the checkpoint trigger) without persisting or broadcasting a duplicate event row.
+    """
+    agent = "context-repeat"
+    await _configure(app, auth_headers, agent)
+    endpoint = f"/api/v1/projects/proj-test/agents/{agent}/context-usage"
+    reading = {
+        "status": "measured",
+        "source": "collector",
+        "basis": "provider_context",
+        "context_tokens": 46378,
+        "limit_tokens": 1000000,
+        "session_id": "sess-repeat",
+        "observed_at": 1000,
+    }
+
+    first = await app.post(endpoint, json=reading, headers=auth_headers)
+    assert first.status_code == 201
+    assert first.json()["status"] == "ok"
+
+    for i in range(1, 4):
+        repeat = {**reading, "observed_at": 1000 + i}
+        response = await app.post(endpoint, json=repeat, headers=auth_headers)
+        assert response.status_code == 201
+        assert response.json() == {"status": "ignored", "agent": agent, "reason": "unchanged"}
+
+    changed = {**reading, "context_tokens": 47665, "observed_at": 2000}
+    response = await app.post(endpoint, json=changed, headers=auth_headers)
+    assert response.status_code == 201
+    assert response.json()["status"] == "ok"
+
+    history = (
+        await app.get(
+            "/api/v1/projects/proj-test/events/history", headers=auth_headers
+        )
+    ).json()
+    context_rows = [
+        row for row in history if row["type"] == "context_warning" and row["agent"] == agent
+    ]
+    assert len(context_rows) == 2
+    assert [row["data"]["context_tokens"] for row in context_rows] == [46378, 47665]
+
+    summaries = (await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)).json()
+    sample = next(item for item in summaries if item["name"] == agent)["context_usage"]
+    assert sample["context_tokens"] == 47665
+
+
+@pytest.mark.asyncio
 async def test_legacy_zero_percent_reset_becomes_unavailable(app, auth_headers):
     """An older CLI posts `{"percent": 0}` on every session reset/compaction.
 
