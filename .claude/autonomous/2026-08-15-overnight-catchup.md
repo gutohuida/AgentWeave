@@ -28,6 +28,21 @@ under `decisions_for_user`.
 
 ---
 
+## 21:51 — driver iteration: still nothing to do, ~9 minutes of runway left
+
+`git log`/branch matched `STATE.json` exactly on start (`acc961a` on top of `0c873d6`, the prior
+iteration's own "still nothing to do" entry). Tree clean. Re-checked: no new operator message, no
+queue item un-done, `q1`–`q9` all still `done` or `standing`, the "Needs your decision" table above
+still matches `decisions_for_user` (`d1`–`d6`) exactly. Only ~9 minutes remain before `stop_at`
+(22:00) — genuinely nothing to do, and too little runway to start anything new even if there were.
+Saying so honestly per the 19:57 standing rule rather than manufacturing a tenth queue item. The
+next 15-minute driver firing lands after `stop_at`, at which point `next_action`'s own instruction
+is to stand down without starting new work — this is likely the last working iteration of the run.
+Heartbeat backdated as the final action, per protocol, in case a firing lands before `stop_at`
+anyway.
+
+---
+
 ## 21:36 — driver iteration: still nothing to do, confirmed and released
 
 `git log`/branch matched `STATE.json` exactly on start (`d666466` on top of `aedbb82`, the prior
