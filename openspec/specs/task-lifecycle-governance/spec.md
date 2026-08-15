@@ -17,7 +17,6 @@ an entitled actor. It does not govern **liveness** — whether a transition happ
 reality changes — which needs the run-to-task binding explored in
 `openspec/explorations/2026-08-10-enforcing-the-development-cycle.md`. The completion gates of B3
 and B4 land inside this capability's transition service rather than beside it.
-
 ## Requirements
 ### Requirement: Task status moves only along declared transitions
 
@@ -493,3 +492,372 @@ undone by the mechanism it was meant to satisfy.
 
 - **WHEN** the operator declines a question that never caused a task to wait
 - **THEN** no task changes status
+
+### Requirement: Approval integrates the approved work
+
+The transition into `approved` SHALL merge the approved work into the project's configured main
+branch, in the same operation that records the transition. Approval is what places work in the
+product, and a lifecycle whose terminal state carries no such meaning cannot answer whether anything
+it approved was ever shipped.
+
+What is merged SHALL be the commit named by the task's accepted evidence footprints — the newest
+such commit per distinct branch — and SHALL NOT be the agent's branch. Agent branches are per agent,
+not per task, so merging a branch would integrate every other task's work that happens to sit beside
+the approved one.
+
+Evidence that is awaiting review or has been rejected SHALL NOT contribute a commit to integrate.
+
+The merge SHALL be performed against the local repository only. The system SHALL NOT contact any
+remote, SHALL NOT push, and SHALL NOT require any credential.
+
+Integration SHALL occur regardless of the rigor of any document the task's requirements belong to.
+Rigor governs who may bring a task to `approved`; integration is what reaching `approved` means. Were
+the two coupled, lowering a document's rigor to get past a blocked task would also silently stop that
+work being shipped.
+
+#### Scenario: Approving a task puts its work on the main branch
+
+- **WHEN** a task with accepted evidence naming a git commit is approved, and the project has a
+  configured main branch
+- **THEN** that commit is merged into the main branch
+- **AND** coverage reports the served requirements as `integrated` rather than
+  `verified, not integrated`
+
+#### Scenario: Only the accepted evidence's commit is integrated
+
+- **WHEN** a task is approved whose agent branch carries commits made after the commit its accepted
+  evidence names
+- **THEN** the later commits are not merged
+
+#### Scenario: A sketch document's task still integrates
+
+- **WHEN** a task whose linked requirements belong to a `sketch`-rigor document is approved
+- **THEN** the work is integrated exactly as it would be for a `gate`-rigor document
+
+#### Scenario: No remote is contacted
+
+- **WHEN** any approval integrates work
+- **THEN** no push occurs and no remote operation is attempted
+
+### Requirement: Approval is refused when the work cannot be merged cleanly
+
+Where the work to be integrated would conflict with the project's main branch, the system SHALL
+refuse the transition into `approved`.
+
+The conflict SHALL be detected before the transition is recorded, by a test merge that modifies
+neither the working tree nor the index. A conflict discovered during the merge itself would leave a
+task recorded as approved and a repository in a state the operator did not ask for.
+
+The refusal SHALL be carried in the same typed refusal that reports unverified requirements, and
+SHALL name the conflicting paths. An operator learning that approval failed SHALL learn why in the
+same response, not by inspecting the repository.
+
+This refusal SHALL apply regardless of rigor. It is not an assertion about whether the work is
+verified; it is an assertion that the work cannot go where approval says it goes.
+
+The check SHALL live inside the single transition service, and SHALL NOT introduce a second
+enforcement point.
+
+#### Scenario: A conflicting branch refuses approval
+
+- **WHEN** approval is requested for a task whose evidence commit conflicts with the main branch
+- **THEN** the transition is refused
+- **AND** the refusal names the conflicting paths
+- **AND** the task's status is unchanged
+- **AND** no merge is attempted
+
+#### Scenario: A conflict refuses approval even at sketch rigor
+
+- **WHEN** approval is requested for a task with conflicting work whose documents are all `sketch`
+- **THEN** the transition is refused
+
+### Requirement: An integration that cannot proceed does not block approval
+
+The transition into `approved` SHALL still succeed where integration cannot be attempted, and the
+integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted
+when the project has no configured main branch, when the project is not a repository, when the
+primary checkout has uncommitted changes to tracked files, or when the primary checkout is not on
+the main branch.
+
+Untracked files SHALL NOT prevent integration. The system writes specification documents into the
+project directory, so untracked content is the ordinary state of a working project rather than a
+signal that a merge is unsafe.
+
+Where integration is attempted and fails, the transition SHALL NOT be rolled back. The approval is a
+judgement that the work is good; a repository failure SHALL NOT reverse it. Coverage SHALL then
+report the requirement as `verified, not integrated`, which is a true statement of what happened.
+
+A project that is not a repository SHALL be no less approvable than before this capability existed.
+
+#### Scenario: An unconfigured main branch does not block approval
+
+- **WHEN** a task is approved in a project with no configured main branch
+- **THEN** the approval succeeds
+- **AND** nothing is merged
+- **AND** the skipped integration is recorded with its reason
+
+#### Scenario: A dirty primary checkout skips rather than merges
+
+- **WHEN** a task is approved while the primary checkout has uncommitted changes to tracked files
+- **THEN** the approval succeeds, no merge is attempted, and the reason is recorded
+
+#### Scenario: Untracked files do not prevent a merge
+
+- **WHEN** a task is approved while the project directory holds untracked files
+- **THEN** the work is integrated
+
+#### Scenario: A failed merge leaves the approval standing
+
+- **WHEN** integration is attempted and the merge fails
+- **THEN** the task remains `approved`
+- **AND** coverage reports the served requirements as `verified, not integrated`
+
+#### Scenario: A project without a repository approves unchanged
+
+- **WHEN** a task is approved in a project whose evidence footprints record paths rather than commits
+- **THEN** the approval succeeds and no integration is attempted
+
+### Requirement: Every integration attempt is recorded
+
+The system SHALL record each integration attempt: the task, the commit and branch integrated, the
+target branch, the outcome (`merged`, `skipped` or `failed`), the reason where it did not merge, the
+approving actor, and the time.
+
+The record SHALL be append-only, with no update path and no delete path. An integration is a write to
+the operator's repository performed by the system, and the account of what was written SHALL NOT be
+editable by the thing that wrote it.
+
+The record SHALL state how the integration was performed, so that a later mode which integrates by a
+different mechanism is distinguishable in the history rather than conflated with this one.
+
+#### Scenario: A merge is recorded with what it merged
+
+- **WHEN** an approval integrates work
+- **THEN** a record names the commit, the source branch, the target branch, the outcome and the
+  approving actor
+
+#### Scenario: Integration records cannot be altered
+
+- **WHEN** any interface attempts to update or delete an integration record
+- **THEN** no such path exists
+
+### Requirement: Work already in the main line is not reported as merged
+
+Where the work to integrate is already reachable from the target branch, the system SHALL record the
+integration as skipped, naming that as the reason, and SHALL NOT record it as merged.
+
+Merging a commit that is already an ancestor of the target succeeds, reports success, and changes
+nothing. Recording that as a merge makes a no-op indistinguishable from work reaching the product,
+which is the one thing integration reporting exists to distinguish.
+
+This SHALL be determined before any precondition concerning the state of the working tree. Whether a
+commit is already present is a fact about the commit and the target alone, and an operator whose
+checkout is mid-edit is better told the true reason than told to tidy up for a merge that would
+change nothing.
+
+#### Scenario: An already-integrated commit is skipped
+
+- **WHEN** a task is approved whose accepted evidence names a commit already reachable from the
+  target branch
+- **THEN** the integration is recorded as skipped
+- **AND** the reason states the work is already in the target branch
+- **AND** the target branch is unchanged
+
+#### Scenario: The true reason wins over a working-tree complaint
+
+- **WHEN** the commit is already in the target branch and the project's checkout also has
+  uncommitted changes
+- **THEN** the reason given is that the work is already integrated
+
+### Requirement: Approval creates the work its document declares
+
+A document's approval SHALL create the tasks that document declares, each linked to the requirements
+it declares that it serves.
+
+A document that declares its own decomposition and produces nothing leaves the operator to
+re-describe by hand work the document already contains, and leaves no relationship between the two.
+
+Tasks SHALL be created unassigned and in the lifecycle's entry status. The document states that the
+work exists; who performs it is not a decision a specification makes.
+
+Creation SHALL be idempotent per document and declared task, so that re-approving a document after
+revision creates only what is new.
+
+A task that already exists for a declared task SHALL NOT be modified, reassigned or reverted by a
+later approval. The document declares that work exists, not what has happened to it since.
+
+A document declaring no tasks SHALL create none, and this SHALL NOT be an error.
+
+Where a declared task names a requirement the document does not resolve, the task SHALL still be
+created and the unresolved reference SHALL be preserved rather than discarded.
+
+#### Scenario: Approving a document creates its declared tasks
+
+- **WHEN** a document declaring tasks is approved
+- **THEN** a task is created for each declared task
+- **AND** each is linked to the requirements it declared it serves
+- **AND** each is unassigned
+
+#### Scenario: Re-approving creates no duplicates
+
+- **WHEN** a document is revised and approved again
+- **THEN** tasks already created for its declared tasks are not duplicated
+- **AND** tasks declared for the first time are created
+
+#### Scenario: Work already under way is left alone
+
+- **WHEN** a document is approved again after a task it declared has been moved out of its entry
+  status
+- **THEN** that task's status and assignee are unchanged
+
+#### Scenario: A document declaring no tasks creates none
+
+- **WHEN** a document declaring no tasks is approved
+- **THEN** no tasks are created
+- **AND** the approval succeeds
+
+### Requirement: An integration that was skipped can be attempted again
+
+The system SHALL offer a way to attempt integration again for an approved task whose work has not been integrated, and SHALL name that way when it reports a skip the operator can put right.
+
+Integration is attempted when a task becomes approved. Where it is skipped, the cause is usually
+something the operator can then put right — a main branch that was never named, a checkout with
+uncommitted changes, a checkout parked on another branch. Restating the approval does not attempt it
+again, because restating a status is deliberately a no-op, so without this the remediation the
+system asked for accomplishes nothing.
+
+A skip SHALL NOT instruct the operator to approve the task again. The task is already approved by the
+time the skip is read, and following that instruction provably does nothing: the request succeeds,
+the status is unchanged, no attempt is recorded, and nothing is merged. An instruction that fails
+silently is worse than none, because it spends the operator's confidence as well as their time.
+
+Where a skip names a cause the operator can put right, it SHALL point at the remedy that works —
+retrying the integration, or the setting whose absence caused the skip.
+
+Retrying SHALL be available to the operator and to agents, and SHALL be refused for a task that is
+not approved.
+
+Retrying a task whose work has already been integrated SHALL be permitted and SHALL merge nothing.
+Whether work has reached the main line is a question about the repository, so it is asked again
+rather than inferred from what was previously attempted.
+
+Every retry SHALL be recorded exactly as a first attempt is.
+
+An agent able to retry SHALL be able to read what the attempts reported. An agent that can act on an
+outcome it cannot see is acting blind.
+
+#### Scenario: Work a skip left behind is merged on retry
+
+- **WHEN** an approved task's integration was skipped
+- **AND** the cause is put right and integration is retried
+- **THEN** the work is merged into the project's main branch
+- **AND** the retry is recorded
+
+#### Scenario: Retrying an unapproved task is refused
+
+- **WHEN** integration is retried for a task that is not approved
+- **THEN** the request is refused
+- **AND** nothing is merged
+
+#### Scenario: Retrying after a merge merges nothing
+
+- **WHEN** integration is retried for a task whose work is already on the main branch
+- **THEN** nothing is merged
+- **AND** the attempt is recorded as skipped because the work is already there
+
+#### Scenario: An agent reads and retries
+
+- **WHEN** an agent asks what a task's integration attempts reported
+- **THEN** it receives them
+- **AND** it may retry the integration
+
+#### Scenario: A skip does not send the operator back to approval
+
+- **WHEN** integration is skipped because the checkout has uncommitted changes
+- **THEN** the reason does not instruct the operator to approve the task again
+
+#### Scenario: A skip names the remedy that works
+
+- **WHEN** integration is skipped because the checkout has uncommitted changes or is on another
+  branch
+- **THEN** the reason directs the operator to retry the integration once the cause is put right
+
+### Requirement: Naming the main branch attempts the integrations that wanted one
+
+The system SHALL attempt integration again, when a project's main branch is set, for approved tasks whose most recent integration was skipped for want of one.
+
+Skipping for want of a main branch tells the operator to choose one in the project's settings.
+Discharging that instruction at the moment the operator follows it is what makes the sentence true;
+leaving it undischarged means the system asked for something and then ignored it.
+
+Only that cause SHALL be answered this way. Naming a branch says nothing about a checkout with
+uncommitted changes or one parked elsewhere, and a merge that failed outright wants a person rather
+than a repetition.
+
+Setting the branch SHALL succeed even where the attempt that follows it does not. The operator
+changed a setting, and that must stand or fall on its own terms.
+
+#### Scenario: Setting the branch merges the work that was waiting for it
+
+- **WHEN** an approved task's integration was skipped because no main branch was set
+- **AND** the operator sets the project's main branch
+- **THEN** the work is merged
+- **AND** the task is not reopened to achieve it
+
+#### Scenario: Other skips are left alone
+
+- **WHEN** an approved task's integration was skipped because the checkout had uncommitted changes
+- **AND** the operator sets the project's main branch
+- **THEN** that task's integration is not attempted again
+
+#### Scenario: The setting is saved even when the attempt fails
+
+- **WHEN** setting the main branch triggers an attempt that raises
+- **THEN** the main branch is still saved
+
+### Requirement: A task reports the requirement identifiers it was given
+
+A task's representation SHALL report the requirement identifiers linked to it, in the form those identifiers are supplied in.
+
+Identifiers are accepted when a task is created and when it is updated. Reporting them nowhere makes
+the field write-only, so a caller cannot confirm what was recorded, and anyone diagnosing why work
+did not merge sees a task that appears to be tied to nothing while the links that govern the merge
+exist.
+
+The identifiers reported SHALL be the same ones accepted, not the system's internal row identity, so
+that what is read back can be submitted again.
+
+Identifiers SHALL be reported in an order that reads as the operator numbered them, comparing the
+numeric parts of an identifier by value. Ordering them as plain text places an eleventh requirement
+between the first and the second, which reads as a defect in data that is correct and costs a
+diagnosis every time someone checks what a task is tied to.
+
+An identifier with no numeric part SHALL still be ordered deterministically. Identifiers are
+authored by the operator and nothing constrains their shape.
+
+References that resolved to no requirement SHALL NOT be reported among them. They are already
+reported as unresolved, and repeating them here would invite a caller to resubmit a reference that
+has already failed.
+
+#### Scenario: A task reports the identifiers it was created with
+
+- **WHEN** a task is created naming requirement identifiers
+- **AND** the task is read back
+- **THEN** it reports those identifiers
+
+#### Scenario: Unresolved references are not reported as links
+
+- **WHEN** a task names a requirement identifier that matches nothing
+- **THEN** the identifier is reported as unresolved
+- **AND** it is not reported among the task's linked identifiers
+
+#### Scenario: Identifiers are ordered by number
+
+- **WHEN** a task is linked to requirements numbered 1, 2 and 11
+- **THEN** they are reported in that order
+
+#### Scenario: An identifier without a number is still ordered
+
+- **WHEN** a task is linked to a requirement whose identifier has no numeric part
+- **THEN** the reported order is deterministic
+

@@ -10,9 +10,7 @@ to reconcile. An agent submits a structured payload and the Hub renders the mark
 a schema the agent cannot violate rather than a contract it is asked to honour. Phase is Hub-owned:
 the status in the file is a copy for whoever reads it, and approval is a decision only the operator
 can take.
-
 ## Requirements
-
 ### Requirement: A specification document is a file in the project working directory
 
 Specification documents SHALL be stored as files beneath the project's working directory and read
@@ -340,3 +338,194 @@ subscribers, so an open surface reflects it without a manual refresh.
 
 - **WHEN** a document's phase changes
 - **THEN** subscribers receive an event carrying the document and its new phase
+
+### Requirement: Evidence is footprinted against the work it describes
+
+An implementation footprint SHALL be captured from the working tree that holds the work the evidence is about, not from a fixed location, and SHALL name the commit that contains that work.
+
+Evidence recorded by an agent SHALL be footprinted from that agent's own checkout where the system
+has provisioned one. Evidence recorded by the operator SHALL be footprinted from the project's own
+checkout. Agents are given isolated checkouts on their own branches, so a footprint taken from the
+project directory names whatever the operator's checkout is on and never names the agent's work.
+
+Determining whether an agent has a checkout SHALL be answered by the version control system, not by
+the presence of a directory. A version control command run inside a directory the system does not
+track answers about the enclosing repository instead, so an abandoned or partially created directory
+would otherwise produce the project's own commit while appearing to have been checked.
+
+Establishing the footprint SHALL NOT create a checkout that does not already exist.
+
+Where no checkout for the agent exists, or the project is not under version control, the footprint
+SHALL fall back to the project's own directory rather than failing.
+
+Where the system commits an agent's work after the turn that produced it, the footprints that turn
+recorded SHALL be re-pointed at the resulting commit. Evidence is recorded while the work is still
+uncommitted, so the commit named at that moment is necessarily the one the turn started from — it
+does not contain the work, and on a new project it is frequently already on the main line, so the
+evidence reads as already integrated. Correcting the record after the commit exists is the only
+point at which the right answer is knowable.
+
+Re-pointing SHALL apply to every piece of evidence the turn recorded, whatever decision has since
+been taken on it. The stored commit is a fact about where the work is, not a judgement about the
+work; leaving a decided piece of evidence pointing at a commit that does not contain the work would
+make what gets merged depend on how quickly it was reviewed.
+
+Re-pointing SHALL re-answer whether the work has reached the main line, and SHALL be free to answer
+that it has not. It concerns a different commit from the one first recorded, so an answer carried
+over from the old commit would be an assertion about work that was never examined.
+
+Re-pointing SHALL establish a footprint for evidence that has none.
+
+#### Scenario: An agent's evidence names the agent's own commit
+
+- **WHEN** an agent records evidence while its checkout holds work not present in the project's
+  checkout
+- **THEN** the footprint names the agent's branch and the commit in that checkout
+- **AND** the footprint does not name the project checkout's commit
+
+#### Scenario: The operator's evidence names the project's checkout
+
+- **WHEN** the operator records evidence
+- **THEN** the footprint names the project checkout's branch and commit
+
+#### Scenario: A directory that is not a tracked checkout is not treated as one
+
+- **WHEN** an agent records evidence and a directory exists at the agent's checkout location that
+  version control does not track as that agent's checkout
+- **THEN** the footprint falls back to the project's own directory
+- **AND** no error is raised
+
+#### Scenario: Recording evidence creates no checkout
+
+- **WHEN** an agent with no provisioned checkout records evidence
+- **THEN** the footprint falls back to the project's own directory
+- **AND** no checkout is created
+
+#### Scenario: Evidence recorded mid-turn names the commit the turn produced
+
+- **WHEN** an agent records evidence for work it has not yet committed
+- **AND** the system commits that work when the turn ends
+- **THEN** the evidence names the commit the system made
+- **AND** it does not name the commit the turn started from
+
+#### Scenario: Evidence already decided is corrected too
+
+- **WHEN** a turn's evidence has been accepted before the turn's work was committed
+- **THEN** the accepted evidence names the commit containing the work
+- **AND** the decision recorded against it is unchanged
+
+#### Scenario: Correcting the commit re-answers integration
+
+- **WHEN** a turn's evidence is re-pointed at a commit that has not reached the main line
+- **THEN** the evidence reports that the work has not reached the main line
+- **AND** an earlier answer of reached is not carried over
+
+### Requirement: Whether work has reached the main line is re-answered
+
+The recorded answer to whether a footprint has reached the project's main line SHALL be re-evaluated
+after work is integrated, and SHALL NOT remain fixed at the value observed when the evidence was
+recorded.
+
+Work is demonstrated before it is integrated, so an answer captured at that moment is necessarily
+"not yet" for every piece of agent evidence. Left unrevised, a requirement would report as
+unintegrated permanently, including immediately after its work was merged.
+
+Re-evaluation SHALL consider the project's configured main branch where one is set, in preference to
+any inferred name.
+
+Re-evaluation SHALL be bounded, and SHALL revise only those answers that changed.
+
+#### Scenario: Integration updates the recorded answer
+
+- **WHEN** a requirement's work is integrated into the project's main branch
+- **THEN** coverage reports that requirement as integrated
+- **AND** it did not report so before the integration
+
+#### Scenario: Other work on the same branch is re-answered too
+
+- **WHEN** integrating one requirement's commit also brings an earlier commit on the same branch into
+  the main line
+- **THEN** the earlier work's recorded answer is revised as well
+
+### Requirement: Drift is assessed against the line of work a footprint names
+
+Drift SHALL be assessed by comparing a footprint against the line of work it names, and SHALL NOT be
+assessed by comparing every footprint against a single location.
+
+Comparing an agent's footprint against the project's main line would report every file that agent
+added as a change, making every demonstrated requirement a drift candidate. That the work is not on
+the main line is already reported as an integration answer; raising it again as drift asks the
+operator one question in two vocabularies.
+
+A footprint that names no line of work, or names one that no longer exists, SHALL raise nothing.
+Being unable to tell is not evidence of drift.
+
+Footprints of different kinds SHALL be compared against their own kind of observation.
+
+#### Scenario: Movement on the main line is not drift for work on a branch
+
+- **WHEN** the main branch changes and an agent's demonstrated work is unchanged
+- **THEN** no drift candidate is raised for that work
+
+#### Scenario: Movement on the branch is drift
+
+- **WHEN** the branch a footprint names changes after the evidence was accepted
+- **THEN** a drift candidate is raised
+
+#### Scenario: A vanished branch raises nothing
+
+- **WHEN** the branch a footprint names no longer exists
+- **THEN** no drift candidate is raised
+- **AND** no error is reported
+
+### Requirement: A renamed document carries its new subject
+
+Where a document is renamed to reflect its subject, that subject SHALL become the document's title.
+
+A document is renamed precisely because its subject became clear. Leaving the previous title in place
+means every surface that lists documents shows a name contradicting the document's own location until
+some later save happens to correct it.
+
+#### Scenario: Renaming updates the title
+
+- **WHEN** a document is renamed to a new subject
+- **THEN** its title is that subject
+- **AND** its path reflects that subject
+
+### Requirement: A declared task can state the name the board shows
+
+A document declaring a task SHALL be able to state that task's title, and the system SHALL use it when the task is created.
+
+A declared task carries a description of the work — a sentence of intent, written to be read in the
+document. A board shows names. Deriving one from the other produces a title that is the whole
+sentence, which is not a name, and a board of them cannot be scanned.
+
+Where no title is declared, the system SHALL derive one, and SHALL keep it short enough to read as a
+name. A derived title SHALL NOT end mid-word: a truncation that splits a word reads as a defect in
+the board rather than as an abbreviation.
+
+A description short enough to serve as a name SHALL be used unchanged. Shortening what is already
+short would be a change with no reader.
+
+#### Scenario: A declared title is used
+
+- **WHEN** a document declares a task with a title
+- **AND** the document is approved
+- **THEN** the created task carries that title
+
+#### Scenario: A title is derived when none is declared
+
+- **WHEN** a declared task states only its description
+- **THEN** the created task carries a title derived from it
+- **AND** that title is short enough to read as a name
+
+#### Scenario: A derived title does not split a word
+
+- **WHEN** a description is too long to serve as a title
+- **THEN** the derived title ends on a word boundary
+
+#### Scenario: A short description is kept as-is
+
+- **WHEN** a declared task's description is already short enough to be a name
+- **THEN** the created task's title is that description
+
