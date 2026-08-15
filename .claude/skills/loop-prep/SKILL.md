@@ -123,6 +123,12 @@ guard described in design decision D4, and mutation-check it" passes.
 Write `.claude/autonomous/STATE.json` — the file `/autonomous-session` and the driver both read.
 Every field earns its place:
 
+- `branch` — the **fresh, dated** branch the loop will cut, e.g. `autonomous/2026-08-15-<topic>`.
+  Never a reused fixed name: the last run's scratch would come with it.
+- `parent_branch` and `parent_sha` — **the branch the operator is actually working on**, captured
+  now. The loop must branch from there, not from `master` and not from a previous autonomous
+  branch, or it works against a world the operator will not recognise. It is also the answer to the
+  morning's first question, "what is this a diff against".
 - `queue` — ordered, each item executable, each with an id.
 - `current` and `next_action` — the first item, written for a stranger.
 - `limits` — the constraints, quoted.

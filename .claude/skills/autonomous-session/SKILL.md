@@ -91,12 +91,37 @@ mid-thought. Default set, adjust to what the user said:
 
 ## Step 3 — Cut the branch and open the log
 
+**Cut it fresh, from the branch the work is actually happening on, with a name that cannot collide.**
+
 ```bash
-git checkout -b autonomous_work        # or <topic>-autonomous if that name is taken
+git branch --show-current                       # this is the parent; confirm it is what you expect
+git status --short                              # must be clean before branching
+git checkout -b autonomous/$(date +%Y-%m-%d)-<topic>
 ```
 
-Never work on the parent branch. The point is that the user wakes up able to read a diff and throw
-it away without consequence.
+Three things matter here, and each has a reason:
+
+- **From the current working branch, not `master` and not a stale autonomous branch.** The loop needs
+  the code and the openspec state the operator has been building on; branching from anywhere else
+  gives it a world the operator does not recognise in the morning.
+- **Fresh, never reused.** A fixed name like `autonomous_work` gets picked up again on the next run,
+  and then the branch carries the last run's scratch as well as this one's. Measured: after one
+  overnight run and one driver test, `autonomous_work` held seven commits of which **two** were
+  wanted — the rest was smoke-test residue that had to be sorted out by hand before anything could
+  be merged. A dated name makes each run's diff self-contained.
+- **Clean tree first.** Branching over uncommitted work hands the loop changes it did not make and
+  cannot explain, and it will commit them under its own message.
+
+Record the parent and its SHA in `STATE.json` (`parent_branch`, `parent_sha`). The morning's first
+question is always "what is this a diff against", and a loop that has been running for hours should
+not make anyone work that out from `git log`.
+
+Never work on the parent branch itself. The point is that the operator wakes up able to read the
+diff and throw it away without consequence.
+
+**When the run ends**, the branch is disposable by design. Merging is the operator's decision, made
+awake — and it is usually a **cherry-pick of the few commits that carry real work**, not a merge,
+because an unattended run legitimately produces scratch alongside the work.
 
 Then create the two files this skill runs on.
 
@@ -109,7 +134,9 @@ rewritten at the end of every iteration:
 
 ```json
 {
-  "branch": "autonomous_work",
+  "branch": "autonomous/2026-08-15-loop9-findings",
+  "parent_branch": "hub-native-experience",
+  "parent_sha": "3ac9808",
   "started_at": "2026-08-15T00:40:00+01:00",
   "stop_at": "2026-08-15T10:00:00+01:00",
   "iteration": 4,
