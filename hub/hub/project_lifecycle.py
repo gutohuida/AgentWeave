@@ -104,7 +104,10 @@ class ProjectLifecycleService:
         if not target.is_absolute():
             raise ProjectPathError("new project directory must be an absolute path")
         if target.exists():
-            raise ProjectPathError("create requires a target that does not exist")
+            raise ProjectPathError(
+                "create requires a target that does not exist; "
+                "use open for a directory that already exists"
+            )
         parent = canonicalize_project_directory(
             target.parent,
             hub_data_directory=self.hub_data_directory,

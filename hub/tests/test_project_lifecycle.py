@@ -221,5 +221,5 @@ async def test_create_new_creates_exactly_one_directory_and_registers_it(app, tm
     assert charter_count and charter_count > 0
 
     async with async_session_factory() as session:
-        with pytest.raises(ProjectPathError, match="does not exist"):
+        with pytest.raises(ProjectPathError, match="use open for a directory that already exists"):
             await ProjectLifecycleService(session).create_new(target)
