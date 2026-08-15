@@ -122,13 +122,22 @@ New file `hub/tests/test_failed_run_returns_input.py`, shaped after
 Against a Hub restarted onto this code. `aw-loop8` (`proj-94f3f169`) is kept as the reproduction and
 needs no rebuild; its `victim` agent exists for exactly this.
 
-- [ ] 7.1 Trigger a Codex agent on a long turn and kill the `codex` process mid-turn. *Expect:* the
+- [x] 7.1 **PASSED 2026-08-15 00:28** on `aw-loop8`/`victim`. `run-1c13d03e` killed mid-turn; entry
+      returned at `delivery_attempts=1` and `run-b61a9ee9` started **18s later on its own** and
+      completed. Trigger a Codex agent on a long turn and kill the `codex` process mid-turn. *Expect:* the
       entry returns to `queued` with `delivery_attempts = 1`, and a new run starts **on its own** —
       no settings save, no project reopen.
-- [ ] 7.2 Kill it twice more. *Expect:* the second clears the conversation's provider session, and
+- [x] 7.2 **PASSED 2026-08-15 00:31.** Three kills on one trigger →
+      `run-be9bfde2`/`run-a4f14537`/`run-0c54da61`, entry `withdrawn` at `attempts=3` with reason
+      "delivery failed 3 times; the Hub stopped retrying", `provider_session_id` cleared to `None`,
+      `queue_entry_abandoned` persisted at `warn`, `victim` back to `idle`. Kill it twice more. *Expect:* the second clears the conversation's provider session, and
       the third abandons the entry with a stated reason that reaches the operator. The agent accepts
       new input throughout.
-- [ ] 7.3 Read the third run's prompt. *Expect:* it says the earlier attempt was cut off, and names
+- [x] 7.3 **PASSED, by a narrower route.** The composed prompt is not persisted, so the real
+      `entry-395c5db3` row was loaded from the live database and run through the production
+      `format_turn_prompt`: `Operator (hop 0) - delivery attempt 2; an earlier attempt was cut off
+      before it finished:`. Proves the function against a real row, not that the Hub called it —
+      though it is the only caller. Read the third run's prompt. *Expect:* it says the earlier attempt was cut off, and names
       the attempt.
 - [ ] 7.4 Does the abandoned entry read as "the Hub gave up" clearly enough to act on? Carried
       forward from `2026-08-14-the-seams-loop7-found` §9.4, which could not be reached to judge.

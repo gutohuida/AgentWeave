@@ -44,6 +44,7 @@ from ...codex_appserver import (
     TRANSPORT_SENTINELS,
     AppServerError,
     TurnOutcome,
+    readable_exit_code,
     uses_app_server,
 )
 from ...codex_appserver import approval_label as codex_approval_label
@@ -1012,7 +1013,8 @@ def _transport_failure_fields(exc: BaseException, conversation_id: Optional[str]
     """
     return {
         "error": str(exc),
-        "exit_code": getattr(exc, "exit_code", None),
+        # Rendered, not raw — this dict is broadcast for display. See `_runtime_failure_fields`.
+        "exit_code": readable_exit_code(getattr(exc, "exit_code", None)),
         "method": getattr(exc, "method", None),
         # Absent until 2026-08-14, so the tail could only surface by having been composed into
         # `str(exc)`. Of the three facts this dict was written to report — exit code, method,
@@ -1032,12 +1034,20 @@ def _runtime_failure_fields(outcome, lifecycle_event: str) -> dict:
 
     Only on a failure, and only for facts that exist: a completed run has nothing to explain, and
     a key that is present but null invites a reader to render "exit: null".
+
+    The status is **rendered**, not raw. Measured 2026-08-15 against a live Hub: this payload went
+    out as `runtime_exit_code: 4294967295` while `run.error` for the same run said `exit -1`, so one
+    death was described by three numbers. D3 put normalisation "where the value is composed for a
+    human" and kept recorded values raw — a broadcast payload is the former, not the latter, and
+    reading it as the latter is what produced the defect. `TurnOutcome.exit_code` and
+    `AppServerError.exit_code` still hold what the platform reported; every surface a person reads
+    now renders it.
     """
     if lifecycle_event != "run_failed":
         return {}
     fields = {}
     if getattr(outcome, "exit_code", None) is not None:
-        fields["runtime_exit_code"] = outcome.exit_code
+        fields["runtime_exit_code"] = readable_exit_code(outcome.exit_code)
     if getattr(outcome, "stderr_tail", None):
         fields["stderr_tail"] = outcome.stderr_tail
     return fields

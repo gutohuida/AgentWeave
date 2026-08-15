@@ -38,6 +38,10 @@ than rebasing a control-flow one.
 - [x] 3.2 Use it in `AppServerError.__init__` (`:524-526`) when composing the `(exit {code})` clause.
 - [x] 3.3 **Do not** normalise `self.exit_code` or `TurnOutcome.exit_code` — what is recorded stays
       what the platform reported (D3).
+- [x] 3.4 **Render at every surface a person reads, not only in the composed clause** — added
+      2026-08-15 after finding L9-1 live. `runtime_exit_code` and `_transport_failure_fields`'s
+      `exit_code` both go through `readable_exit_code`. Verified against a live Hub: consecutive
+      `run_failed` rows in `event_logs` read `4294967295` before the fix and `-1` after.
 
 ## 4. Deliver the stderr tail
 
@@ -119,10 +123,17 @@ than rebasing a control-flow one.
       approve again, which does nothing.
 - [ ] 9.2 Look at a failed run's `run_failed` event. *Expect:* one turn status, one runtime exit
       status, told apart, plus whatever the child wrote to stderr.
-- [ ] 9.3 Kill a Codex app-server and read the error. *Expect:* `-1`, not `4294967295`.
+- [x] 9.3 **PASSED, after one round trip.** First attempt: `run.error` read `exit -1` but the
+      `run_failed` payload carried `runtime_exit_code: 4294967295` — one death, three numbers
+      (finding L9-1). Fixed by rendering at the payload too, then re-killed a live app-server: the
+      two `run_failed` rows sit consecutively in `event_logs`, `4294967295` then `-1`. The unit
+      tests passed throughout both states, which is why this had to be driven rather than read.
 - [ ] 9.4 Judgement call: do two exit codes on one event read as informative or as noise? If noise,
       the answer is a UI change, not a revert — the facts are different and both are needed.
-- [ ] 9.5 Look at a task card linked to more than nine requirements. *Expect:* `FR-2` before `FR-11`.
+- [x] 9.5 **PASSED live 2026-08-15 01:02**, on `aw-loop9`. Approval created seven tasks from a
+      17-requirement specification; `task-7872c5d0` reports
+      `FR-1, FR-2, ... FR-16, FR-17` in numeric order. Before B6 that list would have read
+      `FR-1, FR-10, FR-11, ... FR-17, FR-2, FR-3`.
 
 ## 10. User test guide
 
