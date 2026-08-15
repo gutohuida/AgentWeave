@@ -15,6 +15,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import (
+    requirement_links,
     spec_completeness,
     spec_digest,
     spec_documents,
@@ -141,11 +142,15 @@ async def save_document(
         source=spec_index.SOURCE_HUB,
     )
 
+    board_served = await requirement_links.served_keys(session, document.id)
     return SaveResult(
         path=document.path,
         phase=document.phase,
         identifiers=identifiers,
-        blocking=[finding.to_dict() for finding in spec_completeness.check(payload)],
+        blocking=[
+            finding.to_dict()
+            for finding in spec_completeness.check(payload, board_served=board_served)
+        ],
         divergence=({"recorded": divergence[0], "found": divergence[1]} if divergence else None),
     )
 
@@ -270,7 +275,8 @@ async def propose(
     except PayloadError as exc:
         raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
 
-    findings = spec_completeness.check(payload)
+    board_served = await requirement_links.served_keys(session, document.id)
+    findings = spec_completeness.check(payload, board_served=board_served)
     if findings:
         return [finding.to_dict() for finding in findings]
 

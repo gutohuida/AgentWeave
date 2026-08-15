@@ -279,6 +279,47 @@ async def tasks_for_requirement(session: AsyncSession, requirement_id: str) -> L
     return list(result.scalars().all())
 
 
+async def served_keys(session: AsyncSession, document_id: str) -> set:
+    """Document-scoped keys of requirements a hand-made board task already links to.
+
+    `SpecRequirement.key` is the document's own handle — the same vocabulary `spec_completeness`
+    checks against — so this is directly comparable to a payload requirement's `key`, no identifier
+    translation needed. Used to credit a hand-created board task at `propose` time, so the check does
+    not require the document's own `tasks[]` to restate a decomposition that already exists on the
+    board.
+
+    Scoped to *hand-made* tasks (`Task.spec_task_key IS NULL`) on purpose. A task `materialise()`
+    itself created for an earlier revision of this same document has a key and already counts toward
+    `tasked` on its own declared entry; crediting it here too would let one declared task silently
+    excuse a sibling entry from ever being materialised.
+    """
+    result = await session.execute(
+        select(SpecRequirement.key)
+        .join(TaskRequirementLink, TaskRequirementLink.requirement_id == SpecRequirement.id)
+        .join(Task, Task.id == TaskRequirementLink.task_id)
+        .where(SpecRequirement.document_id == document_id, Task.spec_task_key.is_(None))
+        .distinct()
+    )
+    return set(result.scalars().all())
+
+
+async def hand_made_requirement_ids(session: AsyncSession, project_id: str) -> set:
+    """Requirement ids linked by a task that `spec_tasks.materialise` did not create.
+
+    Neither `TaskCreate` nor `TaskUpdate` exposes `spec_task_key` — it is set nowhere but
+    `materialise()` — so a null value is the reliable signal that a task exists independently of any
+    document's own declared decomposition. `materialise()` uses this to skip minting a duplicate for
+    a declared entry whose requirements a hand-made task already covers, without also refusing to
+    materialise the document's own evolving decomposition against itself.
+    """
+    result = await session.execute(
+        select(TaskRequirementLink.requirement_id)
+        .join(Task, Task.id == TaskRequirementLink.task_id)
+        .where(TaskRequirementLink.project_id == project_id, Task.spec_task_key.is_(None))
+    )
+    return set(result.scalars().all())
+
+
 async def linked_requirement_ids(session: AsyncSession, project_id: str) -> set:
     result = await session.execute(
         select(TaskRequirementLink.requirement_id).where(

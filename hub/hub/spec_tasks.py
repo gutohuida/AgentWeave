@@ -133,12 +133,38 @@ async def materialise(
     by_identifier = {row.identifier: row for row in rows}
     by_key = {row.key: row for row in rows}
 
+    # Requirements a *hand-made* task already serves — one `spec_task_key IS NULL`, so not a task
+    # this document's own decomposition produced. An entry whose every named requirement is already
+    # covered that way restates work that exists rather than declaring work that does not;
+    # materialising it would be the duplication `spec_completeness.check()`'s `board_served` credit
+    # exists to make unnecessary. Deliberately not scoped to tasks *this* materialise call creates
+    # (those carry a key and are tracked by `existing_keys` instead), so a later entry in the
+    # document's own decomposition naming a requirement an earlier declared task already serves is
+    # still created — see `test_re_approving_creates_no_duplicates`.
+    already_served = await requirement_links.hand_made_requirement_ids(session, document.project_id)
+
     created: List[Task] = []
     for entry in declared:
         if not isinstance(entry, dict):
             continue
         key = entry.get("key")
         if not isinstance(key, str) or not key or key in existing_keys:
+            continue
+
+        wanted = entry.get("requirements")
+        requirements: List[SpecRequirement] = []
+        unresolved: List[str] = []
+        for named in wanted if isinstance(wanted, list) else []:
+            if not isinstance(named, str) or not named:
+                continue
+            row = by_key.get(named) or by_identifier.get(identities.get(named, ""))
+            if row is not None:
+                requirements.append(row)
+            else:
+                unresolved.append(named)
+
+        if requirements and not unresolved and all(row.id in already_served for row in requirements):
+            existing_keys.add(key)
             continue
 
         description = entry.get("description") or ""
@@ -156,18 +182,6 @@ async def materialise(
         )
         session.add(task)
         await session.flush()
-
-        wanted = entry.get("requirements")
-        requirements: List[SpecRequirement] = []
-        unresolved: List[str] = []
-        for named in wanted if isinstance(wanted, list) else []:
-            if not isinstance(named, str) or not named:
-                continue
-            row = by_key.get(named) or by_identifier.get(identities.get(named, ""))
-            if row is not None:
-                requirements.append(row)
-            else:
-                unresolved.append(named)
 
         if requirements:
             await requirement_links.link(session, task, requirements, actor=actor)

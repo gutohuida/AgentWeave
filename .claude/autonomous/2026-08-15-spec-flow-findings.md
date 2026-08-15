@@ -203,6 +203,15 @@ real board task whose `requirement_ids` cover the requirement, so the two paths 
 silently coexisting. (b) is more work but is the one that actually prevents the duplication rather
 than just explaining it. Filed for `q4`.
 
+**Fixed 14:0x** (both (a) and (b), see `2026-08-15-overnight-catchup.md`). `spec_completeness.check()`
+now takes a `board_served` set of requirement keys a hand-made task (`Task.spec_task_key IS NULL`)
+already links to, and skips `requirement_without_task` for them. `spec_tasks.materialise()` mirrors
+the same signal to skip minting a duplicate for a declared entry whose requirements are already fully
+covered by a hand-made task. The wording (a) landed too: the message now says "is in neither the
+document's own tasks[] nor a task already on the board." Both driven against the real reproduction
+this section describes, as regression tests in `hub/tests/test_spec_board_task_convergence.py`
+(confirmed failing on the pre-fix code, then passing).
+
 ### Minor: minting an operator API key requires reading the database directly
 
 There is no CLI command or documented HTTP bootstrap to obtain `operator_credentials.id` outside the

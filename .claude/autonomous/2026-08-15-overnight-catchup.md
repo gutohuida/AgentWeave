@@ -38,15 +38,14 @@ rows with a genuinely correct catch: a conflict between two `MUST` requirements 
 landed on `master`, verified independently with plain `git log`/`git branch --contains` outside the
 Hub entirely.
 
-**Three defects filed for the fix queue (`q4`), two now fixed**: approving a task gave no signal when
-(a) a requirement it serves has rejected evidence sitting under it — **fixed this iteration** — or
-(b) the merge that approval promises ("approving is what merges it") was actually skipped — **fixed
-13:29**. Both were silent successes that should not have been silent. The third, (c), is a real
-duplication bug rather than a signal gap: a task board task with the right `requirement_ids` does not
-satisfy `propose`'s completeness check — only the document's own declared `tasks[]` does — so nothing
-stops an operator or agent hand-creating board tasks before approval and then getting a second,
-overlapping set minted on approval, with nothing reconciling the two. Not started — see
-`next_action`.
+**All three `q4` defects are now fixed.** Approving a task gave no signal when (a) a requirement it
+serves has rejected evidence sitting under it — fixed 13:43 — or (b) the merge that approval promises
+("approving is what merges it") was actually skipped — fixed 13:29. Both were silent successes that
+should not have been silent. The third, (c), was a real duplication bug rather than a signal gap: a
+task board task with the right `requirement_ids` did not satisfy `propose`'s completeness check —
+only the document's own declared `tasks[]` did — so nothing stopped an operator or agent
+hand-creating board tasks before approval and then getting a second, overlapping set minted on
+approval, with nothing reconciling the two. Fixed this iteration — see below.
 
 **One genuine bug found and fixed earlier**, in the change that exists to prevent exactly it: the
 tool list told agents `submit_spec_document(path, document)`, a signature the tool has never had.

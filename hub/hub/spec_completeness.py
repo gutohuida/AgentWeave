@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import AbstractSet, List, Optional
 
 from .spec_payload import SpecPayload
 
@@ -60,13 +60,22 @@ def _text_fields(payload: SpecPayload) -> List[tuple]:
     return fields
 
 
-def check(payload: SpecPayload) -> List[Finding]:
+def check(
+    payload: SpecPayload, *, board_served: Optional[AbstractSet[str]] = None
+) -> List[Finding]:
     """Everything wrong with this document, not just the first thing.
 
     Reporting one problem per attempt turns a five-problem document into five
     round trips.
+
+    `board_served` is the set of requirement keys a real task-board task already links to,
+    independent of what the document's own `tasks[]` declares. Without it, an operator or agent who
+    hand-creates board tasks before proposing gets `requirement_without_task` anyway, and then
+    `materialise()` mints a second, overlapping set of tasks on approval — two decompositions with
+    nothing reconciling them. The document's own `tasks[]` and the real board converge here instead.
     """
     findings: List[Finding] = []
+    served = board_served or frozenset()
 
     if not payload.requirements:
         findings.append(
@@ -99,12 +108,13 @@ def check(payload: SpecPayload) -> List[Finding]:
                     f"{requirement.key!r} has no acceptance criterion, so nothing demonstrates it",
                 )
             )
-        if requirement.key not in tasked:
+        if requirement.key not in tasked and requirement.key not in served:
             findings.append(
                 Finding(
                     "requirement_without_task",
                     where,
-                    f"{requirement.key!r} has no task, so nothing implements it",
+                    f"{requirement.key!r} is in neither the document's own tasks[] nor a task "
+                    "already on the board, so nothing implements it",
                 )
             )
 
