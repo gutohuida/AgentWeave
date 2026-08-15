@@ -1,10 +1,17 @@
 # Handoff: the autonomous driver is proven, six changes archived, and two loop skills exist
 
-**Date:** 2026-08-15T11:19+0100 · **Branch:** autonomous_work · **HEAD:** `ffb8d98`
+**Date:** 2026-08-15T11:28+0100 (updated in place from 11:19) · **Branch:** hub-native-experience ·
+**HEAD:** `8b0852f`
 **Agent:** Claude Opus 5 (1M context) (Claude Code)
 **Previous handoff:** `.claude/handoffs/handoff-0046-2026-08-15-1040-the-loop-that-died-and-the-skill-that-survives-it.md`
 **Status:** **chunk complete.** Everything committed and pushed, 0 unpushed, tree clean apart from
 one pre-existing stray file. No work is half-done.
+
+> **Updated after the first version.** The original was written from `autonomous_work` and told the
+> next session to cherry-pick from it. **That has now been done and the branch is deleted** — so the
+> instruction, the branch-layout table and one open question were all obsolete within ten minutes.
+> Everything below reflects the state after that cleanup. The obsolete parts are rewritten rather
+> than annotated, because a handoff that argues with itself is worse than one that is simply current.
 
 ## Goal
 
@@ -33,23 +40,29 @@ skills exist so the next long run does not lose its work to a session ending.
    `STATE.json`, works, commits and pushes. Two real iterations ran. **Task is now unregistered.**
 4. **`/loop-prep` created** (`ffb8d98`) and `/autonomous-session` wired to it.
 
-### Branch layout — read this before merging anything
+### Branch layout — resolved, nothing outstanding
 
-`autonomous_work` is **7 commits ahead** of `hub-native-experience`. They are not all wanted:
+Everything worth keeping is on `hub-native-experience`. **`autonomous_work` has been deleted, local
+and remote.**
 
-| commit | keep? |
+Three commits were cherry-picked across, in order — deliberately, not merged, because the branch
+also held four smoke-test commits and `1f79918`, whose message described three fixes it did not
+contain:
+
+| now on `hub-native-experience` | was |
 |---|---|
-| `81bd5e0` seed STATE.json | **no** — smoke-test scaffolding |
-| `53e469b` Driver smoke test: iteration 1 | **no** — driver-written test residue |
-| `1f79918` Fix the three defects… | **partially** — its message is right but it contains only a file deletion (see Dead ends) |
-| `73ecd70` Commit the driver script changes that 1f79918's message described | **YES — this is the real fix** |
-| `122e37b` Driver smoke test: iteration 2 | **no** |
-| `3396582` Record iteration 2's out-of-scope reconciliation | **no** |
-| `ffb8d98` Add the loop-prep skill… | **YES** — also deletes the smoke-test residue |
+| `4ca0c01` Commit the driver script changes that 1f79918's message described | `73ecd70` — **the real driver fix** |
+| `2d60f61` Add the loop-prep skill, and remove the smoke-test residue | `ffb8d98` |
+| `c9b9772` Record this session's handoff | `1226259` — would have been stranded and lost |
+| `8b0852f` Say what an autonomous branch is cut from, and cut it fresh | written after, direct on this branch |
 
-Recommended: cherry-pick `73ecd70` and `ffb8d98` onto `hub-native-experience`, leave the rest on
-`autonomous_work` as the record. Do **not** plain-merge — it would bring `driver-proof.md` and a
-smoke-test `STATE.json` onto the main line.
+Verified safe before deleting: `git cherry hub-native-experience autonomous_work` reported
+`73ecd70` and `1226259` as already applied, and `git diff --stat` between the branches showed the
+only remaining difference was that `autonomous_work` carried **older** copies of the two skill
+files. Nothing unique of value was lost. The discarded SHAs are listed above if they are ever
+wanted; they survive in the local reflog for the usual 90 days.
+
+**This cleanup is why `8b0852f` exists** — see Key decision 8.
 
 ### The three driver defects, all fixed and verified
 
@@ -84,8 +97,8 @@ untracked at session start**, named in the last six handoffs. Not the live datab
 | `openspec/specs/{task-lifecycle-governance,local-project-workspace,agent-capability-plane,agent-configuration,agent-context-onboarding,agent-run-sandboxing,project-environment-settings,spec-document-authority,agent-conversation-workspace,runtime-diagnostics}/spec.md` | updated by the archive operations. |
 | `.claude/skills/autonomous-session/scripts/install-driver.ps1` | resolves stop time to an absolute instant; adds the gitignore line. Finished. |
 | `.claude/skills/autonomous-session/scripts/run-iteration.ps1` | takes `-StopAt` absolute; BOM-free logging. Finished. |
-| `.claude/skills/autonomous-session/SKILL.md` | Step 1 now skips its interview when `STATE.json` exists. Finished. |
-| `.claude/skills/loop-prep/SKILL.md` | **new**. Finished. |
+| `.claude/skills/autonomous-session/SKILL.md` | Step 1 skips its interview when `STATE.json` exists; **Step 3 rewritten** to say what the branch is cut from, that it must be fresh and dated, that the tree must be clean, and that merging back is usually a cherry-pick. `STATE.json` example gained `parent_branch`/`parent_sha`. Finished. |
+| `.claude/skills/loop-prep/SKILL.md` | **new**; seeds `branch`, `parent_branch` and `parent_sha`. Finished. |
 | `.gitignore` | `+ .claude/autonomous/driver.log`. |
 | `.claude/autonomous/{STATE.json,driver-proof.md}` | created then **deleted** — smoke-test scaffolding. Gone deliberately. |
 | `.claude/autonomous/2026-08-15-overnight-log.md` | unchanged this session. |
@@ -111,6 +124,18 @@ untracked at session start**, named in the last six handoffs. Not the live datab
    contamination `/e2e-loop` warns about and that loop 9 suffered.
 7. **Smoke-test `STATE.json` and `driver-proof.md` deleted.** A stale file saying
    `"purpose": "DRIVER SMOKE TEST"` would be read as a real queue by the next loop.
+8. **An autonomous branch is cut fresh, dated, from the branch the work is on** — added after the
+   operator asked what the next loop should clone from. The skill previously said "cut an autonomous
+   branch" without saying from what or that it must be new, and this session paid for both gaps: I
+   reused the existing `autonomous_work` instead of branching fresh, and it reached seven commits of
+   which two were wanted. Rejected: keeping a single long-lived `autonomous_work`, which is what
+   produced the mess. `parent_branch`/`parent_sha` are now recorded in `STATE.json` because "what is
+   this a diff against" is the first question anyone asks in the morning.
+9. **`autonomous_work` deleted rather than kept as a record.** Its unique content was four
+   smoke-test commits and one misleading commit; the record that matters is this handoff and
+   `.claude/autonomous/2026-08-15-overnight-log.md`, both of which are on the main line. Rejected:
+   keeping the remote branch, which would leave a stale `STATE.json` and `driver-proof.md` for a
+   future loop to find and believe.
 
 ## Constraints and user directives (verbatim)
 
@@ -121,6 +146,8 @@ untracked at session start**, named in the last six handoffs. Not the live datab
   the information that we know from the latest handoffs and at what point we are in the development
   of the current project to see if we need to create any artifact, do any exploration, any spec,
   anything in order to have a smoother loop"**
+- **"For the next loop iteration it should be cloned from the branch that we're working on. Should
+  we add that to the skill?"** — answered yes; see Key decision 8.
 - On next work, the operator chose **"Archive the six outstanding openspec changes"** over proving
   the driver, the explorations, and finishing loop 9.
 
@@ -197,6 +224,12 @@ untracked at session start**, named in the last six handoffs. Not the live datab
 - **BOM removal:** `head -c 3 driver.log` → `202`.
 - Both `.ps1` scripts parse clean via `Parser::ParseFile`.
 
+**Ran after the cherry-pick, to confirm the rebuilt branch is sound:**
+- `pytest hub/tests/test_task_integration.py` — **22 passed** on `hub-native-experience`.
+- Both `.ps1` scripts parse clean via `Parser::ParseFile` (**note:** run this from the repo root;
+  from `hub/` the relative paths resolve to nothing and it reports a spurious FAIL).
+- `.gitignore:145` carries `.claude/autonomous/driver.log`; both skills present.
+
 **NOT run, and it matters:**
 - **The full `pytest hub/tests/` has not been run since `55bfadb`.** `cb26717` changed
   `test_task_integration.py` (that file passes, 22/22) and nothing else touches Python behaviour,
@@ -211,11 +244,12 @@ untracked at session start**, named in the last six handoffs. Not the live datab
 
 ## Git state
 
-Branch `autonomous_work`, HEAD **`ffb8d98`**, working tree **clean** except `?? hub/agentweave.db`,
-**0 unpushed commits**.
+Branch `hub-native-experience`, HEAD **`8b0852f`**, working tree **clean** except
+`?? hub/agentweave.db`, **0 unpushed commits**.
 
-`hub-native-experience` is at `3ac9808`, pushed, and is **7 commits behind** `autonomous_work`. See
-the branch-layout table above — cherry-pick, do not merge.
+**`autonomous_work` no longer exists** — deleted local and remote after its two worthwhile commits
+were cherry-picked. There is no autonomous branch open; the next loop cuts a fresh dated one from
+`hub-native-experience`.
 
 **Live environment:** Hub on `:8010`, detached via WMI, `200` at 11:19. The
 `AgentWeaveAutonomousSession` Scheduled Task is **not registered** (unregistered after the test).
@@ -229,11 +263,7 @@ the branch-layout table above — cherry-pick, do not merge.
 
 ## Next steps
 
-1. **Cherry-pick `73ecd70` and `ffb8d98` onto `hub-native-experience`**, in that order:
-   `git checkout hub-native-experience && git cherry-pick 73ecd70 ffb8d98`. `ffb8d98` deletes
-   `.claude/autonomous/STATE.json` and `driver-proof.md`, which do not exist on that branch — expect
-   and resolve that conflict by keeping them absent. Then push.
-2. **Write the L9-2 exploration** at
+1. **Write the L9-2 exploration** at
    `openspec/explorations/2026-08-15-nothing-asks-whether-the-artefact-is-usable.md`. Evidence is
    already gathered in `.claude/autonomous/2026-08-15-overnight-log.md`: a fresh `git clone` of
    `C:\Users\huida\Documents\aw-loop9\.agentweave\worktrees\builder` fails with
@@ -242,21 +272,20 @@ the branch-layout table above — cherry-pick, do not merge.
    the missing line** — it is that the operator asked for a clean-checkout run, the builder's claim
    was conditional and literally true, and the verifier said *"I'll treat packaging separately from
    test correctness"*. Every actor behaved correctly and the artefact is unusable.
-3. **Triage the 14 in-flight openspec changes.** Fourteen simultaneously is itself a signal; some
+2. **Triage the 14 in-flight openspec changes.** Fourteen simultaneously is itself a signal; some
    are likely done-but-unarchived, some possibly abandoned. `2026-08-13-the-tool-list-matches-the-tools`
    is the obvious outlier at 6 done / 17 open.
-4. **Run the full suites once** to convert the inference above into a measurement.
+3. **Run the full suites once** to convert the inference above into a measurement.
 
 ## Open questions for the user
 
-1. **Which next?** The operator's stated preference last time was archiving; that is done. My
-   recommendation is L9-2, then loop 9's merge half as the way to test whatever it concludes.
+1. **Which next?** Archiving is done and the branch cleanup is done. My recommendation is L9-2,
+   then loop 9's merge half as the way to test whatever it concludes.
 2. **The judgement calls archived unanswered** — worth resurrecting any? The two I would actually
    want answered: *does an abandoned queue entry read as "the Hub gave up" clearly enough to act
    on?* and *do two exit codes on one event read as informative or as noise?* Both concern surfaces
    built this week that nobody has used in anger.
-3. **Delete `autonomous_work` after cherry-picking?** It would then hold only smoke-test residue.
-4. Carried, still unanswered: should `.claude/handoffs/` stay tracked (**now 133 files**)?
+3. Carried, still unanswered: should `.claude/handoffs/` stay tracked (**now 133 files**)?
 
 ## Read on resume
 
