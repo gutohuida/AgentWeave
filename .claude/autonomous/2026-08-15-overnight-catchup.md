@@ -19,11 +19,49 @@ under `decisions_for_user`.
 
 | | question |
 |---|---|
-| **d1** | The ~40 human-only judgement calls. `2026-08-15-judgement-evidence.md` now holds the artefacts so you can answer them without re-driving the product. **This is what unblocks archiving 13 of the 14 in-flight changes.** |
-| **d2** | `2026-07-30-hub-native-experience` has 69 open tasks and looks partly superseded. Drop, split, or resume? |
+| **d1** | The ~40 human-only judgement calls. `2026-08-15-judgement-evidence.md` now holds the artefacts so you can answer them without re-driving the product. **This is what unblocks archiving 13 of the 14 in-flight changes.** `2026-08-15-triage.md` now confirms exactly which 13 — see below. |
+| **d2** | `2026-07-30-hub-native-experience` has 69 open tasks and looks partly superseded. `2026-08-15-triage.md` now has a concrete proposal: don't resume the whole thing, don't archive it either — map section 14 to its successors (nobody has yet), then split what's genuinely still open in 13/14/15 into new change(s), then archive the umbrella. |
 | **d3** | Carried: does an abandoned queue entry read as "the Hub gave up"? Do two exit codes on one event read as informative or noise? |
 | **d4** | Carried: should `.claude/handoffs/` stay tracked, now 134 files? |
 | **d5** | New: the spec flow's own review step caught a real conflict between two `MUST` requirements (FR-7 vs FR-9) in the test document. Worth a wording decision even though the document itself is throwaway — full text in `STATE.json`. |
+
+---
+
+## 14:54 — driver iteration: q5, the 14-change triage
+
+`q4` is fully closed (three defects, three regression tests) and the branch turned to `q5`:
+triage the 14 in-flight `openspec` changes, one line each — archive, resume, or drop — into the new
+`2026-08-15-triage.md`. Read every open task in every `tasks.md` in full (not just counted them),
+same discipline `q1` established: a checkbox count is not evidence.
+
+**Result: 13 of the 14 have nothing left for a loop to do.** Every open task in them is a human
+judgement call (things like "is the placeholder pleasant?", "does the rename feel timely?") — code
+is done, tests pass, and the only thing standing between them and the archive is you answering **d1**
+in `2026-08-15-judgement-evidence.md`. One new gap surfaced while cross-checking: that file is
+missing `the-spec-tool-reaches-the-agent` entirely — not answered, not even listed as pending. Flag
+for whoever runs the next judgement-evidence session.
+
+**One change, `2026-08-12-hub-owns-the-spec-document`, has two small non-judgement items** among its
+8 open tasks: 12.3 (bind the spec charter by default) was *deliberately* left uncoded because the
+obvious implementation makes "no charter bound" unreachable during spec work — it needs a decision
+on `D9` before it needs a line of code. 16.8 (refusing event modification/deletion) is a documented
+test-only gap: no code path offers either action, so there's nothing to fix, only an assertion of
+absence to write.
+
+**`2026-07-30-hub-native-experience` (the big one, 69 open of 188) got the close read its queue entry
+asked for.** Its own `tasks.md` already carries five rounds of dated reconciliation notes written by
+earlier work (2026-08-02 through 2026-08-12) — sections 9–12 are fully closed by successor changes
+already sitting in `archive/`, left unchecked on purpose ("the reconciliation rule"). Section 13 is
+mostly done, with three items (13.4 scope enforcement, 13.9 single-agent Team-block omission, 13.11
+composition inspection) confirmed still genuinely missing from the tree. Section 14 is marked
+superseded but — unlike 9–13 — nobody has ever mapped its 19 items one-by-one to whichever
+2026-08-13 change actually delivered each; that mapping pass is the concrete next step before **d2**
+can be decided. Section 15 (task-lifecycle approval gates in the composer) is confirmed genuinely
+open — permission/question cards exist, task-lifecycle decisions still don't route through them.
+Full detail and the `d2` proposal in `2026-08-15-triage.md`.
+
+**No archiving was done this iteration** — `next_action` was explicit not to, pending your read of
+`d1`/`d2`. Next queue item is `q6`, QoL improvements, once picked up.
 
 ---
 
