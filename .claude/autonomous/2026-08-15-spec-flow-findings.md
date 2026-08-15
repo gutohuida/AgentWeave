@@ -322,3 +322,53 @@ requirement `admission-decision` (FR-1, FR-2, FR-3, FR-4, FR-7, FR-9): 5 of 6 re
 and merged to `master` in the real `notify-window` repository; FR-9 correctly rejected pending a
 wording fix for its conflict with FR-7. `task-0d3c8cb5` (digest delivery) and `task-553c2c37`
 (no-notification-lost) remain `pending` — not driven this iteration, left for the next one.
+
+---
+
+## Continued, next iteration: `task-0d3c8cb5` driven, `verifier` catches a second real gap, and the q4 fixes are confirmed live for the first time
+
+`builder` triggered on `task-0d3c8cb5` (FR-5 `deferred-notifications-bundle-into-single-digest`,
+FR-8 `empty-window-produces-no-digest`), `run-03598b4b`, completed, two `awaiting` evidence rows.
+`verifier` triggered to judge them (`run-ed988ace`): **both rejected.** Full reasoning, quoted from
+`/spec/evidence/{id}/reviews` (the list endpoint doesn't carry it — see the new finding below):
+
+> "The implementation has no quiet-window-end trigger or delivery-event mechanism, and the tests
+> neither model the window ending nor observe emitted delivery events. Returning `None` from an
+> unintegrated helper is insufficient evidence for the requirement's temporal/event behavior."
+
+`builder` wrote `DigestQueue.defer()`/`flush()` — real batching and clearing logic, all 20 tests
+pass — but never wired it to an actual quiet-window-end event, so it demonstrates the data
+structure, not the requirement. This is the second time `verifier` has caught a real gap between
+what a requirement asks for and what evidence actually shows (first was FR-7/FR-9, `d5`), on a
+different failure axis: not a spec contradiction this time, a spec/implementation gap that passing
+tests fully obscured.
+
+### Finding: `list_evidence` doesn't carry the rejection reason — same silent shape as the two things `q4` already fixed
+
+`GET /project/spec/evidence` returns `review_state: rejected` but not *why*. The reason lives on
+`EvidenceReview.reason`, written by `requirement_evidence.decide()` and readable only via a second
+call, one per row, to `GET /spec/evidence/{id}/reviews`. A reviewer scanning a page of evidence to
+understand what's blocking a task has to make N+1 calls to see why any of it was rejected. Same
+"the signal exists, but not where you're already looking" shape as the two things this session
+already fixed for `approve`'s response (`60f0b3f`, `eda02cf`). Filed for the next `q6` iteration —
+not fixed this session, no code changed.
+
+### The two already-shipped q4 fixes, confirmed live for the first time
+
+Moved `task-0d3c8cb5` `under_review` → `approved` specifically to exercise `has_rejected_evidence`
+and the merge-outcome signal against real rejected evidence. Neither fired — both came back
+`null`/absent. Not a regression: the Hub process serving these calls had been running since the
+12:21 handover and had never been restarted, so it was serving `a40ac5b`, six commits behind both
+fixes. Restarted the Hub and repeated the check: `has_rejected_evidence: true, count: 1` on both
+FR-5 and FR-8, `latest_integration: {outcome: "skipped", reason: "no accepted evidence names a
+commit, so there is nothing to merge", ...}`. Both fixes are real and correct — this only ever
+tested the *driving process's* assumption that a running Hub is a current one. Recorded as a
+`dead_end` in `STATE.json`: this Hub does not hot-reload, and nothing before this had actually
+re-verified any of the session's `hub/hub/` fixes against a live server since the interactive
+handover.
+
+### Net for `task-0d3c8cb5`
+
+Approved with both requirements' only evidence `rejected` and the merge correctly skipped — the
+same "sketch rigor blocks nothing, and says so" outcome as `task-1f82d976`'s FR-9, now confirmed
+end to end on a second task. `task-553c2c37` (no-notification-lost) remains `pending` and undriven.

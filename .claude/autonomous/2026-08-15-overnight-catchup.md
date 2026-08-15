@@ -24,6 +24,59 @@ under `decisions_for_user`.
 | **d3** | Carried: does an abandoned queue entry read as "the Hub gave up"? Do two exit codes on one event read as informative or noise? |
 | **d4** | Carried: should `.claude/handoffs/` stay tracked, now 134 files? |
 | **d5** | New: the spec flow's own review step caught a real conflict between two `MUST` requirements (FR-7 vs FR-9) in the test document. Worth a wording decision even though the document itself is throwaway — full text in `STATE.json`. |
+| **d6** | New: findings.md's minted-directory-name finding (66+ char slugs). No platform-aware constant exists to derive a smaller cap from without tuning to one machine or breaking under Docker (see 16:02 entry) — pick a fixed UX-judgement cap, or leave the cosmetic Windows nuisance alone. Full reasoning in `STATE.json`. |
+
+---
+
+## 16:02 — driver iteration: finding 4 punted, task-0d3c8cb5 driven, and a real environment bug caught along the way
+
+**finding 4 (66-char minted slug), punted to `d6`.** Looked for a principled derivation before
+giving up on one: `api/v1/spec.py::_mint_document_path` does hold `workspace.root`, an absolute
+`Path`, which could in theory bound the slug by the real remaining path headroom. It doesn't
+survive contact with the two deployment modes this product actually has — in Docker mode
+`workspace.root` is a container-visible path under `AW_WORKSPACE_ROOT` with no fixed relationship
+to the *host* path length, so a bound derived from it would be right on native Windows and
+silently wrong (too loose or too strict) under Docker, and the Hub cannot always tell which mode
+produced the workspace it is holding. That is exactly the per-machine tuning `limits` forbids, just
+laundered through a variable instead of a literal. Recorded as `d6` with both real options (accept
+a fixed UX-judgement cap, or decide it's a cosmetic Windows-only nuisance not worth touching).
+
+**Drove `task-0d3c8cb5`** (digest delivery, FR-5/FR-8) in `aw-loop10` for one more first-hand
+friction pass, per the fallback in the prior `next_action`. Triggered `builder`
+(`run-03598b4b`, 11×10s poll to `completed`) — it implemented `DigestQueue.defer()`/`flush()` and
+recorded two `awaiting` evidence rows. Triggered `verifier` (`run-ed988ace`) to judge them: **both
+rejected**, and the reasoning (fetched from the per-row `/spec/evidence/{id}/reviews` endpoint,
+since the list view doesn't carry it — see below) is exactly as sharp as the FR-9 rejection two
+iterations ago — the implementation is a manually-invoked helper with no actual quiet-window-end
+trigger or delivery event, so passing tests don't demonstrate the requirement's *temporal* claim.
+Second time the review step has caught a real gap nobody else did. Moved the task
+`under_review` → `approved` to exercise the two already-shipped q4 fixes for real.
+
+**They didn't fire.** `has_rejected_evidence` and `rejected_evidence_count` came back `null` on
+both requirement links, and `latest_integration` was entirely absent, despite both fixes
+(`60f0b3f`, `eda02cf`) being committed hours ago and covered by passing regression tests. Traced it:
+the Hub process (`PID 24412`) had been running since the 12:21 interactive handover and was **never
+restarted** — `uvicorn hub.main:app` with no `--reload` — so it had been silently serving `a40ac5b`
+the entire session while 6 commits touching `hub/hub/` (`95f8fa4` `eda02cf` `60f0b3f` `b10b607`
+`309fef4` `fcedde6`) landed around it. Every "verified live against the running Hub" claim this
+session for anything in that code path was actually checked against pre-fix behaviour — the pytest
+verification for each fix was still real and current-source, but nothing had exercised the fixes
+*live* until now. Restarted the Hub (`Win32_Process.Create`, new `PID 20744`, same command line,
+`/health` confirmed ok) and re-fetched: `has_rejected_evidence: true, count: 1` on both FR-5 and
+FR-8, and `latest_integration` now correctly reads `outcome: skipped, reason: "no accepted evidence
+names a commit, so there is nothing to merge"`. **Both q4 fixes now confirmed working, for the
+first time, against a live and current Hub.** Filed the restart discipline as a `dead_end` and
+updated `environment.hub` — this is a trap the next iteration (or the next session) would fall into
+identically otherwise.
+
+**New candidate filed for the next q6 code fix**, found while chasing the rejection reasoning
+above: `GET /project/spec/evidence` (`list_evidence`) shows `review_state: rejected` but not *why* —
+the reason lives on `EvidenceReview.reason`, reachable only via one extra `GET
+/spec/evidence/{id}/reviews` per row. Same silent-signal shape as the two things q4 already fixed.
+Left as `next_action` rather than fixed this iteration — no code changed this session; the two
+"fixes" that landed were a decision (`d6`) and an operational correction (Hub restart), not a
+tested code change, so q6 itself is still exactly where it was: 2 fixes shipped, this candidate
+queued.
 
 ---
 
