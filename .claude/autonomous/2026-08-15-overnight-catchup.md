@@ -28,6 +28,31 @@ under `decisions_for_user`.
 
 ---
 
+## 21:21 — driver iteration: end-of-run handoff finalized, loop closed early
+
+`git log`/branch matched `STATE.json` exactly on start (`f4a0dda` on top of `29bc213`, the prior
+iteration's suite re-run). With `q1`–`q8` all `done` (or, for `q8`, `standing` and current) and
+nothing new to drive, took `next_action`'s option (a) ahead of its own ~21:45 threshold rather than
+waiting: finalized `handoff-0049` for real. Renamed
+`handoff-0049-2026-08-15-2036-spec-flow-hardening-draft.md` →
+`handoff-0049-2026-08-15-2121-spec-flow-hardening-complete.md` (`git mv`, history preserved), updated
+its header/Status to a closing paragraph, replaced the "as of this draft" Git state section with the
+real closing SHA (`f4a0dda`) and commit count (56 since `f31e90e`), removed the now-stale "task 4.5
+NOT run" line (closed last iteration), and rewrote "Next steps" to reflect that nothing is queued for
+a resuming session beyond the operator's own `d1`–`d6` decisions. `LATEST.md` repointed to the
+renamed file. Did the last diff item first, before touching the handoff: the "Needs your decision"
+table above against `STATE.json.decisions_for_user` — all six (`d1`–`d6`) present, wording
+consistent, nothing drifted since the last check two iterations ago.
+
+This closes `q9` genuinely, not as a draft. The run stops here with ~35 minutes of runway left before
+`stop_at` (22:00): everything queued is done, and per this session's own standing rule (19:57 entry:
+"if nothing new to drive turns up, say so honestly rather than inventing work") manufacturing a tenth
+queue item this late would cost more in risk (an unreviewed change landing minutes before close) than
+it could plausibly return. `last_heartbeat` is being backdated as the final action so a stray firing
+before 22:00 doesn't wedge; the driver should stop scheduling past `stop_at` on its own regardless.
+
+---
+
 ## 21:0x–21:11 — driver iteration: full post-change suite re-run, clean
 
 Took the previous iteration's option (a): the one still-open verification gap in the draft
