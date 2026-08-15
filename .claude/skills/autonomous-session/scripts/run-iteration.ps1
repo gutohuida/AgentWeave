@@ -19,7 +19,12 @@ param(
   # would consider itself already finished and unregister on its first firing -- which is the
   # overnight case, the one this whole driver exists for.
   [Parameter(Mandatory = $true)][string] $StopAt,
-  [string] $TaskName = "AgentWeaveAutonomousSession"
+  [string] $TaskName = "AgentWeaveAutonomousSession",
+  # How recently STATE.json must have been touched for this firing to conclude a live session is
+  # already doing the work and stand down. The driver is often installed as a *backup* to an
+  # interactive session rather than instead of one; without this, both write to the same branch and
+  # the headless one commits the interactive one's half-finished tree. Set to 0 to disable.
+  [int] $HeartbeatGraceMinutes = 25
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,6 +54,28 @@ if (-not (Test-Path $stateFile)) {
   Write-Log "No STATE.json - nothing to resume. Stopping."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
   exit 0
+}
+
+# --- stand down for a live session --------------------------------------------------------------
+# Deliberately does NOT unregister: the session this is backing up may die at any moment, and the
+# next firing is what picks the work up. Standing down is a skip, not a stop.
+if ($HeartbeatGraceMinutes -gt 0) {
+  $heartbeat = $null
+  try { $heartbeat = (Get-Content $stateFile -Raw | ConvertFrom-Json).last_heartbeat } catch {
+    Write-Log "STATE.json did not parse - proceeding, since a backup that defers to a file it cannot read is no backup."
+  }
+  if ($heartbeat) {
+    try {
+      $age = ([datetimeoffset]::Now - [datetimeoffset]::Parse($heartbeat, [System.Globalization.CultureInfo]::InvariantCulture)).TotalMinutes
+      if ($age -lt $HeartbeatGraceMinutes) {
+        Write-Log ("Heartbeat is {0:N1} min old (grace {1}) - a live session holds the branch. Standing down." -f $age, $HeartbeatGraceMinutes)
+        exit 0
+      }
+      Write-Log ("Heartbeat is {0:N1} min old (grace {1}) - assuming the session died. Taking over." -f $age, $HeartbeatGraceMinutes)
+    } catch {
+      Write-Log "last_heartbeat '$heartbeat' is not a parseable instant - proceeding as though absent."
+    }
+  }
 }
 
 # --- the prompt ---------------------------------------------------------------------------------
