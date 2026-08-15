@@ -152,6 +152,75 @@ doing next.
 
 ---
 
+## `2026-08-13-the-spec-tool-reaches-the-agent`
+
+**Gap found and closed 2026-08-15 ~20:1x, during q8's end-to-end review of this file.** This change
+was entirely missing from `judgement-evidence.md` — not answered, not even listed in "still entirely
+uncaptured" — despite two prior iterations (14:54 and the triage pass, `2026-08-15-triage.md` line
+29) flagging the omission and neither one actually adding it. Its own `tasks.md` §5 explicitly names
+the artefact that answers most of section 6: `2026-08-15-spec-flow-findings.md`'s account of the
+`aw-loop10` drive, whose own text says outright — *"This is the evidence 17.2 / 5.2 / 6.1 have been
+waiting for"*. That drive had already happened (q2, 12:00–13:00) before this change's judgement
+section was ever reached; the write-up was just never done.
+
+### 6.1 — "Read the document and judge it — is the renderer's output as readable as the skill-written ones?"
+
+**Judgement call — evidence supplied, verdict is yours (d1).** The document to read is
+`aw-loop10`'s (`proj-ff695d96`, spdoc-1d230e6b, now `approved`):
+`spec/changes/notify-window-graded-notification-urgency-beyond-quiet-hours-boolean/spec.html` — the
+first agent-authored specification to go all the way through interview → propose → approve → build →
+merge, not the original section-5 drive's throwaway `amber-griffin` document. 9 requirements
+(`FR-1`–`FR-9`), every one with a rationale and per-requirement Given/When/Then acceptance criteria;
+`2026-08-15-spec-flow-findings.md`'s own read (written at the time, not reconstructed here) called it
+"good," citing two open questions the agent raised unprompted that neither the operator's answers nor
+a template asked for — a notification already stale on arrival, and a deadline landing exactly at the
+half-open window boundary the existing tests already used. Both are genuine specification work, not
+paraphrase.
+
+### 6.2 — "Run the same flow with a Claude agent. Everything here was Codex."
+
+**ANSWERED.** Section 5's original drive used Codex (`spec-4`, `gpt-5.6-sol`). q2's `aw-loop10` drive
+(same day, 12:00–13:00, logged independently before this gap was noticed) used `speccer`, a **Claude**
+agent on the Spec Author charter, for the full interview-through-submit turn (`run-d3b6f7c5` /
+`run-462fb78e`, see the `the-tool-list-matches-the-tools` 5.1 entry above for the tool-call sequence).
+Same flow, different runner, same outcome shape (prose interview, then `submit_spec_document`).
+`tasks.md` 6.2 ticked.
+
+### 6.3 — "Take a document through `propose` and `approve` from the UI now that one exists with real content."
+
+**ANSWERED, with one honest caveat.** q2's `aw-loop10` drive took the same document through
+`propose` → `approve` → task creation → `build` → `record_evidence` → verifier accept/reject →
+`approve` → merge, all the way to `reachable_from_main: true`, confirmed independently with plain
+`git log`/`git branch --contains` outside the Hub
+(`2026-08-15-spec-flow-findings.md`, propose-through-merge section). **Caveat:** every call was made
+directly against the same REST API the Hub UI itself calls (per the 18:46 entry's convention for this
+whole session), not by clicking through the rendered browser UI — so this answers "does propose/
+approve work end-to-end against real content," not "does the UI's propose/approve screen render and
+behave correctly," which is a distinct, still-open question if the operator wants it literally.
+`tasks.md` 6.3 ticked on the API-level claim; left a note in `tasks.md` rather than overclaiming the
+browser-rendered half.
+
+### 6.4 — "The ten-minute turn timeout."
+
+**Still open — a design question, not an observation.** One loop run is on record as dying to this
+timeout during a multi-round interview plus operator thinking time (cited in the task's own wording;
+not independently re-found this session). Whether the exploration flow — the feature this whole
+change exists to make work, and the one most likely to produce long turns — needs a longer or
+resumable timeout is a product decision, not something a drive can answer either way. Not added to
+`decisions_for_user` unilaterally; flagging here since it surfaced during q8's review, operator's call
+whether it's worth its own line in `STATE.json`.
+
+### 6.5 — "Decide whether a turn triggered with no `conversation_id` should open a new conversation every time."
+
+**Still open — a decision, not a defect.** The UI's composer always sends a `conversation_id`, so
+this isn't reached from the app today. Jobs and peer-opened messages do not send one, and this
+change's own 1.10 already demonstrated how convincingly a cold start can imitate continuity (a prior
+harness bug in the *investigation* tooling, not the product, but proof the failure mode is real and
+easy to miss). No new evidence gathered this iteration — this is exactly the kind of decision q3
+exists to hand the operator, not resolve by guessing at intended behaviour.
+
+---
+
 ## `2026-08-13-the-interview-is-a-conversation`
 
 Written up from the run already on disk (`run-d3b6f7c5`, `aw-loop10`), not a re-drive. Queried
@@ -802,11 +871,21 @@ disk — not just a write-up of an existing run:
   a pure visual read; nothing an API drive can answer. 5.1, 5.2 and 5.5 are now answered above
   (twice over, for 5.1) — what's left of each is the literal act of a person looking at the running
   UI, not an unanswered behaviour.
-- `the-interview-is-a-conversation` 5.3 (needs a run with a real either/or fork) and 5.4 (needs an
-  agent with no charter bound) — 5.1, 5.2, 5.5 are now answered above.
+- `the-spec-tool-reaches-the-agent` 6.4 (the ten-minute turn timeout — a design question, not a
+  drivable behaviour: does the exploration flow need a longer or resumable timeout given it is the
+  feature that produces long turns?) and 6.5 (should a turn triggered with no `conversation_id`
+  open a new conversation every time — a decision, not an observation, per its own wording). See
+  the new section below; 6.1–6.3 are now answered.
 
-**q3's source list is now fully worked**: every one of the seven sources listed in STATE.json has
-either had all its tasks answered, or has been narrowed to the specific sub-items above that
-genuinely need a differently-shaped run (not more of this same evidence-gathering pattern). What
-remains open is human judgement on the evidence already captured (d1), plus the three narrow items
+**q3's source list is now fully worked**: every one of the eight sources now listed in STATE.json
+(the-spec-tool-reaches-the-agent was missing from the original seven — see below) has either had
+all its tasks answered, or has been narrowed to the specific sub-items above that genuinely need a
+differently-shaped run or an operator decision (not more of this same evidence-gathering pattern).
+What remains open is human judgement on the evidence already captured (d1), plus the narrow items
 just listed.
+
+**Correction, 2026-08-15 ~20:1x (q8 review):** this section previously still listed
+`the-interview-is-a-conversation` 5.3/5.4 as uncaptured. They were answered live at 19:57 (see the
+`2026-08-13-the-interview-is-a-conversation` section above, 5.3/5.4) — this list had simply not been
+updated afterward. Removed here. Caught while reviewing this file end-to-end as a deliverable per
+q8's instruction, rather than only ever appending to it.

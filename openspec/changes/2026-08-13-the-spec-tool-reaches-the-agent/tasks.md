@@ -86,10 +86,15 @@ grounded in the repository, and it stopped. No `ask_user`. No OpenSpec.
 ## 6. Still open for the operator
 
 - [ ] 6.1 **Read the document and judge it** — 17.2 asks whether the renderer's output is as readable
-      as the skill-written ones, and this is the first agent-authored document to judge.
-- [ ] 6.2 Run the same flow with a **Claude** agent. Everything here was Codex.
-- [ ] 6.3 Take a document through `propose` and `approve` from the UI now that one exists with real
-      content.
+      as the skill-written ones, and this is the first agent-authored document to judge. Evidence:
+      `.claude/autonomous/2026-08-15-judgement-evidence.md`, `the-spec-tool-reaches-the-agent` 6.1 —
+      the operator's own read, not the loop's.
+- [x] 6.2 Run the same flow with a **Claude** agent. Everything here was Codex. Done by `speccer`
+      (Claude, Spec Author charter) in the `aw-loop10` drive, `run-d3b6f7c5`/`run-462fb78e` —
+      write-up: judgement-evidence.md 6.2.
+- [x] 6.3 Take a document through `propose` and `approve` from the UI now that one exists with real
+      content. Done in the same `aw-loop10` drive, all the way to a real merge — via the API the UI
+      calls, not the rendered browser screen; see judgement-evidence.md 6.3 for that caveat.
 - [ ] 6.4 **The ten-minute turn timeout.** An interview of several rounds plus operator thinking time
       exceeds it; one loop run died that way. Not touched by this change and worth its own look,
       because the exploration flow is the feature that produces long turns.

@@ -28,6 +28,71 @@ under `decisions_for_user`.
 
 ---
 
+## 20:1x — driver iteration: q8's actual review, done — found and fixed two real staleness defects
+
+Previous iteration's `next_action` asked for q8 to be treated as a real review of this file (and
+the judgement-evidence artefact behind it), not just another append. Did that: read
+`2026-08-15-overnight-catchup.md` top to bottom cold, then cross-checked `2026-08-15-judgement-
+evidence.md` and `2026-08-15-triage.md` against it. **It did not come back clean.**
+
+**Defect 1 — a stale claim in judgement-evidence.md.** Its "Still entirely uncaptured" summary
+section still listed `the-interview-is-a-conversation` 5.3/5.4 as uncaptured, even though that
+change's own dedicated section already has both fully answered from the 19:57 iteration below — the
+summary was simply never updated after the write-up landed next to it. Fixed, with a dated
+correction note in place rather than a silent edit.
+
+**Defect 2 — a real gap, flagged twice before and never actually closed.**
+`2026-08-13-the-spec-tool-reaches-the-agent` was entirely missing from `judgement-evidence.md` — not
+answered, not even listed as pending. This had already been flagged twice: once in the 14:54 log
+entry below, and again in `triage.md`'s own row for that change ("Gap: not mentioned anywhere in
+q3... flagging so the next judgement-evidence session adds it") — and neither flagging was ever
+acted on. This is exactly the failure mode a scheduled full re-read exists to catch, and it took one
+to actually catch it.
+
+Investigated properly this time. That change's `tasks.md` §6 has 5 open items (6.1–6.5), and its own
+text names the answering evidence directly: `2026-08-15-spec-flow-findings.md`'s `aw-loop10` drive —
+*"This is the evidence 17.2 / 5.2 / 6.1 have been waiting for."* That drive (q2, 12:00–13:00) had
+already happened; it was just never connected back to this change's judgement tasks.
+
+- **6.1** (is the rendered document as readable as the skill-written ones) — a genuine judgement
+  call, evidence supplied: the real, merged `aw-loop10` document (`spdoc-1d230e6b`, `approved`, 9
+  requirements each with a rationale and Given/When/Then), not the original section-5 drive's
+  throwaway `amber-griffin` one.
+- **6.2** (run the flow with a Claude agent — the original drive was Codex) — **not a judgement
+  call, a fact, and it's already true.** `speccer`, a Claude agent, ran the full interview-to-submit
+  turn in the same `aw-loop10` drive. Answered directly and ticked `[x]`.
+- **6.3** (take a document through `propose`/`approve` with real content) — **also already true.**
+  The same drive took the document all the way through `propose → approve → build →
+  record_evidence → verify → approve → merge`, confirmed independently with `git log`/`git branch
+  --contains` outside the Hub. Ticked `[x]`, with an honest caveat: driven at the API level (the
+  same API the UI calls), not by clicking through the rendered browser screen — a distinct claim if
+  the operator wants it literally.
+- **6.4** (the ten-minute turn timeout) and **6.5** (no-`conversation_id` default behaviour) —
+  genuine open product decisions, not observations a drive can resolve. Left open.
+
+Added a full new section to `judgement-evidence.md`. Updated `triage.md`'s own table too — 8 of its
+12 per-change rows still said "Not yet captured in q3" despite being captured by iterations between
+14:54 (when the table was last touched) and 19:57; corrected all of them with the run time and
+evidence pointer, and moved `the-spec-tool-reaches-the-agent`'s open count from 5/27 to 3/27.
+`npx openspec validate --changes --strict` still 14/14 after the `tasks.md` edit.
+
+**Also confirmed clean, not just assumed:** grepped `judgement-evidence.md`'s section headers
+against every `openspec/changes/*` directory (excluding `archive/`) — 13 of 14 now have a section;
+the 14th, `2026-07-30-hub-native-experience`, is correctly out of scope for this file (it's handled
+through `d2`/`triage.md`'s split proposal instead, a different pattern). The "Needs your decision"
+table above was re-checked against `STATE.json`'s `decisions_for_user` — all six (`d1`–`d6`) present
+and consistent. Newest-first ordering in this file confirmed intact top to bottom.
+
+**No source code changed this iteration** — pure deliverable review and correction, which was q8's
+actual scope. `q3`'s source list grows from 7 to 8 (the missing change counts as its own source now
+that it's captured) but is fully worked either way. Remaining open items are now genuinely
+operator-only: `run-without-a-git-repository` 5.3, and `the-spec-tool-reaches-the-agent` 6.1/6.4/6.5.
+`q9`'s standing handoff-at-end-of-run rule is the only other open queue item. Next iteration: if
+nothing new to drive turns up, say so honestly rather than inventing work, per this session's own
+standing rule.
+
+---
+
 ## 19:57 — driver iteration: q3's last two narrow items closed — the-interview-is-a-conversation 5.3/5.4
 
 Picked up the two items flagged last iteration as needing a differently-shaped run. Drove both in
