@@ -28,6 +28,48 @@ under `decisions_for_user`.
 
 ---
 
+## 17:26 — driver iteration: task-553c2c37's drive was already done (found, not redone); q7 market research written
+
+**Three prior iterations (16:51, 17:06, 17:21) each wasted their whole turn**: they spawned a
+background wait for the task-553c2c37 builder/verifier run and ended the turn expecting a
+notification. That doesn't work across separate Scheduled-Task firings — each is a fresh process
+with no memory of a wait a previous process started, so the notification had nowhere to land. Filed
+as a new `dead_end` so it isn't repeated: poll synchronously within one turn, or check the Hub's
+live state before assuming a drive is still pending.
+
+Checking that live state this iteration found **the drive had already finished**, at 16:09, before
+any of those three iterations even started. Read the actual result rather than re-triggering
+anything: the verifier rejected the builder's FR-6 (exactly-once delivery) evidence correctly — the
+new tests store delivery outcomes in a dict keyed by notification and only check the key set against
+what was submitted, so a duplicate digest delivery would silently pass either test. That's a real,
+specific catch, and a **third** independent confirmation this session that the review gate works
+(after `task-1f82d976` and `task-0d3c8cb5`). No new AgentWeave bug and no new spec conflict — q2/q3/q6's
+first-hand-friction well is now reasonably treated as dry.
+
+With that confirmed, moved to **q7**: wrote
+`openspec/explorations/2026-08-15-where-agentweave-fits.md` after five targeted web searches. Headline,
+stated plainly because the operator asked for honesty: **AgentWeave's three claimed differentiators
+have each been absorbed or commoditised since the 2026-08-02 product-direction call.** Claude Code —
+the harness this very session runs inside — now ships **Agent Teams** (a built-in multi-agent
+orchestrator) and **Dynamic Workflows** (the `Workflow` tool available to this session), giving away
+multi-agent collaboration for free to anyone who already has Claude Code open. Spec-driven
+development is now a named category with GitHub's own Spec Kit and a 52,100-star OpenSpec — which
+this repository's own `CLAUDE.md` mandates using instead of AgentWeave's own spec workflow for
+AgentWeave's own development. Governance/audit-trail demand is real and growing but enterprise
+compliance-shaped (EU AI Act, CAIO), not solo-developer-shaped.
+
+The document does **not** recommend dropping AgentWeave — the operator was explicit that isn't the
+question. It argues the part of the pitch that still holds up is narrower than "multi-agent
+collaboration": durable state across sessions, addressable bound agent identity, and an
+operator-facing UI, none of which the ephemeral in-session Claude Code features provide. Full
+reasoning and every source link is in the file itself.
+
+No source code changed this iteration. Next iteration: q5's d2 groundwork — map
+`hub-native-experience` section 14's 19 items to their 2026-08-13 successors (nobody has done this
+mapping yet), recorded into `2026-08-15-triage.md` as prep for your `d2` call. No archiving.
+
+---
+
 ## 16:39 — driver iteration: q6, third QoL fix (evidence rows carry their own rejection reason)
 
 **Fixed the candidate the 16:02 entry queued**: `GET /project/spec/evidence` (`list_evidence`),
