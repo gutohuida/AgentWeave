@@ -23,24 +23,71 @@ under `decisions_for_user`.
 | **d2** | `2026-07-30-hub-native-experience` has 69 open tasks and looks partly superseded. Drop, split, or resume? |
 | **d3** | Carried: does an abandoned queue entry read as "the Hub gave up"? Do two exit codes on one event read as informative or noise? |
 | **d4** | Carried: should `.claude/handoffs/` stay tracked, now 134 files? |
+| **d5** | New: the spec flow's own review step caught a real conflict between two `MUST` requirements (FR-7 vs FR-9) in the test document. Worth a wording decision even though the document itself is throwaway — full text in `STATE.json`. |
 
 ---
 
 ## The short version so far
 
-**The spec flow's authoring half works, and this is the first time anyone has watched it work.** An
-agent interviewed you, you answered, and it wrote a real 23KB specification with 8 requirements. Two
-openspec tasks had been sitting open specifically because that had never been observed.
+**The whole spec flow has now been driven end to end, for the first time, and it works** — with two
+real defects found along the way. Interview → document → propose → approve → task → build →
+`record_evidence` → `verifier` accept/reject → task approve → merge → reachable-from-`main`, all
+exercised for real against a live `notify-window` codebase. `verifier` rejected one of six evidence
+rows with a genuinely correct catch: a conflict between two `MUST` requirements in the same document
+(**d5**, above). The merge silently skipped once (no `main_branch` configured) and then genuinely
+landed on `master`, verified independently with plain `git log`/`git branch --contains` outside the
+Hub entirely.
 
-**One genuine bug found and fixed**, in the change that exists to prevent exactly it: the tool list
-told agents `submit_spec_document(path, document)`, a signature the tool has never had. Any agent
-following its own tool list would have failed the call.
+**Two UX gaps filed for the fix queue**: approving a task gives no signal when (a) a requirement it
+serves has rejected evidence sitting under it, or (b) the merge that approval promises ("approving is
+what merges it") was actually skipped. Both are silent successes that should not be silent — full
+detail and the file/line to start from are in `STATE.json`'s `next_action`.
+
+**One genuine bug found and fixed earlier**, in the change that exists to prevent exactly it: the
+tool list told agents `submit_spec_document(path, document)`, a signature the tool has never had.
 
 **Four things that looked like serious bugs were my own query errors** — written up as such in
 `2026-08-15-spec-flow-findings.md` so nobody re-files them.
 
-**Still untested:** everything after the document exists — propose, approve, build, evidence, merge.
-That is now the longest-standing untested claim in the product, and it is what the loop does next.
+---
+
+## 12:59 — driver iteration: propose → merge → reachable-from-main, proven
+
+Picked up a `builder` run (`run-84f3535c`) the previous driver iteration had correctly left in
+flight and had not yet seen finish — committed its uncommitted findings text first (the tree was
+dirty, but the content was real, not abandoned work).
+
+**Done**
+
+- Triggered `verifier` (`run-16b86c08`, ~4 min) to review the 6 pieces of evidence `builder` had
+  recorded. 5 accepted, 1 rejected with real reasoning — see d5.
+- Moved the task `completed` → `under_review` → `approved`. Approved instantly despite the
+  rejection: the document is at the default `rigor: sketch`, which the approval gate deliberately
+  does not block on — confirmed in `hub/hub/requirement_gate.py`, not a bug, but the operator gets
+  no signal either way (filed).
+- First merge attempt silently skipped (`aw-loop10` had no `main_branch` set). Set it to `master`
+  via `PUT /projects/{id}/settings`, retried the integration, and it genuinely merged — verified
+  independently with `git log`/`git branch --contains` directly in
+  `C:\Users\huida\Documents\aw-loop10`, outside the Hub. Evidence footprints flipped to
+  `reachable_from_main: true` automatically.
+- Added `hub/agentweave.db` (the recurring stray 0-byte file named in seven prior handoffs) and
+  `.claude/autonomous/scratch/` (API request/response scratch, not durable output) to `.gitignore`
+  so they stop showing up as uncommitted state every iteration.
+- Refreshed `last_heartbeat` from PowerShell mid-iteration (not Git Bash — see `dead_ends`) so a
+  concurrent driver firing does not take over the branch.
+
+**Found** — both filed for the fix queue, both "silent success that shouldn't be silent," neither a
+gate-logic bug:
+
+- `approve`'s response carries no signal when a requirement it serves has rejected evidence, at any
+  rigor below `gate`.
+- `approve`'s response carries no signal about whether the merge it triggers actually happened —
+  only a separate `GET /tasks/{id}/integrations` call shows that.
+
+**Next**: pick up the merge-signal fix first (more contained), then the evidence-signal one. Full
+detail in `STATE.json`'s `next_action`. `task-0d3c8cb5` and `task-553c2c37` (the other two tasks
+this document produced) are still `pending` if more coverage of the same document is ever wanted,
+but the core untested claim is now closed.
 
 ---
 

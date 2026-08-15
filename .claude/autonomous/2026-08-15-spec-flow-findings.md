@@ -219,3 +219,97 @@ FR-2, FR-3, FR-4, FR-7, FR-9), `task-0d3c8cb5` (digest delivery: FR-5, FR-8), `t
 (no-notification-lost: FR-6), all assigned to `builder`. `builder` has been triggered on
 `task-1f82d976` (`run-84f3535c`) with `task_id` bound so the run's completion moves the task off
 `pending`. Outcome not yet known at the time of writing — continued below once the run lands.
+
+---
+
+## Continued, next iteration: build → evidence → verifier accept/reject → approve → merge → reachable-from-main, all proven for the first time
+
+Picked this up because the previous iteration's process ended (not crashed — it correctly recorded
+"outcome not yet known, continued below" and left the tree dirty only with the finding text above,
+which this iteration committed first). `run-84f3535c` had in fact already finished by the time this
+iteration started: `task-1f82d976` was `completed`, with six `record_evidence` calls against it,
+each one a distinct `tests/test_notify_window.py` test at commit `1c65b98`, all `review_state:
+awaiting`. **This is the first time a `builder` run has been observed completing a real task against
+an approved spec document, with evidence.**
+
+### `verifier` reviewing real evidence, for the first time, and catching a real spec defect
+
+Triggered `verifier` (the project's only `can_accept_evidence` agent) with an instruction to judge
+each piece on the merits rather than accept by default. `run-16b86c08`, ~4 minutes. Result: **5
+accepted, 1 rejected** — not a rubber stamp.
+
+The rejection (`ev-6efc41c1`, FR-9 "stale-on-arrival-is-dropped") is a genuine, well-reasoned catch,
+quoted in full since it is the most interesting thing this loop has found so far:
+
+> "Rejected against the full, unqualified wording of approved FR-9. The located stale test covers
+> only arrival during quiet hours (23:30 with deadline 23:00). At the same commit,
+> `test_non_quiet_delivers_even_with_a_stale_deadline` and the implementation explicitly deliver a
+> stale-on-arrival notification outside quiet hours, so the evidence does not demonstrate that every
+> notification whose deadline has already passed is dropped. This exposes a conflict between FR-9
+> and FR-7's 'regardless of its deadline' wording."
+
+FR-7 ("delivered immediately regardless of its deadline", outside quiet hours) and FR-9 ("dropped:
+not delivered ... and not included in the digest", unqualified) are both `MUST` and both in the same
+approved document, and they contradict each other for the one case where both apply: a stale
+notification arriving outside quiet hours. `builder` implemented FR-7 literally (deliver, since
+outside quiet hours always wins) and wrote a test proving it; that test is *correct against FR-7 and
+wrong against FR-9 read literally*. Neither `builder` nor `speccer` (who wrote both requirements in
+the same interview) caught this — only the review step did, and only because `verifier` was
+instructed to judge rather than rubber-stamp. **This is a real spec-authoring defect** — a
+requirements conflict that reached `approved` phase undetected — not a code bug. Filed for the
+operator's `q3`/decision list below, not `q4`, because the fix is a wording decision (does FR-9 mean
+"during quiet hours" implicitly, or does FR-7 need an exception for staleness?), not a code change.
+
+### Finding: the approval gate is a no-op at the document's default rigor, and nothing says so at the point of approval
+
+Moved `task-1f82d976` `completed` → `under_review` → `approved` as the operator. It approved
+**instantly, with FR-9's only evidence sitting `rejected`**, and the response carried no mention of
+that at all — same shape as any other successful approval.
+
+Root cause read in `hub/hub/requirement_gate.py`: `evaluate()` only gates requirements whose
+*document* rigor is `gate`; `_gated_requirements()` filters everything else out before the loop that
+would check `review_state`, and returns "not refused" immediately if the filtered list is empty. The
+document here (`spdoc-1d230e6b`) is at `rigor: sketch` — the default, never touched by `propose` or
+`approve`, and nothing in the interview, `close-exploration`, `propose`, or `approve` responses
+prompts the operator to consider raising it. The docstring is explicit that this is deliberate
+("the default blocks nothing, and it has to, or the change would arrive as a barrier nobody asked
+for") — so this is not a bug in the gate. But it means: **a document born from the ordinary interview
+flow, with all its defaults, can have a task approved over an explicit, reasoned rejection from the
+project's designated verifier, and the approval response gives the operator no signal that this
+happened.** The only way to know is to separately query `/spec/evidence` and read `review_state`
+per row. Filed for `q4` as a UX/signal gap, distinct from the gate's blocking behavior itself, which
+is working as designed: **`approve`'s response should say when a requirement it names has rejected
+or awaiting evidence, even at a rigor that does not block on it.**
+
+### Finding: the merge is silent-skip by default, and the approve response does not say so either
+
+First `approve` attempt integrated nothing: `task_integrations` showed one row, `outcome: skipped`,
+`reason: "this project has no main branch set — choose one in the project's settings"`. This project
+(`aw-loop10`) had never had `main_branch` set — nothing in the whole flow up to and including
+`approve` had asked for it or refused for its absence. `GET /main-branch-suggestion` correctly
+detected `master` as the candidate. Set it via `PUT /projects/{id}/settings`, then
+`POST /tasks/{id}/integrations/retry`: **`outcome: merged`**, commit `1c65b98` merged from
+`agentweave/builder` into `master` via a real merge commit (`e1ac86c`, "Integrate approved work
+1c65b98992a5"). Verified independently with `git log --oneline master` and
+`git branch --contains 1c65b98...` directly in `C:\Users\huida\Documents\aw-loop10` (outside the Hub
+entirely) — the commit is genuinely on `master`. `GET /spec/evidence` afterward shows every evidence
+row's footprint flipped to `"reachable_from_main": true` **automatically**, no manual refresh
+endpoint needed — that part is correct and required no fix.
+
+**This closes the single longest-standing untested claim in the product**: propose → approve → task
+→ build → evidence → accept/reject → approve → merge → reachable-from-main has now been driven for
+real, once, successfully (modulo the two findings above). But the same gap as the rigor finding
+applies here: `approve`'s response is silent about whether the merge it triggers ("approving is what
+merges it", per the gate module's own docstring) actually happened. An operator who does not
+separately check `/tasks/{id}/integrations` has no way to know their approved work is not on `main`
+except by noticing it missing later. Filed for `q4`: **surface the integration outcome inline in the
+`approve` response** (or at minimum in the task detail response), not only via a separate endpoint an
+operator has to already know to check.
+
+### Net for this document
+
+`spec/changes/notify-window-graded-notification-urgency-beyond-quiet-hours-boolean/spec.html`,
+requirement `admission-decision` (FR-1, FR-2, FR-3, FR-4, FR-7, FR-9): 5 of 6 requirements verified
+and merged to `master` in the real `notify-window` repository; FR-9 correctly rejected pending a
+wording fix for its conflict with FR-7. `task-0d3c8cb5` (digest delivery) and `task-553c2c37`
+(no-notification-lost) remain `pending` — not driven this iteration, left for the next one.
