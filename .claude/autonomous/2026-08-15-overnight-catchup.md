@@ -20,11 +20,50 @@ under `decisions_for_user`.
 | | question |
 |---|---|
 | **d1** | The ~40 human-only judgement calls. `2026-08-15-judgement-evidence.md` now holds the artefacts so you can answer them without re-driving the product. **This is what unblocks archiving 13 of the 14 in-flight changes.** `2026-08-15-triage.md` now confirms exactly which 13 — see below. |
-| **d2** | `2026-07-30-hub-native-experience` has 69 open tasks and looks partly superseded. `2026-08-15-triage.md` now has a concrete proposal: don't resume the whole thing, don't archive it either — map section 14 to its successors (nobody has yet), then split what's genuinely still open in 13/14/15 into new change(s), then archive the umbrella. |
+| **d2** | `2026-07-30-hub-native-experience` has 69 open tasks and looks partly superseded. `2026-08-15-triage.md` now has a concrete, code-verified proposal: don't resume the whole thing, don't archive it either — 13.4/13.9/13.11/part of 13.3, all of 15, and section 14's **3 genuinely undelivered items** (14.11/14.12: no successor built an in-place proposal/authoring mechanic; 14.14: scope discipline is charter prose, never an enforced control) plus 2 small partial remainders (14.5, 14.13) are real work. Split that into new change(s), then archive the umbrella. |
 | **d3** | Carried: does an abandoned queue entry read as "the Hub gave up"? Do two exit codes on one event read as informative or noise? |
 | **d4** | Carried: should `.claude/handoffs/` stay tracked, now 134 files? |
 | **d5** | New: the spec flow's own review step caught a real conflict between two `MUST` requirements (FR-7 vs FR-9) in the test document. Worth a wording decision even though the document itself is throwaway — full text in `STATE.json`. |
 | **d6** | New: findings.md's minted-directory-name finding (66+ char slugs). No platform-aware constant exists to derive a smaller cap from without tuning to one machine or breaking under Docker (see 16:02 entry) — pick a fixed UX-judgement cap, or leave the cosmetic Windows nuisance alone. Full reasoning in `STATE.json`. |
+
+---
+
+## 17:39 — driver iteration: q5's section-14 mapping done, giving d2 a concrete remainder
+
+Did the one thing this session's `next_action` named: mapped `hub-native-experience` section 14's
+19 items (14.1–14.19) to whichever 2026-08-13 change actually delivered each, the same code-first
+grep discipline the earlier section-13 pass used rather than trusting titles or checkbox counts.
+Read all nine 2026-08-13 changes' `specs/*/spec.md` and `tasks.md`, grepped for the specific
+requirement text behind each item (identifiers/retirement, task-requirement linkage, evidence
+fields, coverage, drift, rigor/gate enforcement, on-ramps, external-edit reconciliation), and wrote
+the full table into `2026-08-15-triage.md` under "Section 14 mapping."
+
+**Result: 9 of 19 fully delivered**, mostly by `2026-08-13-a-requirement-knows-its-work` (identity,
+linkage, evidence, coverage, drift, navigation) and `2026-08-13-a-gate-that-only-evidence-opens`
+(rigor, enforcement). **2 delivered but distributed** across several successors rather than any one
+of them. **2 partial** — 14.5's "mark a change editorial" affordance has zero hits anywhere despite
+the rest of 14.5 being delivered; 14.13's "grow from conversation" on-ramp is delivered and is in
+fact the *only* one, "derive from implementation" and "start from template" don't exist. **1
+superseded by a different design** — 14.15 asked to make the old `aw-spec-*` skills reachable, but
+they were deleted outright, not made reachable; the intent (evidence attaches to requirements) is
+covered elsewhere. **1 blocked only on bookkeeping** — 14.18 names specs (`spec-traceability`,
+`spec-authoring`) that don't exist under those names; the nearest equivalent, `requirement-traceability`,
+is fully written but not yet synced into `openspec/specs/` — this is the same 16.2 sync blocker
+section 16 already names, not new work. **1 standing** (`/handoff`). **3 genuinely undelivered, no
+successor touches them at all: 14.11 and 14.12** (an in-place, individually-acceptable proposal
+mechanic distinguishing direct edits on sketches from proposals on contracts/gates — searched every
+successor's spec plus `hub/hub/api/v1/spec.py` and `mcp_server.py`, nothing) **and 14.14** (scoping
+authoring assistance so discovered implementation work is proposed rather than performed — exists
+only as charter prose and one observed live run, never as a built, tested control).
+
+This gives **d2** a concrete answer instead of an open question: if the operator takes q5's
+split-then-archive proposal for `hub-native-experience`, the real remaining content of section 14 is
+small and specific (14.11/14.12/14.14 plus two small partials), not "19 open items, unknown status."
+Updated `2026-08-15-triage.md`'s own prior notes (which had flagged this mapping as future work) to
+state the result instead, so the file doesn't contradict itself.
+
+No source code changed this iteration — this was documentation/triage, matching q5's own scope. No
+archiving performed; that stays the operator's call per d2.
 
 ---
 
