@@ -25,7 +25,8 @@
     15 is a reasonable floor for real work.
 
 .PARAMETER UntilHHmm
-    Local wall-clock time to stop, e.g. "10:00". The task unregisters itself past this.
+    Local wall-clock time to stop, e.g. "10:00". Resolved here to an absolute instant; a time
+    already past today is taken to mean tomorrow. The task unregisters itself past it.
 
 .PARAMETER TaskName
     Scheduled Task name. Also used to find and remove it again.
@@ -58,10 +59,27 @@ if (-not (Test-Path $stateFile)) {
 $runner = Join-Path $PSScriptRoot "run-iteration.ps1"
 if (-not (Test-Path $runner)) { throw "Missing $runner" }
 
+# Resolve the wall-clock stop time to an absolute instant here, where "now" is known. A time that
+# has already passed today means the operator meant tomorrow -- which is the overnight case, and
+# the one that silently self-cancelled when the runner parsed HH:mm against today's date.
+$stopInstant = [datetime]::ParseExact($UntilHHmm, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
+if ($stopInstant -le (Get-Date)) { $stopInstant = $stopInstant.AddDays(1) }
+$stopArg = $stopInstant.ToString("yyyy-MM-ddTHH:mm:ss")
+
+# The log is written by this script while the agent it launches is committing, so a tracked log
+# guarantees a dirty tree at every iteration boundary -- the one thing the skill tells iterations
+# never to leave behind.
+$gitignore = Join-Path $Repo ".gitignore"
+$ignoreLine = ".claude/autonomous/driver.log"
+if (-not (Test-Path $gitignore) -or -not (Select-String -Path $gitignore -SimpleMatch $ignoreLine -Quiet)) {
+  Add-Content -Path $gitignore -Value $ignoreLine -Encoding ascii
+  Write-Output "Added '$ignoreLine' to .gitignore (the driver writes it mid-commit)."
+}
+
 # -NoProfile so a slow or interactive profile cannot wedge an unattended firing.
 $action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runner`" -Repo `"$Repo`" -UntilHHmm `"$UntilHHmm`"" `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runner`" -Repo `"$Repo`" -StopAt `"$stopArg`"" `
   -WorkingDirectory $Repo
 
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) `
@@ -78,9 +96,9 @@ $settings = New-ScheduledTaskSettingsSet `
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
-  -Description "One autonomous-session iteration per firing, via headless claude -p. Self-unregisters past $UntilHHmm." | Out-Null
+  -Description "One autonomous-session iteration per firing, via headless claude -p. Self-unregisters past $stopArg." | Out-Null
 
-Write-Output "Installed '$TaskName': every $EveryMinutes min, stopping after $UntilHHmm."
+Write-Output "Installed '$TaskName': every $EveryMinutes min, stopping at $stopArg."
 Write-Output "  repo:   $Repo"
 Write-Output "  claude: $claude"
 Write-Output "  log:    $Repo\.claude\autonomous\driver.log"

@@ -13,23 +13,33 @@
 
 param(
   [Parameter(Mandatory = $true)][string] $Repo,
-  [string] $UntilHHmm = "10:00",
+  # An absolute instant, not a wall-clock time. install-driver.ps1 computes it, because only the
+  # installer knows "now" and can decide whether 07:00 means this morning or tomorrow morning.
+  # An HH:mm parsed here would resolve to *today*, so a run installed at 23:00 to stop at 07:00
+  # would consider itself already finished and unregister on its first firing -- which is the
+  # overnight case, the one this whole driver exists for.
+  [Parameter(Mandatory = $true)][string] $StopAt,
   [string] $TaskName = "AgentWeaveAutonomousSession"
 )
 
 $ErrorActionPreference = "Stop"
 $logFile = Join-Path $Repo ".claude\autonomous\driver.log"
 
+# UTF-8 without a BOM. `Add-Content -Encoding utf8` on Windows PowerShell 5.1 writes one, and it
+# lands at the head of the file where it is invisible in an editor and shows up as a stray glyph
+# in every downstream reader.
+$script:LogEncoding = New-Object System.Text.UTF8Encoding($false)
+
 function Write-Log([string] $Message) {
   $line = "{0}  {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-  Add-Content -Path $logFile -Value $line -Encoding utf8
+  [System.IO.File]::AppendAllText($logFile, $line + [Environment]::NewLine, $script:LogEncoding)
   Write-Output $line
 }
 
 # --- stop condition -----------------------------------------------------------------------------
-$stopAt = [datetime]::ParseExact($UntilHHmm, "HH:mm", $null)
-if ((Get-Date) -ge $stopAt -and (Get-Date).Hour -ge $stopAt.Hour) {
-  Write-Log "Past $UntilHHmm - unregistering '$TaskName' and stopping."
+$stopAtInstant = [datetime]::Parse($StopAt, [System.Globalization.CultureInfo]::InvariantCulture)
+if ((Get-Date) -ge $stopAtInstant) {
+  Write-Log "Past $stopAtInstant - unregistering '$TaskName' and stopping."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
   exit 0
 }
