@@ -144,13 +144,28 @@ You asked 3 questions. The operator has now resolved all of them.
 
 Before `2026-08-13-answers-arrive-together` that was three entries and three turns. This is the
 first time that change has been exercised by an agent's own `ask_user` batch rather than a probe.
-- [ ] 5.3 Run 5.1 with a **Claude** agent as well as a Codex one. The repo's own `.claude/skills/`
+- [x] 5.3 Run 5.1 with a **Claude** agent as well as a Codex one. The repo's own `.claude/skills/`
       carries the same OpenSpec skills, so a Claude agent working in this repository is exposed to
       the identical conflict.
-- [ ] 5.4 In a project that genuinely has an `openspec/` directory, confirm the agent still reads it
+      **Passed**, driven live twice in a fresh scratch project with `openspec init --tools claude`
+      installed (the project-scoped equivalent of Codex's global skill install). A Claude agent
+      that could genuinely see the competing skills in its own worktree (committed, run 2) named
+      them to the operator, declined to use them, and interviewed instead — matching 5.1's Codex
+      result. Full evidence, including the one caveat (run 1 answered from general model knowledge
+      rather than a real file the agent could see), in
+      `.claude/autonomous/2026-08-15-judgement-evidence.md`.
+- [x] 5.4 In a project that genuinely has an `openspec/` directory, confirm the agent still reads it
       as context and does not refuse to look (3.1).
-- [ ] 5.5 Judge whether the agent mentioning a competing workflow is useful or noise. It was added so
+      **Passed** — same run 2 as 5.3. `Glob('**/*')` surfaced the committed `openspec/config.yaml`
+      without hesitation; the agent read the listing and correctly judged it uninteresting to an
+      empty green-field spec rather than refusing to look. One structural note recorded in the
+      evidence file: an *uncommitted* `openspec/` is invisible to a worktree-isolated agent
+      regardless of the floor's wording, since a worktree only contains what's on its branch.
+- [x] 5.5 Judge whether the agent mentioning a competing workflow is useful or noise. It was added so
       the discovery reaches the operator; if it produces a paragraph every turn, it is worth cutting.
+      **Evidence captured, verdict left to the operator** (d1). Both live runs produced one to two
+      proportionate sentences, stated once at the top of the turn and never repeated — consistent
+      with "useful" rather than "noise" at n=2. Full text in the evidence file.
 
 ## 6. User test guide
 

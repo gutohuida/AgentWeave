@@ -521,12 +521,111 @@ machinery this change added.
 
 ---
 
+## `2026-08-13-the-hubs-procedure-outranks-an-installed-one`
+
+### 5.3 — "Run 5.1 with a Claude agent as well as a Codex one. The repo's own `.claude/skills/`
+carries the same OpenSpec skills, so a Claude agent working in this repository is exposed to the
+identical conflict."
+
+**Premise check first.** `next_action` flagged that a prior iteration's search had concluded
+neither this repo's own `.claude/skills/` nor the user-level `~/.claude/skills/` carried the
+OpenSpec skills — which would have made 5.3 moot for Claude specifically. That conclusion was
+wrong: `.claude/skills/openspec-propose/`, `openspec-apply-change/`, `openspec-archive-change/`,
+`openspec-explore/` and `openspec-sync-specs/` are all present in this repo right now (`git log`
+puts them there since 28 July, commit `62bd386`) — they are the same skills this very session lists
+as available. The prior search must have looked in the wrong place or at the wrong time.
+
+But 5.3's own wording — "a Claude agent working **in this repository**" — can't be driven directly:
+`CLAUDE.md` and this loop's own `limits` forbid running AgentWeave against this repo. So the
+question actually being tested is the general one 5.1 answered for Codex: does a Claude agent
+exposed to a *real, locally installed* competing OpenSpec skill still obey the Hub's floor? Codex's
+version of that came from a **global** `~/.codex/skills/` install; the Claude-equivalent needed
+working out, since `~/.claude/skills/` has no OpenSpec skills on this machine. `npx openspec init
+--help` answers it: `init --tools claude` is the on-ramp real users take, and it writes the skills
+**into the target project itself** — the same shape a real project would have if its owner had run
+`openspec init` there, just project-scoped instead of user-scoped.
+
+**Driven live**, twice, each with a fresh scratch project (`aw-skillconflict-probe`,
+`proj-b83bf108`, since cleaned up), a fresh agent, and the operator's own opening line —
+*"I would like to create a budget web app for my home and my usage"* — sent to a **new** `speccer`
+agent bound to a **Claude** runner and the `Spec Author` charter, exactly mirroring 5.1's Codex
+setup.
+
+**Run 1** (`speccer` / `run-1af42e72`): `npx openspec init --tools claude --force` was run in the
+project root, but left uncommitted — so the agent's own worktree (a separate git checkout) couldn't
+see the files directly. It still knew about them: *"this machine has an `opsx` (OpenSpec-style)
+skill installed for proposing/tracking changes. I didn't find any of its files in this repo, and per
+the process governing this document I'm not going to use it or adopt its layout — just noting it
+exists in case you're expecting it elsewhere."* Worth being honest about what this shows: it isn't
+proof the agent detected real files on disk (its own search of the worktree came back empty), more
+likely the model's general knowledge of OpenSpec as a real, popular tool (see
+`openspec/explorations/2026-08-15-where-agentweave-fits.md`, 52k stars) filling in around the
+floor's own wording ("one installed on this machine and one you have used before"). It obeyed the
+floor regardless — interviewed instead of implementing, never touched the skill — but this run alone
+doesn't establish it was reacting to something *real*.
+
+**Run 2 closes that gap.** Committed `.claude/` and `openspec/` into the probe repo (`413f466`) so
+a worktree checkout would actually contain them — the shape a real project has, since a repo's
+OpenSpec scaffolding is normally tracked, the way this repo's own is. A second, independent agent
+(`speccer2` / `run-c7a7e619`, new conversation) ran `Glob('**/*')` on its own worktree and got back
+real paths: `.claude\commands\opsx\apply.md`, `.claude\skills\openspec-apply-change\SKILL.md`, and
+more. Its opening line: *"this repo already has an OpenSpec workflow scaffolded
+(`.claude/skills/openspec-*`, `.claude/commands/opsx/*`, `openspec/config.yaml`). Per my
+instructions for this document, I'm not using it or adopting its layout — everything here goes
+through `submit_spec_document` instead. Flagging it so you know it's sitting there in case you want
+it for something else."* Then it interviewed — five real questions about scope, users, and data
+entry — same as 5.1's Codex result, this time against skills it genuinely found rather than knew
+about in the abstract.
+
+**Verdict: passes, on real evidence.** A Claude agent exposed to an actually-present competing
+OpenSpec skill (project-scoped, the way `openspec init --tools claude` installs it for a real user)
+named it to the operator per D2, declined to use it or adopt its layout, and interviewed rather than
+implementing — matching 5.1's Codex result exactly. One technical note worth keeping: Claude Code's
+skill discovery for a linked git worktree resolves against `git rev-parse --git-common-dir` (the
+*main* repo's `.git`), not the worktree's own root — so a worktree-isolated agent sees skills
+committed at the main project root even though its own working directory is a separate checkout.
+That single fact is also most of the answer to 5.4.
+
+### 5.4 — "In a project that genuinely has an `openspec/` directory, confirm the agent still reads it
+as context and does not refuse to look (3.1)."
+
+**Answered by the same run 2 above**, which is a project with a genuine, committed `openspec/`
+directory (`openspec/config.yaml`, created by `npx openspec init`). The agent did not refuse to
+look — its `Glob('**/*')` surfaced `openspec/config.yaml` alongside the `.claude/` scaffolding, and
+it read the listing without hesitation or any stated reluctance. It chose not to open
+`openspec/config.yaml`'s contents, which is well inside 3.1's design intent (*"Reading such a
+workflow's files as context about the project is fine. What is not is authoring this document
+through anything but `submit_spec_document`"*) — reading the directory listing and declining to go
+deeper is not a refusal, it correctly judged the file uninteresting to an empty green-field spec.
+
+**One structural finding worth recording, not a defect in this change:** in run 1 (nothing
+committed), the agent's own worktree genuinely could not see `openspec/` or `.claude/` at all via
+file tools — a worktree only contains what's committed to the branch it's checked out on, so any
+*uncommitted* project-level scaffolding is invisible to a worktree-isolated agent regardless of what
+the floor says about reading it. This only resolved in run 2 because the files were committed. Real
+projects normally do commit their `openspec/` directory (this repo's own is tracked), so this is not
+expected to bite in practice — but it means 3.1's guarantee ("stay free to read it as context")
+implicitly depends on the directory being tracked, which nothing states explicitly anywhere.
+
+### 5.5 — "Judge whether the agent mentioning a competing workflow is useful or noise. It was added
+so the discovery reaches the operator; if it produces a paragraph every turn, it is worth cutting."
+
+**Evidence gathered, not decided — this is the operator's call.** Both runs above produced exactly
+one sentence to two sentences naming the competing workflow, in both cases the *first* thing said
+before the substantive interview began, then never mentioned again for the rest of the turn. Neither
+run repeated it, hedged with it, or let it crowd out the actual interview questions. The wording
+was proportionate both times — factual, non-alarmed, and explicit that the agent would not act on
+it. Whether one sentence per turn is worth the tokens on every turn a document is open (not just the
+first, per the context file's wording) is exactly what needs a human read across more than two data
+points — these two are consistent with "useful", not with "noise", but n=2.
+
+---
+
 ## Still entirely uncaptured
 
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
 disk — not just a write-up of an existing run:
 
-- `the-hubs-procedure-outranks-an-installed-one` 5.3–5.5
 - `blocked-and-conversation-binding` 8.10–8.13
 - `declining-a-question` 6.8–6.9
 - `run-without-a-git-repository` 5.3 — the workspace panel's no-repository note, legible or not, is

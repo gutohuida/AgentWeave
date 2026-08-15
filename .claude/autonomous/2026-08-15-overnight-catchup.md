@@ -28,6 +28,46 @@ under `decisions_for_user`.
 
 ---
 
+## 19:16 — driver iteration: q3 closed the-hubs-procedure-outranks-an-installed-one 5.3-5.5
+
+**Done**
+
+- Checked the live Hub DB first per the standing instruction: no existing project had OpenSpec
+  skills installed anywhere a Claude agent's worktree could see them, so this needed a live drive
+  rather than a write-up.
+- **Premise check first.** The prior iteration's `next_action` claimed neither this repo's own
+  `.claude/skills/` nor `~/.claude/skills/` carried the OpenSpec skills, which would have made 5.3
+  moot for Claude. That was wrong — this repo's `.claude/skills/openspec-*` has been there since
+  28 July (`62bd386`); they're the same skills this very session lists as available. Found by
+  simply `ls`-ing the directory.
+- 5.3 itself can't be driven literally ("a Claude agent working in this repository" — forbidden by
+  standing limits). Drove the equivalent: `npx openspec init --tools claude` is the real on-ramp
+  a user takes to get project-scoped Claude OpenSpec skills (parallel to Codex's global
+  `~/.codex/skills/` install from the original 5.1). Ran it in a fresh scratch project
+  (`aw-skillconflict-probe`, `proj-b83bf108`, since cleaned up).
+- **Two live runs, same operator message as the original 5.1/5.2 Codex probe.** Run 1 (skills
+  installed but uncommitted, so invisible to the agent's own worktree): the agent still mentioned
+  an `opsx` skill by name, most likely from general model knowledge rather than a real file it could
+  see — an honest caveat, not a clean result on its own. Run 2 (committed the skills so a fresh
+  agent's worktree genuinely contained them, `413f466`): a second independent agent's own
+  `Glob('**/*')` found the real files, named them to the operator, declined to use them, and
+  interviewed — matching 5.1's Codex result exactly, this time on unambiguous evidence.
+- **5.4 answered by the same run 2**: the probe also has a genuine, committed `openspec/` directory;
+  the agent's Glob surfaced it without hesitation or refusal, satisfying 3.1 directly.
+- **5.5**: evidence captured (one to two proportionate sentences, stated once, not noise at n=2),
+  verdict correctly left to the operator per d1.
+- **One structural finding worth keeping, not a defect**: an *uncommitted* `openspec/` or
+  `.claude/` directory is invisible to a worktree-isolated agent regardless of what the floor says
+  about reading it — a worktree only contains what's on its branch. Doesn't bite in practice since
+  real projects commit their OpenSpec scaffolding, but nothing states the dependency explicitly.
+  Recorded in the evidence file, not filed as a bug.
+- Full write-up: `.claude/autonomous/2026-08-15-judgement-evidence.md`, new
+  `the-hubs-procedure-outranks-an-installed-one` section. `tasks.md` 5.3-5.5 checked off.
+  `npx openspec validate --changes --strict` still 14/14 passing after the edit.
+- Cleaned up all DB rows (agents, runners, charters, conversations, runs, spec documents, event
+  logs) for `proj-b83bf108` and removed the scratch project directory.
+- Remaining in q3: `blocked-and-conversation-binding` 8.10-8.13, `declining-a-question` 6.8-6.9.
+
 ## 18:59 — driver iteration: q3 drove answers-arrive-together 5.1-5.5 live
 
 **Done**
