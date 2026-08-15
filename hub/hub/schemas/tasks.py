@@ -221,7 +221,10 @@ class TaskResponse(BaseModel):
     # The requirements this task actually serves: `identifier`, `requirement_id`, `document_id`,
     # `state`, `anchor`, `key`, and — read from the document rather than stored — `statement` and
     # `modal`. `statement` is null where the document no longer words the requirement, which is
-    # what a retired one is.
+    # what a retired one is. `has_rejected_evidence`, `rejected_evidence_count` and
+    # `latest_rejection_reason` cover a gap `state` cannot: evidence rejected at the requirement's
+    # current digest reads identically to a requirement nobody has attempted, because
+    # `requirement_coverage` has no precedence level for "tried and rejected".
     requirement_links: List[Any] = Field(default_factory=list)
     # The read side of `TaskCreate`/`TaskUpdate.requirement_ids`, which were accepted and reported
     # nowhere — so a caller could not confirm what was recorded, and anyone diagnosing why work did

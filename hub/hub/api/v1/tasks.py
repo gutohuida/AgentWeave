@@ -15,6 +15,8 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
     AgentHeartbeat,
+    EvidenceReview,
+    RequirementEvidence,
     RunDivergence,
     SpecRequirement,
     Task,
@@ -22,6 +24,7 @@ from ...db.models import (
     TaskRequirementLink,
     TaskRequirementReference,
 )
+from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
@@ -115,6 +118,38 @@ async def _attach_requirements(
     except Exception:
         wording = {}
 
+    # A requirement whose only evidence was rejected reads identically to one nobody has ever
+    # attempted — `requirement_coverage._state` falls through to `in_progress` either way, because
+    # coverage's precedence has no state for "tried and rejected". Approving the task above it would
+    # be silent about that. Scoped to the current digest, the same way coverage itself is: a
+    # rejection against a since-reworded requirement said nothing about what the requirement now
+    # asks for the day it was rejected, so it should not read as a live warning here either.
+    rejected_by_requirement: dict[str, dict] = {}
+    requirement_ids = {requirement.id for _, requirement in rows}
+    if requirement_ids:
+        current_digest = {requirement.id: requirement.digest for _, requirement in rows}
+        review_rows = await session.execute(
+            select(
+                RequirementEvidence.requirement_id,
+                RequirementEvidence.digest,
+                EvidenceReview.reason,
+            )
+            .join(EvidenceReview, EvidenceReview.evidence_id == RequirementEvidence.id)
+            .where(
+                RequirementEvidence.requirement_id.in_(requirement_ids),
+                RequirementEvidence.review_state == EVIDENCE_REJECTED,
+                EvidenceReview.decision == EVIDENCE_REJECTED,
+            )
+            .order_by(EvidenceReview.created_at.desc())
+        )
+        for requirement_id, digest, reason in review_rows:
+            if digest != current_digest.get(requirement_id):
+                continue
+            entry = rejected_by_requirement.setdefault(
+                requirement_id, {"count": 0, "reason": reason}
+            )
+            entry["count"] += 1
+
     # `.order_by(SpecRequirement.identifier)` above sorts as text, so `FR-11` lands between `FR-1`
     # and `FR-2`. The data is right and the order reads as a defect, which costs a diagnosis every
     # time someone checks what a task is tied to. Sorted here rather than in SQL: a natural sort
@@ -130,6 +165,7 @@ async def _attach_requirements(
     by_task: dict[str, list] = {}
     for task_id, requirement in rows:
         stated = wording.get(requirement.document_id, {}).get(requirement.key) or {}
+        rejection = rejected_by_requirement.get(requirement.id)
         by_task.setdefault(task_id, []).append(
             {
                 "identifier": requirement.identifier,
@@ -142,6 +178,12 @@ async def _attach_requirements(
                 # is, and the honest answer rather than a stale copy.
                 "statement": stated.get("statement"),
                 "modal": stated.get("modal"),
+                # True only for evidence rejected against the requirement's *current* digest — see
+                # the query above. `state` alone cannot say this: it is coverage's `in_progress`
+                # either way.
+                "has_rejected_evidence": rejection is not None,
+                "rejected_evidence_count": rejection["count"] if rejection else 0,
+                "latest_rejection_reason": rejection["reason"] if rejection else None,
             }
         )
 

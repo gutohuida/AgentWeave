@@ -38,16 +38,66 @@ rows with a genuinely correct catch: a conflict between two `MUST` requirements 
 landed on `master`, verified independently with plain `git log`/`git branch --contains` outside the
 Hub entirely.
 
-**Two UX gaps filed for the fix queue**: approving a task gives no signal when (a) a requirement it
-serves has rejected evidence sitting under it, or (b) the merge that approval promises ("approving is
-what merges it") was actually skipped. Both are silent successes that should not be silent — full
-detail and the file/line to start from are in `STATE.json`'s `next_action`.
+**Three defects filed for the fix queue (`q4`), two now fixed**: approving a task gave no signal when
+(a) a requirement it serves has rejected evidence sitting under it — **fixed this iteration** — or
+(b) the merge that approval promises ("approving is what merges it") was actually skipped — **fixed
+13:29**. Both were silent successes that should not have been silent. The third, (c), is a real
+duplication bug rather than a signal gap: a task board task with the right `requirement_ids` does not
+satisfy `propose`'s completeness check — only the document's own declared `tasks[]` does — so nothing
+stops an operator or agent hand-creating board tasks before approval and then getting a second,
+overlapping set minted on approval, with nothing reconciling the two. Not started — see
+`next_action`.
 
 **One genuine bug found and fixed earlier**, in the change that exists to prevent exactly it: the
 tool list told agents `submit_spec_document(path, document)`, a signature the tool has never had.
 
 **Four things that looked like serious bugs were my own query errors** — written up as such in
 `2026-08-15-spec-flow-findings.md` so nobody re-files them.
+
+---
+
+## 13:43 — driver iteration: approve's response stops being silent about rejected evidence
+
+Picked up `q4` defect (1), the sibling to 13:29's merge-visibility fix and the one this branch's
+`next_action` left a concrete starting point for: `PATCH`/`GET .../tasks/{id}` gave no indication
+when a requirement a task serves has rejected evidence sitting under it, even though
+`TaskResponse.requirement_links[]` already carried a `state` per requirement. That vocabulary
+(`unserved`/`not_started`/`in_progress`/`evidence_awaiting_review`/`stale`/`drifting`/`verified`,
+from `requirement_coverage.py`) has no value for "tried and rejected" — a requirement whose only
+evidence was rejected falls through `_state()`'s precedence to `in_progress`, identical to one
+nobody has ever attempted.
+
+**Done**
+
+- Added three fields per `requirement_links[]` entry in `hub/hub/api/v1/tasks.py`
+  `_attach_requirements`: `has_rejected_evidence` (bool), `rejected_evidence_count`, and
+  `latest_rejection_reason`. Populated by one batched query per page (same discipline as
+  `_latest_integrations_by_task`): join `RequirementEvidence` (`review_state == 'rejected'`) to
+  `EvidenceReview` (`decision == 'rejected'`, ordered newest first for the reason), filtered to
+  evidence whose `digest` matches the requirement's *current* digest — same staleness discipline
+  `requirement_coverage._state` already uses, so a rejection against a since-reworded requirement
+  does not read as a live warning.
+- Updated the `requirement_links` doc comment in `hub/hub/schemas/tasks.py` to name the new fields
+  and the gap they close. `requirement_links` is `List[Any]` (dict-shaped), so no schema class
+  changes were needed.
+- New `hub/tests/test_task_rejected_evidence_signal.py`, three tests: a rejected current-digest
+  evidence row is named on both `GET /tasks/{id}` and `GET /tasks`; a requirement nobody has
+  attempted carries no rejection signal (`False`/`0`/`null`); a later *accepted* resubmission does
+  not erase an earlier rejection's signal (coverage moves to `verified`, but the count still names
+  the rejected attempt — the two facts are independent, same reasoning as `requirement_coverage`'s
+  own doc comment on integration vs. state). **Verified the regression is real**: stashed the
+  `tasks.py`/`schemas/tasks.py` changes, reran the three tests — all three failed with `KeyError`
+  on the pre-fix code — then restored the fix and confirmed all three pass.
+- Ran the full `-k "task or requirement or evidence"` slice of `hub/tests/` (449 tests) against the
+  fix: all pass, no regressions. `ruff check` clean on all three touched/added files.
+- Did not touch `requirement_gate.py`'s blocking behaviour — signal-only fix, same discipline as
+  defect (2).
+
+**Found while wrapping up**: `2026-08-15-spec-flow-findings.md` actually documents a *third* `q4`
+defect that this branch's `STATE.json` had never carried into `next_action` or the queue — the
+`propose`-completeness/board-task duplication bug (see the short version above, item (c)). Filed it
+into `next_action` below so the next iteration picks it up rather than re-discovering it from the
+findings file.
 
 ---
 
