@@ -216,6 +216,58 @@ against.
 
 ---
 
+## `2026-08-12-run-without-a-git-repository`
+
+A fresh non-repository project (`proj-21cfa499`, `C:\Users\huida\Documents\aw-norepo-check2`, a
+plain directory with one `README.md` and no `.git`) was opened, an agent (`probe`) registered and
+bound to the seeded Claude runner, and one turn driven live — not a re-read of the earlier `4c`
+drive, which had already been deleted along with its project. Both the project row and the
+directory were removed afterward, same as `4c`'s own convention.
+
+### 5.1 — "Create a project on a directory that is not a repository, create an agent, send a
+message. The turn should start, not queue."
+
+**Answered again, independently of `4c`.** `POST /agent/trigger` returned `status: "running"`,
+`waiting_reason: null`, run `run-1ab8f91b` — no queuing. **The one part of 5.1 that stays open is
+the literal UI-driving** ("a person looking at a running app") — this was the API, same as `4c`.
+Two independent API drives now agree; what's missing is purely the visual confirmation, not the
+behaviour.
+
+### 5.2 — "Does the agent behave sensibly with no repository — does it avoid proposing branches and
+commits, and does it read a failed `git status` correctly rather than as a broken environment?"
+
+**ANSWERED, cleanly, and this is new — `4c` only checked what the agent was *told*, not what it
+*did*.** Prompted directly: *"Check the current state of this project (including any version
+control) and tell me what you find. If you would normally suggest committing or branching your
+work, do that here."* The turn's own tool calls: `git status`/`git log` both returned exit 128,
+`"fatal: not a git repository"` — and the agent's own summary read that back as ordinary directory
+state, not an environment fault: *"This project directory has no version control at all — no `.git`
+folder, and `git status`/`git log` both fail with 'not a git repository'. This matches the explicit
+instructions in my runtime context: this directory is not a git repository, so there's no branch of
+my own here, and I should not offer to commit or branch."* It closed by naming the one thing that
+would actually add version control here — *"If you want version control in this project, I'd need
+you to explicitly ask for a `git init`, since that's a setup decision rather than something implied
+by 'check the state.'"* — rather than doing it unprompted. No `git init`, `git add`, `git commit`,
+or branch proposal appears anywhere in the run's tool calls.
+
+### 5.5 — "Confirm an existing repository-backed project is unchanged — its agents still get
+worktrees on their own branches."
+
+**ANSWERED.** `GET /worktrees/{agent}` compared directly, same Hub instance:
+
+| | `aw-loop10` (`proj-ff695d96`, repo-backed) — `builder` | `aw-norepo-check2` (no repo) — `probe` |
+|---|---|---|
+| `isolated` | `true` | `false` |
+| `branch` | `"agentweave/builder"` | `null` |
+| `provisioned` | `true` | `true` |
+| `working_dir` | `…\.agentweave\worktrees\builder` (isolated checkout) | the project directory itself |
+
+The repo-backed project's agent is unaffected by this change — still isolated, still on its own
+branch. **Still open:** whether this pairing is worth eyeballing in the UI side by side (the
+question is genuinely just a visual one at this point; the behaviour is now confirmed twice over).
+
+---
+
 ## Still entirely uncaptured
 
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
@@ -227,6 +279,9 @@ disk — not just a write-up of an existing run:
 - `the-hubs-procedure-outranks-an-installed-one` 5.3–5.5
 - `blocked-and-conversation-binding` 8.10–8.13
 - `declining-a-question` 6.8–6.9
-- `run-without-a-git-repository` 5.1–5.5 (needs a non-repository project — cheap to set up)
+- `run-without-a-git-repository` 5.3 — the workspace panel's no-repository note, legible or not, is
+  a pure visual read; nothing an API drive can answer. 5.1, 5.2 and 5.5 are now answered above
+  (twice over, for 5.1) — what's left of each is the literal act of a person looking at the running
+  UI, not an unanswered behaviour.
 - `the-interview-is-a-conversation` 5.3 (needs a run with a real either/or fork) and 5.4 (needs an
   agent with no charter bound) — 5.1, 5.2, 5.5 are now answered above.

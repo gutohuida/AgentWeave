@@ -28,6 +28,36 @@ under `decisions_for_user`.
 
 ---
 
+## 18:13 — driver iteration: q3, run-without-a-git-repository driven live
+
+Continued q3 down `next_action`'s remaining list. This one wasn't answerable from data already on
+disk — the earlier `4c` drive's scratch project had already been cleaned up — so drove it fresh:
+opened `C:\Users\huida\Documents\aw-norepo-check2` (a plain directory, no `.git`) as a project,
+registered an agent with no charter bound to the seeded Claude runner, and triggered one turn
+asking it to check version-control state and commit/branch if it normally would.
+
+- **5.1** re-confirmed independently: `POST /agent/trigger` returned `running`, not queued — no
+  regression since `4c`.
+- **5.2** answered for the first time with real behaviour, not just what the agent was *told*: `git
+  status`/`git log` both failed with exit 128, and the agent's own summary read that back correctly
+  as "no version control at all," not a broken environment — and it declined to `git init`/commit/
+  branch unprompted, naming `git init` as the explicit ask that would change that.
+- **5.5** answered by comparing `GET /worktrees/{agent}` for `aw-loop10`'s repo-backed `builder`
+  (`isolated: true`, `branch: agentweave/builder`) against the new no-repo agent (`isolated: false`,
+  `branch: null`) on the same live Hub — the repo-backed path is genuinely unaffected.
+- **5.3** (the workspace panel's no-repository note's legibility) stays open — a pure visual UI
+  read, not answerable from the API or the database.
+
+Cleaned the scratch project up afterward the same way `4c` did — deleted its rows from every table
+that referenced it (no project-delete API exists) and removed the directory. No tasks.md checkbox
+ticked; the write-up is the artefact, the tick is yours. No source code changed.
+
+`2026-08-15-judgement-evidence.md` now has a new section for this change.
+`2026-08-15-run-without-a-git-repository` 5.1/5.2/5.5 answered; only 5.3 left open, for it as for
+`the-interview-is-a-conversation` 5.3/5.4 — 11 sources remain in q3's fully-uncaptured list.
+
+---
+
 ## 17:54 — driver iteration: q3, first judgement-evidence write-up not from a re-drive
 
 Picked the quick win `2026-08-15-judgement-evidence.md` itself had flagged: `the-interview-is-a-
