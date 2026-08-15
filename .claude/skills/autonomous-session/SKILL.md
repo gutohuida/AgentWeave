@@ -47,7 +47,12 @@ do not let them find out in the morning.
 
 ## Step 1 — Ask what to work on
 
-**Ask before proposing.** Use `AskUserQuestion` with the work options *and* an explicit
+**If `.claude/autonomous/STATE.json` already exists and is current, skip this step.** `/loop-prep`
+writes one: an ordered queue, an executable `next_action`, quoted limits, and the decisions it could
+not settle. Re-asking would discard work already done with the operator awake. Read it, confirm the
+queue still matches what they want in one line, and go to Step 3.
+
+Otherwise, **ask before proposing.** Use `AskUserQuestion` with the work options *and* an explicit
 "you choose" option, because the user may genuinely not want to decide — but that has to be their
 choice, not your assumption.
 
