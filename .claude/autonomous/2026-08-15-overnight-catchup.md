@@ -28,6 +28,28 @@ under `decisions_for_user`.
 
 ---
 
+## 21:0x–21:11 — driver iteration: full post-change suite re-run, clean
+
+Took the previous iteration's option (a): the one still-open verification gap in the draft
+end-of-run handoff was q1 task 4.5's full suite measurement, recorded at 12:20 (`f31e90e`, right at
+the start of the run) and never re-run since — meaning none of the day's real `hub/hub/` code fixes
+(q3's live-drive fixes, q4's three bug fixes, q6's three QoL fixes: `b10b607`, `eda02cf`, `60f0b3f`,
+`309fef4`, `fcedde6`, `1b9233a`) had been checked against the suite as a whole, only against their
+own individual regression tests.
+
+Ran `pytest hub/tests/` in the same 3-file-chunk split (alphabetical thirds; recomputed since more
+test files exist now than at 12:20) plus `pytest tests/` for the CLI, all at HEAD (`3dd9b41`):
+**hub chunk 1 656 passed 1 skipped, chunk 2 671 passed 9 skipped, chunk 3 719 passed 1 skipped —
+2046 passed 11 skipped total; CLI 360 passed 3 skipped, unchanged.** Zero failures. Recorded the
+result directly into `the-tool-list-matches-the-tools/tasks.md` task 4.5 as a re-run note rather
+than rewriting the original measurement.
+
+This was the last concrete, bounded piece of unclaimed work identified in the draft handoff. With
+it done, q1 has no open verification gap left at all. Updated `handoff-0049`'s draft "NOT run"
+section to reflect this closes.
+
+---
+
 ## 20:36–20:38 — driver iteration: q9's end-of-run handoff drafted early
 
 With q3 exhaustively worked (two escalating-method gap-check passes below, no third planned) and q8

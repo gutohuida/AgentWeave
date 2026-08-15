@@ -80,6 +80,17 @@ described with a signature it has never had. The name matched, so the test passe
       passed, 3 skipped. After: hub 631 + 686 + **714** passed, 11 skipped; CLI 360 passed, 3
       skipped — the +2 being 4.8 and 4.9. This also converts handoff 0047's outstanding
       *"the full suite has not been run since `55bfadb`"* into a measurement.
+      **Re-run 2026-08-15 21:0x-21:11, post-session** (this measurement was recorded at 12:20/f31e90e,
+      before the whole day's worth of q3/q4/q6 fixes to `hub/hub/` — b10b607, eda02cf, 60f0b3f,
+      309fef4, fcedde6, 1b9233a and others — none of which had had the full suite re-run against
+      them, only their own individual regression tests). Full clean run at HEAD (`3dd9b41`), same
+      3-chunk split (alphabetical thirds of the then-current 147 files):
+      chunk 1 656 passed 1 skipped (248.4s), chunk 2 671 passed 9 skipped (299.7s), chunk 3 719
+      passed 1 skipped (219.8s) — **2046 passed, 11 skipped total**; CLI `pytest tests/ -q` 360
+      passed, 3 skipped (17.9s), unchanged. No failures, no regressions from any of the day's fixes.
+      Chunk boundaries differ from the original run (more test files exist now, including today's
+      new regression tests) so the raw pass counts are not directly comparable line-for-line, but
+      zero red is the fact that matters.
 - [x] 4.6 `ruff check hub/ src/` — all checks passed. `black --check` on both files touched —
       unchanged.
 - [x] 4.7 `npx openspec validate --changes --strict` — 14 passed. `--specs --strict` — 30 passed.

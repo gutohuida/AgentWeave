@@ -33,8 +33,9 @@ Departure message, verbatim (also in `STATE.json.operator_departure_note`):
 
 Nine queue items (`q1`–`q9`) in `STATE.json`. Status as of this draft:
 
-- **q1** (close `the-tool-list-matches-the-tools`) — done except task 4.5 (needs the full
-  post-change suite, not yet re-run since).
+- **q1** (close `the-tool-list-matches-the-tools`) — done, fully. Task 4.5 (the full post-change
+  suite) was re-run at 21:0x-21:11: hub 2046 passed / 11 skipped across 3 chunks, CLI 360 passed /
+  3 skipped, zero failures. No open verification gap left.
 - **q2** (drive the spec flow end-to-end, live) — done. All three test tasks in `aw-loop10` driven
   for real: propose → approve → build → evidence → accept/reject → approve → merge, twice with a
   genuine verifier rejection (weak evidence caught both times), once fully merged and confirmed
@@ -157,8 +158,8 @@ timestamps):**
   repeat.
 
 **NOT run, and it matters — carry this forward:**
-- Task 4.5 (`the-tool-list-matches-the-tools`) — the full post-change suite, not re-run since the
-  tool-surface fix landed.
+- ~~Task 4.5 (`the-tool-list-matches-the-tools`) — the full post-change suite~~ — done at 21:0x-21:11:
+  hub 2046 passed / 11 skipped (3 chunks), CLI 360 passed / 3 skipped, zero failures. No longer open.
 - A third, independently-designed gap-check pass over `judgement-evidence.md` (see "Key decisions"
   #3) — deliberately deferred, not forgotten.
 - `npx vitest run` / `npx tsc --noEmit` — no UI source changed this session that would need it,
