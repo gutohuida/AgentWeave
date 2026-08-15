@@ -18,6 +18,7 @@ from ...db.models import (
     RunDivergence,
     SpecRequirement,
     Task,
+    TaskIntegration,
     TaskRequirementLink,
     TaskRequirementReference,
 )
@@ -27,7 +28,7 @@ from ...run_task_binding import (
     release_conversations_bound_to,
     release_reason,
 )
-from ...schemas.tasks import TaskCreate, TaskResponse, TaskUpdate
+from ...schemas.tasks import TaskCreate, TaskIntegrationSummary, TaskResponse, TaskUpdate
 from ...spec_lifecycle import Actor as SpecActor
 from ...sse import sse_manager
 from ...task_transition_service import (
@@ -53,6 +54,7 @@ def _task_response(
     heartbeat: Optional[AgentHeartbeat] = None,
     *,
     has_open_divergence: bool = False,
+    latest_integration: Optional[TaskIntegration] = None,
 ) -> TaskResponse:
     response = TaskResponse.model_validate(task)
     effective_status, effective_message = effective_heartbeat_status(heartbeat)
@@ -60,6 +62,11 @@ def _task_response(
     response.assignee_status_msg = effective_message
     response.assignee_last_seen = heartbeat.timestamp if heartbeat else None
     response.has_open_divergence = has_open_divergence
+    response.latest_integration = (
+        TaskIntegrationSummary.model_validate(latest_integration)
+        if latest_integration is not None
+        else None
+    )
     return response
 
 
@@ -178,6 +185,30 @@ async def _tasks_with_open_divergence(
         .distinct()
     )
     return {row[0] for row in result}
+
+
+async def _latest_integrations_by_task(
+    session: AsyncSession, project_id: str, task_ids: set[str]
+) -> dict[str, TaskIntegration]:
+    """The newest integration attempt per task, for the tasks that have ever had one.
+
+    Same shape as `_latest_heartbeats_by_agent`: one query for the whole page rather than one per
+    task, ordered newest-first so the first row seen per task is the one kept.
+    """
+    if not task_ids:
+        return {}
+    result = await session.execute(
+        select(TaskIntegration)
+        .where(
+            TaskIntegration.project_id == project_id,
+            TaskIntegration.task_id.in_(task_ids),
+        )
+        .order_by(TaskIntegration.task_id, TaskIntegration.created_at.desc())
+    )
+    latest: dict[str, TaskIntegration] = {}
+    for row in result.scalars().all():
+        latest.setdefault(row.task_id, row)
+    return latest
 
 
 async def _latest_heartbeats_by_agent(
@@ -348,6 +379,9 @@ async def list_tasks(
         {task.assignee for task in tasks if task.assignee},
     )
     diverged = await _tasks_with_open_divergence(session, project_id, {task.id for task in tasks})
+    integrations = await _latest_integrations_by_task(
+        session, project_id, {task.id for task in tasks}
+    )
     return await _attach_requirements(
         session,
         [
@@ -355,6 +389,7 @@ async def list_tasks(
                 task,
                 heartbeats.get(task.assignee) if task.assignee else None,
                 has_open_divergence=task.id in diverged,
+                latest_integration=integrations.get(task.id),
             )
             for task in tasks
         ],
@@ -463,6 +498,7 @@ async def get_task(
         {task.assignee} if task.assignee else set(),
     )
     diverged = await _tasks_with_open_divergence(session, project_id, {task.id})
+    integrations = await _latest_integrations_by_task(session, project_id, {task.id})
     responses = await _attach_requirements(
         session,
         [
@@ -470,6 +506,7 @@ async def get_task(
                 task,
                 heartbeats.get(task.assignee) if task.assignee else None,
                 has_open_divergence=task.id in diverged,
+                latest_integration=integrations.get(task.id),
             )
         ],
         project_id=project_id,
@@ -586,6 +623,7 @@ async def update_task_for_actor(
         {task.assignee} if task.assignee else set(),
     )
     diverged = await _tasks_with_open_divergence(session, project_id, {task.id})
+    integrations = await _latest_integrations_by_task(session, project_id, {task.id})
     responses = await _attach_requirements(
         session,
         [
@@ -593,6 +631,7 @@ async def update_task_for_actor(
                 task,
                 heartbeats.get(task.assignee) if task.assignee else None,
                 has_open_divergence=task.id in diverged,
+                latest_integration=integrations.get(task.id),
             )
         ],
         project_id=project_id,

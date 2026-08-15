@@ -230,6 +230,69 @@ async def test_approving_a_task_puts_its_work_on_main(app, auth_headers, builder
 
 
 @pytest.mark.asyncio
+async def test_the_approve_response_itself_reports_the_merge(app, auth_headers, builder, tmp_path):
+    """Approving is what merges it, but the response used to say nothing about whether it had —
+    only a separate `GET /tasks/{id}/integrations` call showed that. Echo the same fact onto the
+    transition response (and onto plain `GET /tasks/{id}`) so a silent success stops being silent.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+
+    task = await linked_task(app, auth_headers)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    latest = approved.json()["latest_integration"]
+    assert latest is not None, approved.json()
+    assert latest["outcome"] == "merged"
+    assert latest["commit_sha"] == work
+    assert latest["target_branch"] == "main"
+
+    # GET tells the same story, not only the response to the transition that caused it.
+    fetched = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert fetched.json()["latest_integration"]["outcome"] == "merged"
+
+
+@pytest.mark.asyncio
+async def test_the_approve_response_reports_a_skip_too(app, auth_headers, builder, tmp_path):
+    """The other half of the same gap: a skip was exactly as invisible as a merge was."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    # Deliberately no main_branch set.
+
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+
+    task = await linked_task(app, auth_headers)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    latest = approved.json()["latest_integration"]
+    assert latest is not None, approved.json()
+    assert latest["outcome"] == "skipped"
+    assert "no main branch" in latest["reason"]
+
+
+@pytest.mark.asyncio
+async def test_latest_integration_is_null_before_any_approval(app, auth_headers, builder, tmp_path):
+    """A task that has never reached `approved` has never had an integration attempt made for it —
+    null, not an empty skip, is the honest answer."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task = await linked_task(app, auth_headers)
+    fetched = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert fetched.json()["latest_integration"] is None
+
+
+@pytest.mark.asyncio
 async def test_later_commits_on_the_branch_are_not_merged(app, auth_headers, builder, tmp_path):
     """D1: what merges is the commit the evidence names, not the agent's branch.
 

@@ -51,6 +51,61 @@ tool list told agents `submit_spec_document(path, document)`, a signature the to
 
 ---
 
+## 13:29 — driver iteration: approve's response stops being silent about the merge
+
+Picked up `q4`'s first filed defect (2): approving a task ("approving is what merges it") gave no
+signal in the PATCH/GET response about whether the merge actually happened — only a separate
+`GET /tasks/{id}/integrations` call showed that.
+
+**Done**
+
+- Added `TaskIntegrationSummary` (`outcome`, `reason`, `commit_sha`, `target_branch`, `created_at`)
+  and a `latest_integration: Optional[TaskIntegrationSummary]` field on `TaskResponse`
+  (`hub/hub/schemas/tasks.py`).
+- Populated it in `hub/hub/api/v1/tasks.py` for `GET /tasks`, `GET /tasks/{id}`, and the PATCH
+  transition response (`update_task_for_actor`) via a new batched `_latest_integrations_by_task`
+  helper (same shape as the existing `_latest_heartbeats_by_agent`). Left `create_task_for_actor`
+  alone — a just-created task cannot have an integration row, by construction (entry statuses only).
+- Three new regression tests in `hub/tests/test_task_integration.py`: a merge is echoed onto the
+  approve response and onto plain `GET`, a skip (no `main_branch` configured) is echoed too, and a
+  never-approved task reads `null` rather than an invented skip. **Verified the regression is real**
+  by stashing the fix and re-running just these three — all three fail with `KeyError:
+  'latest_integration'` on the old code, confirming they test something that did not exist before.
+  Un-stashed and they pass again.
+- Full `hub/tests/` filtered to `-k task` (283 tests, the load-bearing surface for this change) and
+  the whole of `test_task_integration.py`, `test_tasks.py`, `test_task_transitions.py`,
+  `test_task_transition_service.py`, `test_requirement_gate.py`, `test_requirement_coverage.py`,
+  `test_mcp_server.py`, `test_mcp_body_contract.py`, `test_mcp_tool_schemas.py`,
+  `test_tool_surface_matches_server.py`, `test_spec_declared_tasks.py`,
+  `test_task_spec_document_context.py` — all green, no regressions. `ruff check` clean on both
+  edited files.
+- Deliberately left the Hub UI untouched — the queue entry scoped this to the API response and a
+  regression test, not a rendered surface. If the operator wants the merge outcome visible on a task
+  card, that is a small follow-up, not implied by this fix.
+
+**Found while investigating item (1)** (the sibling defect — approve gives no signal when a
+requirement's evidence was *rejected*, at rigor below `gate`): `TaskResponse.requirement_links[]`
+already carries a `state` per requirement (`hub/hub/api/v1/tasks.py` `_attach_requirements`, backed
+by `SpecRequirement.state` / `requirement_coverage.py`), but that vocabulary has no value for
+"evidence was rejected" — only `unserved`, `not_started`, `in_progress`, `evidence_awaiting_review`,
+`stale`, `drifting`, `verified`. A requirement whose only evidence was rejected reads identically to
+one that was never attempted (`in_progress`), which is the actual gap item (1) names. The review
+state itself (`accepted`/`awaiting`/`rejected`) lives on `RequirementEvidence.review_state`
+(`hub/hub/db/models.py` ~1883, `hub/hub/requirement_evidence.py` ~54-56), one join away from
+`requirement_links`, and is not surfaced anywhere on the task response today. This is the concrete
+starting point for item (1) — see `next_action`.
+
+**Next**: item (1) — surface, per requirement in `requirement_links`, whether it has rejected
+evidence sitting under it (distinct from never-attempted), likely as an added field per link (e.g.
+`has_rejected_evidence` or a small nested summary) populated from the same batched query
+`_attach_requirements` already runs, joined against `RequirementEvidence` filtered to
+`review_state == 'rejected'` for the requirement's current digest. Needs its own fail-before/
+pass-after regression test using the existing `test_task_integration.py` or a sibling
+`test_requirement_gate.py`-style fixture. Do not touch `requirement_gate.py`'s blocking behaviour —
+this is a signal-only fix, same as (2) was.
+
+---
+
 ## 12:59 — driver iteration: propose → merge → reachable-from-main, proven
 
 Picked up a `builder` run (`run-84f3535c`) the previous driver iteration had correctly left in

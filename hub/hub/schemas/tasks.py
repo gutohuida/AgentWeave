@@ -185,6 +185,25 @@ class TaskUpdate(BaseModel):
         return v
 
 
+class TaskIntegrationSummary(BaseModel):
+    """What the most recent approval of this task did to the repository — merged, or skipped why.
+
+    A trimmed echo of one row from `GET /tasks/{id}/integrations`, which existed already but told
+    nobody unless they asked it directly. "Approving is what merges it" was true and silent: the
+    approve response itself gave no sign whether a merge happened, was skipped (no main branch
+    configured, a dirty checkout, nothing to merge), or is not applicable because the task never
+    reached `approved`.
+    """
+
+    outcome: str = Field(max_length=16)
+    reason: str = Field(default="", max_length=2000)
+    commit_sha: Optional[str] = Field(default=None, max_length=64)
+    target_branch: Optional[str] = Field(default=None, max_length=255)
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class TaskResponse(BaseModel):
     id: str = Field(max_length=128)
     project_id: str = Field(max_length=128)
@@ -236,5 +255,10 @@ class TaskResponse(BaseModel):
     # to the specification it implements.
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
     spec_task_key: Optional[str] = Field(default=None, max_length=128)
+    # The most recent attempt to integrate this task's approved work, or null where none has ever
+    # been made (every non-`approved` task, and one whose approval predates this field existing on
+    # older rows the migration never touched). The full history stays at
+    # `GET /tasks/{id}/integrations`; this is only ever the newest row of it.
+    latest_integration: Optional[TaskIntegrationSummary] = None
 
     model_config = {"from_attributes": True}
