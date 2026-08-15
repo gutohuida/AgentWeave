@@ -28,6 +28,67 @@ under `decisions_for_user`.
 
 ---
 
+## 20:2x–20:4x — driver iteration: q8's own recommended second pass, found three more real gaps
+
+The previous iteration's `next_action` explicitly recommended a second full re-read, given this
+file's own history shows a flagged gap can survive being noted once without being fixed. Did that
+pass — but this time checked *item counts*, not just section presence: for every one of the 13
+in-scope changes, diffed each change's own `tasks.md` "human-only"/"verification" section item-by-item
+against `judgement-evidence.md`'s section for that change, instead of trusting that a change having a
+section meant it was complete.
+
+**It was not clean.** Three more sourced-but-never-written items turned up, on top of the whole
+missing change the 20:1x pass found — all three had been marked "captured in q3" in `triage.md`
+without actually being captured:
+
+- **`hub-owns-the-spec-document` 17.8** ("confirm nothing of value was lost with the skills — read §6's
+  table"). Tracked down what "§6" actually refers to (it's not in this change's own `tasks.md` —
+  it's `## 6. Disposition of the skill set` in the exploration doc this change implements,
+  `openspec/explorations/2026-08-12-spec-hub-integration.md:548-661`, a ~50-row audit of every
+  deleted skill section's destination). Wrote up the table's structure and independently verified
+  the charter-harvest half already landed (commit `2909137`, 43+58 passing guard tests) so the
+  operator's read is a five-minute confirmation, not archaeology.
+- **`a-document-earns-its-name` 9.4** ("is the reordered acceptance table more readable?"). Found the
+  actual defect it refers to in `design.md` (acceptance criteria used to render in raw payload order,
+  producing `FR-1, FR-1, FR-2, ..., FR-8, FR-8, FR-7, FR-9` — visibly out of sequence; task 7.1 fixed
+  it to sort by requirement position). Pointed the operator at the already-created `amber-griffin`
+  document from 9.1 to do the visual check.
+- **`a-requirement-knows-its-work` 8.2/8.3/8.4** (drift wording, migration correctness, retention
+  policy) — three of five items in that change's section, silently absent despite `triage.md` claiming
+  full capture. 8.2: quoted the exact operator-facing copy (`SpecCoverageBar.tsx:13` — *"The
+  implementation changed after this was verified. Someone needs to say which one was wrong."*).
+  8.3 turned out to be **answerable outright, not a judgement call**: queried the live Hub database
+  directly — 27 `backfill`-actor links from the real conversion pass, 13 still-unresolved references
+  individually inspected and every one is genuine prose with no parseable requirement identifier
+  (correctly left alone, not silently dropped). Zero incorrect links found. Ticked `8.3 [x]` in that
+  change's own `tasks.md` with the evidence pointer — same treatment 6.2/6.3 got in the 20:1x pass.
+  8.4: quoted the actual default (`evidence_retention` defaults to `"never"`) and the artifact
+  location (`<project-root>/evidence/`, plain files, not inside `.agentweave/`).
+
+Every other change's human-only section was then checked the same item-by-item way and all matched
+exactly — `the-tool-list-matches-the-tools`, `a-gate-that-only-evidence-opens`,
+`a-posture-that-survives-the-handoff`, `blocked-and-conversation-binding`, `declining-a-question`,
+`the-hubs-procedure-outranks-an-installed-one` (0 open, fully closed), `the-interview-is-a-conversation`,
+`the-spec-tool-reaches-the-agent`, `run-without-a-git-repository`. `answers-arrive-together`'s two
+remaining open items outside its human-only section (1.4, 4.6) are agent-verifiable test-writing work,
+correctly out of `judgement-evidence.md`'s scope — not a gap, just noted for whoever picks up q4-style
+code work later.
+
+Corrected `triage.md`'s three affected rows and added a dated second-correction note to
+`judgement-evidence.md`'s own summary section, same discipline as the 20:1x pass: never silently
+rewrite a prior claim, say what was wrong and when it was caught. `npx openspec validate --changes
+--strict` still 14/14 after the one `tasks.md` edit (8.3's checkbox).
+
+**q3 is now, for real, exhaustively checked against every source's own task list** — not just
+"section exists," but "every open item in that section has a written entry." Given the pattern (two
+passes in a row each found real gaps the previous one missed), a third structural pass is unlikely to
+be worth another iteration's budget — what's left in q3/d1 is now squarely the operator's read, not
+more loop-side archaeology. Remaining time before 22:00 is best spent letting q9 (end-of-run handoff)
+and idle-state maintenance run out the clock, per the previous iteration's own guidance, unless a
+future iteration's fresh read turns up something this one missed.
+
+---
+
 ## 20:1x — driver iteration: q8's actual review, done — found and fixed two real staleness defects
 
 Previous iteration's `next_action` asked for q8 to be treated as a real review of this file (and

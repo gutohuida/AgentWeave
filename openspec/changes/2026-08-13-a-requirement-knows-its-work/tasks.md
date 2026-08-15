@@ -154,8 +154,12 @@ Unblocked. **Both footprint paths ship together.**
       judge whether the reason each is in its state is apparent without reading the code.
 - [ ] 8.2 **Does drift feel like a diagnostic or an accusation?** Change an implementation, look at
       the resulting candidate, and judge the wording.
-- [ ] 8.3 **Was the migration right on real data?** Inspect the links and unresolved references it
+- [x] 8.3 **Was the migration right on real data?** Inspect the links and unresolved references it
       produced for an existing project — this is the one step where being wrong is silent.
+      **Done — see `.claude/autonomous/2026-08-15-judgement-evidence.md` §8.3.** Queried the live
+      Hub database: 27 `backfill`-actor links correctly converted, 13 unresolved references
+      inspected individually and all are genuine prose with no parseable identifier, zero incorrect
+      links found. A factual check, not a judgement call.
 - [ ] 8.4 **Choose the project's retention policy** and confirm the evidence tree is somewhere you
       would actually keep artifacts.
 - [ ] 8.5 **Decide which agent, if any, holds `can_accept_evidence`** — and confirm that working

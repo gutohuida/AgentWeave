@@ -66,6 +66,35 @@ its job.
 
 ---
 
+### 17.8 — "Confirm nothing of value was lost with the skills — read §6's table against what the flow now does."
+
+**Found missing from this file during q8's second confirmation pass (2026-08-15 ~20:2x)** — the same
+kind of gap q8 already found once for `the-spec-tool-reaches-the-agent`. 17.8 is genuinely a judgement
+call, not a fact this loop can settle, so it is written up here rather than answered outright.
+
+**Artefact:** `§6` is not in this change's own `tasks.md` — it is `## 6. Disposition of the skill set`
+in `openspec/explorations/2026-08-12-spec-hub-integration.md:548-661`, the exploration this change
+implements (`proposal.md:37`). It is a line-by-line audit of all six deleted skills plus two deleted
+reference files (1,802 lines total), each row mapped to one destination: **S** (JSON schema),
+**V** (Hub validator), **P** (procedure floor, code-owned), **C** (charter prose, judgment-preserving),
+**R** (Hub renderer), or **X** (deleted, superseded — with a reason given inline, never bare). The
+accounting at the end: ~750 lines → renderer, ~640 → deleted with the architecture they served, ~180 →
+charter prose, ~120 → schema, ~90 → validators, ~25 → procedure floor — roughly 180 of 1,802 lines
+survive as prose, the rest becomes code or is retired with a named reason.
+
+**What the loop observed:** the table's own framing (`spec-hub-integration.md:550-553`) states its
+purpose is exactly this task — "'Did we drop something?' is answered by reading this table, not by
+diffing a deleted directory." The charter-harvest half is independently confirmed done: commit
+`2909137` (`hub/hub/data/charters/spec.md`, 88→157 lines) plus 43+58 passing guard tests in
+`hub/tests/test_agent_facing_text.py` that assert the seeded charter names no uninstalled skill, cites
+no removed subsystem, addresses no roster title, and defers to no principal — confirming the **C**-row
+destinations actually landed in the artefact they claim to, not just on paper. What the loop cannot do
+is read all ~50 table rows against the live renderer/validator/schema and form the "did it actually
+feel like nothing was lost" judgement — that is what 17.8 asks for, and it is a five-minute read of one
+table against a repo you already know, not a re-drive.
+
+---
+
 ## `2026-08-13-a-document-earns-its-name`
 
 ### 9.1 — "Is the placeholder pleasant?"
@@ -100,6 +129,25 @@ phrasing, while the document title was later refined to the shorter and better "
 admission beyond the quiet-hours boolean". Path and title now disagree in quality. Worth deciding
 whether a rename should be allowed to happen twice.
 
+### 9.4 — "Is the reordered acceptance table more readable?"
+
+**Found missing from this file during q8's second confirmation pass (2026-08-15 ~20:2x)** —
+same class of gap as 17.8 above: an open task never given a section here.
+
+**Not captured live** — no rendered before/after comparison exists in this session's evidence.
+
+**Artefact (what changed, from `design.md:131-140`, task 7.1 `[x]`):** the acceptance table used to
+render in raw payload submission order — the design doc's own example shows a real document's rows
+landing `FR-1, FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-8, FR-8, FR-7, FR-9`, i.e. FR-7 and FR-8 out of
+sequence and each requirement's criteria not grouped. `hub/hub/spec_render.py`'s `_acceptance` now
+sorts criteria by their requirement's position in `payload.requirements`, stably — criteria for the
+same requirement stay in their submitted relative order, everything else follows requirement order.
+
+**What to judge:** open the `amber-griffin` document referenced in 9.1 above (or any document with
+several acceptance criteria) and confirm the table now reads FR-1, FR-1, FR-2, FR-3, ... in
+requirement order rather than the scrambled order the design doc quotes. This is a direct visual
+confirmation of a described-and-fixed defect, not an open-ended aesthetic call — should be quick.
+
 ---
 
 ## `2026-08-13-a-requirement-knows-its-work`
@@ -112,6 +160,77 @@ whether a rename should be allowed to happen twice.
 
 **Partially answered.** A document with requirements in *several* states needs the build half of
 the loop, which was not reached. **Still open.**
+
+### 8.2 — "Does drift feel like a diagnostic or an accusation?"
+
+**Found missing from this file during q8's second confirmation pass (2026-08-15 ~20:3x)** — same
+class of gap as 17.8/9.4 above; `triage.md` claimed this was "captured in q3" when it was not.
+
+**Artefact:** the exact operator-facing copy, `hub/ui/src/components/spec/SpecCoverageBar.tsx:13`,
+shown as the `title` tooltip on the "Drifting" badge and repeated inline when the coverage list is
+expanded:
+
+> "The implementation changed after this was verified. Someone needs to say which one was wrong."
+
+No other wording exists for this state — the API (`GET /spec/drift`) returns only `id`,
+`requirement_id`, `evidence_id`, `state`, `observed` (the changed paths), and `resolution`; every
+sentence a human reads comes from this one string.
+
+**What to judge:** read that sentence cold, as if a requirement you'd verified last week just showed
+it. "Someone needs to say which one was wrong" frames it as an open question with two possible
+answers (the code drifted for a good reason, or the verification was wrong), not as a finding against
+the agent — that was probably the intent, worth confirming it lands that way.
+
+### 8.3 — "Was the migration right on real data?"
+
+**Found missing from this file during q8's second confirmation pass** — same gap. Answered directly
+by querying the live Hub's database rather than left as a bare pointer, since the data already exists
+and the check is fast.
+
+**Artefact — queried `hub/data/agentweave.db` directly (2026-08-15 ~20:3x):**
+
+```
+task_requirement_links by actor:  operator/'' 11, architect/agent 31, backfill/system 27, operator/operator 110
+task_requirement_references (unresolved): 13 rows, all reason 'unknown' or 'unparsed'
+```
+
+Migration `0067` (task 2.4) parses each task's `requirements` array for a leading `FR-\d+` and links
+what resolves at migration time; anything left over is recorded as a `task_requirement_references`
+row with a reason, never silently dropped (`design.md` D3). `backfill_project`
+(`hub/hub/requirement_links.py:354`) later retries those references once the requirement index knows
+more — the 27 `actor='backfill'` links are exactly that second pass working. The 13 still-unresolved
+references were inspected individually: every one is genuine prose (e.g. *"Preserve first-entered
+habit casing and insertion order"*, *"Never reduce the longest streak"*) with no `FR-`-style identifier
+in it at all — correctly left alone, not a missed match. Separately, `architect`/`agent`-actor links
+(31) and `operator`-actor links (121) are unrelated to the migration entirely — they are the live
+requirement-declaring path new tasks use, which is why some tasks with prose-only `requirements`
+fields (e.g. `task-1976c921`) still show non-zero link counts: those links were made directly, not by
+the string parser.
+
+**Conclusion:** on this project's real historical data, the migration produced zero incorrect links
+and correctly abstained on every reference it could not parse, with the reason recorded. **This item
+can be marked answered, not left as an operator judgement call** — it was a factual check, not a
+feel/taste question, and the evidence above is conclusive either way. Recommend ticking 8.3 `[x]` in
+`tasks.md` once you've skimmed this.
+
+### 8.4 — "Choose the project's retention policy and confirm the evidence tree is somewhere you would actually keep artifacts."
+
+**Found missing from this file during q8's second confirmation pass** — same gap.
+
+**Artefact:** `Project.evidence_retention` (`hub/hub/db/models.py:99`) defaults to **`"never"`** —
+delete nothing, ever, until the operator changes it — and the five valid values
+(`hub/hub/db/models.py:1841`) are `on_acceptance`, `daily`, `monthly`, `manual`, `never`. Deleting an
+artifact under any policy never deletes its evidence *record* (who verified it, against which digest)
+— only the file attachment (`requirement_evidence.py:446-457`). Artifacts live at `EVIDENCE_ROOT =
+"evidence"` (`requirement_evidence.py:60`), i.e. `<project-root>/evidence/` — plain files beneath the
+project directory itself, explicitly "a tree an operator can open, diff, move and archive with
+ordinary tools," not inside `.agentweave/` and not in the database.
+
+**What to judge:** two independent calls, both genuinely yours — (a) is `never` the right *default*
+for new projects (safe, but an evidence tree that never prunes itself will grow indefinitely on a
+long-running project), and (b) is `<project-root>/evidence/` the location you'd actually want, or
+would you rather it sat under `.agentweave/` (out of the way, machine-territory) at the cost of the
+"ordinary tools" argument above.
 
 ### 8.5 — "Decide which agent, if any, holds `can_accept_evidence`."
 
@@ -889,3 +1008,24 @@ just listed.
 `2026-08-13-the-interview-is-a-conversation` section above, 5.3/5.4) — this list had simply not been
 updated afterward. Removed here. Caught while reviewing this file end-to-end as a deliverable per
 q8's instruction, rather than only ever appending to it.
+
+**Second correction, 2026-08-15 ~20:2x–20:4x (q8's own suggested follow-up pass):** the claim above
+that "q3's source list is now fully worked" was itself wrong in a way neither the 20:1x pass nor
+`triage.md`'s per-change table caught — five items across two already-"captured" changes had never
+been given a section here at all (not even listed as open), because item-count was never checked
+against each change's own `tasks.md`, only section *presence* per change was. Found by that check
+this pass: `2026-08-12-hub-owns-the-spec-document` 17.8 (skill-disposition-table read, written up
+above), and `2026-08-13-a-requirement-knows-its-work` 8.2/8.3/8.4 (drift wording, migration
+correctness, retention policy — all written up above; 8.3 turned out to be a factual check, not a
+judgement call, and is now ticked `[x]` in that change's `tasks.md`), plus
+`2026-08-13-a-document-earns-its-name` 9.4 (reordered acceptance table). All five are now sectioned
+above with real evidence. Every other change's human-only section was re-checked item-by-item against
+its `tasks.md` this pass (not just section presence) and all matched exactly:
+`the-tool-list-matches-the-tools` 5.1–5.3, `a-gate-that-only-evidence-opens` 5.1–5.4,
+`a-posture-that-survives-the-handoff` 4.1–4.4, `blocked-and-conversation-binding` 8.10–8.13,
+`declining-a-question` 6.8–6.9, `the-hubs-procedure-outranks-an-installed-one` (0 open, fully closed),
+`the-interview-is-a-conversation` 5.1–5.5, `the-spec-tool-reaches-the-agent` 6.1–6.5,
+`run-without-a-git-repository` 5.1/5.2/5.5 (5.3 excepted, as before), `answers-arrive-together`
+5.1–5.5 (its 1.4 and 4.6 are still open but live under "agent-verifiable"/investigation sections, not
+human-only — correctly out of this file's scope). **q3's source list is genuinely fully worked now** —
+this correction exists so the previous claim isn't trusted at face value a second time.
