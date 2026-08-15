@@ -142,4 +142,9 @@ prints/
 # A stray SQLite file lands here when something is run from the package directory rather than
 # from `hub/`. The real database is `hub/data/`, ignored above; this one is always an accident.
 hub/hub/data/*.db
+hub/agentweave.db
 .claude/autonomous/driver.log
+
+# Working files for the autonomous loop's own API-driving (request/response bodies), not
+# durable output - the findings/log files next to it are.
+.claude/autonomous/scratch/
