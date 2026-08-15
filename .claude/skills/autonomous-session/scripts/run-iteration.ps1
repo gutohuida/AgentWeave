@@ -92,6 +92,15 @@ iterations - everything you need is on disk.
 4. Verify it: run the tests, drive the real surface. A passing suite is not proof of behaviour.
 5. Append a log entry, rewrite STATE.json (including next_action and last_heartbeat), then
    commit and push. Never end an iteration with a dirty tree.
+6. LAST of all, once everything is pushed: set last_heartbeat to an instant ~40 minutes in the
+   past and commit that one-line change. This releases the branch so the very next firing picks
+   the work up instead of standing down against your own heartbeat and idling a cycle. Do this
+   ONLY at the end -- while you are still working, keep refreshing last_heartbeat to now, which
+   is what keeps an interactive session and this driver off each other.
+
+Stamp every timestamp from PowerShell (Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz') or Python's
+datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100, so a
+heartbeat written from it lands an hour in the future and stalls the loop until real time catches up.
 
 Honour the limits recorded in STATE.json. Stay on the autonomous branch. If a decision is
 genuinely the user's, add it to decisions_for_user rather than guessing.
