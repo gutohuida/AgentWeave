@@ -28,6 +28,39 @@ under `decisions_for_user`.
 
 ---
 
+## 17:54 — driver iteration: q3, first judgement-evidence write-up not from a re-drive
+
+Picked the quick win `2026-08-15-judgement-evidence.md` itself had flagged: `the-interview-is-a-
+conversation` 5.1–5.5, marked "mostly answerable from this run's turn 1 — write these up rather than
+re-driving." Queried `hub/data/agentweave.db` directly with sqlite3 (no live Hub call, no new run)
+and confirmed three of the five from data already on disk:
+
+- **5.1** (asks in prose, lays out alternatives) and **5.2** (does it still stop?) — both yes.
+  `run-d3b6f7c5`'s `agent_outputs` sequence is six read/grep/rename tool calls, one `text` reply (the
+  two-question interview, alternatives each with a stated cost), then `status = Completed` — no
+  self-answering, no `ask_user` call anywhere in the turn.
+- **5.5** (compare against the old skill) — the skill itself is gone
+  (`src/agentweave/templates/skills/` has no `explore` skill left, deleted with the `aw-spec-*`
+  retirement), so used the behavioural contrast already on record instead:
+  `run-93ec79be` (2026-08-13, the pre-fix baseline already cited at `tasks.md` 1.4 — three
+  `ask_user` calls, nine multiple-choice questions, no prose) against `run-d3b6f7c5` (zero
+  `ask_user`, two prose questions). Confirmed `run-93ec79be` is a real row, not just a quoted claim.
+
+**5.3 and 5.4 stay genuinely open** — not unwritten, actually not answerable from this project's
+history. Checked the whole of `proj-ff695d96` for any `ask_user` call or `questions` row across every
+agent: zero. And `speccer`'s `charter_id` is set (`charter-4495f995`), so this run doesn't test the
+no-charter case either. Both need a differently-shaped run, not a write-up.
+
+No tasks.md checkbox ticked — 5.1–5.5 are explicitly the operator's own verdict calls; the write-up
+is the artefact the file promises, not a substitute for the tick. No source code changed. This is
+the first item off q3's 12-source uncaptured list; the rest (a-gate-that-only-evidence-opens,
+answers-arrive-together, a-posture-that-survives-the-handoff, the-hubs-procedure-outranks-an-
+installed-one, blocked-and-conversation-binding, declining-a-question) likely need the build/verify
+half of a live drive rather than an existing-data write-up; `run-without-a-git-repository` needs a
+fresh non-repo project but no live drive to set one up.
+
+---
+
 ## 17:39 — driver iteration: q5's section-14 mapping done, giving d2 a concrete remainder
 
 Did the one thing this session's `next_action` named: mapped `hub-native-experience` section 14's
