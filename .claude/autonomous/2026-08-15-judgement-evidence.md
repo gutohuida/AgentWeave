@@ -621,13 +621,65 @@ points — these two are consistent with "useful", not with "noise", but n=2.
 
 ---
 
+## `2026-08-11-declining-a-question`
+
+### 6.8 — "Does dismissing feel like it *ended* the question, or like it merely hid it?"
+
+**Evidence: driven live this iteration**, in a fresh scratch project (`aw-declineprobe`,
+`proj-f71e427c`, since cleaned up). Two run credentials were minted directly (same pattern as prior
+iterations — `hub/hub/agent_auth.py`'s hashing, no real agent process needed), each asked one
+question through the real `POST /agent-actions/questions` route, one run then marked `completed` (the
+"stale" question) while the other stayed `running` (the "live" one). `POST
+.../questions/{id}/decline` was called on the stale one, then `GET /projects/{id}/questions` read
+back:
+
+```
+q-5228ce5e (declined)   answered=False declined=True
+q-576e4f11 (still live) answered=False declined=False
+```
+
+The row survives in the database (D1, as `6.11` already settled — nothing new here), but
+`hub/ui/src/lib/pendingQuestions.ts:26` filters `!q.declined` before anything is sorted, and
+`AgentQuestionCard.tsx` only ever renders from that filtered set — there is no struck-through,
+grayed-out, or "declined" state rendered anywhere; the row simply stops appearing. From the
+operator's seat this reads as **ended**, not merely hidden: nothing on screen marks that a question
+existed and was dismissed. The only place that fact survives is the database, which no surface
+currently reads (the same gap `6.11` already decided doesn't need closing).
+
+### 6.9 — "With a stale question and a live one outstanding, is it obvious which one is being asked
+of you?"
+
+**Evidence: driven live, same probe, before the decline step.** With both questions outstanding at
+once for the one agent (`probe-agent`) —
+
+```
+q-5228ce5e  Stale one: which region?  asker_waiting=False
+q-576e4f11  Live one: which env?      asker_waiting=True
+```
+
+— replaying `activeQuestionFor`'s exact sort (`pendingQuestions.ts:38`, live-first by
+`asker_waiting`, then `batch_index`, then `created_at`) against the real rows picks `q-576e4f11`
+("Live one: which env?"), matching what the code guarantees. This is stronger than a hedge: it isn't
+that the live one is merely favoured, it is the *only* one shown. `AgentQuestionCard` renders exactly
+one active question per agent (`pending[0]`), so the stale one has zero footprint on screen while a
+live one exists for the same agent — the operator is never presented with two questions and left to
+work out which is real. The ambiguity 6.9 asks about is structurally prevented rather than resolved
+by a visual cue: there is nothing to compare because only one card ever renders. (This is per-agent;
+if two *different* agents each had one live question, each renders under its own agent's card,
+disambiguated by placement rather than wording — not what 6.9 is asking about, but worth naming since
+nothing else in the UI lists questions across agents in one place to render as ambiguous.)
+
+Cleanup: all rows for `proj-f71e427c` deleted (2 runs, 2 questions, 2 runners, 9 charters, 4
+event_logs, 1 project row), scratch directory removed.
+
+---
+
 ## Still entirely uncaptured
 
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
 disk — not just a write-up of an existing run:
 
 - `blocked-and-conversation-binding` 8.10–8.13
-- `declining-a-question` 6.8–6.9
 - `run-without-a-git-repository` 5.3 — the workspace panel's no-repository note, legible or not, is
   a pure visual read; nothing an API drive can answer. 5.1, 5.2 and 5.5 are now answered above
   (twice over, for 5.1) — what's left of each is the literal act of a person looking at the running
