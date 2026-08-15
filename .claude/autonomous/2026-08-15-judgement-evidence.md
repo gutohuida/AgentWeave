@@ -268,6 +268,64 @@ question is genuinely just a visual one at this point; the behaviour is now conf
 
 ---
 
+## `2026-08-13-a-posture-that-survives-the-handoff`
+
+Driven live in a fresh scratch project `aw-posture-probe` (`proj-988adfaa`,
+`C:\Users\huida\Documents\aw-posture-probe`), two Claude agents (`probe`, `peer`) on the seeded
+Claude runner, no charter. Cleaned up afterward per the standing convention.
+
+### 4.1 — "Does a Claude agent now verify its own work unprompted?"
+
+**ANSWERED — yes.** `probe` was asked to write `check.py` and run it, with **no** permission posture
+chosen. `run-65eb6b50`: `Write` then `PowerShell` (`python check.py`), both executed with zero
+`permission_requests` rows and no refusal, output `1 2 3 4 5` reported back correctly. Completed,
+exit 0, cost $0.11.
+
+### 4.2 — "Does the posture survive the hop?"
+
+**ANSWERED, and the task's own wording (and the user test guide's steps 3–4) described the wrong
+test — fixed in `tasks.md` this session.** What the spec (`agent-conversation-workspace`, scenario
+"A peer-opened conversation keeps what the operator chose") and `test_another_agents_overrides_are_not_inherited`
+actually require is **same-agent** continuity: an agent's own next conversation, opened by a peer or
+a job rather than the operator, keeps that agent's last posture. It is explicitly **not** propagation
+to a different recipient agent.
+
+Verified both halves live, same project:
+
+- **Same-agent hop (what the spec requires): works.** `probe` had `{"permission_mode": "manual"}` on
+  its two operator-opened conversations. `peer` then sent it a fresh message with no
+  `conversation_id`. The new conversation opened for `probe` (`conv-4c23d9e8`, `origin: "peer"`)
+  carried `{"permission_mode": "manual"}` forward, un-asked. Confirmed by the `conversations` row
+  directly, not inferred from run behaviour.
+- **Cross-agent (what the old task wording and test guide described): does not happen, correctly.**
+  `probe`, with `manual` set, sent `peer` a message. `peer` had never had a conversation before, so
+  its new conversation (`conv-dedbec05`) inherited nothing (`runtime_overrides: null`) and its run
+  (`run-8b745bba`) completed with **zero** `permission_requests` rows — it never asked the operator.
+  Under the old wording ("have that agent message a peer… expect the second agent's run also asks
+  you") this reads as a failure. It is not one — `test_another_agents_overrides_are_not_inherited`
+  pins exactly this as correct, deliberately.
+
+Fixed `tasks.md` task 4.2 and the user test guide's steps 3–4 to describe the same-agent scenario
+instead, so a human running the guide literally does not conclude a working feature is broken.
+
+### 4.3 — "Is the workspace boundary still felt?"
+
+**ANSWERED — yes, and legibly.** Asked `probe` to read a file in a sibling project
+(`aw-loop10/README.md`), outside its own workspace. It refused in its own first reply, without even
+attempting a tool call: *"paths outside my workspace are refused by design… my instructions restrict
+me to files within my own workspace."* Named the actual workspace path. `run-052147b1`, exit 0.
+
+### 4.4 — "Judge the wider execution surface."
+
+**Evidence only — verdict is yours.** The one build turn observed (4.1) ran exactly two tool calls:
+a file write and one shell command the operator's own prompt asked for (`python check.py`), nothing
+broader. Too small a sample to judge the *general* new surface (arbitrary shell inside the worktree)
+from — this only shows the minimum case works, not what an agent chooses to run unprompted on a
+larger task. **Still open**, and probably wants a real multi-step build turn (like the ones q2 has
+been driving in `aw-loop10`) read specifically for this question rather than a fresh probe.
+
+---
+
 ## Still entirely uncaptured
 
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
@@ -275,7 +333,6 @@ disk — not just a write-up of an existing run:
 
 - `a-gate-that-only-evidence-opens` 5.1–5.4 (refusals, demotion, `contract`, gating at `approved`)
 - `answers-arrive-together` 5.1–5.5 (needs a batch of questions and a run that ends mid-batch)
-- `a-posture-that-survives-the-handoff` 4.1–4.4
 - `the-hubs-procedure-outranks-an-installed-one` 5.3–5.5
 - `blocked-and-conversation-binding` 8.10–8.13
 - `declining-a-question` 6.8–6.9

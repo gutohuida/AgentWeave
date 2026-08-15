@@ -28,6 +28,53 @@ under `decisions_for_user`.
 
 ---
 
+## 18:31 — driver iteration: q3 drove a-posture-that-survives-the-handoff 4.1-4.4, and found a real documentation bug along the way
+
+**Done**
+
+- Drove `a-posture-that-survives-the-handoff` 4.1-4.4 live in a fresh scratch project
+  (`aw-posture-probe`, `proj-988adfaa`), two charterless Claude agents (`probe`, `peer`) on the
+  seeded runner.
+- **4.1** confirmed: a Claude agent verifies its own work with no permission posture chosen and no
+  refusal — wrote and ran a script, zero `permission_requests` rows.
+- **4.3** confirmed: the workspace boundary refusal is legible — asked to read a sibling project's
+  file, the agent refused in its first reply (no tool call attempted) and named its own workspace
+  path as the reason.
+- **4.2 surfaced a real bug, not just a judgement call.** The task's own wording, and that change's
+  user test guide (steps 3-4), describe testing "posture survives the hop" by having one agent
+  message a *different, second* agent and expecting that second agent's run to also ask the
+  operator. That is **not** what the spec requires, and not what the code does — confirmed against
+  the spec text (`agent-conversation-workspace`'s "peer-opened conversation keeps what the operator
+  chose" scenario) and an explicit passing regression test
+  (`test_another_agents_overrides_are_not_inherited`): inheritance is per-agent history only, never
+  propagated to a different recipient. Verified live, both halves, same project: the *correct*
+  same-agent-hop scenario genuinely works (an agent's own posture survives into a new conversation a
+  peer opens for it); the cross-agent scenario the old wording described correctly does not happen.
+  **Fixed** the wording of task 4.2 and the user test guide's steps 3-4 in that change's `tasks.md`
+  so a human following the guide literally tests the right thing instead of concluding working code
+  is broken. No implementation code changed — the code and its tests were already correct.
+- **4.4** stays a genuine judgement call — evidence supplied (the one build turn's tool calls), but
+  the sample is too small to judge the general unattended-execution question from; flagged as
+  wanting a larger real build turn rather than a fresh probe.
+- Write-up in `2026-08-15-judgement-evidence.md`. Cleaned up the scratch project (DB rows + directory)
+  afterward, same convention as every prior q3 drive.
+
+**Found**
+
+- The documentation-bug-not-code-bug distinction matters here: q4's fix queue is usually source code,
+  but this is the first fix that was to an openspec change's own verification instructions. Filed
+  under q4 as fix (4) in `STATE.json` for the record, even though nothing in `hub/` or `src/` moved.
+
+**Next**: q3's remaining sources — `a-gate-that-only-evidence-opens` 5.1-5.4,
+`answers-arrive-together` 5.1-5.5, `the-hubs-procedure-outranks-an-installed-one` 5.3-5.5,
+`blocked-and-conversation-binding` 8.10-8.13, `declining-a-question` 6.8-6.9. Note for whoever picks
+up `the-hubs-procedure-outranks-an-installed-one` 5.3: this iteration checked and neither this
+machine's user-level `~/.claude/skills/` nor this repo's `.claude/skills/` currently has the
+OpenSpec skills installed (unlike `~/.codex/skills/`, which did) — work out where a Claude agent
+would actually pick up a competing skill from before assuming 5.3 reproduces the same conflict.
+
+---
+
 ## 18:13 — driver iteration: q3, run-without-a-git-repository driven live
 
 Continued q3 down `next_action`'s remaining list. This one wasn't answerable from data already on
