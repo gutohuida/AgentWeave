@@ -28,6 +28,56 @@ under `decisions_for_user`.
 
 ---
 
+## 19:36 — driver iteration: q3 closed blocked-and-conversation-binding 8.10-8.13 — q3's source list is now fully worked
+
+(Note: the 19:27 iteration drove `declining-a-question` 6.8-6.9 live and pushed `ac254a0`, but did not
+update this file — folding that in here so the record stays complete. Its evidence is in
+`2026-08-15-judgement-evidence.md`'s `2026-08-11-declining-a-question` section.)
+
+This iteration closed q3's last fully-uncaptured source: `blocked-and-conversation-binding` 8.10-8.13,
+the operator-board-reading judgement set about a task parked on an unanswered question. Drove it live
+in a fresh scratch project (`aw-blockedprobe`, `proj-d9803fe8`, since cleaned up) — created a task,
+minted a run credential directly (same pattern as the 6.8/6.9 probe, no real agent process spawned),
+had it ask a real blocking question through `POST /agent-actions/questions`, then invoked the Hub's
+actual run-boundary function (`run_divergence.py::evaluate_run_end`) directly, exactly the code path a
+real spawned process hits at exit. Read the task back through the real API afterward: `status:
+"blocked"`, `blocked_reason: "Waiting on your answer: <the question text>"`.
+
+- **8.10/8.11** (does the board tell you unprompted, does it read as "someone needs you" rather than a
+  failure): `TaskCard.tsx` renders a fixed **"Waiting on you"** heading plus the question text
+  verbatim whenever `status === 'blocked'`, confirmed against the live, passing test suite (`npx
+  vitest run taskBlockedTreatment.test.tsx`, 9/9). Blocked cards also sort to the top of the In
+  Progress column (`TasksBoard.tsx:103`) so they can't sink and go unnoticed.
+- **8.12** (informative or noise, at volume): structural evidence only — a blocked card and a stalled
+  (open-divergence) card are two distinct testids/signals, never conflated, and `blocked` only fires
+  on a genuinely unanswered blocking question the ending run itself opened, not on every pause. Actual
+  *volume* over a real multi-day board is a lived judgement no single-session probe can manufacture.
+- **8.13** (does a bound conversation ever surprise you): from code — binding releases automatically
+  at `approved`/`rejected` by design, and *deliberately* stays bound through `completed`/`under_review`
+  because revisions come back to the same thread. The one real gap: a task moved on from by hand
+  (reassigned, or just abandoned) with no terminal status change stays bound with no timeout — whether
+  that's ever actually hit is, again, a lived-board question.
+
+All four tasks.md checkboxes stay **unchecked**, consistent with the `answers-arrive-together`
+precedent — evidence captured, verdict is yours (**d1**).
+
+**q3 is now fully worked.** Every source in its original list has either had every task answered, or
+been narrowed to items that genuinely need a differently-shaped run rather than more of this same
+evidence-gathering: `run-without-a-git-repository` 5.3 (a pure visual read) and
+`the-interview-is-a-conversation` 5.3/5.4 (need a real either/or fork, and a charter-less agent run
+respectively). No new code defect found this iteration — pure evidence-gathering. Cleanup: all rows
+for `proj-d9803fe8` deleted directly, scratch directory removed. Branch pushed clean.
+
+**What's next**, since q3 no longer has a clean next source to hand the next iteration: q8's own
+"pending" state (the final catch-up file — this file — has been kept current throughout but not
+formally reviewed end-to-end) and q9's standing handoff discipline are the remaining open queue items
+besides the closed-out q1-q7. The next iteration should read `STATE.json`'s queue fresh and decide
+between polishing q3's three remaining narrow items (each needs a real differently-shaped run, not
+evidence-gathering-as-usual), q8 (write the final catch-up review), or picking up d2's split proposal
+into an actual openspec change if the operator has not weighed in by then.
+
+---
+
 ## 19:16 — driver iteration: q3 closed the-hubs-procedure-outranks-an-installed-one 5.3-5.5
 
 **Done**

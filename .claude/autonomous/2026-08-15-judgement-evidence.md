@@ -672,6 +672,95 @@ nothing else in the UI lists questions across agents in one place to render as a
 Cleanup: all rows for `proj-f71e427c` deleted (2 runs, 2 questions, 2 runners, 9 charters, 4
 event_logs, 1 project row), scratch directory removed.
 
+## `2026-08-10-blocked-and-conversation-binding`
+
+### 8.10 — "When an agent asks you something mid-task, does the board tell you *that* is why nothing
+is moving — without you having to work it out?"
+
+**Evidence: driven live this iteration**, in a fresh scratch project (`aw-blockedprobe`,
+`proj-d9803fe8`, since cleaned up). A task (`task-3880f967`) was created and moved to `in_progress`
+through the real operator route, a run credential was minted directly against
+`hub/hub/agent_auth.py`'s hashing (same pattern as the 6.8/6.9 probe — no real agent process
+spawned), and that run asked a genuine blocking question through
+`POST /agent-actions/questions` (`q-9802f696`, "Should failed webhook deliveries retry with backoff,
+or dead-letter immediately?"). The run was then marked `completed` and the **real** run-boundary
+function (`hub/hub/run_divergence.py::evaluate_run_end`, the exact code path a real spawned process
+hits when it exits) was invoked directly — not reimplemented. Reading the task back through the real
+API afterward:
+
+```
+GET /projects/proj-d9803fe8/tasks/task-3880f967
+status: "blocked"
+blocked_reason: "Waiting on your answer: Should failed webhook deliveries retry with backoff, or dead-letter immediately?"
+```
+
+`TaskCard.tsx:220-238` renders this unconditionally whenever `status === 'blocked'`: a labeled block
+(`data-testid="task-blocked-{id}"`) with the fixed heading **"Waiting on you"** followed by the
+`blocked_reason` text verbatim — the actual question, not a generic "blocked" badge. Confirmed
+against the live test suite (`npx vitest run taskBlockedTreatment.test.tsx`, 9/9 passing) with the
+exact assertion `expect(screen.getByText('Waiting on you')).toBeTruthy()` plus a second test that the
+reason text itself renders. `TasksBoard.tsx:9-16` also documents *why* there is no separate column
+for it (R3 — "not a separate stage of work, but In Progress with something missing"), and
+`TasksBoard.tsx:103` sorts blocked cards to the top of the In Progress column
+(`Number(b.status === 'blocked') - Number(a.status === 'blocked')`), so a blocked task cannot sink
+below other in-progress cards and go unnoticed. Taken together: the operator does not have to infer
+that a stalled-looking card is actually waiting on them — the card states it, names what the
+question was, and floats to the top of its column. Whether this reads as *quick to notice* rather
+than merely *technically present* is the part left to you.
+
+### 8.11 — "Does a waiting task read as 'someone needs you' rather than as a failure?"
+
+**Evidence: same live drive.** The rendered heading is literally **"Waiting on you"**, not "Blocked"
+or "Stalled" — worded as an appeal to the operator rather than a status report. `TaskCard.tsx`'s own
+comment (line 217-219) states the design intent directly: *""blocked" alone puts the operator back
+where they were when the card said in progress and nothing was happening"* — i.e. the whole point of
+the wording is to avoid reading as a failure. The color token is `--purple` (`blockedAccent`),
+distinct from whatever color a failed/rejected task uses — not read here as a rendered swatch, but
+the two are structurally different tokens rather than the same "something's wrong" red reused. This
+is the closest an evidence-only pass can get to a feeling; the verdict on whether "Waiting on you"
+actually *lands* as an invitation rather than an alarm is the operator's to make.
+
+### 8.12 — "Now that every turn of a bound conversation is checked: is the volume of stalled markers
+informative or is it noise?"
+
+**Evidence, structural, not volumetric** — a single live probe cannot manufacture "volume"; what it
+can show is what mechanism exists to keep the count meaningful once conversations are, in fact,
+checked every turn. Two things constrain volume by construction, both already read from code and
+confirmed by the passing test suite above: (1) a `blocked` task and an `in_progress` task with an
+open divergence are **two different testids** (`task-blocked-{id}` vs `task-divergence-{id}`,
+`taskBlockedTreatment.test.tsx`'s "is not the same signal as stalled" case, confirmed passing) — a
+question-driven pause is never confused with an agent that silently dropped its work, so the operator
+is never shown two things that mean the same thing twice; (2) `blocked` only fires on a *genuinely
+unanswered blocking question this run itself opened* (`run_task_binding.py::unanswered_blocking_question`
+— excludes non-blocking `ask_user` notes, questions from other runs, and declined questions). Nothing
+in this design manufactures markers from noise the way a naive "flag every pause" rule would. Whether
+the resulting *count*, once the operator has lived with it across a real multi-day board, reads as
+useful signal or as visual clutter is exactly the kind of judgement this task asks for and a
+single-session probe cannot simulate — it needs the operator's own board over time, not another
+drive.
+
+### 8.13 — "Does a conversation staying bound ever surprise you — does it keep attributing work to a
+task you had moved on from?"
+
+**Evidence: from code, cross-checked against the already-passing `run_task_binding.py` test suite**
+(not re-driven this iteration — `TERMINAL_FOR_BINDING` and its release conditions were already
+exercised live by 5.1-5.5 of `answers-arrive-together` and `a-gate-that-only-evidence-opens` earlier
+this session). A conversation's binding to a task releases itself automatically the moment that task
+reaches `approved` or `rejected` (`run_task_binding.py:266-272`, `TERMINAL_FOR_BINDING`), and also
+whenever any conversation's task is explicitly released (`release_conversations_bound_to`). It stays
+bound through `completed` and `under_review` **on purpose** — the code comment states why: "work
+under review comes back often, and releasing there would unbind precisely the thread that is about
+to do the revisions." So a conversation that keeps attributing turns to a task you sent back for
+revision is by design, not a bug — the surprising case would be the opposite, a thread that forgot
+what it was revising. The one case this doesn't cover structurally: a task moved on from by hand
+(e.g. reassigned while `in_progress`, or just abandoned in favor of other work without a status
+change) stays bound until it reaches a terminal status — there is no timeout or "gone idle" release.
+Whether that specific gap (a conversation the operator has mentally dropped, but the Hub hasn't) is
+ever actually encountered is a lived-board judgement, not something a fresh probe can manufacture.
+
+Cleanup: task, question, and run rows for `proj-d9803fe8` deleted directly (1 task, 1 question, 1
+run), scratch project deregistered the same way as prior probes, scratch directory removed.
+
 ---
 
 ## Still entirely uncaptured
@@ -679,10 +768,15 @@ event_logs, 1 project row), scratch directory removed.
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
 disk — not just a write-up of an existing run:
 
-- `blocked-and-conversation-binding` 8.10–8.13
 - `run-without-a-git-repository` 5.3 — the workspace panel's no-repository note, legible or not, is
   a pure visual read; nothing an API drive can answer. 5.1, 5.2 and 5.5 are now answered above
   (twice over, for 5.1) — what's left of each is the literal act of a person looking at the running
   UI, not an unanswered behaviour.
 - `the-interview-is-a-conversation` 5.3 (needs a run with a real either/or fork) and 5.4 (needs an
   agent with no charter bound) — 5.1, 5.2, 5.5 are now answered above.
+
+**q3's source list is now fully worked**: every one of the seven sources listed in STATE.json has
+either had all its tasks answered, or has been narrowed to the specific sub-items above that
+genuinely need a differently-shaped run (not more of this same evidence-gathering pattern). What
+remains open is human judgement on the evidence already captured (d1), plus the three narrow items
+just listed.
