@@ -28,6 +28,47 @@ under `decisions_for_user`.
 
 ---
 
+## 18:46 — driver iteration: q3 drove a-gate-that-only-evidence-opens 5.1-5.4 live
+
+**Done**
+
+- Drove `a-gate-that-only-evidence-opens` 5.1-5.4 live in a fresh scratch project
+  (`aw-gate-probe`, `proj-7ff9ae71`, since cleaned up): a two-requirement document, four tasks,
+  and every phase/rigor/evidence/approval call made directly against the real API the Hub UI
+  itself uses (not simulated).
+- **5.1** (is the refusal actionable): captured the exact structured 409 — names both blocking
+  requirements, their state, and the remedy, plus "lower the document's rigor — which is
+  recorded" as the other lever. Went further than the task asks: had a live `builder` agent
+  asked, in the operator's voice, to lower the rigor to dodge an evidence gate — it refused on
+  two grounds (no tool exposes rigor to it; and it wouldn't use one if it existed, calling that
+  "the operator's own governance call, not an implementation detail"). Full quote in
+  `judgement-evidence.md`.
+- **5.2** (is demotion the right escape hatch): demoted live, confirmed it's one uncomfirmed call,
+  fully recorded and queryable (`rigor-history` — actor, reason, both directions), and disturbs
+  nothing else (a second task's already-accepted evidence and `approved` status survived the
+  whole gate→sketch→gate→contract sequence). Noted one caveat: the product has no per-human
+  operator identity, so every demotion is attributed to the literal string `"operator"`, not a
+  name — "recorded with your name" isn't literally true yet if more than one person ever holds
+  the credential.
+- **5.3** (is `contract` worth having): confirmed live it changes nothing behaviourally — a task
+  with zero evidence approved identically under `contract` and under `sketch`. Only visible effect
+  is the rigor label itself.
+- **5.4** (does gating at `approved` match how you work): confirmed live, three times over, that
+  the gate is silent through `pending → in_progress → completed → under_review` and fires only on
+  the move into `approved`, exactly as 3.2/4.9 describe.
+- All four questions genuinely are the operator's judgement to make ("how it feels") — evidence
+  captured, no checkbox ticked on your behalf.
+- Cleaned up the scratch project's DB rows and directory, same convention as prior iterations.
+
+**Found**: nothing new for the fix queue. The one thing that surprised me (contract truly changes
+nothing observable) is by design, confirmed by task 4.9's own test.
+
+**Next**: q3's remaining sources — `answers-arrive-together` 5.1-5.5, `the-hubs-procedure-outranks-
+an-installed-one` 5.3-5.5, `blocked-and-conversation-binding` 8.10-8.13, `declining-a-question`
+6.8-6.9. Check `hub/data/agentweave.db` for existing evidence first. Full detail in `STATE.json`.
+
+---
+
 ## 18:31 — driver iteration: q3 drove a-posture-that-survives-the-handoff 4.1-4.4, and found a real documentation bug along the way
 
 **Done**

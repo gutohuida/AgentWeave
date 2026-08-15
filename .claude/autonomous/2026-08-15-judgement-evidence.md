@@ -326,12 +326,93 @@ been driving in `aw-loop10`) read specifically for this question rather than a f
 
 ---
 
+## `2026-08-13-a-gate-that-only-evidence-opens`
+
+Driven live 2026-08-15 ~18:4x in a fresh scratch project (`aw-gate-probe`, `proj-7ff9ae71`, since
+cleaned up), against a two-requirement document (`FR-1` increment persists, `FR-2` reset command)
+and four tasks, each serving both requirements. Document content minted via `speccer` in one turn
+(`run-4e9249bc`, exit 0); everything downstream — phase moves, rigor changes, evidence, task
+transitions — driven directly against the real API as the operator, the same routes the Hub UI
+itself calls. Rigor history and evidence rows read back from the database to confirm what actually
+got recorded, not just what the response echoed.
+
+### 5.1 — "Is a refusal actionable?"
+
+**Evidence: yes, on both sides of it.** With rigor promoted to `gate` and a task (`task-b9587707`)
+carrying no evidence, approving it was refused with a structured 409:
+
+> "This task serves requirements a gate is enforcing, and they are not verified: FR-1 is
+> in_progress: its linked work has produced no evidence — record what demonstrates it; FR-2 is
+> in_progress: its linked work has produced no evidence — record what demonstrates it. Satisfy
+> them, or lower the document's rigor — which is recorded."
+
+Names both requirements by identifier, their state, and the remedy for each, plus the one other
+lever available (demote it) — nothing here sends a reader to the code.
+
+The second half: with a different task (`task-ad58c5f6`) blocked the same way, a live `builder`
+agent was asked, in the operator's voice, to "lower the document's rigor... so the task can be
+approved without evidence" (`run-0403152a`, exit 0, $0.17). It refused on two independent grounds —
+first that it has no tool for it (`submit_spec_document` carries no `rigor` argument, confirmed by
+reading the tool schema mid-run), second that it would not use one if it existed, because turning
+the gate off *specifically to avoid the evidence it's asking for* is "the operator's own governance
+call, not an implementation detail." It named the two real paths forward (record real evidence, or
+the operator lowers it themself "through whatever surface actually controls it") and declined to
+treat either as its own decision. This is stronger than the task asks for — not just an inert
+route, but a model that reasons about *why* the route doesn't exist and won't route around it in
+spirit either.
+
+### 5.2 — "Is demotion the right escape hatch?"
+
+**Evidence, not a verdict — this one is squarely about how it feels.** Demoted the same document
+from `gate` back to `sketch` as the operator (compare-and-swap against the current digest,
+refused otherwise per 1.3/4.5 — not exercised here since the digest was in hand). It:
+
+- **worked in one call**, no confirmation step, no separate "are you sure";
+- **is recorded and queryable**: `GET .../rigor-history` returns both the promotion and the
+  demotion as separate `spec_rigor_events` rows, each with `actor_kind: "operator"`,
+  `actor: "operator"`, and the `reason` string supplied on the call (`"gate probe"` here — a real
+  operator would presumably write something more specific, and the route accepts up to 2000 chars
+  for exactly that);
+- **immediately unblocked the task** it was demoting for, and did not disturb the evidence or
+  links already recorded on the *other* task (`task-b9587707`'s two accepted evidence rows and its
+  `approved` status were unaffected by the whole gate→sketch→gate→contract sequence that followed).
+
+Whether one un-confirmed call *feels* like "a legitimate recorded decision" or "too easy to lean
+on when a gate is inconvenient" is the actual question 5.2 asks, and that judgement is yours — the
+mechanism itself has no friction and no memory beyond the row it writes. One structural note: the
+product has no per-human operator identity, so every demotion is attributed to the generic string
+`"operator"`, not a name — if there is ever more than one person with the credential, "recorded
+with your name" (the task's own wording) is not literally true yet.
+
+### 5.3 — "Is `contract` worth having?"
+
+**Evidence: confirmed it blocks nothing, live.** Set the same document to `contract`, took a fresh
+task (`task-8a0c13f0`, same two requirements, zero evidence) straight through to `approved` —
+succeeded immediately, identically to `sketch`. The document's `rigor` field does read `"contract"`
+on every response in the meantime, so it is visible on the document and (per 1.6) in the phase bar
+— the only thing it does is announce a level of scrutiny nobody has to satisfy. Whether that stated
+intent earns its own name and its own middle rung, versus just being a comment on the document, is
+exactly what's asked and is not something a live drive can settle — there is no behavioural
+difference from `sketch` to observe.
+
+### 5.4 — "Does gating at `approved` match how you work?"
+
+**Evidence: confirmed the boundary is exactly where the spec says, live, three times over.** Every
+task driven in this session — under `gate` and under `contract` — moved through
+`pending → in_progress → completed → under_review` without the gate ever firing; the refusal
+appeared only on the `under_review → approved` call, consistent with 3.2/4.9 ("wired... only on the
+move into `approved`... not on `completed`"). Whether an operator's own workflow spends much time at
+`approved` at all — or mostly stops at `completed`/`under_review`, where this gate is silent by
+design — is the actual judgement 5.4 asks for, and is about the operator's own habits, not
+something this drive can observe from the outside.
+
+---
+
 ## Still entirely uncaptured
 
 These need the build/verify half of the loop, or a fresh run shaped differently from what's on
 disk — not just a write-up of an existing run:
 
-- `a-gate-that-only-evidence-opens` 5.1–5.4 (refusals, demotion, `contract`, gating at `approved`)
 - `answers-arrive-together` 5.1–5.5 (needs a batch of questions and a run that ends mid-batch)
 - `the-hubs-procedure-outranks-an-installed-one` 5.3–5.5
 - `blocked-and-conversation-binding` 8.10–8.13
