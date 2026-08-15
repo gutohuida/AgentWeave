@@ -180,6 +180,23 @@ async def integrations(app, auth_headers, task_id):
     return response.json()["integrations"]
 
 
+async def coverage_for(app, auth_headers, identifier):
+    """What the coverage surface says about one requirement.
+
+    `test_requirement_coverage.py` reaches `not_integrated` by setting `reachable_from_main = False`
+    on the footprint by hand. This reaches it the way the product does — by failing a real merge —
+    which is the difference between asserting the vocabulary exists and asserting the system uses it.
+    """
+    response = await app.get(f"{BASE}/spec/coverage", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    report = response.json()
+    rows = report if isinstance(report, list) else report.get("requirements", report)
+    for row in rows:
+        if row.get("identifier") == identifier:
+            return row
+    raise AssertionError(f"{identifier} absent from coverage: {rows}")
+
+
 # ---------------------------------------------------------------------------
 # The demonstrable case
 # ---------------------------------------------------------------------------
@@ -330,6 +347,15 @@ async def test_a_failed_merge_leaves_the_approval_standing(app, auth_headers, bu
     assert work not in commits_on(tmp_path, "main")
     # The file the merge would have clobbered is untouched.
     assert (tmp_path / "feature.py").read_text(encoding="utf-8") == "someone's unsaved work\n"
+
+    # The other half of D6, and the half that was unreachable until evidence stopped being
+    # footprinted against the project checkout: coverage has to say the requirement is *verified*
+    # and *not integrated* at the same time. Before the footprint fix this state could not occur —
+    # the footprint named a commit already on main, so a merge that never happened still reported
+    # `integrated`, which is precisely the lie this change exists to make impossible.
+    entry = await coverage_for(app, auth_headers, "FR-1")
+    assert entry["state"] == "verified"
+    assert entry["integration"] == "not_integrated"
 
 
 @pytest.mark.asyncio

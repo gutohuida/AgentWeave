@@ -84,23 +84,36 @@ Migrations: current head is `0069`. The new one guards for a missing table as `0
 - [x] 6.1 Target selection: the newest accepted footprint commit wins; awaiting evidence contributes
       nothing; rejected evidence contributes nothing; a `paths` footprint contributes nothing;
       multiple branches yield multiple targets.
-- [ ] 6.2 **The demonstrable case, one test with three outcomes:** a task approves and its commit is
+- [x] 6.2 **The demonstrable case, one test with three outcomes:** a task approves and its commit is
       on main; the same task with a conflicting commit is refused; the same task approves and merges
       after the conflict is resolved.
-      **Was not true.** The commit reaching `main` was `main`'s own, because the footprint named the
-      project checkout rather than the agent's worktree. The test asserted `merged` and a no-op
-      satisfies it.
+      **Was not true when written.** The commit reaching `main` was `main`'s own, because the
+      footprint named the project checkout rather than the agent's worktree. The test asserted
+      `merged` and a no-op satisfied it.
+      **Closed 2026-08-15**, once `2026-08-14-the-seams-loop7-found` phase 1 made the footprint name
+      the commit that actually contains the work. The three outcomes live across
+      `test_approving_a_task_puts_its_work_on_main` (merges, and asserts `commit_sha == work`) and
+      `test_a_conflicting_branch_refuses_approval` (refuses, then merges after resolution).
+      **Mutation-checked rather than asserted:** making `integrate_task` record `MERGED` without
+      performing the merge fails `test_approving_a_task_puts_its_work_on_main`, which is exactly what
+      a no-op used to satisfy.
 - [x] 6.3 Later commits on the agent's branch are **not** merged (D1) — the test that proves the
       commit-not-branch decision.
 - [x] 6.4 A `sketch` document's task integrates identically to a `gate` document's task (D5).
 - [x] 6.5 A conflict refuses approval at `sketch` rigor (D3's accepted consequence).
 - [x] 6.6 Each skip precondition, separately: no main branch; dirty checkout; checkout on another
       branch. Each records its own reason and each leaves the approval standing.
-- [ ] 6.7 A failed merge leaves the task `approved` and coverage reporting
+- [x] 6.7 A failed merge leaves the task `approved` and coverage reporting
       `verified, not integrated` (D6).
-      **Was not reachable.** With the footprint naming the project checkout, coverage reported
-      `integrated` for work that was nowhere near the main branch, so the state this asserts could
-      not occur.
+      **Was not reachable when written.** With the footprint naming the project checkout, coverage
+      reported `integrated` for work that was nowhere near the main branch, so the state this
+      asserts could not occur.
+      **Closed 2026-08-15.** `test_a_failed_merge_leaves_the_approval_standing` already covered the
+      `approved` half; it now also asserts coverage reads `state=verified`,
+      `integration=not_integrated` after a **genuinely failed merge**. That matters because
+      `test_requirement_coverage.py` reaches the same vocabulary by setting
+      `reachable_from_main = False` by hand — asserting the words exist, not that the system uses
+      them. **Mutation-checked:** forcing `is_reachable_from_main` to return `True` fails it.
 - [x] 6.8 A non-repository project approves exactly as it did before this change (D7).
 - [x] 6.9 A project with `main_branch` null reports integration exactly as it did before this change
       (task 1.4).

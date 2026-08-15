@@ -218,6 +218,14 @@ the error has fields nothing fills.
       approved`, no walk-back.
 - [ ] 9.3 Kill a Codex app-server mid-turn three times. The agent must unwedge on its own and the
       operator must be told, rather than four silent failures.
+      **Left unchecked deliberately, and it stays unchecked for _this_ change.** The behaviour now
+      passes — verified live 2026-08-15 00:31 on `aw-loop8`: three kills on one trigger produced
+      three runs, the entry reached `withdrawn` at `delivery_attempts=3` with a stated reason, the
+      provider session was cleared, `queue_entry_abandoned` was persisted at `warn`, and the agent
+      returned to `idle`. But **this change did not make that true** —
+      `2026-08-14-a-failed-run-does-not-eat-its-input` did, by reaching the normal completion path
+      this change never wired. Ticking it here would credit the wrong change; the evidence is
+      recorded against that one's task 7.2.
       **FAILED — left unchecked deliberately.** The agent does unwedge (`idle` after every failure),
       but a *mid-turn* death never reaches `return_run_entries`: the entry stays `delivered` with
       `delivery_attempts = 0`, so it is neither retried nor abandoned and the operator's input is
